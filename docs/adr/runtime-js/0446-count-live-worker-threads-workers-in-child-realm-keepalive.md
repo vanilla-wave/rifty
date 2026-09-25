@@ -58,10 +58,14 @@ The constraints come from real packages (evidence:
    both references are released and set to `null` (Node's `kDispose`). Those
    ways are: a kernel exit, a peer error, a refused spawn, `terminate()`, and the
    same-realm end. After that, `ref()` / `unref()` do nothing. A failed start or
-   peer error emits `'error'`, then `'exit'` 1 on a later microtask, as Node
-   does. An unlistened `'error'` throws on as the parent's uncaught exception
-   (never a rejection); `'exit'` still follows and releases both, unless that
-   exception began the parent's exit (Node `_exiting`).
+   peer error emits `'error'` from a Worker-owned microtask, then `'exit'` 1 on a
+   later microtask. An unlistened `'error'` throws on as the parent's uncaught
+   exception (never a rejection, never held back by the kernel's teardown);
+   `'exit'` still follows and releases both, unless that exception began the
+   parent's exit (Node `_exiting`). Node races that `'exit'` against the error:
+   its place among the handling's microtasks, and whether it precedes a fatal
+   uncaught exception, vary with loop timing (evidence §Final+GREEN r2
+   reception). Rifty always takes the order an unloaded Node run gives.
 4. **`parentPort` reference.** In a worker-thread realm, `parentPort` gets the
    same `ref()` / `unref()` / `hasRef()` over one keepalive ref in that realm.
    The first `'message'` listener references it. That covers

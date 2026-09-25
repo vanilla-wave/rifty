@@ -359,7 +359,8 @@ the throw (`process.on('uncaughtException')`) never exited. BASE exits 0 there.
 
 ### Node rows (the class: a start that fails, entry `./missing.cjs`)
 
-`node <file>` in a dir without `missing.cjs`, v24.16.0, 5 runs each, stable:
+`node <file>` in a dir without `missing.cjs`, v24.16.0, 5 sequential runs each
+(unloaded; under load the `wexit` row moves — corrected in §Final+GREEN r2 reception):
 
 ```text
 uncaught.cjs  (uncaughtException logs `e instanceof Error`, queues a 'micro' row; w.on('message'), w.on('exit'))
@@ -372,9 +373,10 @@ listened.cjs  (w.on('error') logs, queues a 'micro' row)
 
 Also (3 runs each): a Worker whose script throws, parent with
 `uncaughtException` → `uncaught worker boom / wexit 1 / EXIT 0`, rc 0; without
-it → `EXIT 1`, rc 1, no `wexit`. So: `'error'` (or the uncaught exception it
-becomes) first, `'exit'` 1 after the microtasks that handling queued, and no
-`'exit'` once the uncaught exception ended the parent.
+it → `EXIT 1`, rc 1, no `wexit`. So, unloaded: `'error'` (or the uncaught
+exception it becomes) first, `'exit'` 1 after the microtasks that handling
+queued, and no `'exit'` once the uncaught exception ended the parent. (Not a
+stable Node order: §Final+GREEN r2 reception.)
 
 ### Fix
 
@@ -416,3 +418,79 @@ so an unlistened `'error'` is an uncaught exception, not a rejection.
   `b9369814…` in `fd74c13a6`).
 - `CI= RIFTY_PLAYGROUND_PORT=5408 npx playwright test --config playwright.prod.config.ts --project=chromium
   tests/e2e-prod/worker-threads-keepalive.spec.ts` (fresh prod build) → 1 passed.
+
+## Final+GREEN r2 reception (2026-09-25) — Node's `'exit'` placement is timing-dependent; unlistened peer death
+
+Blockers (Final+GREEN r2, Bugs): (1) peer death with no `'error'` listener gave
+`exit:1, uncaught, micro` (fatal: `exit:1, owner-exit:1`) — the kernel's
+`attempt(() => emit('peererror'))` collected the listener's throw and rethrew
+it after its `queueMicrotask` close chain, i.e. after `fail()`'s terminate
+microtask — contradicting ADR-0446 §3 / CHANGELOG, no carrier; (2) the
+browser-unit `failed-start-uncaught` compared rifty's fixed order with one live
+Node run whose order varies (red on the reviewed tree).
+
+### Node rows under load (v24.16.0; sources = the fixture's Node programs)
+
+`cd /tmp/vgoal/u8/fgr2/node` (`uncaught.cjs` / `fatal.cjs` / `listened.cjs` = the
+fixture's `failed-start-*` sources with `./missing.cjs`, no `WT|` wrapper;
+`throw-*.cjs` = a worker `throw new Error('boom')`); each run's stdout to its own
+file, `sort | uniq -c`:
+
+```text
+20 sequential (for i in $(seq 20); do node X.cjs; done):
+  uncaught  20  start|uncaught true|wexit 1|micro|EXIT 0   rc 0
+  listened  20  start|error true|micro|wexit 1|EXIT 0      rc 0
+  fatal     20  start|EXIT 1                               rc 1
+10 parallel × 6 rounds:
+  uncaught  43  start|uncaught true|wexit 1|micro|EXIT 0
+            14  start|uncaught true|micro|wexit 1|EXIT 0
+             3  start|wexit 1|uncaught true|micro|EXIT 0
+  listened  60  start|error true|micro|wexit 1|EXIT 0
+  fatal     60  start|EXIT 1
+16 parallel × 10 rounds:
+  uncaught  71 uncaught,wexit,micro / 66 uncaught,micro,wexit / 23 wexit,uncaught,micro   (all EXIT 0, rc 0)
+  listened 146 error,micro,wexit / 14 error,wexit,micro                                    (all EXIT 0, rc 0)
+  fatal    151 start|EXIT 1 / 9 start|wexit 1|EXIT 1                                       (all rc 1)
+  throw-uncaught 93 uncaught,wexit,micro / 54 uncaught,micro,wexit / 13 wexit,uncaught,micro
+  throw-fatal    153 EXIT 1 / 7 wexit 1|EXIT 1
+```
+
+Through the spec's own `runNodeProgram` + `failedStartRows`
+(`npx tsx /tmp/vgoal/u8/fgr2/oracle-failed-start.mts <rounds> <parallel>`):
+
+```text
+20×1   uncaught 20 start,uncaught,wexit,micro,EXIT 0 · fatal 20 start,EXIT 1 · listened 20 start,error,micro,wexit,EXIT 0
+       projected: one value per program (20/20)
+10×16  uncaught 95 …micro,wexit… / 55 …wexit,micro… / 10 start,wexit,uncaught…
+       fatal 147 start,EXIT 1 / 13 start,wexit 1,EXIT 1 · listened 150 …micro,wexit… / 10 …wexit,micro…
+       projected (160/160 each):
+       uncaught {"ordered":["WT|start","WT|uncaught true","WT|micro","WT|EXIT 0"],"wexit":["WT|wexit 1"]} code=0
+       fatal    {"ordered":["WT|start","WT|EXIT 1"]} code=1
+       listened {"ordered":["WT|start","WT|error true","WT|micro","WT|EXIT 0"],"wexit":["WT|wexit 1"]} code=0
+```
+
+So Node's stable facts: `'error'` precedes `'exit'` when listened; an unlistened
+`'error'` is the parent's uncaught exception; the parent survives it with
+`'exit'` 1 and rc 0 when handled, and ends rc 1 otherwise; nothing hangs. The
+`wexit` row's place (and, when the exception is fatal, whether it prints) races.
+Rifty's fixed order = every unloaded Node run's order above.
+
+### Fix
+
+- `worker_threads.ts`: the peer error calls `fail()` from its own microtask, so an
+  unlistened `'error'` escapes to the realm trap before `fail()`'s terminate
+  microtask (same order as the failed starts; the kernel no longer holds it back).
+- Carriers: the fault test's failure rows gain `kernel peer death` (uncaught /
+  fatal / listened); the browser-unit failed-start programs are compared with
+  live Node on `failedStartRows` (every row but `wexit` in order; `wexit` only
+  where Node always prints it), in their own `expect` after Acceptance 2's.
+- ADR-0446 §3, CHANGELOG, compat keepalive row, unit peer-death row + re-cut:
+  Node's placement recorded as timing-dependent, rifty's as an unloaded Node run's.
+
+### RED (HEAD `cb2039be8` product, new peer-death rows)
+
+`npx vitest run --project unit packages/runtime-js/src/builtins/worker_threads-keepalive.fault.test.ts`
+→ 2 failed / 13 passed: `kernel peer death: … uncaught exception, then 'exit' 1`
+events `[ 'exit:1', 'uncaught', 'micro' ]`; `kernel peer death: … ends the owner`
+events `[ 'exit:1', 'owner-exit:1' ]` (= the reviewer's probe).
+

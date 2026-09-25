@@ -215,7 +215,9 @@ export class Worker extends EventEmitter {
       }
       observeProcessTerminalOutcome(handle, (outcome) => {
         if (outcome.kind === 'peererror') {
-          this.fail(outcome.error);
+          // Own microtask: the kernel's emit collects a listener throw and
+          // rethrows it after 'exit'; unlistened, it must be uncaught first.
+          queueMicrotask(() => this.fail(outcome.error));
           return;
         }
         // TODO(backlog: runtime-js/worker-threads-kernel-error-event): a

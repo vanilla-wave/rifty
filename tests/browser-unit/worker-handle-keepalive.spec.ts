@@ -4,6 +4,7 @@ import { type AdvancedIpcProgram, runNodeProgram } from './fixtures/advanced-ipc
 import { runOwnerCommand } from './fixtures/message-port-ref-cases.ts';
 import {
   failedStartPrograms,
+  failedStartRows,
   workerHandlePrograms,
   workerRows,
 } from './fixtures/worker-handle-keepalive-cases.ts';
@@ -11,7 +12,8 @@ import {
 // ADR-0446 / goal I2: a live worker_threads.Worker holds its parent, an
 // unref()'d one does not, and a worker realm exits when its loop drains — in a
 // real Chromium child realm (`node main.cjs`), against a live Node run of the
-// same sources. One owner runs every program so the diff shows them all.
+// same sources. One owner runs every program; Acceptance 2's programs are
+// compared whole, the failed starts on Node's timing-independent rows.
 
 interface ProgramRun {
   readonly name: string;
@@ -19,6 +21,10 @@ interface ProgramRun {
   readonly exit: number | null;
   readonly rows: readonly string[];
 }
+
+type FailedStartRun = Omit<ProgramRun, 'rows'> & {
+  readonly rows: ReturnType<typeof failedStartRows>;
+};
 
 async function runInRifty(page: Page, program: AdvancedIpcProgram): Promise<ProgramRun> {
   const directory = `/scratch/wt-${program.name}`;
@@ -45,14 +51,14 @@ test('Worker lifetime holds the parent as in live Node (Chromium child realm)', 
       rows: workerRows(oracle.stdout),
     });
   }
-  const expectedFailedStarts: ProgramRun[] = [];
-  for (const { node } of failedStartPrograms) {
+  const expectedFailedStarts: FailedStartRun[] = [];
+  for (const { node, wexitAlways } of failedStartPrograms) {
     const oracle = await runNodeProgram(node);
     expectedFailedStarts.push({
       name: node.name,
       timedOut: false,
       exit: oracle.code,
-      rows: workerRows(oracle.stdout),
+      rows: failedStartRows(workerRows(oracle.stdout), wexitAlways),
     });
   }
 
@@ -68,14 +74,15 @@ test('Worker lifetime holds the parent as in live Node (Chromium child realm)', 
     expect(install.exit, install.out).toBe(0);
     const actual: ProgramRun[] = [];
     for (const program of workerHandlePrograms) actual.push(await runInRifty(page, program));
-    const actualFailedStarts: ProgramRun[] = [];
-    for (const { rifty } of failedStartPrograms) {
-      actualFailedStarts.push(await runInRifty(page, rifty));
+    expect(actual).toEqual(expected);
+    const actualFailedStarts: FailedStartRun[] = [];
+    for (const { rifty, wexitAlways } of failedStartPrograms) {
+      const run = await runInRifty(page, rifty);
+      actualFailedStarts.push({ ...run, rows: failedStartRows(run.rows, wexitAlways) });
     }
-    expect({ actual, actualFailedStarts }).toEqual({
-      actual: expected,
-      actualFailedStarts: expectedFailedStarts,
-    });
+    expect(actualFailedStarts, 'failed starts (timing-independent rows)').toEqual(
+      expectedFailedStarts,
+    );
   } finally {
     await closeOwner(page);
   }

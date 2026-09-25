@@ -1,9 +1,9 @@
 /**
  * ADR-0446 fault rows at the parent ↔ kernel Worker boundary: a live Worker
  * holds its parent's ADR-0152 keepalive, and every terminal path releases every
- * hold it took — peer death, a spawn the DOM Worker boundary refuses, a failed
- * start whose 'error' nobody listens to, and a constructor that throws (which
- * takes none). Only the absent DOM Worker and the browser's microtask exception
+ * hold it took — peer death, a spawn the DOM Worker boundary refuses, a peer
+ * death or failed start whose 'error' nobody listens to, and a constructor that
+ * throws (which takes none). Only the absent DOM Worker and the browser's microtask exception
  * report are substituted; the real kernel ProcessManager allocates, wires and
  * retires, and the production realm error trap dispatches.
  */
@@ -84,11 +84,19 @@ function installRealmErrorReport(): { readonly reported: unknown[]; restore(): v
   };
 }
 
-/** Starts that fail through the Worker's own 'error' path. */
-const FAILED_STARTS: ReadonlyArray<{
+/** Worker ends through its own 'error' path: a kernel peer death and failed starts. */
+const FAILURES: ReadonlyArray<{
   readonly label: string;
   readonly start: () => { worker: Worker; restore(): void };
 }> = [
+  {
+    label: 'kernel peer death',
+    start: () => {
+      const restore = installKernelWorkerBoundary(closeKernelWorkerPeer);
+      enableKernelWorkers();
+      return { worker: new Worker('/workspace/w-peer-death.mjs'), restore };
+    },
+  },
   {
     label: 'kernel spawn refused by the DOM Worker boundary',
     start: () => {
@@ -229,10 +237,12 @@ describe('worker_threads Worker keepalive holds (ADR-0446)', () => {
     }
   });
 
-  // Node v24.16.0 (evidence §Final+GREEN reception): 'error' first, then 'exit' 1
-  // after the microtasks its handling queued; unhandled, it is the owner's
-  // uncaught exception, and 'exit' 1 still follows unless that ended the owner.
-  for (const { label, start } of FAILED_STARTS) {
+  // Node v24.16.0 (evidence §Final+GREEN reception, r2): 'error' first; unhandled, it
+  // is the owner's uncaught exception. Node's 'exit' 1 placement races it; these
+  // rows pin Node's most frequent order: after the handling's microtasks when
+  // listened, between the uncaught exception and its microtasks otherwise, and
+  // none once that exception ended the owner.
+  for (const { label, start } of FAILURES) {
     it(`${label}: an unlistened 'error' is the owner's uncaught exception, then 'exit' 1 releases every hold`, async () => {
       const report = installRealmErrorReport();
       let restoreStart = () => {};
