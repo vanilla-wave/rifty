@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- `awaitDrain` settles with the active process's first exit terminal (`exit()`, a fatal rejection, a throwing `uncaughtException` listener), not only a recorded rejection (ADR-0445 note 2026-09-25): an in-process host without a control port (no-COI command, runBin) now sees exit 7 / an in-handler `exit(n)` instead of draining on to a natural exit 0, and no later task of that process runs. `activeRefs` is on `./internal`.
 - A runtime fatal exit (no-listener unhandled rejection, throwing `uncaughtException` listener) keeps the error it ended the process for as the exit signal's `cause` (ADR-0445), so an in-process host still names a declared gap behind it.
 - `vm.constants` is Node's frozen null-prototype pair of symbols (`USE_MAIN_CONTEXT_DEFAULT_LOADER`, `DONT_CONTEXTIFY`), also a named ESM export; `createContext` / `runInNewContext` / `Script#runInNewContext` with `DONT_CONTEXTIFY` throw `NotImplementedError('vm.createContext.DONT_CONTEXTIFY')` after Node's option validation, so jsdom under vitest `environment: 'jsdom'` fails named instead of a bare `TypeError` (ADR-0464).
 - The inherited-stdin hook key is registered (`Symbol.for('rifty.runtime-js.process-stdin-inherit.v1')`): in a production realm the process and `child_process` are separate runtime-js copies, so a default-stdio `fork` fell back to a `'data'` listener on the parent's stdin and held the parent forever after the child exited.
