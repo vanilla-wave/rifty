@@ -26,10 +26,8 @@ import {
   type ToolchainRequest,
   type ToolchainResult,
   type ToolchainResultValue,
-  captureTimerBoundary,
   checkedRuntimeFsFlush,
   claimSandboxToolchainResidentTransition,
-  clearTimersSince,
   handleWorkerFsRequest,
   invalidateRuntimeWorkerModules,
   releaseSandboxToolchainResidentTransition,
@@ -43,6 +41,7 @@ import { INSTALL_STAMP_BASENAME, readInstallStamp } from '../glue/install-stamp.
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { declaredGapCause } from './declared-gap-cause.ts';
 import { createNoCoiInstallContext } from './no-coi-install-context.ts';
+import { openNoCoiInvocationScope } from './no-coi-invocation-scope.ts';
 import { startResidentNodeEntry } from './resident-node-entry.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -196,8 +195,7 @@ async function runInstalledBin(
   // ADR-0445: a reused in-process process starts unset and not exiting.
   resetNodeProcessExit(riftyProcess);
   setProcessCwd(input.cwd);
-  const timerBoundary = captureTimerBoundary();
-  let drained = false;
+  const invocation = openNoCoiInvocationScope();
   let exitCode = 0;
   try {
     await runNodeEntry({
@@ -207,13 +205,9 @@ async function runInstalledBin(
       bin: true,
     });
     await awaitDrain({ capMs: 600_000 });
-    drained = true;
     // Natural exit = Node's `exit()`: `'exit'` once, then `exitCode ?? 0`; it throws its signal.
     nodeExit();
   } catch (error) {
-    // Ended before the loop drained (entry throw, process terminal): Node's process
-    // is gone, so none of its timers runs later in this reused realm.
-    if (!drained) clearTimersSince(timerBoundary);
     const pendingRejection = takeUnhandledRejection();
     const failure = pendingRejection === null ? error : pendingRejection.reason;
     // A runtime fatal exit keeps its error as `cause` (ADR-0445): a declared gap
@@ -223,6 +217,8 @@ async function runInstalledBin(
     const signalled = processExitCode(failure);
     if (signalled === null) throw failure;
     exitCode = signalled;
+  } finally {
+    invocation.end();
   }
   await flushMirror();
   return { exitCode };
