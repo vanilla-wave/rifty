@@ -315,3 +315,149 @@ First failure unchanged: goal I1. Scratch copy (override `vite@8.0.16`,
 
 → goal I6 (the ESM `Function` write guard), still a scenario wall; the
 Startup Error exiting 0 is the I3/I4 exit-code path.
+
+## IMPLEMENT — on the integrated goal tree (2026-09-25)
+
+`vg/u12` merged `t3code/vitest-run-browser` at `d1a44f616` (all children
+landed). RED r3, same command as §RED:
+
+```
+  ✓ 1 … npm install + vitest run report Node results and exit codes on both pools (56.2s)
+  ✘ 2 … unclaimed modes fail loudly with a named ceiling, never a silent pass (43.3s)
+      Expected pattern: /Not implemented: [^\n]*DONT_CONTEXTIFY/u
+      Caused by: TypeError: Cannot read properties of undefined (reading 'DONT_CONTEXTIFY')
+       ❯ exports.createWindow node_modules/jsdom/lib/jsdom/browser/Window.js:60:44
+```
+
+The claimed scenario is green as landed; the first wall is the jsdom ceiling
+this unit owns (Decisions 2026-09-23). Browser mode was next behind it
+(§Static reads: `http.Agent` absent).
+
+Node oracle for the two members (v24.16.0):
+
+```
+$ node -e 'const vm=require("node:vm"); console.log(vm.constants, Object.isFrozen(vm.constants)); …'
+[Object: null prototype] {
+  USE_MAIN_CONTEXT_DEFAULT_LOADER: Symbol(vm_dynamic_import_main_context_default),
+  DONT_CONTEXTIFY: Symbol(vm_context_no_contextify)
+} true
+descriptor on vm: writable/enumerable/configurable true; Object.keys(vm) includes 'constants'
+createContext(DONT_CONTEXTIFY) → object, isContext true, own intrinsics (c.Array !== Array)
+createContext(DONT_CONTEXTIFY, {name:1}) → ERR_INVALID_ARG_TYPE The "options.name" property must be of type string. Received type number (1)
+$ node -e 'const http=require("node:http"); …'
+typeof http.Agent 'function', name 'Agent', length 1, descriptor writable/enumerable/configurable true,
+Object.getPrototypeOf(https.Agent) === http.Agent
+```
+
+Carriers, RED before the product change (logs in the unit's scratch):
+
+```
+$ npx vitest run packages/runtime-js/src/builtins/vm/dont-contextify-ceiling.test.ts packages/net/src/http/agent.test.ts
+ FAIL dont-contextify-ceiling.test.ts  TypeError: Cannot destructure property 'DONT_CONTEXTIFY' of 'default.constants' as it is undefined.
+ FAIL agent.test.ts (3)                TypeError: http.Agent is undefined
+$ pnpm test:parity vm/constants
+  ✗ vm/constants.case.ts  error: SyntaxError: The requested module 'node:vm' does not provide an export named 'constants'
+$ pnpm test:parity http/agent-shape
+  ✗ http/agent-shape.case.ts  error: TypeError: Class extends value undefined is not a constructor or null
+```
+
+After (ADR-0464): both unit files pass (3 + 3), both parity cases match,
+`pnpm test:parity vm/` and `http/` all match.
+
+## GREEN — Chromium, the claimed scenario and every ceiling (2026-09-25)
+
+```
+$ RIFTY_PLAYGROUND_PORT=5412 pnpm exec playwright test --project=chromium-heavy tests/e2e/vitest-run.spec.ts --workers=1
+  ✓ 1 … npm install + vitest run report Node results and exit codes on both pools (56.3s)
+  ✓ 2 … unclaimed modes fail loudly with a named ceiling, never a silent pass (1.3m)
+  2 passed (2.3m)
+```
+
+Outputs, from an uncommitted copy of the spec that prints each command's
+slice (same seed/commands, `--project=chromium-light`; ANSI stripped,
+`Users/…` source frames elided):
+
+```
+$ npm install                                   [exit 0]
+npm: + vite@8.0.16 … npm: + lightningcss-wasm@1.32.0 …
+npm: lightningcss@^1.32.0 → lightningcss-wasm@1.32.0 (substituted from shadow registry, ADR-0051)
+npm: installed 48 package(s) in 13.2s
+$ vitest run                                    [exit 1]
+ RUN  v4.1.11 /
+ ❯ src/sum.test.ts (2 tests | 1 failed) 4ms
+   ✓ first sum 1ms
+   × second sum 3ms
+ FAIL  src/sum.test.ts > second sum
+AssertionError: expected 3 to be 4 // Object.is equality
+- Expected
++ Received
+- 4
++ 3
+ ❯ src/sum.test.ts:9:21
+      9|   expect(sum(1, 2)).toBe(4);
+       |                     ^
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+$ npm test                                      [exit 1]   > vitest run + the same block
+$ vitest run --pool=threads --reporter=verbose  [exit 1]
+ ✓ src/sum.test.ts > first sum 1ms
+ × src/sum.test.ts > second sum 3ms
+   → expected 3 to be 4 // Object.is equality      (+ the same failure block and counts)
+$ vitest run   (fixed)                          [exit 0]
+ ✓ src/sum.test.ts (2 tests) 1ms
+   ✓ first sum 1ms                                  (TTY stdout: Node's TTY renderSucceed lines, §Oracle)
+   ✓ second sum 0ms
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+$ vitest       (fixed, non-TTY stdin)           [exit 0]   same lines, one run
+$ npm install  (unpinned)                       [exit 1]
+npm: + vite@8.3.1 …
+npm: install failed: Not implemented: lightningcss.version (shadow recipe does not admit ^1.33.0)
+$ vitest run --environment=jsdom                [exit 1]
+Caused by: NotImplementedError: Not implemented: vm.createContext.DONT_CONTEXTIFY (the vm engines contextify a given object only; handing out a fresh realm's own global is not supported)
+ ❯ exports.createWindow node_modules/jsdom/lib/jsdom/browser/Window.js:60:17
+$ vitest run --environment=happy-dom            [exit 1]
+Caused by: NotImplementedError: Not implemented: module-loader.esm-global-function-assignment (ESM module /node_modules/happy-dom/lib/window/GlobalWindow.js writes the Function binding/global property; …
+$ vitest run --coverage                         [exit 1]
+ModuleLoadError: Built-in 'node:inspector/promises' is not implemented
+$ vitest run --pool=vmThreads                   [exit 1]
+Caused by: NotImplementedError: Not implemented: worker_threads.Worker.execArgv (startup option '--experimental-vm-modules' is not carried; …)
+[vitest-pool]: Timeout terminating vmThreads worker for test files /src/sum.test.ts.
+close timed out after 10000ms
+Tests closed successfully but something prevents Vite server from exiting
+$ vitest run --pool=vmForks                     [exit 1]
+Caused by: NotImplementedError: Not implemented: child_process.fork.execArgv (startup option '--experimental-vm-modules' is not carried; …)
+  (same three teardown lines)
+$ vitest run   (browser-mode config)            [exit 1]
+NotImplementedError: Not implemented: node:https.Agent (TLS termination is not available in the browser — a custom https Agent has no socket pool to manage)
+ ❯ new HttpsHappyEyeballsAgent node_modules/playwright-core/lib/coreBundle.js:7935:31
+```
+
+Browser mode now reaches playwright-core's first construction
+(`coreBundle.js:7945` `new HttpsHappyEyeballsAgent`); the `class extends
+http.Agent` declarations before it evaluate as on Node.
+
+Registry drift since PICKUP: `npm view vite dist-tags.latest` → `8.3.1`,
+`npm view vite@8.3.1 dependencies.lightningcss` → `^1.33.0` (npm 11.17.0,
+public registry) — the page's ⚠️ versions row names 8.2.0 through 8.3.1.
+
+### Observation — teardown after a pool-start ceiling
+
+Node with a pool Worker whose start throws (`test.execArgv: ['--bogus-flag']`,
+same project, markers unset, stdin `/dev/null`):
+
+```
+$ npx vitest run --config vitest.bogus.config.ts --pool=vmThreads     [exit 1] 10s
+Caused by: Error: Initiated Worker with invalid execArgv flags: --bogus-flag
+[vitest-pool]: Timeout terminating vmThreads worker for test files …/src/sum.test.ts.
+$ … --pool=threads                                                    [exit 1] 10s   (same shape)
+```
+
+Node exits when the pool's ref'd terminate timer (`cli-api.CnMVyzaz.js:3550`)
+fires; in rifty the process is still alive when vitest's unref'd `exit()`
+teardown timer (`:14033-14046`, armed milliseconds later with the same 10 s)
+fires and prints `close timed out after 10000ms` / `… prevents Vite server
+from exiting`. Exit code and the named ceiling match. Root cause not
+diagnosed: a handle the never-closed Vite server holds in rifty, or drain
+latency after the last ref'd timer. Unclaimed-mode error path only (claimed
+runs close normally) — a deferred discovery, not this unit's result.

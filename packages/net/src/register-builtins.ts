@@ -7,7 +7,8 @@
  * (runtime-* must not depend on net).
  */
 import { registerBuiltin } from '@riftydev/io';
-import http, {
+import http from './http/index.ts';
+import {
   HttpServer as BaseHttpServer,
   type RequestListener,
   type ServerOptions,

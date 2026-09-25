@@ -27,17 +27,40 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `--pool=threads` | ✅ | Test files run in a `worker_threads.Worker` (stdout/stderr streams); same results and exit codes as `forks` |
 | Node process contracts vitest depends on | ✅ | A live `Worker`/ref'd `MessagePort` keeps the process running; `uncaughtException`/`unhandledRejection` handlers, the `exit` event and `process.exit()` honouring `process.exitCode` behave as on Node |
 | Loading the vitest 4.1.11 tree | ✅ | CLI, config bundle and pool workers load every module on the claimed path — no link-time `SyntaxError`, `ModuleLoadError` or loader ceiling; members the browser cannot provide throw a named `NotImplementedError` only on unclaimed calls |
-| `environment: 'jsdom'` | ❌ | Named `NotImplementedError` at jsdom's `vm.createContext(vm.constants.DONT_CONTEXTIFY)` (vitest runs jsdom with `runScripts: 'dangerously'`); tracked by epic `jsdom-environment-in-browser` |
+| `environment: 'jsdom'` | ❌ | `Not implemented: vm.createContext.DONT_CONTEXTIFY` at jsdom's `vm.createContext(vm.constants.DONT_CONTEXTIFY)` (vitest runs jsdom with `runScripts: 'dangerously'`; ADR-0464); tracked by epic `jsdom-environment-in-browser` |
 | `environment: 'happy-dom'` | ❌ | `Not implemented: module-loader.esm-global-function-assignment` — happy-dom's window writes a `Function` binding |
 | Coverage (`--coverage`, `@vitest/coverage-v8`) | ❌ | `Built-in 'node:inspector/promises' is not implemented` |
-| Browser mode (`@vitest/browser-playwright`) | ❌ | `Not implemented: node:https.Agent` (or `node:http.Agent`) when Playwright loads; no browser is launched from inside the browser |
-| `--pool=vmThreads` / `--pool=vmForks` | ❌ | Named `NotImplementedError` for the pools' `--experimental-vm-modules` startup flag (`vm.SourceTextModule` is absent) |
-| Watch mode (`vitest` without `run`, `--watch`) | ⚠️ | Not claimed. Shell children get a non-TTY stdin, so bare `vitest` runs once with `vitest run`'s lines and exit code, as Node does with piped stdin; `vitest --watch` is untested and has no named ceiling on its path |
-| Other Vite / vitest versions | ⚠️ | Not claimed. Vite releases requiring `lightningcss ^1.33.0` (8.2.0 through 8.3.0, the latest at writing) fail `npm install` with `Not implemented: lightningcss.version`; Vite 7.3.6 / 8.0.x / 8.1.x and vitest other than 4.1.11 are untested, install included |
+| Browser mode (`@vitest/browser-playwright`) | ❌ | `Not implemented: node:https.Agent` when Playwright loads and constructs its `https.Agent` subclass (an `http.Agent` subclass throws `node:http.Agent`, ADR-0464); no browser is launched from inside the browser |
+| `--pool=vmThreads` / `--pool=vmForks` | ❌ | `Not implemented: worker_threads.Worker.execArgv` / `child_process.fork.execArgv` naming the pools' `--experimental-vm-modules` startup flag (ADR-0449; `vm.SourceTextModule` is absent). As on Node when a pool worker fails to start, vitest waits its 10 s teardown timeout; rifty then also prints `close timed out after 10000ms` and `… prevents Vite server from exiting` before exit 1 |
+| Watch mode (`vitest` without `run`, `--watch`) | ⚠️ | Not claimed. Shell children get a non-TTY stdin, so bare `vitest` runs once, as Node does with piped stdin (tested on the passing project: `vitest run`'s lines, exit 0); `vitest --watch` is untested and has no named ceiling on its path |
+| Other Vite / vitest versions | ⚠️ | Not claimed. Vite releases requiring `lightningcss ^1.33.0` (8.2.0 through 8.3.1, the latest on 2026-09-25) fail `npm install` with `Not implemented: lightningcss.version`; Vite 7.3.6 / 8.0.x / 8.1.x and vitest other than 4.1.11 are untested, install included |
 
 ## Test Sources
 
-- `tests/e2e/vitest-run.spec.ts`
+- `tests/e2e/vitest-run.spec.ts` — the scenario in Chromium: install, failing and fixed runs on both
+  pools, `npm test`, verbose, bare `vitest`, and every ❌ row's named throw
+- `tests/e2e/npm-override-bare-version.spec.ts` — the npm-spelled Vite override install
+- Worker / `MessagePort` keepalive: `tools/node-parity-runner/cases/worker_threads/handle-*.case.ts`,
+  `worker-natural-exit.case.ts`, `worker-port-*.case.ts`; `tests/browser-unit/worker-handle-keepalive.spec.ts`,
+  `tests/browser-unit/message-port-ref-keepalive.spec.ts`; `tests/e2e-prod/worker-threads-keepalive.spec.ts`
+- Process lifecycle: `tools/node-parity-runner/cases/process/*-lifecycle*.case.ts`,
+  `exit-lifecycle-child.case.ts`, `callback-throw-uncaught-child.case.ts`,
+  `natural-exit-patched-process-exit.case.ts`; `tests/browser-unit/owner-node-process-lifecycle.spec.ts`
+- Pools: `tools/node-parity-runner/cases/child_process/public-ipc-advanced*.case.ts`,
+  `fork-exec-argv.case.ts`, `fork-stdout-pipe-process-stdio.case.ts`, `vitest-pool-shape.case.ts`;
+  `cases/stream/pipe-process-stdio*.case.ts`; `cases/worker_threads/stdio-*.case.ts`,
+  `exec-argv-*.case.ts`, `vitest-pool-shape.case.ts`; `cases/vm/run-in-this-context-offsets*.case.ts`;
+  `tests/browser-unit/advanced-ipc.spec.ts`, `worker-stdio-exec-argv.spec.ts`, `vm-script-offsets.spec.ts`;
+  `tests/e2e-prod/worker-stdio-exec-argv.spec.ts`
+- Module loading: `tools/node-parity-runner/cases/path/posix-subpath-*.case.ts`,
+  `cases/process/esm-named-members*.case.ts`, `cases/modules/builtin-loud-members-link.case.ts`,
+  `cases/child_process/pool-worker-loud-members.case.ts`, `cases/modules/global-computed-key-*.case.ts`;
+  `tests/conformance/modules/global-computed-key-guard*.test.ts`
+- Ceilings: `tools/node-parity-runner/cases/vm/constants.case.ts`,
+  `packages/runtime-js/src/builtins/vm/dont-contextify-ceiling.test.ts`,
+  `tools/node-parity-runner/cases/http/agent-shape.case.ts`, `packages/net/src/http/agent.test.ts`,
+  `packages/runtime-js/src/builtins/loud-members.test.ts`,
+  `packages/runtime-js/src/builtins/startup-options-ceiling.test.ts`
 
 ## Known Limitations
 

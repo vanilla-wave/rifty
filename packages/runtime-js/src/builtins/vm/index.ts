@@ -350,12 +350,31 @@ function runScriptInThisContext(
   return runGlobalScript(sourceURL ? `${code}\n//# sourceURL=${sourceURL}` : code);
 }
 
+const DONT_CONTEXTIFY = Symbol('vm_context_no_contextify');
+
+/** Node's `vm.constants` (data). As an `importModuleDynamically` value it hits that option's throw. */
+const constants: {
+  readonly USE_MAIN_CONTEXT_DEFAULT_LOADER: symbol;
+  readonly DONT_CONTEXTIFY: symbol;
+} = Object.freeze(
+  Object.assign(Object.create(null) as object, {
+    USE_MAIN_CONTEXT_DEFAULT_LOADER: Symbol('vm_dynamic_import_main_context_default'),
+    DONT_CONTEXTIFY,
+  }),
+);
+
 export function createContext<T extends Record<string, unknown> = Record<string, unknown>>(
-  contextObject?: T,
+  contextObject?: T | symbol,
   options?: CreateContextOptions,
 ): T {
   if (isVmContext(contextObject)) return contextObject as T;
   const codeGeneration = normalizeContextCodeGeneration(options);
+  if (contextObject === DONT_CONTEXTIFY) {
+    throw new NotImplementedError(
+      'vm.createContext.DONT_CONTEXTIFY',
+      "the vm engines contextify a given object only; handing out a fresh realm's own global is not supported",
+    );
+  }
   const engine = selectEngine();
   if (
     engine.name === 'rewrite' &&
@@ -413,7 +432,7 @@ export function runInContext(
 
 export function runInNewContext(
   code: string,
-  contextObject?: Record<string, unknown>,
+  contextObject?: Record<string, unknown> | symbol,
   options?: VmOptions,
 ): unknown {
   if (contextObject === null) {
@@ -472,7 +491,7 @@ export class Script {
     );
   }
 
-  runInNewContext(contextObject?: Record<string, unknown>, options?: VmOptions): unknown {
+  runInNewContext(contextObject?: Record<string, unknown> | symbol, options?: VmOptions): unknown {
     if (contextObject === null) {
       throw new TypeError('The "object" argument must be of type object. Received null');
     }
@@ -500,6 +519,7 @@ export function compileFunction(
 const vmModule = {
   Script,
   compileFunction,
+  constants,
   createContext,
   isContext,
   runInContext,
