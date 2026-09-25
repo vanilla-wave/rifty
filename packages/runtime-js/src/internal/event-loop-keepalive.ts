@@ -18,6 +18,7 @@ import {
   dispatchUncaughtException,
   dispatchUnhandledRejection,
   isRiftyProcessExit,
+  readNodeProcessTerminal,
   takeUndispatchedRethrow,
   terminateFatal,
 } from '../builtins/process-lifecycle-events.ts';
@@ -338,7 +339,8 @@ export interface DrainOptions {
 
 /**
  * Resolve once the event loop has drained (refCount→0), reject on a recorded
- * rejection or once `capMs` elapses without draining.
+ * rejection, with the active process's exit terminal, or once `capMs` elapses
+ * without draining.
  *
  * The first check runs on the MACROTASK queue so all pending microtasks (e.g. a
  * detached `import(...).then(run)` chain whose loader reads are microtask-driven)
@@ -424,6 +426,13 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
           reason: state.rejection.reason,
           origin: state.rejection.origin,
         });
+        return;
+      }
+      // ADR-0445: the process's first terminal ends its loop in-realm, as the
+      // control port ends a kernel child; no later task runs as that process.
+      const exited = readNodeProcessTerminal();
+      if (exited !== null) {
+        finish({ kind: 'rejected', reason: exited, origin: 'explicit-exit' });
         return;
       }
       if (state.refCount <= 0 && !opts.hasRef?.()) {

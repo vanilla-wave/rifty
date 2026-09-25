@@ -3,11 +3,14 @@ import type { KernelProcessSpec } from '@riftydev/kernel';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   awaitDrain,
+  handleRealmUncaughtError,
   handleRealmUnhandledRejection,
   resetKeepalive,
 } from '../internal/event-loop-keepalive.ts';
 import { installNodeProcessShim } from '../ipc/install-process.ts';
+import { setActiveNodeProcessBootstrap } from './process-bootstrap-identity.ts';
 import { dispatchUncaughtException } from './process-lifecycle-events.ts';
+import { NodeProcess, resetNodeProcessExit } from './process.ts';
 
 // ADR-0445 fault rows (observable-order): `exit()` re-entered from an `'exit'`
 // listener, or called again by a timer that listener scheduled (vitest's
@@ -196,5 +199,79 @@ describe('fatal unhandled rejection (ADR-0445)', () => {
     expect(frames).toEqual([{ kind: 'control:self-exit', code: 0 }]);
     expect(stderr).toEqual([]);
     await expect(awaitDrain()).rejects.toMatchObject({ code: 'RIFTY_PROCESS_EXIT', exitCode: 0 });
+  });
+});
+
+// ADR-0445 in-process host (no-COI command/runBin): no control port carries the
+// exit request, so the drain is the only in-realm reader of the terminal. Node
+// v24.16.0: a throwing listener exits 7 (never the natural exit's 0); an exit()
+// inside a handler owns the status; a fresh invocation starts without it.
+describe('in-process process without a control port (ADR-0445)', () => {
+  function inProcess(): { readonly process: NodeProcess; readonly stderr: string[] } {
+    const process = new NodeProcess();
+    const stderr: string[] = [];
+    process.stderr.write = (chunk: string | Uint8Array) => {
+      stderr.push(String(chunk));
+      return true;
+    };
+    setActiveNodeProcessBootstrap(process);
+    return { process, stderr };
+  }
+
+  afterEach(() => {
+    setActiveNodeProcessBootstrap(null);
+  });
+
+  it('a throwing uncaughtException listener settles the drain with status 7', async () => {
+    const { process, stderr } = inProcess();
+    process.on('uncaughtException', () => {
+      throw new Error('LISTENER');
+    });
+
+    expect(handleRealmUncaughtError(new Error('timer'))).toBe(true);
+
+    await expect(awaitDrain()).rejects.toMatchObject({
+      code: 'RIFTY_PROCESS_EXIT',
+      exitCode: 7,
+    });
+    expect(stderr.join('')).toContain('Error: LISTENER');
+  });
+
+  it('a listener throw for an unhandled rejection settles the drain with status 7', async () => {
+    const { process } = inProcess();
+    process.on('uncaughtException', () => {
+      throw new Error('LISTENER');
+    });
+    const reason = new Error('rejected');
+    const promise = Promise.reject(reason);
+    promise.catch(() => {});
+
+    expect(handleRealmUnhandledRejection(reason, promise)).toBe(true);
+
+    await expect(awaitDrain()).rejects.toMatchObject({
+      code: 'RIFTY_PROCESS_EXIT',
+      exitCode: 7,
+    });
+  });
+
+  it('an exit() inside a handler ends the loop with its status', async () => {
+    const { process } = inProcess();
+    process.on('uncaughtException', () => process.exit(4));
+
+    expect(handleRealmUncaughtError(new Error('timer'))).toBe(true);
+
+    await expect(awaitDrain()).rejects.toMatchObject({
+      code: 'RIFTY_PROCESS_EXIT',
+      exitCode: 4,
+    });
+  });
+
+  it('a reset invocation drains without the previous terminal', async () => {
+    const { process } = inProcess();
+    expect(() => process.exit(3)).toThrow(exitSignal(3));
+
+    resetNodeProcessExit(process);
+
+    await expect(awaitDrain()).resolves.toBeUndefined();
   });
 });

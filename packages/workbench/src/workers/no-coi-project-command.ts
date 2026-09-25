@@ -10,9 +10,11 @@ import {
 import {
   type ToolchainCommandInput,
   type ToolchainCommandResult,
+  activeRefs,
   captureTimerBoundary,
   clearTimersSince,
   installConsole,
+  takeUnhandledRejection,
 } from '@riftydev/runtime-js/internal';
 import { type CommandContext, Shell, ShellCommandLifecycleError } from '@riftydev/shell';
 import type { FsSync } from '@riftydev/vfs';
@@ -35,6 +37,20 @@ function processExitCode(error: unknown): number | null {
   return candidate.code === 'RIFTY_PROCESS_EXIT' && typeof candidate.exitCode === 'number'
     ? candidate.exitCode
     : null;
+}
+
+/**
+ * ADR-0445: the drain settled with the process's terminal, Node's status. Its
+ * timers die with it; any other live handle (port, pending import/fetch)
+ * outlives it in this reused realm, so the realm is replaced instead.
+ */
+function terminalExitCode(settlement: unknown, timerBoundary: number): number | null {
+  const exitCode = processExitCode(settlement);
+  if (exitCode === null || declaredGapCause(settlement) !== null) return null;
+  clearTimersSince(timerBoundary);
+  if (activeRefs() > 0 || listPorts().length > 0) return null;
+  takeUnhandledRejection();
+  return exitCode;
 }
 
 function serializeError(error: unknown): SerializedRuntimeError {
@@ -124,13 +140,20 @@ export async function runNoCoiProjectCommand(
         executionError = error;
       }
       // A throwing entry may already have scheduled real work. Never skip its drain.
+      let terminal: number | null = null;
       try {
         await awaitDrain({ capMs: 600_000, hasRef: () => listPorts().length > 0 });
       } catch (error) {
-        requiresTermination = true;
-        failure = error;
-        throw new ShellCommandLifecycleError('Node event-loop settlement failed', { cause: error });
+        terminal = terminalExitCode(error, timerBoundary);
+        if (terminal === null) {
+          requiresTermination = true;
+          failure = error;
+          throw new ShellCommandLifecycleError('Node event-loop settlement failed', {
+            cause: error,
+          });
+        }
       }
+      if (terminal !== null) return terminal;
       if (executionFailed) {
         const exitCode = processExitCode(executionError);
         if (exitCode !== null) return exitCode;

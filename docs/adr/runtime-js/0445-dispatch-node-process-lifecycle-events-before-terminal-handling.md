@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-09-23
 
-> TL;DR: One dispatch on the realm's active `NodeProcess` delivers uncaught errors and unhandled rejections to Node's listeners before any terminal path runs. A handled error cancels the browser report and the program continues. `exit()` follows Node: `exitCode` starts `undefined`, no argument means `exitCode`, and `'exit'` fires once before the kernel exit request. Natural exit calls the same `exit()`. A zero-ref drain confirms idleness across one more host task before it settles.
+> TL;DR: One dispatch on the realm's active `NodeProcess` delivers uncaught errors and unhandled rejections to Node's listeners before any terminal path runs. A handled error cancels the browser report and the program continues. `exit()` follows Node: `exitCode` starts `undefined`, no argument means `exitCode`, and `'exit'` fires once before the kernel exit request. Natural exit calls the same `exit()`. The drain settles with the process's first exit terminal. A zero-ref drain confirms idleness across one more host task before it settles.
 
 Partially supersedes ADR-0152 §3 (a rejection a process listener handles is
 canceled and not recorded; a no-listener rejection's stderr and exit request
@@ -77,6 +77,15 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
    throws the exit signal. An in-process owner reusing one process per
    invocation (no-COI, the Node-hosted execSync substitutes) resets it with
    `resetNodeProcessExit` (`./builtins/process`).
+   Corrected 2026-09-25: the drain settles with the active process's first
+   terminal (this rule, rule 3, rule 4), not only rule 3's record. The request
+   reached only the control port, so an in-process host (no-COI command, runBin)
+   drained on and reported 0 for a listener throw, and ran later timers. A
+   kernel child's status is unchanged: the drain and the control request carry
+   the same first terminal. The no-COI command takes its status from that
+   terminal and clears the invocation's timers. It replaces the realm only when
+   another live handle (port, pending import/fetch) outlives the terminal.
+   runBin ends with rule 6's natural exit.
 6. **Natural exit.** A lifecycle owner that sees the loop drain calls `exit()`
    with no argument — the program/eval lifecycle (after the `-p` print) and the
    execSync program branch (after its drain, which now precedes it). Worker
@@ -100,6 +109,10 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   synchronously): killed — native async-function rejections and captured
   `then` intrinsics bypass a JS patch (process.ts header limitation).
 - Late rejection by a fixed delay: killed — a timing guess, not an order.
+- Terminal read at each realm trap and the `nextTick` drain (2026-09-25):
+  killed — an `exit()` a guest catches, or an emitter swallows
+  (`child_process` owner events), reaches no trap. One read at the drain
+  covers every terminal.
 - No-listener rejection terminal at the next drain sample (ADR-0152 §3's
   record): killed — a user task in between can call `exit(0)` and send the
   first kernel request, so the program exits 0 after `'exit'` 1 (evidence §F).
@@ -127,6 +140,9 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   reorders ADR-0085) → backlog `runtime-js/late-unhandled-rejection-drain`.
 - Zero-ref drains settle one host task later.
 - Explicit gaps (compat rows): `beforeExit` and `rejectionHandled` are not
-  emitted; `setUncaughtExceptionCaptureCallback` is absent; the no-COI
-  in-process project command keeps its own settlement; worker-thread natural
-  exit stays with map item 8.
+  emitted; `setUncaughtExceptionCaptureCallback` is absent; worker-thread
+  natural exit stays with map item 8. No-COI in-process hosts (2026-09-25):
+  a no-listener throw keeps the realm's default report (the toolchain Worker
+  crashes), and a command's eval fatal rejection or a terminal with a live
+  non-timer handle replaces the realm (draft
+  `distribution/no-coi-command-unhandled-rejection-exit`).

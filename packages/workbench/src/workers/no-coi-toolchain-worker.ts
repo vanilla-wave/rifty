@@ -26,8 +26,10 @@ import {
   type ToolchainRequest,
   type ToolchainResult,
   type ToolchainResultValue,
+  captureTimerBoundary,
   checkedRuntimeFsFlush,
   claimSandboxToolchainResidentTransition,
+  clearTimersSince,
   handleWorkerFsRequest,
   invalidateRuntimeWorkerModules,
   releaseSandboxToolchainResidentTransition,
@@ -54,6 +56,9 @@ Object.defineProperty(globalThis, TOOLCHAIN_REALM, {
 });
 installEventLoopKeepalive();
 registerNetBuiltins();
+// ADR-0445 rule 6: natural exit is Node's own `exit()`, captured before any guest
+// can reassign `process.exit`.
+const nodeExit = riftyProcess.exit;
 const closeToolchainWorker = installToolchainCloseSignal();
 Reflect.set(globalThis, '__riftyTrackCliPromise', trackKeepalivePromise);
 
@@ -187,11 +192,12 @@ async function runInstalledBin(
 ): Promise<{ readonly exitCode: number }> {
   const { prepareSavedToolchain } = await import('./no-coi-toolchain-install.ts');
   await prepareSavedToolchain(input.cwd);
-  const process = riftyProcess as unknown as { argv: string[]; exitCode?: number };
-  process.argv = ['node', input.binPath, ...input.args];
+  riftyProcess.argv = ['node', input.binPath, ...input.args];
   // ADR-0445: a reused in-process process starts unset and not exiting.
   resetNodeProcessExit(riftyProcess);
   setProcessCwd(input.cwd);
+  const timerBoundary = captureTimerBoundary();
+  let drained = false;
   let exitCode = 0;
   try {
     await runNodeEntry({
@@ -201,8 +207,13 @@ async function runInstalledBin(
       bin: true,
     });
     await awaitDrain({ capMs: 600_000 });
-    if (typeof process.exitCode === 'number') exitCode = process.exitCode;
+    drained = true;
+    // Natural exit = Node's `exit()`: `'exit'` once, then `exitCode ?? 0`; it throws its signal.
+    nodeExit();
   } catch (error) {
+    // Ended before the loop drained (entry throw, process terminal): Node's process
+    // is gone, so none of its timers runs later in this reused realm.
+    if (!drained) clearTimersSince(timerBoundary);
     const pendingRejection = takeUnhandledRejection();
     const failure = pendingRejection === null ? error : pendingRejection.reason;
     // A runtime fatal exit keeps its error as `cause` (ADR-0445): a declared gap

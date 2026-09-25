@@ -91,6 +91,11 @@ export class NodeProcessExit {
     return this.#exiting;
   }
 
+  /** The first requested terminal; null while the process lives. */
+  get terminal(): RiftyProcessExitSignal | null {
+    return this.#terminal;
+  }
+
   /** Node `per_thread.js` `exit()`: the status is read after the listeners. */
   exit(hasCode: boolean, code: unknown): never {
     if (hasCode) this.#host.writeExitCode(code);
@@ -154,7 +159,7 @@ export class NodeProcessExit {
 
 type NodeProcessExitLike = Pick<
   NodeProcessExit,
-  'exiting' | 'beginFatal' | 'fatal' | 'listenerThrew' | 'reset'
+  'exiting' | 'terminal' | 'beginFatal' | 'fatal' | 'listenerThrew' | 'reset'
 >;
 
 export function attachNodeProcessExit(process: object, exit: NodeProcessExit): void {
@@ -177,6 +182,14 @@ function exitStateOf(process: unknown): NodeProcessExitLike | null {
 /** True once `process`'s exit has begun (Node `_exiting`); false for a non-runtime process. */
 export function isNodeProcessExiting(process: unknown): boolean {
   return exitStateOf(process)?.exiting === true;
+}
+
+/**
+ * The active process's first terminal. The drain settles with it: an in-process
+ * host has no control port to carry the exit request.
+ */
+export function readNodeProcessTerminal(target?: unknown): RiftyProcessExitSignal | null {
+  return lifecycleTarget(target)?.exit.terminal ?? null;
 }
 
 /** Reset a reused in-process `NodeProcess` to an unset, not-exiting invocation. */
