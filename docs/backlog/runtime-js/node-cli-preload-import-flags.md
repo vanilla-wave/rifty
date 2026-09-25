@@ -5,8 +5,8 @@ title: Node CLI preload and import flags
 created: 2026-07-30
 why: Node loads `--require`/`-r` and `--import` modules before eval or entry execution, while Rifty stops each valid form at a named no-child gap.
 user_story: As a Node CLI author using startup hooks, I want preload modules to run before my command with exact Node identity, but today Rifty throws one named unsupported-context error.
-sources: [M11, ADR-0155, docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md]
-code: [packages/workbench/src/workers/node-entry-resolve.ts, packages/workbench/src/workers/workbench-project-runtime.ts, packages/runtime-js/src/module-loader/loader.ts]
+sources: [M11, ADR-0155, docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md, docs/backlog/runtime-js/reference/worker-threads-stdio-streams-empty-exec-argv-evidence.md]
+code: [packages/workbench/src/workers/node-entry-resolve.ts, packages/workbench/src/workers/workbench-project-runtime.ts, packages/runtime-js/src/module-loader/loader.ts, packages/runtime-js/src/builtins/child_process-worker.ts]
 ---
 
 ## Context
@@ -37,3 +37,15 @@ faithful contract must pin option spellings and ordering, specifier resolution,
 preload/eval realm identity, `process.execArgv`, preload failure priority, and
 program versus eval consumers, including separated empty specifiers. This draft
 chooses no loader or launch mechanism; no coordination mechanism is proposed.
+
+## `spawn('node', [flags…, file])` (2026-09-25)
+
+REV-12 discovery of `runtime-js/worker-threads-stdio-streams-empty-exec-argv`
+(evidence §Discoveries). Node v24.16.0: `spawn('node', ['--require',
+'./pre.cjs', 'c.cjs'])` runs `c.cjs` after the preload (`spawn-flags 0
+"child [\"--require\",\"./pre.cjs\"] pre\n"`). rifty reads the first flag as
+the entry (`buildChildExecutionPlan(…, args[0])` in `child_process-worker.ts`):
+`Error: Cannot find module '/project/--require'`, exit 1 — a wrong error, not
+the named gap. `fork`/`Worker` `execArgv` already carry `-r`/`-C`/
+`--experimental-import-meta-resolve` (ADR-0449). Open: a spawned `node` argv
+reusing that compiler vs the `workbench.node.preload-context` named gap.

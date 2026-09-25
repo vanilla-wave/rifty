@@ -1,21 +1,14 @@
 # Map — vitest-run-in-browser
 
 Live plan: index, not store. Minimal pattern first; each child a `draft`
-finding compiled to `ready` at its own PICKUP (`RDY-1`). 12 depends on 11;
-the order is also recorded as `blocked_by`.
+finding compiled to `ready` at its own PICKUP (`RDY-1`). One child left;
+no ordering constraint.
 
 ## Items
 
-11. `runtime-js/worker-threads-stdio-streams-empty-exec-argv` — **worker-stdio** —
-    I4/I5; `Worker.stdout/stderr` Readables (`stdout: true` semantics) and the
-    pools' real startup options: vitest 4.1.11 passes a non-empty `execArgv`
-    (`--experimental-import-meta-resolve`, `--require <vitest>/suppress-warnings.cjs`,
-    `--conditions …`) to both `fork` and `new Worker` — honoured with Node
-    semantics, any other flag a named throw (today Worker throws, fork drops
-    it silently).
 12. `runtime-js/vitest-run-acceptance` — **acceptance** — I4, I5, I7; e2e spec
     running the scenario (`vitest.config.ts`, `.ts` tests) on both pools + a
-    `vitest.md` page in `docs/public/compat/`; closes the goal. After 11.
+    `vitest.md` page in `docs/public/compat/`; closes the goal.
 
 ## Open questions
 

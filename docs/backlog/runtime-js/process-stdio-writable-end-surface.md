@@ -4,7 +4,7 @@ status: draft
 title: `process.stdout|stderr` lack Node's Writable end surface (`end`, `writableEnded`, `destroy`)
 created: 2026-09-23
 why: rifty's process streams are an EventEmitter with `write` only; `process.stdout.end()` and `pipeline(src, process.stdout|stderr)` throw `TypeError` where Node ends the stream (pipeline ends it once, then un-destroys it)
-sources: [docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md, docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-final-green.json, docs/public/compat/streams.md]
+sources: [docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md, docs/backlog/runtime-js/reference/worker-threads-stdio-streams-empty-exec-argv-evidence.md, docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-final-green.json, docs/public/compat/streams.md]
 code: [packages/runtime-js/src/builtins/process-stdio-writer.ts, packages/io/src/streams/pipeline.ts]
 ---
 
@@ -21,6 +21,10 @@ function`; `pipeline(Readable.from(['p\n']), process.stdout, cb)` →
 cb `err=undefined`, stdout later `ended=false`; direct `end('x\n')` then
 `write` → `ERR_STREAM_WRITE_AFTER_END`. Compat: `streams.md` `Readable.pipe` ⚠️
 row names the `pipeline` throw.
+
+REV-12 discovery (2026-09-25) of `runtime-js/worker-threads-stdio-streams-empty-exec-argv`
+(evidence §Discoveries): in the parity runner's `child-worker` parent,
+`process.stdout.writable` is `undefined`; Node `true`.
 
 ## Next
 

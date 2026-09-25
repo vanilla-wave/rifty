@@ -5,7 +5,7 @@ title: e2e acceptance — the vitest scenario runs on both pools and the compat 
 created: 2026-09-15
 why: the goal closes only on observable proof: a Chromium e2e running the scenario (install, failing run exit 1, fixed run exit 0, threads == forks) plus a `vitest.md` page in `docs/public/compat/` with ✅/❌ rows — source greps and shimmed probes do not close acceptance
 epic: vitest-run-in-browser
-blocked_by: [runtime-js/worker-threads-stdio-streams-empty-exec-argv]
+blocked_by: []
 sources: [docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/public/compat/package-tooling.md, docs/public/compat/vite-command.md]
 code: [tests/e2e/owner-shell-prettier-eslint.spec.ts, tests/e2e/npm-lock-replay.spec.ts, docs/public/compat/README.md]
 ---

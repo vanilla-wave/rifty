@@ -1,35 +1,32 @@
 ---
 area: runtime-js
 status: draft
-title: Worker threads must inherit trusted Node execArgv
+title: A Worker started by a `node -e` parent inherits its eval execArgv
 created: 2026-07-30
-why: A path Worker created by a Node eval process currently receives empty execArgv, while Node inherits the original CLI identity recursively and ignores later public-array mutation.
-user_story: As a CLI spawning worker threads, I want each thread to observe the same effective Node options as its parent unless I explicitly override them.
-sources: [ADR-0267, ADR-0339, docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md]
-code: [packages/runtime-js/src/builtins/node-entry-runtime-config.ts, packages/runtime-js/src/builtins/process.ts, packages/runtime-js/src/builtins/worker_threads.ts]
+why: Node's path Worker under `node -e` inherits the eval parent's source-bearing execArgv (recursively, public-array mutation ignored); rifty throws `NotImplementedError('worker_threads.Worker.execArgv')` naming the inherited `-e`/`--eval` token.
+user_story: As a user running `node -e "new Worker('./w.js')"`, I want the Worker to start as in Node, but today it throws a named unsupported-startup-option error.
+sources: [ADR-0267, ADR-0339, ADR-0449, docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md]
+code: [packages/runtime-js/src/builtins/worker_threads-launch.ts, packages/runtime-js/src/internal/node-startup-options.ts, packages/runtime-js/src/builtins/node-entry-runtime-config.ts]
 ---
 
 ## Context
 
-2026-08 probe (`reference/no-coi-degradation-probes.md`): product COI
-`worker_threads.Worker(file)` throws `NotImplementedError:
-worker_threads.Worker.execArgv` while the same-realm no-COI fallback completes
-exit=0 — this item is what makes the capable tier worse than the degraded one.
+Narrowed 2026-09-25 (land of `runtime-js/worker-threads-stdio-streams-empty-exec-argv`,
+ADR-0449): explicit `WorkerOptions.execArgv` and default inheritance of a
+program parent's `-r`/`-C`/`--experimental-import-meta-resolve` tokens ship
+(node-entry v6 carries the exact snapshot). Only the eval parent remains.
 
 Node v24.16.0 path Workers created under `node -e` inherit the original
 source-bearing `process.execArgv`, including recursively. Mutating the public
-parent array before construction does not change that trusted snapshot;
-`WorkerOptions.execArgv` supplies an explicit override.
+parent array before construction does not change that trusted snapshot
+(`reference/node-v24.16.0-cli-eval-probe.md`).
 
-Node-entry v3 deliberately retained its exact worker-thread variant without an
-`execArgv` field. Extending it permissively would contradict ADR-0267/0339, and
-seeding the worker with `[]` would lie. While the inherited identity is
-nonempty—or an explicit override is supplied—`Worker` therefore throws
+rifty: `resolveWorkerLaunch` (`worker_threads-launch.ts`) inherits the
+parent's launch tokens; the startup-option compiler accepts only the three
+ADR-0449 families, so an inherited `-e <source>` is
 `NotImplementedError('worker_threads.Worker.execArgv')` before thread-id or
-physical Worker allocation.
+physical Worker allocation (ADR-0449 §3). An explicit `execArgv` from an eval
+parent works.
 
-No overlapping item or protocol decision was found on 2026-07-30. Faithful
-support requires a newly contracted node-entry protocol version, a superseding
-ADR, every worker-thread producer/decoder, and native-versus-physical recursive
-identity acceptance. The loud guard ships with the eval slice that first makes
-the mismatch reachable; this draft does not choose that future protocol.
+Open: carrying the eval pair means an eval-aware compiler/decoder and
+recursive native-vs-physical identity acceptance (ADR-0267/0339 versioning).
