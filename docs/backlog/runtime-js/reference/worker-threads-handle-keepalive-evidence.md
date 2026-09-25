@@ -410,3 +410,9 @@ so an unlistened `'error'` is an uncaught exception, not a rejection.
 - browser-unit `worker-handle-keepalive`, `message-port-ref-keepalive` (+ `.fault`),
   `advanced-ipc`, `owner-node-process-lifecycle`, `kernel-process-terminal-drain-real-worker`
   (`--workers=1`, port 5408) → 21 passed; the three `failed-start-*` programs equal live Node.
+- `pnpm pr:check` on `fd74c13a6` → 25/25 passed (first run on the uncommitted tree: only
+  `check:compat-drift`, the uncommitted `process.md` edit, and `check:esbuild-legacy-retirement`,
+  typescript-worker.js same 10 022 694 bytes with renamed shared-chunk imports → sha256 re-pinned
+  `b9369814…` in `fd74c13a6`).
+- `CI= RIFTY_PLAYGROUND_PORT=5408 npx playwright test --config playwright.prod.config.ts --project=chromium
+  tests/e2e-prod/worker-threads-keepalive.spec.ts` (fresh prod build) → 1 passed.
