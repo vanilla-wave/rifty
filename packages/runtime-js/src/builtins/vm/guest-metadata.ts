@@ -7,13 +7,9 @@ const BOOTSTRAP = `(() => {
   const get = WeakMap.prototype.get, put = WeakMap.prototype.set;
   const ids = new WeakMap(), proxies = new WeakMap(), originals = new WeakMap();
   const define = Object.defineProperty, descriptor = Object.getOwnPropertyDescriptor;
-  const prototype = Object.getPrototypeOf, tag = Symbol.toStringTag;
   const isArray = Array.isArray, toString = Function.prototype.toString;
   const mapHas = Map.prototype.has, setHas = Set.prototype.has;
   const mapEach = Map.prototype.forEach, setEach = Set.prototype.forEach;
-  const dateTime = Date.prototype.getTime;
-  const typedTag = descriptor(Object.getPrototypeOf(Uint8Array.prototype), Symbol.toStringTag).get;
-  const regexpSource = descriptor(RegExp.prototype, 'source').get;
   let next = 0;
   const read = (map, key) => apply(get, map, [key]);
   const write = (map, key, value) => apply(put, map, [key, value]);
@@ -66,33 +62,6 @@ const BOOTSTRAP = `(() => {
     if (op === 'array') {
       const target = targetOf(value);
       return target !== null && isArray(target);
-    }
-    if (op === 'target') return targetOf(value);
-    if (op === 'failure') {
-      const target = targetOf(value);
-      let label = '[object Object]';
-      if (target === null) label = 'null';
-      else if (typeof target === 'function') label = apply(toString, target, []);
-      else if (isArray(target)) label = '[object Array]';
-      else {
-        const kind = collection(target);
-        if (kind) label = '[object ' + kind + ']';
-        else {
-          try { apply(dateTime, target, []); label = '[object Date]'; } catch {}
-          try { apply(regexpSource, target, []); label = '[object RegExp]'; } catch {}
-          const typed = apply(typedTag, target, []);
-          if (typed) label = '[object ' + typed + ']';
-        }
-      }
-      if (target !== null && typeof target !== 'function') {
-        for (let owner = target; owner !== null && !read(proxies, owner); owner = prototype(owner)) {
-          const property = descriptor(owner, tag);
-          if (!property) continue;
-          if (typeof property.value === 'string') label = '[object ' + property.value + ']';
-          break;
-        }
-      }
-      return label + ' could not be cloned.';
     }
     if (op === 'collection') return collection(value);
     if (op === 'entries') {
