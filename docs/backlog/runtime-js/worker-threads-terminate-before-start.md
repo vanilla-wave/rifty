@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/builtins/worker_threads.ts]
 
 ## Context
 
-REV-12 discovery of `runtime-js/worker-threads-handle-keepalive`
+REV-12 discovery of `runtime-js/reference/worker-threads-handle-keepalive-evidence.md`
 (vitest-run-in-browser item 8; evidence §Discoveries, final-green verdict
 concerns). It predates that unit.
 

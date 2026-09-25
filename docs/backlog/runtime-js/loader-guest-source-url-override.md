@@ -4,13 +4,13 @@ status: draft
 title: A module's own `//# sourceURL=` names its frames, as in Node, instead of rifty's appended loader `sourceURL`
 created: 2026-09-24
 why: rifty's loaders append `//# sourceURL=<id>` after guest code, and V8's last valid comment wins, so a guest-declared name (bundler output, generated code) is silently replaced by the module path
-sources: [docs/backlog/runtime-js/reference/vm-run-in-this-context-offsets-evidence.md, docs/backlog/runtime-js/vm-run-in-this-context-offsets.md]
+sources: [docs/backlog/runtime-js/reference/vm-run-in-this-context-offsets-evidence.md]
 code: [packages/runtime-js/src/module-loader/cjs.ts, packages/runtime-js/src/module-loader/esm-job-preparation.ts, packages/runtime-js/src/module-loader/loader.ts, packages/runtime-js/src/builtins/worker_threads.ts, packages/runtime-js/src/builtins/child_process-exec.ts]
 ---
 
 ## Context
 
-REV-12 discovery of `runtime-js/vm-run-in-this-context-offsets`
+REV-12 discovery of `runtime-js/reference/vm-run-in-this-context-offsets-evidence.md`
 (vitest-run-in-browser item 10; evidence §Own sourceURL "Pre-existing
 sibling", unit Out of scope "routed at land", not filed then). ADR-0450
 honours an own `sourceURL` only for host-realm vm scripts. Sites appending

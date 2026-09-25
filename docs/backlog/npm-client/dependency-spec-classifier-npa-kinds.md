@@ -10,7 +10,7 @@ code: [packages/npm-client/src/installer-request.ts, packages/npm-client/src/ove
 
 ## Context
 
-REV-12 discovery of `npm-client/overrides-bare-version-spec`
+REV-12 discovery of `npm-client/reference/overrides-bare-version-spec-evidence.md`
 (vitest-run-in-browser item 1; ADR-0451 §Divergences "`@scope/pkg` and
 `*.tgz`/`*.tar(.gz)` values … uppercase `NPM:` aliases read as a package
 name"); the same classifier guards `dependencies`, so it is not

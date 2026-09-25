@@ -10,7 +10,8 @@ Date: 2026-09-25
 ADR-0443 §2 admits a named-loud builtin member only for a claimed consumer's
 link/load edge; the rest stay absent. ADR-0348 §2's link-only-placeholder
 ban, as ADR-0443 narrowed it, is narrowed further here for these loud
-members (`http.Agent`). Goal `vitest-run-in-browser` I7 needs
+members (`http.Agent`). Goal vitest-run-in-browser I7 (record
+`docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md`) needs
 each ❌ mode on `docs/public/compat/vitest.md` to fail with a named throw, never
 a bare error. Two modes reach an absent Node member first (evidence
 `docs/backlog/runtime-js/reference/vitest-run-acceptance-evidence.md`

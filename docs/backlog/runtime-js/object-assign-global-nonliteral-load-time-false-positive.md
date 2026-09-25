@@ -5,17 +5,17 @@ title: "A non-literal `Object.assign(globalThis, src)` in a branch that never ru
 created: 2026-09-25
 why: the load-time Function-mutation ceiling rejects any non-literal `Object.assign(globalThis, …)` source even when the call sits in a branch dead in every browser realm; `fetch-blob@3.2.0` `streams.cjs` has one, so `node-fetch@3.3.2` throws `module-loader.cjs-global-function-assignment` where Node loads it
 user_story: As a developer running a program that imports `node-fetch@3`, I want it to load as in Node, but today rifty throws `module-loader.cjs-global-function-assignment` at load for a polyfill branch that never runs
-sources: [docs/backlog/runtime-js/function-constructor-exhaustive-metaprogramming-ceiling.md, docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md, docs/backlog/runtime-js/cjs-global-function-assignment.md, ADR-0444, docs/public/compat/modules.md]
+sources: [docs/backlog/runtime-js/function-constructor-exhaustive-metaprogramming-ceiling.md, docs/backlog/runtime-js/reference/symbol-key-global-write-guard-precision-evidence.md, docs/backlog/runtime-js/cjs-global-function-assignment.md, ADR-0444, docs/public/compat/modules.md]
 code: [packages/runtime-js/src/module-loader/cjs.ts, packages/runtime-js/src/module-loader/esm.ts]
 ---
 
 ## Context
 
-REV-12 discovery of `runtime-js/symbol-key-global-write-guard-precision`
+REV-12 discovery of `runtime-js/reference/symbol-key-global-write-guard-precision-evidence.md`
 (IMPLEMENT, 2026-09-23); first filed as a note in
 `runtime-js/function-constructor-exhaustive-metaprogramming-ceiling`, which
 owns the non-literal `Object.assign` ceiling
-(`symbol-key-global-write-guard-precision` §Out of scope).
+(symbol-key-global-write-guard-precision contract §Out of scope, at `57f6117de`).
 
 `fetch-blob@3.2.0/streams.cjs`:
 

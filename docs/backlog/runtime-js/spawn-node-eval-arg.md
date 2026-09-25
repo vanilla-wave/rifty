@@ -36,7 +36,7 @@ token (`child_process.ts` `workerRoute` → `child_process-worker.ts`
 `buildChildExecutionPlan(parent.cwd, options.cwd, args[0])`), so
 `--require`, `--no-warnings`, `-C`, `--inspect`, … each become
 `Cannot find module '/<cwd>/<option>'` (code reading beyond `--require`).
-Probe (REV-12 discovery of `runtime-js/worker-threads-stdio-streams-empty-exec-argv`,
+Probe (REV-12 discovery of `runtime-js/reference/worker-threads-stdio-streams-empty-exec-argv-evidence.md`,
 evidence §Discoveries): Node v24.16.0 `spawn('node', ['--require',
 './pre.cjs', 'c.cjs'])` runs `c.cjs` after the preload (`spawn-flags 0
 "child [\"--require\",\"./pre.cjs\"] pre\n"`); rifty `spawn-flags 1 ""

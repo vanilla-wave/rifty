@@ -96,7 +96,8 @@ Each gap is a named throw, or is listed in `docs/public/compat/process.md`:
 ## Rejected
 
 - Patching emnapi, rolldown or vitest: package-shaped, and against the goal's
-  generic-handle rule (vitest-run-in-browser goal §Decisions).
+  generic-handle rule (vitest-run-in-browser goal §Decisions; record
+  `docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md` §Goal record).
 - Prototype methods with no pair record (own `unref`/`close` only). A
   referenced port whose peer closes would hang the terminal drain forever,
   which Node never does.
@@ -114,4 +115,4 @@ Each gap is a named throw, or is listed in `docs/public/compat/process.md`:
 
 - ADR-0152 (drain model, §1 handle set, §4 cap), ADR-0158 (precedent: widened set)
 - `packages/runtime-js/src/internal/event-loop-keepalive.ts`
-- `docs/backlog/runtime-js/message-port-ref-keepalive.md`
+- `docs/backlog/runtime-js/reference/message-port-ref-keepalive-evidence.md`

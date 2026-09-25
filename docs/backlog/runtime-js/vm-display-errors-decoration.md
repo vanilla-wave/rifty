@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/builtins/vm/index.ts]
 
 ## Context
 
-REV-12 discovery of `runtime-js/vm-run-in-this-context-offsets`
+REV-12 discovery of `runtime-js/reference/vm-run-in-this-context-offsets-evidence.md`
 (vitest-run-in-browser item 10; evidence §Discovered 2, unit Out of scope
 "route to backlog at land", not filed then); pre-existing. An explicit
 `displayErrors` option already throws

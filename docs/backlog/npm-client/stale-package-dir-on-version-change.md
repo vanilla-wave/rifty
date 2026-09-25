@@ -17,7 +17,8 @@ Observed 2026-09-15 on main 51440931a: starter project (vite 7.3.6 installed),
 `dist/node/chunks` holds both versions' chunk files, vite-cli-prep counts two
 watcher-patch anchors and aborts the install; a clean tree installs fine.
 Finding only (no carrier decided); belongs with the planned honest-npm work,
-not with `vitest-run-in-browser` (whose scenario starts from a clean project).
+not with the closed vitest-run-in-browser goal (`docs/public/compat/vitest.md`
+claims a tree without `node_modules/vite`).
 Until fixed, the visible workaround is documented nowhere — at minimum the
 prep error should name the stale-dir cause.
 

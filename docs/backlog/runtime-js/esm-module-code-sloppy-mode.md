@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/module-loader/esm-job-preparation.ts, packages/ru
 
 ## Context
 
-REV-12 discovery at the `runtime-js/builtin-static-names-prototype-methods`
+REV-12 discovery at the `runtime-js/reference/builtin-static-names-prototype-methods-evidence.md`
 Final+GREEN review: an imported `cwd` is called with a receiver, so no
 committed carrier makes an unbound call. Re-probed and widened at land
 2026-09-23 on `t3code/vitest-run-browser` (Node v24.16.0; temporary parity

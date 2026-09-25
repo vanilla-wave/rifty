@@ -11,7 +11,7 @@ code: [packages/runtime-js/src/builtins/fs-streams.ts, packages/io/src/streams/r
 ## Context
 
 REV-12 discovery (Final+GREEN concern, Scope) of
-`runtime-js/readable-pipe-never-ends-process-stdio`; pre-existing, not on
+`runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md`; pre-existing, not on
 vitest's path. `fs-streams.ts:503` `pipe(dest)`: `data` → `dest.write`,
 `end` → `dest.end()` unconditionally, no options, no unpipe/cleanup, no
 backpressure. rifty: `fs.createReadStream('f.txt').pipe(process.stdout)` →

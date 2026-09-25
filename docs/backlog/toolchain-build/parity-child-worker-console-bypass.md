@@ -10,7 +10,7 @@ code: [tools/node-parity-runner/src/run-in-rifty.ts, tools/node-parity-runner/sr
 
 ## Context
 
-REV-12 discovery of `runtime-js/worker-threads-stdio-streams-empty-exec-argv`
+REV-12 discovery of `runtime-js/reference/worker-threads-stdio-streams-empty-exec-argv-evidence.md`
 (vitest-run-in-browser item 11, evidence §Discoveries). Its `vitest-pool-shape`
 child probe (`pool-probe.mjs`) had to switch from `console.log` to
 `process.stdout.write`: under `kind: 'child-worker'` the child's `console.log`

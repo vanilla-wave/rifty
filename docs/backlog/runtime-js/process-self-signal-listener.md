@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/builtins/process.ts, packages/kernel/src/process-
 
 ## Context
 
-REV-12 discovery D2 of `runtime-js/builtin-static-names-prototype-methods`
+REV-12 discovery D2 of `runtime-js/reference/builtin-static-names-prototype-methods-evidence.md`
 (evidence §D2; Node v24.16.0). A forked child runs
 `process.on('SIGUSR2', …); process.kill(process.pid, 'SIGUSR2')`:
 Node `{"out":"sent true\ngot SIGUSR2\n","code":0,"signal":null}`, rifty

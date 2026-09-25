@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/module-loader/import-meta-resolve-parent.ts, pack
 
 ## Context
 
-REV-12 discoveries of `runtime-js/worker-threads-stdio-streams-empty-exec-argv`
+REV-12 discoveries of `runtime-js/reference/worker-threads-stdio-streams-empty-exec-argv-evidence.md`
 (vitest-run-in-browser item 11; evidence §Discoveries, Final+GREEN Ecosystem
 UX concern). Both loud in rifty, so no silent lie; both differ from Node.
 

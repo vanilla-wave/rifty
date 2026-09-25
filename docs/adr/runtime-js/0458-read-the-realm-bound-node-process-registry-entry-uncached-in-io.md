@@ -9,7 +9,7 @@ Date: 2026-09-23
 ## Context
 
 `Readable.pipe` needs Node's bootstrap `process` to skip `dest.end()` on
-`process.stdout|stderr` (backlog `runtime-js/readable-pipe-never-ends-process-stdio`).
+`process.stdout|stderr` (evidence `docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md`).
 io reaches it only through the ADR-0035 registry: runtime-js's `process` factory
 returns the active bootstrap (`readActiveNodeProcessBootstrap`). The registry
 caches per name. A same-realm child swaps the active bootstrap while it runs

@@ -5,7 +5,7 @@ title: node-builtin loud-stub capability gaps — throwing and absent Node surfa
 created: 2026-06-13
 why: These node: builtin features throw NotImplementedError — a real runtime capability absence a consumer hits when running ordinary npm code; tracked here as the capability limitation itself, distinct from the compat-visibility item which only proposes ❌ matrix rows.
 user_story: As a dev running an npm package that reaches `tls.createServer`, `dns.resolve`, full readline TTY editing, `v8.serialize` or `dgram.createSocket`, I want it to run — but today these `node:` builtins throw `NotImplementedError` (honest loud stubs, parked by design).
-sources: [ADR-0010, AGENTS.md, docs/adr/runtime-js/0443-named-loud-builtin-members-for-linked-unsuppliable-edges.md, docs/backlog/runtime-js/absent-builtin-members-loud-throws.md]
+sources: [ADR-0010, AGENTS.md, docs/adr/runtime-js/0443-named-loud-builtin-members-for-linked-unsuppliable-edges.md, docs/backlog/runtime-js/reference/absent-builtin-members-loud-throws-evidence.md]
 code: [packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/builtins/tty.ts, packages/runtime-js/src/builtins/os.ts, packages/runtime-js/src/builtins/perf_hooks.ts, packages/runtime-js/src/builtins/vm.ts, packages/runtime-js/src/builtins/string_decoder.ts, packages/runtime-js/src/builtins/misc-stubs.ts, packages/runtime-js/src/builtins/null-net-stubs.ts, packages/runtime-js/src/builtins/crypto.ts, packages/runtime-js/src/builtins/fs.ts]
 ---
 

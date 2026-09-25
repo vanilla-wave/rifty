@@ -11,7 +11,7 @@ code: [packages/runtime-js/src/builtins/worker_threads-launch.ts, packages/runti
 
 ## Context
 
-Narrowed 2026-09-25 (land of `runtime-js/worker-threads-stdio-streams-empty-exec-argv`,
+Narrowed 2026-09-25 (land of `runtime-js/reference/worker-threads-stdio-streams-empty-exec-argv-evidence.md`,
 ADR-0449): explicit `WorkerOptions.execArgv` and default inheritance of a
 program parent's `-r`/`-C`/`--experimental-import-meta-resolve` tokens ship
 (node-entry v6 carries the exact snapshot). Only the eval parent remains.

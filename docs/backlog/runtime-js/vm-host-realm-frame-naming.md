@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/builtins/vm/index.ts, packages/runtime-js/src/bui
 
 ## Context
 
-REV-12 discoveries of `runtime-js/vm-run-in-this-context-offsets`
+REV-12 discoveries of `runtime-js/reference/vm-run-in-this-context-offsets-evidence.md`
 (vitest-run-in-browser item 10; unit Out of scope "route to backlog at
 land", not filed then). One mechanism: `runScriptInThisContext` runs
 `code + '\n//# sourceURL=' + name` through a global eval; with zero offsets

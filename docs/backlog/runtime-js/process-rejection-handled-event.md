@@ -4,13 +4,13 @@ status: draft
 title: "`process` emits `'rejectionHandled'` when a reported rejection gains a handler later"
 created: 2026-09-24
 why: Node emits `'rejectionHandled'` for a promise already reported via `'unhandledRejection'` once it is handled; rifty never emits it, so trackers that pair the two events leak entries
-sources: [docs/backlog/runtime-js/process-lifecycle-events-exit-code.md, docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md, docs/public/compat/process.md]
+sources: [docs/backlog/runtime-js/reference/process-lifecycle-events-exit-code-evidence.md, docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md, docs/public/compat/process.md]
 code: [packages/runtime-js/src/builtins/process-lifecycle-events.ts, packages/runtime-js/src/internal/event-loop-keepalive.ts]
 ---
 
 ## Context
 
-REV-12 discovery of `runtime-js/process-lifecycle-events-exit-code`
+REV-12 discovery of `runtime-js/reference/process-lifecycle-events-exit-code-evidence.md`
 (vitest-run-in-browser item 7; unit Out of scope). No runtime-js code
 listens for the realm's `rejectionhandled` (`grep -rni rejectionhandled
 packages/runtime-js/src` → 0 hits @ `8c8993649`).

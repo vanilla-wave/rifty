@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/builtins/path.ts, packages/runtime-js/src/builtin
 
 ## Context
 
-REV-12 discovery from `runtime-js/path-posix-win32-builtins` (vitest-run-in-browser
+REV-12 discovery from `runtime-js/reference/path-posix-win32-builtins-evidence.md` (vitest-run-in-browser
 I6 delivered `node:path/posix` only; win32 dropped — no claimed consumer).
 Node v24.16.0 vs rifty @ `325ae797c` (evidence §Oracle — `path.win32`,
 §Rifty baseline): `win32 === posix` false/true; `win32.sep` `\`/`/`;

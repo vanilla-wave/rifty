@@ -11,9 +11,9 @@ code: [packages/runtime-js/src/builtins/vm/index.ts]
 ## Context
 
 DEC-2 decision review of ADR-0464 (2026-09-25): its "after Node's argument
-validation" is false for the new-context entry points (goal
-`vitest-run-in-browser` ledger, re-chart after `vitest-run-acceptance`: the
-`runInNewContext` ceiling-before-validation NOTE).
+validation" is false for the new-context entry points (the `runInNewContext`
+ceiling-before-validation NOTE of
+`docs/backlog/runtime-js/reference/vitest-run-acceptance-final-green.json`).
 
 Node v24.16.0 (`node -e`, probes 2026-09-25):
 

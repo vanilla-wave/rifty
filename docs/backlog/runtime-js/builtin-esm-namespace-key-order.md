@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/module-loader/interop.ts]
 
 ## Context
 
-REV-12 discovery at the `runtime-js/path-posix-win32-builtins` Final+GREEN
+REV-12 discovery at the `runtime-js/reference/path-posix-win32-builtins-evidence.md` Final+GREEN
 review, re-run at land 2026-09-23 on `t3code/vitest-run-browser` (scratch
 parity case, ESM): `import * as a from 'node:path/posix'; import * as b from
 'node:fs/promises'; Object.keys(x).slice(0,4)` — Node v24.16.0
@@ -26,5 +26,6 @@ order); CJS-file namespaces share that constructor — unverified. Compat ⚠️
 
 Owner runtime-js; trigger: a consumer iterating a builtin namespace's keys
 (snapshot/serializer output), or the next builtin-namespace unit
-(`runtime-js/builtin-static-names-prototype-methods` touches the same names).
+(landed `runtime-js/reference/builtin-static-names-prototype-methods-evidence.md` touched the
+same names).
 Parity case first.

@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/module-loader/loader.ts]
 
 ## Context
 
-REV-12 discovery at the `runtime-js/path-posix-win32-builtins` Final+GREEN
+REV-12 discovery at the `runtime-js/reference/path-posix-win32-builtins-evidence.md` Final+GREEN
 review, re-run at land 2026-09-23 on `t3code/vitest-run-browser` (scratch
 parity case, CJS): `for (const id of ['path/posix','fs/promises','fs','node:fs'])
 console.log(id, require.resolve(id))` — Node v24.16.0 prints each id

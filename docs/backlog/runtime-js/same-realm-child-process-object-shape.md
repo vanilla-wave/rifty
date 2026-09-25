@@ -4,16 +4,16 @@ status: draft
 title: A same-realm (no-COI) child's `process` is a plain object with bare `{write}` stdio and no `NodeProcess` members
 created: 2026-09-24
 why: on the same-realm fallback route the child's `process` / `require('process')` is a hand-built object — `stdout`/`stderr` are `{ write }` only, so `src.pipe(process.stdout)` throws `dest.on is not a function`, and members the Worker route has (`memoryUsage`, Writable surface, …) are absent
-sources: [docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md, docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-final-green.json, docs/backlog/runtime-js/absent-builtin-members-loud-throws.md, docs/backlog/kernel/process-equals-web-worker.md]
+sources: [docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md, docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-final-green.json, docs/backlog/runtime-js/reference/absent-builtin-members-loud-throws-evidence.md, docs/backlog/kernel/process-equals-web-worker.md]
 code: [packages/runtime-js/src/builtins/child_process-exec.ts]
 ---
 
 ## Context
 
-REV-12 discovery of `runtime-js/readable-pipe-never-ends-process-stdio`
+REV-12 discovery of `runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md`
 (vitest-run-in-browser item 6, Final+GREEN concern; evidence §Final+GREEN
 r1 reception "Sibling sweep"); also named in
-`runtime-js/absent-builtin-members-loud-throws` Out of scope (no
+absent-builtin-members-loud-throws contract Out of scope (at `57f6117de`; no
 `memoryUsage`). Code reading @ `8c8993649`: `child_process-exec.ts:289-296`
 builds `childProcess = { argv, env, pid, ppid, stdin, stdout: { write },
 stderr: { write }, cwd, on, … }`; the child's `require('process')` /

@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/builtins/child_process-worker.ts, packages/runtim
 
 ## Context
 
-REV-12 discovery of `runtime-js/worker-threads-stdio-streams-empty-exec-argv`
+REV-12 discovery of `runtime-js/reference/worker-threads-stdio-streams-empty-exec-argv-evidence.md`
 (vitest-run-in-browser item 11, evidence §Discoveries). `child_process-worker.ts`
 `activeProcess()` (spawn/fork default env, cwd, stdio, pid; `activeProcessStdio()`)
 reads the active bootstrap, else a raw `globalThis.process`.

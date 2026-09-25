@@ -29,8 +29,9 @@ path executes.
 
 ## Known bypass shapes
 
-Observed 2026-09-23 (symbol-key-global-write-guard-precision Final+GREEN, Bugs
-concern; identical before and after ADR-0444): with runtime key `k = 'Function'`
+Observed 2026-09-23
+(`docs/backlog/runtime-js/reference/symbol-key-global-write-guard-precision-final-green.json`,
+Bugs concern; identical before and after ADR-0444): with runtime key `k = 'Function'`
 these replace host `Function` with no ceiling —
 - ESM+CJS global object via a non-identifier expression: `(0, globalThis)[k] = 1`,
   `(true ? globalThis : {})[k] = 1`, `globalThis.globalThis[k] = 1`,

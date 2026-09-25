@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/builtins/worker_threads.ts]
 
 ## Context
 
-REV-12 discovery of `runtime-js/worker-threads-stdio-streams-empty-exec-argv`
+REV-12 discovery of `runtime-js/reference/worker-threads-stdio-streams-empty-exec-argv-evidence.md`
 (vitest-run-in-browser item 11, evidence §Discoveries; Final+GREEN Goal drift
 concern). Pre-existing; not on vitest 4.1.11's pool path.
 

@@ -4,13 +4,13 @@ status: draft
 title: IPC `send()` after disconnect does not match Node — no async `ERR_IPC_CHANNEL_CLOSED` `'error'`; a same-realm child's `process.send()` after `process.disconnect()` returns `true` and delivers
 created: 2026-09-23
 why: Node reports a send on a closed channel (`false` + async `'error'`, nothing delivered); rifty stays silent on both routes and, on the same-realm route, still delivers
-sources: [docs/backlog/runtime-js/child-process-advanced-ipc-serialization.md, docs/backlog/runtime-js/reference/child-process-advanced-ipc-serialization-evidence.md, docs/backlog/runtime-js/reference/child-process-advanced-ipc-serialization-final-green.json]
+sources: [docs/backlog/runtime-js/reference/child-process-advanced-ipc-serialization-evidence.md, docs/backlog/runtime-js/reference/child-process-advanced-ipc-serialization-final-green.json]
 code: [packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/builtins/process.ts, packages/runtime-js/src/builtins/child_process-exec.ts]
 ---
 
 ## Context
 
-REV-12 discoveries of `runtime-js/child-process-advanced-ipc-serialization`
+REV-12 discoveries of `runtime-js/reference/child-process-advanced-ipc-serialization-evidence.md`
 (contract Decisions; evidence §Oracle — process-boundary faults; Node
 v24.16.0), both serializations:
 

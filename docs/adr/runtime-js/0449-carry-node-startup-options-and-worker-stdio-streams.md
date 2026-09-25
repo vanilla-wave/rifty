@@ -130,4 +130,4 @@ existing kernel-path `'error'` gap `runtime-js/worker-threads-kernel-error-event
 ## References
 
 - ADR-0267, ADR-0339, ADR-0416, ADR-0446, ADR-0448, ADR-0458
-- `docs/backlog/runtime-js/worker-threads-stdio-streams-empty-exec-argv.md`
+- `docs/backlog/runtime-js/reference/worker-threads-stdio-streams-empty-exec-argv-evidence.md`

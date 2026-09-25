@@ -4,13 +4,13 @@ status: draft
 title: "`MessagePort#postMessage` returns `true` and a transfer through a closed or moved port detaches, as in Node"
 created: 2026-09-24
 why: rifty's ports are Chromium's native ports behind the ADR-0447 wrapper, which keeps the native result — `postMessage` returns `undefined` (Node `true`) and a transfer list posted through a closed/transferred-away port keeps its buffers (Node detaches them)
-sources: [docs/backlog/runtime-js/reference/message-port-ref-keepalive-evidence.md, docs/backlog/runtime-js/message-port-ref-keepalive.md, docs/adr/runtime-js/0447-count-referenced-messageports-in-child-realm-keepalive.md, docs/public/compat/process.md]
+sources: [docs/backlog/runtime-js/reference/message-port-ref-keepalive-evidence.md, docs/adr/runtime-js/0447-count-referenced-messageports-in-child-realm-keepalive.md, docs/public/compat/process.md]
 code: [packages/runtime-js/src/internal/message-port-ref.ts, packages/runtime-js/src/builtins/worker_threads.ts]
 ---
 
 ## Context
 
-REV-12 discoveries of `runtime-js/message-port-ref-keepalive`
+REV-12 discoveries of `runtime-js/reference/message-port-ref-keepalive-evidence.md`
 (vitest-run-in-browser item 13; unit Out of scope "not claimed"; evidence
 §IMPLEMENT reflection probe row `closed-post-kept`, §Chromium 148);
 pre-existing Node-vs-Chromium platform differences. Re-run 2026-09-24:

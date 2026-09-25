@@ -11,7 +11,7 @@ code: [packages/runtime-js/src/builtins/worker_threads.ts, packages/kernel/src/p
 ## Context
 
 REV-12 discovery (Final+GREEN concern, Goal drift) of
-`runtime-js/message-port-ref-keepalive`; pre-existing, observed defect.
+`runtime-js/reference/message-port-ref-keepalive-evidence.md`; pre-existing, observed defect.
 Probe (evidence §Sibling sweep, same source in Node and rifty `node main.cjs`):
 `w.postMessage({ port })`, `w.postMessage({ fn })`, then `w.postMessage('after')`
 → Node v24.16.0 throws `DataCloneError` twice, child gets `"after"`, exit 0;
@@ -21,7 +21,8 @@ rifty no throw, times out, worker exit 1. Carrier: `Worker#postMessage` →
 
 ## Next
 
-Owner runtime-js; trigger: I5 threads pool (`vitest-run-acceptance`) or the
-next kernel Worker messaging unit. Parity first: the probe rows above, plus
+Owner runtime-js; trigger: the next kernel Worker messaging unit, or a claimed
+path posting an uncloneable value (vitest's I5 threads pool landed green:
+`runtime-js/reference/vitest-run-acceptance-evidence.md`). Parity first: the probe rows above, plus
 `DataCloneError` name/message and that the channel stays usable after the
 throw. Route via `rifty-fix` (observed defect).

@@ -4,13 +4,13 @@ status: draft
 title: "`async_hooks.createHook` returns a hook whose callbacks never run, and `executionAsyncId()` a fabricated `0`"
 created: 2026-09-24
 why: Fidelity defect (AGENTS.md §Fidelity — no happy-path stub that lies) — a leak/handle detector built on `createHook` silently reports nothing where Node reports resources; must become real or a named loud throw + compat ❌
-sources: [docs/backlog/runtime-js/absent-builtin-members-loud-throws.md, docs/backlog/runtime-js/reference/message-port-ref-keepalive-evidence.md, docs/public/compat/modules.md]
+sources: [docs/backlog/runtime-js/reference/absent-builtin-members-loud-throws-evidence.md, docs/backlog/runtime-js/reference/message-port-ref-keepalive-evidence.md, docs/public/compat/modules.md]
 code: [packages/runtime-js/src/builtins/misc-stubs.ts, packages/runtime-js/src/builtins/index.ts]
 ---
 
 ## Context
 
-REV-12 discovery reported by the `runtime-js/absent-builtin-members-loud-throws`
+REV-12 discovery reported by the `runtime-js/reference/absent-builtin-members-loud-throws-evidence.md`
 unit run (vitest-run-in-browser item 4; not in its committed evidence),
 re-verified below; not tracked before this draft. `node:async_hooks` is
 `misc-stubs.ts` `async_hooks`:

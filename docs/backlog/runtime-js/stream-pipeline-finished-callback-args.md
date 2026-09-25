@@ -10,7 +10,7 @@ code: [packages/io/src/streams/pipeline.ts, tools/compat-matrix-generator/stream
 
 ## Context
 
-REV-12 discovery of `runtime-js/readable-pipe-never-ends-process-stdio`
+REV-12 discovery of `runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md`
 (vitest-run-in-browser item 6; evidence §IMPLEMENT "Base and impl both
 report cb `err=null` where Node passes `undefined`"); pre-existing.
 `pipeline.ts:98` and `:143` call `cb?.(null)`.

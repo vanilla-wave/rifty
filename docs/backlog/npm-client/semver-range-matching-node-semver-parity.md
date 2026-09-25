@@ -11,7 +11,7 @@ code: [packages/npm-client/src/semver.ts, docs/public/compat/package-tooling.md]
 ## Context
 
 REV-12 discovery (Final+GREEN concern, Ecosystem UX) of
-`npm-client/overrides-bare-version-spec`. `matchesRange` vs npm 11.17.0
+`npm-client/reference/overrides-bare-version-spec-evidence.md`. `matchesRange` vs npm 11.17.0
 `semver.satisfies(v, r, {loose: true})` over `[7.9.9, 8.0.0, 8.0.16, 8.3.0, 9.0.0]`:
 `<=8` rifty `[7.9.9, 8.0.0]`, npm adds `8.0.16, 8.3.0`; `8.0.0 - 8.0.16` rifty
 `[]`; `~>8.0` rifty `[]`; `||` rifty `[]`, npm all. Pre-existing for every

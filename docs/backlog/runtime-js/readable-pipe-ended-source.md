@@ -4,13 +4,13 @@ status: draft
 title: "`Readable.pipe` from a source whose `'end'` already fired ends the destination on `nextTick`"
 created: 2026-09-24
 why: Node's `pipe()` sees `endEmitted` and schedules the end step on `nextTick`; rifty waits for an `'end'` that never comes, so the destination never ends or unpipes
-sources: [docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md, docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md, docs/public/compat/streams.md]
+sources: [docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md, docs/public/compat/streams.md]
 code: [packages/io/src/streams/readable.ts]
 ---
 
 ## Context
 
-REV-12 discovery of `runtime-js/readable-pipe-never-ends-process-stdio`
+REV-12 discovery of `runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md`
 (vitest-run-in-browser item 6; unit Out of scope "pre-existing,
 unchanged"; evidence §Node mechanism `internal/streams/readable` :932-935
 — `kEndEmitted` → `process.nextTick(endFn)`, else `src.once('end',

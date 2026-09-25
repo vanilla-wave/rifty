@@ -4,13 +4,13 @@ status: draft
 title: "`process.setUncaughtExceptionCaptureCallback` / `hasUncaughtExceptionCaptureCallback` exist with Node's semantics"
 created: 2026-09-24
 why: both are absent in rifty (`typeof` `undefined`), so a call is a bare `TypeError: … is not a function` — neither Node's capture (callback replaces `'uncaughtException'` dispatch) nor a named `NotImplementedError`
-sources: [docs/backlog/runtime-js/process-lifecycle-events-exit-code.md, docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md, docs/public/compat/process.md]
+sources: [docs/backlog/runtime-js/reference/process-lifecycle-events-exit-code-evidence.md, docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md, docs/public/compat/process.md]
 code: [packages/runtime-js/src/builtins/process.ts, packages/runtime-js/src/builtins/process-lifecycle-events.ts]
 ---
 
 ## Context
 
-REV-12 discovery of `runtime-js/process-lifecycle-events-exit-code`
+REV-12 discovery of `runtime-js/reference/process-lifecycle-events-exit-code-evidence.md`
 (vitest-run-in-browser item 7; unit Out of scope).
 
 Probe 2026-09-24 (scratch `child-worker` parity case, forked child through

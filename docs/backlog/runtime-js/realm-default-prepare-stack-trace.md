@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/builtins/vm/script-offsets.ts]
 
 ## Context
 
-REV-12 discovery of `runtime-js/vm-run-in-this-context-offsets`
+REV-12 discovery of `runtime-js/reference/vm-run-in-this-context-offsets-evidence.md`
 (vitest-run-in-browser item 10; evidence §Discovered 4, unit Out of scope
 "route to backlog at land", not filed then); pre-existing, realm-wide (not
 vm-specific). Re-run 2026-09-24:

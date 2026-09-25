@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/module-loader/cjs.ts]
 
 ## Context
 
-REV-12 discovery reported by the `runtime-js/symbol-key-global-write-guard-precision`
+REV-12 discovery reported by the `runtime-js/reference/symbol-key-global-write-guard-precision-evidence.md`
 unit run (vitest-run-in-browser item 5, IMPLEMENT; not in its committed
 evidence), re-verified below; pre-existing (8 entries before ADR-0444 added
 the global-key helper, 9 now). `compileCjsSource`

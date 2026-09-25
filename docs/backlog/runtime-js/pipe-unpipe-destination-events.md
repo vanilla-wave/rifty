@@ -11,7 +11,7 @@ code: [packages/io/src/streams/readable.ts]
 ## Context
 
 REV-12 discovery (Final+GREEN concern, Scope) of
-`runtime-js/readable-pipe-never-ends-process-stdio`; pre-existing, not on
+`runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md`; pre-existing, not on
 vitest's path. Probe (evidence §Sibling gaps): Writable `'pipe'`/`'unpipe'`
 listeners across `pipe()` + `unpipe()` → rifty `""`, Node v24.16.0
 `pipe,unpipe`; P3 (`pipe(process.stdout, {end: true})`, unpipe at source

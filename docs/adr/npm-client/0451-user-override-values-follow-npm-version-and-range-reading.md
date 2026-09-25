@@ -12,7 +12,8 @@ Date: 2026-09-23
 
 ## Context
 
-Goal `vitest-run-in-browser` I1: `{"overrides": {"vite": "8.0.16"}}` fails
+Goal vitest-run-in-browser I1 (record `docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md`):
+`{"overrides": {"vite": "8.0.16"}}` fails
 `Failed to fetch packument 8.0.16: 404` — `overrides.ts` reads every value
 without `@` as a replacement package NAME.
 

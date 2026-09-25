@@ -10,9 +10,9 @@ code: [packages/net/src/http/agent.ts, packages/net/src/https.ts]
 
 ## Context
 
-DEC-2 decision review of ADR-0464 (2026-09-25); goal `vitest-run-in-browser`
-ledger, re-chart after `vitest-run-acceptance`: the ES-class `http.Agent`
-call/`util.inherits` NOTE.
+DEC-2 decision review of ADR-0464 (2026-09-25); the ES-class `http.Agent`
+call/`util.inherits` NOTE of
+`docs/backlog/runtime-js/reference/vitest-run-acceptance-final-green.json`.
 
 Node v24.16.0 (`node -e`, probe 2026-09-25): `http.Agent() instanceof
 http.Agent` → `true`; `function Sub(o) { http.Agent.call(this, o) }

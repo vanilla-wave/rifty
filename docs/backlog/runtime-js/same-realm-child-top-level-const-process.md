@@ -4,13 +4,13 @@ status: draft
 title: A same-realm fork child's top-level `const process` (or `setTimeout`, `global`, …) is a SyntaxError
 created: 2026-09-23
 why: Node's CJS wrapper binds only `exports, require, module, __filename, __dirname`, so a top-level `const process = require('node:process')` is legal; rifty's same-realm child wrapper passes `process` and timer/global names as `new Function` parameters, so the declaration throws before the child runs
-sources: [docs/backlog/runtime-js/child-process-advanced-ipc-serialization.md, docs/backlog/runtime-js/reference/child-process-advanced-ipc-serialization-final-green.json]
+sources: [docs/backlog/runtime-js/reference/child-process-advanced-ipc-serialization-evidence.md, docs/backlog/runtime-js/reference/child-process-advanced-ipc-serialization-final-green.json]
 code: [packages/runtime-js/src/builtins/child_process-exec.ts]
 ---
 
 ## Context
 
-REV-12 discovery of `runtime-js/child-process-advanced-ipc-serialization`
+REV-12 discovery of `runtime-js/reference/child-process-advanced-ipc-serialization-evidence.md`
 (contract Decisions). The same-realm child body is compiled as
 `new Function('__stdout_write', …, 'process', 'setTimeout', …, 'globalThis',
 'global', 'self', 'require', code)` (`child_process-exec.ts:454-468`); a

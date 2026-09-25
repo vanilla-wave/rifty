@@ -27,7 +27,7 @@ dialect (documented divergence), or become a named loud gap? Cases:
 
 ## Context
 
-REV-12 discoveries of `npm-client/overrides-bare-version-spec`
+REV-12 discoveries of `npm-client/reference/overrides-bare-version-spec-evidence.md`
 (vitest-run-in-browser item 1), recorded as ADR-0451 §Divergences and
 compat ⚠️ `package-tooling.md` "`package.json#overrides` rifty
 spellings". ADR-0451 killed "every bare word a dist-tag" because it breaks

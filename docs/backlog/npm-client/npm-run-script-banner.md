@@ -11,7 +11,7 @@ code: [packages/workbench/src/glue/npm-shell-command.ts]
 ## Context
 
 Discovery of the vitest-run-in-browser acceptance unit (item 12,
-`runtime-js/vitest-run-acceptance`) Node oracle — its `npm test`
+`runtime-js/reference/vitest-run-acceptance-evidence.md`) Node oracle — its `npm test`
 transcript shows `> test` then `> vitest run`, which rifty lacks; that
 unit's contract (branch `vg/u12`) puts the banner out of scope with no
 owner.

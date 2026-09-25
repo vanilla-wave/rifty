@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/builtins/process.ts, packages/io/src/event-emitte
 
 ## Context
 
-REV-12 discovery D1 of `runtime-js/builtin-static-names-prototype-methods`
+REV-12 discovery D1 of `runtime-js/reference/builtin-static-names-prototype-methods-evidence.md`
 (evidence §D1, Node v24.16.0 O1). Builtin ESM names are
 `Object.keys(process)` (ADR-0348 §2). On a process with no IPC port rifty
 still has own enumerable `send`/`disconnect`/`connected`/`channel`
@@ -27,6 +27,4 @@ row ("Known over-export").
 
 Owner runtime-js; trigger: a consumer that feature-detects IPC by a
 `node:process` named import or `Object.keys(process)`, or the next
-`process` shape unit (`runtime-js/absent-builtin-members-loud-throws`,
-`runtime-js/process-lifecycle-events-exit-code`). Oracle on a forked IPC
-child first, then parity case.
+`process` shape unit. Oracle on a forked IPC child first, then parity case.

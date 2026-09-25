@@ -4,13 +4,13 @@ status: draft
 title: "`process._exiting` reads `false` until exit and `true` inside `'exit'`, as in Node"
 created: 2026-09-24
 why: Node's undocumented flag is set by `exit()` before `'exit'` fires (libraries use it to skip work during shutdown); rifty keeps its exit state internal, so `process._exiting` is `undefined` throughout
-sources: [docs/backlog/runtime-js/process-lifecycle-events-exit-code.md, docs/backlog/runtime-js/reference/process-lifecycle-events-exit-code-evidence.md, docs/public/compat/process.md]
+sources: [docs/backlog/runtime-js/reference/process-lifecycle-events-exit-code-evidence.md, docs/public/compat/process.md]
 code: [packages/runtime-js/src/builtins/process.ts]
 ---
 
 ## Context
 
-REV-12 discovery of `runtime-js/process-lifecycle-events-exit-code`
+REV-12 discovery of `runtime-js/reference/process-lifecycle-events-exit-code-evidence.md`
 (vitest-run-in-browser item 7; unit Out of scope). Node mechanism
 (evidence §N, `internal/process/per_thread` `exit()`): `if
 (!process._exiting) { process._exiting = true; process.emit('exit', …) }`.

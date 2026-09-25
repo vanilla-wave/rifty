@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/builtins/worker_threads.ts, packages/runtime-js/s
 
 ## Context
 
-REV-12 discovery of `runtime-js/worker-threads-stdio-streams-empty-exec-argv`
+REV-12 discovery of `runtime-js/reference/worker-threads-stdio-streams-empty-exec-argv-evidence.md`
 (vitest-run-in-browser item 11; Final+GREEN Bugs concern). Not on vitest's path.
 
 Node v24.16.0 (probe 2026-09-25, `node p.cjs`: `new Worker(path.resolve('w.cjs'), { env })`,

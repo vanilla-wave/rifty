@@ -10,7 +10,7 @@ code: [packages/workbench/src/workers/no-coi-project-command.ts]
 
 ## Context
 
-REV-12 discovery of `runtime-js/worker-threads-handle-keepalive`
+REV-12 discovery of `runtime-js/reference/worker-threads-handle-keepalive-evidence.md`
 (vitest-run-in-browser item 8; evidence §Discoveries). Same fault class as
 evidence §Natural exit: ADR-0446 §6 moved every node-entry owner (worker
 thread, `node <file>`, `node -e`, execSync child) to the `NodeProcess` exit

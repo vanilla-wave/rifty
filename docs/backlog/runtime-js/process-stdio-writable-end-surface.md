@@ -11,7 +11,7 @@ code: [packages/runtime-js/src/builtins/process-stdio-writer.ts, packages/io/src
 ## Context
 
 REV-12 discovery (Final+GREEN concern, Scope) of
-`runtime-js/readable-pipe-never-ends-process-stdio`; pre-existing, not on
+`runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md`; pre-existing, not on
 vitest's path. `NodeStdioWriter` (`process-stdio-writer.ts:18`) has no `end`,
 `writableEnded`, `destroy`. rifty: `typeof process.stdout.end` →
 `undefined`; `process.stdout.end()` → `TypeError: process.stdout.end is not a
@@ -22,7 +22,7 @@ cb `err=undefined`, stdout later `ended=false`; direct `end('x\n')` then
 `write` → `ERR_STREAM_WRITE_AFTER_END`. Compat: `streams.md` `Readable.pipe` ⚠️
 row names the `pipeline` throw.
 
-REV-12 discovery (2026-09-25) of `runtime-js/worker-threads-stdio-streams-empty-exec-argv`
+REV-12 discovery (2026-09-25) of `runtime-js/reference/worker-threads-stdio-streams-empty-exec-argv-evidence.md`
 (evidence §Discoveries): in the parity runner's `child-worker` parent,
 `process.stdout.writable` is `undefined`; Node `true`.
 

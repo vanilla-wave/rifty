@@ -1,0 +1,267 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "PASS (no blocker): the r1 residual (no-COI runBin timers after its natural exit) is fixed at the root owner and proven RED->GREEN against live Node v24.16.0; every invariant I1-I7 and every User scenario line has executed end-to-end proof on HEAD 57f6117de (acceptance e2e 2 passed, independent run; no-COI carriers 21 passed; CI all lanes). Goal complete: CLOSE may proceed (steps 2-4); advisory concerns are NOTEs.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "57f6117de4a887a3be71f744d1d36336570b28cf",
+  "unit_goal_source": "docs/backlog/epics/vitest-run-in-browser/goal.md (ready; amend 2026-09-23 user 'A: поправить I7 (Recommended)', goal.md:179) + map.md (Items and Open questions empty) + ledger.md (append-only vs BASE: 0 removed lines); delivered by PR #353, branch t3code/vitest-run-browser, BASE 2c9bbd30109692647c0174f8930f713007150f67, HEAD 57f6117de4a887a3be71f744d1d36336570b28cf. Verify pass 2 over close-final-green-r1 (reviewed 2734fc0c8): changed since r1 = 79bdb164d (runBin ends its process at every terminal, shared openNoCoiInvocationScope, carriers) + 5165ad6e2 (file inventory 171->172, typescript-worker fingerprint re-pin), merged at 57f6117de. Children: 13 ready contracts under docs/backlog/{npm-client,runtime-js}/ with Contract+RED and Final+GREEN JSON in reference/ (CR ancestor of FG, FG ancestor of its unit tip with no non-doc change after it, FG ancestor of HEAD — all 13). Post-land rifty-fix repairs reviewed here as their independent final review: 70fae62c3 (vg/fix-companion, merge 1c2b74482), 94588bd17 (vg/fix-nocoi, merge 5616d5a64), cadf94625 (vg/fix-exit7, merge bba094116) and its CLOSE-r1 residual repair 79bdb164d (merge 57f6117de); baselines: browser-unit companion spec green on main, CI run 36102786895 at a6f0226cb (no-coi 'threaded-WASM: Vite 8 Rolldown fails at named boundary' red; browser-unit advanced-ipc oracle-side row drift under unpinned Node 24), live Node v24.16.0 rows in tests/no-coi/no-coi-process-exit-status.spec.ts.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Scenario 1: clean project seeded with the npm-spelled overrides manifest, vitest.config.ts (include src/**/*.test.ts), src/sum.ts, src/sum.test.ts (one pass, one fail) plus a decoy test the default include would collect",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:14-69,180",
+      "note": ""
+    },
+    {
+      "row": "Scenario 2 / I1: npm install with overrides {vite: 8.0.16} -> exactly one node_modules/vite@8.0.16 (lock entry the same) satisfying vitest's vite edge, vitest 4.1.11, @rolldown/binding-wasm32-wasi, lightningcss-wasm@1.32.0 shadow line; exit 0",
+      "source": "acceptance",
+      "trace": "I1+scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:181-190; tests/e2e/npm-override-bare-version.spec.ts:66-81",
+      "note": ""
+    },
+    {
+      "row": "I1: the rifty spelling vite@8.0.16 keeps working (same tree as npm 11.17.0)",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/npm-override-bare-version.spec.ts:79",
+      "note": ""
+    },
+    {
+      "row": "I2: a live worker_threads.Worker holds its parent — its later message and 'exit' arrive before the process ends; an unref()'d Worker does not hold the loop",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/handle-keepalive.case.ts:1-27; tools/node-parity-runner/cases/worker_threads/handle-reference-api.case.ts:33-43; tests/browser-unit/worker-handle-keepalive.spec.ts; tests/e2e-prod/worker-threads-keepalive.spec.ts; exercised end to end by --pool=threads at tests/e2e/vitest-run.spec.ts:168-169",
+      "note": ""
+    },
+    {
+      "row": "I3: uncaughtException/unhandledRejection handlers receive the error and the process continues; process.once('exit') fires with the final code; process.exit() without an argument exits with process.exitCode",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:15 (cases tests/browser-unit/fixtures/process-lifecycle-cases.ts:49-128); tools/node-parity-runner/cases/process/exit-lifecycle-child.case.ts; in-process no-COI hosts tests/no-coi/no-coi-process-exit-status.spec.ts:133-218",
+      "note": ""
+    },
+    {
+      "row": "Scenario 3 / I4: vitest run (forks default) loads and honours vitest.config.ts (decoy not collected), runs the .ts test, default reporter per-file/per-test lines, 1 passed / 1 failed with the assertion diff, exit 1 — never exit 0 with empty output",
+      "source": "acceptance",
+      "trace": "I4+scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:122-146,163-167,192-197",
+      "note": ""
+    },
+    {
+      "row": "Scenario 3 / I4: after the fix every run exits 0 with Test Files 1 passed, Tests 2 passed; npm test (> vitest run) and --reporter=verbose behave the same",
+      "source": "acceptance",
+      "trace": "I4+scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:148-161,199-205",
+      "note": ""
+    },
+    {
+      "row": "Scenario 4 / I5: vitest run --pool=threads (default and verbose reporter) reports the same lines, counts and exit code as --pool=forks, failing and fixed",
+      "source": "acceptance",
+      "trace": "I5+scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:167-169,192-205",
+      "note": ""
+    },
+    {
+      "row": "Composed transition on one representative program (CLOSE step 1): clean seed -> npm install -> 6 failing runs (vitest run, npm test, verbose, forks, threads, threads verbose) -> fix -> 6 passing runs -> bare vitest once, in one shell session",
+      "source": "acceptance",
+      "trace": "I1+I4+I5+scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:173-212",
+      "note": ""
+    },
+    {
+      "row": "I6: the vitest 4.1.11 CLI and pool workers load every module on the claimed path — no link-time SyntaxError, ModuleLoadError, loader ceiling or Startup Error on any claimed run; unclaimed members throw a named NotImplementedError only on call",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:120,145,160 (12 claimed runs + bare vitest); tools/node-parity-runner/cases/modules/builtin-loud-members-link.case.ts; tools/node-parity-runner/cases/child_process/pool-worker-loud-members.case.ts",
+      "note": ""
+    },
+    {
+      "row": "Scenario 5 / I7: jsdom, happy-dom, coverage, vmThreads, vmForks and browser mode each exit 1 with their named ceiling on the throw's own line, never a silent pass; the unpinned manifest fails install loudly on lightningcss.version",
+      "source": "acceptance",
+      "trace": "I7+scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:214-283",
+      "note": ""
+    },
+    {
+      "row": "Scenario 5 / I7: watch mode and other vite versions unclaimed with the observed boundary, no mode/version ban — bare vitest under non-TTY shell stdin runs once and exits 0 as Node with piped stdin; latest vite fails install loudly",
+      "source": "acceptance",
+      "trace": "I7+scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:207-211,221-227; docs/public/compat/vitest.md:35-36",
+      "note": ""
+    },
+    {
+      "row": "I7: docs/public/compat/vitest.md claims exactly vitest 4.1.11 + vite 8.0.16, states the manifest precondition (pin or npm-authored lock; unpinned = loud lightningcss.version), ✅ rows for I1-I6 incl. vitest.config.ts and TS files, ❌ rows backed by loud throws, ⚠️ unclaimed rows for watch mode / other versions",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "docs/public/compat/vitest.md:1-36; docs/public/compat/README.md:24",
+      "note": ""
+    },
+    {
+      "row": "fix-companion: Workbench close over an open companion session settles regardless of when its late close-project reaches the shutting-down owner; a retired project transport cancels stranded PTY work with ClosedHandleError",
+      "source": "acceptance",
+      "trace": "baseline: tests/browser-unit/workbench-playground-companion.spec.ts:928 green on main",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-owner-controller.test.ts:901; packages/workbench/src/workbench/workbench-browser-owner.test.ts:1412; tests/browser-unit/workbench-playground-companion.spec.ts:928",
+      "note": ""
+    },
+    {
+      "row": "fix-nocoi: a declared gap behind a runtime fatal exit stays the named throw in no-COI runBin and project commands (exit signal keeps its cause); a guest-owned exit() keeps its status",
+      "source": "acceptance",
+      "trace": "ADR-0445",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:139,156; tests/no-coi/no-coi-agent-sdk.spec.ts:153; tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2420",
+      "note": ""
+    },
+    {
+      "row": "fix-exit7: no-COI project commands and runBin settle with the process's first terminal and report Node's status — throwing uncaughtException listener 7, exit(n) in a handler/timer, exit-listener exitCode, fatal 1",
+      "source": "acceptance",
+      "trace": "ADR-0445",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-process-exit-status.spec.ts:133-218; packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:209-257; packages/workbench/src/workers/no-coi-project-command-exit.test.ts:56,68",
+      "note": ""
+    },
+    {
+      "row": "CLOSE-r1 residual (fix-exit7 Parity 8 -> I3, ADR-0445 rules 5-6): runBin ends with Node's natural exit — no timer of the invocation (one an 'exit' listener arms, an unref'd one) runs after the terminal",
+      "source": "acceptance",
+      "trace": "ADR-0445+I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-toolchain-worker.ts:198,220-222; tests/no-coi/no-coi-process-exit-status.spec.ts:53-58,77-89,177-218",
+      "note": ""
+    },
+    {
+      "row": "Each in-process invocation is its own Node process: a finished runBin's/command's 'exit' and 'uncaughtException' listeners never run in the next one (next status is Node's 1, not 5)",
+      "source": "acceptance",
+      "trace": "ADR-0445",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-invocation-scope.ts:16-31; tests/no-coi/no-coi-process-exit-status.spec.ts:221-305",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/workbench/src/workers/no-coi-invocation-scope.ts:16-31",
+          "evidence": "pnpm check:arch -> 'runtime topology and compile-time dependency policy OK'; pnpm check:file-size -> 'file-size: OK (ratchet holds)' (scratch copy at HEAD)",
+          "summary": "The repair adds no coordination mechanism: openNoCoiInvocationScope composes the existing captureTimerBoundary/clearTimersSince and captureEventEmitterListenerScope already used by the project command, so command and runBin share one process end (sibling-drift kill). Walls closed across the goal stay generic Node contracts; no package-, vitest- or cac-shaped branch, no version/mode sniffing found.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:179",
+          "evidence": "",
+          "summary": "Delivery matches the amended goal revision (goal.md diff vs BASE = the user-authorised amend only). The amend line records 'vite 7.3.6/8.0.x/8.1.x install' and '--watch wait on fs polling' as observations, while map.md:26-27 and docs/public/compat/vitest.md:35-36 publish them as untested/unverified; the published rows are the conservative reading and still state an observed boundary (bare vitest runs once; 8.2+ loud install failure). User-facing re-word of the amend observation is the user's call.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tools/review/blockers.mjs:32-36",
+          "evidence": "node tools/review/blockers.mjs <record> exits 2 for process-lifecycle-events-exit-code, readable-pipe-never-ends-process-stdio, vm-run-in-this-context-offsets, worker-threads-handle-keepalive -contract-red.json ('coverage has N rows for M traced obligations' against the working-tree contract); evaluateVerdict with readContract = git show <reviewed_sha>:<contract> returns code 0 for all four (/tmp/vgoal/close/r2-check-at-sha.mjs).",
+          "summary": "RDY-8 preparation exists and binds for all 13 children; the CLI validates a stored Contract+RED record against the current contract, which grew at Final+GREEN — a tooling sharp edge (carried from r1), not a missing preparation.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/epics/vitest-run-in-browser/ledger.md:26",
+          "evidence": "git blame: line 26 added by b796a0763 on 2026-09-25 08:23 as the last line; git diff BASE..HEAD on ledger.md has 0 removed lines",
+          "summary": "Ledger is append-only (no edited line); one appended entry carries the date label 2026-09-24 after 2026-09-25 entries.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/no-coi/no-coi-dev-hmr.spec.ts:661-688",
+          "evidence": "no-COI run at HEAD: 'late createRequire cannot borrow resident ownership across prior loaders' passed (review-2-nocoi.log); assertion block (SandboxResidentPortOwnershipError 'selected installed bin', one exit event reason error) is unchanged from 2734fc0c8.",
+          "summary": "PR-4 changed carrier: the runBin-origin rival no longer rides its unref'd timers (which the fix now kills, as Node would) but a server it leaves listening, armed by a request from the selected entry. The ownership assertion is unchanged and still discriminates; the carrier now depends on the documented runBin live-handle gap (draft distribution/no-coi-command-unhandled-rejection-exit) and must move again when that gap closes — the comment says so.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": ".github/workflows/ci.yml:255",
+          "evidence": "CI run 36102786895 (a6f0226cb, node-version: 24): browser-unit advanced-ipc.spec.ts:79 failed on the ORACLE side (live Node sent 'detached-view' where the frozen v24.16.0 rows record TypeError); local node --version = v24.16.0.",
+          "summary": "PR-4: pinning browser-unit CI Node to 24.16.0 aligns the live oracle with the frozen v24.16.0 rows; rifty-side assertions unchanged, nothing weakened. Frozen rows stay Node-patch-specific, so a Node bump re-surfaces the drift. fix-companion (Workbench close race) is outside vitest but is a baseline regression exposed by ADR-0445 and rides the unit per REV-12. extraction-boundary inventory 171->172 and the typescript-worker sha re-pin track the one new production module.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md:80-88",
+          "evidence": "",
+          "summary": "The 2026-09-25 correction says the no-COI command clears the invocation's timers and 'runBin ends with rule 6's natural exit'; that runBin now also clears timers and retires its process/stdio listeners at every terminal is recorded in packages/workbench/CHANGELOG.md and docs/public/compat/process.md:50 but not in the ADR note. Behaviour matches Node's process end; documentation precision only.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/workbench/src/workers/no-coi-toolchain-worker.ts:220-222",
+          "evidence": "Independent RED/mutants in a detached scratch copy at HEAD: mutant A (pre-fix: clear timers only if the drain did not finish, no end) -> runBin exit-listener-timer, unref-interval and 'runBin ends each process's listeners with it' fail (3 failed / 6 passed); mutant B (finally clears timers but keeps listeners) -> 'runBin ends each process's listeners' fails with exit 5 and rows L|caught-first/L|exit-first vs Node's exit 1 (1 failed / 8 passed); fix-companion revert -> 2 unit tests fail; fix-nocoi cause drop -> 2 unit tests fail; fix-exit7 drain terminal read disabled -> 5 unit tests fail. HEAD: no-COI carriers 21 passed; acceptance e2e 2 passed.",
+          "summary": "All four post-land repairs carry discriminating REDs at their root owner; CI at HEAD (run 36119047003) green on lint/typecheck, unit/conformance, parity, no-coi, browser-unit and every e2e lane.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/public/compat/vitest.md:24,34",
+          "evidence": "",
+          "summary": "Claimed output matches Node's lines, counts and exit codes; two disclosed divergences stay routed, not hidden: npm's '> test' banner line (npm-client/npm-run-script-banner) and the teardown-timeout lines on the unclaimed vm-pools ❌ path (runtime-js/vitest-pool-start-ceiling-teardown-timeout). no-COI runBin still leaves a live non-timer handle running after it returns (pre-existing at BASE; compat process.md:50 ⚠️ + draft distribution/no-coi-command-unhandled-rejection-exit).",
+          "authority": ""
+        }
+      ]
+    }
+  ]
+}

@@ -7,7 +7,8 @@ import {
   terminalHistoryExitCode,
 } from './helpers/playground.ts';
 
-// Acceptance of goal vitest-run-in-browser (docs/backlog/runtime-js/vitest-run-acceptance.md).
+// Acceptance of goal vitest-run-in-browser (claim: docs/public/compat/vitest.md; record:
+// docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md §Goal record).
 // Expected lines/counts/exit codes = real-Node oracle (Node v24.16.0, npm 11.17.0) in
 // docs/backlog/runtime-js/reference/vitest-run-acceptance-evidence.md. Timing/ANSI not claimed (I4).
 

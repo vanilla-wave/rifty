@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtim
 
 ## Context
 
-REV-12 discovery of `runtime-js/vitest-run-acceptance` (vitest-run-in-browser
+REV-12 discovery of `runtime-js/reference/vitest-run-acceptance-evidence.md` (vitest-run-in-browser
 item 12; Final+GREEN Scope concern; evidence §Observation — teardown after a
 pool-start ceiling). Unclaimed-mode error path only: claimed runs close
 normally; exit code 1 and the named ceiling already match Node.

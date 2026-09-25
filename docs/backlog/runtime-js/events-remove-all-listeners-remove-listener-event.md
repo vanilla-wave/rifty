@@ -10,7 +10,7 @@ code: [packages/io/src/event-emitter.ts, packages/runtime-js/src/builtins/fs-wat
 
 ## Context
 
-REV-12 discovery of `runtime-js/worker-threads-handle-keepalive`
+REV-12 discovery of `runtime-js/reference/worker-threads-handle-keepalive-evidence.md`
 (vitest-run-in-browser item 8; evidence §IMPLEMENT "Worker `removeAllListeners`
 (Parity 13)"). That unit applies Node's effect on `kPublicPort` inside
 `Worker#removeAllListeners` (ADR-0446 §1) instead of changing the shared

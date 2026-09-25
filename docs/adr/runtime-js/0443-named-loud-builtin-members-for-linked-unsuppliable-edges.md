@@ -12,7 +12,8 @@ Date: 2026-09-23
 
 ADR-0348 §2 takes builtin ESM names from the runtime object's enumerable keys
 and forbids link-only placeholders: Vite's called `execFile` edge landed only
-with its real contract. vitest 4.1.11 (goal `vitest-run-in-browser` I6) links
+with its real contract. vitest 4.1.11 (goal vitest-run-in-browser I6, record
+`docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md`) links
 `statfsSync` from `node:fs` and `spawnSync` from `node:child_process` (tinyexec
 1.3.1), and binds `process.memoryUsage` when its pool workers load. Rifty lacks all
 three, so linking fails with a `SyntaxError` and the bind with a `TypeError`. Under Node

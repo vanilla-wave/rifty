@@ -5,7 +5,7 @@ title: Unhandled rejection vs an already-queued Node callback — the callback r
 created: 2026-08-02
 why: Chromium delivers `unhandledrejection` in its own later task, so a Node callback already queued (setImmediate, same-due timers, fs callback, fs.promises settlement) runs before it; with no listener its `exit(0)` exits 0 with no stderr where Node prints the error and exits 1
 user_story: As a Node program with an unhandled rejection followed by an already-queued callback that calls `process.exit(0)`, I want Node's stderr and exit 1, but today the callback runs first and the program exits 0 silently.
-sources: [docs/backlog/runtime-js/reference/process-lifecycle-events-exit-code-evidence.md, docs/backlog/runtime-js/process-lifecycle-events-exit-code.md, docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md, docs/adr/perf/0085-setimmediate-queue-rep-check-phase-drain-order-contract.md, docs/adr/runtime-js/0152-child-realm-event-loop-drain-loud-fail-exit-contract.md, docs/backlog/npm-client/reference/sass-embedded-contract-red.md, docs/public/compat/process.md]
+sources: [docs/backlog/runtime-js/reference/process-lifecycle-events-exit-code-evidence.md, docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md, docs/adr/perf/0085-setimmediate-queue-rep-check-phase-drain-order-contract.md, docs/adr/runtime-js/0152-child-realm-event-loop-drain-loud-fail-exit-contract.md, docs/backlog/npm-client/reference/sass-embedded-contract-red.md, docs/public/compat/process.md]
 code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtime-js/src/builtins/timers.ts, packages/runtime-js/src/builtins/process-lifecycle-events.ts]
 ---
 
@@ -14,7 +14,7 @@ code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtim
 Finding. First captured 2026-08-02 (Sass substitution slice) as a drain race:
 `awaitDrain` settled on its first zero-ref sample before Chromium dispatched a
 detached rejection's `unhandledrejection` task → silent exit 0. ADR-0445 rule 7
-closes that race (unit `runtime-js/process-lifecycle-events-exit-code`: one
+closes that race (unit `runtime-js/reference/process-lifecycle-events-exit-code-evidence.md`: one
 more host task confirms zero refs; carriers
 `event-loop-keepalive-late-rejection.fault.test.ts`, browser-unit
 `fatal-rejection`, `rejection-only-handler`). This draft now owns the case that
@@ -79,7 +79,8 @@ rejection (a test runner or CLI exiting 0 after a fatal rejection), or a goal
 that claims Node's rejection-before-next-callback order. Until then a capture,
 not an obligation.
 
-Dedup: `process-lifecycle-events-exit-code` claims rejections Chromium has
+Dedup: landed `runtime-js/reference/process-lifecycle-events-exit-code-evidence.md`
+(ADR-0445) claims rejections Chromium has
 already delivered and names this case Out of scope;
 `invocation-scoped-unhandled-rejection` scopes a recorded rejection to one
 no-COI invocation; `same-realm-child-async-throw-ownership` concerns fallback
