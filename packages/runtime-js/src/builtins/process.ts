@@ -1,21 +1,5 @@
-/**
- * Node-compatible `process` global — the ONE `NodeProcess` class (ADR-0157).
- *
- * Spec-seeded (pid/ppid/argv/env/cwd + stdio MessagePorts + ADR-0045 fork-IPC)
- * AND mutable (chdir/nextTick/hrtime/uptime/exitCode). Built once: the kernel
- * pre-entry seam constructs `new NodeProcess(spec)` for kernel-spawned children
- * (see `ipc/install-process.ts`); the REPL worker uses the no-spec singleton
- * `riftyProcess`. No post-spawn `globalThis.process` swap.
- *
- * `nextTick` is queued via `queueMicrotask`. To match Node's ordering (nextTick
- * always wins over `Promise.then`), `patchPromiseForNextTick` patches
- * `Promise.prototype.then` in the realm so every then-callback drains pending
- * nextTicks before firing — gated to Node workers at the pre-entry seam (WASI
- * realms leave `then` native).
- * Limitation: code that captured the original `.then` before our patch (via
- * `bind`/closure on boot) bypasses the drain. Acceptable for M3; revisit if a
- * real package breaks.
- */
+/** ADR-0157: spec-seeded process per child; singleton for REPL.
+ * nextTick precedes patched Promise callbacks; captured native then bypasses it. */
 import {
   type IpcFrame,
   type KernelProcessSpec,
@@ -30,7 +14,11 @@ import {
   unref as unrefEventLoop,
 } from '../internal/event-loop-keepalive.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
-import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import {
+  type NodeIpcSerialization,
+  deserializeNodeIpcMessage,
+  serializeNodeIpcMessage,
+} from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -46,6 +34,7 @@ import {
   readNodeProcessBootstrapIdentity,
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
+import { NODE_PROCESS_EXIT_EVENT, dispatchProcessError } from './process-error-events.ts';
 import {
   NODE_PROCESS_IDENTITY,
   type NodeProcessRelease,
@@ -115,11 +104,7 @@ function drainNextTicks(): void {
     try {
       item.fn(...item.args);
     } catch (err) {
-      // Surface on the ACTIVE realm process (the one user code attached handlers
-      // to): the seeded NodeProcess in a kernel child, else the REPL singleton.
-      const active = (globalThis as { process?: unknown }).process;
-      const target = active instanceof NodeProcess ? active : riftyProcess;
-      (target as unknown as EventEmitter).emit('uncaughtException', err);
+      if (!dispatchProcessError(err, 'uncaughtException')) throw err;
     }
   }
   // Fully drained: clear the array + cursor so the next nextTick sees length
@@ -508,41 +493,39 @@ export function coerceExitCode(v: unknown): number {
   );
 }
 
-/**
- * The unified Node `process`. `instanceof EventEmitter` holds so user code doing
- * `process instanceof require('events')` keeps working.
- */
+/** The realm's Node process and event emitter. */
 export class NodeProcess extends EventEmitter {
   pid: number;
   ppid: number;
   argv: string[];
   execArgv: string[] = [];
+  declare readonly _eval?: string;
   readonly argv0 = NODE_PROCESS_IDENTITY.argv0;
   readonly execPath = NODE_PROCESS_IDENTITY.execPath;
   readonly platform = NODE_PROCESS_IDENTITY.platform;
   readonly arch = NODE_PROCESS_IDENTITY.arch;
   readonly version = NODE_PROCESS_IDENTITY.version;
-  // Shallow copy so per-process mutation (e.g. process.versions.x = …) works
-  // without throwing and doesn't leak across processes (ADR-0150: each
-  // foreground CLI gets an isolated child worker). `Record` keeps absent-key reads type-safe.
+  // ADR-0150: mutable versions belong to each process.
   readonly versions: Record<string, string> = { ...NODE_PROCESS_IDENTITY.versions };
   readonly features = { require_module: true } as const;
   declare readonly release: NodeProcessRelease;
   readonly title = NODE_PROCESS_IDENTITY.title;
   env: Record<string, string | undefined>;
-  // Node-faithful: assigning an invalid exit code throws at the SETTER (loud),
-  // a numeric string coerces; reads return the validated integer.
-  #exitCode = 0;
-  get exitCode(): number {
+  #exitCode: number | undefined;
+  #exiting = false;
+  get exitCode(): number | undefined {
     return this.#exitCode;
   }
   set exitCode(v: unknown) {
-    this.#exitCode = coerceExitCode(v);
+    this.#exitCode = v == null ? undefined : coerceExitCode(v);
   }
   stdout: NodeStdioWriter;
   stderr: NodeStdioWriter;
   stdin: NodeStdin;
   nextTick = nextTick;
+  memoryUsage = (): never => {
+    throw new NotImplementedError('process.memoryUsage');
+  };
 
   /** Fork-IPC (ADR-0045) — present only when seeded with a spec ipc port. */
   send?: (message: unknown, ...unsupported: unknown[]) => boolean;
@@ -555,18 +538,29 @@ export class NodeProcess extends EventEmitter {
   #ipcDisconnected = false;
   #controlClosed = false;
   #publicIpc = false;
-  #jsonIpc = false;
+  #ipcSerialization: NodeIpcSerialization | null = null;
   #ipcKeepaliveHeld = false;
   readonly #workerMessageListeners = new Set<(message: unknown) => void>();
   readonly #workerIpcBacklog: unknown[] = [];
   #latestTtyControlSize: { readonly cols: number; readonly rows: number } | null = null;
   #descendantAuthority: NodeProcessDescendantAuthority | null = null;
-  // Frames received before any `'message'` listener attaches (ADR-0045) — flushed
-  // in order on the first listener; mirrors makeStdinReader's pending buffer.
+  // ADR-0045: buffer until the first message listener.
   readonly #ipcBacklog: unknown[] = [];
 
   constructor(spec?: KernelProcessSpec) {
     super();
+    Object.defineProperty(this, NODE_PROCESS_EXIT_EVENT, {
+      value: (code: number, emit: boolean) => this.#beginExit(code, emit),
+    });
+    // Node publishes these as own, receiver-independent functions; ESM uses own keys.
+    for (const name of ['cwd', 'chdir', 'hrtime', 'uptime', 'exit', 'kill'] as const) {
+      Object.defineProperty(this, name, {
+        value: Object.assign(this[name].bind(this), this[name]),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
     Object.defineProperty(this, 'release', {
       value: createNodeProcessRelease(),
       writable: false,
@@ -625,9 +619,15 @@ export class NodeProcess extends EventEmitter {
       this.ppid = spec.ppid;
       this.argv = [...spec.argv];
       const launch = readNodeEntryBootstrapIfPresent()?.launch;
-      this.execArgv = launch?.kind === 'eval' ? [...launch.execArgv] : [];
-      // Copy so per-process env mutation does not leak into the published
-      // Readonly spec (the kernel threads spec.env by reference).
+      this.execArgv = launch === undefined ? [] : [...launch.execArgv];
+      if (launch?.kind === 'eval') {
+        Object.defineProperty(this, '_eval', {
+          value: launch.source,
+          writable: false,
+          enumerable: true,
+          configurable: true,
+        });
+      }
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
       const terminal = processTerminalBootstrap(launch);
@@ -646,7 +646,8 @@ export class NodeProcess extends EventEmitter {
         this.#wireWorkerIpc(spec.stdio.ipc);
       } else {
         this.#publicIpc = true;
-        this.#jsonIpc = launch?.kind === 'program';
+        this.#ipcSerialization =
+          launch?.kind === 'program' ? (launch.ipc === 'advanced' ? 'advanced' : 'json') : null;
         this.connected = true;
         this.channel = nodeIpcChannel('process');
         this.#wireIpc(spec.stdio.ipc);
@@ -747,10 +748,10 @@ export class NodeProcess extends EventEmitter {
     return performance.now() / 1000;
   }
 
-  exit(code: unknown = 0): never {
+  exit(code: unknown = this.#exitCode): never {
     const c = coerceExitCode(code); // coerce string / throw on invalid (Node parity)
-    this.#exitCode = c;
-    const exitCode = toUint8ExitCode(c);
+    this.#beginExit(c, true);
+    const exitCode = toUint8ExitCode(this.#exitCode ?? 0);
     const exitError = Object.assign(new Error(`process.exit(${c})`), {
       code: RIFTY_PROCESS_EXIT,
       exitCode, // OS-style uint8 wrap (process.exit(257) → 1)
@@ -761,6 +762,13 @@ export class NodeProcess extends EventEmitter {
     });
     if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(exitCode);
     throw exitError;
+  }
+
+  #beginExit(code: number, emit: boolean): void {
+    this.#exitCode = code;
+    if (this.#exiting) return;
+    this.#exiting = true;
+    if (emit) this.emit('exit', code);
   }
 
   kill(pid: number, signal = 'SIGTERM'): boolean {
@@ -787,7 +795,7 @@ export class NodeProcess extends EventEmitter {
       if (frame === null) return;
       if (frame.kind === 'ipc:message') {
         if (this.#ipcDisconnected) return;
-        const payload = this.#jsonIpc ? serializeNodeIpcMessage(frame.payload) : frame.payload;
+        const payload = deserializeNodeIpcMessage(frame.payload, this.#ipcSerialization);
         if (this.listenerCount('message') === 0) {
           this.#ipcBacklog.push(payload);
         } else {
@@ -807,16 +815,10 @@ export class NodeProcess extends EventEmitter {
     };
     port.start();
 
-    // Flush frames buffered before the first listener. `newListener` fires BEFORE
-    // the listener is added; defer to a MACROTASK (not a microtask) so the flush
-    // lands AFTER the entry module finishes evaluating — Node delivers IPC on the
-    // event loop, never mid-eval. A microtask delivered the buffered
-    // `{__emnapi__:load}` frame in the gap between Rolldown's `wasi-worker.mjs`
-    // attaching `parentPort.on('message')` (top) and setting `globalThis.onmessage`
-    // (last line), crashing with "globalThis.onmessage is not a function".
-    // TODO(backlog: runtime-js/ipc-backlog-flush-entry-resolution): setTimeout(0)
-    // is robust only while the entry body fits one macrotask; the Node-correct
-    // release is a kernel post-entry hook firing after the entry module resolves.
+    // Flush after listener installation and entry evaluation. A microtask can
+    // precede Rolldown's globalThis.onmessage assignment and drop its load frame.
+    // TODO(backlog: runtime-js/ipc-backlog-flush-entry-resolution): replace the
+    // timer with a kernel post-entry hook; async entries can outlive one turn.
     this.on('newListener', (event) => {
       if (event !== 'message' || this.#ipcBacklog.length === 0) return;
       setTimeout(() => {
@@ -827,7 +829,7 @@ export class NodeProcess extends EventEmitter {
     this.send = (message: unknown, ...unsupported: unknown[]): boolean => {
       if (unsupported.length > 0) throw new NotImplementedError('process.send.arguments');
       if (this.#ipcDisconnected) return false;
-      const payload = this.#jsonIpc ? serializeNodeIpcMessage(message) : message;
+      const payload = serializeNodeIpcMessage(message, this.#ipcSerialization);
       try {
         const frame: IpcFrame = { kind: 'ipc:message', payload };
         port.postMessage(frame);
@@ -1047,7 +1049,10 @@ export class NodeProcess extends EventEmitter {
   }
 
   #syncIpcKeepalive(): void {
-    const shouldHold = this.#jsonIpc && !this.#ipcDisconnected && this.listenerCount('message') > 0;
+    const shouldHold =
+      this.#ipcSerialization !== null &&
+      !this.#ipcDisconnected &&
+      this.listenerCount('message') > 0;
     if (shouldHold === this.#ipcKeepaliveHeld) return;
     this.#ipcKeepaliveHeld = shouldHold;
     if (shouldHold) refEventLoop();
@@ -1178,21 +1183,22 @@ export function nodeProcessWorkerIpc(process: unknown): NodeProcessWorkerIpc {
 /** REPL/default singleton (no spec). Kernel children get their own seeded one. */
 export const riftyProcess = new NodeProcess();
 
+/** Canonical Node builtin process; an embedder's host process is a different realm. */
+export function currentNodeProcess(): object {
+  const active = readActiveNodeProcessBootstrap()?.process;
+  if (active !== undefined) return active;
+  const live = (globalThis as { process?: unknown }).process;
+  return live instanceof NodeProcess ? live : riftyProcess;
+}
+
 /** Host bridge: deliver terminal/process stdin into the REPL Worker process. */
 export function writeProcessStdin(data: string | Uint8Array): void {
   riftyProcess.pushStdin(data);
 }
 
-/**
- * Install the no-spec REPL `process` on `globalThis` + patch Promise for nextTick
- * ordering. Idempotent: skips when `globalThis.process` is already a `NodeProcess`
- * (the kernel pre-entry seam already installed the seeded one), so a stray
- * top-level call in a co-bundled chunk cannot clobber it (ADR-0157;
- * backlog: runtime-js/worker-entry-process-globals-side-effect).
- */
+/** Retain seeded REPL bindings (ADR-0157; backlog: runtime-js/worker-entry-process-globals-side-effect). */
 export function installProcessGlobals(): void {
-  // A kernel-installed binding is realm-private authority. A later idempotent
-  // call must not let a guest-replaced public global replace or downgrade it.
+  // A guest-replaced global cannot override the installed binding.
   if (readActiveNodeProcessBootstrap() !== null) return;
   const active = (globalThis as { process?: unknown }).process;
   if (active instanceof NodeProcess) {
@@ -1202,16 +1208,11 @@ export function installProcessGlobals(): void {
   patchPromiseForNextTick();
   (globalThis as unknown as { process: NodeProcess }).process = riftyProcess;
   setActiveNodeProcessBootstrap(riftyProcess);
-  // `global === globalThis` via the single helper — Node's descriptor
-  // (writable+enumerable+configurable), not a private non-enumerable alias.
+  // Preserve Node's global alias descriptor.
   installGlobalAlias();
 }
 
-/**
- * Test/host helper: override the per-Worker cwd cell, bypassing `chdir`'s VFS
- * validation. Used by the parity-runner so `process.cwd()` sees a stable anchor
- * matching the Node child's `--cwd`. Not Node API — production code uses `chdir`.
- */
+/** Host/test cwd override; production uses validated chdir. */
 export function setProcessCwd(next: string): void {
   currentCwd = next;
 }

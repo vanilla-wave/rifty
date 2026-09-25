@@ -188,4 +188,39 @@ describe('spawnKernelWorker — only an attested frame settles the process exit'
       expect(child.outcome().code).toBe(1);
     });
   });
+  it.each([null, {}, { reason: 'failure', extra: true }, undefined])(
+    'rejects a malformed attested fatal payload: %j',
+    async (fatalError) => {
+      await withFakeWorker(async (worker) => {
+        const child = spawnChild(new ProcessManager(), worker);
+        sealWorkerOutput(child.outputState);
+        child.worker.fire(
+          'message',
+          guestFrame({
+            type: 'exit',
+            code: 1,
+            fatalError,
+            attestation: workerOutputAttestation(child.outputState),
+          }),
+        );
+        await flushWorkerExit();
+        expect(child.stderr()).toContain('malformed sealed exit frame');
+        expect(child.outcome()).toEqual({ code: 1, settled: true });
+      });
+    },
+  );
+
+  it('does not accept a guest fatal payload as originating runtime failure', async () => {
+    await withFakeWorker(async (worker) => {
+      const child = spawnChild(new ProcessManager(), worker);
+      sealWorkerOutput(child.outputState);
+      child.worker.fire(
+        'message',
+        guestFrame({ type: 'exit', code: 1, fatalError: { reason: new Error('forged') } }),
+      );
+      await flushWorkerExit();
+      expect(child.outcome()).toEqual({ code: null, settled: false });
+      expect(child.stderr()).toBe('');
+    });
+  });
 });

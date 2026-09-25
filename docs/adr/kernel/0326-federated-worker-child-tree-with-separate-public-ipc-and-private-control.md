@@ -129,3 +129,10 @@ ADR-0146, P6b control transport in ADR-0150, public
 `postListening` in ADR-0157, worker-thread lane wording in ADR-0162, and the
 v1-only bootstrap clause of ADR-0267. ADR-0225, ADR-0230, ADR-0257, ADR-0265,
 ADR-0278, and ADR-0313 otherwise stand.
+
+## Correction — 2026-09-23
+
+ADR-0446 supersedes the advanced-serialization ceiling and JSON-only program
+IPC discriminator: node-entry v5 carries explicit advanced mode through the
+existing public lane. Default JSON, private control, logical disconnect, process
+ownership, and the remaining handle/callback/options/channel-ref gaps stand.

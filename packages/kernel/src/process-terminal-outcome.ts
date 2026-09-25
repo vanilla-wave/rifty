@@ -1,5 +1,10 @@
 export type ProcessTerminalOutcome =
-  | { readonly kind: 'exit'; readonly code: unknown; readonly signal: unknown }
+  | {
+      readonly kind: 'exit';
+      readonly code: unknown;
+      readonly signal: unknown;
+      readonly fatalError?: { readonly reason: unknown };
+    }
   | { readonly kind: 'peererror'; readonly error: unknown };
 
 export interface ProcessTerminalEventSource {
@@ -13,8 +18,15 @@ export function observeProcessTerminalOutcome(
   listener: (outcome: ProcessTerminalOutcome) => void,
 ): () => void {
   let active = true;
-  const onExit = (code: unknown, signal: unknown): void => {
-    settle({ kind: 'exit', code, signal });
+  const onExit = (code: unknown, signal: unknown, fatalError?: unknown): void => {
+    settle({
+      kind: 'exit',
+      code,
+      signal,
+      ...(fatalError === undefined
+        ? {}
+        : { fatalError: fatalError as { readonly reason: unknown } }),
+    });
   };
   const onPeerError = (error: unknown): void => {
     settle({ kind: 'peererror', error });

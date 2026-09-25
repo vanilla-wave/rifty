@@ -1,52 +1,47 @@
 ---
 area: runtime-js
 status: draft
-title: worker_threads kernel-path 'error' event for worker-runtime uncaught exceptions
+title: worker_threads error provenance for uncaught global errors after entry
 created: 2026-06-20
-why: a kernel-backed Worker that throws at runtime emits only 'exit' 1, not Node's 'error' (with the real Error) then 'exit'
-user_story: As a dev whose `worker_threads.Worker` script throws, I want the parent `worker.on('error', e => …)` to receive the real Error like Node — but today on the kernel-backed path only `'exit'` (code 1) fires; the stack goes to the worker's stderr, never to an `'error'` event.
-sources: [handoff-vite8-refactor-tails.md #6, packages/runtime-js/src/builtins/worker_threads.ts]
-code: [packages/runtime-js/src/builtins/worker_threads.ts, packages/kernel/src/worker-entry.ts]
+why: an uncaught timer callback in a kernel Worker exits 1 without the parent's error event
+user_story: As a developer, I need an uncaught asynchronous Worker error to reach worker.on('error') with its real name, message and code before exit 1.
+sources: [handoff-vite8-refactor-tails.md #6, packages/runtime-js/src/builtins/worker_threads.ts, docs/adr/kernel/0460-carry-originating-runtime-failures-in-sealed-worker-exits.md]
+code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/kernel/src/spawn-worker.ts, packages/runtime-js/src/builtins/worker_threads.ts]
 ---
 
-## Context
+## Current boundary — 2026-09-23
 
-Node `Worker` emits `'error'` (carrying the thrown `Error`) for a worker-runtime
-uncaught exception / unhandled rejection, THEN `'exit'` with code 1.
+ADR-0460 closed entry/preload failures and drain-recorded rejections: the
+originating failure crosses the existing attested terminal frame before exit.
+Explicit exit1 and handled uncaughtException do not create Worker.error.
+This broader item remains open for unhandled global errors after entry.
 
-Rifty divergence by path:
-- **same-realm fallback** — `startSameRealmAsync`'s `catch` already calls
-  `emitWorkerError(err)` → `'error'` fires with the real Error. ✔ Node-parity.
-- **kernel-backed path** — the child realm's throw is caught by the kernel
-  bootstrap (`runEntryLifecycle`), which writes the stack to the worker's
-  **stderr** and exits 1. The parent's `handle.on('exit')` → `finish(1)` emits
-  only `'exit'` 1. `'error'` fires ONLY on a *spawn* failure (the `startViaKernel`
-  try/catch), never for a runtime throw inside the worker. ✘
+Executed live Node24 and real Chromium/physical Worker, fresh port5444:
 
-Why not just synthesize an `Error` from exit code 1: that would LIE about the
-cause (Fidelity — no fake impls). The real Error must cross the realm boundary.
+| Child source | Native parent events | Browser parent events |
+|---|---|---|
+| `setTimeout(()=>{throw Object.assign(new TypeError('async'),{code:'ASYNC'})},0)` | TypeError/ASYNC/async, then exit1 | exit1 only — RED |
+| `Promise.reject(Object.assign(new TypeError('reject'),{code:'REJECT'}))` | TypeError/REJECT/reject, then exit1 | exact match — PASS |
 
-## Options or Next
+Both parents naturally exit0; neither uses an artificial interval. Native and
+browser compare name/code/message, TypeError identity, and ordered exit.
+`installUnhandledErrorTrap` reports process exit and leaves default global
+error delivery; it does not record the reason for the drain. The rejection
+trap records its actual reason, so it reaches the new terminal payload.
 
-Real cross-realm propagation (additive, no public-API break):
-1. The node-entry child installs an `uncaughtException` / `unhandledrejection`
-   handler that serializes the Error (`name`/`message`/`stack`/`code`) and posts
-   an IPC `{ kind: 'worker:error', error }` frame via `process.send` BEFORE the
-   kernel reaps it. Kernel stays Node-API-agnostic (ADR-0039) — the frame is a
-   runtime-js convention over the existing ADR-0045 fork-IPC channel.
-2. `worker_threads.Worker` maps an inbound `worker:error` frame to
-   `emitWorkerError(deserialize(frame.error))`, so `'error'` precedes the
-   `'exit'` the kernel still posts.
-3. Decide structured-clone vs the plain field subset for the Error (match the
-   `workerData` JSON-safe policy or widen deliberately).
+Reproducer/artifacts: `/private/tmp/rifty-worker-async-audit/audit.spec.ts`,
+`config.mts`, `browser.log`; browser trace retained beside them. Command:
 
-Gate: a kernel-backed-path test (COI/SAB) asserting `'error'` (real message)
-fires before `'exit'` 1 — the same-realm path already covers the event shape.
+```sh
+RIFTY_PLAYGROUND_PORT=5444 pnpm exec playwright test --config /private/tmp/rifty-worker-async-audit/config.mts
+```
 
-## Reversibility
+## Next
 
-REVERSIBLE — additive IPC frame + handler, recorded as this backlog item with a
-`TODO(backlog: runtime-js/worker-threads-kernel-error-event)` marker at the
-kernel-path exit site. The same-realm path keeps Node-parity today; the gap is
-the kernel path only, and it is an explicit documented divergence (loud stderr +
-honest `'exit'` 1), never a silent stub.
+Route the originating global error through the existing terminal authority;
+no Error synthesized from exit1, no stderr parsing, no guest-forgeable IPC
+error tag or second exit owner. Preserve handled process-error behavior.
+Required native/physical browser guard: late timer throws TypeError with code,
+parent gets that error exactly once before exit1, with normal cleanup/stdio.
+Public compatibility remains partial: entry/preload/drain rejection supported;
+unhandled asynchronous timer/global Worker.error remains unsupported here.

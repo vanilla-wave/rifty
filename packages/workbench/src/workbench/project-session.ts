@@ -40,9 +40,17 @@ export interface ProjectSession<TReady> {
 interface ProjectSessionCloseInternals {
   readonly beforeClose: Set<() => Promise<void>>;
   readonly isClosing: () => boolean;
+  readonly admission: () => Promise<void> | null;
 }
 
 const closeInternals = new WeakMap<object, ProjectSessionCloseInternals>();
+
+/** Private close handoff: hooks settled and core teardown calls synchronously admitted. */
+export function projectSessionCloseAdmission(
+  session: ProjectSession<unknown>,
+): Promise<void> | null {
+  return closeInternals.get(session)?.admission() ?? null;
+}
 
 function deduplicateCausalCloseErrors(errors: readonly Error[]): readonly Error[] {
   const unique = errors.filter((error, index) => errors.indexOf(error) === index);
@@ -86,6 +94,7 @@ export function createProjectSession<TReady>(_options: {
   let closing = false;
   let closed = false;
   let closePromise: Promise<void> | null = null;
+  let closeAdmission: Promise<void> | null = null;
   const beforeClose = new Set<() => Promise<void>>();
 
   const assertOpen = (): void => {
@@ -204,6 +213,8 @@ export function createProjectSession<TReady>(_options: {
       }
 
       closing = true;
+      const admission = deferred<void>();
+      closeAdmission = admission.promise;
       void (async () => {
         const errors: Error[] = [];
         const operations: Promise<unknown>[] = [];
@@ -235,6 +246,7 @@ export function createProjectSession<TReady>(_options: {
         // Terminal close frames are synchronously enqueued before the owner
         // token is retired. Dirty preflight never reaches this hook.
         if (closeOwner !== undefined) operations.push(start(closeOwner));
+        admission.resolve(undefined);
         const results = await Promise.allSettled(operations);
         errors.push(
           ...results.flatMap((result) =>
@@ -264,7 +276,11 @@ export function createProjectSession<TReady>(_options: {
     },
   };
 
-  closeInternals.set(session, { beforeClose, isClosing: () => closing || closed });
+  closeInternals.set(session, {
+    beforeClose,
+    isClosing: () => closing || closed,
+    admission: () => closeAdmission,
+  });
 
   return session;
 }

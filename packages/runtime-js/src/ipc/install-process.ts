@@ -31,6 +31,7 @@ import {
   type WorkerSpawnSpec,
   globalProcessManager,
   readKernelProcessSpec,
+  setKernelFatalErrorSerializer,
   setKernelPreEntryHook,
 } from '@riftydev/kernel';
 import { Buffer } from '../builtins/buffer.ts';
@@ -44,6 +45,7 @@ import {
 import { resolveVmEngineName } from '../builtins/vm/engine-config.ts';
 import { QUICKJS_WASM_URL_ENV, ensureVmEngineReady } from '../builtins/vm/quickjs-loader.ts';
 import { installWebGlobals } from '../builtins/web-globals.ts';
+import { serializeWorkerFatalError } from '../internal/worker-fatal-error.ts';
 import { installGlobalAlias, installWorkerRealmCompat } from './worker-realm-compat.ts';
 
 /** Host bootstrap key for the QuickJS asset consumed by this pre-entry installer. */
@@ -99,7 +101,7 @@ export function installNodeProcessShim(
  * Timers + keepalive stay universal at `kernel-worker-entry.ts` module top-level.
  */
 export function installNodeRuntime(
-  spec: Pick<WorkerSpawnSpec, 'pid' | 'ppid' | 'env'>,
+  spec: Pick<WorkerSpawnSpec, 'pid' | 'ppid' | 'env'> & Partial<Pick<WorkerSpawnSpec, 'entry'>>,
 ): void | Promise<void> {
   const isNodeEntry = readNodeEntryBootstrapIfPresent() !== null;
   const isNode = isNodeEntry || spec.env.__RIFTY_WASI_WASM_URL === undefined;
@@ -114,6 +116,7 @@ export function installNodeRuntime(
   // (ADR-0334).
   if (!isNodeEntry) bindNodeProcessDescendantAuthority(process, globalProcessManager);
   if (isNode) {
+    setKernelFatalErrorSerializer(serializeWorkerFatalError);
     patchPromiseForNextTick();
     (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
     installWebGlobals();

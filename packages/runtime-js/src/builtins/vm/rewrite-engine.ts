@@ -1,7 +1,5 @@
 /**
- * Rewrite engine: the original `node:vm` AST-rewrite sandbox implementation,
- * moved here verbatim behind the {@link VmEngine} interface (Task 4 split — no
- * behavior change). Source is parsed with acorn, top-level free writes/`var`/
+ * AST-rewrite {@link VmEngine}: acorn parses top-level free writes/`var`/
  * function declarations are redirected onto the contextified object, then run in
  * the host realm under a `with (proxy) { eval(...) }` membrane.
  *

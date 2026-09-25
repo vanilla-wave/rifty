@@ -1,7 +1,8 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
+import { runInThisContext } from '../builtins/vm/index.ts';
 import { createModuleLoader } from './loader.ts';
-import { SourceMapRegistry, extractInlineSourceMap } from './source-maps.ts';
+import { SourceMapRegistry, extractInlineSourceMap, withStackRemapping } from './source-maps.ts';
 
 declare global {
   var __riftyStackFrame: string | undefined;
@@ -9,6 +10,19 @@ declare global {
   var __riftyOverlapReleaseB: (() => void) | undefined;
   var __riftyOverlapFrame: string | undefined;
 }
+
+it('does not apply an active loader map to an independent vm script with the same filename', async () => {
+  const registry = new SourceMapRegistry();
+  const filename = '/virtual/shared-source.js';
+  registry.set(filename, {
+    lines: [[{ generatedColumn: 0, originalLine: 80, originalColumn: 4 }]],
+  });
+  const stack = await withStackRemapping(registry, filename, 0, async () =>
+    runInThisContext('new Error().stack', { filename, columnOffset: 5 }),
+  );
+  expect(String(stack)).toContain(`${filename}:1:6`);
+  expect(String(stack)).not.toContain(`${filename}:81:5`);
+});
 
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 

@@ -1,4 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads';
+import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
 import { runInRiftyInCurrentRealm } from './run-in-rifty.ts';
 import type {
   NodeCliEvalBootstrapFault,
@@ -36,6 +37,10 @@ function serializeError(error: unknown): {
 
 if (parentPort === null) throw new Error('rifty parity Worker has no parent port');
 const request = workerData as WorkerRequest;
+
+// The parent program is guest code too; mirror production pre-entry in this
+// disposable realm instead of leaking native Node Buffer/Proxy into its oracle.
+(globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
 
 try {
   const stdout = await runInRiftyInCurrentRealm(request.testCase, {

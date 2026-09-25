@@ -135,7 +135,7 @@ describe('pre-entry gate (ADR-0157)', () => {
     const entry = buildNodeEntryWorkerEntry(
       'https://host.test/node-entry.js',
       { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
-      { kind: 'worker-thread', remoteFs: true, threadId: 7 },
+      { kind: 'worker-thread', execArgv: [], remoteFs: true, threadId: 7 },
     );
     publishKernelEntryBootstrap(entry.bootstrap ?? null);
     Reflect.deleteProperty(globalThis, 'global');
@@ -179,6 +179,7 @@ describe('pre-entry gate (ADR-0157)', () => {
       { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
       {
         kind: 'program',
+        execArgv: [],
         bin: true,
         remoteFs: true,
         nodeServe: true,
@@ -222,6 +223,7 @@ describe('pre-entry gate (ADR-0157)', () => {
       { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
       {
         kind: 'program',
+        execArgv: [],
         bin: false,
         remoteFs: true,
         remoteFsRoot,

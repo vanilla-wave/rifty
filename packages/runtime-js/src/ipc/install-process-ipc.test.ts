@@ -136,7 +136,7 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
     const entry = buildNodeEntryWorkerEntry(
       'https://host.test/node-entry.js',
       { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
-      { kind: 'program', bin: false, remoteFs: true, ipc: 'json', nodeServe: true },
+      { kind: 'program', execArgv: [], bin: false, remoteFs: true, ipc: 'json', nodeServe: true },
     );
     publishKernelEntryBootstrap(entry.bootstrap ?? null);
     const process = installNodeProcessShim({

@@ -22,7 +22,11 @@ import {
   inspectProjectDefinition,
   projectStorageSegment,
 } from './project-definition.ts';
-import { type ProjectSession, registerProjectSessionBeforeClose } from './project-session.ts';
+import {
+  type ProjectSession,
+  projectSessionCloseAdmission,
+  registerProjectSessionBeforeClose,
+} from './project-session.ts';
 import {
   type ServiceWorkerControlContainer,
   type ServiceWorkerControlTimers,
@@ -372,8 +376,14 @@ function createWorkbench(
           completion.reject(error);
         },
       );
-      // Synchronous close preflight settles before this checkpoint; later failures are terminal.
-      queueMicrotask(() => settlePreflight(CLOSE_PREFLIGHT_PASSED));
+      const admission = projectSessionCloseAdmission(session);
+      if (admission !== null) {
+        // Owner shutdown can cancel pending core drains, but must not overtake tool hooks.
+        void admission.then(() => settlePreflight(CLOSE_PREFLIGHT_PASSED));
+      } else {
+        // External owner sessions have no package-private hooks; retain synchronous preflight.
+        queueMicrotask(() => settlePreflight(CLOSE_PREFLIGHT_PASSED));
+      }
       return attempt;
     };
 

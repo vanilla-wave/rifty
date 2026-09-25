@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Expose one import/subclass-safe HTTP Agent constructor whose use throws the named socket-pool ceiling (ADR-0459).
 - Name Workbench deployment.wasm.sqlite in the uninitialized SQLite error while retaining direct engine initialization guidance.
 
 ### Added

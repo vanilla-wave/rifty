@@ -37,6 +37,7 @@ export function buildChildSpawnSpec(
   const projectedBindings = projectOwnerChildRuntimeBindings(runtimeBindings, req.remoteFsRoot);
   const entry = buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
     kind: 'program',
+    execArgv: [],
     bin: isBinShimPath(req.shimPath),
     remoteFs: true,
     ...(req.remoteFsRoot === undefined ? {} : { remoteFsRoot: req.remoteFsRoot }),

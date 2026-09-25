@@ -1,4 +1,5 @@
 import { parse as acornParse } from 'acorn';
+import { readNodeStartupOptions } from '../internal/node-startup-options.ts';
 
 export interface FileDirResolutionOrder {
   readonly extensions: readonly string[];
@@ -55,12 +56,16 @@ export function resolutionOrder(esm: boolean): FileDirResolutionOrder {
   return esm ? IMPORT_RESOLUTION : REQUIRE_RESOLUTION;
 }
 
-export type ResolutionCondition = 'node' | 'default' | 'import' | 'require' | 'module-sync';
+export type ResolutionCondition = string;
 
 export function activeConditions(esm: boolean): readonly ResolutionCondition[] {
-  return esm
-    ? (['node', 'import', 'module-sync', 'default'] as const)
-    : (['node', 'require', 'module-sync', 'default'] as const);
+  return [
+    'node',
+    esm ? 'import' : 'require',
+    'module-sync',
+    'default',
+    ...readNodeStartupOptions().conditions,
+  ];
 }
 
 /** Node's ambiguous `.js` syntax detection after package-scope classification. */

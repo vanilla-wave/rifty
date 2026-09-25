@@ -38,7 +38,7 @@
  * abort (the disposal-stress guard is T18).
  */
 
-import type { QuickJSContext } from 'quickjs-emscripten-core';
+import type { QuickJSContext, QuickJSHandle } from 'quickjs-emscripten-core';
 import type { ContextLifetime } from './context-lifetime.ts';
 import { Membrane } from './membrane.ts';
 import { getQuickJsModuleSync } from './quickjs-loader.ts';
@@ -74,8 +74,19 @@ function withSourceURL(code: string, filename?: string): string {
   return `${code}\n//# sourceURL=${filename}`;
 }
 
-function evalInfrastructure(qctx: QuickJSContext, source: string, feature: string): void {
-  const result = qctx.evalCode(source);
+function evalInfrastructure(
+  qctx: QuickJSContext,
+  source: string,
+  feature: string,
+  nativeProxy: QuickJSHandle,
+): void {
+  const factory = qctx.unwrapResult(qctx.evalCode(source));
+  let result: ReturnType<QuickJSContext['callFunction']>;
+  try {
+    result = qctx.callFunction(factory, qctx.undefined, nativeProxy);
+  } finally {
+    factory.dispose();
+  }
   if (result.error !== undefined) {
     const dumped = qctx.dump(result.error);
     result.error.dispose();
@@ -84,13 +95,17 @@ function evalInfrastructure(qctx: QuickJSContext, source: string, feature: strin
   result.value.dispose();
 }
 
-function applyCodeGenerationPolicy(qctx: QuickJSContext, context: ContextObject): void {
+function applyCodeGenerationPolicy(
+  qctx: QuickJSContext,
+  context: ContextObject,
+  nativeProxy: QuickJSHandle,
+): void {
   const policy = getContextCodeGeneration(context);
   if (!policy || (policy.strings && policy.wasm)) return;
   evalInfrastructure(
     qctx,
     `
-      (() => {
+      ((Proxy) => {
         const allowStrings = ${String(policy.strings)};
         const allowWasm = ${String(policy.wasm)};
         const facades = new WeakMap();
@@ -222,9 +237,10 @@ function applyCodeGenerationPolicy(qctx: QuickJSContext, context: ContextObject)
           });
           replaceValue(Function.prototype, 'toString', guardedToString);
         }
-      })();
+      });
     `,
     'vm.createContext.codeGeneration',
+    nativeProxy,
   );
 }
 
@@ -232,8 +248,13 @@ function getOrCreateGuestRuntime(context: ContextObject): GuestRuntime {
   let rt = guestRuntimes.get(context);
   if (!rt) {
     const qctx = getQuickJsModuleSync().newContext();
+    const nativeProxy = qctx.getProp(qctx.global, 'Proxy');
     const membrane = new Membrane(qctx);
-    applyCodeGenerationPolicy(qctx, context);
+    try {
+      applyCodeGenerationPolicy(qctx, context, nativeProxy);
+    } finally {
+      nativeProxy.dispose();
+    }
     rt = { qctx, membrane };
     guestRuntimes.set(context, rt);
     // GC'ing the ContextObject marks the controller pending → safe teardown once

@@ -1,0 +1,1767 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final PASS на1179ddfd4912519004a1e44bdd911f72f9178d3a: merge сохранён,214/214 coverage PASS, CI36139754267 completed SUCCESS, все19jobs GREEN. Единственный CI/binding residual закрыт; goal_complete=true. Готово к публикации re-bound record и PR ready; merge не запрашивался и не выполнялся.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "1179ddfd4912519004a1e44bdd911f72f9178d3a",
+  "unit_goal_source": "PR351 post-CLOSE Workbench close repair, merged verification; current BASE main99fdf6c91c02439c0b22967f0207be3def20a07e; reviewed1179ddfd4912519004a1e44bdd911f72f9178d3a. Observed repair BASE b0b54f6ab8ab8ce74ed001e6f2ec2a4cf1356b0f; preceding independent review8573c7521781480f72e5d1cea2f621b746e0edec. Accepted goal slug vitest-run-in-browser: historical goal/contracts at f98099bf7aa5304b344a3b3b1cc215fcd379c0b8, до CLOSE; live goal contract отсутствует. Canonical vitest-delivery-final-green.json остаётся историческим Final PASS f980, 204/204 и CI36130870229 все19jobs GREEN. Весь repair delta b0b54f6ab→8573 прочитан: 2production files, supplemental unit criteria, новый real-browser carrier, ADR0468/evidence/changelog. Все204 прежние coverage rows сохранены без изменений. Их исполняемые carriers/source и frozen artifacts неизменны; единственное изменение cited compat/vitest — явная строка уже принятого binary ceiling. Сохраняется прежняя миграция исходных201:191retained/migrated,10retired по ADR0467; последующие13 обязательств дают204. User2026-09-25: Vitest-only native clone, binary refusal, platform clone errors, exact Vitest4.1.11/Vite8.0.16 run/bothpools и unclaimed другие modes/versions; forks закрыты, не пересмотрены. Добавлены10 строк ADR0468/0319/0278/0273:4fault,4acceptance,2 изменённых public close entry points; новый публичный API/frozen artifact отсутствует. Source inspection: admission создаётся только после clean preflight, hooks allSettled перед core invocations, resolve до core settlement; Workbench ждёт admission. Dirty veto/retry, no-hooks, повторный/reentrant close, exact failures, external adapters и opening/deleting cancellation проверены; private WeakMap/deferred reused, error classifier и owner authority не изменены. Raw baseline /private/tmp/rifty-final-ci-companion-isolated.log: неизменный real instant Vite1FAIL/5PASS, inactive-token+SIGTERM, не timeout. Raw /private/tmp/rifty-close-admission-red.log:3RED — реальный owner уже closed, readFile отвергнут при удержанном hook. Raw /private/tmp/rifty-close-admission-browser-green.log: fresh5509 новые3 и неизменные6=9PASS14.2s, originalVite1.7s. Независимо исполнено на detached8573: node node_modules/vitest/vitest.mjs run project-session.test.ts open-workbench.test.ts open-workbench.contract.test.ts internal/playground-workbench.contract.test.ts (полные пути packages/workbench/src/workbench/);165/165PASS, /private/tmp/rifty-close-admission-independent-unit.log. Producer raw /private/tmp/rifty-close-admission-pr-check.log завершён:25/25PASS, test:run229.1s, parity79.4s. Broad/browser lanes повторно не запускались. Verification-only continuation1179: весь merge delta8573→1179 проверен по Git blobs —14 новых/изменённых файлов точь-в-точь из main99fdf6c91, единственный residual merge edit ADR index добавляет0466 и сохраняет0468; иных merge edits нет. Ремонт Workbench production/tests и все59 файлов carriers для214 coverage rows byte-identical8573; все214 rows/trace/status/citation сохранены целиком. PR356 agent-history уже входит в новый BASE, новых delivery obligations или scope fork здесь не создаёт. Fresh exact1179 raw /private/tmp/rifty-close-admission-merged-pr-check.log:25/25PASS, test:run220.7s, parity86.3s; /private/tmp/rifty-close-admission-packed.log:real external tarball consumerPASS187.7s; /private/tmp/rifty-close-admission-vitest.log: unchanged10-run Vitest e2e fresh5511PASS46.7s. Дополнительный literal-revert /private/tmp/rifty-close-admission-revert/red.log: unchangedfulfilled-hook RED, owner.closed=true и readFile lost при старом microtask; trace фиксирует оригинальный @fs URL open-workbench.ts, bootstrap/registry identity не подменён отдельным модулем. Новых tests/browser/full-suite review runs не выполнялось: неопределённость снята exact blob comparison и новыми raw gates. Read-only review; tracked source не изменён; без children/env inspection/PR actions. Единственный verification residual закрыт authoritative GitHub read в этой сессии: CI36139754267 completed SUCCESS на exact1179ddfd4912519004a1e44bdd911f72f9178d3a, все19jobs completed SUCCESS, включая browser-unit job108086559627 и production/hosted/e2e/no-COI/unit/parity lanes. Статусы сохранены в /private/tmp/rifty-close-admission-verified-ci-status.json; run https://github.com/vanilla-wave/rifty/actions/runs/36139754267. Все accepted obligations доказаны; unit/goal residuals пусты. Никаких новых scope решений, product changes, tests или merge actions в verification-only continuation.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "overrides Acceptance 1: Bare version сохраняет имя; name@version совместим.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:4",
+      "note": ""
+    },
+    {
+      "row": "overrides Parity cases 1: npm override выбирает единственный Vite 8.0.16.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest.spec.ts:29",
+      "note": ""
+    },
+    {
+      "row": "path subpaths Acceptance 1: Оба path subpath/prefix возвращают существующие namespace.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/path-subpaths.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "path subpaths Acceptance 2: Named POSIX join(a,b) = a/b.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpaths-esm.case.ts:15",
+      "note": ""
+    },
+    {
+      "row": "path subpaths Parity cases 1: CJS subpaths: identity/prefix/join.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpaths-cjs.case.ts:5",
+      "note": ""
+    },
+    {
+      "row": "path subpaths Parity cases 2: ESM subpaths: default identity/named join.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpaths-esm.case.ts:4",
+      "note": ""
+    },
+    {
+      "row": "process exports Acceptance 1: Именованные process methods равны default и callable без receiver.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/named-method-exports.case.ts:5",
+      "note": ""
+    },
+    {
+      "row": "process exports Parity cases 1: Шесть own methods, hrtime.bigint; inherited names отсутствуют.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/named-method-exports.case.ts:8",
+      "note": ""
+    },
+    {
+      "row": "optional builtins Acceptance 1: statfsSync/spawnSync links; memoryUsage.bind работает.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/builtin-optional-members.case.ts:5",
+      "note": ""
+    },
+    {
+      "row": "optional builtins Acceptance 2: Три вызова дают собственные named ceilings.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/builtin-optional-members.test.ts:22",
+      "note": ""
+    },
+    {
+      "row": "optional builtins Parity cases 1: Native callable/default-member shape.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/builtin-optional-members.case.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Symbol guard Acceptance 1: Symbol key вычисляется один раз на исходной позиции, CJS/ESM.",
+      "source": "acceptance",
+      "trace": "I6+ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-global-writes-cjs.case.ts:23",
+      "note": ""
+    },
+    {
+      "row": "Symbol guard Acceptance 2: Вся mutation family использует единый key rule; opaque maps loud.",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/global-mutation-family.fault.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Symbol guard Acceptance 3: Non-symbol runtime rejection после key effects, до mutation/coercion.",
+      "source": "acceptance",
+      "trace": "ADR-0171+ADR-0444",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/symbol-global-writes.test.ts:109",
+      "note": ""
+    },
+    {
+      "row": "Symbol guard Acceptance 4: Mutable/shadowed actual Symbols допустимы.",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/symbol-global-writes.test.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Symbol guard Parity cases 1: CJS/ESM values/order/mutation/deletion native parity.",
+      "source": "acceptance",
+      "trace": "I6+ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-global-writes-esm.case.ts:4",
+      "note": ""
+    },
+    {
+      "row": "stdio pipe Acceptance 1: Pipe не завершает stdio; ordinary fd=1 Writable завершается.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio.case.ts:9",
+      "note": ""
+    },
+    {
+      "row": "stdio pipe Parity cases 1: Повторная запись stdout/stderr и ordinary finish.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio.case.ts:9",
+      "note": ""
+    },
+    {
+      "row": "process lifecycle Acceptance 1: Natural/explicit exit один раз; omitted code = exitCode.",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:11",
+      "note": ""
+    },
+    {
+      "row": "process lifecycle Acceptance 2: Unset/reset exitCode undefined; startup failure = 1.",
+      "source": "acceptance",
+      "trace": "I3+I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/exit-code-unset.case.ts:5",
+      "note": ""
+    },
+    {
+      "row": "process lifecycle Acceptance 3: Handled timer/entry/rejection продолжают выполнение.",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:15",
+      "note": ""
+    },
+    {
+      "row": "process lifecycle Parity cases 1: Native differential всех exit/error entry paths.",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:43",
+      "note": ""
+    },
+    {
+      "row": "process lifecycle Fault matrix 1: Exit listener перед terminal, один раз.",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:43",
+      "note": ""
+    },
+    {
+      "row": "process lifecycle Fault matrix 2: Sibling error boundaries сохраняют continuation.",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:15",
+      "note": ""
+    },
+    {
+      "row": "process lifecycle Fault matrix 3: UnhandledRejection получает исходный Promise.",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:16",
+      "note": ""
+    },
+    {
+      "row": "process lifecycle Fault matrix 4: Fatal exit1; throwing uncaught handler exit7 без exit event.",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:53",
+      "note": ""
+    },
+    {
+      "row": "Worker lifecycle Acceptance 1: Sole Worker держит CJS parent; ref/unref idempotent.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:39",
+      "note": ""
+    },
+    {
+      "row": "Worker lifecycle Acceptance 2: Natural child drain; parentPort close/remove/unref отпускают.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:113",
+      "note": ""
+    },
+    {
+      "row": "Worker lifecycle Acceptance 3: Terminate один exit/release; повтор возвращает undefined.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:211",
+      "note": ""
+    },
+    {
+      "row": "Worker lifecycle Acceptance 4: Readable stdio, exact bytes/EOF, capture/default forwarding.",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:163",
+      "note": ""
+    },
+    {
+      "row": "Worker lifecycle Acceptance 5: Explicit [] заменяет inherited node -e argv в real Worker.",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:198",
+      "note": ""
+    },
+    {
+      "row": "Worker lifecycle Parity cases 1: Parent-live/ref-after-unref/unref parity.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/worker-thread-lifecycle.spec.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Worker lifecycle Parity cases 2: Child-natural/port-close/remove/unref parity.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/worker-thread-lifecycle.spec.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Worker lifecycle Parity cases 3: Terminate-releases-once parity.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:211",
+      "note": ""
+    },
+    {
+      "row": "Worker lifecycle Parity cases 4: Stdio capture/default parity.",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/worker-thread-lifecycle.spec.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Worker lifecycle Parity cases 5: Explicit-empty-exec-argv parity.",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:198",
+      "note": ""
+    },
+    {
+      "row": "Worker lifecycle Fault matrix 1: Late message → child exit → parent exit.",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:39",
+      "note": ""
+    },
+    {
+      "row": "Worker lifecycle Fault matrix 2: Ref/unref/terminal: count/release once, no leak.",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:226",
+      "note": ""
+    },
+    {
+      "row": "Worker lifecycle Fault matrix 3: Port close/remove/unref дают child drain после reply.",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:123",
+      "note": ""
+    },
+    {
+      "row": "Worker lifecycle Fault matrix 4: Exact stdio bytes, EOFs и один exit.",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:163",
+      "note": ""
+    },
+    {
+      "row": "Worker lifecycle Fault matrix 5: Explicit empty launch identity выигрывает.",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:198",
+      "note": ""
+    },
+    {
+      "row": "advanced IPC Acceptance 1: non-binary graphs/cycles/aliases/snapshot; binary nested graphs дают named ceiling без dispatch/disconnect [user2026-09-25; ADR-0467].",
+      "source": "acceptance",
+      "trace": "I4+user2026-09-25",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-advanced-ipc-binary-ceiling.spec.ts:74",
+      "note": ""
+    },
+    {
+      "row": "advanced IPC Acceptance 2: Node top-level validation, getter identity, synchronous platform clone rejection; native DataCloneError отличие явно принято в ADR-0467/re-cut.",
+      "source": "acceptance",
+      "trace": "I4+ADR-0326+ADR-0467",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-advanced-ipc-proxy.spec.ts:118",
+      "note": ""
+    },
+    {
+      "row": "advanced IPC Acceptance 3: Disconnect сохраняет private kill; JSON unchanged.",
+      "source": "acceptance",
+      "trace": "I4+ADR-0326",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:82",
+      "note": ""
+    },
+    {
+      "row": "advanced IPC Acceptance 4: Advanced discriminator/retired v4 rejection; active v6 по ADR-0456.",
+      "source": "acceptance",
+      "trace": "ADR-0267+ADR-0446",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-advanced-ipc.test.ts:20",
+      "note": ""
+    },
+    {
+      "row": "advanced IPC Parity cases 1: Child graph, parent echo, mutation/disconnect/kill parity.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:64",
+      "note": ""
+    },
+    {
+      "row": "advanced IPC Parity cases 2: Sender fault/getter identity/order parity.",
+      "source": "acceptance",
+      "trace": "I4+ADR-0326",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:30",
+      "note": ""
+    },
+    {
+      "row": "advanced IPC Parity cases 3: Default JSON regression.",
+      "source": "acceptance",
+      "trace": "ADR-0326",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-json.case.ts:1",
+      "note": ""
+    },
+    {
+      "row": "advanced IPC Fault matrix 1: Corrupt input обоих senders: sync error, no dispatch, healthy channel.",
+      "source": "fault-matrix",
+      "trace": "I4+ADR-0326",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-advanced-ipc-proxy.spec.ts:118",
+      "note": ""
+    },
+    {
+      "row": "advanced IPC Fault matrix 2: Parent/child codec selection, native graph, JSON unchanged.",
+      "source": "fault-matrix",
+      "trace": "I4+ADR-0326",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:64",
+      "note": ""
+    },
+    {
+      "row": "advanced IPC Fault matrix 3: Getter throws before return; order и snapshot сохраняются.",
+      "source": "fault-matrix",
+      "trace": "I4+ADR-0326",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:30",
+      "note": ""
+    },
+    {
+      "row": "advanced IPC Fault matrix 6: Typed launch сохраняет advanced и отвергает старый protocol.",
+      "source": "fault-matrix",
+      "trace": "ADR-0267+ADR-0446",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-advanced-ipc.test.ts:26",
+      "note": ""
+    },
+    {
+      "row": "advanced IPC Fault matrix 7: Public disconnect не отключает private SIGUSR2.",
+      "source": "fault-matrix",
+      "trace": "ADR-0326",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:82",
+      "note": ""
+    },
+    {
+      "row": "vm offsets Acceptance 1: Direct offsets signed, column только line1, native filename/stack.",
+      "source": "acceptance",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:15",
+      "note": ""
+    },
+    {
+      "row": "vm offsets Acceptance 2: Script constructor offsets неизменны при повторном run.",
+      "source": "acceptance",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/script-this-context-offsets.case.ts:21",
+      "note": ""
+    },
+    {
+      "row": "vm offsets Acceptance 3: Escaped function/lazy stack сохраняют позиции при filename reuse.",
+      "source": "acceptance",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:29",
+      "note": ""
+    },
+    {
+      "row": "vm offsets Parity cases 1: Direct offset matrix/returned function/late stack/throw parity.",
+      "source": "acceptance",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tests/browser-unit/vm-host-offsets.spec.ts:17",
+      "note": ""
+    },
+    {
+      "row": "vm offsets Parity cases 2: Script matrix/constructor/repeated/escaped parity.",
+      "source": "acceptance",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/script-this-context-offsets.case.ts:14",
+      "note": ""
+    },
+    {
+      "row": "vm offsets Fault matrix 1: Direct и Script используют одинаковые offsets.",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/browser-unit/vm-host-offsets.spec.ts:11",
+      "note": ""
+    },
+    {
+      "row": "vm offsets Fault matrix 2: Filename reuse не портит прежний Error/function.",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/script-this-context-offsets.case.ts:26",
+      "note": ""
+    },
+    {
+      "row": "vm offsets Fault matrix 3: Escaped/throw сохраняют filename и signed coordinates.",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:23",
+      "note": ""
+    },
+    {
+      "row": "startup Acceptance 1: Explicit argv snapshot, точный child argv, parent isolation.",
+      "source": "acceptance",
+      "trace": "I5+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:80",
+      "note": ""
+    },
+    {
+      "row": "startup Acceptance 2: Ordered cached preloads; missing/throwing: error → exit1, no entry.",
+      "source": "acceptance",
+      "trace": "I5+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:111",
+      "note": ""
+    },
+    {
+      "row": "startup Acceptance 3: Conditions: require/static/dynamic, declaration order, trusted policy.",
+      "source": "acceptance",
+      "trace": "I5+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:59",
+      "note": ""
+    },
+    {
+      "row": "startup Acceptance 4: Flagged meta.resolve parentURL; flag-off/builtin controls.",
+      "source": "acceptance",
+      "trace": "I5+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:73",
+      "note": ""
+    },
+    {
+      "row": "startup Acceptance 5: Recursive Worker inherits trusted vector; [] сбрасывает все effects.",
+      "source": "acceptance",
+      "trace": "I5+scenario+ADR-0267",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:94",
+      "note": ""
+    },
+    {
+      "row": "startup Acceptance 6: Missing operands дают native sync error; subsequent Worker работает.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:133",
+      "note": ""
+    },
+    {
+      "row": "startup Acceptance 7: Fork explicit/reset/public-default/caller snapshot.",
+      "source": "acceptance",
+      "trace": "I4+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fork-startup-options.spec.ts:56",
+      "note": ""
+    },
+    {
+      "row": "startup Acceptance 8: Точный Vitest fail/fix на обоих pools совпадает с Node.",
+      "source": "acceptance",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest.spec.ts:52",
+      "note": ""
+    },
+    {
+      "row": "startup Parity cases 1: Effective-options full native semantic snapshot.",
+      "source": "acceptance",
+      "trace": "I5+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/worker-thread-startup-options.spec.ts:57",
+      "note": ""
+    },
+    {
+      "row": "startup Parity cases 2: Trusted recursive inheritance/reset native snapshot.",
+      "source": "acceptance",
+      "trace": "I5+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:94",
+      "note": ""
+    },
+    {
+      "row": "startup Parity cases 3: Missing/throwing preload native error then exit1.",
+      "source": "acceptance",
+      "trace": "I5+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:111",
+      "note": ""
+    },
+    {
+      "row": "startup Parity cases 4: Malformed options плюс последующий valid physical Worker.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:133",
+      "note": ""
+    },
+    {
+      "row": "startup Parity cases 5: Fork same-family options/reset/public-default parity.",
+      "source": "acceptance",
+      "trace": "I4+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fork-startup-options.spec.ts:56",
+      "note": ""
+    },
+    {
+      "row": "startup Parity cases 6: Real Vitest exact pair/config/TS/outcomes/pools.",
+      "source": "acceptance",
+      "trace": "I5+I6",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest.spec.ts:52",
+      "note": ""
+    },
+    {
+      "row": "startup Fault matrix 1: Raw startup identity frozen; caller/public writes не меняют Worker launch.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0267",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-startup-schema.test.ts:17",
+      "note": ""
+    },
+    {
+      "row": "startup Fault matrix 2: Preload order/cache/failure blocks entry.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/worker-thread-startup-options.spec.ts:57",
+      "note": ""
+    },
+    {
+      "row": "startup Fault matrix 3: Resolver siblings разделяют condition membership.",
+      "source": "fault-matrix",
+      "trace": "I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:59",
+      "note": ""
+    },
+    {
+      "row": "startup Fault matrix 4: Malformed operands rejected до allocation; valid launch survives.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-startup-options.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "startup Fault matrix 5: Recursive Worker trusted; fork public default; [] resets effects.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:94",
+      "note": ""
+    },
+    {
+      "row": "startup Fault matrix 6: Worker/fork используют одинаковую compiled startup policy.",
+      "source": "fault-matrix",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tests/browser-unit/fork-startup-options.spec.ts:56",
+      "note": ""
+    },
+    {
+      "row": "MessagePort Acceptance 1: Manual ref держит parent до позднего Worker result; unref отпускает.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:32",
+      "note": ""
+    },
+    {
+      "row": "MessagePort Acceptance 2: Default/raw ports не держат loop; global/builtin aliases.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:18",
+      "note": ""
+    },
+    {
+      "row": "MessagePort Acceptance 3: Own/peer close один раз, async, queued bytes/order сохранены.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:63",
+      "note": ""
+    },
+    {
+      "row": "MessagePort Acceptance 4: Managed transfer loud до detach; ArrayBuffer/native identity сохранены.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:65",
+      "note": ""
+    },
+    {
+      "row": "MessagePort Acceptance 5: Один primordial owner; повтор установки/bundle безопасен.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "MessagePort Parity cases 1: Manual/idempotent/return/hasRef parity.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:42",
+      "note": ""
+    },
+    {
+      "row": "MessagePort Parity cases 2: Global alias/default infrastructure parity.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:56",
+      "note": ""
+    },
+    {
+      "row": "MessagePort Parity cases 3: Own/peer/queued-close native partial-order parity.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:91",
+      "note": ""
+    },
+    {
+      "row": "MessagePort Parity cases 4: Managed transfer refusal плюс native buffer transfer.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:65",
+      "note": ""
+    },
+    {
+      "row": "MessagePort Parity cases 5: Second kernel bundle сохраняет original constructor.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "MessagePort Fault matrix 1: Ref/unref/close count/release once; no revival.",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:63",
+      "note": ""
+    },
+    {
+      "row": "MessagePort Fault matrix 2: Queued message и immediate перед close.",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:91",
+      "note": ""
+    },
+    {
+      "row": "MessagePort Fault matrix 3: Managed transfer не теряет ownership.",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:65",
+      "note": ""
+    },
+    {
+      "row": "MessagePort Fault matrix 4: Global/builtin/raw channels сохраняют distinct ownership.",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:18",
+      "note": ""
+    },
+    {
+      "row": "MessagePort Fault matrix 5: Second bundle не recapture публичный wrapper.",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "Install exact pinned tree",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest.spec.ts:29",
+      "note": ""
+    },
+    {
+      "row": "Worker liveness/ref/unref",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/worker-thread-lifecycle.spec.ts:60",
+      "note": ""
+    },
+    {
+      "row": "Process error/exit events",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:43",
+      "note": ""
+    },
+    {
+      "row": "Forks/config/TS/reporters/fail-fix",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest.spec.ts:52",
+      "note": ""
+    },
+    {
+      "row": "Threads == forks outcomes",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest.spec.ts:52",
+      "note": ""
+    },
+    {
+      "row": "Exact claimed module tree executes",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest.spec.ts:52",
+      "note": ""
+    },
+    {
+      "row": "Native Proxy/revocable/revoked rejection before traps; non-binary control getter once [Buffer-success заменён по user2026-09-25].",
+      "source": "acceptance",
+      "trace": "ADR-0467",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-proxy.case.ts:5",
+      "note": ""
+    },
+    {
+      "row": "QuickJS private eager metadata, reverse identity, tamper/lifetime",
+      "source": "acceptance",
+      "trace": "ADR-0453",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/vm/quickjs-proxy-metadata.test.ts:7",
+      "note": ""
+    },
+    {
+      "row": "VM Map/Set/Date/Error backings/cycles сохранены; plain/array Proxy mirrors явно отклоняются native clone [граница ADR-0467].",
+      "source": "acceptance",
+      "trace": "ADR-0453+ADR-0467",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-vm-proxy.test.ts:15",
+      "note": ""
+    },
+    {
+      "row": "Dense frozen module.builtinModules shared facade",
+      "source": "acceptance",
+      "trace": "ADR-0453",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/module-builtin-array.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Offset CallSites projected before custom renderer; non-string result",
+      "source": "acceptance",
+      "trace": "ADR-0443",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/host-offset-callsite-projection.case.ts:7",
+      "note": ""
+    },
+    {
+      "row": "Originating fatal value/error metadata before exit; explicit/handled controls",
+      "source": "acceptance",
+      "trace": "ADR-0460",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:145",
+      "note": ""
+    },
+    {
+      "row": "Fatal malformed/unattested frames cannot claim terminal authority",
+      "source": "acceptance",
+      "trace": "ADR-0460",
+      "status": "pass",
+      "citation": "packages/kernel/tests/spawn-worker-exit-attestation.fault.test.ts:191",
+      "note": ""
+    },
+    {
+      "row": "Serializer clone failure remains terminal",
+      "source": "acceptance",
+      "trace": "ADR-0460",
+      "status": "pass",
+      "citation": "packages/kernel/tests/worker-entry-drain.test.ts:141",
+      "note": ""
+    },
+    {
+      "row": "Unsupported custom-inspect remains explicit named ceiling",
+      "source": "acceptance",
+      "trace": "ADR-0460",
+      "status": "pass",
+      "citation": "tests/browser-unit/worker-thread-error-ceilings.spec.ts:1",
+      "note": ""
+    },
+    {
+      "row": "HTTP Agent import/subclass valid; construction named ceiling",
+      "source": "acceptance",
+      "trace": "ADR-0459",
+      "status": "pass",
+      "citation": "packages/net/src/http/agent.test.ts:7",
+      "note": ""
+    },
+    {
+      "row": "vm.constants.DONT_CONTEXTIFY named ceiling, installed jsdom",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest-ceilings.spec.ts:50",
+      "note": ""
+    },
+    {
+      "row": "Installed happy-dom/coverage/browser/vm pools: actual exit1 ceilings",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest-ceilings.spec.ts:54",
+      "note": ""
+    },
+    {
+      "row": "path/posix",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpaths-cjs.case.ts:6",
+      "note": ""
+    },
+    {
+      "row": "path/win32 registration only",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpaths-esm.case.ts:6",
+      "note": ""
+    },
+    {
+      "row": "fs.statfsSync",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/builtin-optional-members.test.ts:22",
+      "note": ""
+    },
+    {
+      "row": "child_process.spawnSync",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/builtin-optional-members.test.ts:22",
+      "note": ""
+    },
+    {
+      "row": "process.memoryUsage",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/builtin-optional-members.test.ts:22",
+      "note": ""
+    },
+    {
+      "row": "Readable.pipe(process stdout/stderr)",
+      "source": "public-api",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio.case.ts:9",
+      "note": ""
+    },
+    {
+      "row": "process.exitCode",
+      "source": "public-api",
+      "trace": "I3+I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/exit-code-unset.case.ts:5",
+      "note": ""
+    },
+    {
+      "row": "process.exit",
+      "source": "public-api",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:11",
+      "note": ""
+    },
+    {
+      "row": "process uncaughtException event",
+      "source": "public-api",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:15",
+      "note": ""
+    },
+    {
+      "row": "process unhandledRejection event",
+      "source": "public-api",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:16",
+      "note": ""
+    },
+    {
+      "row": "process exit event",
+      "source": "public-api",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:11",
+      "note": ""
+    },
+    {
+      "row": "Worker constructor/options",
+      "source": "public-api",
+      "trace": "I2+I5+ADR-0456",
+      "status": "pass",
+      "citation": "tests/browser-unit/worker-thread-startup-options.spec.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Worker.ref",
+      "source": "public-api",
+      "trace": "I2+ADR-0449",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:50",
+      "note": ""
+    },
+    {
+      "row": "Worker.unref",
+      "source": "public-api",
+      "trace": "I2+ADR-0449",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:107",
+      "note": ""
+    },
+    {
+      "row": "Worker.terminate",
+      "source": "public-api",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:211",
+      "note": ""
+    },
+    {
+      "row": "Worker.stdout",
+      "source": "public-api",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:163",
+      "note": ""
+    },
+    {
+      "row": "Worker.stderr",
+      "source": "public-api",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:163",
+      "note": ""
+    },
+    {
+      "row": "Worker message listener transitions",
+      "source": "public-api",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:41",
+      "note": ""
+    },
+    {
+      "row": "Worker error event",
+      "source": "public-api",
+      "trace": "ADR-0460",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:145",
+      "note": ""
+    },
+    {
+      "row": "Worker exit event",
+      "source": "public-api",
+      "trace": "ADR-0449+ADR-0460",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:226",
+      "note": ""
+    },
+    {
+      "row": "parentPort.ref",
+      "source": "public-api",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:50",
+      "note": ""
+    },
+    {
+      "row": "parentPort.unref",
+      "source": "public-api",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:123",
+      "note": ""
+    },
+    {
+      "row": "parentPort.close",
+      "source": "public-api",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:123",
+      "note": ""
+    },
+    {
+      "row": "parentPort message/onmessage listener lifetime",
+      "source": "public-api",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:144",
+      "note": ""
+    },
+    {
+      "row": "child_process.fork startup options",
+      "source": "public-api",
+      "trace": "I4+I6+ADR-0456",
+      "status": "pass",
+      "citation": "tests/browser-unit/fork-startup-options.spec.ts:56",
+      "note": ""
+    },
+    {
+      "row": "child_process.fork advanced serialization — non-binary + binary refusal [user2026-09-25; ADR-0467]",
+      "source": "public-api",
+      "trace": "I4+ADR-0446+ADR-0467",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:64",
+      "note": ""
+    },
+    {
+      "row": "ChildProcess.send advanced — non-binary + binary refusal [user2026-09-25; ADR-0467]",
+      "source": "public-api",
+      "trace": "I4+ADR-0446+ADR-0467",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-advanced-ipc-proxy.spec.ts:118",
+      "note": ""
+    },
+    {
+      "row": "process.send advanced — non-binary + binary refusal [user2026-09-25; ADR-0467]",
+      "source": "public-api",
+      "trace": "I4+ADR-0446+ADR-0467",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-advanced-ipc-proxy.spec.ts:118",
+      "note": ""
+    },
+    {
+      "row": "ChildProcess.disconnect advanced",
+      "source": "public-api",
+      "trace": "ADR-0326",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:82",
+      "note": ""
+    },
+    {
+      "row": "vm.runInThisContext offsets",
+      "source": "public-api",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tests/browser-unit/vm-host-offsets.spec.ts:17",
+      "note": ""
+    },
+    {
+      "row": "vm.Script constructor offsets",
+      "source": "public-api",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/script-this-context-offsets.case.ts:21",
+      "note": ""
+    },
+    {
+      "row": "vm.Script.runInThisContext",
+      "source": "public-api",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/script-this-context-offsets.case.ts:21",
+      "note": ""
+    },
+    {
+      "row": "vm.Script.runInContext offset ceiling",
+      "source": "public-api",
+      "trace": "ADR-0443",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/vm.test.ts:100",
+      "note": ""
+    },
+    {
+      "row": "vm.Script.runInNewContext offset ceiling",
+      "source": "public-api",
+      "trace": "ADR-0443",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/vm.test.ts:100",
+      "note": ""
+    },
+    {
+      "row": "vm.runInContext: VM carriers сохранены; native-IPC Proxy-mirror boundary явный [ADR-0467].",
+      "source": "public-api",
+      "trace": "ADR-0453+ADR-0467",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-vm-proxy.test.ts:15",
+      "note": ""
+    },
+    {
+      "row": "vm.runInNewContext: cloneable intrinsic backings сохранены, Proxy mirrors вне IPC гарантии [ADR-0467].",
+      "source": "public-api",
+      "trace": "ADR-0453+ADR-0467",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-vm-proxy.test.ts:53",
+      "note": ""
+    },
+    {
+      "row": "vm.constants.DONT_CONTEXTIFY",
+      "source": "public-api",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/builtin-optional-members.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "http.Agent default/named/package facades",
+      "source": "public-api",
+      "trace": "ADR-0459",
+      "status": "pass",
+      "citation": "packages/net/src/http/agent.test.ts:14",
+      "note": ""
+    },
+    {
+      "row": "module.builtinModules and Module.builtinModules",
+      "source": "public-api",
+      "trace": "ADR-0453",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/module-builtin-array.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Global Proxy constructor: native surface после удаления facade [ADR-0467].",
+      "source": "public-api",
+      "trace": "ADR-0467",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-proxy.case.ts:12",
+      "note": ""
+    },
+    {
+      "row": "Proxy.revocable: native surface после удаления facade [ADR-0467].",
+      "source": "public-api",
+      "trace": "ADR-0467",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-proxy.case.ts:12",
+      "note": ""
+    },
+    {
+      "row": "Function.prototype.toString: native surface после удаления facade [ADR-0467].",
+      "source": "public-api",
+      "trace": "ADR-0467",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-proxy.case.ts:31",
+      "note": ""
+    },
+    {
+      "row": "Global/builtin MessageChannel",
+      "source": "public-api",
+      "trace": "ADR-0452",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:18",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.ref",
+      "source": "public-api",
+      "trace": "ADR-0452",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:42",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.unref",
+      "source": "public-api",
+      "trace": "ADR-0452",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:42",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.hasRef",
+      "source": "public-api",
+      "trace": "ADR-0452",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:42",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.close",
+      "source": "public-api",
+      "trace": "ADR-0452",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:63",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.start/onmessage",
+      "source": "public-api",
+      "trace": "ADR-0452",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:91",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.postMessage transfer/return",
+      "source": "public-api",
+      "trace": "ADR-0452",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/message-port-native-carriers.test.ts:4",
+      "note": ""
+    },
+    {
+      "row": "structuredClone transfer",
+      "source": "public-api",
+      "trace": "ADR-0452",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-transfer-options.spec.ts:94",
+      "note": ""
+    },
+    {
+      "row": "Native Worker.postMessage transfer",
+      "source": "public-api",
+      "trace": "ADR-0452",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-transfer-options.spec.ts:94",
+      "note": ""
+    },
+    {
+      "row": "Worker-global postMessage transfer",
+      "source": "public-api",
+      "trace": "ADR-0452",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-transfer-options.spec.ts:94",
+      "note": ""
+    },
+    {
+      "row": "kernel.getKernelHostMessageChannel",
+      "source": "public-api",
+      "trace": "ADR-0452",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "kernel.setKernelFatalErrorSerializer",
+      "source": "public-api",
+      "trace": "ADR-0460",
+      "status": "pass",
+      "citation": "packages/kernel/tests/worker-entry-drain.test.ts:141",
+      "note": ""
+    },
+    {
+      "row": "spawnKernelWorker/SpawnWorkerResult.onExit fatal payload",
+      "source": "public-api",
+      "trace": "ADR-0460",
+      "status": "pass",
+      "citation": "packages/kernel/tests/spawn-worker-exit-attestation.fault.test.ts:191",
+      "note": ""
+    },
+    {
+      "row": "ProcessManager terminal/observeProcessTerminalOutcome fatal payload",
+      "source": "public-api",
+      "trace": "ADR-0460",
+      "status": "pass",
+      "citation": "tests/browser-unit/worker-thread-startup-options.spec.ts:57",
+      "note": ""
+    },
+    {
+      "row": "NodeEntryProgramLaunch / NodeEntryWorkerThreadLaunch v6",
+      "source": "public-api",
+      "trace": "ADR-0456",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-startup-schema.test.ts:17",
+      "note": ""
+    },
+    {
+      "row": "buildNodeEntryWorkerEntry / configured producer",
+      "source": "public-api",
+      "trace": "ADR-0456",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-startup-schema.test.ts:17",
+      "note": ""
+    },
+    {
+      "row": "readNodeEntryBootstrap / IfPresent",
+      "source": "public-api",
+      "trace": "ADR-0456",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-startup-schema.test.ts:56",
+      "note": ""
+    },
+    {
+      "row": "process.execArgv child startup",
+      "source": "public-api",
+      "trace": "ADR-0456",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:80",
+      "note": ""
+    },
+    {
+      "row": "import.meta.resolve parentURL",
+      "source": "public-api",
+      "trace": "ADR-0456",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:73",
+      "note": ""
+    },
+    {
+      "row": "process.cwd own/bound export",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/named-method-exports.case.ts:8",
+      "note": ""
+    },
+    {
+      "row": "process.chdir own/bound export",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/named-method-exports.case.ts:8",
+      "note": ""
+    },
+    {
+      "row": "process.hrtime own/bound export",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/named-method-exports.case.ts:8",
+      "note": ""
+    },
+    {
+      "row": "process.uptime own/bound export",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/named-method-exports.case.ts:8",
+      "note": ""
+    },
+    {
+      "row": "process.kill own/bound export",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/named-method-exports.case.ts:8",
+      "note": ""
+    },
+    {
+      "row": "Frozen CJS path subpaths expected stdout",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpaths-cjs.case.ts:14",
+      "note": ""
+    },
+    {
+      "row": "Frozen ESM path subpaths expected stdout",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpaths-esm.case.ts:16",
+      "note": ""
+    },
+    {
+      "row": "Frozen CJS Symbol mutation stdout",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-global-writes-cjs.case.ts:44",
+      "note": ""
+    },
+    {
+      "row": "Frozen ESM Symbol mutation stdout",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-global-writes-esm.case.ts:45",
+      "note": ""
+    },
+    {
+      "row": "Shared exact Vitest manifest/config/TS fail-fix oracle",
+      "source": "frozen-artifact",
+      "trace": "I1+I4+I5",
+      "status": "pass",
+      "citation": "tests/e2e/fixtures/vitest-run/native-oracle.mts:26",
+      "note": ""
+    },
+    {
+      "row": "advanced IPC Fault matrix 4: binary graph encounter → exact named ceiling до dispatch в обоих senders [замена SAB-success по user2026-09-25].",
+      "source": "fault-matrix",
+      "trace": "I4+user2026-09-25+ADR-0467",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-advanced-ipc-binary-ceiling.spec.ts:74",
+      "note": ""
+    },
+    {
+      "row": "advanced IPC Fault matrix 5: intrinsic rejection независимо от realm/prototype; ordinary frozen records клонируются.",
+      "source": "fault-matrix",
+      "trace": "I4+ADR-0467",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced.test.ts:150",
+      "note": ""
+    },
+    {
+      "row": "Native Promise rejection без mutation/getters/reactions; frozen/locked включены, исходный rejection остаётся unhandled [probe удалён ADR-0467].",
+      "source": "acceptance",
+      "trace": "I4+ADR-0467",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-promise-brand.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Eval→fork: native identity/lastIndexOf filter, parent argv unchanged; cloned-source ceilings сохранены.",
+      "source": "acceptance",
+      "trace": "I4+ADR-0456",
+      "status": "pass",
+      "citation": "tests/browser-unit/eval-fork-options.spec.ts:79",
+      "note": ""
+    },
+    {
+      "row": "process._eval: native eval-only own descriptor и ordinary-child absence.",
+      "source": "public-api",
+      "trace": "ADR-0339+ADR-0456",
+      "status": "pass",
+      "citation": "tests/browser-unit/eval-fork-options.spec.ts:30",
+      "note": ""
+    },
+    {
+      "row": "typescript-worker.js: 10022694B, SHA256 052e72b146d87f62aba766778b74b1fa8d1d81d915ecd1f84e1c882002ec5e38; cap/negative guards сохранены, compiler body совпадает после import-hash normalization.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391+ADR-0467",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.test.ts:54",
+      "note": ""
+    },
+    {
+      "row": "I7: exact Vitest4.1.11/Vite8.0.16 scenario, manifest pin, TS, both pools; unverified watch/versions без искусственных запретов.",
+      "source": "acceptance",
+      "trace": "I7+scenario",
+      "status": "pass",
+      "citation": "docs/public/compat/vitest.md:3",
+      "note": ""
+    },
+    {
+      "row": "Scenario 6: binary graphs запрещены; 35 shapes на каждом public sender, no dispatch, connected recovery.",
+      "source": "acceptance",
+      "trace": "scenario+I4+ADR-0467",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-advanced-ipc-binary-ceiling.spec.ts:74",
+      "note": ""
+    },
+    {
+      "row": "Post-clone scan: AB/SAB/views в records/arrays, Map keys/values, Set, Error.cause и cycles.",
+      "source": "acceptance",
+      "trace": "ADR-0467",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-binary-ceiling.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Binary getter читается ровно один раз перед отказом.",
+      "source": "acceptance",
+      "trace": "ADR-0467",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-binary-ceiling.test.ts:37",
+      "note": ""
+    },
+    {
+      "row": "Shared views всех 12 families теперь binary ceilings [user2026-09-25].",
+      "source": "acceptance",
+      "trace": "I4+ADR-0467",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-shared-views.test.ts:21",
+      "note": ""
+    },
+    {
+      "row": "Receiver отвергает binary frame/nonempty legacy buffers metadata; wire shape сохранён.",
+      "source": "acceptance",
+      "trace": "ADR-0467",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-binary-ceiling.test.ts:48",
+      "note": ""
+    },
+    {
+      "row": "Frozen/nonextensible/locked-constructor non-binary records клонируются как Node; B1 закрыт.",
+      "source": "acceptance",
+      "trace": "I4+ADR-0467",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced.test.ts:150",
+      "note": ""
+    },
+    {
+      "row": "vitest-run-acceptance Acceptance 1: clean manifest → одна Vite8.0.16, Vitest4.1.11 и wasm bindings.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest.spec.ts:29",
+      "note": ""
+    },
+    {
+      "row": "vitest-run-acceptance Acceptance 2: config/include/TS; fail1→fix0, diff/counts, default/forks/threads/verbose/npm test.",
+      "source": "acceptance",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest.spec.ts:52",
+      "note": ""
+    },
+    {
+      "row": "vitest-run-acceptance Acceptance 3: exact guarantee, pin, measured ceilings; unclaimed watch/versions; binary unsupported.",
+      "source": "acceptance",
+      "trace": "I7+scenario",
+      "status": "pass",
+      "citation": "docs/public/compat/vitest.md:3",
+      "note": ""
+    },
+    {
+      "row": "vitest-run-acceptance Parity 1: общий native fixture, все10 fail/fix commands.",
+      "source": "acceptance",
+      "trace": "I4+I5",
+      "status": "pass",
+      "citation": "tests/e2e/fixtures/vitest-run/native-oracle.mts:26",
+      "note": ""
+    },
+    {
+      "row": "vitest-run-acceptance Parity 2: Chromium10commands и шесть installed-mode ceilings.",
+      "source": "acceptance",
+      "trace": "I1+I4+I5+I6+I7",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest-ceilings.spec.ts:11",
+      "note": ""
+    },
+    {
+      "row": "ADR-0467 error boundary: оба sender, семь intrinsic failures; Node Error/null/not-DOMException и Chromium DataCloneError/25/DOMException проверяются отдельно; оба getter sentinels identity/once.",
+      "source": "acceptance",
+      "trace": "ADR-0467",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-advanced-ipc-proxy.spec.ts:118",
+      "note": ""
+    },
+    {
+      "row": "Close repair baseline: unchanged real instant Vite port5174 session closes through Workbench without inactive-token/SIGTERM.",
+      "source": "acceptance",
+      "trace": "ADR-0319+ADR-0278+ADR-0468",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-playground-companion.spec.ts:928",
+      "note": ""
+    },
+    {
+      "row": "Close admission without hooks: signal follows synchronous core invocations but does not wait for pending terminal settlement.",
+      "source": "acceptance",
+      "trace": "ADR-0468",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/project-session.test.ts:312",
+      "note": ""
+    },
+    {
+      "row": "Close identity: repeated/reentrant successful session and Workbench close share one settlement and teardown attempt.",
+      "source": "acceptance",
+      "trace": "ADR-0468",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/project-session.test.ts:496; packages/workbench/src/workbench/open-workbench.contract.test.ts:987",
+      "note": ""
+    },
+    {
+      "row": "Existing external session adapters retain preflight fallback; opening/deleting retain early owner cancellation.",
+      "source": "acceptance",
+      "trace": "ADR-0468",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/open-workbench.contract.test.ts:1015; packages/workbench/src/workbench/open-workbench.contract.test.ts:1078; packages/workbench/src/workbench/open-workbench.contract.test.ts:1095",
+      "note": ""
+    },
+    {
+      "row": "Close Fault matrix 1: observable-order / hook vs owner shutdown — hooks settle, all core closes invoked, then owner shutdown.",
+      "source": "fault-matrix",
+      "trace": "ADR-0319+ADR-0278",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-close-admission.spec.ts:48; packages/workbench/src/workbench/project-session.test.ts:377",
+      "note": ""
+    },
+    {
+      "row": "Close Fault matrix 2: torn-state / dirty preflight and retry — no hook/core/owner close on veto; later clean attempt admits.",
+      "source": "fault-matrix",
+      "trace": "ADR-0273+ADR-0319",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-close-admission.spec.ts:54; packages/workbench/src/workbench/project-session.test.ts:277",
+      "note": ""
+    },
+    {
+      "row": "Close Fault matrix 3: liveness / admitted VFS close — owner teardown may cancel after admission; full project settlement is not prerequisite.",
+      "source": "fault-matrix",
+      "trace": "ADR-0319",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/project-session.test.ts:312; packages/workbench/src/workbench/open-workbench.contract.test.ts:1112; packages/workbench/src/workbench/open-workbench.test.ts:1290",
+      "note": ""
+    },
+    {
+      "row": "Close Fault matrix 4: hook/core failure — attempt teardown siblings, preserve original failures, no broad cancellation mask.",
+      "source": "fault-matrix",
+      "trace": "ADR-0278",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-close-admission.spec.ts:95; packages/workbench/src/workbench/project-session.test.ts:652; packages/workbench/src/workbench/open-workbench.contract.test.ts:1133",
+      "note": ""
+    },
+    {
+      "row": "ProjectSession.close: successful private admission after hooks/core invocation; dirty veto has no admission; existing public signature unchanged.",
+      "source": "public-api",
+      "trace": "ADR-0468+ADR-0319+ADR-0278",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/project-session.test.ts:277; packages/workbench/src/workbench/project-session.test.ts:312; packages/workbench/src/workbench/project-session.test.ts:377",
+      "note": ""
+    },
+    {
+      "row": "Workbench.close: real owner survives pending beforeClose hook; failed hook identity retained, clean retry succeeds, owner.closed fulfills after release.",
+      "source": "public-api",
+      "trace": "ADR-0468+ADR-0278",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-close-admission.spec.ts:5",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

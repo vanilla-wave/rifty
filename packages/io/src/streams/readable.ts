@@ -23,6 +23,7 @@
  */
 
 import { Buffer } from '../buffer.ts';
+import { loadBuiltin } from '../builtin-registry.ts';
 import { EventEmitter } from '../event-emitter.ts';
 import {
   type CallableStreamConstructor,
@@ -717,8 +718,7 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
   /**
    * Connect a source `Readable` to a destination `Writable`.
    *
-   * Symmetric wiring (improves on the pre-fix shape that left dangling
-   * listeners on either side after an error):
+   * Pipe wiring:
    *   - source `'data'` → `dest.write()` (pause on backpressure);
    *   - source `'end'`  → `dest.end()` (unless `opts.end === false`);
    *   - source `'error'`→ propagate to dest then cleanup the wiring;
@@ -733,15 +733,15 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
    *
    * @param dest Writable-like sink (anything matching {@link PipeableWritable}).
    * @param opts `{end?: boolean}` — when `false`, source's `end` does NOT call
-   *   `dest.end()`. Default `true`, matching Node.
+   *   `dest.end()`. Process stdout/stderr are always exempt.
    */
   pipe<W extends PipeableWritable>(dest: W, opts: { end?: boolean } = {}): W {
-    // Already piping to this dest: clean up first so the listener count returns
-    // to baseline; the new wiring replaces it.
+    // Replace prior wiring to this destination.
     const existing = this.pipeCleanups.get(dest);
     if (existing) existing();
 
-    const endOnFinish = opts.end ?? true;
+    const process = loadBuiltin('process');
+    const endOnFinish = opts.end !== false && dest !== process?.stdout && dest !== process?.stderr;
     const onData = (chunk: unknown): void => {
       const writeResult = dest.write(chunk);
       if (writeResult === false) {

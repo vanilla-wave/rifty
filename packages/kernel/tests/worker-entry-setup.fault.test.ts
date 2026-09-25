@@ -103,6 +103,7 @@ function expectReaped(
   expect(target.postMessage).toHaveBeenCalledWith({
     type: 'exit',
     code: 1,
+    fatalError: { reason: expect.any(Error) },
     attestation: workerOutputAttestation(outputState),
   });
   expect(ports[3]?.postMessage.mock.calls.map(([frame]) => frame)).toStrictEqual(

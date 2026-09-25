@@ -1,6 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import type { ImportExpression, Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
+import type { Edit } from './cjs-source-rewrite.ts';
 import { rewriteDirectEvalImportArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
 
@@ -17,12 +18,6 @@ type RuntimeFunctionConstructor = {
 
 export interface RoutedFunctionConstructors {
   readonly Function: RuntimeFunctionConstructor;
-}
-
-interface Edit {
-  readonly start: number;
-  readonly end: number;
-  readonly text: string;
 }
 
 interface AnyNodeShape {

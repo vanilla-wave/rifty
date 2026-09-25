@@ -6,6 +6,7 @@ import {
   getKernelDrainHook,
   runEntryLifecycle,
   setKernelDrainHook,
+  setKernelFatalErrorSerializer,
 } from '../src/worker-entry.ts';
 
 describe('kernel drain hook', () => {
@@ -79,7 +80,13 @@ describe('runEntryLifecycle drain branch (ADR-0152)', () => {
     const deps = makeDeps({ drainHook });
     const outcome = await runEntryLifecycle(makeSpec(false), deps);
 
-    expect(outcome).toEqual({ threw: true, code: 1 });
+    expect(outcome).toEqual({
+      threw: true,
+      code: 1,
+      fatalError: {
+        reason: expect.objectContaining({ message: 'child realm exceeded keepalive drain cap' }),
+      },
+    });
     expect(deps.writeStderr).toHaveBeenCalledTimes(1);
     const written = deps.writeStderr.mock.calls[0]?.[0] as Uint8Array;
     expect(new TextDecoder().decode(written)).toContain('keepalive drain cap');
@@ -112,7 +119,11 @@ describe('runEntryLifecycle drain branch (ADR-0152)', () => {
     const outcome = await runEntryLifecycle(makeSpec(false), deps);
 
     expect(drainHook).not.toHaveBeenCalled();
-    expect(outcome).toEqual({ threw: true, code: 1 });
+    expect(outcome).toEqual({
+      threw: true,
+      code: 1,
+      fatalError: { reason: expect.objectContaining({ message: 'entry blew up' }) },
+    });
     expect(deps.writeStderr).toHaveBeenCalledTimes(1);
   });
 
@@ -127,4 +138,31 @@ describe('runEntryLifecycle drain branch (ADR-0152)', () => {
     expect(outcome).toEqual({ threw: true, code: 3 });
     expect(deps.writeStderr).not.toHaveBeenCalled();
   });
+  it.each([false, true])(
+    'a projection clone failure remains terminal (throw=%s)',
+    async (throws) => {
+      setKernelFatalErrorSerializer(() => {
+        const uncloneable = () => {};
+        if (throws) throw uncloneable;
+        return uncloneable;
+      });
+      try {
+        const outcome = await runEntryLifecycle(
+          makeSpec(false),
+          makeDeps({
+            runEntry: async () => {
+              throw new Error('original');
+            },
+          }),
+        );
+        expect(outcome).toEqual({
+          threw: true,
+          code: 1,
+          fatalError: { reason: expect.objectContaining({ name: 'DataCloneError' }) },
+        });
+      } finally {
+        setKernelFatalErrorSerializer(null);
+      }
+    },
+  );
 });

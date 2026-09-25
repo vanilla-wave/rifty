@@ -18,8 +18,9 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
-import type { FsSync } from '@riftydev/vfs';
+import { type FsSync, joinPath } from '@riftydev/vfs';
 import { registerNodeEvalDrainLifecycle } from '../internal/event-loop-keepalive.ts';
+import { readNodeStartupOptions } from '../internal/node-startup-options.ts';
 import { ModuleLoadError } from '../module-loader/errors.ts';
 import {
   type ModuleLoader,
@@ -29,6 +30,11 @@ import {
   projectNodeEvalError,
 } from '../module-loader/loader.ts';
 import { formatNodeEvalPrintValue } from '../repl/inspect.ts';
+import {
+  dispatchProcessError,
+  isProcessExitSignal,
+  notifyProcessExit,
+} from './process-error-events.ts';
 
 const utf8 = new TextDecoder();
 const reflectApplyPrimordial = Reflect.apply;
@@ -208,6 +214,8 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
         compiler,
       }).run(opts.source);
     } catch (error) {
+      if (dispatchProcessError(error, 'uncaughtException')) return;
+      if (!isProcessExitSignal(error)) notifyProcessExit(1);
       throw projectNodeEvalError(error, opts.source, 'sync', compiler);
     }
     registerNodeEvalDrainLifecycle({
@@ -242,6 +250,9 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
   }
   const loader = (opts.createLoader ?? createModuleLoader)(opts.vfs, { cwd: opts.cwd });
   try {
+    for (const preload of readNodeStartupOptions().preloads) {
+      loader.require(preload, joinPath(opts.cwd, '__preload__.cjs'));
+    }
     if (opts.bin) {
       const shim = utf8.decode(opts.vfs.readFileBytesSync(opts.entryPath));
       const target = parseBinLauncherTarget(shim);
@@ -260,6 +271,8 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
     }
     await loader.import(opts.entryPath, opts.entryPath);
   } catch (err) {
+    if (dispatchProcessError(err, 'uncaughtException')) return;
+    if (!isProcessExitSignal(err)) notifyProcessExit(1);
     // A missing entry (`node ./nope.js`) or an uncaught nested-require miss
     // surfaces real Node's `Error: Cannot find module … { code, requireStack }`
     // on the child stderr instead of rifty's ModuleLoadError name + frames

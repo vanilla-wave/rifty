@@ -209,6 +209,7 @@ type WorkerTerminalOutcome =
       readonly kind: 'exit';
       readonly code: number;
       readonly cause: 'natural' | 'failure';
+      readonly fatalError?: { readonly reason: unknown };
       readonly error?: Error;
     }
   | { readonly kind: 'signal'; readonly signal: string }
@@ -1038,9 +1039,14 @@ export class ProcessManager {
       _fail(code: number): boolean {
         return this._transition({ kind: 'exit', code, cause: 'failure' });
       }
-      _settleAfterStdio(code: number): void {
+      _settleAfterStdio(code: number, fatalError?: { readonly reason: unknown }): void {
         if (
-          !this._transition({ kind: 'exit', code, cause: 'natural' }) &&
+          !this._transition({
+            kind: 'exit',
+            code,
+            cause: 'natural',
+            ...(fatalError === undefined ? {} : { fatalError }),
+          }) &&
           this.#terminalOutcome !== null
         ) {
           this._startOutputCut();
@@ -1281,7 +1287,7 @@ export class ProcessManager {
         }
         this.exitCode = outcome.code;
         this.signalCode = null;
-        attempt(() => this.emit('exit', outcome.code, null));
+        attempt(() => this.emit('exit', outcome.code, null, outcome.fatalError));
         this._retireAndScheduleTerminalClose(
           outcome.code,
           null,
@@ -1377,24 +1383,17 @@ export class ProcessManager {
       throw error;
     }
 
-    // Start the IPC port AFTER `record.handle` is wired, so any synchronous
-    // `'message'` / `'disconnect'` dispatch sees a fully-constructed
-    // handle. The IPC port is otherwise inert (no auto-start).
+    // Start IPC only after record.handle is ready for synchronous listeners.
     handle._startIpc();
 
-    spawnResult.onExit((code) => {
-      handle._settleAfterStdio(code);
+    spawnResult.onExit((code, fatalError) => {
+      handle._settleAfterStdio(code, fatalError);
     });
 
-    // Surface `messageerror` events on the handle so callers don't have
-    // to reach into `SpawnWorkerResult` (review §1.10).
     spawnResult.onMessageError((ev) => {
       handle.emit('messageerror', ev);
     });
 
-    // A worker error that escaped worker-entry's try/catch left no child-side
-    // stack. The handle appends the parent diagnostic only after all attested
-    // child output, then schedules terminal delivery behind local Readable flow.
     spawnResult.onUncaughtError((message, outputSealedByChild) => {
       handle._workerError(message, outputSealedByChild);
     });
