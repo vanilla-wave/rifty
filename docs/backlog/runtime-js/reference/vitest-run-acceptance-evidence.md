@@ -380,6 +380,14 @@ $ RIFTY_PLAYGROUND_PORT=5412 pnpm exec playwright test --project=chromium-heavy 
   2 passed (2.3m)
 ```
 
+On the committed implementation `f71d88d41` (clean tree, `pnpm pr:check` 25/25
+green), the same command twice (flake check):
+
+```
+run 1  ✓ 1 (56.2s)  ✓ 2 (1.4m)  2 passed (2.4m)
+run 2  ✓ 1 (56.2s)  ✓ 2 (1.3m)  2 passed (2.3m)
+```
+
 Outputs, from an uncommitted copy of the spec that prints each command's
 slice (same seed/commands, `--project=chromium-light`; ANSI stripped,
 `Users/…` source frames elided):
