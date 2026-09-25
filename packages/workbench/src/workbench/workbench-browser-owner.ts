@@ -817,18 +817,19 @@ export function startBrowserWorkspaceOwner(
         currentPreview = Object.freeze([]);
         for (const listener of [...previewListeners]) listener(currentPreview);
         previewListeners.clear();
-        const toolsFailure = error ?? new ClosedHandleError('Workbench project transport');
+        const failure = error ?? new ClosedHandleError('Workbench project transport');
         for (const listener of [...playgroundToolListeners]) {
           try {
-            listener(toolsFailure);
+            listener(failure);
           } catch {
             // Disconnect is already authoritative; consumer failure cannot reopen it.
           }
         }
         playgroundToolListeners.clear();
         operationalHealthListeners.clear();
-        pty.disconnect(error);
-        content.disconnect(error);
+        // No peer error = a retired project, not a dead owner: every leg gets one cancellation.
+        pty.disconnect(failure);
+        content.disconnect(failure);
       },
     };
   };
