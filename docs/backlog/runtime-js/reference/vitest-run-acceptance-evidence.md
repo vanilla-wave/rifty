@@ -364,6 +364,13 @@ $ pnpm test:parity http/agent-shape
 After (ADR-0464): both unit files pass (3 + 3), both parity cases match,
 `pnpm test:parity vm/` and `http/` all match.
 
+`check:esbuild-legacy-retirement` then failed on
+`packages/workbench/dist/assets/typescript-worker.js` (same 10 022 694 bytes,
+new SHA-256). Rebuilt with the pre-change sources: the pinned
+`98a6fa18…` came back; old vs new differ in 39 bytes, all inside the five
+renamed chunk import names (`chunk-*.js` ×4, `module-loader-*.js`) — pin
+updated to `4d7c0ef3…` only (`traps.md` copied-asset-fingerprints).
+
 ## GREEN — Chromium, the claimed scenario and every ceiling (2026-09-25)
 
 ```

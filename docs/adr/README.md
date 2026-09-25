@@ -427,6 +427,7 @@ superseded.
 | 0326 advanced-IPC-serialization loud-gap + launch-plan `ipc: 'none' \| 'json'` clauses | 0448 / notes 2026-09-23, 2026-09-25 | fork `serialization: 'advanced'` rides the public lane as a native structured clone with Node's view/refusal rules; handles, callbacks/options, channel `ref()`/`unref()` stay gaps; launch plan `ipc` gains `'advanced'` |
 | 0416 active node-entry v4 version | 0448 / note 2026-09-23 | v5 carries program launch `ipc: 'advanced'`; SQLite absence semantics unchanged |
 | 0448 active node-entry v5 version | 0449 / note 2026-09-25 | v6 carries program and worker-thread `execArgv` (`-r`/`-C`/`--experimental-import-meta-resolve`); advanced IPC unchanged |
+| 0443 §2 "stay absent" clause | 0464 / note 2026-09-25 | a member a ❌-listed mode reaches first with a bare `TypeError` ships with Node's shape — real data or a named `NotImplementedError` (`vm.constants`, `http.Agent`) |
 | 0348 §2 link-only-placeholder clause | 0443 / note 2026-09-23 | an observed link/load-time edge whose real behavior rifty cannot supply ships as a named `NotImplementedError` member; called edges still need the real contract |
 | 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
 | 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |

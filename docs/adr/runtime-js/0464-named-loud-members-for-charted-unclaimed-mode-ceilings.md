@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-09-25
 
-> TL;DR: A Node-own member that an unclaimed mode listed ❌ on a compat page reaches first, whose absence gives a bare `TypeError` instead of a named ceiling, ships with Node's shape: real where Node's value is data, a named `NotImplementedError` where the behavior is unsuppliable. Adds admission to ADR-0443 §2; admitted: `vm.constants` (+ the `DONT_CONTEXTIFY` context ceiling) and `http.Agent`.
+> TL;DR: A Node-own member that an unclaimed mode listed ❌ on a compat page reaches first, whose absence gives a bare `TypeError` instead of a named ceiling, ships with Node's shape: real where Node's value is data, a named `NotImplementedError` where the behavior is unsuppliable. Partially supersedes ADR-0443 §2's "stay absent" clause (dated note there); admitted: `vm.constants` (+ the `DONT_CONTEXTIFY` context ceiling) and `http.Agent`.
 
 ## Context
 
@@ -28,9 +28,9 @@ a bare error. Two modes reach an absent Node member first (evidence
 
 ## Decision
 
-1. Admission (adds to ADR-0443 §2): a Node-own member is admitted when a mode
-   a compat page lists ❌ reaches it before any named ceiling and its absence
-   gives a bare `TypeError`. Per observed edge, cited by evidence; the ❌ row
+1. Admission (beyond ADR-0443 §2's claimed consumers): a Node-own member is
+   admitted when a mode a compat page lists ❌ reaches it before any named
+   ceiling and its absence gives a bare `TypeError`. Per observed edge, cited by evidence; the ❌ row
    names the resulting throw.
 2. Shape follows ADR-0443 §1: Node's descriptor on the same owner. Data the
    realm supplies faithfully ships real (parity); unsuppliable behavior
