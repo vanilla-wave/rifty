@@ -658,16 +658,20 @@ test('late createRequire cannot borrow resident ownership across prior loaders',
         testCase.builtin === 'node:http'
           ? `.createServer((_req, res) => res.end('rival'))`
           : `.createServer((socket) => socket.end('rival'))`;
+      // runBin origin: its timers die with its process (ADR-0445), so the late
+      // listen rides the server the rival leaves listening (runBin gap, draft
+      // `distribution/no-coi-command-unhandled-rejection-exit`); the selected
+      // entry's request runs that prior-loader callback after admission.
+      const helperPort = targetPort + 100;
       const schedule = `const lateRequire = createRequire;
-const fs = lateRequire('/port-proof/gate.cjs')('node:fs');
-function afterSelectedEntry() {
-  if (!fs.existsSync('/port-proof/selected-entered-${targetPort}')) {
-    setTimeout(afterSelectedEntry, 5).unref();
-    return;
-  }
-  setTimeout(() => lateRequire('/port-proof/late.cjs')('${testCase.builtin}')${createServer}.listen(${targetPort}, '127.0.0.1'), 20).unref();
-}
-afterSelectedEntry();`;
+lateRequire('/port-proof/gate.cjs')('node:http').createServer((_req, res) => {
+  res.end('armed');
+  setTimeout(() => lateRequire('/port-proof/late.cjs')('${testCase.builtin}')${createServer}.listen(${targetPort}, '127.0.0.1'), 20);
+}).listen(${helperPort}, '127.0.0.1');`;
+      const trigger =
+        testCase.origin === 'runBin'
+          ? `\nhttp.get('http://127.0.0.1:${helperPort}/', (res) => res.resume());`
+          : '';
       const rivalSource =
         testCase.format === 'cjs'
           ? `const { createRequire } = require('node:module');\n${schedule}`
@@ -681,7 +685,7 @@ afterSelectedEntry();`;
         }),
         '/port-proof/node_modules/plain-dev/server.cjs': `const http = require('node:http');
 const selected = http.createServer((_req, res) => res.end('selected'));
-require('node:fs').writeFileSync('/port-proof/selected-entered-${targetPort}', 'ready');
+require('node:fs').writeFileSync('/port-proof/selected-entered-${targetPort}', 'ready');${trigger}
 setTimeout(() => selected.listen(${targetPort}, '127.0.0.1'), 100);`,
         '/port-proof/node_modules/.bin/rival': `#!/usr/bin/env node
 import('../rival/index.${testCase.format === 'cjs' ? 'cjs' : 'mjs'}');

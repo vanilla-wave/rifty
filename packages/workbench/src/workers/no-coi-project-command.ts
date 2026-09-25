@@ -1,4 +1,4 @@
-import { NotImplementedError, captureEventEmitterListenerScope } from '@riftydev/io';
+import { NotImplementedError } from '@riftydev/io';
 import { listPorts } from '@riftydev/net';
 import { type SerializedRuntimeError, awaitDrain } from '@riftydev/runtime-js';
 import { type RunNodeEntryOptions, runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
@@ -11,8 +11,6 @@ import {
   type ToolchainCommandInput,
   type ToolchainCommandResult,
   activeRefs,
-  captureTimerBoundary,
-  clearTimersSince,
   installConsole,
   takeUnhandledRejection,
 } from '@riftydev/runtime-js/internal';
@@ -22,6 +20,7 @@ import { createNpmScriptShellCommand } from '../glue/npm-shell-command.ts';
 import { runNestedShellCommand } from '../glue/run-nested-shell-command.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { declaredGapCause } from './declared-gap-cause.ts';
+import { type NoCoiInvocationScope, openNoCoiInvocationScope } from './no-coi-invocation-scope.ts';
 import { classifyNodeInvocation, resolveNodeEntry } from './node-entry-resolve.ts';
 
 interface CommandHooks {
@@ -44,10 +43,10 @@ function processExitCode(error: unknown): number | null {
  * timers die with it; any other live handle (port, pending import/fetch)
  * outlives it in this reused realm, so the realm is replaced instead.
  */
-function terminalExitCode(settlement: unknown, timerBoundary: number): number | null {
+function terminalExitCode(settlement: unknown, invocation: NoCoiInvocationScope): number | null {
   const exitCode = processExitCode(settlement);
   if (exitCode === null || declaredGapCause(settlement) !== null) return null;
-  clearTimersSince(timerBoundary);
+  invocation.clearTimers();
   if (activeRefs() > 0 || listPorts().length > 0) return null;
   takeUnhandledRejection();
   return exitCode;
@@ -87,13 +86,7 @@ export async function runNoCoiProjectCommand(
     execArgv: readonly string[],
     ctx: CommandContext,
   ): Promise<number> => {
-    const timerBoundary = captureTimerBoundary();
-    const listenerScopes = [
-      riftyProcess,
-      riftyProcess.stdin,
-      riftyProcess.stdout,
-      riftyProcess.stderr,
-    ].map(captureEventEmitterListenerScope);
+    const invocation = openNoCoiInvocationScope();
     const previous = {
       cwd: riftyProcess.cwd(),
       env: riftyProcess.env,
@@ -144,7 +137,7 @@ export async function runNoCoiProjectCommand(
       try {
         await awaitDrain({ capMs: 600_000, hasRef: () => listPorts().length > 0 });
       } catch (error) {
-        terminal = terminalExitCode(error, timerBoundary);
+        terminal = terminalExitCode(error, invocation);
         if (terminal === null) {
           requiresTermination = true;
           failure = error;
@@ -176,8 +169,7 @@ export async function runNoCoiProjectCommand(
       ctx.signal?.removeEventListener('abort', abort);
       // A rejected drain leaves the realm owned until the host physically terminates it.
       if (!requiresTermination) {
-        for (const retire of listenerScopes) retire();
-        clearTimersSince(timerBoundary);
+        invocation.end();
         restoreConsole();
         riftyProcess.stdout.write = previous.stdout;
         riftyProcess.stderr.write = previous.stderr;

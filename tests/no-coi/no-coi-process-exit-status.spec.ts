@@ -50,6 +50,12 @@ const listenerThrowLive = program(
   `${LISTENER_THROWS}\nsetInterval(() => {}, 1000);\nsetTimeout(() => { throw new Error('timer'); }, 0);`,
   'LISTENER-THREW',
 );
+// ADR-0445: no timer of a process runs after its terminal — neither one an
+// 'exit' listener arms nor an unref'd one.
+const unrefInterval = program(
+  'unref-interval',
+  `${EXIT_ROW}\nsetInterval(() => console.log('L|tick'), 20).unref();`,
+);
 
 const commandCases: readonly ProcessLifecycleCase[] = [
   listenerThrowRejection,
@@ -68,6 +74,8 @@ const commandCases: readonly ProcessLifecycleCase[] = [
   shared('exit-in-uncaught-handler'),
   shared('fatal-rejection'),
   shared('natural-exit-code'),
+  shared('exit-listener-timer'),
+  unrefInterval,
 ];
 
 const binCases: readonly ProcessLifecycleCase[] = [
@@ -76,6 +84,8 @@ const binCases: readonly ProcessLifecycleCase[] = [
   shared('exit-listener-reassign'),
   shared('exit-reentrant'),
   shared('natural-exit'),
+  shared('exit-listener-timer'),
+  unrefInterval,
   shared('fatal-rejection'),
 ];
 
@@ -205,6 +215,92 @@ for (const testCase of binCases.map(asBin)) {
       { root, files: testCase.files, binPath: `/exit-status/${testCase.nodeArgv[0]}` },
     );
     await expectNodeStatus(testCase, observed, 'runBin');
+  });
+}
+
+// Each invocation is its own Node process: a finished one's listeners never run
+// in the next (its 'exit' listener neither prints nor sets the next status; its
+// 'uncaughtException' listener does not handle the next one's rejection).
+const firstProcess = program(
+  'first-listeners',
+  `process.on('exit', (c) => { console.log('L|exit-first', c); process.exitCode = 5; });
+process.on('uncaughtException', (e) => console.log('L|caught-first', e.message));
+console.log('L|first');`,
+);
+const secondProcess = program(
+  'second-rejects',
+  `${EXIT_ROW}\nconsole.log('L|second');\nPromise.reject(new Error('second-rejected'));`,
+  'second-rejected',
+);
+
+for (const host of ['project command', 'runBin'] as const) {
+  test(`${host} ends each process's listeners with it`, async ({ page }) => {
+    test.setTimeout(120_000);
+    const runs =
+      host === 'runBin'
+        ? [asBin(firstProcess), asBin(secondProcess)]
+        : [firstProcess, secondProcess];
+    await page.goto('/no-coi-harness.html');
+    const observed = await page.evaluate(
+      async ({ root, host, runs }) => {
+        const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
+        const sandbox = await createSandbox({
+          requireCrossOriginIsolation: false,
+          skipServiceWorker: true,
+          toolchain: {
+            workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
+          },
+        });
+        let stdout = '';
+        const off = sandbox.runtime.on((event: { type: string; chunk?: string }) => {
+          if (event.type === 'stdout') stdout += event.chunk ?? '';
+        });
+        try {
+          await sandbox.fs.writeFile('/exit-status/.keep', '');
+          for (const run of runs) {
+            for (const [path, content] of Object.entries(run.files)) {
+              await sandbox.fs.writeFile(`/exit-status/${path}`, content);
+            }
+          }
+          const results: { exit: number | null; stdout: string }[] = [];
+          for (const run of runs) {
+            if (host === 'runBin') {
+              stdout = '';
+              const { exitCode } = await sandbox.toolchain.runBin({
+                cwd: '/exit-status',
+                binPath: `/exit-status/${run.nodeArgv[0]}`,
+                args: [],
+              });
+              await new Promise((resolve) => setTimeout(resolve, 50));
+              results.push({ exit: exitCode, stdout });
+            } else {
+              const done = await sandbox
+                .project({ root: '/exit-status' })
+                .run(`node ${run.nodeArgv[0]}`).completion;
+              results.push({
+                exit: done.status === 'exited' ? done.exitCode : null,
+                stdout: done.stdout,
+              });
+            }
+          }
+          return results;
+        } finally {
+          off();
+          sandbox.dispose();
+        }
+      },
+      { root, host, runs },
+    );
+    const oracle: { exit: number | null; rows: string[] }[] = [];
+    for (const run of runs) {
+      const node = await runLifecycleOracle(run);
+      if (run.fatal !== undefined) expect(node.stderr).toContain(run.fatal);
+      oracle.push({ exit: node.code, rows: lifecycleRows(node.stdout) });
+    }
+    expect(
+      observed.map((run) => ({ exit: run.exit, rows: lifecycleRows(run.stdout) })),
+      `${host} vs Node`,
+    ).toEqual(oracle);
   });
 }
 

@@ -23,7 +23,9 @@ Silent: the resident reports no status and keeps serving.
 
 Own the resident's lifetime with the existing drain (`awaitDrain` with the
 port `hasRef`, no cap), which now settles with the process's terminal, and end
-the resident through the existing toolchain terminal frame. Open: whether the
+the resident through the existing toolchain terminal frame; end its process
+with `openNoCoiInvocationScope` as runBin/command do (timers, an `'exit'`
+listener's included, and process listeners). Open: whether the
 exit event carries the status (public event shape → ADR). Carrier: a no-COI
 e2e with the probe's program against live Node.
 
