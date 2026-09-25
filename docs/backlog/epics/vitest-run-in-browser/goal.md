@@ -210,3 +210,5 @@ challenge: 2026-09-15 — 6 problems (all resolved before FIT; lines below)
   ambiguous locked-constructor records as an allowed limitation. This does not
   revoke the explicit binary prohibition. Prefer native cloning when it avoids
   that extra limitation; no artificial frozen-record rejection is required.
+
+- amend: 2026-09-25 — user: “Vitest достаточно; бинарный IPC явно запрещён”; scenario6/I7 explicitly refuse binary graphs. “Да, точная гарантия и честные ограничения” supersedes blanket bans in scenario5/I7: exact vitest run pair and both pools guaranteed, other versions/modes unclaimed. “Да, принять явный ceiling и задокументировать ограничение” permits opaque-brand refusal if necessary; native clone makes it unnecessary. I1–I6 primary scenario unchanged.

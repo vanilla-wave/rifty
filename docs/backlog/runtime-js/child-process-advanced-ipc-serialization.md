@@ -100,3 +100,5 @@ ready-verdict: 2026-09-23 — Contract+RED @ 57602c71af088f69e2f973aa54ae3334644
   Binary-success criteria migrate to explicit synchronous ceiling checks;
   ordinary non-binary graph/native clone tests remain. User separately permits
   documented opaque-brand ceiling if technically necessary; no silent admission.
+
+- re-cut: 2026-09-25 — fork: user explicitly chooses Vitest-only non-binary IPC + binary ceiling; ADR-0467 partially supersedes ADR-0446 binary preservation and ADR-0453 provenance mechanism. Accepted non-binary behavior, both senders, getter order, healthy channels and ADR-0326 private control remain; frozen plain records now native instead of opaque-brand refusal.
