@@ -1,0 +1,322 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted: the r1 class-1 blocker (a false Node fact about fork operands) is fixed. The corrected contract and ADR-0449 text reproduce on Node v24.16.0. Every changed RED fails now for its declared reason, and the new thread-id/hold carrier kills an allocate-before-throw mutant. Four advisory concerns remain. This is not a merge approval: Final+GREEN is still required.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/worker-threads-stdio-streams-empty-exec-argv.md (status: ready) at HEAD 7a15b735446a35eb5a71fa7d2506b6357fa11d7c (branch vg/u11). BASE is b5b385c6c1085f8df6248c0b44bd5eb5be9c79db. Goal: docs/backlog/epics/vitest-run-in-browser/goal.md I4/I5/I6 (the goal directory is unchanged BASE..HEAD). ADRs: ADR-0449 (new, revised in 7a15b7354), ADR-0448 (dated correction note), ADR-0458, ADR-0446, ADR-0267. Verify pass 2 by a fresh independent reviewer. It is read-only on vg-u11. Probes ran in the detached scratch /tmp/vgoal/u11/scratch-cr-2 @ HEAD and in /tmp/vgoal/u11/rv2-probe. Prior verdict: /tmp/vgoal/u11/contract-red-r1.json. Since r1 (03adcb29d..HEAD) only 5 files changed: the contract, ADR-0449, the evidence, startup-options-ceiling.test.ts and the browser-unit fixture. Parity cases, e2e-prod and node-entry tests are byte-identical to r1, so r1's executed RED/oracle artifacts for them stand. Executed this pass: (1) Node v24.16.0 fork operands: node fork-operands.cjs (stdio pipe, a stdin program written then ended). [\"--require\"]/[\"-r\"] exit 0: the module runs as a preload (main false), then the stdin program runs. [\"--conditions\"]/[\"-C\"] exit 0 with the stdin program only. [\"--require\",\"--conditions\",\"custom\"], [\"-r\",\"-x\"], [\"-C\",\"-\"], [\"--conditions\",\"-\"], [\"--conditions=\"] and [\"--require=\"] exit 9 with '<flag> requires an argument'. [\"-r=./x.cjs\"] exits 9 with 'bad option'. This matches the corrected contract :92 and ADR-0449 :40-47. (2) Eval-pair identity: a node -e parent's fork gives default [] and explicit {execArgv: process.execArgv} []; {execArgv: null} gives []; a copy [...process.execArgv] keeps -e (the child re-runs the eval). node -r ./fprint.cjs -e … fork gives [\"-r\",\"./fprint.cjs\"]. This matches ADR-0449 :55-60 and Parity 11. (3) tid.cjs / nohold.cjs: Node-rejected Worker execArgv ([\"--require\"], [\"--conditions=\"], [\"-C\",\"-\"], [\"--require\",\"--conditions\",\"custom\"] → ERR_WORKER_INVALID_EXEC_ARGV; \"str\" → ERR_INVALID_ARG_TYPE). The next Worker's threadId is 1, active resources are [], exit 0. This matches Acceptance 5. (4) npx vitest run on the ceiling and node-entry tests (log /tmp/vgoal/u11/rv2-ceiling.log): 25 failed, 5 passed. Ceiling 21/21 fail for the declared reasons: BASE message lacks the token; BASE NotImplementedError instead of Node's code on the 4 Node-invalid rows; stdin:true, same-realm and every fork row construct or spawn silently. node-entry: 4 fail (v5 pin, unexpected field execArgv x2, v5 envelope accepted), and 5 pass as the declared decode-rejection guards. (5) Mutant (scratch, reverted): worker_threads.ts throws a token-naming NotImplementedError carrying Node's code AFTER nextThreadId++ and attachWorkerReferences. The 9 Worker execArgv rows then die on '{ holds: 1, nextThreadId: 2 } to deeply equal { holds: +0, nextThreadId: 1 }' (log /tmp/vgoal/u11/rv2-ceiling-mutant.log). (6) RIFTY_PLAYGROUND_PORT=5461 pnpm test:browser-unit tests/browser-unit/worker-stdio-exec-argv.spec.ts under the heavy slot (log /tmp/vgoal/u11/rv2-bu.log): 1 failed, 3.5s, no timeout. The failures: worker-default-stdout lacks both worker rows; nested-worker-inherit exit 1 with no rows; nested-fork-inherit inner has execArgv []; vitest-threads-shape 'thread throw NotImplementedError'; vitest-forks-shape 'pool execArgv []'. eval-parent-fork matches both new rows, the declared BASE guard. (7) The fixture's live Node side (npx tsx over runStartupProgramInNode) ran 3x: identical rows and codes (only stderr PIDs differ), with eval-parent-fork 'SX|eval default child []', 'SX|eval explicit child []', code 0. (8) Gates: tsc runtime-js exit 0; scoped tsc over the browser-unit spec and fixture exit 0; biome clean on both changed test files; docs:check, check:contract-drift, check:arch, check:file-size and check:parity-coverage OK. PR-4: git grep 'node-entry/v5' outside docs finds exactly the sites the new criteria line :109 declares (plus the product constant node-entry-runtime-config.ts:8 and the new test's intentional v5 rejection). No existing test, gate or oracle is changed in the diff, and no product source is in it.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:110",
+      "summary": "vitest run end-to-end on the forks pool (config.ts, .ts tests, reporter, exit 1/0): delivered by this unit (map item 11), then item 12."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "--pool=threads matches forks: this unit supplies Worker execArgv and stdio; item 12 completes it."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:119",
+      "summary": "Pool workers start with vitest's exact startup options (this unit); the end-to-end load proof is item 12."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:124",
+      "summary": "The vitest.md compat page: item 12."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: worker-env parity (physical kernel Worker, production node-entry bootstrap) matches live Node + pinned expected for Parity 1-4; child-worker for Parity 5",
+      "source": "acceptance",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/stdio-streams.case.ts:10-74; tools/node-parity-runner/cases/worker_threads/stdio-exit-order.case.ts:8-76; tools/node-parity-runner/cases/worker_threads/exec-argv-startup.case.ts:13-76; tools/node-parity-runner/cases/worker_threads/exec-argv-validation.case.ts:10-53; tools/node-parity-runner/cases/child_process/fork-exec-argv.case.ts:12-77 (unchanged since r1; r1 RED + Node 3x artifacts stand)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: vitest 4.1.11 pool launch shapes with exact pool execArgv (Parity 6, 7) match live Node: preload applied, development condition, import.meta.resolve parent, output once through stdout.pipe",
+      "source": "acceptance",
+      "trace": "I4+I5+I6+ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/vitest-pool-shape.case.ts:17-58; tools/node-parity-runner/cases/child_process/vitest-pool-shape.case.ts:13-44; tests/browser-unit/fixtures/worker-stdio-exec-argv-cases.ts:90-91 (RED now in browser-unit: thread throw NotImplementedError, pool execArgv [])",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: real Chromium child realm runs every fixture program (Parity 8-11 + 6, 7 verbatim) with the same rows and exit code as live Node, no timeout",
+      "source": "acceptance",
+      "trace": "I4+I5+ADR-0449",
+      "status": "pass",
+      "citation": "tests/browser-unit/worker-stdio-exec-argv.spec.ts:37-68; tests/browser-unit/fixtures/worker-stdio-exec-argv-cases.ts:26-92,103-149 (RED now: 5/6 programs differ, eval-parent-fork guard matches; Node side 3x identical)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: production build `node main.cjs` prints Parity 12 rows and exits 0",
+      "source": "acceptance",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tests/e2e-prod/worker-stdio-exec-argv.spec.ts:43-99 (unchanged since r1; r1 RED rows [] stands)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: tokens outside the three families, a fork flag without its own operand, Worker stdin:true and same-realm cases throw the named NotImplementedError before any thread id, hold, child or spawn; Node's own Worker execArgv errors allocate no thread id or hold either",
+      "source": "acceptance",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/startup-options-ceiling.test.ts:82-91,134-179,181-211,215-232,234-251 (21/21 RED now; allocate-before-throw mutant dies on holds/nextThreadId)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: node-entry v6 carries exact program/worker-thread execArgv snapshot through decode, rejects compiler-rejected tokens on build and decode, no v5 reader",
+      "source": "acceptance",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-startup-options.test.ts:33-82 (4 RED now; 5 reject rows are declared guards, contract :106)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: compat modules.md (+ process.md) rows: ok Worker stdout/stderr and fork/Worker -r/-C/--experimental-import-meta-resolve with inheritance; named-throw gaps incl. fork flag without operand and the preload 'error' (❌, existing kernel-path row); unclaimed rows",
+      "source": "acceptance",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/worker-threads-stdio-streams-empty-exec-argv.md:57; docs/public/compat/process.md:48 (existing ❌ kernel-path 'error' row); docs deliverable graded by reading at Final+GREEN",
+      "note": ""
+    },
+    {
+      "row": "Parity 1 stdio-streams: default Readable stdout/stderr, stdin null, stable identity, output before parent exit row; stdout/stderr:true captured only; unread stream delays nothing",
+      "source": "acceptance",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/stdio-streams.case.ts:20-73",
+      "note": ""
+    },
+    {
+      "row": "Parity 2 stdio-exit-order: 1000 lines before exit 3, readableEnded false in exit then end, true a tick later; terminate mid-output exit 1 then end, resolves 1",
+      "source": "acceptance",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/stdio-exit-order.case.ts:21-73",
+      "note": ""
+    },
+    {
+      "row": "Parity 3 exec-argv-startup: explicit execArgv exact, preloads ordered from cwd with require.main unset, conditions on every resolution, import.meta.resolve parent with flag only, falsy/omitted inherit parent thread original options",
+      "source": "acceptance",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/exec-argv-startup.case.ts:16-73",
+      "note": ""
+    },
+    {
+      "row": "Parity 4 exec-argv-validation: ERR_INVALID_ARG_TYPE for \"str\"/{}; ERR_WORKER_INVALID_EXEC_ARGV for 5 operand errors; missing preload exit 1",
+      "source": "acceptance",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/exec-argv-validation.case.ts:13-50",
+      "note": ""
+    },
+    {
+      "row": "Parity 5 fork-exec-argv: explicit execArgv exact with preloads from child cwd, conditions, meta parent; missing preload exit 1 with Cannot find module on stderr; default = public execArgv at call incl. pushed token",
+      "source": "acceptance",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/fork-exec-argv.case.ts:15-74",
+      "note": ""
+    },
+    {
+      "row": "Parity 6 worker vitest-pool-shape: pool execArgv + stdout/stderr:true piped then unpiped after exit",
+      "source": "acceptance",
+      "trace": "I5+I6+ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/vitest-pool-shape.case.ts:20-55",
+      "note": ""
+    },
+    {
+      "row": "Parity 7 child vitest-pool-shape: fork(entry, [], { env, execArgv, stdio pipe, serialization advanced }) piped",
+      "source": "acceptance",
+      "trace": "I4+I6+ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/vitest-pool-shape.case.ts:16-41",
+      "note": ""
+    },
+    {
+      "row": "Parity 8 browser-unit worker-default-stdout: worker console.log and stdout.write reach the terminal before the parent exit row",
+      "source": "acceptance",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-stdio-exec-argv-cases.ts:31-44; tests/browser-unit/worker-stdio-exec-argv.spec.ts:64",
+      "note": ""
+    },
+    {
+      "row": "Parity 9 browser-unit nested-worker-inherit: inner default Worker inherits outer original options despite a public push",
+      "source": "acceptance",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-stdio-exec-argv-cases.ts:45-62; tests/browser-unit/worker-stdio-exec-argv.spec.ts:64",
+      "note": ""
+    },
+    {
+      "row": "Parity 10 browser-unit nested-fork-inherit: inner default fork inherits outer execArgv",
+      "source": "acceptance",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-stdio-exec-argv-cases.ts:63-77; tests/browser-unit/worker-stdio-exec-argv.spec.ts:64",
+      "note": ""
+    },
+    {
+      "row": "Parity 11 browser-unit eval-parent-fork: a node -e parent forks without execArgv, then with { execArgv: process.execArgv }; both drop the eval pair",
+      "source": "acceptance",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-stdio-exec-argv-cases.ts:26-28,78-89; tests/browser-unit/worker-stdio-exec-argv.spec.ts:64 (preservation guard at BASE, both rows match; the explicit row kills a take-as-given-without-identity implementation, which would name -e)",
+      "note": ""
+    },
+    {
+      "row": "Parity 12 prod node main.cjs: 5 SP| rows, exit 0",
+      "source": "acceptance",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tests/e2e-prod/worker-stdio-exec-argv.spec.ts:43-99",
+      "note": ""
+    },
+    {
+      "row": "observable-order x worker output vs its exit (burst then process.exit(n)): every chunk before exit; stream ends after",
+      "source": "fault-matrix",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/stdio-exit-order.case.ts:24-44,72",
+      "note": ""
+    },
+    {
+      "row": "observable-order x default auto-pipe vs parent exit listener: worker output on parent stdout before parent exit row",
+      "source": "fault-matrix",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/stdio-streams.case.ts:24-38,65-68; tests/browser-unit/fixtures/worker-stdio-exec-argv-cases.ts:31-44; tests/e2e-prod/worker-stdio-exec-argv.spec.ts:92-98",
+      "note": ""
+    },
+    {
+      "row": "peer death x terminate() mid-output: exit 1 then end; resolves 1; no hang or open stream",
+      "source": "fault-matrix",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/stdio-exit-order.case.ts:45-65,73",
+      "note": ""
+    },
+    {
+      "row": "unbounded-read x captured stream nobody reads: holds nothing; exit fires, program ends",
+      "source": "fault-matrix",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/stdio-streams.case.ts:53-61,71",
+      "note": ""
+    },
+    {
+      "row": "torn-state x invalid/unsupported startup option on Worker/fork: throws before thread id, hold, child or spawn",
+      "source": "fault-matrix",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/exec-argv-validation.case.ts:16-32; packages/runtime-js/src/builtins/startup-options-ceiling.test.ts:82-91,134-179,215-232 (spawn spies, activeRefs, next threadId 1; mutant log /tmp/vgoal/u11/rv2-ceiling-mutant.log)",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input x launch execArgv at node-entry decode: rejected token, non-string, non-array or v5 envelope is a protocol error",
+      "source": "fault-matrix",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-startup-options.test.ts:53-82",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie x fork/Worker default inheritance: Worker original options, fork public array minus eval pair when the effective array is that array itself, un-carriable inherited token named",
+      "source": "fault-matrix",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/exec-argv-startup.case.ts:50-59,72-73; tools/node-parity-runner/cases/child_process/fork-exec-argv.case.ts:52-61,74; tests/browser-unit/fixtures/worker-stdio-exec-argv-cases.ts:45-89; packages/runtime-js/src/builtins/startup-options-ceiling.test.ts:234-242 (copy-from-eval-parent not carried, see Completeness concern)",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift x launch producers and child owners: one compiler; preloads/conditions in runNodeEntry shared by Workbench bootstrap and parity adapter",
+      "source": "fault-matrix",
+      "trace": "ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/exec-argv-startup.case.ts:74; tools/node-parity-runner/cases/child_process/fork-exec-argv.case.ts:75; tests/browser-unit/worker-stdio-exec-argv.spec.ts:37-68; tests/e2e-prod/worker-stdio-exec-argv.spec.ts:67-99",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/worker-threads-stdio-streams-empty-exec-argv.md:86; docs/adr/runtime-js/0449-carry-node-startup-options-and-worker-stdio-streams.md:55-62; tests/browser-unit/fixtures/worker-stdio-exec-argv-cases.ts:78-89; packages/runtime-js/src/builtins/startup-options-ceiling.test.ts:234-242",
+          "evidence": "$ node -e \"if (process.argv.length > 1) console.log('copy child re-ran eval; execArgv[0]', process.execArgv[0]); else require('node:child_process').fork('./fprint.cjs', ['copy'], { execArgv: [...process.execArgv] })\"   # Node v24.16.0\ncopy child re-ran eval; execArgv[0] -e",
+          "summary": "Advisory, no REV-5 artifact against the RED. The identity half of the eval-pair rule has no carrier: ADR-0449 §3 says 'any other array is taken as given', so an eval parent's copy keeps -e and rifty must name -e. An implementation that strips the eval pair from any array whenever the launch was eval passes Parity 11 (both rows []) and every ceiling row. It would still silently fork [] where Node keeps -e. A cheap fix: a fork ceiling row with an eval launch published (the worker_threads.test.ts:434 pattern) and { execArgv: [...process.execArgv] } expecting NotImplementedError('child_process.fork.execArgv') naming '-e'.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/worker_threads.ts (765 lines); packages/runtime-js/src/builtins/process.ts (pinned oversized); docs/backlog/runtime-js/worker-threads-stdio-streams-empty-exec-argv.md:107",
+          "evidence": "",
+          "summary": "Carried from r1 and recorded as an IMPLEMENT note at :107. The 800-line ratchet leaves worker_threads.ts about 35 lines of headroom, and process.ts can only shrink. Plan the stdio Readables, compiler and realm startup record as their own modules.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/worker-threads-stdio-streams-empty-exec-argv.md:92; docs/adr/runtime-js/0449-carry-node-startup-options-and-worker-stdio-streams.md:44-47",
+          "evidence": "$ script -q /dev/null node -e \"const c=require('child_process').fork(require('path').resolve('fop-child.cjs'),[],{execArgv:['--conditions']}); setTimeout(()=>{c.kill(); console.log('killed after 1500ms, child exitCode', c.exitCode)},1500)\" < /dev/null   # Node v24.16.0, TTY stdin\nWelcome to Node.js v24.16.0.\nType \".help\" for more information.\n> \nkilled after 1500ms, child exitCode 0",
+          "summary": "Precision only; rifty names this case, and no carrier depends on the wording. The entry-less fork child 'runs the program it reads from stdin' only when stdin is not a TTY, which holds for the evidence's pipe stdio. fork's default stdio inherits the parent's stdin, so from a terminal the child starts Node's REPL. Suggested wording: '(a REPL on a TTY stdin)'.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/reference/worker-threads-stdio-streams-empty-exec-argv-evidence.md (§Discoveries); docs/backlog/runtime-js/worker-threads-stdio-streams-empty-exec-argv.md:107",
+          "evidence": "",
+          "summary": "Carried from r1; the contract defers routing to land (:107). Final+GREEN checks that each discovery has an owner (REV-12). Three need one: WorkerOptions argv/resourceLimits/name/transferList/trackUnmanagedFds are silently ignored (a pre-existing Fidelity gap, needing a backlog item or a named throw); spawn('node', [flags…, file]) reads the first flag as the entry; and the child-worker parity programs bypass the rifty console.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "7a15b735446a35eb5a71fa7d2506b6357fa11d7c"
+}

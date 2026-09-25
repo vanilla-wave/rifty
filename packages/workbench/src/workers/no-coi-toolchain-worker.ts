@@ -13,7 +13,11 @@ import {
   trackKeepalivePromise,
 } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
-import { riftyProcess, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
+import {
+  resetNodeProcessExit,
+  riftyProcess,
+  setProcessCwd,
+} from '@riftydev/runtime-js/builtins/process';
 import {
   SANDBOX_TOOLCHAIN_PROTOCOL,
   type ToolchainActivationState,
@@ -185,7 +189,8 @@ async function runInstalledBin(
   await prepareSavedToolchain(input.cwd);
   const process = riftyProcess as unknown as { argv: string[]; exitCode?: number };
   process.argv = ['node', input.binPath, ...input.args];
-  process.exitCode = undefined;
+  // ADR-0445: a reused in-process process starts unset and not exiting.
+  resetNodeProcessExit(riftyProcess);
   setProcessCwd(input.cwd);
   let exitCode = 0;
   try {

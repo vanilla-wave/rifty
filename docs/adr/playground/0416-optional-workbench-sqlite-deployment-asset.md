@@ -34,3 +34,7 @@ absence contract. No new transport or asset mechanism.
 - Node/Vite deployments need no SQLite URL or asset; configured SQLite stays lazy.
 - Deploy matching Worker assets together; old bootstrap versions are rejected.
 - Engine, builtin removal, persistence and bytes API are outside this change.
+
+## Corrections (active)
+
+2026-09-23 — ADR-0448: Node entry now uses v5 (program launch `ipc: 'advanced'`); SQLite absence semantics unchanged.

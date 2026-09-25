@@ -3,6 +3,11 @@
 Status: Accepted
 Date: 2026-08
 
+> Correction 2026-09-23 (ADR-0443): §2's link-only-placeholder ban no longer
+> covers a member a claimed consumer links or reads at load whose real
+> behavior rifty cannot supply: it ships as a named `NotImplementedError` member.
+> Called edges still need their real contract; the rest of ADR-0348 stands.
+
 > TL;DR: one loader-owned ESM job links a graph before synchronously evaluating
 > `require(ESM)`; Node 24 defines its result, errors, cache, cycles, and resolver
 > conditions.

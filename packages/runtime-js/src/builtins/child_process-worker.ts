@@ -3,14 +3,19 @@
 import { NotImplementedError, type Readable } from '@riftydev/io';
 import { type ProcessHandle, type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
+import type { NodeIpcSerialization } from '../internal/node-ipc-serialization.ts';
+import { compileNodeStartupOptions } from '../internal/node-startup-options.ts';
 import {
   buildConfiguredNodeEntryWorkerEntry,
   nodeChildSpawnOptions,
+  readNodeEntryBootstrapIfPresent,
 } from './node-entry-runtime-config.ts';
 import {
   readActiveNodeProcessBootstrap,
   readNodeProcessBootstrapIdentity,
 } from './process-bootstrap-identity.ts';
+import { publicNodeProcess } from './process-public.ts';
+import { stdinInheritHook } from './process-stdin-inherit.ts';
 
 type Listener = (...args: unknown[]) => void;
 
@@ -44,6 +49,7 @@ export interface WorkerStdioPlan {
 }
 
 interface ActiveProcess {
+  readonly execArgv?: unknown;
   readonly pid?: unknown;
   readonly argv?: unknown;
   readonly cwd?: unknown;
@@ -298,16 +304,52 @@ function forward(
   handle.once('close', cleanup);
 }
 
+/** Node's inherited fd: the child reads the parent's stdin, which stays unread and unheld. */
+function forwardStdin(source: ReadableSource, target: WritableTarget, handle: StdioHandle): void {
+  const inherit = stdinInheritHook(source);
+  if (inherit === undefined) {
+    forward(source, target, handle, true);
+    return;
+  }
+  const detach = inherit({
+    data: (chunk) => {
+      target.write(chunk);
+    },
+    end: () => {
+      target.end?.();
+    },
+  });
+  handle.once('close', detach);
+}
+
 export function forwardWorkerStdio(handle: StdioHandle, plan: WorkerStdioPlan): void {
-  if (plan.stdin) forward(plan.stdin, handle.stdin(), handle, true);
+  if (plan.stdin) forwardStdin(plan.stdin, handle.stdin(), handle);
   if (plan.stdout) forward(handle.stdout(), plan.stdout, handle, false);
   if (plan.stderr) forward(handle.stderr(), plan.stderr, handle, false);
+}
+
+/**
+ * fork's startup tokens (ADR-0449 §3): Node's `options.execArgv || process.execArgv`;
+ * when that is the public array itself, the launch's eval pair is removed from a copy.
+ */
+export function forkExecArgv(value: unknown): readonly string[] {
+  const publicArgv = (publicNodeProcess() as ActiveProcess).execArgv;
+  let tokens = value || publicArgv || [];
+  const launch = readNodeEntryBootstrapIfPresent()?.launch;
+  if (tokens === publicArgv && Array.isArray(tokens) && launch?.kind === 'eval') {
+    const index = tokens.lastIndexOf(launch.source);
+    if (index > 0) tokens = [...tokens.slice(0, index - 1), ...tokens.slice(index + 1)];
+  }
+  return compileNodeStartupOptions(tokens, 'child_process.fork').execArgv;
 }
 
 export interface SpawnWorkerChildOptions {
   readonly cwd?: string;
   readonly env?: Record<string, string>;
-  readonly fork: boolean;
+  /** The fork's public IPC lane (`serialization`); `none` for a plain spawn. */
+  readonly ipc: 'none' | NodeIpcSerialization;
+  /** A fork's exact startup tokens (ADR-0449). */
+  readonly execArgv?: readonly string[];
 }
 
 /** Translate a validated `node <script>` launch to one real remote-FS Worker. */
@@ -324,8 +366,11 @@ export function spawnWorkerChild(
     kind: 'program',
     bin: false,
     remoteFs: true,
-    ipc: options.fork ? 'json' : 'none',
+    ipc: options.ipc,
     nodeServe: true,
+    ...(options.execArgv === undefined || options.execArgv.length === 0
+      ? {}
+      : { execArgv: options.execArgv }),
   });
   const spec: SpawnWorkerSpec = {
     entry,

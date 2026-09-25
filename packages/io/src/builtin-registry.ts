@@ -46,6 +46,17 @@ export function loadBuiltin(specifier: string): Record<string, unknown> | null {
   return ns;
 }
 
+/**
+ * Fresh factory value, cache untouched (ADR-0458). For io's own reads of a
+ * realm-bound entry: `process` follows the active bootstrap, so a cached read
+ * inside a same-realm child would pin that child's process realm-wide.
+ */
+export function readBuiltinUncached(specifier: string): Record<string, unknown> | null {
+  const name = specifier.startsWith('node:') ? specifier.slice(5) : specifier;
+  const factory = factories[name];
+  return factory ? (factory() as Record<string, unknown>) : null;
+}
+
 export function listBuiltins(): string[] {
   return Object.keys(factories);
 }

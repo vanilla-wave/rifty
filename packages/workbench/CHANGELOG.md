@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- The node-entry bootstrap reads node-entry v6 launches (ADR-0449): a `fork`/`Worker` child's `execArgv` preloads, conditions and `import.meta.resolve` parent apply through runtime-js before the entry; deploy matching Worker assets together (a v5 bundle rejects a v6 launch).
+- A worker thread drains without a cap and then exits the Node way (ADR-0446 §5); every node-entry natural exit (worker thread, `node <file>`, eval, execSync child) calls the `process.exit` captured before user code, never a reassigned one (vitest's pool workers patch it).
+- Node natural exit is `process.exit()` with no argument (ADR-0445): `'exit'` fires and `exitCode` sets the status on `node <file>`/`.bin`/spawn/fork/eval, and execSync children drain then exit the same way. `NodeLifecycleDeps.readExitCode` and `normalizeExitCode` are removed. No-COI project commands, toolchain run-bin and resident bins reset the reused process per invocation (unset `exitCode`, not exiting); no-COI project commands also end with a natural `exit()` (one `'exit'`), while run-bin reads `exitCode` at completion and a resident bin runs until stopped; neither emits a natural `'exit'`.
+
 - Remove `checkSandboxSupport` scratch storage even when the probe deadline expires while the Worker still holds its OPFS sync access handle; the lock is waited out inside the cleanup deadline, and a lock that outlives it reports `cleanup: incomplete` naming the native error instead of a failure the caller cannot act on (ADR-0439).
 - Report an observed cleanup rejection ahead of deadline expiry, with each native name and message retained in the aggregate reason.
 - Keep an observed `module-worker: passed` when the probe Worker fails later; the observations still pending in it report that failure as `incomplete`.

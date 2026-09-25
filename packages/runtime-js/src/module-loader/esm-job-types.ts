@@ -44,9 +44,10 @@ export type EsmFactory = (
   metaDirname: string,
   metaFilename: string,
   assetPath: (s: string) => string,
-  metaResolve: (s: string) => string,
+  metaResolve: (s: string, ...parent: unknown[]) => string,
   Function: FunctionConstructor,
   webAssembly: typeof WebAssembly,
+  globalKeyCheck: (key: unknown) => unknown,
 ) => EsmEvaluationIterator;
 
 export type EsmDirectFactory = (...args: Parameters<EsmFactory>) => Promise<void>;
