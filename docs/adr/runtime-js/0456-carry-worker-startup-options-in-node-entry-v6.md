@@ -11,7 +11,7 @@ Both accepted Vitest pools pass --require, --conditions and
 --experimental-import-meta-resolve. Native probes prove preload order/cache,
 package condition selection, resolver parentURL behavior and recursive trusted
 inheritance; echoing argv or ignoring flags is insufficient.
-[Contract/evidence](../../backlog/runtime-js/worker-threads-startup-options.md).
+[Contract/evidence](../../backlog/runtime-js/reference/worker-thread-exec-argv-evidence.md).
 
 Current rifty.node-entry/v5 accepts exact program/worker-thread fields without
 execArgv. Worker rejects this; fork accepts then loses every effect.

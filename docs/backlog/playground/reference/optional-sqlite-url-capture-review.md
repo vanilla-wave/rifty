@@ -6,7 +6,7 @@ transcription correction `terminal close` → `await command.close()` in the dra
 and `optional-sqlite-url-evidence.md`. Both corrected texts inspected.
 
 Scope: only `## Related parent-lifetime question (2026-09-10)` in
-`docs/backlog/runtime-js/worker-threads-kernel-run-to-completion-exit.md`.
+`docs/backlog/runtime-js/reference/vitest-delivery-evidence.md` (Historical adjacent observation; original item at f98099bf7).
 Not the full SQLite implementation/acceptance review.
 
 Sources independently read: `/tmp/rifty-sqlite-optional-url-handoff.md`, GitHub

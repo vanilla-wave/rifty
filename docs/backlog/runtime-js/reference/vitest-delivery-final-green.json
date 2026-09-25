@@ -1,39 +1,12 @@
 {
-  "overall_verdict": "blocker",
-  "merge_call": "Не merge: B1/full IPC contract остаётся RED; opaque-brand и I7 ждут пользователя. C2–C4 проверены; production/packed PASS, pr:check 2/25 RED, текущий CI не подтверждён.",
+  "overall_verdict": "pass",
+  "merge_call": "Final PASS: CI36130870229 и browser job108057706790 completed SUCCESS на exact f98099bf; все19jobs GREEN. CI residual закрыт. Готово к docs-only CLOSE и PR ready после pass-binding; merge не выполнялся.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "cdf806fc93b6af762574ac1f4d39a4af1ab82d89",
-  "unit_goal_source": "PR351 whole-delivery verify; ready docs/backlog/epics/vitest-run-in-browser/goal.md и map contracts @cdf806fc93b6af762574ac1f4d39a4af1ab82d89. Original BASE 0c4c1b070042a7a3079888cae92f25f15db24cdf (main); inspected entire delta 0b8daa7bd0ef86c5245ff6dce4ffc387545f9170→cdf806fc93b6af762574ac1f4d39a4af1ab82d89. Все 186 исходных coverage obligations сохранены/rebound; добавлены новые. Coverage pass означает discriminating carrier, не GREEN реализации: frozen-Promise carrier сейчас RED. I7 и opaque-brand narrowing пользователем не приняты.",
-  "unit_residuals": [
-    {
-      "clause": "Advanced IPC Acceptance 1/2 → I4, ADR-0326; ADR-0446/0453",
-      "location": "packages/runtime-js/src/internal/node-ipc-advanced.ts:36",
-      "summary": "B1 частично закрыт: пять brands и editable Promise исправлены. Locked Promise имеет ненативную ошибку; frozen/locked plain records отвергаются вместо успешной сериализации. Proposed ceiling не принят; полный контракт и RED сохраняются."
-    },
-    {
-      "clause": "Зелёный pnpm pr:check перед Final+GREEN",
-      "location": "packages/runtime-js/src/internal/node-ipc-advanced.test.ts:145",
-      "summary": "Полный root gate завершился RED 2/25: unit frozen-Promise и physical advanced-fault parity. Isolated RED подтверждён независимо. Lint/export assertion/compiler pin исправлены; после разрешения B1 нужен полный GREEN."
-    },
-    {
-      "clause": "Актуальная CI verification доставки",
-      "location": "packages/runtime-js/src/index.ts:47",
-      "summary": "Production 5449 8/8 и packed-consumer PASS подтверждены raw logs; прежний production residual закрыт. CI текущего reviewed SHA не проверен, остаётся verification residual."
-    }
-  ],
-  "goal_residuals": [
-    {
-      "clause": "I7; User scenario 5",
-      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:122",
-      "summary": "Watch/other-version blanket bans не доказаны; exact-guarantee wording остаётся предложением. goal.md неизменён, ответа нет; цель/PR не готовы к closure."
-    },
-    {
-      "clause": "I4; full advanced IPC Acceptance 1/2",
-      "location": "docs/backlog/runtime-js/child-process-advanced-ipc-serialization.md:45",
-      "summary": "Второй независимый user fork: принять locked-object opaque-brand ceiling либо выполнить исходный native graph/error контракт. Ответа нет; B1 и полный RED не закрыты."
-    }
-  ],
-  "goal_complete": false,
+  "reviewed_sha": "f98099bf7aa5304b344a3b3b1cc215fcd379c0b8",
+  "unit_goal_source": "PR351 whole-delivery Final+GREEN verify @f98099bf7aa5304b344a3b3b1cc215fcd379c0b8; accepted docs/backlog/epics/vitest-run-in-browser/goal.md, Decisions2026-09-25 и текущие map contracts. Current main BASE 2c9bbd30109692647c0174f8930f713007150f67; original whole-source BASE 0c4c1b070042a7a3079888cae92f25f15db24cdf. Проверен весь delta 6a2da600→f980, включая main readiness merge. Исходные201 rows: 191 retained/migrated; 10 retired по ADR-0467 (sealed authority; trusted/unmarked capture phases; owner/dev-server/TS role proofs; WorkerEntryDescriptor.role; seal API; installNodeRuntime phase; TS endpoint phase). Binary success заменён binary refusal по user2026-09-25; VM Proxy-mirror IPC ограничение и удаление host facades явно разрешены ADR-0467. Предыдущие198 rows сохранены, добавлены5 ready-acceptance clauses + platform-error proof =204. Acceptance2 error-class критерий явно re-cut под принятую native-clone/Vitest-only стратегию: platform DataCloneError, исходные getter exceptions неизменны. Это не утверждение старой Node error-class parity. Оба user forks закрыты; B1/B2/C6/C7 исправлены.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
   "coverage": [
     {
       "row": "overrides Acceptance 1: Bare version сохраняет имя; name@version совместим.",
@@ -364,19 +337,19 @@
       "note": ""
     },
     {
-      "row": "advanced IPC Acceptance 1: Rich graph в обе стороны: Buffer/brands/cycles/aliases/snapshot.",
+      "row": "advanced IPC Acceptance 1: non-binary graphs/cycles/aliases/snapshot; binary nested graphs дают named ceiling без dispatch/disconnect [user2026-09-25; ADR-0467].",
       "source": "acceptance",
-      "trace": "I4",
-      "status": "weak",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:4",
-      "note": "B1: rich carrier не различает отказ для native-cloneable frozen/locked records; proposed opaque-brand ceiling не принят."
+      "trace": "I4+user2026-09-25",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-advanced-ipc-binary-ceiling.spec.ts:74",
+      "note": ""
     },
     {
-      "row": "advanced IPC Acceptance 2: Оба send синхронно отвергают invalid/clone/getter failures без dispatch.",
+      "row": "advanced IPC Acceptance 2: Node top-level validation, getter identity, synchronous platform clone rejection; native DataCloneError отличие явно принято в ADR-0467/re-cut.",
       "source": "acceptance",
-      "trace": "I4+ADR-0326",
+      "trace": "I4+ADR-0326+ADR-0467",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:7",
+      "citation": "tests/browser-unit/owner-advanced-ipc-proxy.spec.ts:118",
       "note": ""
     },
     {
@@ -384,7 +357,7 @@
       "source": "acceptance",
       "trace": "I4+ADR-0326",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:95",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:82",
       "note": ""
     },
     {
@@ -400,7 +373,7 @@
       "source": "acceptance",
       "trace": "I4",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:75",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:64",
       "note": ""
     },
     {
@@ -408,7 +381,7 @@
       "source": "acceptance",
       "trace": "I4+ADR-0326",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:7",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:30",
       "note": ""
     },
     {
@@ -424,7 +397,7 @@
       "source": "fault-matrix",
       "trace": "I4+ADR-0326",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:7",
+      "citation": "tests/browser-unit/owner-advanced-ipc-proxy.spec.ts:118",
       "note": ""
     },
     {
@@ -432,7 +405,7 @@
       "source": "fault-matrix",
       "trace": "I4+ADR-0326",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:75",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:64",
       "note": ""
     },
     {
@@ -440,7 +413,7 @@
       "source": "fault-matrix",
       "trace": "I4+ADR-0326",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:31",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:30",
       "note": ""
     },
     {
@@ -456,7 +429,7 @@
       "source": "fault-matrix",
       "trace": "ADR-0326",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:95",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:82",
       "note": ""
     },
     {
@@ -852,19 +825,11 @@
       "note": ""
     },
     {
-      "row": "Proxy/revocable/revoked rejection before traps; Buffer getter once",
+      "row": "Native Proxy/revocable/revoked rejection before traps; non-binary control getter once [Buffer-success заменён по user2026-09-25].",
       "source": "acceptance",
-      "trace": "ADR-0453",
+      "trace": "ADR-0467",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-proxy.case.ts:4",
-      "note": ""
-    },
-    {
-      "row": "One sealed primordial authority across duplicate bundles",
-      "source": "acceptance",
-      "trace": "ADR-0453",
-      "status": "pass",
-      "citation": "packages/runtime-js/src/internal/proxy-provenance.test.ts:4",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-proxy.case.ts:5",
       "note": ""
     },
     {
@@ -872,15 +837,15 @@
       "source": "acceptance",
       "trace": "ADR-0453",
       "status": "pass",
-      "citation": "packages/runtime-js/src/builtins/vm/quickjs-proxy-metadata.test.ts:8",
+      "citation": "packages/runtime-js/src/builtins/vm/quickjs-proxy-metadata.test.ts:7",
       "note": ""
     },
     {
-      "row": "VM Proxy, Map/Set/Date/Error cause slots/cycles; actual host input",
+      "row": "VM Map/Set/Date/Error backings/cycles сохранены; plain/array Proxy mirrors явно отклоняются native clone [граница ADR-0467].",
       "source": "acceptance",
-      "trace": "ADR-0453",
+      "trace": "ADR-0453+ADR-0467",
       "status": "pass",
-      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-vm-proxy.test.ts:16",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-vm-proxy.test.ts:15",
       "note": ""
     },
     {
@@ -1156,35 +1121,35 @@
       "note": ""
     },
     {
-      "row": "child_process.fork advanced serialization",
+      "row": "child_process.fork advanced serialization — non-binary + binary refusal [user2026-09-25; ADR-0467]",
       "source": "public-api",
-      "trace": "I4+ADR-0446",
+      "trace": "I4+ADR-0446+ADR-0467",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:75",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:64",
       "note": ""
     },
     {
-      "row": "ChildProcess.send advanced",
+      "row": "ChildProcess.send advanced — non-binary + binary refusal [user2026-09-25; ADR-0467]",
       "source": "public-api",
-      "trace": "I4+ADR-0446",
-      "status": "weak",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:71",
-      "note": "B1: rich carrier не различает отказ для native-cloneable frozen/locked records; proposed opaque-brand ceiling не принят."
+      "trace": "I4+ADR-0446+ADR-0467",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-advanced-ipc-proxy.spec.ts:118",
+      "note": ""
     },
     {
-      "row": "process.send advanced",
+      "row": "process.send advanced — non-binary + binary refusal [user2026-09-25; ADR-0467]",
       "source": "public-api",
-      "trace": "I4+ADR-0446",
-      "status": "weak",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:51",
-      "note": "B1: rich carrier не различает отказ для native-cloneable frozen/locked records; proposed opaque-brand ceiling не принят."
+      "trace": "I4+ADR-0446+ADR-0467",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-advanced-ipc-proxy.spec.ts:118",
+      "note": ""
     },
     {
       "row": "ChildProcess.disconnect advanced",
       "source": "public-api",
       "trace": "ADR-0326",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:95",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:82",
       "note": ""
     },
     {
@@ -1228,19 +1193,19 @@
       "note": ""
     },
     {
-      "row": "vm.runInContext QuickJS return ingress",
+      "row": "vm.runInContext: VM carriers сохранены; native-IPC Proxy-mirror boundary явный [ADR-0467].",
       "source": "public-api",
-      "trace": "ADR-0453",
+      "trace": "ADR-0453+ADR-0467",
       "status": "pass",
-      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-vm-proxy.test.ts:16",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-vm-proxy.test.ts:15",
       "note": ""
     },
     {
-      "row": "vm.runInNewContext QuickJS return ingress",
+      "row": "vm.runInNewContext: cloneable intrinsic backings сохранены, Proxy mirrors вне IPC гарантии [ADR-0467].",
       "source": "public-api",
-      "trace": "ADR-0453",
+      "trace": "ADR-0453+ADR-0467",
       "status": "pass",
-      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-vm-proxy.test.ts:38",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-vm-proxy.test.ts:53",
       "note": ""
     },
     {
@@ -1268,27 +1233,27 @@
       "note": ""
     },
     {
-      "row": "Global Proxy constructor",
+      "row": "Global Proxy constructor: native surface после удаления facade [ADR-0467].",
       "source": "public-api",
-      "trace": "ADR-0453",
+      "trace": "ADR-0467",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-proxy.case.ts:11",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-proxy.case.ts:12",
       "note": ""
     },
     {
-      "row": "Proxy.revocable",
+      "row": "Proxy.revocable: native surface после удаления facade [ADR-0467].",
       "source": "public-api",
-      "trace": "ADR-0453",
+      "trace": "ADR-0467",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-proxy.case.ts:11",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-proxy.case.ts:12",
       "note": ""
     },
     {
-      "row": "Function.prototype.toString facade",
+      "row": "Function.prototype.toString: native surface после удаления facade [ADR-0467].",
       "source": "public-api",
-      "trace": "ADR-0453",
+      "trace": "ADR-0467",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-proxy.case.ts:30",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-proxy.case.ts:31",
       "note": ""
     },
     {
@@ -1524,27 +1489,27 @@
       "note": ""
     },
     {
-      "row": "advanced IPC Fault matrix 4: SAB view bytes snapshot при encounter; aliases retained.",
+      "row": "advanced IPC Fault matrix 4: binary graph encounter → exact named ceiling до dispatch в обоих senders [замена SAB-success по user2026-09-25].",
       "source": "fault-matrix",
-      "trace": "I4+ADR-0446",
+      "trace": "I4+user2026-09-25+ADR-0467",
       "status": "pass",
-      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-shared-views.test.ts:42",
+      "citation": "tests/browser-unit/owner-advanced-ipc-binary-ceiling.spec.ts:74",
       "note": ""
     },
     {
-      "row": "advanced IPC Fault matrix 5: Intrinsic rejection независимо от realm/prototype; locked Promise RED сохранён.",
+      "row": "advanced IPC Fault matrix 5: intrinsic rejection независимо от realm/prototype; ordinary frozen records клонируются.",
       "source": "fault-matrix",
-      "trace": "I4+ADR-0446+ADR-0453",
+      "trace": "I4+ADR-0467",
       "status": "pass",
-      "citation": "packages/runtime-js/src/internal/node-ipc-advanced.test.ts:130",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced.test.ts:150",
       "note": ""
     },
     {
-      "row": "Editable Promise probe: exact descriptor restoration, no getters/reactions; rejection остаётся unhandled.",
+      "row": "Native Promise rejection без mutation/getters/reactions; frozen/locked включены, исходный rejection остаётся unhandled [probe удалён ADR-0467].",
       "source": "acceptance",
-      "trace": "I4+ADR-0446+ADR-0453",
+      "trace": "I4+ADR-0467",
       "status": "pass",
-      "citation": "packages/runtime-js/src/internal/node-ipc-promise-brand.test.ts:7",
+      "citation": "packages/runtime-js/src/internal/node-ipc-promise-brand.test.ts:6",
       "note": ""
     },
     {
@@ -1564,90 +1529,122 @@
       "note": ""
     },
     {
-      "row": "Trusted bootstrap допускает вторую runtime copy, затем закрывает acquisition.",
-      "source": "acceptance",
-      "trace": "ADR-0465",
-      "status": "pass",
-      "citation": "packages/runtime-js/src/ipc/install-process-bootstrap-phase.fault.test.ts:6",
-      "note": ""
-    },
-    {
-      "row": "Unmarked URL/source закрыты до entry; никакого default open.",
-      "source": "acceptance",
-      "trace": "ADR-0465",
-      "status": "pass",
-      "citation": "packages/runtime-js/src/ipc/install-process-bootstrap-phase.fault.test.ts:54",
-      "note": ""
-    },
-    {
-      "row": "Owner producer маркирует только host deployment entry.",
-      "source": "acceptance",
-      "trace": "ADR-0465",
-      "status": "pass",
-      "citation": "packages/workbench/src/workbench/workbench-browser-owner.test.ts:807",
-      "note": ""
-    },
-    {
-      "row": "Dev-server producer переносит explicit runtime-bootstrap role.",
-      "source": "acceptance",
-      "trace": "ADR-0465",
-      "status": "pass",
-      "citation": "packages/workbench/src/workers/dev-server-child-config.test.ts:73",
-      "note": ""
-    },
-    {
-      "row": "TS relay маркирует entry; endpoint boot закрывает phase до requests.",
-      "source": "acceptance",
-      "trace": "ADR-0465",
-      "status": "pass",
-      "citation": "packages/runtime-js/src/ipc/install-process-bootstrap-phase.fault.test.ts:37",
-      "note": ""
-    },
-    {
-      "row": "WorkerEntryDescriptor.role: host-owned runtime-bootstrap URL role.",
-      "source": "public-api",
-      "trace": "ADR-0465",
-      "status": "pass",
-      "citation": "packages/workbench/src/workers/owner-child-dev-server.test.ts:83",
-      "note": ""
-    },
-    {
-      "row": "sealNodeRuntimeBootstrap: public close-only, acquisition после closure запрещён.",
-      "source": "public-api",
-      "trace": "ADR-0465",
-      "status": "pass",
-      "citation": "packages/runtime-js/src/ipc/install-process-bootstrap-phase.fault.test.ts:45",
-      "note": ""
-    },
-    {
-      "row": "installNodeRuntime entry policy: defer только trusted URL/typed Node bootstrap.",
-      "source": "public-api",
-      "trace": "ADR-0465",
-      "status": "pass",
-      "citation": "packages/runtime-js/src/ipc/install-process-bootstrap-phase.fault.test.ts:6",
-      "note": ""
-    },
-    {
-      "row": "bootTsLanguageServiceWorker closes capture перед endpoint registration.",
-      "source": "public-api",
-      "trace": "ADR-0465",
-      "status": "pass",
-      "citation": "packages/runtime-js/src/ipc/install-process-bootstrap-phase.fault.test.ts:37",
-      "note": ""
-    },
-    {
-      "row": "typescript-worker.js: 10022748 bytes, SHA256 c5ac589d55ce145febf6eb66d8535bbbd61aa01912cdc59d97aa8d4cad8fbed2; cap/negative payload checks unchanged.",
+      "row": "typescript-worker.js: 10022694B, SHA256 052e72b146d87f62aba766778b74b1fa8d1d81d915ecd1f84e1c882002ec5e38; cap/negative guards сохранены, compiler body совпадает после import-hash normalization.",
       "source": "frozen-artifact",
-      "trace": "ADR-0391+ADR-0465",
+      "trace": "ADR-0391+ADR-0467",
       "status": "pass",
       "citation": "tools/checks/esbuild-legacy-retirement.test.ts:54",
+      "note": ""
+    },
+    {
+      "row": "I7: exact Vitest4.1.11/Vite8.0.16 scenario, manifest pin, TS, both pools; unverified watch/versions без искусственных запретов.",
+      "source": "acceptance",
+      "trace": "I7+scenario",
+      "status": "pass",
+      "citation": "docs/public/compat/vitest.md:3",
+      "note": ""
+    },
+    {
+      "row": "Scenario 6: binary graphs запрещены; 35 shapes на каждом public sender, no dispatch, connected recovery.",
+      "source": "acceptance",
+      "trace": "scenario+I4+ADR-0467",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-advanced-ipc-binary-ceiling.spec.ts:74",
+      "note": ""
+    },
+    {
+      "row": "Post-clone scan: AB/SAB/views в records/arrays, Map keys/values, Set, Error.cause и cycles.",
+      "source": "acceptance",
+      "trace": "ADR-0467",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-binary-ceiling.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Binary getter читается ровно один раз перед отказом.",
+      "source": "acceptance",
+      "trace": "ADR-0467",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-binary-ceiling.test.ts:37",
+      "note": ""
+    },
+    {
+      "row": "Shared views всех 12 families теперь binary ceilings [user2026-09-25].",
+      "source": "acceptance",
+      "trace": "I4+ADR-0467",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-shared-views.test.ts:21",
+      "note": ""
+    },
+    {
+      "row": "Receiver отвергает binary frame/nonempty legacy buffers metadata; wire shape сохранён.",
+      "source": "acceptance",
+      "trace": "ADR-0467",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-binary-ceiling.test.ts:48",
+      "note": ""
+    },
+    {
+      "row": "Frozen/nonextensible/locked-constructor non-binary records клонируются как Node; B1 закрыт.",
+      "source": "acceptance",
+      "trace": "I4+ADR-0467",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced.test.ts:150",
+      "note": ""
+    },
+    {
+      "row": "vitest-run-acceptance Acceptance 1: clean manifest → одна Vite8.0.16, Vitest4.1.11 и wasm bindings.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest.spec.ts:29",
+      "note": ""
+    },
+    {
+      "row": "vitest-run-acceptance Acceptance 2: config/include/TS; fail1→fix0, diff/counts, default/forks/threads/verbose/npm test.",
+      "source": "acceptance",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest.spec.ts:52",
+      "note": ""
+    },
+    {
+      "row": "vitest-run-acceptance Acceptance 3: exact guarantee, pin, measured ceilings; unclaimed watch/versions; binary unsupported.",
+      "source": "acceptance",
+      "trace": "I7+scenario",
+      "status": "pass",
+      "citation": "docs/public/compat/vitest.md:3",
+      "note": ""
+    },
+    {
+      "row": "vitest-run-acceptance Parity 1: общий native fixture, все10 fail/fix commands.",
+      "source": "acceptance",
+      "trace": "I4+I5",
+      "status": "pass",
+      "citation": "tests/e2e/fixtures/vitest-run/native-oracle.mts:26",
+      "note": ""
+    },
+    {
+      "row": "vitest-run-acceptance Parity 2: Chromium10commands и шесть installed-mode ceilings.",
+      "source": "acceptance",
+      "trace": "I1+I4+I5+I6+I7",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest-ceilings.spec.ts:11",
+      "note": ""
+    },
+    {
+      "row": "ADR-0467 error boundary: оба sender, семь intrinsic failures; Node Error/null/not-DOMException и Chromium DataCloneError/25/DOMException проверяются отдельно; оба getter sentinels identity/once.",
+      "source": "acceptance",
+      "trace": "ADR-0467",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-advanced-ipc-proxy.spec.ts:118",
       "note": ""
     }
   ],
   "axes": [
     {
       "axis": "Completeness",
-      "verdict": "blocker",
+      "verdict": "pass",
       "findings": []
     },
     {
@@ -1657,16 +1654,8 @@
     },
     {
       "axis": "Goal drift",
-      "verdict": "concern",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "docs/backlog/epics/vitest-run-in-browser/map.md:56",
-          "evidence": "git diff 0b8daa7bd cdf806fc9 -- goal.md: пусто. Acceptance 1/2 и frozen-Promise native criterion сохранены; новые pending forks явно записаны в map/evidence.",
-          "summary": "Оба fork остаются user-owned. Ни предложенный opaque-brand ceiling, ни I7 wording не считаются принятыми; решений пользователя не подменяю.",
-          "authority": ""
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     },
     {
       "axis": "Approach cost",
@@ -1680,34 +1669,18 @@
     },
     {
       "axis": "Bugs",
-      "verdict": "blocker",
-      "findings": [
-        {
-          "severity": "blocker",
-          "location": "packages/runtime-js/src/internal/node-ipc-advanced.ts:36",
-          "evidence": "Scratch @cdf806fc9. node --import tsx verify-probes.mts: frozen record native OK {a:1}, rifty opaque-brand; frozen erased Promise native Error/could not be cloned, rifty NotImplementedError/opaque-brand. Targeted vitest: 97 PASS/1 RED; isolated node-ipc-advanced.test.ts: 13 PASS/1 RED. node --import tsx tools/node-parity-runner/src/cli.ts public-ipc-advanced: rich/listener/proxy MATCH, fault differs only locked Promise on both physical senders. Editable six-brand differential MATCH; Promise guards 6/6, SAB views 25/25. Logs /private/tmp/rifty-verify-cdf-{probes,targeted,intrinsic-isolated,physical,editable-physical}.log.",
-          "summary": "B1 сохраняется в известном pending narrowing: ambiguous locked input получает ненативный ceiling, включая cloneable frozen records. Класс intrinsic-provenance/sibling-drift. Frozen-Promise RED уже есть и не ослаблен; positive frozen-record RED отсутствует. Пять intrinsic siblings и editable Promise исправлены; нового отдельного product blocker не найдено.",
-          "authority": "child-process-advanced-ipc-serialization Acceptance 1/2 → I4, ADR-0326; ADR-0446 native rich graph/errors; ADR-0453 intrinsic dispatch independent of realm/prototype."
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     },
     {
       "axis": "Regressions",
-      "verdict": "blocker",
+      "verdict": "pass",
       "findings": []
     },
     {
       "axis": "Ecosystem UX",
-      "verdict": "concern",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "docs/backlog/runtime-js/worker-threads-kernel-error-event.md:46",
-          "evidence": "Новая backlog boundary явно оставляет unhandled timer/global Worker.error открытым; docs/public/compat/modules.md:27 всё ещё говорит Actual runtime failures arrive before exit без этого ограничения.",
-          "summary": "C5: уточнить публичную Worker fatal-error строку до entry/preload/drain rejection. Асинхронный timer gap уже имеет owner; это документационный NOTE, не новое требование реализовать его в I1–I6.",
-          "authority": ""
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     }
   ],
   "adjudication": []

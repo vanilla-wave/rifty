@@ -701,7 +701,7 @@
   kernel path's `serve:true` (keeps a message-driven Worker alive — Node parity +
   Rolldown's pool) means a run-to-completion Worker does not auto-emit `'exit'`
   like Node; marked explicit at the spawn site and tracked at
-  `backlog/runtime-js/worker-threads-kernel-run-to-completion-exit` (the same-realm
+  ADR-0449 / `backlog/runtime-js/reference/worker-thread-lifecycle-evidence.md` (the same-realm
   path already auto-exits). (c) `worker-realm-compat.ts` header corrected — the
   realm shims install via `installNodeRuntime` (the host's registered pre-entry
   hook; the kernel ships no default) gated to Node workers, not a mythical

@@ -130,3 +130,28 @@ recovery, singlegetters. Frozenplainrecord/nativePromise tests nowGREEN.
 QuickJS object/array hostProxy mirrors explicitly failnativeclone; no VM
 expansionrequired bythe amendedVitest-onlyclaim. ADR0467 recordsdecision and
 supersession; olderBLOCK reports remainhistorical, notcurrentacceptance.
+
+## Final native exception repair
+
+IndependentFinal @6a2da600c accepted binary scope/removal and found B2: wrapping
+DataCloneError also changes a getter-thrown original Error/DOMException. Native
+physical bothsendersRED. New unit2RED then18PASS after removing catch. Preserve
+platform clone errors; explicit DataCloneError difference in ADR0467/compat.
+No name/stack/brand heuristic can distinguish a reused native-generated exception.
+
+Fresh5506 browser3/3PASS6.8s: nativeNodeError/null/nonDOMException versus actual
+ChromiumDataCloneError/25/DOMException, bothsenders sevenuncloneables; renamed
+Error/reusednativeDOMException getteridentity/once; binary35shapeseachdirection
+no-dispatch/connectedrecovery. Physicalparity4/4PASS compares only shared
+rejection/getter/traps/channel semantics, not unclaimed error-class equality.
+
+Removed dead metadata target/failure operations (17VMtestsPASS). Main2c9bbd301
+readiness fixes merged cleanly; they repair e2e launcher admission. Finalcompiler
+asset10022694bytes SHA052e72b146d87f62aba766778b74b1fa8d1d81d915ecd1f84e1c882002ec5e38;
+body unchanged after chunkimporthash normalization; exactpin/2MBguard retained.
+Fullgate/packed/currentCI and finalverify atf98099bf7 remain required.
+
+Final f98099bf7: `pnpm pr:check`25/25PASS (test:run211.3s,
+test:parity76.3s); packed external tarball consumerPASS237.9s. CI36130870229
+production, parity, lint and multiplebrowserlanesPASS; remainingjobs live at
+this record. Finalindependentverify running againstexactf980.

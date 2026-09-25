@@ -36,7 +36,7 @@ the mismatch reachable; this draft does not choose that future protocol.
 
 ## Related implementation
 
-2026-09-23 — ADR-0456 / worker-threads-startup-options adds v6 trusted Worker
+2026-09-23 — ADR-0456 / reference/worker-thread-exec-argv-evidence.md adds v6 trusted Worker
 inheritance for the required --require/--conditions/import-meta-resolve family.
 This draft retains source-bearing eval and other startup families; the original
 v3 observations above are history, not the current supported-family ceiling.
