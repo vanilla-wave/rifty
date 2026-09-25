@@ -494,3 +494,16 @@ Rifty's fixed order = every unloaded Node run's order above.
 events `[ 'exit:1', 'uncaught', 'micro' ]`; `kernel peer death: … ends the owner`
 events `[ 'exit:1', 'owner-exit:1' ]` (= the reviewer's probe).
 
+
+### GREEN (`d1c6e1760` + fingerprint re-pin `85c5b8c90`)
+
+- fault + `worker_threads.test.ts` → 42 passed.
+- browser-unit `worker-handle-keepalive`, `message-port-ref-keepalive` (+ `.fault`), `advanced-ipc`,
+  `owner-node-process-lifecycle`, `kernel-process-terminal-drain` (+ `-real-worker`)
+  (`--workers=1`, port 5408) → 26 passed; `worker-handle-keepalive` `--workers=2 --repeat-each=4` → 4 passed.
+- `pnpm pr:check` on `85c5b8c90` → 25/25 passed. The run on `d1c6e1760` failed only
+  `check:esbuild-legacy-retirement`: typescript-worker.js same 10 022 694 bytes; a rebuild with the
+  previous `worker_threads.ts` reproduces the old pin `b9369814…`, and the two differ only in 5 renamed
+  chunk imports (sha256 equal after normalizing `chunk-`/`module-loader-` names) → re-pinned `28ade787…`.
+- `CI= RIFTY_PLAYGROUND_PORT=5408 npx playwright test --config playwright.prod.config.ts --project=chromium
+  tests/e2e-prod/worker-threads-keepalive.spec.ts` (fresh prod build) → 1 passed.
