@@ -37,10 +37,14 @@ and `fork` drops `execArgv` silently. Oracle and consumer facts (Node v24.16.0):
    non-Node `'stdout'`/`'stderr'` Worker events are removed.
 2. **One compiler.** Accepted tokens: `-r <s>`, `--require <s>`,
    `--require=<s>`, `-C <c>`, `--conditions <c>`, `--conditions=<c>`,
-   `--experimental-import-meta-resolve`. An operand that is absent, starts with
-   `-`, or is an empty `=` value is Node's usage error: for a Worker
+   `--experimental-import-meta-resolve`. A flag without its own operand (absent,
+   starting with `-`, or an empty `=` value): for a Worker Node's
    `ERR_WORKER_INVALID_EXEC_ARGV` (`<flag> requires an argument`); for `fork`
-   (Node's child exits 9) `NotImplementedError('child_process.fork.execArgv')`.
+   `NotImplementedError('child_process.fork.execArgv')` naming the flag. (Node's
+   fork appends the module path after `execArgv`: an absent operand takes it —
+   `-r`/`--require` preloads the module, `-C`/`--conditions` makes it a
+   condition — and the entry-less child runs its stdin program; the other two
+   exit the child 9, evidence §fork operands.)
    Any other entry (another flag, `-r=x`, a non-string) is
    `NotImplementedError('worker_threads.Worker.execArgv' | 'child_process.fork.execArgv')`
    naming the token quoted. All of this throws before a thread id, hold, child
@@ -48,10 +52,12 @@ and `fork` drops `execArgv` silently. Oracle and consumer facts (Node v24.16.0):
 3. **Effective `execArgv`.** Worker: a truthy `options.execArgv` (a non-array is
    Node's `ERR_INVALID_ARG_TYPE`); falsy or omitted inherits the parent
    thread's startup tokens from its launch (Node's trusted snapshot: a mutated
-   public `process.execArgv` does not change it). `fork`: a truthy
-   `options.execArgv`, else the owner's public `process.execArgv` at the call
-   minus Node's eval pair (the last occurrence of the launch's eval source and
-   the switch before it). `spawn` ignores `execArgv`, as in Node. An inherited
+   public `process.execArgv` does not change it). `fork`: Node's
+   `options.execArgv || process.execArgv` with the owner's public array at the
+   call; when the result is that array itself (omitted, falsy, or passed
+   explicitly) Node's eval pair is removed from a copy (the last occurrence of
+   the launch's eval source and the switch before it); any other array is
+   taken as given. `spawn` ignores `execArgv`, as in Node. An inherited
    eval switch (`node -e "new Worker(...)"`) is an unaccepted token, so it stays
    the named throw of draft `runtime-js/worker-threads-inherited-exec-argv`.
 4. **node-entry v6.** Program and worker-thread launches gain an optional
@@ -103,12 +109,12 @@ and `fork` drops `execArgv` silently. Oracle and consumer facts (Node v24.16.0):
 
 Named throws, listed in `docs/public/compat/modules.md`: every other startup
 flag (`--import`, `--no-warnings`, `--experimental-vm-modules`, `--inspect`,
-`-e`/`-p`, …), `fork` usage errors, Worker `stdin: true`, the same-realm cases
-above. Not claimed (compat ⚠️): the order between a worker's stdout and its
-`'message'` events (Node varies, evidence §Stdio), and the port hold an
-`unref()`'d Worker's read `stdout: true` stream takes in Node. A failing
-preload in a Worker exits 1 without Node's `'error'` (existing gap
-`runtime-js/worker-threads-kernel-error-event`).
+`-e`/`-p`, …), a `fork` flag without its own operand, Worker `stdin: true`, the
+same-realm cases above. Not claimed (compat ⚠️): the order between a worker's
+stdout and its `'message'` events (Node varies, evidence §Stdio), and the port
+hold an `unref()`'d Worker's read `stdout: true` stream takes in Node. A
+failing preload in a Worker exits 1 without Node's `'error'` (compat ❌, the
+existing kernel-path `'error'` gap `runtime-js/worker-threads-kernel-error-event`).
 
 ## Consequences
 

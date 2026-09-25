@@ -3,10 +3,13 @@
  * throw `NotImplementedError` synchronously, before any thread id, hold or
  * child is allocated — never a silently dropped flag or an ignored option.
  * Node accepts these calls (evidence §Unsupported flags), so this is a rifty
- * ceiling contract, not a parity case.
+ * ceiling contract, not a parity case. Node's own `execArgv` errors allocate
+ * nothing either (evidence §fork operands, `tid.cjs`); the parity runner cannot
+ * compare absolute thread ids, so that row lives here too.
  */
 import { globalProcessManager, setKernelWorkerUrl } from '@riftydev/kernel';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { activeRefs, resetKeepalive } from '../internal/event-loop-keepalive.ts';
 import { fork } from './child_process.ts';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
 import { writeFileSync } from './fs.ts';
@@ -76,6 +79,17 @@ function kernelCapableRealm() {
   });
 }
 
+/** Nothing half-started by a rejected construction: no keepalive hold, and the next Worker gets id 1. */
+async function afterRejection(): Promise<{ holds: number; nextThreadId: number }> {
+  const holds = activeRefs();
+  (globalThis as Coi).crossOriginIsolated = false;
+  const next = new Worker('/worker.cjs');
+  const exited = new Promise((resolve) => next.once('exit', resolve));
+  const nextThreadId = next.threadId;
+  await exited;
+  return { holds, nextThreadId };
+}
+
 async function withParentProcess<T>(run: (parent: NodeProcess) => Promise<T>): Promise<T> {
   const parent = new NodeProcess();
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'process');
@@ -101,6 +115,7 @@ async function withParentProcess<T>(run: (parent: NodeProcess) => Promise<T>): P
 beforeEach(() => {
   _resetFallbackWarnState();
   _resetThreadIdCounterForTests();
+  resetKeepalive();
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   setProcessCwd('/');
   writeFileSync('/worker.cjs', ';');
@@ -124,20 +139,43 @@ describe('worker_threads.Worker startup-option and stdio ceilings (ADR-0449)', (
     [[42], '42'],
   ])('names unsupported execArgv %j before allocating a thread', async (execArgv, token) => {
     const spawnWorker = kernelCapableRealm();
-    const thrown = await withParentProcess(() =>
-      workerError(() => new Worker('/worker.cjs', { execArgv: execArgv as string[] })),
-    );
+    const [thrown, after] = await withParentProcess(async () => [
+      await workerError(() => new Worker('/worker.cjs', { execArgv: execArgv as string[] })),
+      await afterRejection(),
+    ]);
     expect(thrown).toEqual(namedGap('worker_threads.Worker.execArgv', token));
     expect(spawnWorker).not.toHaveBeenCalled();
+    expect(after).toEqual({ holds: 0, nextThreadId: 1 });
   });
+
+  it.each([
+    [['--require'], 'ERR_WORKER_INVALID_EXEC_ARGV'],
+    [['--conditions='], 'ERR_WORKER_INVALID_EXEC_ARGV'],
+    [['-C', '-'], 'ERR_WORKER_INVALID_EXEC_ARGV'],
+    ['str', 'ERR_INVALID_ARG_TYPE'],
+  ])(
+    'rejects Node-invalid execArgv %j with %s before allocating a thread',
+    async (execArgv, code) => {
+      const spawnWorker = kernelCapableRealm();
+      const [thrown, after] = await withParentProcess(async () => [
+        await workerError(() => new Worker('/worker.cjs', { execArgv } as never)),
+        await afterRejection(),
+      ]);
+      expect(thrown).toEqual(expect.objectContaining({ code }));
+      expect(spawnWorker).not.toHaveBeenCalled();
+      expect(after).toEqual({ holds: 0, nextThreadId: 1 });
+    },
+  );
 
   it('names `stdin: true` (the parent-to-worker stdin stream is not carried)', async () => {
     const spawnWorker = kernelCapableRealm();
-    const thrown = await withParentProcess(() =>
-      workerError(() => new Worker('/worker.cjs', { stdin: true } as never)),
-    );
+    const [thrown, after] = await withParentProcess(async () => [
+      await workerError(() => new Worker('/worker.cjs', { stdin: true } as never)),
+      await afterRejection(),
+    ]);
     expect(thrown).toEqual(namedGap('worker_threads.Worker.stdin'));
     expect(spawnWorker).not.toHaveBeenCalled();
+    expect(after).toEqual({ holds: 0, nextThreadId: 1 });
   });
 
   it('names captured stdio and startup options on the same-realm fallback', async () => {
@@ -178,16 +216,19 @@ describe('child_process.fork startup-option ceilings (ADR-0449)', () => {
     [['--no-warnings'], '--no-warnings'],
     [['--import', './hook.mjs'], '--import'],
     [['--require'], '--require'],
+    [['--require', '--conditions', 'custom'], '--require'],
     [['--conditions='], '--conditions='],
     [[42], '42'],
     ['--require', '--require'],
   ])('names unsupported or malformed execArgv %j before spawning', async (execArgv, token) => {
     const spawn = vi.spyOn(globalProcessManager, 'spawn');
-    const thrown = await withParentProcess(() =>
-      forkError(() => fork('/child.cjs', [], { execArgv } as never)),
-    );
+    const [thrown, holds] = await withParentProcess(async () => [
+      await forkError(() => fork('/child.cjs', [], { execArgv } as never)),
+      activeRefs(),
+    ]);
     expect(thrown).toEqual(namedGap('child_process.fork.execArgv', token));
     expect(spawn).not.toHaveBeenCalled();
+    expect(holds).toBe(0);
   });
 
   it('names an inherited parent flag it cannot carry', async () => {

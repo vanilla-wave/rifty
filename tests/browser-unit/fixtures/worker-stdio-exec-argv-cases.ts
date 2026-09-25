@@ -23,6 +23,9 @@ export interface StartupProgram {
 }
 
 const EXEC_ARGV = "['--require', './pre.cjs', '-C', 'custom']";
+const EVAL_FORK =
+  "const { fork } = require('node:child_process'); fork('./fprint.cjs', ['default'])" +
+  ".on('exit', () => fork('./fprint.cjs', ['explicit'], { execArgv: process.execArgv }))";
 
 export const startupPrograms: readonly StartupProgram[] = [
   {
@@ -73,13 +76,16 @@ child.on('exit', (code) => console.log('SX|outer exit ' + code));
     },
   },
   {
-    // Node's fork drops the parent's eval pair from the inherited execArgv.
+    // Node's fork drops the parent's eval pair whenever the effective execArgv
+    // is `process.execArgv` itself: omitted, or passed explicitly (the second
+    // child starts after the first exits, so the rows are ordered).
     name: 'eval-parent-fork',
     files: {
-      'fprint.cjs': "console.log('SX|eval child ' + JSON.stringify(process.execArgv));\n",
+      'fprint.cjs':
+        "console.log('SX|eval ' + process.argv[2] + ' child ' + JSON.stringify(process.execArgv));\n",
     },
-    command: `node -e "require('node:child_process').fork('./fprint.cjs')"`,
-    nodeArgv: ['-e', "require('node:child_process').fork('./fprint.cjs')"],
+    command: `node -e "${EVAL_FORK}"`,
+    nodeArgv: ['-e', EVAL_FORK],
   },
   { name: 'vitest-threads-shape', files: { ...STARTUP_FILES, 'main.cjs': threadVitestShape.code } },
   { name: 'vitest-forks-shape', files: { ...STARTUP_FILES, 'main.cjs': forkVitestShape.code } },

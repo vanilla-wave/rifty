@@ -418,7 +418,88 @@ $ node fork-misc.cjs
 
 - fork prepends `execArgv` to the child's node argv: the child's exact `process.execArgv`, preloads from the child's cwd (the `cwd` option), conditions everywhere.
 - Default: the parent's public `process.execArgv` at the call (a pushed token is inherited), minus the eval pair (`node -e` → `[]`; `node -r ./pre2.cjs -e` → `["-r","./pre2.cjs"]`). `process._eval` is the source string.
-- Usage errors belong to the child: `bad option` and `requires an argument` exit 9; `['--require']` consumes the module path as the preload; a string is spread into characters. rifty names each (§Unsupported flags).
+- Usage errors belong to the child: `bad option` and `requires an argument` exit 9. `['--require']` is not one: it takes the module path as the preload (§fork operands). A string is spread into characters. rifty names each (§Unsupported flags).
+
+## Startup options — fork operands, eval-pair identity, rejected Worker allocation
+
+Contract+RED r1 reception (the review found the contract claiming Node's fork child exits 9 for an absent operand). Scratch directory `<dir>`; `fop-child.cjs`: `process.stdout.write('child ' + JSON.stringify(process.execArgv) + ' argv ' + JSON.stringify(process.argv.slice(1)) + ' main ' + (require.main === module) + '\n');`; `fprint.cjs`: `console.log('eval ' + process.argv[2] + ' child ' + JSON.stringify(process.execArgv));`; `w.cjs` is empty. `fork-operands.cjs` forks the absolute `<dir>/fop-child.cjs` once per `execArgv` in the rows below with `stdio: ['pipe','pipe','pipe','ipc']`, ending the child's stdin at once. `fork-operand-stdin.cjs` forks it with `['--require']`, `['--conditions']` and `['-C']`, once writing a one-line program to the child's stdin and ending it (`src`), once leaving stdin open and killing the child after 1500 ms (`open`). `tid.cjs` constructs Workers with `execArgv` `['--require']`, `['--conditions=']`, `['-C','-']` and `'str'`, then a valid one (`['--require','./missing.cjs']`), and prints its `threadId` and its `'exit'` code. `nohold.cjs` runs the same four, then prints `process.getActiveResourcesInfo()` and its own `'exit'` code. The last `exit` line of each block is the shell's `$?`. Three runs each gave identical output (Node v24.16.0):
+
+```text
+$ node fork-operands.cjs
+["--require"] exit 0 null out "child [\"--require\",\"<dir>/fop-child.cjs\"] argv [] main false\n" err ""
+["-r"] exit 0 null out "child [\"-r\",\"<dir>/fop-child.cjs\"] argv [] main false\n" err ""
+["--conditions"] exit 0 null out "" err ""
+["-C"] exit 0 null out "" err ""
+["--require","--conditions","custom"] exit 9 null out "" err "<node>: --require requires an argument"
+["-r","-x"] exit 9 null out "" err "<node>: -r requires an argument"
+["-C","-"] exit 9 null out "" err "<node>: -C requires an argument"
+["--conditions","-"] exit 9 null out "" err "<node>: --conditions requires an argument"
+["--conditions="] exit 9 null out "" err "<node>: --conditions= requires an argument"
+["--require="] exit 9 null out "" err "<node>: --require= requires an argument"
+["--require=","x"] exit 9 null out "" err "<node>: --require= requires an argument"
+["-r=./x.cjs"] exit 9 null out "" err "<node>: bad option: -r=./x.cjs"
+["-C","custom","--require"] exit 0 null out "child [\"-C\",\"custom\",\"--require\",\"<dir>/fop-child.cjs\"] argv [] main false\n" err ""
+exit 0
+
+$ node fork-operand-stdin.cjs
+["--require"] src exit 0 null out "child [\"--require\",\"<dir>/fop-child.cjs\"] argv [] main false\nstdin-program [\"--require\",\"<dir>/fop-child.cjs\"] argv []\n" err ""
+["--require"] open still running after 1500ms, out "child [\"--require\",\"<dir>/fop-child.cjs\"] argv [] main false\n"
+["--require"] open exit null SIGTERM out "child [\"--require\",\"<dir>/fop-child.cjs\"] argv [] main false\n" err ""
+["--conditions"] src exit 0 null out "stdin-program [\"--conditions\",\"<dir>/fop-child.cjs\"] argv []\n" err ""
+["--conditions"] open still running after 1500ms, out ""
+["--conditions"] open exit null SIGTERM out "" err ""
+["-C"] src exit 0 null out "stdin-program [\"-C\",\"<dir>/fop-child.cjs\"] argv []\n" err ""
+["-C"] open still running after 1500ms, out ""
+["-C"] open exit null SIGTERM out "" err ""
+exit 0
+
+$ node -e "const { fork } = require('node:child_process'); fork('./fprint.cjs', ['default']).on('exit', () => fork('./fprint.cjs', ['explicit'], { execArgv: process.execArgv }))"
+eval default child []
+eval explicit child []
+exit 0
+$ node -e "if (process.argv.length > 1) console.log('copy child re-ran the eval source; argv', JSON.stringify(process.argv.slice(1)), 'execArgv[0]', process.execArgv[0]); else require('node:child_process').fork('./fprint.cjs', ['copy'], { execArgv: [...process.execArgv] })"
+copy child re-ran the eval source; argv ["./fprint.cjs","copy"] execArgv[0] -e
+exit 0
+$ node tid.cjs
+["--require"] throw ERR_WORKER_INVALID_EXEC_ARGV
+["--conditions="] throw ERR_WORKER_INVALID_EXEC_ARGV
+["-C","-"] throw ERR_WORKER_INVALID_EXEC_ARGV
+"str" throw ERR_INVALID_ARG_TYPE
+next threadId 1
+exit 1
+exit 0
+
+$ node nohold.cjs
+["--require"] throw ERR_WORKER_INVALID_EXEC_ARGV
+["--conditions="] throw ERR_WORKER_INVALID_EXEC_ARGV
+["-C","-"] throw ERR_WORKER_INVALID_EXEC_ARGV
+"str" throw ERR_INVALID_ARG_TYPE
+active resources []
+exit 0
+exit 0
+```
+
+Source (`process.binding('natives').child_process`, `fork`, v24.16.0):
+
+```js
+  execArgv = options.execArgv || process.execArgv;
+  validateArgumentsNullCheck(execArgv, 'options.execArgv');
+
+  if (execArgv === process.execArgv && process._eval != null) {
+    const index = ArrayPrototypeLastIndexOf(execArgv, process._eval);
+    if (index > 0) {
+      // Remove the -e switch to avoid fork bombing ourselves.
+      execArgv = ArrayPrototypeSlice(execArgv);
+      ArrayPrototypeSplice(execArgv, index - 1, 2);
+    }
+  }
+
+  args = [...execArgv, modulePath, ...args];
+```
+
+- fork puts the module path right after `execArgv`, so a trailing flag never lacks an operand. `--require`/`-r` take the module path as a preload (it runs with `require.main !== module`); `--conditions`/`-C` take it as a condition (it never runs). The child then has no entry and runs the program it reads from stdin: exit 0 once stdin ends, still running while it stays open. Only a `-`-leading operand or an empty `=` value is the child's usage error (`<flag> requires an argument`, exit 9). rifty names all of them (ADR-0449 §2; ceiling test).
+- The eval pair is dropped by identity. An omitted `execArgv` and an explicit `{ execArgv: process.execArgv }` both give `[]`. A copy keeps `-e <src>`, so the child re-runs the eval source; without the probe's guard it forks again without end.
+- A Worker `execArgv` that Node rejects allocates no thread id (the next Worker gets 1) and holds nothing (no active resources; exit 0).
 
 ## Unsupported flags (rifty ceiling)
 
@@ -454,7 +535,8 @@ SX|outer exit 0
 SX|inner {"execArgv":["--require","./pre.cjs","-C","custom"],"pre":["pre"],"preFacts":{"requireMain":"undefined","execArgv":["--require","./pre.cjs","-C","custom"],"cpkg":"custom"},"require":"custom","requireResolve":"node_modules/cpkg/custom-sub.js","imports":"i-custom","warnings":["VM Modules is an experimental feature and might change at any time","other warning"],"dynamicImport":"custom"}
 SX|outer exit 0
 == eval-parent-fork v24.16.0 code 0
-SX|eval child []
+SX|eval default child []
+SX|eval explicit child []
 == vitest-threads-shape v24.16.0 code 0
 pool execArgv ["--experimental-import-meta-resolve","--require","<abs>/suppress-warnings.cjs","--conditions","node","--conditions","development"]
 pool cpkg dev meta sub/a.mjs
@@ -582,22 +664,49 @@ $ worker_threads/vitest-pool-shape (kind cjs)
 thread throw NotImplementedError: Not implemented: worker_threads.Worker.execArgv (node-entry v3 cannot preserve worker-thread execArgv identity)
 ```
 
-Unit (`npx vitest run packages/runtime-js/src/builtins/startup-options-ceiling.test.ts`): 16 failed of 16. Worker execArgv tokens are not named (the BASE message is `node-entry v3 cannot preserve worker-thread execArgv identity`); `stdin: true`, same-realm `stdout: true` and stream reads construct silently; every `fork` case spawns (no throw):
+Unit (`npx vitest run packages/runtime-js/src/builtins/startup-options-ceiling.test.ts`): 21 failed of 21. Worker execArgv tokens are not named (the BASE message is `node-entry v3 cannot preserve worker-thread execArgv identity`), and Node's own execArgv errors are that `NotImplementedError` instead of Node's code; `stdin: true`, same-realm `stdout: true` and stream reads construct silently; every `fork` case spawns (no throw). The thread-id/hold assertions (`afterRejection`) hold at BASE, because BASE throws before allocating: with the name/code assertion removed, the nine Worker `execArgv` rows pass; the same helper fails the `stdin: true` row, whose BASE constructor starts a Worker (next id 2). Scratch copies, deleted after the run (`-t` filters, `--reporter=verbose`):
 
 ```text
-   × worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names unsupported execArgv ["--no-warnings"] before allocating a thread 5ms
+ ✓ |unit| packages/runtime-js/src/builtins/<scratch copy>.test.ts > worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names unsupported execArgv ["--no-warnings"] before allocat
+ ✓ |unit| packages/runtime-js/src/builtins/<scratch copy>.test.ts > worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names unsupported execArgv ["--require","./pre.cjs","--impo
+ ✓ |unit| packages/runtime-js/src/builtins/<scratch copy>.test.ts > worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names unsupported execArgv ["--experimental-vm-modules"] be
+ ✓ |unit| packages/runtime-js/src/builtins/<scratch copy>.test.ts > worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names unsupported execArgv ["-e","42"] before allocating a 
+ ✓ |unit| packages/runtime-js/src/builtins/<scratch copy>.test.ts > worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names unsupported execArgv [42] before allocating a thread
+ ✓ |unit| packages/runtime-js/src/builtins/<scratch copy>.test.ts > worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > rejects Node-invalid execArgv ["--require"] with ERR_WORKER
+ ✓ |unit| packages/runtime-js/src/builtins/<scratch copy>.test.ts > worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > rejects Node-invalid execArgv ["--conditions="] with ERR_WO
+ ✓ |unit| packages/runtime-js/src/builtins/<scratch copy>.test.ts > worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > rejects Node-invalid execArgv ["-C","-"] with ERR_WORKER_IN
+ ✓ |unit| packages/runtime-js/src/builtins/<scratch copy>.test.ts > worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > rejects Node-invalid execArgv "str" with ERR_INVALID_ARG_TY
+      Tests  9 passed | 12 skipped (21)
+ × |unit| packages/runtime-js/src/builtins/<scratch copy>.test.ts > worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names `stdin: true` (the parent-to-worker stdin stream is n
+   → expected { holds: +0, nextThreadId: 2 } to deeply equal { holds: +0, nextThreadId: 1 }
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 20 skipped (21)
+```
+
+The committed file at BASE:
+
+```text
+   × worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names unsupported execArgv ["--no-warnings"] before allocating a thread 6ms
      → expected NotImplementedError: Not implemented: wor… { feature: '…' } to deeply equal ObjectContaining{…}
    × worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names unsupported execArgv ["--require","./pre.cjs","--import","./hook.mjs"] before allocating a thread 1ms
      → expected NotImplementedError: Not implemented: wor… { feature: '…' } to deeply equal ObjectContaining{…}
-   × worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names unsupported execArgv ["--experimental-vm-modules"] before allocating a thread 0ms
+   × worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names unsupported execArgv ["--experimental-vm-modules"] before allocating a thread 1ms
      → expected NotImplementedError: Not implemented: wor… { feature: '…' } to deeply equal ObjectContaining{…}
    × worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names unsupported execArgv ["-e","42"] before allocating a thread 0ms
      → expected NotImplementedError: Not implemented: wor… { feature: '…' } to deeply equal ObjectContaining{…}
    × worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names unsupported execArgv [42] before allocating a thread 0ms
      → expected NotImplementedError: Not implemented: wor… { feature: '…' } to deeply equal ObjectContaining{…}
+   × worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > rejects Node-invalid execArgv ["--require"] with ERR_WORKER_INVALID_EXEC_ARGV before allocating a thread 0ms
+     → expected NotImplementedError: Not implemented: wor… { feature: '…' } to deeply equal ObjectContaining{…}
+   × worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > rejects Node-invalid execArgv ["--conditions="] with ERR_WORKER_INVALID_EXEC_ARGV before allocating a thread 0ms
+     → expected NotImplementedError: Not implemented: wor… { feature: '…' } to deeply equal ObjectContaining{…}
+   × worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > rejects Node-invalid execArgv ["-C","-"] with ERR_WORKER_INVALID_EXEC_ARGV before allocating a thread 0ms
+     → expected NotImplementedError: Not implemented: wor… { feature: '…' } to deeply equal ObjectContaining{…}
+   × worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > rejects Node-invalid execArgv "str" with ERR_INVALID_ARG_TYPE before allocating a thread 0ms
+     → expected NotImplementedError: Not implemented: wor… { feature: '…' } to deeply equal ObjectContaining{…}
    × worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names `stdin: true` (the parent-to-worker stdin stream is not carried) 1ms
      → expected undefined to deeply equal ObjectContaining{…}
-   × worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names captured stdio and startup options on the same-realm fallback 1ms
+   × worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names captured stdio and startup options on the same-realm fallback 0ms
      → expected undefined to deeply equal ObjectContaining{…}
    × worker_threads.Worker startup-option and stdio ceilings (ADR-0449) > names reading a same-realm Worker stream (its output shares the parent streams) 0ms
      → expected undefined to deeply equal ObjectContaining{…}
@@ -607,7 +716,9 @@ Unit (`npx vitest run packages/runtime-js/src/builtins/startup-options-ceiling.t
      → expected undefined to deeply equal ObjectContaining{…}
    × child_process.fork startup-option ceilings (ADR-0449) > names unsupported or malformed execArgv ["--require"] before spawning 1ms
      → expected undefined to deeply equal ObjectContaining{…}
-   × child_process.fork startup-option ceilings (ADR-0449) > names unsupported or malformed execArgv ["--conditions="] before spawning 1ms
+   × child_process.fork startup-option ceilings (ADR-0449) > names unsupported or malformed execArgv ["--require","--conditions","custom"] before spawning 2ms
+     → expected undefined to deeply equal ObjectContaining{…}
+   × child_process.fork startup-option ceilings (ADR-0449) > names unsupported or malformed execArgv ["--conditions="] before spawning 2ms
      → expected undefined to deeply equal ObjectContaining{…}
    × child_process.fork startup-option ceilings (ADR-0449) > names unsupported or malformed execArgv [42] before spawning 2ms
      → expected undefined to deeply equal ObjectContaining{…}
@@ -617,8 +728,8 @@ Unit (`npx vitest run packages/runtime-js/src/builtins/startup-options-ceiling.t
      → expected undefined to deeply equal ObjectContaining{…}
    × child_process.fork startup-option ceilings (ADR-0449) > names startup options on the same-realm fallback instead of dropping them 2ms
      → expected undefined to deeply equal ObjectContaining{…}
-⎯⎯⎯⎯⎯⎯ Failed Tests 16 ⎯⎯⎯⎯⎯⎯⎯
-      Tests  16 failed (16)
+⎯⎯⎯⎯⎯⎯ Failed Tests 21 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  21 failed (21)
 ```
 
 `npx vitest run packages/runtime-js/src/builtins/node-entry-startup-options.test.ts`: 4 failed, 5 passed. Failing: the protocol is `rifty.node-entry/v5`; program and worker-thread launches reject the field (`node-entry bootstrap program launch has unexpected field execArgv`); a v5 envelope is accepted. Passing guards: the five rejection rows (BASE has no field at all).
@@ -636,10 +747,10 @@ Unit (`npx vitest run packages/runtime-js/src/builtins/startup-options-ceiling.t
       Tests  4 failed | 5 passed (9)
 ```
 
-Browser-unit (`RIFTY_PLAYGROUND_PORT=5411 pnpm test:browser-unit tests/browser-unit/worker-stdio-exec-argv.spec.ts`, real Chromium). `eval-parent-fork` matches (a guard: BASE fork drops every `execArgv`):
+Browser-unit (`RIFTY_PLAYGROUND_PORT=5411 pnpm test:browser-unit tests/browser-unit/worker-stdio-exec-argv.spec.ts`, real Chromium). `eval-parent-fork` (both rows) matches (a guard: BASE fork drops every `execArgv`). Rerun after the r1 reception, same diff as the first run:
 
 ```text
-  ✘  1 tests/browser-unit/worker-stdio-exec-argv.spec.ts:37:1 › Worker stdio and fork/Worker startup options match live Node (Chromium child realm) (3.3s)
+  ✘  1 tests/browser-unit/worker-stdio-exec-argv.spec.ts:37:1 › Worker stdio and fork/Worker startup options match live Node (Chromium child realm) (3.7s)
     - Expected  - 15
     + Received  +  7
     -       "SX|from-worker console.log",
