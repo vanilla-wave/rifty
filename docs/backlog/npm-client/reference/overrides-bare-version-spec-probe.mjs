@@ -1,7 +1,8 @@
 // npm 11 override-value probe (overrides-bare-version-spec). Oracle only:
 // npm's own npm-package-arg classification + real `npm install
-// --package-lock-only` against registry.npmjs.org with an isolated cache.
-// Prints deterministic JSON on stdout.
+// --package-lock-only` against npm's configured registry (the recorded run used
+// the public npm registry) with an isolated cache. Prints deterministic JSON on
+// stdout; the registry used is part of it.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -9,7 +10,6 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const REGISTRY = 'https://registry.npmjs.org/';
 const cache = mkdtempSync(join(tmpdir(), 'npm-override-probe-cache-'));
 const root = mkdtempSync(join(tmpdir(), 'npm-override-probe-'));
 
@@ -17,8 +17,10 @@ const run = (cwd, args) =>
   spawnSync('npm', args, {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, npm_config_cache: cache, npm_config_registry: REGISTRY },
+    env: { ...process.env, npm_config_cache: cache },
   });
+// Registry comes from npm's own configuration (env / npmrc), never a literal.
+const REGISTRY = run(root, ['config', 'get', 'registry']).stdout.trim();
 
 const npmVersion = run(root, ['--version']).stdout.trim();
 const npmRoot = join(run(root, ['root', '-g']).stdout.trim(), 'npm');

@@ -5,10 +5,12 @@
 Host Node v24.16.0 / npm 11.17.0 (bundled npm-package-arg 13.0.2,
 @npmcli/arborist 9.8.0, semver 7.8.4), public registry
 `https://registry.npmjs.org/` (the host's own npm config points at a mirror;
-the probe pins the public registry), isolated npm cache.
+the reproduction pins the public registry through npm's env config), isolated
+npm cache.
 
 ```sh
-node docs/backlog/npm-client/reference/overrides-bare-version-spec-probe.mjs \
+npm_config_registry=https://registry.npmjs.org/ \
+  node docs/backlog/npm-client/reference/overrides-bare-version-spec-probe.mjs \
   | cmp - docs/backlog/npm-client/reference/overrides-bare-version-spec-probe-output.json
 shasum -a 256 docs/backlog/npm-client/reference/overrides-bare-version-spec-probe.mjs \
   docs/backlog/npm-client/reference/overrides-bare-version-spec-probe-output.json
@@ -24,6 +26,11 @@ gained a 40-value loose-grammar sweep and the `star-padded` /
 unchanged in the regenerated golden (two runs, `cmp`-identical).
 Probe SHA-256 `c7460c1921a432bf267ac629987bd3c6189b5c0f33a8ad9eec6caf12d77dc64f`,
 golden SHA-256 `20afeaedb877d4f91ff8c7030f461b73e746ee491b1e5d9da8337660e801cf93`.
+2026-09-25 (PR #353 review, D-004): the probe no longer hard-codes the registry;
+it reads npm's configured one (`npm config get registry`) and records it.
+Re-run with the command above: every classify/install row identical to the
+golden; only `registryFacts.vite.latest` drifted (8.3.0 → 8.3.1, registry
+state). Probe SHA-256 now `a7353d2e59551174c1bca050a7dda323370a841983d193ac641c8453b341112f`; golden unchanged.
 
 ## Mechanism (npm 11.17.0 sources)
 
