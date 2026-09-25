@@ -86,6 +86,11 @@ export class NodeProcessExit {
     this.#host = host;
   }
 
+  /** Node `process._exiting`: an `exit()` or the fatal `'exit'` has begun. */
+  get exiting(): boolean {
+    return this.#exiting;
+  }
+
   /** Node `per_thread.js` `exit()`: the status is read after the listeners. */
   exit(hasCode: boolean, code: unknown): never {
     if (hasCode) this.#host.writeExitCode(code);
@@ -145,7 +150,7 @@ export class NodeProcessExit {
 
 type NodeProcessExitLike = Pick<
   NodeProcessExit,
-  'beginFatal' | 'fatal' | 'listenerThrew' | 'reset'
+  'exiting' | 'beginFatal' | 'fatal' | 'listenerThrew' | 'reset'
 >;
 
 export function attachNodeProcessExit(process: object, exit: NodeProcessExit): void {
@@ -163,6 +168,11 @@ function exitStateOf(process: unknown): NodeProcessExitLike | null {
   }
   const exit = Reflect.get(process, NODE_PROCESS_LIFECYCLE) as NodeProcessExitLike | undefined;
   return exit === undefined ? null : exit;
+}
+
+/** True once `process`'s exit has begun (Node `_exiting`); false for a non-runtime process. */
+export function isNodeProcessExiting(process: unknown): boolean {
+  return exitStateOf(process)?.exiting === true;
 }
 
 /** Reset a reused in-process `NodeProcess` to an unset, not-exiting invocation. */

@@ -54,6 +54,9 @@ import {
 import { installBundleLocalBuffer, installBundleLocalCwd } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
+// ADR-0446 §6: natural exit is Node's own `exit()`, captured before any user
+// code can reassign `process.exit` (vitest's pool workers do).
+const nodeExit = proc.exit;
 adoptNodeProcessBootstrap(proc, globalProcessManager);
 const nodeEntryBootstrap = readNodeEntryBootstrap();
 const launch = nodeEntryBootstrap.launch;
@@ -166,7 +169,7 @@ const runEntry = (): Promise<void> =>
 // `proc` is the ONE spec-seeded rich process the pre-entry seam installed (ADR-0157):
 // correct argv/cwd/stdin + fork-IPC `send`. No swap, so every entry path reads the
 // same runtime-owned flowing stdin and its loud unsupported pull/raw surfaces.
-// The else-branch (.bin/execSync) already has Buffer + nextTick from pre-entry;
+// The worker-thread and execSync branches already have Buffer + nextTick from pre-entry;
 // a server-capable launch additionally registers net builtins.
 if (nodeServe) {
   registerNetBuiltins();
@@ -186,17 +189,18 @@ if (nodeServe) {
         previewScope === undefined ? {} : { scope: previewScope },
       ),
     postListening: (ports) => postNodeProcessListeningControl(proc, ports, previewScope),
-    exit: (...code) => proc.exit(...code),
+    exit: (...code) => nodeExit(...code),
   });
 } else if (launch.kind === 'worker-thread') {
+  // ADR-0446 §5: a worker thread ends when its loop drains — no cap, as in Node
+  // (a referenced `parentPort` keeps it until terminate()) — then Node's exit.
   await runEntry();
-  // Worker-thread natural exit stays with backlog runtime-js/worker-threads-handle-keepalive
-  // (ADR-0445 rule 6); a set process.exitCode still surfaces (ADR-0157 D4).
-  if (proc.exitCode) proc.exit(proc.exitCode);
+  await awaitDrain({ capMs: Number.POSITIVE_INFINITY });
+  nodeExit();
 } else {
   // execSync `node <script>` child: Node's natural exit after the loop drains —
   // `'exit'` once, then `exitCode ?? 0` (ADR-0445 rule 6). The throw carries the code.
   await runEntry();
   await awaitDrain();
-  proc.exit();
+  nodeExit();
 }

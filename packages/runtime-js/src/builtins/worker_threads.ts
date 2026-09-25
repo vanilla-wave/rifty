@@ -19,6 +19,12 @@ import {
 import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { nodeMessageChannel } from '../internal/message-port-ref.ts';
 import { fileURLToPathPosix, isNodeUrl } from '../internal/posix-file-url.ts';
+import {
+  type WorkerReferences,
+  attachWorkerReferences,
+  referenceParentPort,
+  referenceWorker,
+} from '../internal/worker-reference.ts';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -32,6 +38,7 @@ import {
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
 import { type NodeProcessContextSnapshot, snapshotNodeProcessContext } from './process-context.ts';
+import { isNodeProcessExiting } from './process-lifecycle-events.ts';
 import { getProcessCwd, nodeProcessWorkerIpc } from './process.ts';
 
 interface WorkerOptions {
@@ -62,10 +69,10 @@ interface WorkerMessageEvent {
 type WorkerMessageHandler = (event: WorkerMessageEvent) => void;
 
 interface WorkerPort extends EventEmitter {
-  onmessage: WorkerMessageHandler | null;
+  onmessage: unknown;
   postMessage(msg: unknown): void;
-  ref(): WorkerPort;
-  unref(): WorkerPort;
+  ref(): unknown;
+  unref(): unknown;
   start(): void;
   close(): void;
 }
@@ -101,6 +108,7 @@ export class Worker extends EventEmitter {
   /** ADR-0011 phase 2: when present, backed by a real `kernel.spawnWorker`
    * realm and `terminate` routes through it. */
   private workerHandle: ProcessHandle | null = null;
+  private readonly references: WorkerReferences;
 
   constructor(script: WorkerScript, opts: WorkerOptions = {}) {
     super();
@@ -128,6 +136,8 @@ export class Worker extends EventEmitter {
     this.workerData = opts.workerData;
     this.processContext = processContext;
     this.env = env;
+    // ADR-0446: held from here (after every synchronous validation) to the end.
+    this.references = attachWorkerReferences(this);
     // TODO(backlog: runtime-js/worker-threads-prompt-start-atomics-wait):
     // synchronous allocation cannot close prompt-start while entry loading
     // still needs parent-serviced remote FS.
@@ -137,13 +147,12 @@ export class Worker extends EventEmitter {
   private start(): void {
     if (this.entry.kind === 'data-url') {
       // TODO(backlog: runtime-js/worker-eval-data-url-entry)
-      this.emitWorkerError(
+      this.fail(
         new NotImplementedError(
           'worker_threads.Worker.data-url',
           'data: URL Worker entries are not implemented',
         ),
       );
-      void this.terminate(1);
       return;
     }
     const script = this.entry.path;
@@ -185,13 +194,8 @@ export class Worker extends EventEmitter {
         argv: ['rifty', script],
         env,
         cwd: this.processContext.cwd,
-        // serve:true keeps a message-driven Worker alive (Node parity, and the
-        // shape Rolldown's pthread pool needs) — the kernel never drain-reaps a
-        // serve child. Cost: a run-to-completion Worker (no live handle after the
-        // entry resolves) does NOT auto-emit 'exit' here like Node; the
-        // same-realm path does (keepsAlive -> terminate(0)). Explicit, tracked
-        // divergence (not a silent hang):
-        // TODO(backlog: runtime-js/worker-threads-kernel-run-to-completion-exit).
+        // serve:true: the kernel never drain-reaps the worker; its node-entry
+        // bootstrap drains it without a cap and exits the Node way (ADR-0446 §5).
         serve: true,
       };
       const handle = globalProcessManager.spawnWorkerThread(
@@ -211,11 +215,9 @@ export class Worker extends EventEmitter {
       }
       observeProcessTerminalOutcome(handle, (outcome) => {
         if (outcome.kind === 'peererror') {
-          try {
-            this.emitWorkerError(outcome.error);
-          } finally {
-            this.finish(1);
-          }
+          // Own microtask: the kernel's emit collects a listener throw and
+          // rethrows it after 'exit'; unlistened, it must be uncaught first.
+          queueMicrotask(() => this.fail(outcome.error));
           return;
         }
         // TODO(backlog: runtime-js/worker-threads-kernel-error-event): a
@@ -226,8 +228,7 @@ export class Worker extends EventEmitter {
         this.finish(typeof outcome.code === 'number' ? outcome.code : 1);
       });
     } catch (err) {
-      this.emitWorkerError(err);
-      void this.terminate(1);
+      this.fail(err);
     }
   }
 
@@ -287,8 +288,8 @@ export class Worker extends EventEmitter {
         this.sameRealmGlobalOnMessage !== null;
       if (!keepsAlive) void this.terminate(0);
     } catch (err) {
-      this.emitWorkerError(err);
-      void this.terminate(1);
+      // Node: an unlistened 'error' is an uncaught exception, never a rejection.
+      queueMicrotask(() => this.fail(err));
     }
   }
 
@@ -327,11 +328,16 @@ export class Worker extends EventEmitter {
     return code;
   }
 
-  ref(): this {
-    return this;
+  ref(): void {
+    referenceWorker(this, 'ref');
   }
 
-  unref(): this {
+  unref(): void {
+    referenceWorker(this, 'unref');
+  }
+
+  override removeAllListeners(event?: string | symbol): this {
+    this.references.removeAll(event, () => super.removeAllListeners(event));
     return this;
   }
 
@@ -369,13 +375,25 @@ export class Worker extends EventEmitter {
     this.pendingParentMessages.push(msg);
   }
 
-  private emitWorkerError(error: unknown): void {
-    this.emitToOwner('error', error);
+  /**
+   * Node: 'error', then 'exit' 1 after the microtasks its handling queued. An
+   * unlistened 'error' throws on as the owner's uncaught exception; 'exit' still
+   * follows (releasing every hold) unless that exception ended the owner.
+   */
+  private fail(error: unknown): void {
+    try {
+      this.emitToOwner('error', error);
+    } finally {
+      queueMicrotask(() => {
+        if (!isNodeProcessExiting(this.ownerProcess)) void this.terminate(1);
+      });
+    }
   }
 
   private finish(code: number): void {
     if (this.exited) return;
     this.exited = true;
+    this.references.dispose();
     this.emitToOwner('exit', code);
   }
 
@@ -574,7 +592,8 @@ function createWorkerPort(postMessage: (msg: unknown) => void): WorkerPort {
 
 function deliverToPort(port: WorkerPort, msg: unknown): void {
   port.emit('message', msg);
-  port.onmessage?.({ data: msg });
+  const handler = port.onmessage;
+  if (typeof handler === 'function') handler({ data: msg });
 }
 
 function readGlobalOnMessage(): WorkerMessageHandler | null {
@@ -623,6 +642,7 @@ function readProcessWorkerContext(): WorkerThreadContext | null {
       );
     }
   });
+  referenceParentPort(parentPort);
   const context: WorkerThreadContext = {
     parentPort,
     workerData: decodeWorkerData(launch.workerDataJson),

@@ -101,11 +101,11 @@ if (
 ) {
   throw new TypeError('worker-env parity received an unknown pre-entry fault');
 }
-if (request.nodeCliEvalVfsAudit) {
-  // The disposable adapter is a real node:worker_threads Worker, while
-  // SyncRpcClient's production guard targets browser Worker globals. Expose the
-  // corresponding physical-worker markers only in eval children so the harness
-  // exercises the real SAB client without widening program siblings.
+// The disposable adapter is a real node:worker_threads Worker, while
+// SyncRpcClient's production guard targets browser Worker globals. Expose the
+// corresponding physical-worker markers only in eval and worker-thread children
+// (their bootstraps read the owner store over SAB) without widening program siblings.
+function exposePhysicalWorkerMarkers(): void {
   Object.defineProperties(globalThis, {
     WorkerGlobalScope: {
       value: class WorkerGlobalScope {},
@@ -117,6 +117,7 @@ if (request.nodeCliEvalVfsAudit) {
     },
   });
 }
+if (request.nodeCliEvalVfsAudit) exposePhysicalWorkerMarkers();
 const vfs = new NodeCliEvalVfsObserver();
 vfs.loadFixture(
   Object.fromEntries(Object.entries(request.files).map(([path, source]) => [`/${path}`, source])),
@@ -272,6 +273,14 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
     }
     return;
   }
+  if (launchKind === 'worker-thread') {
+    // ADR-0446 §5: the Workbench bootstrap owns the worker-thread lifecycle
+    // (uncapped drain, Node's natural exit) over the owner's store, as in production.
+    exposePhysicalWorkerMarkers();
+    publishKernelSyncApi(createSyncApi(spec));
+    await import('../../../packages/workbench/src/workers/node-entry-bootstrap.ts');
+    return;
+  }
   const entryPath = spec.argv[1];
   if (entryPath === undefined) throw new Error('worker-env parity child has no argv[1]');
   const runEntry = () =>
@@ -288,6 +297,8 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
 
   registerNetBuiltins();
   const proc = globalThis.process;
+  // ADR-0446 §6: natural exit never calls a user-reassigned `process.exit`.
+  const nodeExit = proc.exit;
   await runNodeProgramLifecycle({
     runEntry,
     listPorts,
@@ -301,7 +312,7 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
         launch.previewScope === undefined ? {} : { scope: launch.previewScope },
       ),
     postListening: (ports) => postNodeProcessListeningControl(proc, ports, launch.previewScope),
-    exit: (...code) => proc.exit(...code),
+    exit: (...code) => nodeExit(...code),
   });
 }
 

@@ -1749,6 +1749,13 @@ export async function runInRiftyInCurrentRealm(
       installRuntimeJsFsHandlers(dispatcher, () => fsMirror);
     }
 
+    if (testCase.kind === 'worker-env') {
+      // Worker threads read the owner's store over sync-RPC (remoteFs), as in production.
+      const { getKernelDispatcher } = await import('../../../packages/kernel/src/index.ts');
+      const { installRuntimeJsFsHandlers } = await import('@riftydev/runtime-js');
+      installRuntimeJsFsHandlers(getKernelDispatcher(), () => fsMirror);
+    }
+
     // ADR-0267: only a physical kernel child can prove that typed host
     // bootstrap metadata stays outside exact inherited/replacement guest env.
     let physicalWorkerMode: PhysicalWorkerMode | undefined;

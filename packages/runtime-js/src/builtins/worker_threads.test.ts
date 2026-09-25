@@ -111,8 +111,9 @@ parentPort.on('message', (data) => {
     const worker = new Worker(new URL('file:///w-esm.mjs'), {
       workerData: { answer: 42 },
     });
-    expect(worker.unref()).toBe(worker);
-    expect(worker.ref()).toBe(worker);
+    // Node's Worker#ref/unref return undefined (handle-reference-api parity case).
+    expect(worker.unref()).toBeUndefined();
+    expect(worker.ref()).toBeUndefined();
 
     const messages: unknown[] = [];
     const nextMessage = () =>
