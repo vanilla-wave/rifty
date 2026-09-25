@@ -1,22 +1,12 @@
 # Map — vitest-run-in-browser
 
 Live plan: index, not store. Minimal pattern first; each child a `draft`
-finding compiled to `ready` at its own PICKUP (`RDY-1`). One child left;
-no ordering constraint.
+finding compiled to `ready` at its own PICKUP (`RDY-1`). All children
+landed; CLOSE verifies the destination.
 
 ## Items
 
-12. `runtime-js/vitest-run-acceptance` — **acceptance** — I4, I5, I7; e2e spec
-    running the scenario (`vitest.config.ts`, `.ts` tests) on both pools + a
-    `vitest.md` page in `docs/public/compat/`; closes the goal.
-
 ## Open questions
-
-- `vitest.config.ts` loading (vite `loadConfigFromFile` → rolldown bundle of
-  the TS config) and `.ts` test transform under vitest's module runner: no
-  wall observed yet because earlier walls block — owner: agent — first
-  exercised at item 12; a wall there is a re-chart (new child), never a
-  silent narrowing of the claim.
 
 ## Out of scope
 
