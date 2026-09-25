@@ -7,13 +7,11 @@
  * tests; it is not used for threaded WASI packages such as Rolldown in-browser.
  */
 
-import { NotImplementedError } from '@riftydev/io';
+import { NotImplementedError, type Readable } from '@riftydev/io';
 import {
   type ProcessHandle,
   type SpawnWorkerSpec,
-  getKernelWorkerUrl,
   globalProcessManager,
-  isSabIpcSupported,
   observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
 import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
@@ -40,12 +38,17 @@ import {
 import { type NodeProcessContextSnapshot, snapshotNodeProcessContext } from './process-context.ts';
 import { isNodeProcessExiting } from './process-lifecycle-events.ts';
 import { getProcessCwd, nodeProcessWorkerIpc } from './process.ts';
+import { type WorkerLaunch, resolveWorkerLaunch, sameRealmStdio } from './worker_threads-launch.ts';
+import { WorkerStdio } from './worker_threads-stdio.ts';
 
 interface WorkerOptions {
   workerData?: unknown;
   env?: Record<string, string | undefined>;
   eval?: boolean;
-  execArgv?: readonly string[];
+  execArgv?: readonly string[] | null;
+  stdin?: boolean;
+  stdout?: boolean;
+  stderr?: boolean;
 }
 
 function snapshotWorkerEnvironment(
@@ -100,6 +103,9 @@ export class Worker extends EventEmitter {
   private readonly processContext: NodeProcessContextSnapshot | null;
   private readonly ownerProcess: unknown;
   private readonly ownerBootstrap: ReturnType<typeof readActiveNodeProcessBootstrap>;
+  private readonly launch: WorkerLaunch;
+  /** ADR-0449 §1: Node's stdout/stderr streams; `null` on the same-realm fallback. */
+  private readonly stdio: WorkerStdio | null;
   private exited = false;
   private sameRealmContext: WorkerThreadContext | null = null;
   private sameRealmParentPort: WorkerPort | null = null;
@@ -115,17 +121,10 @@ export class Worker extends EventEmitter {
     this.ownerProcess = (globalThis as { process?: unknown }).process;
     this.ownerBootstrap = readActiveNodeProcessBootstrap();
     const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
-    const inheritedLaunch = readNodeEntryBootstrapIfPresent()?.launch;
-    if (
-      Object.prototype.hasOwnProperty.call(opts, 'execArgv') ||
-      (inheritedLaunch?.kind === 'eval' && inheritedLaunch.execArgv.length > 0)
-    ) {
-      // TODO(backlog: runtime-js/worker-threads-inherited-exec-argv)
-      throw new NotImplementedError(
-        'worker_threads.Worker.execArgv',
-        'node-entry v3 cannot preserve worker-thread execArgv identity',
-      );
-    }
+    this.launch = resolveWorkerLaunch(opts);
+    this.stdio = this.launch.kernelBacked
+      ? new WorkerStdio(this.ownerProcess as { stdout?: unknown }, this.launch.capture)
+      : null;
     const processContext = snapshotNodeProcessContext();
     const env =
       opts.env === undefined
@@ -144,6 +143,20 @@ export class Worker extends EventEmitter {
     queueMicrotask(() => this.start());
   }
 
+  get stdout(): Readable {
+    if (this.stdio === null) throw sameRealmStdio();
+    return this.stdio.stdout;
+  }
+
+  get stderr(): Readable {
+    if (this.stdio === null) throw sameRealmStdio();
+    return this.stdio.stderr;
+  }
+
+  get stdin(): null {
+    return null;
+  }
+
   private start(): void {
     if (this.entry.kind === 'data-url') {
       // TODO(backlog: runtime-js/worker-eval-data-url-entry)
@@ -158,7 +171,7 @@ export class Worker extends EventEmitter {
     const script = this.entry.path;
     // ADR-0011 phase 2: real Worker realm via kernel.spawnWorker when
     // capability + host wiring permit.
-    if (isSabIpcSupported() && getKernelWorkerUrl() !== null && getNodeEntryWorkerUrl() !== null) {
+    if (this.launch.kernelBacked) {
       this.startViaKernel(script);
       return;
     }
@@ -185,6 +198,7 @@ export class Worker extends EventEmitter {
         remoteFs: true,
         threadId: this.threadId,
         ...(encodedWorkerData === undefined ? {} : { workerDataJson: encodedWorkerData }),
+        ...(this.launch.execArgv.length === 0 ? {} : { execArgv: this.launch.execArgv }),
       });
       if (this.processContext === null) {
         throw new Error('worker_threads.Worker: kernel Node process context is unavailable');
@@ -205,8 +219,7 @@ export class Worker extends EventEmitter {
       );
       this.workerHandle = handle;
       if (handle.kind === 'worker') {
-        handle.stdout().on('data', (chunk) => this.emitToOwner('stdout', chunk));
-        handle.stderr().on('data', (chunk) => this.emitToOwner('stderr', chunk));
+        this.stdio?.attach(handle.stdout(), handle.stderr());
         handle.on('message', (msg) => this.emitWorkerMessage(msg));
         this.flushKernelMessages(handle);
         // Node emits 'online' once the worker realm exists. Construction-start
@@ -394,6 +407,7 @@ export class Worker extends EventEmitter {
     if (this.exited) return;
     this.exited = true;
     this.references.dispose();
+    this.stdio?.end();
     this.emitToOwner('exit', code);
   }
 

@@ -60,8 +60,8 @@ describe('node-entry host bootstrap config', () => {
     resetNodeEntryWorkerUrl();
   });
 
-  it('uses the one atomic node-entry v5 wire contract', () => {
-    expect(NODE_ENTRY_BOOTSTRAP_PROTOCOL).toBe('rifty.node-entry/v5');
+  it('uses the one atomic node-entry v6 wire contract', () => {
+    expect(NODE_ENTRY_BOOTSTRAP_PROTOCOL).toBe('rifty.node-entry/v6');
   });
 
   it('snapshots host runtime values out of band from the guest environment', () => {
@@ -120,7 +120,7 @@ describe('node-entry host bootstrap config', () => {
     expect(entry).toMatchObject({
       kind: 'url',
       bootstrap: {
-        protocol: 'rifty.node-entry/v5',
+        protocol: 'rifty.node-entry/v6',
         payload: {
           launch: {
             kind: 'eval',
@@ -469,18 +469,21 @@ describe('node-entry host bootstrap config', () => {
     expect(() => readNodeEntryBootstrap()).toThrow(/protocol/i);
   });
 
-  it.each(['v2', 'v3', 'v4'])('does not read or fall back to retired node-entry %s', (version) => {
-    publishKernelEntryBootstrap({
-      protocol: `rifty.node-entry/${version}`,
-      payload: {
-        hostRuntime: HOST_RUNTIME,
-        launch: { kind: 'program', bin: false, remoteFs: true, nodeServe: false },
-      },
-    });
+  it.each(['v2', 'v3', 'v4', 'v5'])(
+    'does not read or fall back to retired node-entry %s',
+    (version) => {
+      publishKernelEntryBootstrap({
+        protocol: `rifty.node-entry/${version}`,
+        payload: {
+          hostRuntime: HOST_RUNTIME,
+          launch: { kind: 'program', bin: false, remoteFs: true, nodeServe: false },
+        },
+      });
 
-    expect(readNodeEntryBootstrapIfPresent()).toBeNull();
-    expect(() => readNodeEntryBootstrap()).toThrow(/protocol.*v5/i);
-  });
+      expect(readNodeEntryBootstrapIfPresent()).toBeNull();
+      expect(() => readNodeEntryBootstrap()).toThrow(/protocol.*v6/i);
+    },
+  );
 
   // ADR-0448: fork's `serialization: 'advanced'` rides the program launch.
   it('carries an advanced fork IPC lane on a program launch', () => {

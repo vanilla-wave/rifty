@@ -110,7 +110,8 @@ and `fork` drops `execArgv` silently. Oracle and consumer facts (Node v24.16.0):
 Named throws, listed in `docs/public/compat/modules.md`: every other startup
 flag (`--import`, `--no-warnings`, `--experimental-vm-modules`, `--inspect`,
 `-e`/`-p`, …), a `fork` flag without its own operand, Worker `stdin: true`, the
-same-realm cases above. Not claimed (compat ⚠️): the order between a worker's
+same-realm cases above, and package resolution in `import.meta.resolve` from a
+non-`file:` parent (`module.import.meta.resolve.parent`). Not claimed (compat ⚠️): the order between a worker's
 stdout and its `'message'` events (Node varies, evidence §Stdio), and the port
 hold an `unref()`'d Worker's read `stdout: true` stream takes in Node. A
 failing preload in a Worker exits 1 without Node's `'error'` (compat ❌, the

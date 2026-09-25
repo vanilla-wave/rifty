@@ -6,7 +6,9 @@
  * parent's stream to flowing and hold its realm past the child's close.
  */
 
-export const INHERIT_STDIN = Symbol('rifty.process.stdin.inherit');
+// Registered: the process (pre-entry bundle) and child_process (node-entry
+// bundle) are separate runtime-js copies in a production realm.
+export const INHERIT_STDIN = Symbol.for('rifty.runtime-js.process-stdin-inherit.v1');
 
 export interface StdinInheritor {
   data(chunk: string | Uint8Array): void;

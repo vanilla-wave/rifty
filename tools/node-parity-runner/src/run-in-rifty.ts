@@ -1115,7 +1115,7 @@ function corruptNodeCliEvalEntry(
     ...candidate,
     execArgv: [...(candidate.execArgv as readonly string[])],
   };
-  let protocol = 'rifty.node-entry/v5';
+  let protocol = 'rifty.node-entry/v6';
   switch (fault) {
     case 'wrong-protocol':
       protocol = 'rifty.node-entry/v2';

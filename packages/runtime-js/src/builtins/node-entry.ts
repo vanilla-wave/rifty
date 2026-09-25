@@ -20,6 +20,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import type { FsSync } from '@riftydev/vfs';
 import { registerNodeEvalDrainLifecycle } from '../internal/event-loop-keepalive.ts';
+import { nodeStartupOptions } from '../internal/node-startup-options.ts';
 import { ModuleLoadError } from '../module-loader/errors.ts';
 import {
   type ModuleLoader,
@@ -249,7 +250,13 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
   }
   const loader = (opts.createLoader ?? createModuleLoader)(opts.vfs, { cwd: opts.cwd });
   let entrySpecifier = opts.entryPath;
+  let preloading = true;
   try {
+    // ADR-0449 §5: `--require` preloads, in order, from the cwd, before the entry.
+    for (const preload of nodeStartupOptions().preloads) {
+      requirePreload(loader, preload, opts.cwd);
+    }
+    preloading = false;
     if (opts.bin) {
       const shim = utf8.decode(opts.vfs.readFileBytesSync(opts.entryPath));
       const target = parseBinLauncherTarget(shim);
@@ -277,11 +284,36 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
     const printed = asNodePrintedError(err);
     // ADR-0445: Node delivers an entry throw to `uncaughtException`; a handled
     // one leaves the loop running.
-    const origin = entryOrigin(loader, entrySpecifier, opts.entryPath);
+    const origin = preloading
+      ? 'uncaughtException'
+      : entryOrigin(loader, entrySpecifier, opts.entryPath);
     const outcome = dispatchUncaughtException(printed, origin);
     if (outcome.kind === 'handled') return;
     if (outcome.kind === 'exited') throw outcome.signal;
     throw printed;
+  }
+}
+
+/** Node's `Module._preloadModules`: a miss names the synthetic `internal/preload` parent. */
+function requirePreload(loader: ModuleLoader, preload: string, cwd: string): void {
+  try {
+    loader.require(preload, cwd);
+  } catch (err) {
+    if (
+      !(err instanceof ModuleLoadError) ||
+      err.code !== 'MODULE_NOT_FOUND' ||
+      err.specifier !== preload ||
+      err.importer !== cwd
+    ) {
+      throw err;
+    }
+    throw new ModuleLoadError(
+      'MODULE_NOT_FOUND',
+      preload,
+      `Cannot find module '${preload}'\nRequire stack:\n- internal/preload`,
+      'internal/preload',
+      ['internal/preload'],
+    );
   }
 }
 

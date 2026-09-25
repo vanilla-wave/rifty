@@ -49,6 +49,7 @@ import {
   type SpawnStdio,
   activeChildProcessContext,
   activeProcessStdio,
+  forkExecArgv,
   forwardWorkerStdio,
   resolveWorkerStdio,
   spawnWorkerChild,
@@ -94,8 +95,11 @@ interface SpawnOptions {
   stdio?: SpawnStdio;
   silent?: boolean;
   serialization?: NodeIpcSerialization;
+  execArgv?: unknown;
   /** Internal flag set by `fork()` to enable IPC. */
   __fork?: boolean;
+  /** Internal: fork's compiled startup tokens (ADR-0449). */
+  __execArgv?: readonly string[];
 }
 
 interface ExecOptions extends SpawnOptions {
@@ -352,11 +356,13 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
     isSabIpcSupported() &&
     getKernelWorkerUrl() !== null &&
     getNodeEntryWorkerUrl() !== null;
+  const execArgv = opts.__execArgv ?? [];
   if (workerRoute) {
     const handle = spawnWorkerChild(command, args, {
       cwd: opts.cwd,
       env: opts.env,
       ipc: ipc ?? 'none',
+      execArgv,
     });
     if (handle.kind !== 'worker') throw new Error('child_process.spawn: expected Worker handle');
     const child = new ChildProcess(handle, ipc, {
@@ -368,6 +374,12 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
     });
     forwardWorkerStdio(handle, stdio);
     return child;
+  }
+  if (execArgv.length > 0) {
+    throw new NotImplementedError(
+      'child_process.fork.execArgv.same-realm',
+      'a same-realm child runs in its parent realm and cannot start with its own options',
+    );
   }
   return spawnViaSameRealm(command, args, { ...opts, serialization }, stdio, ipc);
 }
@@ -682,7 +694,8 @@ export function fork(
   args: string[] = [],
   opts: SpawnOptions = {},
 ): ChildProcess {
-  return spawn('node', [modulePath, ...args], { ...opts, __fork: true });
+  const execArgv = forkExecArgv(opts.execArgv);
+  return spawn('node', [modulePath, ...args], { ...opts, __fork: true, __execArgv: execArgv });
 }
 
 // `execSync` lives in `./child_process-sync.ts` to keep the SAB-vs-fallback

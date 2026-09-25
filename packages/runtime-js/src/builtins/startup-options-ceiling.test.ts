@@ -7,12 +7,17 @@
  * nothing either (evidence §fork operands, `tid.cjs`); the parity runner cannot
  * compare absolute thread ids, so that row lives here too.
  */
-import { globalProcessManager, setKernelWorkerUrl } from '@riftydev/kernel';
+import {
+  globalProcessManager,
+  publishKernelEntryBootstrap,
+  setKernelWorkerUrl,
+} from '@riftydev/kernel';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { activeRefs, resetKeepalive } from '../internal/event-loop-keepalive.ts';
 import { fork } from './child_process.ts';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
 import { writeFileSync } from './fs.ts';
+import { buildNodeEntryWorkerEntry } from './node-entry-runtime-config.ts';
 import * as nodeEntryUrl from './node-entry-url.ts';
 import {
   readActiveNodeProcessBootstrap,
@@ -127,6 +132,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   (globalThis as Coi).crossOriginIsolated = false;
   nodeEntryUrl.resetNodeEntryWorkerUrl();
+  publishKernelEntryBootstrap(null);
   resetSyncMirror();
 });
 
@@ -238,6 +244,24 @@ describe('child_process.fork startup-option ceilings (ADR-0449)', () => {
       return forkError(() => fork('/child.cjs'));
     });
     expect(thrown).toEqual(namedGap('child_process.fork.execArgv', '--no-deprecation'));
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  // Node drops the eval pair only when the effective array IS process.execArgv;
+  // a copy keeps `-e <source>` (the child would re-run the eval), so it is named.
+  it("names a copy of an eval parent's execArgv (the eval pair is dropped by identity only)", async () => {
+    const spawn = vi.spyOn(globalProcessManager, 'spawn');
+    const entry = buildNodeEntryWorkerEntry(
+      'https://rifty.test/node-entry.js',
+      { RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js' },
+      { kind: 'eval', source: '42', print: false, execArgv: ['-e', '42'], remoteFs: false },
+    );
+    publishKernelEntryBootstrap(entry.bootstrap ?? null);
+    const thrown = await withParentProcess((parent) => {
+      parent.execArgv = ['-e', '42'];
+      return forkError(() => fork('/child.cjs', [], { execArgv: [...parent.execArgv] } as never));
+    });
+    expect(thrown).toEqual(namedGap('child_process.fork.execArgv', '-e'));
     expect(spawn).not.toHaveBeenCalled();
   });
 
