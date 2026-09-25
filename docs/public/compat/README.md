@@ -21,6 +21,7 @@ from test RESULTS is tracked in `docs/backlog/toolchain-build/compat-matrix-test
 - [sass-embedded.md](./sass-embedded.md) — exact sass-embedded 1.100.0 facade over the exact pure-JS Sass twin; direct construction, initialized-compiler reflection, CLI/watch/types gaps, and the sync-importer divergence stay visible (ADR-0344)
 - [git.md](./git.md) — git over the VFS (isomorphic-git, ADR-0167); offline-faithful porcelain + smart-HTTP network ceiling
 - [vite-command.md](./vite-command.md) — playground `vite` command through the installed `.bin` CLI (ADR-0174)
+- [vitest.md](./vitest.md) — `vitest run` for exactly vitest 4.1.11 on Vite 8.0.16 in the browser shell, both pools; unclaimed modes and versions stay loud or ⚠️
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal `node <file>` command + its gaps (ADR-0155/0157)
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (`@riftydev/runtime-wasi`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)

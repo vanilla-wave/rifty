@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- `node:http` exposes `Agent` with Node's shape (subclassable); constructing one throws `NotImplementedError('node:http.Agent')`, the `https.Agent` twin (ADR-0464) — playwright-core under vitest browser mode fails named instead of `Class extends value undefined`. The `node:http` module object moved from `http/server.ts` to `http/index.ts`.
 - Name Workbench deployment.wasm.sqlite in the uninitialized SQLite error while retaining direct engine initialization guidance.
 
 ### Added

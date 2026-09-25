@@ -33,10 +33,8 @@ import {
 import { type AddressInfo, createVirtualAddressInfo } from '../server-address.ts';
 import { channelNameFor, portChannelNameFor, portChannelNameForPort } from '../ws/channel.ts';
 import type { WsMessage } from '../ws/in-process.ts';
-import { METHODS, maxHeaderSize } from './methods.ts';
 import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 import { ServerResponse } from './response.ts';
-import { STATUS_CODES } from './status-codes.ts';
 import {
   type WebSocketBridgeFrame,
   WebSocketClientSocket,
@@ -994,16 +992,3 @@ export function get(
   req.end();
   return req;
 }
-
-const http = {
-  createServer,
-  request,
-  get,
-  Server: HttpServer,
-  IncomingMessage,
-  ServerResponse,
-  STATUS_CODES,
-  METHODS,
-  maxHeaderSize,
-};
-export default http;

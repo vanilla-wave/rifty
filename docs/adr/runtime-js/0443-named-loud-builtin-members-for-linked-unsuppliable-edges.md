@@ -3,6 +3,11 @@
 Status: Accepted
 Date: 2026-09-23
 
+> Correction 2026-09-25 (ADR-0464): §2's "members no claimed consumer links or
+> reads at load stay absent" no longer covers a member that a mode listed ❌
+> on a compat page reaches first with a bare `TypeError`: it ships with
+> Node's shape (real data or a named throw). The rest of ADR-0443 stands.
+
 ## Context
 
 ADR-0348 §2 takes builtin ESM names from the runtime object's enumerable keys
