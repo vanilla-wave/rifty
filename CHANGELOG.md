@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Compat: `docs/public/compat/vitest.md` (vitest 4.1.11 on Vite 8.0.16, `tests/e2e/vitest-run.spec.ts`) joins the generated README index; `renderReadme` moved from `tools/compat-matrix-generator/cli.js` to `readme.js` (file-size ratchet); `http.md` gains the `http.Agent` ❌ row (ADR-0464).
 - Move the `docs/public/compat/fs.md` inventory from `tools/compat-matrix-generator/cli.js` to `fs-matrix.js` (file-size ratchet; generated output unchanged) and add its `statfsSync` ❌ row (ADR-0443).
 - Parity runner: the Node oracle child no longer inherits `FORCE_COLOR` (Playwright workers set it), so browser-unit specs comparing against `runInNode` see Node's piped, uncoloured output.
+- e2e: `pickStarter`/`selectPreset`/`resetSandboxThroughUi` open the launcher through one `openLauncher`, and specs touching the App shell after `goto`/`reload` wait `waitForProjectIndex`, instead of 2s/5s deadlines (hosted webpack flake on cold CI runners; closes `toolchain-build/hosted-webpack-launcher-readiness-timeout`).
 
 - Add the public `checkSandboxSupport()` browser prerequisite report to `@riftydev/workbench`, and settle its probe teardown against the terminated Worker's OPFS lock (ADR-0437, ADR-0438, ADR-0439). SDK README samples keep gating on `checkCapabilities().sufficient`; the published support assets build from one publishing step the browser suite reuses in a scratch directory.
 

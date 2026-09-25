@@ -1,6 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 import {
   type TerminalSessionTarget,
+  openLauncher,
   openShellTerminal,
   pickStarter,
   runTerminalLine,
@@ -26,10 +27,7 @@ async function expectSessionContains(
 }
 
 async function openProjects(page: Page): Promise<void> {
-  const trigger = page.locator('[data-action="open-launcher"]');
-  await expect(trigger).toBeEnabled({ timeout: OWNER_TIMEOUT });
-  await trigger.click();
-  await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 5_000 });
+  await openLauncher(page);
   await page.getByRole('button', { name: /^Projects/ }).click();
 }
 

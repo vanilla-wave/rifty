@@ -10,6 +10,7 @@ import {
   pickStarter,
   runTerminalLineSettled,
   terminalBuffer,
+  waitForProjectIndex,
 } from './helpers/playground.ts';
 
 async function openChat(page: Page) {
@@ -214,6 +215,7 @@ test('settings keep only endpoint/model; Reset retains files and reload clears k
     ).toHaveLength(1);
     expect((await exported(page)).config.maxToolCalls).toBe(3);
     await page.reload();
+    await waitForProjectIndex(page);
     if (await page.getByTestId('launcher').isVisible()) await openActiveProjectFromLauncher(page);
     await openChat(page);
     await panel.getByRole('button', { name: 'Settings', exact: true }).click();

@@ -58,9 +58,6 @@ test.describe('Real npm project (React + Vite issue tracker)', () => {
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 20_000,
     });
-    // The project-first chooser auto-opens ~1s after a cold boot — out-wait it
-    // so pickStarter never races the opening animation.
-    await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 15_000 });
     await pickStarter(page, 'real-vite');
 
     // from-scratch: the install really runs — asserted on the installer's OWN
