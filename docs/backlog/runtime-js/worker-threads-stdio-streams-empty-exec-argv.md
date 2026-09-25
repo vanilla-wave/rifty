@@ -100,6 +100,7 @@ Sources: `tools/node-parity-runner/cases/worker_threads/{stdio-streams,stdio-exi
 
 ## Decisions
 
+ready-verdict: 2026-09-24 — Contract+RED @ 7a15b735446a35eb5a71fa7d2506b6357fa11d7c
 - 2026-09-25 — carrier: ADR-0449 (one compiler; node-entry v5 → v6 with an optional exact `execArgv` on program and worker-thread launches; one realm-scoped startup record; preloads in `runNodeEntry`; Worker-owned stdio Readables). It corrects ADR-0448's active v5 version with a dated note. Rejected: per-loader conditions, #349's entry-relative preload wrapper and vitest-shaped allowlist, env-carried tokens, and exposing the kernel handle's Readables (ADR-0449 §Rejected).
 - 2026-09-25 — scope: re-cut per map item 11 (vitest passes a non-empty `execArgv` to both pools). The title now names the three flag families and the stdio streams instead of an explicit empty `execArgv`. Node's default inheritance on both launchers is included, because honouring explicit options without it would silently change nested children (Parity 9–11). Overlap: `worker-threads-inherited-exec-argv` keeps only eval-parent inheritance; `node-cli-preload-import-flags` keeps the terminal CLI.
 - 2026-09-25 — criteria (`PR-4`), migrated at IMPLEMENT: `worker_threads.test.ts` "rejects an explicit execArgv override" (`execArgv: []` throws) and "publishes trusted stdout and stderr" (non-Node `'stdout'`/`'stderr'` events) follow Node (Parity 1 and 3); `env-semantics.case.ts` swaps its `worker.once('stderr')` failure detector for `worker.stderr`.
