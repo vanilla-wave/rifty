@@ -46,6 +46,7 @@ allowlist. Only the exact pair and scenario above carry a support guarantee.
 | vmThreads/vmForks | ❌ | Their experimental VM flag hits `worker_threads.Worker.execArgv` / `child_process.fork.execArgv`, exit1 |
 | Watch | ⚠️ | Initial run and waiting observed; edit/re-run/cleanup lifecycle not certified |
 | Other Vite versions | ⚠️ | Outside exact guarantee; 8.0.15 default fail/fix also worked in a probe |
+| Binary advanced IPC graphs | ❌ | `child_process.serialization.advanced.binary` before dispatch; includes nested Buffer/views/ArrayBuffer/SharedArrayBuffer |
 
 Installed-environment/provider checks:
 `tests/e2e/owner-shell-vitest-ceilings.spec.ts`. The extra packages are actually
