@@ -112,6 +112,8 @@ export interface AgentResourceReport {
 }
 
 export interface AgentSessionCommonOptions extends AgentRunLimits {
+  /** Native history, copied at creation. Incomplete tool pairs throw TypeError. */
+  readonly initialMessages?: readonly AgentMessage[];
   readonly host: AgentHost;
   readonly tools?: readonly AgentTool[];
   readonly instructions?: readonly string[];
@@ -171,6 +173,8 @@ export interface AgentTrace {
         readonly runTimeoutMs: number;
       };
   readonly transcript: readonly AgentMessage[];
+  /** The first N transcript messages were restored, not emitted by this session. */
+  readonly restoredMessageCount: number;
   readonly events: readonly { readonly at: number; readonly event: AgentSessionEvent }[];
   readonly status: AgentStatus;
   readonly timings: readonly { readonly startedAt: number; readonly endedAt: number }[];

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { bootOwner, gotoHarness } from './fixtures.ts';
 import type * as Proof from './fixtures/agent-core-proof.ts';
+import type * as HistoryProof from './fixtures/agent-history-proof.ts';
 
 const proofUrl = `/@fs${process.cwd()}/tests/browser-unit/fixtures/agent-core-proof.ts`;
 
@@ -297,4 +298,32 @@ test('exact edit preserves the UTF-8 BOM outside the replaced text', async ({ pa
     proofUrl,
   );
   expect(bytes).toEqual(Array.from(new TextEncoder().encode('\ufeffbeta')));
+});
+
+test('fresh headless session restores persisted native messages with a changed model', async ({
+  page,
+}) => {
+  const result = await page.evaluate(async (url) => {
+    const proof = (await import(/* @vite-ignore */ url)) as typeof HistoryProof;
+    return proof.proveHistory();
+  }, `/@fs${process.cwd()}/tests/browser-unit/fixtures/agent-history-proof.ts`);
+  expect(result.status).toBe('done');
+  expect(result.file).toBe('persisted work');
+  expect(result.restored.transcript).toEqual(result.seed);
+  expect(result.restored).toMatchObject({
+    restoredMessageCount: result.seed.length,
+    timings: [],
+    usage: { totalTokens: 0 },
+  });
+  expect(JSON.stringify(result.requests[0]?.body.messages)).toContain('Remember this work.');
+  expect(JSON.stringify(result.requests[0]?.body.messages)).toContain('Write remember.txt');
+  expect(result.requests[0]?.body).toHaveProperty('model', 'new-model');
+  expect(
+    result.continued.transcript.filter(
+      (m) => m.role === 'toolResult' && m.toolName === 'write_file',
+    ),
+  ).toHaveLength(1);
+  expect(result.continued.timings).toHaveLength(1);
+  expect(result.reset).toHaveProperty('restoredMessageCount', 0);
+  expect(JSON.stringify(result.requests[2]?.body.messages)).not.toContain('Remember this work.');
 });
