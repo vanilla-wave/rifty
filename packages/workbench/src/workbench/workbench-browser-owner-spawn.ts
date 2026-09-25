@@ -73,7 +73,6 @@ export function workbenchOwnerSpawnSpec(input: WorkbenchOwnerStartInput): SpawnW
     entry: Object.freeze({
       kind: 'url' as const,
       url: input.deployment.workers.owner,
-      role: 'runtime-bootstrap' as const,
     }),
     argv: Object.freeze(['rifty', 'workbench-owner']),
     env: Object.freeze({}),

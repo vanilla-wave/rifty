@@ -2,7 +2,8 @@
 
 ## [Unreleased]
 
-- Close runtime bootstrap capture before the language-service worker admits requests (ADR-0465).
+- Remove the Proxy-capture bootstrap role/closer after adopting native non-binary IPC (ADR-0467).
+
 
 ### Changed
 

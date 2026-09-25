@@ -1,4 +1,3 @@
-import { RuntimeProxy } from '../../internal/proxy-provenance.ts';
 /**
  * AST-rewrite {@link VmEngine}: acorn parses top-level free writes/`var`/
  * function declarations are redirected onto the contextified object, then run in
@@ -153,7 +152,7 @@ function contextProxy(context: ContextObject): ContextProxy {
   const existing = contextProxies.get(context);
   if (existing) return existing;
 
-  const proxy: ContextProxy = new RuntimeProxy(context, {
+  const proxy: ContextProxy = new Proxy(context, {
     has(_target, prop) {
       if (prop === Symbol.unscopables) return false;
       return (

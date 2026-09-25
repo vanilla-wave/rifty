@@ -107,7 +107,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0452 | Reference locally owned native MessagePorts without counting infrastructure listeners |
 | 0453 | Track guest Proxy provenance before advanced IPC snapshots |
 | 0456 | Carry Node child startup options in node-entry v6 |
-| 0465 | Seal Proxy provenance after trusted runtime bootstrap imports |
+| 0467 | Use native non-binary advanced IPC snapshots |
 
 ### runtime-wasi
 
@@ -380,6 +380,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 
 | removed | superseded by | note |
 |---|---|---|
+| 0465 | 0467 | native non-binary IPC removes Proxy capture phase and runtime-bootstrap role |
 | 0013 | 0072 | OPFS hot path; context grafted |
 | 0025 | 0043 | dev-server realm; page-realm globals-guard grafted |
 | 0028 | 0133 | prod npm-registry proxy; deploy/routing/env contract reshaped, context grafted |
@@ -424,6 +425,8 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0446 binary graph preservation | 0467 / note 2026-09-25 | user chooses native non-binary IPC and explicit binary refusal; launch/control retained |
+| 0453 Proxy provenance owner | 0467 / note 2026-09-25 | native clone owns rejection; independent builtinModules/VM backing repairs retained |
 | 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
 | 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |

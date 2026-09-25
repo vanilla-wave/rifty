@@ -1,29 +1,22 @@
 import type { ParityCase } from '../../src/types.ts';
 
+// Binary success criteria removed by the explicit epic amendment; tracked as ceilings.
 const values = `
-  const { Buffer } = require('node:buffer');
   let getterReads = 0;
   function value() {
     const shared = { n: 7 };
-    const sharedBytes = new Uint8Array(new SharedArrayBuffer(8));
-    sharedBytes.set([1, 2, 3, 4, 5, 6, 7, 8]);
-    const sharedView = new Uint8Array(sharedBytes.buffer, 2, 4);
     const result = {
       date: new Date('2020-01-02T03:04:05.000Z'),
       map: new Map([['key', shared]]), set: new Set([shared]),
-      regexp: /test/gi, bytes: new Uint8Array([1, 2, 255]),
-      buffer: Buffer.from([4, 5, 254]), bigint: 9007199254740993n,
+      regexp: /test/gi, values: [1, 2, 255], bigint: 9007199254740993n,
       error: new TypeError('failure', { cause: new Error('cause') }),
       array: [undefined, NaN, Infinity, -0], shared,
-      sharedView, sharedViewAlias: sharedView,
-      sharedData: new DataView(sharedBytes.buffer, 2, 4),
     };
     result.self = result;
-    Object.defineProperty(result, 'bufferAlias', {
+    Object.defineProperty(result, 'sharedAlias', {
       enumerable: true, get() {
         getterReads++;
-        sharedBytes.fill(88);
-        return result.buffer;
+        return result.shared;
       },
     });
     return result;
@@ -34,18 +27,14 @@ const values = `
       map: [v.map instanceof Map, v.map.get('key') === v.shared],
       set: [v.set instanceof Set, v.set.has(v.shared)],
       regexp: [v.regexp instanceof RegExp, v.regexp.source, v.regexp.flags],
-      bytes: [v.bytes instanceof Uint8Array, Array.from(v.bytes)],
-      buffer: [Buffer.isBuffer(v.buffer), Array.from(v.buffer), v.bufferAlias === v.buffer],
+      values: [Array.isArray(v.values), v.values],
+      alias: v.sharedAlias === v.shared,
       bigint: [typeof v.bigint, String(v.bigint)],
       error: [v.error instanceof TypeError, v.error.message, v.error.cause.message],
       array: [v.array.length, 0 in v.array, v.array[0] === undefined,
         Number.isNaN(v.array[1]), v.array[2] === Infinity, Object.is(v.array[3], -0)],
       cycle: v.self === v, shared: v.shared.n,
-      sharedView: [v.sharedView instanceof Uint8Array, Array.from(v.sharedView),
-        v.sharedView === v.sharedViewAlias, v.sharedView.buffer instanceof ArrayBuffer],
-      sharedData: [v.sharedData instanceof DataView,
-        Array.from(new Uint8Array(v.sharedData.buffer, v.sharedData.byteOffset,
-          v.sharedData.byteLength)), v.sharedData.buffer instanceof ArrayBuffer],
+
     };
   }
 `;
@@ -63,7 +52,7 @@ const c: ParityCase = {
         });
         const initial = value();
         process.send({ tag: 'ready', value: initial });
-        initial.sharedView.fill(99);
+        initial.shared.n = 99;
         setInterval(() => {}, 1000);
       `,
     },
@@ -85,8 +74,7 @@ const c: ParityCase = {
           result.sendReturned = child.send(sent);
           result.getterReads = getterReads - before;
           sent.shared.n = 99;
-          sent.bytes[0] = 99;
-          sent.sharedView.fill(99);
+          sent.values[0] = 99;
           return;
         }
         result.childReceived = message.received;

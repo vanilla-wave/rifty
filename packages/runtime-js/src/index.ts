@@ -42,6 +42,3 @@ export {
   trackKeepalivePromise,
 } from './internal/event-loop-keepalive.ts';
 export { installFetchKeepalive } from './builtins/fetch-keepalive.ts';
-
-/** Close runtime authority capture before evaluating guest/package code. */
-export { sealNodeProxyBootstrap as sealNodeRuntimeBootstrap } from './internal/proxy-provenance.ts';

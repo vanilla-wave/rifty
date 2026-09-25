@@ -91,8 +91,6 @@ export type WorkerEntryDescriptor =
   | {
       readonly kind: 'url';
       readonly url: string;
-      /** Host-owned runtime setup; this entry seals its capture phase before guest execution. */
-      readonly role?: 'runtime-bootstrap';
       /** Entry-scoped higher-runtime metadata; kernel transports it opaquely. */
       readonly bootstrap?: KernelEntryBootstrapEnvelope;
     };

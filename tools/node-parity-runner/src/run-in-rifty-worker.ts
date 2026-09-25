@@ -1,9 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
-import {
-  installNodeProxyProvenance,
-  sealNodeProxyBootstrap,
-} from '../../../packages/runtime-js/src/internal/proxy-provenance.ts';
 import { runInRiftyInCurrentRealm } from './run-in-rifty.ts';
 import type {
   NodeCliEvalBootstrapFault,
@@ -45,8 +41,6 @@ const request = workerData as WorkerRequest;
 // The parent program is guest code too; mirror production pre-entry in this
 // disposable realm instead of leaking native Node Buffer/Proxy into its oracle.
 (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
-installNodeProxyProvenance();
-sealNodeProxyBootstrap();
 
 try {
   const stdout = await runInRiftyInCurrentRealm(request.testCase, {

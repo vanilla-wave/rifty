@@ -20,7 +20,7 @@ const exercise = `
       catch (error) { failures.push([label, error.name, error.code ?? null, error.message]); }
     }
     let reads = 0;
-    send({ tag: 'control', get bytes() { reads++; return Buffer.from([1, 2, 255]); } });
+    send({ tag: 'control', get values() { reads++; return [1, 2, 255]; } });
     return { failures, traps, reads, proxyShape: [
       Proxy.name, Proxy.length, typeof Proxy.prototype,
       Proxy.revocable === Object.getOwnPropertyDescriptor(Proxy, 'revocable').value,
@@ -40,7 +40,7 @@ const c: ParityCase = {
       'project/proxy-fault.cjs': `
         ${exercise}
         process.on('message', message => {
-          if (message.tag === 'control') process.send({ tag: 'echo', buffer: Buffer.isBuffer(message.bytes), bytes: Array.from(message.bytes) });
+          if (message.tag === 'control') process.send({ tag: 'echo', array: Array.isArray(message.values), values: message.values });
         });
         process.send({ tag: 'ready', outcome: proxyFailures(value => process.send(value)) });
         setInterval(() => {}, 1000);
@@ -55,13 +55,13 @@ const c: ParityCase = {
       const result = {};
       child.on('error', reject);
       child.on('message', message => {
-        if (message.tag === 'control') result.childControl = [Buffer.isBuffer(message.bytes), Array.from(message.bytes)];
+        if (message.tag === 'control') result.childControl = [Array.isArray(message.values), message.values];
         if (message.tag === 'ready') {
           result.child = message.outcome;
           result.parent = proxyFailures(value => child.send(value));
         }
         if (message.tag === 'echo') {
-          result.parentControl = [message.buffer, message.bytes];
+          result.parentControl = [message.array, message.values];
           child.once('exit', () => resolve(result));
           child.kill('SIGUSR2');
         }

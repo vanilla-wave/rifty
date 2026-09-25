@@ -117,3 +117,16 @@ record oracles: native clones all three, candidate rejects; targeted file now
 These additional REDs expose the proposed narrowing; no criterion weakened.
 CI unit job also reproduced only original frozen-Promise failure at cdf806fc9
 (10636PASS/1FAIL/18SKIP). Both user answers still absent.
+
+## User amendment2026-09-25 supersedes the pending fork
+
+User: “Vitest достаточно; бинарный IPC явно запрещён”; also permits the earlier
+opaque-brand ceiling if needed. Native codec eliminates the need for it.
+One native clone, then binary scan; no custom Buffer/Promise/globalProxy owner.
+Binary37RED→37GREEN; codec73PASS, both-public-sender physicalnonbinary4/4PASS.
+Fresh5502 unchangedVitest10runsPASS47.1s. Afterremoval fresh5503 binary/proxy
+browser2/2PASS5.7s:35binaryshapes eachdirection, namedNIE/no-dispatch/connected
+recovery, singlegetters. Frozenplainrecord/nativePromise tests nowGREEN.
+QuickJS object/array hostProxy mirrors explicitly failnativeclone; no VM
+expansionrequired bythe amendedVitest-onlyclaim. ADR0467 recordsdecision and
+supersession; olderBLOCK reports remainhistorical, notcurrentacceptance.

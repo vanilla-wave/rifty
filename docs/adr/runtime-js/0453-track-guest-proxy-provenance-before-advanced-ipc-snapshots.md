@@ -55,3 +55,10 @@ observed ingress. No public `util.types.isProxy` expansion.
 - VM Proxy ingress and Map/Set carriers share the existing membrane owner.
   Older retained-mirror mutation and missing exotic-mirror gaps remain explicit
   in compat and their backlog drafts; the codec snapshots its actual host input.
+
+## Corrections (active)
+
+- 2026-09-25 — [ADR-0467](0467-use-native-non-binary-advanced-ipc-snapshots.md)
+  records the explicit user amendment: native non-binary IPC snapshots and
+  named binary refusal replace custom binary/provenance serialization.
+  Independent typed-launch, builtinModules and VM backing repairs remain.

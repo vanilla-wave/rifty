@@ -1,7 +1,3 @@
-import {
-  installNodeProxyProvenance,
-  sealNodeProxyBootstrap,
-} from '../internal/proxy-provenance.ts';
 /**
  * Node-shape `process` install for kernel-spawned Workers (ADR-0039, ADR-0157).
  *
@@ -121,9 +117,6 @@ export function installNodeRuntime(
   if (!isNodeEntry) bindNodeProcessDescendantAuthority(process, globalProcessManager);
   if (isNode) {
     setKernelFatalErrorSerializer(serializeWorkerFatalError);
-    installNodeProxyProvenance();
-    const trustedBootstrap = spec.entry?.kind === 'url' && spec.entry.role === 'runtime-bootstrap';
-    if (!isNodeEntry && !trustedBootstrap) sealNodeProxyBootstrap();
     patchPromiseForNextTick();
     (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
     installWebGlobals();

@@ -9,8 +9,7 @@ const mocks = vi.hoisted(() => ({
   syncCall: vi.fn(),
 }));
 
-vi.mock('@riftydev/kernel', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@riftydev/kernel')>()),
+vi.mock('@riftydev/kernel', () => ({
   readKernelSyncApi: mocks.readKernelSyncApi,
 }));
 

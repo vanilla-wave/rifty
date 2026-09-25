@@ -1,5 +1,4 @@
 import { NotImplementedError } from '@riftydev/io';
-import { RuntimeProxy } from './proxy-provenance.ts';
 
 const SANDBOX_TOOLCHAIN_REALM = Symbol.for('rifty.runtime-js.sandbox-toolchain.v1');
 const SANDBOX_TOOLCHAIN_RESIDENT_TRANSITION = Symbol.for(
@@ -35,7 +34,7 @@ export function sandboxToolchainWebAssembly(): typeof WebAssembly {
       const descriptorType = typeof descriptor;
       let effectiveArgs = args;
       if (descriptor !== null && (descriptorType === 'object' || descriptorType === 'function')) {
-        const guardedDescriptor = new RuntimeProxy(descriptor, {
+        const guardedDescriptor = new Proxy(descriptor, {
           get(targetDescriptor, property) {
             const value = Reflect.get(targetDescriptor, property, targetDescriptor);
             if (property !== 'shared') return value;
@@ -55,8 +54,8 @@ export function sandboxToolchainWebAssembly(): typeof WebAssembly {
       return Reflect.construct(target, effectiveArgs, effectiveNewTarget);
     },
   };
-  const GuardedMemory = new RuntimeProxy(NativeMemory, memoryHandler);
-  return new RuntimeProxy(WebAssembly, {
+  const GuardedMemory = new Proxy(NativeMemory, memoryHandler);
+  return new Proxy(WebAssembly, {
     get(target, property, receiver) {
       return property === 'Memory' ? GuardedMemory : Reflect.get(target, property, receiver);
     },

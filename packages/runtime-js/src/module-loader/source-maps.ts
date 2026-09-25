@@ -1,4 +1,3 @@
-import { RuntimeProxy } from '../internal/proxy-provenance.ts';
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 const BASE64_VALUES = new Map([...BASE64].map((char, index) => [char, index] as const));
 const INLINE_SOURCE_MAP_RE =
@@ -148,7 +147,7 @@ function mappedStackFrame(frame: StackFrameLike): StackFrameLike {
     position = { filename: identity, line: Number(coordinates[1]), column: Number(coordinates[2]) };
   }
   const projected = position;
-  return new RuntimeProxy(frame, {
+  return new Proxy(frame, {
     get(target, key) {
       if (key === 'getFileName' || key === 'getScriptNameOrSourceURL')
         return () => projected.filename;

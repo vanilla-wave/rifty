@@ -1,7 +1,7 @@
 ---
 area: runtime-js
 status: ready
-title: `child_process.fork` with `serialization: 'advanced'` round-trips structured-clone values
+title: `child_process.fork` advanced IPC carries non-binary Vitest graphs with explicit binary ceiling
 created: 2026-09-15
 why: vitest's default forks pool calls `fork(entry, [], { env, execArgv, stdio: 'pipe', serialization: 'advanced' })`; rifty throws `NotImplementedError('child_process.serialization.advanced')` at spawn, so the default pool cannot start
 epic: vitest-run-in-browser
@@ -10,6 +10,9 @@ code: [packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/sr
 ---
 
 ## Context
+
+Historical native reference below includes binary values; the user2026-09-25
+amendment narrows delivery to non-binary IPC plus explicit binary refusal.
 
 Native Node v24.16.0: advanced fork IPC preserves cyclic/shared references,
 Date, Map, Set, RegExp, typed arrays, Buffer, nested bigint, Error/cause and
@@ -42,8 +45,8 @@ validation and clone failure. Successful sends snapshot their input.
 
 ## Acceptance
 
-1. `fork(..., { serialization: 'advanced', stdio: 'pipe' })` carries the native rich-value graph in both directions, preserving Buffer/type identity, cycles, shared references and send-time values. → I4
-2. Both public senders reject invalid messages and getter/clone failures synchronously as Node; no failed message is delivered, and subsequent valid messages arrive in order on the still-connected channel. → I4, ADR-0326
+1. `fork(..., { serialization: 'advanced', stdio: 'pipe' })` carries the non-binary graphs needed by the accepted Vitest scenario in both directions, preserving cycles, shared references and send-time values. Buffer/typed arrays/DataView/ArrayBuffer/SharedArrayBuffer graphs, including nested occurrences, synchronously throw named `NotImplementedError('child_process.serialization.advanced.binary')`; no dispatch or disconnect. → I4, user2026-09-25
+2. Both public senders reject invalid messages and getter/clone failures synchronously as Node within the non-binary scope; no failed message is delivered, and subsequent valid messages arrive in order on the still-connected channel. The user permits a documented opaque-brand ceiling for ambiguous locked-constructor records if required by the chosen carrier; it must not be invented where native cloning works. → I4, ADR-0326, user2026-09-25
 3. Advanced public disconnect changes `connected` without disabling private child control; kill and terminal events remain observable. Default JSON semantics stay unchanged. → I4, ADR-0326
 
 4. Typed producer and receiver retain `ipc: 'advanced'`; the extended envelope is v5 and rejects v4 atomically. → ADR-0267, ADR-0446
@@ -61,12 +64,15 @@ validation and clone failure. Successful sends snapshot their input.
 | corrupt-input × both advanced senders | sync native error; no dispatch/disconnect; healthy send survives | advanced-fault invalid/nested/getter rows | → I4, ADR-0326 |
 | sibling-drift × parent/child codec selection | native graph retained on child-originated message and parent echo; JSON unchanged | advanced + existing json cases | → I4, ADR-0326 |
 | observable-order × serialization/queued sends | getter failure thrown before return; admitted messages retain order and send-time snapshot | advanced-fault sequences 1/2; advanced mutation | → I4, ADR-0326 |
-| observable-order × SAB-backed view encounter | bytes captured before later getter/post-send writes; same view aliases retained | node-ipc-advanced-shared-views + rich physical IPC case | → I4, ADR-0446 |
-| sibling-drift × uncloneable intrinsic brands | realm/prototype cannot erase rejection; constructor-locked Promise remains pending user fork | node-ipc-advanced intrinsic census + advanced-fault; intrinsic-brands evidence | → I4, ADR-0446, ADR-0453 |
+| corrupt-input × binary graph encounter | named binary ceiling before dispatch in both senders; channel survives | binary-ceiling unit census + owner-advanced-ipc-binary-ceiling browser case | → I4, user2026-09-25, ADR-0467 |
+| sibling-drift × uncloneable intrinsic brands | native rejection independent of realm/prototype; ordinary frozen graphs clone | node-ipc-advanced intrinsic census + advanced-fault | → I4, ADR-0467 |
 | provenance-lie × typed launch ownership | advanced survives producer/receiver; old protocol rejected | node-entry-advanced-ipc owner parser tests | → ADR-0267, ADR-0446 |
 | torn-state × public disconnect/private control | connected false; private kill still terminates exact child | advanced disconnect/SIGUSR2 | → ADR-0326 |
 
 ## Out of scope
+
+QuickJS Proxy-backed object/array mirrors fail native cloning; extending VM
+mirror-to-IPC compatibility is outside the user-approved Vitest-only route.
 
 Send handles, send callbacks/options and channel ref/unref retain existing
 named ceilings (ADR-0326). Native callback probe records reference behavior;
@@ -87,3 +93,10 @@ ready-verdict: 2026-09-23 — Contract+RED @ 57602c71af088f69e2f973aa54ae3334644
   concrete candidate, not an accepted narrowing. User question pending;
   Acceptance2 and its frozen-Promise native-error RED remain unchanged.
   Evidence: `reference/advanced-ipc-intrinsic-brands-evidence.md`.
+
+- 2026-09-25 — explicit user amendment supersedes full binary graph promise:
+  Vitest sufficient; binary IPC explicitly prohibited. Native-clone candidate
+  replaces the custom Buffer snapshot; prior REDs remain historical evidence.
+  Binary-success criteria migrate to explicit synchronous ceiling checks;
+  ordinary non-binary graph/native clone tests remain. User separately permits
+  documented opaque-brand ceiling if technically necessary; no silent admission.

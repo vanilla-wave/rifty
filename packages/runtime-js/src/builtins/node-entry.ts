@@ -1,4 +1,3 @@
-import { sealNodeProxyBootstrap } from '../internal/proxy-provenance.ts';
 /**
  * Run a VFS Node entry through the rifty module loader (ADR-0137).
  *
@@ -199,7 +198,6 @@ function exportedPromise(ns: Record<string, unknown>): PromiseLike<unknown> | nu
 
 /** Import the resolved Node entry (or a `.bin` launcher's target) via the loader. */
 export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
-  sealNodeProxyBootstrap();
   if (opts.kind === 'eval') {
     // Capture the installed process capabilities before guest code can replace
     // `process`, its streams, or their methods. Late eval terminals are runtime

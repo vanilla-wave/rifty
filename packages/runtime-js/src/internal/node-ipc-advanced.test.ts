@@ -3,9 +3,9 @@ import { runInNewContext } from 'node:vm';
 import { expect, it } from 'vitest';
 import { deserializeNodeIpcMessage, serializeNodeIpcMessage } from './node-ipc-serialization.ts';
 
-it('preserves cross-realm buffers and boxed primitive slots', () => {
+it('preserves cross-realm boxed primitive slots', () => {
   const source: unknown = runInNewContext(
-    '({ buffer: new Uint8Array([2,5,9]).buffer, boolean: Object(true), number: Object(3), string: Object("hello"), bigint: Object(7n) })',
+    '({ boolean: Object(true), number: Object(3), string: Object("hello"), bigint: Object(7n) })',
   );
   const expected = deserialize(serialize(source));
   const actual = deserializeNodeIpcMessage(
@@ -113,7 +113,7 @@ it('ignores symbol accessors when snapshotting a guest object, as native advance
 });
 
 it('does not interpret guest value/buffers fields as codec metadata', () => {
-  const source = { value: { buffers: [new Uint8Array([1, 2])] }, buffers: ['guest'] };
+  const source = { value: { buffers: [[1, 2]] }, buffers: ['guest'] };
   const expected: unknown = deserialize(serialize(source));
   const wire = structuredClone(serializeNodeIpcMessage(source, 'advanced'));
   expect(deserializeNodeIpcMessage(wire, 'advanced')).toEqual(expected);
@@ -123,7 +123,6 @@ const uncloneableSources = [
   'new WeakMap()',
   'new WeakSet()',
   'Promise.resolve(1)',
-  'new SharedArrayBuffer(2)',
   'new WeakRef({})',
   'new FinalizationRegistry(() => {})',
 ];
@@ -150,7 +149,7 @@ it.each(uncloneableSources)('rejects intrinsic %s without reading guest properti
 });
 
 it.each(['frozen', 'non-extensible', 'readonly-constructor'])(
-  'preserves native-cloneable %s plain records under the retained full contract',
+  'preserves native-cloneable %s plain records without an opaque-brand ceiling',
   (mode) => {
     const source = { value: 7, nested: { text: 'hello' } };
     if (mode === 'frozen') Object.freeze(source);

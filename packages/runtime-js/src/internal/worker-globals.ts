@@ -44,7 +44,6 @@
  */
 
 import type { QuickJSWASMModule } from 'quickjs-emscripten-core';
-import type { ProxyProvenanceOwner } from './proxy-provenance-types.ts';
 
 /** Single root key under which every runtime-js global lives. */
 export const RUNTIME_JS_ROOT_KEY = '__rifty' as const;
@@ -59,7 +58,6 @@ export const RUNTIME_JS_GLOBAL_KEYS = {
   createRequireImpl: 'createRequireImpl',
   quickjsModulePromise: 'quickjsModulePromise',
   quickjsModuleSync: 'quickjsModuleSync',
-  proxyProvenance: 'proxyProvenance',
 } as const;
 
 /** Union of the documented key names. */
@@ -91,8 +89,6 @@ export interface RuntimeJsGlobalRecord {
   createRequireImpl: CreateRequireImpl;
   quickjsModulePromise: Promise<QuickJSWASMModule>;
   quickjsModuleSync: QuickJSWASMModule;
-  /** Bootstrap-only acquisition; install-process installs, node-entry seals (ADR-0453). */
-  proxyProvenance: ProxyProvenanceOwner;
 }
 
 interface GlobalWithRuntimeRoot {

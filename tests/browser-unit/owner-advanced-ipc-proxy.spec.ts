@@ -4,7 +4,7 @@ import fixture from '../../tools/node-parity-runner/cases/child_process/public-i
 import { runInNode } from '../../tools/node-parity-runner/src/run-in-node.ts';
 import { bootOwner, closeOwner, execLine, gotoHarness, writeOwnerFile } from './fixtures.ts';
 
-test('advanced fork IPC rejects Proxy without traps and keeps Buffer/getter semantics', async ({
+test('advanced fork IPC rejects Proxy without traps and keeps nonbinary control/getter semantics', async ({
   page,
 }) => {
   const oracle = await runInNode(fixture);

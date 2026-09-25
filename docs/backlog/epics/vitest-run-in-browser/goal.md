@@ -40,9 +40,14 @@ npm is a separate planned goal.
    `1 passed`, `1 failed` with the assertion diff; exit code 1. Fix the test →
    exit 0. `npm test` and `vitest run --reporter=verbose` behave the same.
 4. `vitest run --pool=threads` → same results and exit code as `--pool=forks`.
-5. Outside the claim, every path stays loud: `environment: 'jsdom'`, watch
-   mode, coverage, `vmThreads`/`vmForks`, other vite versions throw a named
-   `NotImplementedError`/ceiling and the compat page lists them ❌.
+5. Guarantee only the stated `vitest run` scenario on Vitest4.1.11/Vite8.0.16,
+   both pools. Other versions/modes (including watch) are outside the guarantee,
+   without artificial bans. Compat lists concrete measured loud gaps honestly.
+6. Advanced IPC supports the non-binary graphs needed by this scenario.
+   Binary graphs (Buffer, typed arrays, DataView, ArrayBuffer/SharedArrayBuffer,
+   including nested values) throw a named NotImplementedError synchronously;
+   binary IPC support is not required by this epic.
+
 
 ## Invariants
 
@@ -119,14 +124,14 @@ npm is a separate planned goal.
    link-time SyntaxError, no `ModuleLoadError`, no loader ceiling; a member the
    browser cannot provide is reachable only by an unclaimed call and throws a
    named `NotImplementedError`.
-7. I7. A `vitest.md` page in `docs/public/compat/` claims exactly vitest 4.1.11 +
-   vite 8.0.16, states the manifest precondition (`overrides: {vite: "8.0.16"}`
-   or an npm-authored lock — the organic `devDependencies: {vitest}` manifest
-   alone resolves latest vite and stays a loud `lightningcss.version` install
-   failure), carries ✅ rows for I1–I6 including `vitest.config.ts` and
-   TypeScript test files, and ❌ rows for jsdom/happy-dom, watch mode,
-   coverage, browser mode, `vmThreads`/`vmForks`, other vite versions — each ❌
-   backed by a loud throw, never a silent fallback.
+7. I7. `docs/public/compat/vitest.md` guarantees only the stated `vitest run`
+   scenario on Vitest4.1.11/Vite8.0.16, with the manifest pin precondition,
+   TypeScript config/tests and both pools (I1–I6). Other versions and modes,
+   including watch, remain outside the guarantee without artificial bans.
+   Name concrete measured loud gaps; distinguish unsupported calls from
+   unverified modes. Advanced binary IPC graphs explicitly throw a named
+   NotImplementedError; non-binary Vitest IPC remains required.
+
 
 ## Challenge
 
@@ -191,3 +196,17 @@ challenge: 2026-09-15 — 6 problems (all resolved before FIT; lines below)
   violates the same clause (changes resolution identity/lock/peer placement).
 - rejected route: vitest-specific install-time patch for the silent exit —
   violates I2 (generic handle model) and I7 (would pin vitest by source shape).
+
+- 2026-09-25 — user amendment: “Vitest достаточно; бинарный IPC явно запрещён”.
+  Binary graph fidelity is removed from this epic; synchronous named binary
+  ceiling and native non-binary cloning replace it. Both pools and primary
+  Vitest scenario remain required.
+- 2026-09-25 — user amendment: “Да, точная гарантия и честные ограничения”.
+  I7/scenario5 now guarantee only the stated vitest run pair; other versions
+  and modes (including watch) are unclaimed, without artificial bans.
+  Measured gaps stay explicit; prior blanket-ban requirement is superseded.
+
+- 2026-09-25 — user also accepts the proposed named opaque-brand ceiling for
+  ambiguous locked-constructor records as an allowed limitation. This does not
+  revoke the explicit binary prohibition. Prefer native cloning when it avoids
+  that extra limitation; no artificial frozen-record rejection is required.

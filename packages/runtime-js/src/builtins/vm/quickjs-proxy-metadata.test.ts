@@ -1,5 +1,4 @@
 import { beforeAll, expect, it } from 'vitest';
-import { proxyCloneFailure } from '../../internal/proxy-provenance.ts';
 import { Membrane } from './membrane.ts';
 import { ensureVmEngineReady, getQuickJsModuleSync } from './quickjs-loader.ts';
 
@@ -29,14 +28,13 @@ it('keeps eager metadata private, tamper-resistant, identity-stable and lifetime
   const plainWrapper = membrane.wrapGuestToHost(plain) as object;
   const proxyWrapper = membrane.wrapGuestToHost(proxy) as object;
   expect(membrane.wrapGuestToHost(proxy)).toBe(proxyWrapper);
+  expect(() => structuredClone(plainWrapper)).toThrow();
+  expect(() => structuredClone(proxyWrapper)).toThrow();
   const roundtrip = membrane.marshalHostToGuest(proxyWrapper);
   expect(ctx.eq(roundtrip, proxy)).toBe(true);
-  expect(proxyCloneFailure(plainWrapper)).toBeUndefined();
-  expect(proxyCloneFailure(proxyWrapper)).toBe('[object Object] could not be cloned.');
   evaluate(
     'pair.revoke(); WeakMap.prototype.get=()=>999; WeakMap.prototype.set=()=>{}; WeakSet.prototype.has=()=>false; void 0',
   ).dispose();
-  expect(proxyCloneFailure(proxyWrapper)).toBe('null could not be cloned.');
   expect(membrane.wrapGuestToHost(seed)).toBe(original);
   expect(membrane.wrapGuestToHost(plain)).toBe(plainWrapper);
   roundtrip.dispose();

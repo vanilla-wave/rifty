@@ -3,7 +3,7 @@ import { runInNewContext } from 'node:vm';
 import { expect, it } from 'vitest';
 import { serializeNodeIpcMessage } from './node-ipc-serialization.ts';
 
-it.each(['absent', 'accessor', 'readonly-configurable', 'sealed-writable'])(
+it.each(['absent', 'accessor', 'readonly-configurable', 'sealed-writable', 'frozen', 'locked'])(
   'rejects local/foreign erased Promise with %s constructor without guest reads',
   (kind) => {
     for (const foreign of [false, true]) {
@@ -31,6 +31,8 @@ it.each(['absent', 'accessor', 'readonly-configurable', 'sealed-writable'])(
         Object.defineProperty(value, 'constructor', { value: 7, writable: true, enumerable: true });
         Object.preventExtensions(value);
       }
+      if (kind === 'locked') Object.defineProperty(value, 'constructor', { value: 7 });
+      if (kind === 'frozen') Object.freeze(value);
       const before = Object.getOwnPropertyDescriptors(value);
       expect(() => serializeNodeIpcMessage({ bad: value }, 'advanced')).toThrow(
         /could not be cloned/,
@@ -41,7 +43,7 @@ it.each(['absent', 'accessor', 'readonly-configurable', 'sealed-writable'])(
   },
 );
 
-it('restores ordinary constructor before the one real snapshot getter', () => {
+it('reads ordinary constructor once without changing its descriptor', () => {
   let reads = 0;
   const value = {
     get constructor() {

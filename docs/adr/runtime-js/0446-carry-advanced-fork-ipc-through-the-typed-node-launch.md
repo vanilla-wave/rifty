@@ -45,3 +45,10 @@ Oracle and RED: `docs/backlog/runtime-js/reference/child-process-advanced-ipc-se
   rich/fault cases and owner parser tests prove both boundaries.
 - Buffer preservation requires a codec beyond raw structured clone; no new
   queue, correlation ledger, delivery acknowledgement or transport retry.
+
+## Corrections (active)
+
+- 2026-09-25 — [ADR-0467](0467-use-native-non-binary-advanced-ipc-snapshots.md)
+  records the explicit user amendment: native non-binary IPC snapshots and
+  named binary refusal replace custom binary/provenance serialization.
+  Independent typed-launch, builtinModules and VM backing repairs remain.

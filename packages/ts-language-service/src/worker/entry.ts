@@ -33,7 +33,6 @@
  */
 
 import { readKernelSyncApi } from '@riftydev/kernel';
-import { sealNodeRuntimeBootstrap } from '@riftydev/runtime-js';
 import { createRpcFsSync } from './host-fs-rpc.ts';
 import { TS_IPC_TYPE, type TsResponseMessage, isTsRequestMessage } from './protocol.ts';
 import { createServiceEndpoint } from './service-endpoint.ts';
@@ -77,7 +76,6 @@ export function bootTsLanguageServiceWorker(): void {
   if (typeof proc?.on !== 'function' || typeof proc.send !== 'function') {
     throw new Error('ts-lsp worker: fork-IPC channel (process.send/on) unavailable');
   }
-  sealNodeRuntimeBootstrap();
   booted = true;
 
   const endpoint = createServiceEndpoint({

@@ -175,6 +175,9 @@ context for synchronous code. Two caveats: a guest callback mutating the sandbox
 seen only at the next run; the host→guest side retains one seed per DISTINCT inbound object/fn for
 the context's life (not GC-evicted), so keep `vm` off a hot loop that streams fresh objects in.
 
+❌ QuickJS object/array mirrors use host Proxy carriers and cannot cross native
+advanced IPC cloning (ADR-0467). This does not block the claimed Vitest scenario.
+
 ❌ Retained Array/Date/Map/Set mirrors are snapshots: later guest mutations do
 not update an earlier host backing. Tracked in
 `backlog/runtime-js/vm-retained-mirror-mutations`. ❌ QuickJS returns ordinary

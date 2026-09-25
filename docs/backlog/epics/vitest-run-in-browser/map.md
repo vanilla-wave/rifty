@@ -53,16 +53,12 @@ retain their ordering.
 
 ## Open questions
 
-- Advanced IPC scope fork pending: candidate Promise brand guard rejects ambiguous
-  locked-constructor records with a named opaque-brand ceiling. Exact Vitest10runs
-  stays GREEN5447; frozen-Promise native-parity RED remains. User approval required
-  before changing the full graph contract; evidence in
-  `runtime-js/reference/advanced-ipc-intrinsic-brands-evidence.md`.
-- I7 user fork pending: fresh Chromium5428 also runs Vitest4.1.11/Vite8.0.15
-  fail/fix correctly. The accepted blanket other-version ceiling is false.
-  Watch also ran tests and waited45s without a ceiling (Chromium5429).
-  Asked whether to retain exact guarantee without artificial mode/version bans;
-  no goal.md amendment until the user's answer. Other work continues.
+- Resolved2026-09-25: user accepts native non-binary IPC cloning + named
+  binary-graph ceiling; replace custom Buffer/provenance machinery after the
+  mechanism sweep. No opaque-brand ceiling for ordinary frozen records.
+- Resolved2026-09-25: I7 guarantees only stated vitest run pair/both pools;
+  other versions and modes are outside guarantee, without artificial bans.
+  Concrete measured limitations stay visible. Re-run acceptance after IPC change.
 - Resolved startup-handle fog (2026-09-23): emnapi runtime's
   NodejsWaitingRequestCounter calls missing ref/unref on a global MessageChannel
   port; rolldown deliberately unrefs its Worker. Accepted I4 MessagePort slice owns this class,

@@ -1,8 +1,3 @@
-import {
-  RuntimeProxy,
-  markGuestProxy,
-  proxyTargetCloneFailure,
-} from '../../internal/proxy-provenance.ts';
 /** Two-way VM membrane. Private metadata precedes guest inspection; wrappers
  * retain reverse identity and ContextLifetime ownership. */
 
@@ -401,19 +396,6 @@ export class Membrane {
           ? this.#wrapFunction(handle, id, false)
           : this.#wrapObject(handle, id, this.#metadata.read('array', handle) === true)
       ) as object;
-      const guest = this.#outWrapperGuest.get(wrapper) as QuickJSHandle;
-      markGuestProxy(wrapper, () => {
-        const target = this.#metadata.call('target', guest);
-        try {
-          if (!this.#ctx.eq(target, this.#ctx.null)) {
-            const origin = this.#hostOrigins.get(this.#idOf(target));
-            if (origin !== undefined) return proxyTargetCloneFailure(origin);
-          }
-          return this.#metadata.read('failure', guest) as string;
-        } finally {
-          target.dispose();
-        }
-      });
       return wrapper;
     });
   }
@@ -890,7 +872,7 @@ export class Membrane {
     // GC/`releaseWrapper`) instead of an untracked live handle that would later
     // abort `ctx.dispose()`. See `#retainForWrapper`.
     const target: unknown[] = [];
-    const wrapper = new RuntimeProxy(target, { getPrototypeOf: () => null });
+    const wrapper = new Proxy(target, { getPrototypeOf: () => null });
     this.#retainForWrapper(wrapper, handle, id);
     try {
       for (let i = 0; i < length; i++) {
@@ -991,7 +973,7 @@ export class Membrane {
       this.#syncTargetWith(target, guest, () => this.#wrappedGuestProto(guest), key);
     };
 
-    const wrapper = new RuntimeProxy(target, {
+    const wrapper = new Proxy(target, {
       getPrototypeOf: () => this.#wrappedGuestProto(guest),
       get(_t, key) {
         if (typeof key === 'symbol' && !hasSymbolKey(key)) return undefined;
@@ -1339,7 +1321,7 @@ export class Membrane {
     // and redefine the thunk's own `name`/`length` (both configurable on a fn) so
     // the Proxy surfaces them. Done BEFORE the Proxy so the wrapper is final.
     if (inspect) this.#copyFnNameLength(handle, thunk);
-    const wrapper = new RuntimeProxy(thunk, {
+    const wrapper = new Proxy(thunk, {
       getPrototypeOf: () => null,
       get(target, key, receiver) {
         if (!inspect && (key === 'name' || key === 'length')) {

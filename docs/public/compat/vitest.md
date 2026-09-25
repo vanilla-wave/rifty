@@ -51,3 +51,8 @@ Installed-environment/provider checks:
 `tests/e2e/owner-shell-vitest-ceilings.spec.ts`. The extra packages are actually
 installed; missing dependencies are not used as runtime ceiling evidence.
 
+Advanced fork IPC supports this non-binary scenario. Binary serialized graphs,
+including nested Buffer/typed arrays/DataView/ArrayBuffer/SharedArrayBuffer,
+throw `child_process.serialization.advanced.binary` before sending (ADR-0467).
+QuickJS Proxy-backed object/array mirrors cannot cross this native-clone IPC
+boundary. Other versions/modes are outside the guarantee; no artificial ban.

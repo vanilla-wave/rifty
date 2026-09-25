@@ -806,7 +806,7 @@ describe('browser Workbench owner transport', () => {
 
   it('spawns one run-to-completion owner with no config or binding in process env', () => {
     expect(workbenchOwnerSpawnSpec(input)).toEqual({
-      entry: { kind: 'url', url: '/workers/workbench-owner.js', role: 'runtime-bootstrap' },
+      entry: { kind: 'url', url: '/workers/workbench-owner.js' },
       argv: ['rifty', 'workbench-owner'],
       env: {},
       cwd: '/',

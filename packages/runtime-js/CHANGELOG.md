@@ -2,19 +2,18 @@
 
 ## [Unreleased]
 
-- Keep Proxy provenance capture open only for explicit trusted runtime bootstrap imports, then seal before guest work (ADR-0465).
+- Use one native advanced IPC snapshot; refuse binary graphs with a named ceiling. Remove custom Buffer serialization, Promise probes and runtime-wide Proxy capture (ADR-0467; user scope amendment).
+- Preserve VM Map/Set/Error cause backings and dense frozen builtinModules; document Proxy-backed VM mirrors as outside native IPC cloning.
+
 - Filter the canonical eval source pair from default fork startup while preserving explicit execArgv.
-- Snapshot SharedArrayBuffer-backed view bytes at advanced IPC send time while preserving view metadata.
 
 - Execute child startup preloads, conditions and flagged import.meta.resolve parent URLs; preserve Worker trusted inheritance and fork public defaults through exact node-entry v6 (ADR-0456).
 - Deliver originating Worker failures before exit; distinguish explicit exits, handled exceptions and unsupported custom-inspect projection (ADR-0460).
 - Preserve native postMessage return values used by Node BroadcastChannel infrastructure.
 - Keep vm.constants importable and refuse DONT_CONTEXTIFY with its named ceiling instead of jsdom's undefined-property TypeError.
 - Count manual refs on local native MessagePorts; preserve raw infrastructure channels and reject managed transfer before detachment (ADR-0452).
-- Preserve VM Proxy provenance and Map/Set/Error cause carriers; serialize real cross-realm slots without duplicate Error accessor reads (ADR-0453).
 - Record explicit VM retained-mirror, missing-exotic and replaced-stack-hook limitations.
 - Count Worker and parentPort lifetimes through drain; carry real stdio and accept empty execArgv (ADR-0449).
-- Reject host guest Proxies before advanced IPC snapshots; preserve Buffer/getters and dense frozen builtinModules (ADR-0453).
 
 - Allow actual symbol global mutation keys through shared CJS/ESM validation; preserve Function ceilings and helper binding hygiene.
 - Add advanced fork IPC value graphs and typed launch v5; keep JSON and private control separate (ADR-0446).

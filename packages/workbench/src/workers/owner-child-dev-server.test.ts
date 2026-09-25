@@ -83,7 +83,6 @@ describe('buildDevServerChildSpawnSpec', () => {
     expect(spec.entry).toEqual({
       kind: 'url',
       url: 'blob:dev-server-url',
-      role: 'runtime-bootstrap',
       bootstrap: {
         protocol: 'rifty.dev-server/v2',
         payload: {
