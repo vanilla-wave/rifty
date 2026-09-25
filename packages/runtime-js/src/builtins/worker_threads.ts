@@ -37,6 +37,7 @@ import {
 } from './process-bootstrap-identity.ts';
 import { type NodeProcessContextSnapshot, snapshotNodeProcessContext } from './process-context.ts';
 import { isNodeProcessExiting } from './process-lifecycle-events.ts';
+import { publicNodeProcess } from './process-public.ts';
 import { getProcessCwd, nodeProcessWorkerIpc } from './process.ts';
 import { type WorkerLaunch, resolveWorkerLaunch, sameRealmStdio } from './worker_threads-launch.ts';
 import { WorkerStdio } from './worker_threads-stdio.ts';
@@ -122,8 +123,9 @@ export class Worker extends EventEmitter {
     this.ownerBootstrap = readActiveNodeProcessBootstrap();
     const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
     this.launch = resolveWorkerLaunch(opts);
+    // Node pipes into its bootstrap process's streams, not a reassigned global.
     this.stdio = this.launch.kernelBacked
-      ? new WorkerStdio(this.ownerProcess as { stdout?: unknown }, this.launch.capture)
+      ? new WorkerStdio(publicNodeProcess() as { stdout?: unknown }, this.launch.capture)
       : null;
     const processContext = snapshotNodeProcessContext();
     const env =
