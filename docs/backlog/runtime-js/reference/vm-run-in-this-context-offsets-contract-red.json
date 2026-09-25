@@ -1,0 +1,329 @@
+{
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/vm-run-in-this-context-offsets.md @ 75ea85bce3969246d1f3b31bc61f2d95863d937c (status: ready; ADR-0450; evidence docs/backlog/runtime-js/reference/vm-run-in-this-context-offsets-evidence.md); goal docs/backlog/epics/vitest-run-in-browser/goal.md I4, I6 (unchanged); BASE 325ae797c0406453aed61b3a4e5d16f9c219d5ea; oracle Node v24.16.0 (V8 13.6.233.17-node.49), Chromium 148.0.7778.96",
+  "overall_verdict": "concern",
+  "merge_call": "Proceed to IMPLEMENT: no REV-5 Contract+RED blocker (oracle re-verified, every RED fails now for the unimplemented reason, no vacuous RED). Recommended before implementing: add Chromium-start-state variants of fault rows 1-2 (weak rows). Do not merge before GREEN and independent Final+GREEN.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:114",
+          "evidence": "Detached scratch of 75ea85bce (removed). Reviewer throwaway minimal ADR-0450 impl: per-script sourceURL identity rifty-vm://<lo>/<co>/<encoded filename>, owner accessor on Error.prepareStackTrace (cached wrapper / default ErrorPrepareStackTrace), Proxy projection; source-maps.ts window reads/writes the raw slot through the owner (ADR-0450 Decision 5) but, mode b, keeps BASE line 139 `Reflect.deleteProperty(errorCtor, 'prepareStackTrace')` when the pre-window value is undefined; mode good clears via the owner. Variants = committed rows 1/2 preceded by Reflect.deleteProperty(Error,'prepareStackTrace') (Chromium start state, contract Context + spec precondition {type:'undefined',own:false}). $ CR1_MODE=b npx vitest run packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts .../cr1-variants.test.ts -> ' ✓ script-offsets-stack-hook.fault.test.ts (3 tests)'; ' × after-window with Chromium default (hook undefined before the offset script) keeps the owner (fault row 1)' Received [\"/work/a.ts:3:1\",\"/virtual/late.js:4:35\",\"/work/b.ts:3:1\",\"missing\"]; ' × around-window with Chromium default … keeps the owner → expected 'missing' to be '/virtual/late.js:4:35''. $ CR1_MODE=good … -> Tests 7 passed (7). Committed test env pre-window hook: 'typeof function {\"value\":\"fn:prepareStackTrace\",\"writable\":true,…}' (host vitest interceptor), so source-maps.ts:139 is unreachable in every committed row. Node v24.16.0.",
+          "summary": "Fault rows 1-2 (and Acceptance 6 'never remove the owner') run only with a function-valued pre-window hook (host vitest), never from Chromium's start state (hook undefined). A plausible mutant that implements ADR-0450 Decision 5 but keeps source-maps.ts:139 Reflect.deleteProperty removes the owner in the product realm and passes all 3 committed fault rows. Rows graded weak (REV-4, advisory). Fix: rerun rows 1-2 after Reflect.deleteProperty(Error,'prepareStackTrace').",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:132",
+          "evidence": "Same scratch, CR1_MODE=a (source-maps.ts unchanged = ADR-0450 Decision 5 unimplemented): committed row 1 ' × … → Maximum call stack size exceeded' (killed); committed rows 2,3 pass; variant 'around-window: restores the value it read' (row 2 + `const readBefore = Error.prepareStackTrace; …; Error.prepareStackTrace = readBefore; expect(afterWindow).toBe(Error.prepareStackTrace)`) ' × expected [Function w] to be [Function w]' — the dispatcher stays the guest value after the window closes.",
+          "summary": "Row 2 does not assert Acceptance 6 'restore the value they read' for a window opened around the first offset script. With the window left unchanged, the dispatcher stays installed and row 2 passes. Row 1 already kills this mutant through self-recursion, so this is advisory hardening.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:146",
+          "evidence": "",
+          "summary": "Fault row 4 names three owner bypasses: delete, formatting inside a hook, and stack overflow. The carrier exercises only delete. The encoded-identity property is shared, so the row stays pass, but the other two bypasses have no RED.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/vm/script-offsets.test.ts:66",
+          "evidence": "$ node p-node.cjs (v24.16.0) -> 'runInNewContext co 1.5 RangeError ERR_OUT_OF_RANGE The value of \"options.columnOffset\" is out of range. It must be an integer. Received 1.5'; 'runInNewContext lo str TypeError ERR_INVALID_ARG_TYPE …'",
+          "summary": "Acceptance 5 lists runInNewContext, but no carrier calls runInNewContext with an invalid offset. Rifty's runInNewContext delegates to runInContext, which is covered, so no plausible surviving mutant was executed. The row stays pass.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:32",
+          "evidence": "$ node p-async.cjs (v24.16.0) -> 'async frames at inner (/virtual/async.js:12:65) | at async outer (/virtual/async.js:12:3)'",
+          "summary": "Acceptance 2 says 'every frame of an offset script', but no parity row contains an async (`at async`) frame from an offset script. vitest test bodies are async. Consider adding one row.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/vm-run-in-this-context-offsets.md:36",
+          "evidence": "",
+          "summary": "Rendering rows (Acceptance 2-3, Parity 1-7) trace only to I6, which states load/execute as under Node, not stack positions (RDY-3 trace exactness). The trace may not hold at Final+GREEN. Add '+ ADR-0450', whose Consequences state that default stacks show Node's positions.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/epics/vitest-run-in-browser/map.md:43",
+          "evidence": "",
+          "summary": "Map item 10 says I4/I5 while the contract traces I4, I6. The map open question 'vm offsets carrier' is answered by ADR-0450. Re-chart at land. goal.md is unchanged.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/runtime-js/0450-project-vm-script-offsets-through-one-owned-stack-hook.md:68",
+          "evidence": "$ node p-async.cjs (v24.16.0) -> 'nested eval at eval (eval at f (/virtual/nested-eval.js:1:24), <anonymous>:1:1) | at f (/virtual/nested-eval.js:6:27)'; reviewer minimal ADR-0450 §4 owner (scratch, tsx) -> 'at eval (eval at f (rifty-vm://5/3/%2Fvirtual%2Fnested-eval.js), <anonymous>:1:1) | at f (/virtual/nested-eval.js:6:27)'",
+          "summary": "'Other CallSites pass through untouched' leaks the encoded identity into eval-origin text for eval called inside an offset script. Node shows the real filename. This divergence is missing from Out of scope and the compat ❌ list.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/vm-run-in-this-context-offsets.md:84",
+          "evidence": "$ node p-node.cjs -> 'zero-offset no filename     at evalmachine.<anonymous>:1:7'; rifty BASE (tsx, vm/index.ts) -> 'at eval (eval at <anonymous> (eval at <anonymous> (…/vm/index.ts:1:838)), <anonymous>:1:7)'",
+          "summary": "Pre-existing gap missing from §Discovered 1-4: with zero offsets and no filename, rifty renders <anonymous> where Node renders evalmachine.<anonymous>. After this unit only offset scripts get evalmachine.<anonymous>. Route to backlog (REV-12).",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "coverage": [
+    {
+      "row": "A1 runInThisContext/Script accept any int32 offset, execute unchanged, never throw offset gaps; vitest module-evaluator shape returns its function",
+      "source": "acceptance",
+      "trace": "I4+I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:66; tools/node-parity-runner/cases/vm/run-in-this-context-offsets-callsites.case.ts:42; packages/runtime-js/src/builtins/vm/script-offsets.test.ts:38",
+      "note": ""
+    },
+    {
+      "row": "A2 every offset-script frame renders as Node (line+lineOffset, column+columnOffset on physical line 1, unclamped, zero omitted); other scripts unchanged",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:32-60; tests/browser-unit/vm-script-offsets.spec.ts:64",
+      "note": ""
+    },
+    {
+      "row": "A3 offsets belong to the script; Script keeps constructor offsets, run options carry none; default filename evalmachine.<anonymous>",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:46-63",
+      "note": ""
+    },
+    {
+      "row": "A4 guest prepareStackTrace hook (before/after) gets offset CallSites (getters, null ≤0, filename, toString); save/restore and reset keep offsets",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets-callsites.case.ts:31-89; tests/browser-unit/vm-script-offsets.spec.ts:64",
+      "note": ""
+    },
+    {
+      "row": "A5 int32 validation (exact messages, lineOffset first) on runInThisContext, Script, runInContext, runInNewContext, compileFunction before any gap",
+      "source": "acceptance",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:70-99; packages/runtime-js/src/builtins/vm/script-offsets.test.ts:66-86",
+      "note": ""
+    },
+    {
+      "row": "A6 one owner: ADR-0136 windows after/around an offset script keep both remaps, restore what they read, never remove the owner; bypass never shows unshifted position; next offset script re-projects",
+      "source": "acceptance",
+      "trace": "ADR-0450",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:114-162",
+      "note": "Executed mutant (Completeness concern 1): the owner is removed when the pre-window hook is undefined (Chromium start state). All committed fault rows pass because host vitest always has a function hook."
+    },
+    {
+      "row": "A7 compat node:vm row + CHANGELOG + ADR-0450 indexed",
+      "source": "acceptance",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "docs/adr/README.md:101; docs/backlog/runtime-js/vm-run-in-this-context-offsets.md:41",
+      "note": ""
+    },
+    {
+      "row": "P1 line1-negative-column /virtual/mod.js:1:-13",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:32",
+      "note": ""
+    },
+    {
+      "row": "P2 offsets split by physical line (b/c/d/e/i/j rows)",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:33-38",
+      "note": ""
+    },
+    {
+      "row": "P3 non-positive shifted positions + getter boundaries",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:41-43; tools/node-parity-runner/cases/vm/run-in-this-context-offsets-callsites.case.ts:77-89",
+      "note": ""
+    },
+    {
+      "row": "P4 vm.Script rows (line2, line1, run-options-ignored, reused)",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:46-50",
+      "note": ""
+    },
+    {
+      "row": "P5 per-script + default-filename",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:53-56,63",
+      "note": ""
+    },
+    {
+      "row": "P6 deferred-line2/line1 + captureStackTrace",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:59-60,102-109",
+      "note": ""
+    },
+    {
+      "row": "P7 exec 42 7",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:66",
+      "note": ""
+    },
+    {
+      "row": "P8 validation 15 option sets × {runInThisContext, Script}",
+      "source": "acceptance",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:70-99",
+      "note": ""
+    },
+    {
+      "row": "P9 vitest/vite hook shape rows (vite-hook, callsites-pattern, late-hook, restored)",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets-callsites.case.ts:31-74",
+      "note": ""
+    },
+    {
+      "row": "P10 cases 1-9 same stdout in a fresh Chromium module worker as runInNode",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/vm-script-offsets.spec.ts:31-65",
+      "note": ""
+    },
+    {
+      "row": "F sibling-drift × guest assigns hook before/after an offset script",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets-callsites.case.ts:31-74; tests/browser-unit/vm-script-offsets.spec.ts:64",
+      "note": ""
+    },
+    {
+      "row": "F concurrent-same-key × ADR-0136 window after an offset script, twice: both remaps, restore reads back pre-window value, no self-recursion",
+      "source": "fault-matrix",
+      "trace": "ADR-0450",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:114",
+      "note": "The committed row kills the unchanged-window mutant through self-recursion. It passes a mutant that deletes the owner when the pre-window value is undefined; the Chromium-start variant fails with Received [...,'missing'] (Completeness concern 1)."
+    },
+    {
+      "row": "F concurrent-same-key × first offset script inside an ADR-0136 window: restore keeps the owner, frames still project",
+      "source": "fault-matrix",
+      "trace": "ADR-0450",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:132",
+      "note": "The committed row passes the owner-deleting mutant; the Chromium-start variant fails with expected 'missing' to be '/virtual/late.js:4:35' (Completeness concern 1)."
+    },
+    {
+      "row": "F provenance-lie × formatter bypassing the owner: encoded identity, never unshifted file:line:col; next offset script re-installs",
+      "source": "fault-matrix",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:146",
+      "note": ""
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4 + I6 (this unit Acceptance 1-7, Fault matrix)",
+      "location": "docs/backlog/runtime-js/vm-run-in-this-context-offsets.md:33",
+      "summary": "Implement ADR-0450 and turn every RED green (parity ×2, unit, fault, Chromium browser-unit), update compat and CHANGELOG, then run an independent Final+GREEN."
+    },
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:97",
+      "summary": "npm overrides bare-version spelling (map item 1) is still a mapped child."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:100",
+      "summary": "Worker keepalive (map item 8) is still a mapped child."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:104",
+      "summary": "Process lifecycle events and exitCode (map item 7) are still a mapped child."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:108",
+      "summary": "End-to-end vitest run on forks (map items 6, 9, 11, 13, 12) is still open."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:115",
+      "summary": "The threads pool (map items 11, 12) is still open."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "The remaining load/execute walls (map items 2-5) are still open."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:122",
+      "summary": "The vitest.md compat page (map item 12) is still open."
+    }
+  ],
+  "goal_complete": false,
+  "reviewed_sha": "75ea85bce3969246d1f3b31bc61f2d95863d937c"
+}

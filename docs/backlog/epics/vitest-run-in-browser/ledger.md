@@ -1,9 +1,0 @@
-# Ledger — vitest-run-in-browser (append-only)
-
-- 2026-09-15 — refined from the user question "can vitest run in rifty; which platform capabilities are missing"; probes + interview evidence: `docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md`.
-- 2026-09-15 — final written-result check pass 1 (RDY-6; fresh read-only reviewer subagent over the working tree on main 51440931a): 7 problems — child-8 contract vs fog, I2 over-broad (Worker only proven), I7 manifest precondition, stale-dir repeat-use, blocked_by vs map order, I3 `beforeExit`/`exit()` need, Node oracle from memory — all resolved in the landed revision.
-- 2026-09-16 — final written-result check pass 2 (fresh read-only reviewer subagent over the working tree on main 51440931a): prior 7 resolved; 5 new — review-record forward claim, npm overrides semantics unverified, "same files" oracle wording, `vitest.config.ts`/`.ts`-tests scope gap (user asked), blocked_by prose — all but the scope answer resolved in the landed revision; Node v24.16.0 + npm 11.17.0 oracle evidence added.
-- 2026-09-16 — user amendment before ready: `vitest.config.ts` + TypeScript tests in the claim ("Да: config.ts + .ts-тесты в заявке"); Outcome/scenario/I4/I7/map/acceptance amended; amended scenario re-run on main (evidence §I4-amended).
-- 2026-09-16 — final written-result check pass 3 (fresh read-only reviewer subagent over the working tree on main 51440931a): pass-2 problems resolved; 4 wording/citation problems (Outcome "default config", I4 evidence sentence, vite TS-config proof scope, §Oracle framing) fixed before landing; scope re-check clean → `status: ready`.
-
-- 2026-09-16 — landed refine + FIT set @ f872eb5c0 (reviewed revision for passes 1–3 = this set over main 51440931a).

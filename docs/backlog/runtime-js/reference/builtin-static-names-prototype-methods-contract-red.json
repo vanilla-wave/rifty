@@ -1,0 +1,160 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED PASS (advisory concerns only): proceed to IMPLEMENT; merge still requires GREEN + independent Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md @ 5f355a65423d5bb3db6e1bfed48e9e18e9717b6f (branch vg/u3), BASE 325ae797c0406453aed61b3a4e5d16f9c219d5ea; goal docs/backlog/epics/vitest-run-in-browser/goal.md I6 (line 117); oracle host Node v24.16.0 darwin",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "This unit's GREEN (reshape NodeProcess) + Final+GREEN pending; remaining I6 walls owned by map items 2, 4, 5, 10."
+    },
+    {
+      "clause": "I1, I2, I3, I4, I5, I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:11-58",
+      "summary": "Open via map items 1, 6-9, 11-13; end-to-end proof at item 12."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: `import { cwd } from 'node:process'` links; imported cwd() equals process.cwd(); RED at BASE with link SyntaxError on `cwd`",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-members.case.ts:11",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: cwd/chdir/hrtime/uptime/exit/kill/nextTick own data props (w/e/c true), exitCode own accessor (e, non-c); in Object.keys; ns[name] === process[name]; hrtime.bigint own",
+      "source": "acceptance",
+      "trace": "ADR-0348",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-members.case.ts:17-29",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: detached exit(3) closes code 3, detached kill(pid,'SIGUSR2') closes signal SIGUSR2, no stderr; RED at BASE TypeError code 1",
+      "source": "acceptance",
+      "trace": "ADR-0348",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/unbound-exit-kill.case.ts:13-37",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: on/emit/addListener/prependListener/removeListener/removeAllListeners/listenerCount/pushStdin named imports are link SyntaxError naming the export; none own on process (guard, red under prototype walk)",
+      "source": "acceptance",
+      "trace": "ADR-0348",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-members-off-surface.case.ts:8-38",
+      "note": ""
+    },
+    {
+      "row": "Parity case 1 frozen Node v24.16.0 output of process/esm-named-members",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0348",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md:44",
+      "note": ""
+    },
+    {
+      "row": "Parity case 2 frozen Node output of process/esm-named-members-off-surface (8x SyntaxError:true + 8 false own flags)",
+      "source": "frozen-artifact",
+      "trace": "ADR-0348",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md:45",
+      "note": ""
+    },
+    {
+      "row": "Parity case 3 frozen Node output of process/unbound-exit-kill (code 3 / signal SIGUSR2, stderr false)",
+      "source": "frozen-artifact",
+      "trace": "ADR-0348",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md:46",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md:32-33",
+          "evidence": "ADR-0348 §2 (docs/adr/runtime-js/0348-synchronous-require-esm-on-node-24.md:44-52) states only the builtin static-name rule (enumerable keys of the rifty object; missing edge = link SyntaxError). Carriers still discriminate every part: scratch mutants on HEAD process.ts (candidate = own bound members + own exitCode accessor turns all 3 cases green) — M1 bound hrtime without .bigint -> esm-named-members `TypeError: __m0(...).hrtime.bigint is not a function`; M2 exitCode left on prototype -> exitCode [\"undefined\",\"undefined\",null,null], keys/nsHas last=false; M4 writable:false -> own [false,true,true]x6; M6 exitCode configurable:true -> exitCode [...,true,true]; M3 own unbound methods -> unbound-exit-kill code 1/stderr true (esm cases green).",
+          "summary": "Acceptance 2 descriptor details (writable/configurable, exitCode non-configurable, hrtime.bigint own) and Acceptance 3 (detached exit/kill) trace only to ADR-0348, which does not state them (RDY-3 exactness) — those parts are carrier notes, not blockable obligations at Final+GREEN; consider an I6 trace for the exercised-path parts or accept them as notes.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/process/esm-named-members.case.ts:24-33",
+          "evidence": "Temporary esm case in scratch (setup lib.mjs `export function who() { return typeof this; }`; `import { who } from './lib.mjs'; console.log(who())`): pnpm test:parity -> `- undefined` (Node v24.16.0) / `+ object` (rifty @ 5f355a654).",
+          "summary": "The `unbound` row never makes an unbound call on the rifty side: rifty's ESM transform invokes imported bindings with a receiver (Node: this === undefined). Acceptance 1's 'called unbound' holds only because rifty cwd/chdir/hrtime/uptime are this-independent; the only real detached proof is the CJS child-worker case for exit/kill. Pre-existing loader divergence outside this unit.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/epics/vitest-run-in-browser/map.md:16-18",
+          "evidence": "",
+          "summary": "Map item 3 still names the rejected mechanism ('static export names … include its prototype methods'); Decision line 65 defers the edit to the land step — keep it on the land checklist.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md:64",
+          "evidence": "",
+          "summary": "IMPLEMENT plans a ≤140-line TTY-writer extraction from process.ts sized partly for future items 4/7/9/11; no carrier covers the move — Final+GREEN must confirm it is a pure behavior-preserving move and no larger than the ratchet-driven cohesive block.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md:55",
+          "evidence": "grep -rlE '_listenersMap|over-export|self-signal|SIGUSR2' docs/backlog -> only this unit, its evidence file and unrelated nodemon/same-realm docs; grep 'typeof this|call receiver' docs/backlog -> none.",
+          "summary": "Discoveries D1 (non-IPC over-export of send/disconnect/connected/channel/_listenersMap/_warned), D2 (self SIGUSR2 with listener terminates) and the import-call receiver divergence above have no backlog item yet; the driver must capture them (rifty-to-backlog) before landing so they are not a silent backlog.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "5f355a65423d5bb3db6e1bfed48e9e18e9717b6f"
+}

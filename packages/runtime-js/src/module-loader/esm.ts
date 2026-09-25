@@ -1,7 +1,16 @@
 import { NotImplementedError } from '@riftydev/io';
 import type { Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
+import type { Edit } from './cjs-source-rewrite.ts';
 import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
+import {
+  globalWriteKeyMayBeFunction,
+  isComputedMember,
+  literalString,
+  staticPropertyKeyName,
+  staticPropertyName,
+  unwrapChain as unwrapGuardChain,
+} from './global-write-key.ts';
 
 interface GuardNodeShape {
   readonly type: string;
@@ -20,6 +29,8 @@ interface GuardScope {
 
 interface EsmFunctionGuardCtx {
   readonly scopes: GuardScope[];
+  readonly keyHelperName: string;
+  readonly keyEdits: Edit[];
   hasGlobalFunctionWrite: boolean;
   hasDynamicFunctionScope: boolean;
   hasWithDynamicFunctionScope: boolean;
@@ -34,8 +45,13 @@ const functionRoutingAnalysisToken =
   /\bFunction\b|\bconstructor\b|\bglobalThis\b|\bglobal\b|\bObject\b|\bReflect\b|__define(?:Getter|Setter)__|\beval\b|\bwith\b/;
 const directEvalImportProbeHelper = '__riftyDynamicImport';
 
-export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): void {
-  if (!functionRoutingAnalysisToken.test(source)) return;
+/** Throws the load-time ceilings; returns the runtime global-key check edits (ADR-0444). */
+export function assertNoEsmFunctionRoutingCeiling(
+  source: string,
+  id: string,
+  keyHelperName: string,
+): readonly Edit[] {
+  if (!functionRoutingAnalysisToken.test(source)) return [];
   let program: Program;
   try {
     program = acornParse(source, {
@@ -45,7 +61,7 @@ export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): v
       locations: false,
     }) as Program;
   } catch {
-    return;
+    return [];
   }
 
   const rootScope = createGuardScope();
@@ -54,6 +70,8 @@ export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): v
   predeclareGuardLexicalScope(body, rootScope);
   const ctx: EsmFunctionGuardCtx = {
     scopes: [rootScope],
+    keyHelperName,
+    keyEdits: [],
     hasGlobalFunctionWrite: false,
     hasDynamicFunctionScope: false,
     hasWithDynamicFunctionScope: false,
@@ -84,6 +102,7 @@ export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): v
       `ESM module ${id} writes the Function binding/global property; rifty cannot emulate that without mutating the host constructor, so this module is an explicit ceiling`,
     );
   }
+  return ctx.keyEdits;
 }
 
 function createGuardScope(): GuardScope {
@@ -500,7 +519,7 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
       return;
     case 'UnaryExpression':
       if ((n as unknown as { operator?: string }).operator === 'delete') {
-        walkGuardAssignmentTarget(n.argument, ctx);
+        walkGuardDeleteOperand(n.argument, ctx);
         return;
       }
       walkGuardDefault(n, ctx);
@@ -681,6 +700,16 @@ function walkGuardAssignmentTarget(target: unknown, ctx: EsmFunctionGuardCtx): v
     return;
   }
   walkGuardAssignmentPatternTarget(t, ctx);
+}
+
+// `delete` deletes only a reference (optionally chained); any other operand is
+// an ordinary expression that still runs.
+function walkGuardDeleteOperand(operand: unknown, ctx: EsmFunctionGuardCtx): void {
+  const o = operand as GuardNodeShape | undefined;
+  const target = o?.type === 'ChainExpression' ? (o.expression as GuardNodeShape) : o;
+  if (target?.type === 'Identifier' || target?.type === 'MemberExpression') {
+    walkGuardAssignmentTarget(target, ctx);
+  } else walkEsmFunctionGuard(operand, ctx);
 }
 
 function walkGuardAssignmentPatternTarget(pattern: unknown, ctx: EsmFunctionGuardCtx): void {
@@ -1257,8 +1286,8 @@ function isGlobalFunctionReadMember(node: GuardNodeShape, ctx: EsmFunctionGuardC
 
 function isGlobalFunctionWriteMember(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {
   if (!isGlobalObjectExpression(node.object, ctx)) return false;
-  const propertyName = staticPropertyName(node);
-  return propertyName === 'Function' || (propertyName === undefined && isComputedMember(node));
+  if (!isComputedMember(node)) return staticPropertyName(node) === 'Function';
+  return globalWriteKeyMayBeFunction(node.property, ctx.keyHelperName, ctx.keyEdits);
 }
 
 function guardExpressionMayBeHostFunction(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
@@ -1466,14 +1495,14 @@ function isGlobalFunctionMutationCall(node: GuardNodeShape, ctx: EsmFunctionGuar
     if (propertyName === 'defineProperties') {
       return objectMayContainFunctionKey(args[1]);
     }
-    return propertyMayBeFunction(args[1]);
+    return globalWriteKeyMayBeFunction(args[1], ctx.keyHelperName, ctx.keyEdits);
   }
 
   if (
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
-    return propertyMayBeFunction(args[0]);
+    return globalWriteKeyMayBeFunction(args[0], ctx.keyHelperName, ctx.keyEdits);
   }
 
   return false;
@@ -1499,66 +1528,4 @@ function objectMayContainFunctionKey(node: unknown): boolean {
     const key = staticPropertyKeyName(property);
     return key === 'Function' || key === undefined;
   });
-}
-
-function staticPropertyName(node: GuardNodeShape): string | undefined {
-  const n = unwrapGuardChain(node) as GuardNodeShape;
-  const member = n as unknown as { computed?: boolean; property?: GuardNodeShape };
-  const property = member.property;
-  if (!property) return undefined;
-  if (!member.computed && property.type === 'Identifier') {
-    return (property as unknown as { name?: string }).name;
-  }
-  return member.computed ? literalString(property) : undefined;
-}
-
-function isComputedMember(node: GuardNodeShape): boolean {
-  return Boolean((unwrapGuardChain(node) as unknown as { computed?: boolean }).computed);
-}
-
-function staticPropertyKeyName(node: GuardNodeShape): string | undefined {
-  const property = node as unknown as { computed?: boolean; key?: GuardNodeShape };
-  const key = property.key;
-  if (!key) return undefined;
-  if (!property.computed && key.type === 'Identifier') {
-    return (key as unknown as { name?: string }).name;
-  }
-  return literalString(key);
-}
-
-function literalString(node: unknown): string | undefined {
-  if (!node || typeof node !== 'object') return undefined;
-  const n = unwrapGuardChain(node) as GuardNodeShape;
-  if (n.type === 'Literal') {
-    const value = (n as unknown as { value?: unknown }).value;
-    return typeof value === 'string' ? value : undefined;
-  }
-  if (n.type === 'BinaryExpression' && (n as unknown as { operator?: string }).operator === '+') {
-    const left = literalString(n.left);
-    const right = literalString(n.right);
-    return left !== undefined && right !== undefined ? left + right : undefined;
-  }
-  if (n.type === 'TemplateLiteral') {
-    const expressions = (n as unknown as { expressions?: unknown[] }).expressions ?? [];
-    if (expressions.length > 0) return undefined;
-    const quasis = (n as unknown as { quasis?: GuardNodeShape[] }).quasis ?? [];
-    return quasis
-      .map((quasi) => {
-        const value = quasi.value as { cooked?: unknown } | undefined;
-        return typeof value?.cooked === 'string' ? value.cooked : '';
-      })
-      .join('');
-  }
-  return undefined;
-}
-
-function unwrapGuardChain(node: unknown): unknown {
-  if (!node || typeof node !== 'object') return node;
-  const n = node as GuardNodeShape;
-  if (n.type === 'ChainExpression') return unwrapGuardChain(n.expression);
-  if (n.type === 'SequenceExpression') {
-    const expressions = (n as unknown as { expressions?: unknown[] }).expressions ?? [];
-    return unwrapGuardChain(expressions[expressions.length - 1]);
-  }
-  return node;
 }

@@ -6,13 +6,22 @@
  * reaping, so a child exits on "loop empty" like Node, not at top-level resolve.
  *
  * Loud-fail (no silent stub): a recorded `unhandledrejection` rejects the drain
- * (→ kernel stderr + exit 1); a never-draining loop rejects with a
- * self-explanatory cap error rather than hanging the worker forever. The cap is
- * a SAFETY-NET, not a faithfulness feature (Node has no cap) — generous + loud +
- * documented (see ADR + compat matrix).
+ * (→ stderr + exit 1: the process's fatal terminal, else the kernel's); a
+ * never-draining loop rejects with a self-explanatory cap error rather than
+ * hanging the worker forever. The cap is a SAFETY-NET, not a faithfulness
+ * feature (Node has no cap) — generous + loud + documented (see ADR + compat
+ * matrix).
  */
 
 import { setKernelDrainHook } from '@riftydev/kernel';
+import {
+  dispatchUncaughtException,
+  dispatchUnhandledRejection,
+  isRiftyProcessExit,
+  readNodeProcessTerminal,
+  takeUndispatchedRethrow,
+  terminateFatal,
+} from '../builtins/process-lifecycle-events.ts';
 
 const PromiseConstructorPrimordial = Promise;
 const promiseResolvePrimordial = Promise.resolve;
@@ -129,7 +138,7 @@ export function trackKeepalivePromise(promise: PromiseLike<unknown>): void {
     () => unref(),
     (err) => {
       unref();
-      recordRejection(err);
+      handleRealmUnhandledRejection(err, promise);
     },
   );
 }
@@ -330,7 +339,8 @@ export interface DrainOptions {
 
 /**
  * Resolve once the event loop has drained (refCount→0), reject on a recorded
- * rejection or once `capMs` elapses without draining.
+ * rejection, with the active process's exit terminal, or once `capMs` elapses
+ * without draining.
  *
  * The first check runs on the MACROTASK queue so all pending microtasks (e.g. a
  * detached `import(...).then(run)` chain whose loader reads are microtask-driven)
@@ -356,6 +366,7 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
   const start = now();
   return new PromiseConstructorPrimordial<void>((resolve, reject) => {
     let terminal = false;
+    let idleConfirmed = false;
     const finish = (
       outcome:
         | { readonly kind: 'resolved' }
@@ -417,12 +428,26 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
         });
         return;
       }
-      if (state.refCount <= 0 && !opts.hasRef?.()) {
-        // TODO(backlog: runtime-js/late-unhandled-rejection-drain): cover a late
-        // browser unhandledrejection task without a second drain owner.
-        finish({ kind: 'resolved' });
+      // ADR-0445: the process's first terminal ends its loop in-realm, as the
+      // control port ends a kernel child; no later task runs as that process.
+      const exited = readNodeProcessTerminal();
+      if (exited !== null) {
+        finish({ kind: 'rejected', reason: exited, origin: 'explicit-exit' });
         return;
       }
+      if (state.refCount <= 0 && !opts.hasRef?.()) {
+        // ADR-0445 rule 7: Chromium queues `unhandledrejection` as its own task,
+        // possibly behind this sample — settle only when the next host task
+        // still sees zero refs and no rejection.
+        if (idleConfirmed) {
+          finish({ kind: 'resolved' });
+          return;
+        }
+        idleConfirmed = true;
+        schedule(tick);
+        return;
+      }
+      idleConfirmed = false;
       if (now() - start > capMs) {
         if (state.nodeEvalDrainOwner === nodeEvalDrainLease) {
           state.nodeEvalDrainOwner = null;
@@ -442,6 +467,7 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
 
 interface RejectionEventLike {
   reason: unknown;
+  promise?: unknown;
   preventDefault?(): void;
 }
 interface RejectionTarget {
@@ -457,18 +483,32 @@ interface ErrorTarget {
   addEventListener(type: 'error', cb: (ev: ErrorEventLike) => void): void;
 }
 
-interface RiftyProcessExit {
-  readonly code: 'RIFTY_PROCESS_EXIT';
-  readonly exitCode: number;
+/**
+ * A realm-uncaught error (ADR-0445): process listeners first; unhandled → the
+ * eval terminal claim, else the default Worker report. True = cancel the report.
+ */
+export function handleRealmUncaughtError(reason: unknown): boolean {
+  if (isRiftyProcessExit(reason)) return true;
+  if (!takeUndispatchedRethrow(reason)) {
+    const { kind } = dispatchUncaughtException(reason, 'uncaughtException');
+    if (kind === 'handled' || kind === 'exited') return true;
+  }
+  return beginNodeEvalUnhandled(reason, 'uncaught-error');
 }
 
-function isRiftyProcessExit(reason: unknown): reason is RiftyProcessExit {
-  return (
-    typeof reason === 'object' &&
-    reason !== null &&
-    (reason as { readonly code?: unknown }).code === 'RIFTY_PROCESS_EXIT' &&
-    typeof (reason as { readonly exitCode?: unknown }).exitCode === 'number'
-  );
+/**
+ * A realm-unhandled rejection (ADR-0445): process listeners first; unhandled →
+ * the eval terminal claim, else the fatal terminal runs now (stderr, one exit
+ * request) and the drain settles with its exit signal. True = cancel the
+ * browser report. An exit signal is never dispatched: the drain carries its code.
+ */
+export function handleRealmUnhandledRejection(reason: unknown, promise: unknown): boolean {
+  const outcome = isRiftyProcessExit(reason) ? null : dispatchUnhandledRejection(reason, promise);
+  if (outcome?.kind === 'handled' || outcome?.kind === 'exited') return true;
+  if (beginNodeEvalUnhandled(reason, 'rejection')) return true;
+  const fatal = outcome?.kind === 'unhandled' ? terminateFatal(outcome.error) : null;
+  recordRejection(fatal ?? reason);
+  return fatal !== null;
 }
 
 export function installUnhandledErrorTrap(
@@ -481,8 +521,7 @@ export function installUnhandledErrorTrap(
         : typeof event.message === 'string'
           ? new Error(event.message)
           : new Error('Worker terminated by an uncaught error');
-    if (!beginNodeEvalUnhandled(reason, 'uncaught-error')) return;
-    event.preventDefault?.();
+    if (handleRealmUncaughtError(reason)) event.preventDefault?.();
   });
 }
 
@@ -493,18 +532,15 @@ export function installUnhandledErrorTrap(
  * LOUDLY.
  *
  * Eval claims are controlled terminal paths: print flushes before the drain or
- * served-worker fallback emits the diagnostic and exit. Other realms retain
- * default reporting while their run-to-completion drain records the reason.
+ * served-worker fallback emits the diagnostic and exit. Other realms run the
+ * process's fatal terminal at once (ADR-0445 rule 3); a realm without a process
+ * keeps default reporting while its run-to-completion drain records the reason.
  */
 export function installUnhandledRejectionTrap(
   target: RejectionTarget = self as unknown as RejectionTarget,
 ): void {
   target.addEventListener('unhandledrejection', (ev: RejectionEventLike) => {
-    if (beginNodeEvalUnhandled(ev.reason, 'rejection')) {
-      ev.preventDefault?.();
-      return;
-    }
-    recordRejection(ev.reason);
+    if (handleRealmUnhandledRejection(ev.reason, ev.promise)) ev.preventDefault?.();
   });
 }
 

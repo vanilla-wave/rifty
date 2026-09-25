@@ -98,6 +98,16 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0383 | No COI VM default and preboot worker selection |
 | 0385 | Keep one foreground drain across HTTP server close |
 | 0422 | Retire callbacks with completed command invocations |
+| 0443 | Named-loud builtin members for linked, unsuppliable Node edges |
+| 0444 | Check runtime global-write keys at Node's key coercion |
+| 0445 | Dispatch Node process lifecycle events before terminal handling |
+| 0446 | Count live `worker_threads` Workers in child-realm keepalive |
+| 0447 | Count referenced MessagePorts in child-realm keepalive |
+| 0448 | Carry advanced fork IPC as a native structured clone |
+| 0449 | Carry Node startup options on fork and Worker launches; expose Worker stdio streams |
+| 0450 | Project vm script offsets through one owned stack hook |
+| 0458 | Read the realm-bound `node:process` registry entry uncached in io |
+| 0464 | Named-loud members for charted unclaimed-mode ceilings |
 
 ### runtime-wasi
 
@@ -178,6 +188,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0399 | Preserve declared companion policy through retained-lock acquisition |
 | 0433 | Preserve Vite module URLs at the filesystem root |
 | 0435 | Follow npm tar root stripping for materialized installs |
+| 0451 | User override values follow npm's version/range reading |
 
 ### playground
 
@@ -413,6 +424,13 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0445 rule 5 control-port-only exit request; Consequences "no-COI command keeps its own settlement" | note 2026-09-25 | the drain settles with the active process's first terminal (every kernel child unchanged); no-COI command and runBin report that status, the command replaces its realm only when a live non-timer handle outlives it |
+| 0326 advanced-IPC-serialization loud-gap + launch-plan `ipc: 'none' \| 'json'` clauses | 0448 / notes 2026-09-23, 2026-09-25 | fork `serialization: 'advanced'` rides the public lane as a native structured clone with Node's view/refusal rules; handles, callbacks/options, channel `ref()`/`unref()` stay gaps; launch plan `ipc` gains `'advanced'` |
+| 0416 active node-entry v4 version | 0448 / note 2026-09-23 | v5 carries program launch `ipc: 'advanced'`; SQLite absence semantics unchanged |
+| 0448 active node-entry v5 version | 0449 / note 2026-09-25 | v6 carries program and worker-thread `execArgv` (`-r`/`-C`/`--experimental-import-meta-resolve`); advanced IPC unchanged |
+| 0443 §2 "stay absent" clause | 0464 / note 2026-09-25 | a member a ❌-listed mode reaches first with a bare `TypeError` ships with Node's shape — real data or a named `NotImplementedError` (`vm.constants`, `http.Agent`) |
+| 0348 §2 link-only-placeholder clause | 0443 + 0464 / notes 2026-09-23, 2026-09-25 | an observed link/load-time edge whose real behavior rifty cannot supply ships as a named `NotImplementedError` member; 0464 adds a member a ❌-listed mode reaches first with a bare `TypeError` (`http.Agent`); called edges on the claimed path still need the real contract |
+| 0136 option-1 no-permanent-global-hook premise; Decision install/restore-on-raw-slot clause | 0450 / note 2026-09-25 | once an offset script ran the realm keeps ADR-0450's owned accessor; the window reads/writes the hook value through it and never deletes it; scoped TS remap unchanged |
 | 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
 | 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |
@@ -497,6 +515,10 @@ superseded.
 | 0054 pipe-sink deferral | 0154 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
+| 0152 §1 named handle set | 0447 / note 2026-09-25 | a manually referenced `MessagePort` is counted (one ref per port; `unref()` or `close()` of either pair end releases; transfers that would hide a release are named throws); listener referencing stays an explicit gap; §1 shape unchanged, named set grew |
+| 0152 §1 first zero-ref sample settles the drain; §3 every recorded rejection is fatal | 0445 / note 2026-09-25 | a zero-ref drain settles after one more host task confirms it (late Chromium `unhandledrejection`); a rejection a process listener handles is canceled and not recorded; the no-listener default stays stderr + exit `uint8(exitCode ?? 1)` read after the `'exit'` listeners (1 unless one reassigns it), a rejection's printed and requested at the trap and the drain records that exit |
+| 0152 §1 named handle set; 0445 rule 6 natural exit (worker thread; `node <file>`, `node -e`, execSync child) | 0446 / note 2026-09-25 | a live `worker_threads.Worker` is counted through Node's own `Symbol(kHandle)`/`Symbol(kPublicPort)` references (napi-rs can neuter them), a worker realm's `parentPort` is counted while referenced by its `'message'` listeners, worker-thread realms drain uncapped then exit naturally, and no natural exit calls the reassignable `process.exit`; ADR-0445's "worker-thread natural exit stays with map item 8" gap is closed; §1 shape unchanged, named set grew |
+| 0157 §1 `exit()` clause | 0445 / note 2026-09-25 | `exitCode` starts `undefined`; `exit()` without an argument uses it, emits `'exit'` once before the kernel exit request, and natural exit calls it |
 | 0155 §5 loud-only interactive-stdin clause | 0230 / note 2026-07-13 | owner PTY pump ships flowing stdin, explicit EOF, and pause/resume; ADR-0225 ships live resize; pull/raw gaps stay loud |
 | 0157 §4 forward-target/interim-guard clause | 0230 / note 2026-07-13 | Node and `.bin` children consume flowing stdin; pull/raw surfaces remain exact loud gaps |
 | 0135 §4 slug = preset.id reuse key | 0165 | multi-project: install-stamp slug becomes project-scoped (`slug=projectId\|'scratch'`); same-Starter projects must not share node_modules; cleanup fires on root/projectId change |

@@ -111,8 +111,9 @@ parentPort.on('message', (data) => {
     const worker = new Worker(new URL('file:///w-esm.mjs'), {
       workerData: { answer: 42 },
     });
-    expect(worker.unref()).toBe(worker);
-    expect(worker.ref()).toBe(worker);
+    // Node's Worker#ref/unref return undefined (handle-reference-api parity case).
+    expect(worker.unref()).toBeUndefined();
+    expect(worker.ref()).toBeUndefined();
 
     const messages: unknown[] = [];
     const nextMessage = () =>
@@ -256,7 +257,7 @@ globalThis.onmessage = ({ data }) => {
     }
   });
 
-  it('publishes trusted stdout and stderr before a kernel-backed Worker settles', async () => {
+  it('publishes captured stdout and stderr streams before a kernel-backed Worker settles', async () => {
     let publishInit!: (init: WorkerInitMessage) => void;
     const initReady = new Promise<WorkerInitMessage>((resolve) => {
       publishInit = resolve;
@@ -274,9 +275,13 @@ globalThis.onmessage = ({ data }) => {
     try {
       await withProcessGlobal(parent, async () => {
         const events: string[] = [];
-        const worker = new Worker('/workspace/w-output-carrier.mjs');
-        worker.on('stdout', (chunk) => events.push(`stdout:${decodeOutput(chunk)}`));
-        worker.on('stderr', (chunk) => events.push(`stderr:${decodeOutput(chunk)}`));
+        // ADR-0449 §1: Node's Worker streams, captured instead of auto-piped.
+        const worker = new Worker('/workspace/w-output-carrier.mjs', {
+          stdout: true,
+          stderr: true,
+        });
+        worker.stdout.on('data', (chunk) => events.push(`stdout:${decodeOutput(chunk)}`));
+        worker.stderr.on('data', (chunk) => events.push(`stderr:${decodeOutput(chunk)}`));
         worker.on('error', () => events.push('error'));
         worker.on('exit', (code) => events.push(`exit:${String(code)}`));
         const userMessages: unknown[] = [];
@@ -486,32 +491,32 @@ globalThis.onmessage = ({ data }) => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
-  it('rejects an explicit execArgv override before allocating a worker thread', async () => {
+  it('carries an explicit execArgv as the worker-thread launch tokens (ADR-0449)', async () => {
     _resetThreadIdCounterForTests();
-    const spawn = vi
-      .spyOn(globalProcessManager, 'spawnWorker')
-      .mockImplementation(() => makeFakeWorkerHandle([]));
+    const specs: SpawnWorkerSpec[] = [];
+    vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((_command, spec) => {
+      specs.push(spec);
+      return makeFakeWorkerHandle([]);
+    });
     (globalThis as Coi).crossOriginIsolated = true;
     setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
     configureNodeEntryWorker('https://rifty.test/node-entry.js', {
       RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
     });
 
-    expect(() => new Worker('/workspace/worker.mjs', { execArgv: [] })).toThrow(
-      expect.objectContaining({
-        name: 'NotImplementedError',
-        feature: 'worker_threads.Worker.execArgv',
-      }),
-    );
-    expect(spawn).not.toHaveBeenCalled();
-
-    (globalThis as Coi).crossOriginIsolated = false;
-    writeFileSync('/worker-after-explicit-gap.js', ';');
-    const valid = new Worker('/worker-after-explicit-gap.js');
-    const exit = onceEvent(valid, 'exit');
-    expect(valid.threadId).toBe(1);
-    await exit;
-    expect(spawn).not.toHaveBeenCalled();
+    await withProcessGlobal(new NodeProcess(), async () => {
+      const execArgv = ['--require', './pre.cjs', '-C', 'custom'];
+      const empty = new Worker('/workspace/worker.mjs', { execArgv: [] });
+      const tokens = new Worker('/workspace/worker.mjs', { execArgv });
+      execArgv.push('--mutated-after-construction');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(specs.map((spec) => launchOf(spec).execArgv)).toEqual([
+        undefined,
+        ['--require', './pre.cjs', '-C', 'custom'],
+      ]);
+      await empty.terminate();
+      await tokens.terminate();
+    });
   });
 
   it('keeps bootstrap ancestry when guest pid fields and the public spec are poisoned', async () => {
@@ -879,6 +884,13 @@ globalThis.onmessage = ({ data }) => {
 
 const onceEvent = <T = unknown>(emitter: EventEmitter, event: string): Promise<T> =>
   new Promise<T>((resolve) => emitter.once(event, (...args: unknown[]) => resolve(args[0] as T)));
+
+function launchOf(spec: SpawnWorkerSpec): { readonly execArgv?: readonly string[] } {
+  const entry = spec.entry as {
+    readonly bootstrap?: { readonly payload?: { readonly launch?: { execArgv?: string[] } } };
+  };
+  return entry.bootstrap?.payload?.launch ?? {};
+}
 
 function decodeOutput(chunk: unknown): string {
   if (!(chunk instanceof Uint8Array)) throw new TypeError('expected Uint8Array output');

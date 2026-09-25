@@ -23,6 +23,8 @@ import {
   type PreparedEsm,
 } from './esm-job-types.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
+import { createGlobalWriteKeyCheck } from './global-write-key.ts';
+import { metaResolveRequest } from './import-meta-resolve-parent.ts';
 import { withStackRemapping } from './source-maps.ts';
 
 export function evaluateAsyncJob(
@@ -245,9 +247,11 @@ function factoryArguments(
     }
   };
   const assetPath = (specifier: string): string => deps.resolve(specifier, resolved.id, true).id;
-  const metaResolve = (specifier: string): string => {
+  const metaResolve = (specifier: string, ...parent: unknown[]): string => {
     if (hasURLScheme(specifier, 'node')) return specifier;
-    const dependency = deps.resolve(specifier, resolved.id, true);
+    const request = metaResolveRequest(specifier, parent, resolved.id);
+    if ('href' in request) return request.href;
+    const dependency = deps.resolve(request.specifier, request.from, true);
     return dependency.kind === 'builtin'
       ? dependency.id
       : fileURLFromResolvedPath(dependency.id).href;
@@ -266,6 +270,10 @@ function factoryArguments(
     metaResolve,
     routedConstructors.Function,
     deps.WebAssembly,
+    createGlobalWriteKeyCheck(
+      'module-loader.esm-global-function-assignment',
+      `ESM module ${resolved.id} writes the global Function property through a runtime key; rifty cannot emulate that without mutating the host constructor`,
+    ),
   ];
 }
 

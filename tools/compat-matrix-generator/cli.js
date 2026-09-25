@@ -2,6 +2,9 @@
 // Deterministic static inventories; test-result sink:
 // TODO(backlog: toolchain-build/compat-matrix-test-result-sink).
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { fsMatrix } from './fs-matrix.js';
+import { renderReadme } from './readme.js';
+import { streamsMatrix } from './streams-inventory.js';
 
 const here = new URL('.', import.meta.url);
 const conformanceDir = new URL('../../tests/conformance/', here);
@@ -330,229 +333,8 @@ const viteCommandMatrix = {
 };
 
 const matrices = [
-  {
-    file: 'fs.md',
-    title: 'Compatibility matrix — `node:fs`',
-    intro:
-      'Public claim surface for the runtime-local `node:fs` subset over rifty VFS. Rows cite existing conformance and node-parity coverage.',
-    rows: [
-      [
-        '`readFileSync` / `writeFileSync`',
-        '✅',
-        'utf8 strings and binary `Uint8Array`/Buffer-like reads',
-      ],
-      ['`mkdirSync({ recursive })`', '✅', 'Creates parent directories'],
-      [
-        '`readdirSync` / `Dirent[]`',
-        '✅',
-        'Sorted names; `withFileTypes`; `{ recursive: true }` BFS walk + `Dirent.parentPath` (no removed-in-v24 `path` alias)',
-      ],
-      ['`existsSync` / `statSync`', '✅', '`Stats` shape plus `throwIfNoEntry: false` parity'],
-      ['`rmSync({ recursive })`', '✅', 'Tree removal'],
-      [
-        '`copyFileSync` / `renameSync` / `cpSync`',
-        '✅',
-        '`COPYFILE_EXCL`, recursive copy, mtime-preserving rename; `cp` `{ filter, force, errorOnExist, preserveTimestamps }`; `dereference` loud-throws (no-symlink, ADR-0050)',
-      ],
-      [
-        '`openAsBlob(path[, { type }])`',
-        '✅',
-        'Reads VFS bytes into a resolved Blob (default type `""`)',
-      ],
-      [
-        '`lutimesSync` / `futimesSync` / `futimes`',
-        '✅',
-        'lutimes ≡ utimes (no-symlink); futimes resolves fd→path, `EBADF` (syscall `futime`) on a bad fd',
-      ],
-      ['Encoding reads', '✅', 'utf8, utf16le, latin1/ascii, hex parity cases'],
-      ['Path resolution with `process.cwd()`', '✅', 'Relative fs paths anchor at runtime cwd'],
-      ['Callback `readFile` / `writeFile`', '✅', 'Node-style error-first callbacks'],
-      [
-        '`fs.promises` file ops',
-        '✅',
-        '`readFile`, `writeFile`, `appendFile`, `readdir`, `copyFile`, `rename`, `rm`, `access`',
-      ],
-      [
-        'fd table',
-        '✅',
-        '`open`/`close`/`read`/`write`/`fstat`/`ftruncate`; sequential and positional IO',
-      ],
-      ['`truncate` / zero fill', '✅', 'Sync and promises paths'],
-      ['`mkdtemp` / `opendir`', '✅', 'Sync and promises; async directory iteration'],
-      [
-        '`createReadStream` / `createWriteStream`',
-        '✅',
-        "Async `Vfs.openReadable` first, cwd-resolved paths, chunked reads, write flags (`w`/`a`/`x`/`r+` subset), read-stream abort `signal` (Node event order incl. pre-abort), TypedArray/DataView chunks, string-options overload (`createReadStream(p, 'utf8')` emits strings; `createWriteStream(p, 'base64')` decodes string writes, per-write encoding overrides), destroy() on Node's write-dispatch boundary (in-flight bytes land + 'error'; pre-dispatch discards silently), pipe and `end` parity tests",
-      ],
-      [
-        'Stream unsupported options',
-        '❌',
-        '`fd`, custom `fs`, write-stream `start`, write-stream `signal`, `autoClose:false`, and non-`r` read-stream flags throw `NotImplementedError` — no silent accept-and-ignore; invalid options/encoding args are Node-shaped `ERR_INVALID_ARG_TYPE`/`ERR_INVALID_ARG_VALUE`',
-      ],
-      [
-        '`fs.watch`',
-        '⚠️',
-        'Conformance covered as cooperative VFS watch subset, not OS-native watcher semantics; `null` options accepted, invalid encoding value rejected before target existence (Node order)',
-      ],
-      [
-        '`fs.watchFile` / `fs.unwatchFile`',
-        '✅',
-        'Poll-based; listener receives the same `Stats` class `statSync` returns (missing target = one zeroed call, Node ENOENT contract); uint32 `interval` validation (`ERR_OUT_OF_RANGE`, 0 valid)',
-      ],
-      [
-        '`fs.watch` buffer/exotic filename encodings',
-        '❌',
-        "`encoding:'buffer'` and non-UTF-8 filename encodings throw `NotImplementedError` only where Node would succeed (missing target stays `ENOENT`); UTF-8 string filenames are the claimed subset",
-      ],
-      [
-        '`{ bigint: true }` stats (`statSync`/`lstatSync`/`fstatSync`/promises/`watchFile`)',
-        '❌',
-        "Throws `NotImplementedError('fs.<surface>.bigint')` AFTER Node-visible errors (missing target stays `ENOENT`, bad fd stays `EBADF`); number-shaped `Stats` are never returned for a BigIntStats request",
-      ],
-      [
-        'Durable `fsync` / inode-like open-unlink semantics',
-        '❌',
-        'Tracked as VFS fd durability residual',
-      ],
-      [
-        'Full `FileHandle` object API',
-        '❌',
-        'Tracked separately; high-frequency fd wall covered first',
-      ],
-    ],
-    tests: [
-      '`tests/conformance/builtins/fs.test.ts`',
-      '`tests/conformance/builtins/fs-realpath-readdir.test.ts`',
-      '`tests/conformance/builtins/fs-streams.test.ts`',
-      '`tests/conformance/builtins/shared-vfs.test.ts`',
-      '`tests/conformance/builtins/fs-watch.test.ts`',
-      '`tools/node-parity-runner/cases/fs/*.case.ts`',
-    ],
-    limitations: [
-      '`O_SYNC`, `O_DSYNC`, reflink constants and unsupported numeric flag bits are intentionally absent or rejected.',
-      'VFS-level durability beyond OPFS write-through remains a separate lower-layer design.',
-    ],
-  },
-  {
-    file: 'streams.md',
-    title: 'Compatibility matrix — `node:stream`',
-    intro:
-      'Public claim surface for the `node:stream` subset used by package servers, fs streams, HTTP bodies, and pipeline-style consumers.',
-    rows: [
-      [
-        '`Readable` push/data/end',
-        '⚠️',
-        'Late-bound `_read`, bounded refill, object identity, string/Buffer/plain-Uint8Array admission, byte no-ops, and coded EOF failure are parity-tested; other views and invalid byte values remain — backlog `runtime-js/stream-byte-chunk-kinds`',
-      ],
-      [
-        '`Readable.read(n)`',
-        '⚠️',
-        "Exact byte slicing works; sized reads do not raise `readableHighWaterMark` to Node's next-power-of-two projection or pass that projected HWM to `_read` — backlog `runtime-js/readable-sized-read-hwm-growth`",
-      ],
-      ['Readable async iteration', '✅', '`for await` over readable chunks'],
-      [
-        'Readable async-iterator helpers',
-        '✅',
-        '`map`/`filter`/`forEach`/`reduce`/`toArray`/`take`/`drop`/`flatMap`/`some`/`every`/`find`/`iterator`; `{ concurrency }` runs N at once but emits in INPUT order; `{ signal }` aborts with `AbortError`; Node validation errors (`ERR_INVALID_ARG_TYPE`/`ERR_OUT_OF_RANGE`/`ERR_MISSING_ARGS`) — parity-tested',
-      ],
-      [
-        '`Readable.from(iterable)`',
-        '⚠️',
-        'Node object-mode defaults, atomic string/Buffer boundaries, HWM, and cold start are parity-tested; iterator async-value/throw/return cleanup still diverges — backlog `runtime-js/readable-from-iterator-lifecycle`',
-      ],
-      [
-        '`Writable` write/end/finish',
-        '⚠️',
-        'decodeStrings, covered byte admission, and scalar/batch completion order, HWM returns, drain, errors, and finish are parity-tested; other chunk kinds and `writableNeedDrain` remain — backlogs `runtime-js/stream-byte-chunk-kinds`, `runtime-js/writable-sync-dispatch-state`',
-      ],
-      ['`Transform`', '✅', '`_transform` callback path'],
-      ['`PassThrough`', '✅', 'Forwards chunks unchanged'],
-      ['`pipeline`', '✅', 'Promise/callback chaining, multi-stage, destroy-on-error parity'],
-      ['`finished`', '✅', 'Resolves on readable end and cleanup cases'],
-      [
-        '`compose` / `Readable.wrap`',
-        '✅',
-        '`compose(...stages)` → a `Duplex` wired via `pipeline`; `Readable.wrap(legacy)` adapts streams1 data/end with backpressure — parity-tested',
-      ],
-      [
-        '`Duplex.from`',
-        '⚠️',
-        'Accepted shapes are parity-tested. Iterable branches are eager through a second Readable; the returned Duplex incorrectly remains writable and silently discards writes — backlog `runtime-js/duplex-from-source-ownership`',
-      ],
-      ['`destroy` / cleanup', '✅', 'Writable destroy and async-iterator cleanup parity'],
-      ['`stream/consumers`', '✅', 'Text/buffer/json-style consumers covered'],
-      ['Legacy streams', '✅', 'Pipe/unpipe and callable core constructor parity'],
-      [
-        '`Readable.fromWeb`',
-        '⚠️',
-        'Cold demand, chunks, option/error/acquisition order, and invalid-signal lock behavior are parity-tested; terminal reason/events/lock release still diverge — backlog `runtime-js/web-stream-adapter-terminal-lifecycle`',
-      ],
-      [
-        '`node:stream/web` module',
-        '✅',
-        'Re-exports the host WHATWG globals (`ReadableStream`/`WritableStream`/`TransformStream`/readers/controllers/`TextEncoderStream`/`TextDecoderStream`); each `=== globalThis.<Name>`, parity-tested',
-      ],
-      [
-        '`Readable.toWeb`',
-        '✅',
-        'Pull-driven `ReadableStream` honoring backpressure; `cancel()` → `destroy()`, error/end propagated (parity-tested)',
-      ],
-      [
-        '`Writable.toWeb` / `Writable.fromWeb` / `Duplex.toWeb` / `Duplex.fromWeb`',
-        '⚠️',
-        'Normal data/backpressure and allowHalfOpen work; reason identity, duplicate events, pending settlement, locks, and one-sided teardown diverge — backlog `runtime-js/web-stream-adapter-terminal-lifecycle`',
-      ],
-      [
-        '`Readable/Writable/Duplex.fromWeb({ signal })`',
-        '❌',
-        'Falsy signal is absent and invalid values preserve Node errors; a valid signal throws `NotImplementedError` before lock acquisition — backlog `runtime-js/web-stream-adapter-terminal-lifecycle`',
-      ],
-      [
-        '`isReadable` / `isWritable` / `isErrored` / `isDisturbed`',
-        '✅',
-        'Predicates over the existing state machine; `isDisturbed` backed by an explicit bit; non-stream input never throws (parity-tested truth tables)',
-      ],
-      [
-        '`getDefaultHighWaterMark` / `setDefaultHighWaterMark`',
-        '✅',
-        'Module-level default HWM read by the Readable/Writable ctors (explicit `{ highWaterMark }` still wins); parity-tested',
-      ],
-      [
-        '`addAbortSignal`',
-        '⚠️',
-        'Abort destroys with `AbortError`/`ABORT_ERR`; `error.cause === signal.reason` is missing — backlog `runtime-js/add-abort-signal-reason-identity`',
-      ],
-      [
-        '`Writable` `cork` / `uncork` / `_writev`',
-        '✅',
-        'Cork defers writes (nested counter); uncork flushes the batch in ONE `_writev` (Node `{chunk,encoding}` shape) — real `writev` option, sequential `_write` fallback, backpressure + `drain` preserved (parity-tested)',
-      ],
-    ],
-    tests: [
-      '`tests/conformance/builtins/stream.test.ts`',
-      '`tests/conformance/builtins/stream-legacy.test.ts`',
-      '`tests/conformance/builtins/stream-consumers.test.ts`',
-      '`packages/io/src/streams/readable.from.test.ts`',
-      '`packages/io/src/streams/readable.read-hook.fault.test.ts`',
-      '`packages/io/src/streams/readable.refill-terminal.fault.test.ts`',
-      '`packages/io/src/streams/from-web-options.fault.test.ts`',
-      '`packages/io/src/streams/writable.admission.fault.test.ts`',
-      '`packages/io/src/streams/writable.decode-strings.fault.test.ts`',
-      '`packages/io/src/streams/writable.completion-order.fault.test.ts`',
-      '`packages/io/src/streams/readable.to-web.test.ts`',
-      '`packages/io/src/streams/writable.to-web.test.ts`',
-      '`packages/io/src/streams/duplex.web-bridge.test.ts`',
-      '`packages/io/src/streams/readable.async-iter-helpers.test.ts`',
-      '`packages/io/src/streams/compose-wrap-from.test.ts`',
-      '`packages/io/src/streams/predicates-and-defaults.test.ts`',
-      '`packages/io/src/streams/writable.cork-writev.test.ts`',
-      '`packages/net/src/http/response.test.ts`',
-      '`tools/node-parity-runner/cases/stream/*.case.ts`',
-    ],
-    limitations: [
-      'Backpressure is covered at the JS API surface, not as an OS/socket throughput guarantee.',
-    ],
-  },
+  fsMatrix,
+  streamsMatrix,
   {
     file: 'http.md',
     title: 'Compatibility matrix — `node:http` / `node:https`',
@@ -652,6 +434,11 @@ const matrices = [
         '❌',
         '`createServer`, `new Agent()`, TLS/socket options (`cert`/`key`/`ca`/`rejectUnauthorized:false`/custom `agent`), and loopback `https:` throw `NotImplementedError` — no in-browser TLS server/socket layer (ADR-0010 ceiling, ADR-0181)',
       ],
+      [
+        '`http.Agent`',
+        '❌',
+        "Present with Node's shape (subclassable, parity-pinned); `new Agent()` throws `NotImplementedError('node:http.Agent')` — no socket pool to manage (ADR-0464)",
+      ],
       ['Real OS sockets', '❌', 'Browser runtime uses port registry, not kernel TCP sockets'],
       ['HTTP/2 implementation', '❌', '`node:http2` is only a loud surface stub today'],
     ],
@@ -660,6 +447,7 @@ const matrices = [
       '`tests/conformance/builtins/http-incoming-body.test.ts`',
       '`tests/conformance/builtins/https.test.ts`',
       '`packages/net/src/https.test.ts`',
+      '`packages/net/src/http/agent.test.ts`',
       '`tools/node-parity-runner/cases/http/*.case.ts`',
       '`tools/node-parity-runner/cases/http2/surface.case.ts`',
       '`packages/net/src/http/client.test.ts`',
@@ -1220,43 +1008,9 @@ async function validateMatrixSources() {
   return seen.size;
 }
 
-function renderReadme() {
-  return `# Compatibility matrices
-
-These files are the public claim surface for rifty compatibility. Treat missing areas as
-undocumented, not supported. The point is honest fit: tested support, visible caveats, and loud
-unsupported rows.
-
-Each markdown here cites the covering tests in \`tests/conformance/\` and \`tests/integration/\` for a
-Node-compatible area. \`fs.md\`/\`streams.md\`/\`http.md\`/\`zlib.md\`/\`git.md\`/\`esbuild-js-api.md\`/\`sass-embedded.md\`/\`vite-command.md\` are rendered by \`pnpm compat:generate\`
-from static inventories whose cited test files are existence-checked, not re-run — deriving statuses
-from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-test-result-sink\`.
-
-- [modules.md](./modules.md) — M2 (Modules)
-- [buffer.md](./buffer.md) — \`Buffer\` polyfill (\`@riftydev/io\`)
-- [fs.md](./fs.md) — \`node:fs\` runtime VFS subset
-- [streams.md](./streams.md) — \`node:stream\` subset
-- [http.md](./http.md) — \`node:http\` / browser-local port registry subset
-- [zlib.md](./zlib.md) — \`node:zlib\` web-compression-backed async subset (ADR-0159)
-- [ts-language-service.md](./ts-language-service.md) — in-browser \`ts.LanguageService\` over the VFS (\`@riftydev/ts-language-service\`, ADR-0166)
-- [package-tooling.md](./package-tooling.md) — real package CLIs in the browser shell (Prettier, ESLint, typed \`typescript-eslint\`)
-- [esbuild-js-api.md](./esbuild-js-api.md) — direct CJS/ESM and Vite 7 share exact registry-owned esbuild 0.28.0 over guest VFS; CLI and D4 gaps stay loud (ADR-0226/0308/0311)
-- [sass-embedded.md](./sass-embedded.md) — exact sass-embedded 1.100.0 facade over the exact pure-JS Sass twin; direct construction, initialized-compiler reflection, CLI/watch/types gaps, and the sync-importer divergence stay visible (ADR-0344)
-- [git.md](./git.md) — git over the VFS (isomorphic-git, ADR-0167); offline-faithful porcelain + smart-HTTP network ceiling
-- [vite-command.md](./vite-command.md) — playground \`vite\` command through the installed \`.bin\` CLI (ADR-0174)
-- [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal \`node <file>\` command + its gaps (ADR-0155/0157)
-- [wasi.md](./wasi.md) — WASI preview1 syscall surface (\`@riftydev/runtime-wasi\`)
-- [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)
-- (sqlite.md — coming with the \`node:sqlite\` \`DatabaseSync\` shim, ADR-0065)
-- (browsers.md — coming with first cross-browser CI run)
-
-${legend}
-`;
-}
-
 await mkdir(matrixDir, { recursive: true });
 const sourceCount = await validateMatrixSources();
-await writeFile(new URL('README.md', matrixDir), renderReadme());
+await writeFile(new URL('README.md', matrixDir), renderReadme(legend));
 for (const matrix of matrices) {
   await writeFile(new URL(matrix.file, matrixDir), renderMatrix(matrix));
 }

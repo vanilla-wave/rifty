@@ -50,7 +50,7 @@ const c: ParityCase = {
         });
         worker.once('error', reject);
         worker.once('messageerror', reject);
-        worker.once('stderr', (chunk) => reject(new Error('worker stderr: ' + String(chunk))));
+        worker.stderr.once('data', (chunk) => reject(new Error('worker stderr: ' + String(chunk))));
         worker.once('exit', (code) => {
           if (!received) reject(new Error('worker exited before env message: ' + code));
         });

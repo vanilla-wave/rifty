@@ -1,14 +1,18 @@
-import { NotImplementedError, captureEventEmitterListenerScope } from '@riftydev/io';
+import { NotImplementedError } from '@riftydev/io';
 import { listPorts } from '@riftydev/net';
 import { type SerializedRuntimeError, awaitDrain } from '@riftydev/runtime-js';
 import { type RunNodeEntryOptions, runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
-import { riftyProcess, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
+import {
+  resetNodeProcessExit,
+  riftyProcess,
+  setProcessCwd,
+} from '@riftydev/runtime-js/builtins/process';
 import {
   type ToolchainCommandInput,
   type ToolchainCommandResult,
-  captureTimerBoundary,
-  clearTimersSince,
+  activeRefs,
   installConsole,
+  takeUnhandledRejection,
 } from '@riftydev/runtime-js/internal';
 import { type CommandContext, Shell, ShellCommandLifecycleError } from '@riftydev/shell';
 import type { FsSync } from '@riftydev/vfs';
@@ -16,6 +20,7 @@ import { createNpmScriptShellCommand } from '../glue/npm-shell-command.ts';
 import { runNestedShellCommand } from '../glue/run-nested-shell-command.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { declaredGapCause } from './declared-gap-cause.ts';
+import { type NoCoiInvocationScope, openNoCoiInvocationScope } from './no-coi-invocation-scope.ts';
 import { classifyNodeInvocation, resolveNodeEntry } from './node-entry-resolve.ts';
 
 interface CommandHooks {
@@ -31,6 +36,20 @@ function processExitCode(error: unknown): number | null {
   return candidate.code === 'RIFTY_PROCESS_EXIT' && typeof candidate.exitCode === 'number'
     ? candidate.exitCode
     : null;
+}
+
+/**
+ * ADR-0445: the drain settled with the process's terminal, Node's status. Its
+ * timers die with it; any other live handle (port, pending import/fetch)
+ * outlives it in this reused realm, so the realm is replaced instead.
+ */
+function terminalExitCode(settlement: unknown, invocation: NoCoiInvocationScope): number | null {
+  const exitCode = processExitCode(settlement);
+  if (exitCode === null || declaredGapCause(settlement) !== null) return null;
+  invocation.clearTimers();
+  if (activeRefs() > 0 || listPorts().length > 0) return null;
+  takeUnhandledRejection();
+  return exitCode;
 }
 
 function serializeError(error: unknown): SerializedRuntimeError {
@@ -67,13 +86,7 @@ export async function runNoCoiProjectCommand(
     execArgv: readonly string[],
     ctx: CommandContext,
   ): Promise<number> => {
-    const timerBoundary = captureTimerBoundary();
-    const listenerScopes = [
-      riftyProcess,
-      riftyProcess.stdin,
-      riftyProcess.stdout,
-      riftyProcess.stderr,
-    ].map(captureEventEmitterListenerScope);
+    const invocation = openNoCoiInvocationScope();
     const previous = {
       cwd: riftyProcess.cwd(),
       env: riftyProcess.env,
@@ -98,7 +111,8 @@ export async function runNoCoiProjectCommand(
     riftyProcess.env = { ...ctx.env };
     riftyProcess.argv = [...argv];
     riftyProcess.execArgv = [...execArgv];
-    riftyProcess.exitCode = 0;
+    // ADR-0445: each invocation starts with an unset exitCode, not exiting.
+    resetNodeProcessExit(riftyProcess);
     setProcessCwd(ctx.cwd);
     let executionError: unknown;
     let executionFailed = false;
@@ -119,13 +133,20 @@ export async function runNoCoiProjectCommand(
         executionError = error;
       }
       // A throwing entry may already have scheduled real work. Never skip its drain.
+      let terminal: number | null = null;
       try {
         await awaitDrain({ capMs: 600_000, hasRef: () => listPorts().length > 0 });
       } catch (error) {
-        requiresTermination = true;
-        failure = error;
-        throw new ShellCommandLifecycleError('Node event-loop settlement failed', { cause: error });
+        terminal = terminalExitCode(error, invocation);
+        if (terminal === null) {
+          requiresTermination = true;
+          failure = error;
+          throw new ShellCommandLifecycleError('Node event-loop settlement failed', {
+            cause: error,
+          });
+        }
       }
+      if (terminal !== null) return terminal;
       if (executionFailed) {
         const exitCode = processExitCode(executionError);
         if (exitCode !== null) return exitCode;
@@ -134,19 +155,28 @@ export async function runNoCoiProjectCommand(
           (executionError instanceof Error ? executionError : new Error(String(executionError)))
         );
       }
-      return riftyProcess.exitCode;
+      // Natural exit = Node's `exit()`: `'exit'` once, status `exitCode ?? 0`.
+      let naturalExit: unknown;
+      try {
+        riftyProcess.exit();
+      } catch (error) {
+        naturalExit = error;
+      }
+      const exitCode = processExitCode(naturalExit);
+      if (exitCode === null) throw naturalExit;
+      return exitCode;
     } finally {
       ctx.signal?.removeEventListener('abort', abort);
       // A rejected drain leaves the realm owned until the host physically terminates it.
       if (!requiresTermination) {
-        for (const retire of listenerScopes) retire();
-        clearTimersSince(timerBoundary);
+        invocation.end();
         restoreConsole();
         riftyProcess.stdout.write = previous.stdout;
         riftyProcess.stderr.write = previous.stderr;
         riftyProcess.env = previous.env;
         riftyProcess.argv = previous.argv;
         riftyProcess.execArgv = previous.execArgv;
+        resetNodeProcessExit(riftyProcess);
         riftyProcess.exitCode = previous.exitCode;
         setProcessCwd(previous.cwd);
       }

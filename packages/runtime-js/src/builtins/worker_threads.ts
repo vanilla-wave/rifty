@@ -7,17 +7,22 @@
  * tests; it is not used for threaded WASI packages such as Rolldown in-browser.
  */
 
-import { NotImplementedError } from '@riftydev/io';
+import { NotImplementedError, type Readable } from '@riftydev/io';
 import {
   type ProcessHandle,
   type SpawnWorkerSpec,
-  getKernelWorkerUrl,
   globalProcessManager,
-  isSabIpcSupported,
   observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
 import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { nodeMessageChannel } from '../internal/message-port-ref.ts';
 import { fileURLToPathPosix, isNodeUrl } from '../internal/posix-file-url.ts';
+import {
+  type WorkerReferences,
+  attachWorkerReferences,
+  referenceParentPort,
+  referenceWorker,
+} from '../internal/worker-reference.ts';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -31,13 +36,20 @@ import {
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
 import { type NodeProcessContextSnapshot, snapshotNodeProcessContext } from './process-context.ts';
+import { isNodeProcessExiting } from './process-lifecycle-events.ts';
+import { publicNodeProcess } from './process-public.ts';
 import { getProcessCwd, nodeProcessWorkerIpc } from './process.ts';
+import { type WorkerLaunch, resolveWorkerLaunch, sameRealmStdio } from './worker_threads-launch.ts';
+import { WorkerStdio } from './worker_threads-stdio.ts';
 
 interface WorkerOptions {
   workerData?: unknown;
   env?: Record<string, string | undefined>;
   eval?: boolean;
-  execArgv?: readonly string[];
+  execArgv?: readonly string[] | null;
+  stdin?: boolean;
+  stdout?: boolean;
+  stderr?: boolean;
 }
 
 function snapshotWorkerEnvironment(
@@ -61,10 +73,10 @@ interface WorkerMessageEvent {
 type WorkerMessageHandler = (event: WorkerMessageEvent) => void;
 
 interface WorkerPort extends EventEmitter {
-  onmessage: WorkerMessageHandler | null;
+  onmessage: unknown;
   postMessage(msg: unknown): void;
-  ref(): WorkerPort;
-  unref(): WorkerPort;
+  ref(): unknown;
+  unref(): unknown;
   start(): void;
   close(): void;
 }
@@ -92,6 +104,9 @@ export class Worker extends EventEmitter {
   private readonly processContext: NodeProcessContextSnapshot | null;
   private readonly ownerProcess: unknown;
   private readonly ownerBootstrap: ReturnType<typeof readActiveNodeProcessBootstrap>;
+  private readonly launch: WorkerLaunch;
+  /** ADR-0449 §1: Node's stdout/stderr streams; `null` on the same-realm fallback. */
+  private readonly stdio: WorkerStdio | null;
   private exited = false;
   private sameRealmContext: WorkerThreadContext | null = null;
   private sameRealmParentPort: WorkerPort | null = null;
@@ -100,23 +115,18 @@ export class Worker extends EventEmitter {
   /** ADR-0011 phase 2: when present, backed by a real `kernel.spawnWorker`
    * realm and `terminate` routes through it. */
   private workerHandle: ProcessHandle | null = null;
+  private readonly references: WorkerReferences;
 
   constructor(script: WorkerScript, opts: WorkerOptions = {}) {
     super();
     this.ownerProcess = (globalThis as { process?: unknown }).process;
     this.ownerBootstrap = readActiveNodeProcessBootstrap();
     const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
-    const inheritedLaunch = readNodeEntryBootstrapIfPresent()?.launch;
-    if (
-      Object.prototype.hasOwnProperty.call(opts, 'execArgv') ||
-      (inheritedLaunch?.kind === 'eval' && inheritedLaunch.execArgv.length > 0)
-    ) {
-      // TODO(backlog: runtime-js/worker-threads-inherited-exec-argv)
-      throw new NotImplementedError(
-        'worker_threads.Worker.execArgv',
-        'node-entry v3 cannot preserve worker-thread execArgv identity',
-      );
-    }
+    this.launch = resolveWorkerLaunch(opts);
+    // Node pipes into its bootstrap process's streams, not a reassigned global.
+    this.stdio = this.launch.kernelBacked
+      ? new WorkerStdio(publicNodeProcess() as { stdout?: unknown }, this.launch.capture)
+      : null;
     const processContext = snapshotNodeProcessContext();
     const env =
       opts.env === undefined
@@ -127,28 +137,43 @@ export class Worker extends EventEmitter {
     this.workerData = opts.workerData;
     this.processContext = processContext;
     this.env = env;
+    // ADR-0446: held from here (after every synchronous validation) to the end.
+    this.references = attachWorkerReferences(this);
     // TODO(backlog: runtime-js/worker-threads-prompt-start-atomics-wait):
     // synchronous allocation cannot close prompt-start while entry loading
     // still needs parent-serviced remote FS.
     queueMicrotask(() => this.start());
   }
 
+  get stdout(): Readable {
+    if (this.stdio === null) throw sameRealmStdio();
+    return this.stdio.stdout;
+  }
+
+  get stderr(): Readable {
+    if (this.stdio === null) throw sameRealmStdio();
+    return this.stdio.stderr;
+  }
+
+  get stdin(): null {
+    return null;
+  }
+
   private start(): void {
     if (this.entry.kind === 'data-url') {
       // TODO(backlog: runtime-js/worker-eval-data-url-entry)
-      this.emitWorkerError(
+      this.fail(
         new NotImplementedError(
           'worker_threads.Worker.data-url',
           'data: URL Worker entries are not implemented',
         ),
       );
-      void this.terminate(1);
       return;
     }
     const script = this.entry.path;
     // ADR-0011 phase 2: real Worker realm via kernel.spawnWorker when
     // capability + host wiring permit.
-    if (isSabIpcSupported() && getKernelWorkerUrl() !== null && getNodeEntryWorkerUrl() !== null) {
+    if (this.launch.kernelBacked) {
       this.startViaKernel(script);
       return;
     }
@@ -175,6 +200,7 @@ export class Worker extends EventEmitter {
         remoteFs: true,
         threadId: this.threadId,
         ...(encodedWorkerData === undefined ? {} : { workerDataJson: encodedWorkerData }),
+        ...(this.launch.execArgv.length === 0 ? {} : { execArgv: this.launch.execArgv }),
       });
       if (this.processContext === null) {
         throw new Error('worker_threads.Worker: kernel Node process context is unavailable');
@@ -184,13 +210,8 @@ export class Worker extends EventEmitter {
         argv: ['rifty', script],
         env,
         cwd: this.processContext.cwd,
-        // serve:true keeps a message-driven Worker alive (Node parity, and the
-        // shape Rolldown's pthread pool needs) — the kernel never drain-reaps a
-        // serve child. Cost: a run-to-completion Worker (no live handle after the
-        // entry resolves) does NOT auto-emit 'exit' here like Node; the
-        // same-realm path does (keepsAlive -> terminate(0)). Explicit, tracked
-        // divergence (not a silent hang):
-        // TODO(backlog: runtime-js/worker-threads-kernel-run-to-completion-exit).
+        // serve:true: the kernel never drain-reaps the worker; its node-entry
+        // bootstrap drains it without a cap and exits the Node way (ADR-0446 §5).
         serve: true,
       };
       const handle = globalProcessManager.spawnWorkerThread(
@@ -200,8 +221,7 @@ export class Worker extends EventEmitter {
       );
       this.workerHandle = handle;
       if (handle.kind === 'worker') {
-        handle.stdout().on('data', (chunk) => this.emitToOwner('stdout', chunk));
-        handle.stderr().on('data', (chunk) => this.emitToOwner('stderr', chunk));
+        this.stdio?.attach(handle.stdout(), handle.stderr());
         handle.on('message', (msg) => this.emitWorkerMessage(msg));
         this.flushKernelMessages(handle);
         // Node emits 'online' once the worker realm exists. Construction-start
@@ -210,11 +230,9 @@ export class Worker extends EventEmitter {
       }
       observeProcessTerminalOutcome(handle, (outcome) => {
         if (outcome.kind === 'peererror') {
-          try {
-            this.emitWorkerError(outcome.error);
-          } finally {
-            this.finish(1);
-          }
+          // Own microtask: the kernel's emit collects a listener throw and
+          // rethrows it after 'exit'; unlistened, it must be uncaught first.
+          queueMicrotask(() => this.fail(outcome.error));
           return;
         }
         // TODO(backlog: runtime-js/worker-threads-kernel-error-event): a
@@ -225,8 +243,7 @@ export class Worker extends EventEmitter {
         this.finish(typeof outcome.code === 'number' ? outcome.code : 1);
       });
     } catch (err) {
-      this.emitWorkerError(err);
-      void this.terminate(1);
+      this.fail(err);
     }
   }
 
@@ -286,8 +303,8 @@ export class Worker extends EventEmitter {
         this.sameRealmGlobalOnMessage !== null;
       if (!keepsAlive) void this.terminate(0);
     } catch (err) {
-      this.emitWorkerError(err);
-      void this.terminate(1);
+      // Node: an unlistened 'error' is an uncaught exception, never a rejection.
+      queueMicrotask(() => this.fail(err));
     }
   }
 
@@ -326,11 +343,16 @@ export class Worker extends EventEmitter {
     return code;
   }
 
-  ref(): this {
-    return this;
+  ref(): void {
+    referenceWorker(this, 'ref');
   }
 
-  unref(): this {
+  unref(): void {
+    referenceWorker(this, 'unref');
+  }
+
+  override removeAllListeners(event?: string | symbol): this {
+    this.references.removeAll(event, () => super.removeAllListeners(event));
     return this;
   }
 
@@ -368,13 +390,26 @@ export class Worker extends EventEmitter {
     this.pendingParentMessages.push(msg);
   }
 
-  private emitWorkerError(error: unknown): void {
-    this.emitToOwner('error', error);
+  /**
+   * Node: 'error', then 'exit' 1 after the microtasks its handling queued. An
+   * unlistened 'error' throws on as the owner's uncaught exception; 'exit' still
+   * follows (releasing every hold) unless that exception ended the owner.
+   */
+  private fail(error: unknown): void {
+    try {
+      this.emitToOwner('error', error);
+    } finally {
+      queueMicrotask(() => {
+        if (!isNodeProcessExiting(this.ownerProcess)) void this.terminate(1);
+      });
+    }
   }
 
   private finish(code: number): void {
     if (this.exited) return;
     this.exited = true;
+    this.references.dispose();
+    this.stdio?.end();
     this.emitToOwner('exit', code);
   }
 
@@ -573,7 +608,8 @@ function createWorkerPort(postMessage: (msg: unknown) => void): WorkerPort {
 
 function deliverToPort(port: WorkerPort, msg: unknown): void {
   port.emit('message', msg);
-  port.onmessage?.({ data: msg });
+  const handler = port.onmessage;
+  if (typeof handler === 'function') handler({ data: msg });
 }
 
 function readGlobalOnMessage(): WorkerMessageHandler | null {
@@ -622,6 +658,7 @@ function readProcessWorkerContext(): WorkerThreadContext | null {
       );
     }
   });
+  referenceParentPort(parentPort);
   const context: WorkerThreadContext = {
     parentPort,
     workerData: decodeWorkerData(launch.workerDataJson),
@@ -703,13 +740,27 @@ function decodeWorkerData(encoded: string | undefined): unknown {
 
 const worker_threads: Record<string, unknown> = {
   Worker,
-  MessageChannel: globalThis.MessageChannel,
   markAsUntransferable,
   isMarkedAsUntransferable,
   markAsUncloneable,
 };
 
 Object.defineProperties(worker_threads, {
+  // Read late: the realm's recorded constructor is installed pre-entry (ADR-0447).
+  // Assignment still works as on Node's writable data property.
+  MessageChannel: {
+    enumerable: true,
+    configurable: true,
+    get: nodeMessageChannel,
+    set(value: unknown) {
+      Object.defineProperty(worker_threads, 'MessageChannel', {
+        value,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+    },
+  },
   isMainThread: {
     enumerable: true,
     get: () => activeWorkerContext() === null,

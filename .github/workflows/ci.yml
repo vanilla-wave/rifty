@@ -252,7 +252,7 @@ jobs:
       - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.16.0 # browser-unit specs diff live Node against frozen v24.16.0 oracle rows
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         env:
