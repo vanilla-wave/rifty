@@ -21,6 +21,14 @@ timers die with the process. Since ADR-0445 the recorded rejection is the fatal
 exit signal: the command's `error` reads `process.exit(1)` (the reason is its
 `cause`; a declared gap behind it is reported by name), stderr has the stack.
 
+Silent sibling (probe 2026-09-25, `94588bd17`, `sandbox.project().run`): a
+throwing `uncaughtException` listener after `Promise.reject(new Error('R'))` or a
+`setTimeout` throw → `status: 'exited', exitCode: 0`, stderr `Error: L`; Node
+v24.16.0 exits 7 for both (`node rejection.cjs` / `node timer.cjs`). ADR-0445's
+listener-throw exit request goes to the control port, which the in-process host
+lacks, and the trap records nothing for an `exited` dispatch; run-bin reads
+`exitCode` the same way (code reading). Wrong status, not loud — Fidelity.
+
 ## Options or Next
 
 - Mirror ADR-0423 in the command path: consume the pending rejection, map a
@@ -32,7 +40,8 @@ exit signal: the command's `error` reads `process.exit(1)` (the reason is its
   `status: 'failed', exitCode: 1, worker: 'retained'`, plus a live-listener
   variant that still requires termination.
 - Loud today (explicit failed/replaced outcome), so not a Fidelity blocker; an
-  Ecosystem UX gap for common agent-authored code.
+  Ecosystem UX gap for common agent-authored code. The exit-7 sibling above is
+  not loud: it needs the in-process host to see the process's exit request.
 
 ## Reversibility
 
