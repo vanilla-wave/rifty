@@ -14,6 +14,8 @@ code: [packages/workbench/src/workers/no-coi-project-command.ts, packages/workbe
 Since ADR-0445's 2026-09-25 note the drain settles with the process's first
 terminal. A no-COI project command maps it to Node's status, clears the
 invocation's timers and keeps the realm; runBin ends with a natural `exit()`.
+Both end the invocation at every terminal: its timers cleared, its
+process/stdio listeners retired (`no-coi-invocation-scope.ts`).
 Carrier: `tests/no-coi/no-coi-process-exit-status.spec.ts` (live Node
 v24.16.0 oracle): listener throw 7, `exit(n)` in handlers, file-entry fatal
 rejection 1, natural `exitCode`, on both hosts.
@@ -50,6 +52,9 @@ so an `'exit'` listener's `exitCode`/`exit(n)` is ignored there.
 - Live handles: a host-owned retirement of ports/imports/fetches, or a
   terminal-aware result (`exited`, status, `requiresTermination`) that keeps
   the status while replacing the realm; runBin needs the same.
+- When runBin's live-handle gap closes, move the `late createRequire` runBin
+  carrier in `tests/no-coi/no-coi-dev-hmr.spec.ts`: it rides a server the rival
+  leaves listening after runBin returns.
 
 ## Reversibility
 

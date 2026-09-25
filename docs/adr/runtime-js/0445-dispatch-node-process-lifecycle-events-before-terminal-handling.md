@@ -85,7 +85,12 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
    the same first terminal. The no-COI command takes its status from that
    terminal and clears the invocation's timers. It replaces the realm only when
    another live handle (port, pending import/fetch) outlives the terminal.
-   runBin ends with rule 6's natural exit.
+   runBin ends with rule 6's natural exit. Both end the invocation at every
+   terminal, natural exit included (`openNoCoiInvocationScope`,
+   `packages/workbench/src/workers/no-coi-invocation-scope.ts`): its timers are
+   cleared and its process/stdio listeners retired, so none runs afterwards or
+   in the next invocation. runBin still leaves a live non-timer handle running
+   (draft `distribution/no-coi-command-unhandled-rejection-exit`).
 6. **Natural exit.** A lifecycle owner that sees the loop drain calls `exit()`
    with no argument — the program/eval lifecycle (after the `-p` print) and the
    execSync program branch (after its drain, which now precedes it). Worker
