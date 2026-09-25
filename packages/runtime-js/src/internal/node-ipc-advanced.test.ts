@@ -168,3 +168,36 @@ it.each(['frozen', 'non-extensible', 'readonly-constructor'])(
     expect(actual).toEqual(expected);
   },
 );
+
+it.each(['renamed Error', 'DOMException'])(
+  'preserves a getter-thrown %s named DataCloneError by identity',
+  (kind) => {
+    const sentinel =
+      kind === 'DOMException'
+        ? new DOMException('guest sentinel', 'DataCloneError')
+        : Object.assign(new Error('guest sentinel'), { name: 'DataCloneError' });
+    let reads = 0;
+    const graph = {
+      get value() {
+        reads++;
+        throw sentinel;
+      },
+    };
+    let nativeFailure: unknown;
+    try {
+      serialize(graph);
+    } catch (error) {
+      nativeFailure = error;
+    }
+    expect(nativeFailure).toBe(sentinel);
+    expect(reads).toBe(1);
+    let actualFailure: unknown;
+    try {
+      serializeNodeIpcMessage(graph, 'advanced');
+    } catch (error) {
+      actualFailure = error;
+    }
+    expect(actualFailure).toBe(sentinel);
+    expect(reads).toBe(2);
+  },
+);

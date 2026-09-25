@@ -1,5 +1,6 @@
 import type { ParityCase } from '../../src/types.ts';
 
+// Compare rejection/trap semantics; platform clone-error shape has separate browser assertions.
 const exercise = `
   function proxyFailures(send) {
     const traps = [];
@@ -17,7 +18,7 @@ const exercise = `
       ['revocable', revocable.proxy], ['revoked', revoked.proxy],
     ]) {
       try { send({ bad: value }); failures.push([label, 'NO_THROW']); }
-      catch (error) { failures.push([label, error.name, error.code ?? null, error.message]); }
+      catch { failures.push([label, 'rejected']); }
     }
     let reads = 0;
     send({ tag: 'control', get values() { reads++; return [1, 2, 255]; } });

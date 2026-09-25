@@ -21,16 +21,24 @@ const failures = `
     ]) {
       try { send(message); result.push([label, 'NO_THROW']); }
       catch (error) {
-        result.push([label, error.name, error.code ?? null,
-          /could not be cloned/.test(error.message)]);
+        // Argument errors remain Node-shaped; intrinsic clone errors follow the platform.
+        result.push(label === 'undefined' || label === 'function' || label === 'symbol' || label === 'bigint'
+          ? [label, error.name, error.code ?? null]
+          : [label, 'rejected']);
       }
     }
-    const order = [];
-    const sentinel = new Error('getter failed');
-    try { send({ get value() { order.push('getter'); throw sentinel; } }); }
-    catch (error) { order.push(error === sentinel ? 'same-error' : 'wrong-error'); }
-    order.push('after-send');
-    result.push(['getter', order]);
+    const ordinary = new Error('getter failed');
+    const renamed = new Error('renamed getter failed');
+    renamed.name = 'DataCloneError';
+    let nativeCloneError;
+    try { structuredClone(() => {}); } catch (error) { nativeCloneError = error; }
+    for (const [label, sentinel] of [['ordinary', ordinary], ['renamed', renamed], ['native-clone-error', nativeCloneError]]) {
+      const order = [];
+      try { send({ get value() { order.push('getter'); throw sentinel; } }); }
+      catch (error) { order.push(error === sentinel ? 'same-error' : 'wrong-error'); }
+      order.push('after-send');
+      result.push(['getter-' + label, order]);
+    }
     return result;
   }
 `;

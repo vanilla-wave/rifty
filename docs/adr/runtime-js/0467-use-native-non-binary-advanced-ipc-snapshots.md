@@ -19,8 +19,9 @@ native candidate (47.1s;53.9s total).
 ## Decision
 
 - Both advanced senders take one captured native structuredClone snapshot.
-  Preserve existing top-level Node validation; normalize native DataCloneError
-  to Error. Do not mutate guest constructor or register promise reactions.
+  Preserve existing top-level Node validation and every thrown exception by
+  identity. Intrinsic native failures expose platform DataCloneError, not
+  Node v8 Error. Do not mutate guest constructor or register promise reactions.
 - Inspect only the clone for ArrayBuffer/SharedArrayBuffer/views (Buffer clones
   as Uint8Array), including records/arrays, Map keys/values, Set and Error.cause.
   Cycles terminate. Any binary value in the serialized graph throws
@@ -61,3 +62,13 @@ refusal, nonbinary physical parity, final native Vitest, production/packed and
 whole delivery review remain required after mechanism removal. Test migrations
 are explicit consequences of the user amendment, not fixes to make unchanged
 criteria pass. No all-green delivery claimed by this ADR alone.
+
+## Error identity correction
+
+Independent decision/probe: a getter can throw a DOMException obtained from a
+previous native clone failure. Name/brand/message/stack cannot establish where
+it originated in this call. Converting DataCloneError into Error corrupts that
+accepted getter identity. Preserve all native exceptions; document the platform
+class difference. This re-cuts ADR-0446 error-shape parity under the user's
+native-clone/Vitest-only route, without changing the primary scenario or binary
+ceiling. No reflection pre-walk or error-origin tracking owner added.

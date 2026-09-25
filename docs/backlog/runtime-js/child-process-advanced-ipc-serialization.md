@@ -46,7 +46,7 @@ validation and clone failure. Successful sends snapshot their input.
 ## Acceptance
 
 1. `fork(..., { serialization: 'advanced', stdio: 'pipe' })` carries the non-binary graphs needed by the accepted Vitest scenario in both directions, preserving cycles, shared references and send-time values. Buffer/typed arrays/DataView/ArrayBuffer/SharedArrayBuffer graphs, including nested occurrences, synchronously throw named `NotImplementedError('child_process.serialization.advanced.binary')`; no dispatch or disconnect. → I4, user2026-09-25
-2. Both public senders reject invalid messages and getter/clone failures synchronously as Node within the non-binary scope; no failed message is delivered, and subsequent valid messages arrive in order on the still-connected channel. The user permits a documented opaque-brand ceiling for ambiguous locked-constructor records if required by the chosen carrier; it must not be invented where native cloning works. → I4, ADR-0326, user2026-09-25
+2. Both public senders retain Node top-level validation, getter exception identity and synchronous native-platform clone rejection; no failed message is delivered, and subsequent valid messages arrive in order on the still-connected channel. Intrinsic clone failures expose platform DataCloneError rather than Node v8 Error. Native cloning supports ordinary frozen records without opaque-brand refusal. → I4, ADR-0326, ADR-0467
 3. Advanced public disconnect changes `connected` without disabling private child control; kill and terminal events remain observable. Default JSON semantics stay unchanged. → I4, ADR-0326
 
 4. Typed producer and receiver retain `ipc: 'advanced'`; the extended envelope is v5 and rejects v4 atomically. → ADR-0267, ADR-0446
@@ -102,3 +102,5 @@ ready-verdict: 2026-09-23 — Contract+RED @ 57602c71af088f69e2f973aa54ae3334644
   documented opaque-brand ceiling if technically necessary; no silent admission.
 
 - re-cut: 2026-09-25 — fork: user explicitly chooses Vitest-only non-binary IPC + binary ceiling; ADR-0467 partially supersedes ADR-0446 binary preservation and ADR-0453 provenance mechanism. Accepted non-binary behavior, both senders, getter order, healthy channels and ADR-0326 private control remain; frozen plain records now native instead of opaque-brand refusal.
+
+- re-cut: 2026-09-25 — native-clone user route: replace ADR-0446 clone-error class normalization with platform DataCloneError. Independent decision proved an actual native-generated DOMException thrown later by a getter is indistinguishable from a fresh clone failure; preserve identity instead of unreliable reclassification. Top-level Node validation, synchronous rejection, no dispatch and channel recovery unchanged; explicit compat difference, no claim of old error-shape parity.

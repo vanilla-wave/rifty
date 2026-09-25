@@ -56,3 +56,7 @@ including nested Buffer/typed arrays/DataView/ArrayBuffer/SharedArrayBuffer,
 throw `child_process.serialization.advanced.binary` before sending (ADR-0467).
 QuickJS Proxy-backed object/array mirrors cannot cross this native-clone IPC
 boundary. Other versions/modes are outside the guarantee; no artificial ban.
+
+Advanced IPC clone failures expose the platform `DataCloneError` (Node v8 uses
+`Error`). Getter-thrown values retain identity; failed sends dispatch nothing
+and leave the channel connected (ADR-0467).

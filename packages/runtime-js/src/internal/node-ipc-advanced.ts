@@ -69,20 +69,7 @@ function assertNonBinary(root: unknown): void {
 
 /** One native snapshot owns intrinsic brands, getter order and clone rejection. */
 export function encodeAdvancedIpc(message: unknown): AdvancedFrame {
-  let value: unknown;
-  try {
-    value = clone(message);
-  } catch (error) {
-    if (error instanceof Error && error.name === 'DataCloneError') {
-      throw new Error(
-        error.message.replace(
-          /^Failed to execute 'structuredClone' on '(?:WorkerGlobalScope|Window)': /,
-          '',
-        ),
-      );
-    }
-    throw error;
-  }
+  const value = clone(message);
   assertNonBinary(value);
   return { value, buffers: [] };
 }

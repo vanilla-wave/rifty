@@ -86,3 +86,7 @@ Chromium covers the real supervisor → application Worker journey.
   Worker/parentPort, public process IPC and manually referenced local MessagePorts.
   This is a browser handle subset, not the full libuv set
   (ADR-0152, ADR-0158, ADR-0446, ADR-0449, ADR-0452).
+
+Advanced IPC clone failures expose the platform `DataCloneError` (Node v8 uses
+`Error`). Getter-thrown values retain identity; failed sends dispatch nothing
+and leave the channel connected (ADR-0467).
