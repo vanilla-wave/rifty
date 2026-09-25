@@ -807,3 +807,18 @@ Production build (`RIFTY_PLAYGROUND_PORT=5411 pnpm test:e2e:prod tests/e2e-prod/
 - The parity runner's `child-worker` program launches bypass the rifty console: a child's `console.log` reaches the host stdout, not the kernel stdout port (`pool-probe.mjs` switched to `process.stdout.write`). That is a harness gap, and it hides console routing from program parity.
 - In the `child-worker` parent, `process.stdout.writable` is `undefined` (Node: `true`); compare draft `runtime-js/process-stdio-writable-end-surface`.
 - Worker `argv`, `resourceLimits`, `name`, `transferList` and `trackUnmanagedFds` options are ignored silently (`WorkerOptions` in `worker_threads.ts` has only `workerData`, `env`, `eval`, `execArgv`). This was found by reading the code, not a probe.
+- `child_process-worker.ts` `activeProcess()` (spawn/fork default env, cwd, stdio, pid) falls back to a raw `globalThis.process`, while `node:process` selects the active bootstrap, a live `NodeProcess` or `riftyProcess` (`builtins/process-public.ts`). In the in-process parity harness that is the host Node process: before `fork`'s default moved to `publicNodeProcess()`, `child_process/public-ipc-advanced-options` failed with `NotImplementedError: … startup option '--import' …` (the host worker's `["--import","tsx"]`), and three sibling fork cases failed with it (IMPLEMENT run, 2026-09-25). Only `execArgv` was moved; env/cwd/stdio keep the raw read.
+
+## GREEN at IMPLEMENT (2026-09-25)
+
+Product commits `baa504ce7`, `fea0b7fec`, `52757dbec` (host Node v24.16.0).
+
+- `npx vitest run packages/runtime-js/src/builtins/startup-options-ceiling.test.ts packages/runtime-js/src/builtins/node-entry-startup-options.test.ts` → 31 passed. The added ceiling row `names a copy of an eval parent's execArgv` fails when `forkExecArgv` strips the eval pair from any array (identity dropped): 1 failed | 21 passed.
+- `pnpm test:parity <name>` for `stdio-streams`, `stdio-exit-order`, `exec-argv-startup`, `exec-argv-validation`, `fork-exec-argv`, `vitest-pool-shape` (both kinds) → `all cases match`; filters `worker_threads/` (19), `child_process/` (25), `process/` (48) → `all cases match`.
+- `RIFTY_PLAYGROUND_PORT=5411 pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/worker-stdio-exec-argv.spec.ts` (with `advanced-ipc`, `worker-handle-keepalive`) → 7 passed.
+- `RIFTY_PLAYGROUND_PORT=5411 pnpm test:e2e:prod` → 10 passed, `worker-stdio-exec-argv` included.
+- `pnpm pr:check` → passed (25 checks; `test:run`, `test:parity` green).
+
+### Production fork hold (found by the prod carrier)
+
+The first prod run printed all five `SP|` rows, then `node main.cjs` never returned to the prompt. A scratch prod spec isolated it to a plain default-stdio fork (`fork('f-quiet.cjs')`: `SP|done 0`, no prompt within 25 s), no startup options involved. Cause: `process-stdin-inherit.ts` keyed the inherited-stdin hook with an unregistered `Symbol`, and a production realm runs `process` (pre-entry bundle) and `child_process` (node-entry bundle) from separate runtime-js copies, so the fork fell back to a `'data'` listener on the parent's stdin and held the parent. With `Symbol.for('rifty.runtime-js.process-stdin-inherit.v1')` the same scratch variants (plain fork, `execArgv` fork, Workers) all return; dev never showed it (one module graph). Regression: `child_process-inherit-stdin.test.ts` `finds the inherit hook another runtime-js copy's process installed` (fails with the old key).
