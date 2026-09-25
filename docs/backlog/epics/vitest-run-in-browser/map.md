@@ -1,37 +1,24 @@
 # Map — vitest-run-in-browser
 
 Live plan: index, not store. Minimal pattern first; each child a `draft`
-finding compiled to `ready` at its own PICKUP (`RDY-1`). Where a child
-depends on another (11 after 8; 12 after all) the order
-is also recorded as `blocked_by`; the other children are independent.
+finding compiled to `ready` at its own PICKUP (`RDY-1`). 12 depends on 11;
+the order is also recorded as `blocked_by`.
 
 ## Items
 
-8. `runtime-js/worker-threads-handle-keepalive` — **handle-keepalive** — I2; a
-   live `worker_threads.Worker` is a counted handle. Contract is fixed by I2. A
-   counted Worker needs a run-to-completion Worker to exit (absorbs
-   `runtime-js/worker-threads-kernel-run-to-completion-exit`) and a real
-   `unref()` in Node's observable shape (napi-rs neuters `ref` through the
-   Worker's own `Symbol(kHandle)`/`Symbol(kPublicPort)` objects; rolldown's
-   pool Workers stay unref'd) — else the parent never drains.
 11. `runtime-js/worker-threads-stdio-streams-empty-exec-argv` — **worker-stdio** —
     I4/I5; `Worker.stdout/stderr` Readables (`stdout: true` semantics) and the
     pools' real startup options: vitest 4.1.11 passes a non-empty `execArgv`
     (`--experimental-import-meta-resolve`, `--require <vitest>/suppress-warnings.cjs`,
     `--conditions …`) to both `fork` and `new Worker` — honoured with Node
     semantics, any other flag a named throw (today Worker throws, fork drops
-    it silently). After 8.
+    it silently).
 12. `runtime-js/vitest-run-acceptance` — **acceptance** — I4, I5, I7; e2e spec
     running the scenario (`vitest.config.ts`, `.ts` tests) on both pools + a
-    `vitest.md` page in `docs/public/compat/`; closes the goal. After 8, 11.
+    `vitest.md` page in `docs/public/compat/`; closes the goal. After 11.
 
 ## Open questions
 
-- Natural exit calls the user-reassignable `process.exit` property
-  (`node-entry-bootstrap.ts` `exit: (...code) => proc.exit(...code)`): vitest
-  4.1.11 pool workers patch it (a throwing patch → exit 1 where Node fires
-  `'exit'` 0 and exits 0) — owner: agent — first exercised at item 8 (worker
-  natural exit) / item 12; a wall there is a re-chart.
 - `vitest.config.ts` loading (vite `loadConfigFromFile` → rolldown bundle of
   the TS config) and `.ts` test transform under vitest's module runner: no
   wall observed yet because earlier walls block — owner: agent — first
