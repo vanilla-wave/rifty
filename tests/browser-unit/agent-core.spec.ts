@@ -156,9 +156,13 @@ test('diagnostics match the real companion and export includes SCM state', async
   const resultMessage = result.trace.transcript.find(
     (message) => message.role === 'toolResult' && message.toolName === 'diagnostics',
   );
-  expect(resultMessage?.content).toEqual([
-    { type: 'text', text: JSON.stringify(result.expectedDiagnostics) },
-  ]);
+  if (resultMessage?.role !== 'toolResult') throw new Error('Missing diagnostics result');
+  const text = resultMessage.content
+    .map((part) => (part.type === 'text' ? part.text : ''))
+    .join('\n');
+  const [receipt, ...body] = text.split('\n');
+  expect(JSON.parse(receipt!)).toMatchObject({ callsLeft: 99, msLeft: expect.any(Number) });
+  expect(JSON.parse(body.join('\n'))).toEqual(result.expectedDiagnostics);
   expect(JSON.stringify(result.trace.finalDiff)).toContain('diagnostic.ts');
   expect(result.trace.finalDiff).not.toHaveProperty('error');
 });
@@ -192,7 +196,9 @@ test('tool result cap preserves UTF-8 head and tail with an explicit omitted-byt
       .join('') ?? '';
   expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(16 * 1024);
   expect(text).toContain('HEAD');
-  expect(text.startsWith('\ufeffHEAD')).toBe(true);
+  const [receipt, ...body] = text.split('\n');
+  expect(JSON.parse(receipt!)).toMatchObject({ callsLeft: 19, msLeft: expect.any(Number) });
+  expect(body.join('\n').startsWith('\ufeffHEAD')).toBe(true);
   expect(text).toContain('TAIL');
   expect(text).toMatch(/\[truncated \d+ bytes\]/);
   expect(text).not.toContain('\ufffd');

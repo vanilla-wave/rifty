@@ -133,6 +133,7 @@ export interface AgentSessionCommonOptions extends AgentRunLimits {
 }
 
 export interface AgentSessionOptions extends AgentSessionCommonOptions {
+  readonly recipe?: boolean;
   readonly retry?: Partial<RetryPolicy>;
   readonly compaction?: Partial<CompactionSettings>;
   readonly models: Models;
@@ -152,6 +153,12 @@ export type AgentStatus =
   | 'context-exceeded';
 
 export type AgentSessionEvent =
+  | {
+      readonly type: 'repeated-call';
+      readonly toolName: string;
+      readonly count: 3;
+      readonly message: string;
+    }
   | {
       readonly type: 'retry';
       readonly phase: 'start' | 'end';
@@ -202,6 +209,7 @@ export interface AgentTrace {
     readonly transport: 'openai-compatible' | 'custom';
     readonly thinking: string;
     readonly temperature?: number;
+    readonly recipe: boolean;
     readonly retry: RetryPolicy;
     readonly compaction: CompactionSettings;
     readonly maxToolCalls: number;

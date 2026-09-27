@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Default600s and model-facing budget receipts; exact-edit hints, third-repeat native steering, bounded post-mutation diagnostics and shared recipe v2 with opt-out.
+
 - Native Pi retry/compaction, bounded context recovery, restorable summary details and full current-session attempt usage.
 
 - Keep native trace statuses and event/message tags valid when a catalog header matches a protocol word; mask credentials in payload values/keys, preserving ordinary tool metadata.

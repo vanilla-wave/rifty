@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Default AI run budget600s; built-in results expose remaining budget and mutation diagnostics, native repeated-call notices appear in history.
+
 - Show retry/compaction notices and offer explicit model continuation after context overflow.
 
 - Edit/persist a model catalog, switch without resetting history, continue after provider errors, attach images or exact project-file bytes.

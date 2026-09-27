@@ -18,7 +18,7 @@ export default function(pi) {
   pi.on('before_agent_start', event=> {
     const systemPrompt=[profile.intro,profile.guidance,
       'Native Node project with the installed Pi CLI read/bash/edit/write tools. The tool schemas describe their actual protocols and output limits; these differ from the browser host. A dev server is running. No additional project context files were loaded.',
-      profile.recovery,profile.verification,
+      profile.recovery,profile.verification,profile.recipe,
       'Current working directory: '+process.cwd(),
       'Current date: '+new Date().toISOString().slice(0,10)].join('\\n\\n');
     writeFileSync(directory+'/system-prompt.txt',systemPrompt);

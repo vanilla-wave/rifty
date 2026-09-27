@@ -155,7 +155,7 @@ export function loadSettings(): ChatSettings {
     typeof fields.model === 'string' && models.some((entry) => entry.id === fields.model)
       ? fields.model
       : models[0]!.id;
-  return { models, model, apiKeys: {}, maxToolCalls: 100, runTimeoutMs: 180_000 };
+  return { models, model, apiKeys: {}, maxToolCalls: 100, runTimeoutMs: 600_000 };
 }
 
 export function validateSettings(input: ChatSettings): ChatSettings {

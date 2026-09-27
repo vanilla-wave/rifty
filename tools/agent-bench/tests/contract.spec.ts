@@ -84,8 +84,14 @@ async function cli(args: string[], extraEnv: Record<string, string> = {}) {
 // RED scaffold is callable and loud; it cannot substitute a fabricated successful report.
 test('the public shared coding profile is available to browser and native CLI consumers', () => {
   const profile = getAgentPromptProfile();
-  expect(profile.id).toBe('pi-0.85.1+rifty-adapter-v1');
-  for (const part of [profile.intro, profile.guidance, profile.recovery, profile.verification])
+  expect(profile.id).toBe('pi-0.85.1+rifty-adapter-v2');
+  for (const part of [
+    profile.intro,
+    profile.guidance,
+    profile.recovery,
+    profile.verification,
+    profile.recipe,
+  ])
     expect(part.length).toBeGreaterThan(20);
 });
 
@@ -121,7 +127,13 @@ test('all three real mock-model lanes run the entire task set with identical jud
       .filter((message) => message.role === 'system' || message.role === 'developer')
       .map((message) => message.content)
       .join('\n');
-    for (const part of [profile.intro, profile.guidance, profile.recovery, profile.verification])
+    for (const part of [
+      profile.intro,
+      profile.guidance,
+      profile.recovery,
+      profile.verification,
+      profile.recipe,
+    ])
       expect(system).toContain(part);
     const result = JSON.stringify(
       request.body.messages.filter((message) => message.role === 'tool'),

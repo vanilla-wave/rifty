@@ -14,6 +14,7 @@ const tags = new Set([
   'budget-exceeded',
   'context-exceeded',
   'retry',
+  'repeated-call',
   'compaction',
   'end',
   'summary',

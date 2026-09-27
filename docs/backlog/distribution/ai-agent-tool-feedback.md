@@ -93,6 +93,8 @@ challenge: 2026-09-28 — accepted goal; independent DEC-2 carrier probe, no sco
 
 ## Decisions
 
+ready-verdict: 2026-09-28 — Contract+RED @ a56659d4c — `reference/ai-agent-tool-feedback-contract-red.json`
+
 - re-cut: 2026-09-28 — combine five feedback drafts, preserve I7–I11 — trace: none
 - ADR0475 will record native receipt seam, consumer-envelope convention and narrow
   ADR0440 profile correction; I6-dependent fixture repair remains linked evidence.

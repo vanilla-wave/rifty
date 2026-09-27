@@ -494,7 +494,7 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
         model: trace.config.model,
         profile: trace.profile,
         maxToolCalls: trace.config.maxToolCalls ?? 100,
-        runTimeoutMs: trace.config.runTimeoutMs ?? 180_000,
+        runTimeoutMs: trace.config.runTimeoutMs ?? 600_000,
       };
     },
   };

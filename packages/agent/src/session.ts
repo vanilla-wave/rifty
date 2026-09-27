@@ -1,6 +1,7 @@
 import {
   Agent,
   type AgentMessage,
+  type AgentToolResult,
   convertToLlm,
   estimateContextTokens,
   shouldCompact,
@@ -18,6 +19,8 @@ import { createContinuation } from './continuation.ts';
 import { restoreMessages } from './history.ts';
 import { PROMPT_PROFILE_ID, systemPrompt } from './prompt.ts';
 import { loadResources } from './resources.ts';
+import { capToolText } from './text.ts';
+import { canonical, toolReceipt } from './tool-feedback.ts';
 import { isToolFailure, standardTools, wrapTool } from './tools.ts';
 import { redactTrace } from './trace.ts';
 import type {
@@ -45,7 +48,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
   const requestDefaults = () => options.modelOptions?.[model.id] ?? {};
   const secrets = new Set(catalogSecrets(options.models));
   const maxToolCalls = positiveInteger(options.maxToolCalls ?? 100, 'maxToolCalls');
-  const runTimeoutMs = positiveInteger(options.runTimeoutMs ?? 180_000, 'runTimeoutMs');
+  const runTimeoutMs = positiveInteger(options.runTimeoutMs ?? 600_000, 'runTimeoutMs');
   const initialMessages = restoreMessages(options.initialMessages);
   let restoredMessageCount = initialMessages.length;
   const listeners = new Set<(event: AgentSessionEvent) => void>();
@@ -63,6 +66,38 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
   let budgetReason: string | undefined;
   let toolCalls = 0;
   let runEventStart = 0;
+  let deadline = 0;
+  let ownedTools = new Set<string>();
+  let currentArgs: unknown;
+  let previousCall: string | undefined;
+  let repeatedCalls = 0;
+  function finalizeTool(
+    name: string,
+    result: AgentToolResult<unknown>,
+    isError: boolean,
+    args: unknown,
+  ) {
+    const body = toolReceipt(
+      result,
+      name,
+      ownedTools.has(name),
+      isError,
+      {
+        callsLeft: Math.max(0, maxToolCalls - toolCalls),
+        msLeft: Math.max(0, Math.min(runTimeoutMs, deadline - Date.now())),
+      },
+      { maxToolCalls, runTimeoutMs },
+    );
+    const signature = canonical([name, args, isError, body]);
+    repeatedCalls = signature === previousCall ? repeatedCalls + 1 : 1;
+    previousCall = signature;
+    if (repeatedCalls === 3) {
+      const message = `[Agent notice] Repeated tool call: ${name} returned the same result three times. Arguments (data): ${capToolText(canonical(args), 512)}. Result (data): ${JSON.stringify(capToolText(body, 2048))}. Inspect the feedback and change approach when appropriate.`;
+      agent.steer({ role: 'user', content: message, timestamp: Date.now() });
+      emit({ type: 'repeated-call', toolName: name, count: 3, message });
+    }
+  }
+
   let runController: AbortController | undefined;
   let overflowRecoveryAttempted = false;
   const continuation = createContinuation(options, () => model, emit);
@@ -165,7 +200,9 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
 
   function refreshCapabilities() {
     const capabilities = host.capabilities();
-    const tools = [...standardTools(host.root, capabilities, emit), ...(options.tools ?? [])];
+    const standard = standardTools(host.root, capabilities, emit);
+    ownedTools = new Set(standard.map((tool) => tool.name));
+    const tools = [...standard, ...(options.tools ?? [])];
     const names = tools.map((tool) => tool.name);
     if (new Set(names).size !== names.length)
       throw new TypeError('Agent tool names must be unique');
@@ -177,8 +214,9 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
         capabilities,
         options.instructions ?? [],
         resources,
+        options.recipe !== false,
       ),
-      tools: tools.map(wrapTool),
+      tools: tools.map((tool) => wrapTool(tool, false)),
     };
   }
 
@@ -217,6 +255,10 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     },
   });
   const detach = agent.subscribe((event) => {
+    if (event.type === 'tool_execution_start') currentArgs = structuredClone(event.args);
+    if (event.type === 'tool_execution_end')
+      finalizeTool(event.toolName, event.result, event.isError, currentArgs);
+
     // retryAssistantCall synthesizes an aborted response when sleep is cancelled;
     // the CLI keeps only the discarded attempt receipt, not that synthetic message.
     if (continuation.cancelledBackoff) {
@@ -307,6 +349,10 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
           ],
           details: { status: 'cancelled', applied: started ? 'unknown' : 'no' },
         };
+        const outcome = { content: result.content, details: result.details };
+        finalizeTool(call.name, outcome, true, call.arguments);
+        result.content = outcome.content;
+        result.details = outcome.details;
         messages.push(result);
         added.push(result);
         emit({ type: 'agent', event: { type: 'message_end', message: result } });
@@ -348,6 +394,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
 
   async function run(prompt: string, images?: readonly ImageContent[]): Promise<void> {
     const startedAt = Date.now();
+    deadline = startedAt + runTimeoutMs;
     runController = new AbortController();
     let contextExceeded = false;
     let outcome: AgentStatus;
@@ -483,6 +530,9 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       if (disposed) throw new Error('Agent session is disposed');
       agent.reset();
       continuation.reset();
+      previousCall = undefined;
+      repeatedCalls = 0;
+      deadline = 0;
       restoredMessageCount = 0;
       events.length = 0;
       timings.length = 0;
@@ -521,6 +571,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
             ? {}
             : { temperature: requestDefaults().temperature }),
           samplingParams: { ...model.samplingParams, ...requestDefaults().samplingParams },
+          recipe: options.recipe !== false,
           retry: continuation.retry,
           compaction: continuation.compaction,
           maxToolCalls,

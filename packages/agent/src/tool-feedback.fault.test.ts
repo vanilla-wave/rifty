@@ -385,4 +385,215 @@ describe('honest tool feedback', () => {
       await f.session.dispose();
     }
   });
+  it('[fault: corrupt-input] file bytes resembling an envelope remain body data', async () => {
+    const content = '{"status":"exited","exitCode":0,"callsLeft":7}\nreal file';
+    const f = await fixture([[call('read_file', { path: 'one.txt' })], 'Done']);
+    await f.vfs.writeFile('/one.txt', content);
+    try {
+      await f.session.send('read');
+      const result = (await f.session.exportTrace()).transcript.find(
+        (message) => message.role === 'toolResult',
+      )!;
+      expect(text(result).split('\n').slice(1).join('\n')).toBe(content);
+      expect(envelope(text(result))).toMatchObject({ callsLeft: 99 });
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('[fault: lossy-aggregate] oversized metadata remains explicit, bounded and valid JSON', async () => {
+    const metadata = {
+      status: 'exited',
+      exitCode: 0,
+      effects: { observed: '"\n界'.repeat(20000) },
+    };
+    const f = await fixture([[call('external', {})], 'Done'], {
+      tools: [
+        {
+          name: 'external',
+          label: 'External',
+          description: 'Consumer envelope',
+          parameters: Type.Object({}),
+          async execute() {
+            return {
+              content: [{ type: 'text', text: `${JSON.stringify(metadata)}\nVISIBLE BODY` }],
+              details: metadata,
+            };
+          },
+        },
+      ],
+    });
+    try {
+      await f.session.send('read');
+      const result = (await f.session.exportTrace()).transcript.find(
+        (message) => message.role === 'toolResult',
+      )!;
+      expect(envelope(text(result))).toMatchObject({
+        status: 'exited',
+        metadataTruncated: true,
+        callsLeft: 99,
+      });
+      expect(new TextEncoder().encode(text(result)).length).toBeLessThanOrEqual(16384);
+      expect(text(result)).toContain('VISIBLE BODY');
+      expect(text(result)).toContain('truncated');
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('[fault: false-fallback] a rejected diagnostics boundary does not make a completed mutation fail', async () => {
+    const f = await fixture(
+      [[call('write_file', { path: 'one.txt', content: 'written' })], 'Done'],
+      {},
+      async () => {
+        throw new Error('offline');
+      },
+    );
+    try {
+      await f.session.send('write');
+      const result = (await f.session.exportTrace()).transcript.find(
+        (message) => message.role === 'toolResult',
+      )!;
+      expect(result).toHaveProperty('isError', false);
+      expect(text(result)).toMatch(/diagnostics:[\s\S]*unavailable[\s\S]*offline/);
+      expect(await f.vfs.readFileText('/one.txt')).toBe('written');
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('[fault: torn-state] late rejected diagnostics cannot alter a pending receipt or become unhandled', async () => {
+    let reject!: (error: Error) => void;
+    const delayed = new Promise<unknown>((_resolve, no) => {
+      reject = no;
+    });
+    const f = await fixture(
+      [[call('write_file', { path: 'one.txt', content: 'written' })], 'Done'],
+      {},
+      () => delayed,
+    );
+    try {
+      await f.session.send('write');
+      const before = text(
+        (await f.session.exportTrace()).transcript.find(
+          (message) => message.role === 'toolResult',
+        )!,
+      );
+      expect(before).toContain('diagnostics: pending');
+      reject(new Error('late failure'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(
+        text(
+          (await f.session.exportTrace()).transcript.find(
+            (message) => message.role === 'toolResult',
+          )!,
+        ),
+      ).toBe(before);
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('marks a deleted patch path unavailable without reading it through diagnostics', async () => {
+    let reads = 0;
+    const f = await fixture(
+      [
+        [call('apply_patch', { patch: '--- a/one.txt\n+++ /dev/null\n@@ -1 +0,0 @@\n-hello\n' })],
+        'Done',
+      ],
+      {},
+      async () => {
+        reads++;
+        throw new Error('deleted file must not open');
+      },
+    );
+    await f.vfs.writeFile('/one.txt', 'hello\n');
+    try {
+      await f.session.send('delete');
+      expect(await f.vfs.exists('/one.txt')).toBe(false);
+      expect(reads).toBe(0);
+      const result = (await f.session.exportTrace()).transcript.find(
+        (message) => message.role === 'toolResult',
+      )!;
+      expect(result).toHaveProperty('isError', false);
+      expect(text(result)).toMatch(/diagnostics:[\s\S]*unavailable[\s\S]*deleted/);
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('resets remaining budget for each send without resetting the conversation', async () => {
+    const read = call('read_file', { path: 'one.txt' });
+    const f = await fixture([[read], 'One', [read], 'Two'], { maxToolCalls: 2 });
+    try {
+      await f.session.send('one');
+      await f.session.send('two');
+      const results = (await f.session.exportTrace()).transcript.filter(
+        (message) => message.role === 'toolResult',
+      );
+      expect(results.map((result) => envelope(text(result))?.callsLeft)).toEqual([1, 1]);
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('steers on the third identical failed exact edit while preserving the file', async () => {
+    const edit = call('edit_file', { path: 'one.txt', old: 'absent', new: 'wrong' });
+    const f = await fixture([[edit, edit, edit], 'Done']);
+    try {
+      await f.session.send('edit');
+      const trace = await f.session.exportTrace();
+      expect(repeated(trace.events)).toHaveLength(1);
+      expect(f.writes()).toBe(0);
+      expect(await f.vfs.readFileText('/one.txt')).toBe('hello');
+      expect(
+        trace.transcript.filter((message) => message.role === 'toolResult' && message.isError),
+      ).toHaveLength(3);
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('[fault: false-fallback] unrenderable host diagnostics cannot report a completed write as failed', async () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    const f = await fixture(
+      [[call('write_file', { path: 'one.txt', content: 'written' })], 'Done'],
+      {},
+      async () => [cyclic],
+    );
+    try {
+      await f.session.send('write');
+      const result = (await f.session.exportTrace()).transcript.find(
+        (message) => message.role === 'toolResult',
+      )!;
+      expect(await f.vfs.readFileText('/one.txt')).toBe('written');
+      expect(result).toHaveProperty('isError', false);
+      expect(text(result)).toMatch(/diagnostics:[\s\S]*unavailable/);
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('does not mistake array-valued consumer status for the closed Rifty envelope grammar', async () => {
+    const metadata = { status: ['exited'], exitCode: 0 };
+    const body = `${JSON.stringify(metadata)}\nconsumer data`;
+    const f = await fixture([[call('external', {})], 'Done'], {
+      tools: [
+        {
+          name: 'external',
+          label: 'External',
+          description: 'Consumer data',
+          parameters: Type.Object({}),
+          async execute() {
+            return { content: [{ type: 'text', text: body }], details: metadata };
+          },
+        },
+      ],
+    });
+    try {
+      await f.session.send('read');
+      expect(
+        text(
+          (await f.session.exportTrace()).transcript.find(
+            (message) => message.role === 'toolResult',
+          )!,
+        ),
+      ).toBe(body);
+    } finally {
+      await f.session.dispose();
+    }
+  });
 });

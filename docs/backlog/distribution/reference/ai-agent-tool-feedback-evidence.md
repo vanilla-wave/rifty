@@ -47,3 +47,54 @@ The new native test also kills the reviewer's headless-only mutant on actual
 model wire: `/private/tmp/rifty-pr359-native-recipe-mutant-red.log` (profile.recipe
 exists; native prompt lacks it). Agent-bench typecheck passes; metric guard6/6
 passes `/private/tmp/rifty-pr359-feedback-metrics-baseline.log`.
+
+## Implementation proof
+
+Native end-event receipts preserve execution authority and existing admission
+counts. Final capping moved from wrapTool to the receipt boundary; streaming
+consumer updates retain their old cap. This prevents double truncation and keeps
+JSON headings intact. Existing consumer-envelope recognition requires native
+scalar types and matching details; file bytes are never parsed as metadata.
+
+- First GREEN:15 core feedback +native recipe +6 metrics =22/22,
+  `/private/tmp/rifty-pr359-tool-feedback-green1.log`.
+- Extended fault coverage24/24: Unicode/large metadata, consumer false positives,
+  failed-edit repetition, late/rejected diagnostics, deleted paths, reset budgets.
+  `/private/tmp/rifty-pr359-tool-feedback-fault-final2.log`.
+- Diagnostics rendering failure RED (actual write succeeded but tool was marked
+  failed) and repair: `/private/tmp/rifty-pr359-feedback-diagnostics-format-red.log`.
+- Array-valued consumer status RED and strict-grammar repair:
+  `/private/tmp/rifty-pr359-feedback-consumer-grammar-red.log`.
+- Real Workbench browser18/18:
+  `/private/tmp/rifty-pr359-tool-feedback-browser-final.log`.
+- Full prior chat15/15: `/private/tmp/rifty-pr359-tool-feedback-chat.log`.
+- Composed I7/I8/I9 chat: four rejected exact edits, one visible native steer,
+  subsequent real read_file proves file unchanged; no suppressed calls:
+  `/private/tmp/rifty-pr359-tool-feedback-repeat-browser3.log`.
+- First full gate25/25: `/private/tmp/rifty-pr359-tool-feedback-pr-check1.log`.
+  Final unchanged-source confirmation remains before delivery.
+
+PR-4: default-prompt golden gains only the declared recipe and static receipt
+explanation; four shared paragraphs remain. UI reload default180→600 per I9;
+explicit caller180 overrides remain. Native benchmark profile expectationv1→v2
+and paragraph assertions include recipe. Browser BOM/diagnostic checks now assert
+JSON receipt plus exactly the prior body semantics, rather than requiring the
+old no-header shape. No task/judge/config baseline changed.
+
+New composition-test harness corrections: there is no capture() bench hook;
+use actual read_file, explicitly included in the scripted sequence. Those two
+harness failures are retained in repeat-browser{,2}.log; not product failures.
+Whitespace hints rank the first nonempty old line after whitespace removal by
+shared prefix/suffix proportion, exact normalized equality first, first-line ties.
+This is locating advice only; all writes still require one exact full old match.
+
+Final focused suite120/120: `/private/tmp/rifty-pr359-tool-feedback-focused-final.log`.
+Final gate25/25, no isolation: `/private/tmp/rifty-pr359-tool-feedback-pr-check-final.log`.
+Full mock-model smoke passed all14 real task/lane pairs and shared recipe wire
+assertions; COI/native budget cases passed. No-COI budget preparation overlapped
+that gate's dist rebuild and packaged missing runtime-js outputs; it failed before
+an agent request. Missing files exist after build. Sequential isolated proof is
+`/private/tmp/rifty-pr359-tool-feedback-no-coi-isolated.log`; no production workaround.
+Keep the original failure `/private/tmp/rifty-pr359-tool-feedback-real-lanes.log`.
+Sequential no-COI budget rerun PASS1/1 (1.7m), same code, no build overlap.
+All required smoke/budget cases now have passing execution evidence.

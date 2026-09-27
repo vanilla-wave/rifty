@@ -237,7 +237,7 @@ test('settings keep the catalog; Reset retains files and reload clears key/conve
     await expect(panel.getByLabel('Model', { exact: true })).toHaveValue('scripted');
     await expect(panel.getByLabel('API key (optional)', { exact: true })).toHaveValue('');
     await expect(panel.getByLabel('Tool limit', { exact: true })).toHaveValue('100');
-    await expect(panel.getByLabel('Time limit (seconds)', { exact: true })).toHaveValue('180');
+    await expect(panel.getByLabel('Time limit (seconds)', { exact: true })).toHaveValue('600');
     await expect(panel.getByTestId('ai-messages')).not.toContainText('Read the saved file.');
   } finally {
     await model.close();
@@ -967,5 +967,48 @@ test('native compaction marker survives settlement; overflow offers larger model
   } finally {
     await small.close();
     await large.close();
+  }
+});
+
+test('repeated failed exact edits stay visible, retain the file and steer before the next request', async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  const edit = { name: 'edit_file', args: { path: 'repeat.txt', old: 'alpha', new: 'wrong' } };
+  const model = await agentModelServer([
+    [edit, edit, edit, edit],
+    [{ name: 'read_file', args: { path: 'repeat.txt' } }],
+    'Read the locating feedback.',
+  ]);
+  try {
+    await page.goto('/?agentBench=1');
+    await pickStarter(page);
+    await openChat(page);
+    await settings(page, model.baseUrl);
+    await page.evaluate(async () =>
+      (
+        Reflect.get(globalThis, '__riftyAgentBench') as {
+          seed(input: { taskId: string; files: Record<string, string> }): Promise<void>;
+        }
+      ).seed({ taskId: 'repeat-proof', files: { 'repeat.txt': 'alpha\nbeta\nalpha\n' } }),
+    );
+    await send(page, 'Replace the exact text and inspect any failure.');
+    const panel = page.getByTestId('ai-panel');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await expect(panel.locator('[data-tool-name="edit_file"]')).toHaveCount(4);
+    await expect(panel.getByTestId('ai-messages')).toContainText('Repeated tool call: edit_file');
+    const trace = await exported(page);
+    const results = toolResults(trace).filter((result) => result.toolName === 'edit_file');
+    expect(results).toHaveLength(4);
+    expect(results.every((result) => result.isError)).toBe(true);
+    expect(JSON.stringify(results)).toContain('2 matches: lines 1, 3');
+    expect(trace.events.filter(({ event }) => event.type === 'repeated-call')).toHaveLength(1);
+    expect(JSON.stringify(model.requests[1]?.body.messages)).toContain('[Agent notice]');
+    const read = toolResults(trace).find((result) => result.toolName === 'read_file');
+    const text =
+      read?.content.map((part) => (part.type === 'text' ? part.text : '')).join('') ?? '';
+    expect(text.split('\n').slice(1).join('\n')).toBe('alpha\nbeta\nalpha\n');
+  } finally {
+    await model.close();
   }
 });

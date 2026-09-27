@@ -20,7 +20,7 @@ const agent = createAgentSession({
   host: createWorkbenchAgentHost({ session: projectSession }),
   models, model,
   maxToolCalls: 100,
-  runTimeoutMs: 180_000,
+  runTimeoutMs: 600_000,
   instructions: ['Follow the project coding conventions.'],
   // tools: native Pi AgentTool[]; provider fetch is consumer-owned.
 });
@@ -141,7 +141,7 @@ preview fetch begins with HTTP status. The envelope is included inside the same
 16 KiB text cap, so a following model turn can distinguish quiet outcomes.
 Consumer tools must put their own model-relevant outcome in text.
 
-Limits default to 100 tool calls / 180 seconds per `send`. Tool text results
+Limits default to 100 tool calls / 600 seconds per `send`. Tool text results
 use a 16 KiB UTF-8 head/tail cap. Trace includes native transcript, events and
 agent output, timing, token usage and host diff (or explicit unavailability/error).
 Storage remains host-owned. Multimodal/image tool results are unsupported and
@@ -222,3 +222,20 @@ is excluded. `reset()` clears current usage.
 tokens before/after and whether the source was provider usage or an estimate.
 Unrecovered native overflow ends `context-exceeded`; select a larger entry and
 send another prompt to continue. No automatic fallback.
+
+
+### Tool feedback
+
+Built-in final results begin with a complete JSON budget receipt (`callsLeft`,
+`msLeft`); body plus receipt stays within16KiB. Consumer plain text stays theirs;
+existing shell/preview envelopes with matching details also receive counters.
+Exact failed edits report counts/lines or a whitespace-insensitive hint; hints
+never change matching. Third consecutive equal call/result queues native steering;
+no deduplication. Sequence spans sends, reset clears it.
+
+Successful writes/edits/patches append host diagnostics (up to10 entries). The
+1000ms wait covers all changed files; delayed diagnostics are pending, missing or
+rejected diagnostics are explicit unavailable. Mutation success/effects remain.
+
+The shared v2 profile adds one workflow recipe. `recipe:false` omits only that
+paragraph; `trace.config.recipe` records the effective setting.
