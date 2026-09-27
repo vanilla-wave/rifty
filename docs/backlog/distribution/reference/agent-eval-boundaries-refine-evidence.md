@@ -135,3 +135,22 @@ comparison. Required behavior is measured, never a guaranteed discovered flaw.
 - [Anthropic: Infrastructure noise](https://www.anthropic.com/engineering/infrastructure-noise)
   (read 2026-09-27): resource and timeout configuration affect measured agent
   outcomes. Record those settings; a score difference alone is not causal proof.
+
+## Final written-result check
+
+Fresh read-only `/root/boundaries_refine_final`: PASS, no findings.
+Record: `agent-eval-boundaries-final-green.json`; reviewed commit
+`d9057895438e9a6f78562bf1f56ec2ee028aa3ac`; driver verified all 12 hashes in
+`agent-eval-boundaries-review-manifest.json`.
+
+Reviewer independently reran the real standalone Shell probe and matched
+its fields, candidate counts and selected call/results to the 42 archived
+traces. No public-browser or new model-trial proof claimed.
+
+`pnpm pr:check`: docs-only 20/20 PASS; log
+`/tmp/rifty-eval-boundaries-pr-check-final.log`. Initial lint failure was
+JSON array formatting only; corrected with no data change. Source lanes
+were skipped. `git diff --check` and verdict validator PASS.
+
+Refine amendment complete; implementation and real I1–I11 acceptance
+remain open. I5 pilot success cannot close the boundary-search obligation.
