@@ -122,6 +122,7 @@ open:
 - `docs/backlog/distribution/ai-ide-product-ui` — chat + streamed tool-call/diff/approve UI over the IDE-kit.
 - `docs/backlog/toolchain-build/ts-language-service` — in-browser TS diagnostics/hover/defs over VFS (agent `typecheck` + editor squiggles).
 - `docs/backlog/shell/git-command-isomorphic` — git over VFS (isomorphic-git) for git-aware tools.
+- `docs/backlog/epics/no-coi-agent-host-kit` — an existing non-COI app embeds sandbox + agent by wiring connections only; every quality-relevant part stays a rifty package obligation.
 
 ## M13 — Sharing & import
 
