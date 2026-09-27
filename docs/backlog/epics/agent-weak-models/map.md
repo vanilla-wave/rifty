@@ -1,9 +1,9 @@
 # Map — agent-weak-models
 
 Live plan: index, not store. Frontier = open children with `epic:` backlinks.
-Shared files with `epics/no-coi-agent-host-kit` (PR #357) and
-`epics/agent-code-quality-evaluation` (PR #341): order in goal §Decisions
-"cross-goal reconciliation" / "shared bench order".
+Goals run whole and in sequence: this goal → `epics/no-coi-agent-host-kit`
+(PR #357) → `epics/agent-code-quality-evaluation` (PR #341); no cross-goal
+item ordering (goal §Decisions "shared bench order").
 
 ## Items
 
@@ -23,10 +23,10 @@ Shared files with `epics/no-coi-agent-host-kit` (PR #357) and
 3. `distribution/ai-agent-playground-model-catalog` — **playground** —
    Settings catalog editor, chat model picker, attach control (image → prompt,
    other file → project via the project files API + path in prompt), switch
-   offer after provider `error` (I4). After 1–2 and the kit's transcript
-   reducer `distribution/agent-transcript-model` (PR #357), which the picker,
-   attach control and switch offer extend. The `context-exceeded` offer and
-   the compaction marker are item 7's UI half.
+   offer after provider `error` (I4). After 1–2. The `context-exceeded` offer
+   and the compaction marker are item 7's UI half; the kit's transcript
+   reducer (`distribution/agent-transcript-model`, PR #357) lands after this
+   goal and covers these chat events.
 4. `distribution/ai-agent-weak-model-baseline-lane` — **baseline** — bench
    `endpoint` as a catalog entry, report header + per-run metric columns,
    `context-exceeded` outcome, one recorded `gpt-6-luna` run of the existing
@@ -42,8 +42,7 @@ Shared files with `epics/no-coi-agent-host-kit` (PR #357) and
    option (default on), pi 0.85.1 compaction over the retained history, trace
    tokens and full usage totals, `context-exceeded`, plus the playground chat
    marker and the `context-exceeded` switch offer (I5, I4 second half). After
-   4 and the kit's reducer `distribution/agent-transcript-model` (PR #357),
-   which the marker and offer extend; fault matrix.
+   4; fault matrix.
 8. `distribution/ai-agent-edit-failure-diagnostics` — **edit-diagnostics** —
    locating failure text for `edit_file` match failures, exact matching kept,
    apply_patch and host-write semantics unchanged (I7). After 4.

@@ -267,15 +267,21 @@ Pass 4: 1 blocker → I6 no longer promises `Retry-After` handling (pi: fixed ex
   stands; the kit's measure-first question narrows to the 16 KiB cap. «5 -
   ок» three cold runs stay; a ±1-pass delta on 3 runs is marked as within
   noise in the comparison table — I13's regression rule still applies (fix or
-  explicit user amendment). «6 - ок» the kit's transcript reducer
-  (`distribution/agent-transcript-model`) lands before items 3 and 7, whose
-  chat UI halves (picker, attach, switch offer, compaction marker) extend it.
+  explicit user amendment). «6 - ок», then simplified on the user's «очень
+  сложная последовательность»: no cross-goal ordering between the kit's
+  transcript reducer (`distribution/agent-transcript-model`) and items 3 and
+  7 — the reducer lands after this goal and covers its chat events (model
+  switch, compaction marker, retry attempts, steering message,
+  `context-exceeded`).
 - shared bench order: 2026-09-27 — agent (user: «сделай так, чтобы разработка
-  была проще») — `tools/agent-bench` is shared with PR #341 and PR #357:
-  item 1 (catalog endpoint, lanes migrated) and item 4 (per-run metric
-  columns, `context-exceeded`, recorded baseline) land before the quality
-  goal's runner/report restructuring (`distribution/agent-eval-local-runner`),
-  which then carries them; item 12 ships the smallest `report --compare` over
+  была проще») — the three goals run whole and in sequence, each by its own
+  map: this goal → `epics/no-coi-agent-host-kit` →
+  `epics/agent-code-quality-evaluation`; no cross-goal item ordering. Why:
+  `tools/agent-bench` is shared with PR #341 and PR #357 — item 1 (catalog
+  endpoint, lanes migrated) and item 4 (per-run metric columns,
+  `context-exceeded`, recorded baseline) land before the quality goal's
+  runner/report restructuring (`distribution/agent-eval-local-runner`), which
+  then carries them; item 12 ships the smallest `report --compare` over
   two summary directories of one config and the quality goal's report owner
   (`distribution/agent-eval-comparison-report`) absorbs it — no second
   comparison design; the kit's no-COI lane swap

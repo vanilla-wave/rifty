@@ -32,10 +32,9 @@ finding — goal slice 7 (I5); after slice 4 (baseline first); adds the `compact
 - After this slice: the summary is generated through the selected entry's
   transport; the summary stays in history; a compaction event with tokens
   before/after is emitted, rendered as a marker in the playground chat (this
-  slice owns that UI half and the chat's `context-exceeded` switch offer, I4 —
-  both extend the kit's reducer `distribution/agent-transcript-model`, PR
-  #357, which lands first: user 2026-09-27 «6 - ок») and kept in the exported
-  trace; trace usage totals keep the compacted-away
+  slice owns that UI half and the chat's `context-exceeded` switch offer, I4;
+  the kit's later reducer `distribution/agent-transcript-model`, PR #357,
+  covers these events) and kept in the exported trace; trace usage totals keep the compacted-away
   messages and add the summary requests (critic finding 10); a request that
   cannot fit after compaction — e.g. a window smaller than reserve + retained
   tail — ends the run with `context-exceeded`, distinct from `budget-exceeded`
