@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Repair ci-cross-browser.yml, make it manual-only, run it once and record the named run's Firefox/WebKit rows in browsers.md, record-only
 created: 2026-09-27
 why: ci-cross-browser.yml runs weekly and is red on every run (6/6 since 2026-08-17) with nobody reading it — chromium by a workflow command bug, firefox/webkit by launcher failures; the COI row of browsers.md has no executed cell outside Chromium
@@ -17,7 +17,13 @@ Needed: fix the command expression, remove the `schedule` trigger (manual dispat
 
 ## Challenge
 
-<!-- Premise checked at goal FIT 2026-09-27 (goal.md §Challenge); recheck at PICKUP only for changed promises. -->
+challenge: 2026-09-28 — clear; unchanged goal FIT premise and ADR-0469 record-only decision. RDY-8: existing-behavior proof / test infrastructure; prior executed baseline in `docs/backlog/playground/reference/no-coi-lane-firefox-webkit-evidence.md`.
+
+## Acceptance
+
+1. One manual-only non-gating dispatch runs explicit valid COI commands on Chromium, Firefox and WebKit. → I6
+2. Reports preserve build, date, failures and classes; named-run rows land in browsers.md. → I6
+3. Product failures are recorded; no product repair or COEP policy change. → I6
 
 ## Out of scope
 
@@ -26,3 +32,5 @@ Switching D-001 to `require-corp` (question `distribution/coi-on-webkit-require-
 ## Decisions
 
 - 2026-09-27 — record-only — user "Только записать"
+
+- 2026-09-28 — pickup: reuse accepted evidence under RDY-8; relevant browser runs plus independent Final+GREEN; no new product promise.

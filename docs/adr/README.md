@@ -26,6 +26,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0425 | Persist Workbench trees as validated OPFS segments |
 | 0428 | Wait for native replica ownership before replay |
 | 0429 | Preserve subtree failure scope and native reader lifetimes |
+| 0476 | OPFS admission and structured storage startup failures |
 
 ### kernel
 
@@ -255,6 +256,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0323 | Gate heavy PR tests on code-affecting changes |
 | 0338 | TTY parity composes exact one-axis native resize traces |
 | 0421 | Bind reusable package adapters to Node invocations |
+| 0477 | Pinned browser floor proof runners |
 
 ### protocol
 

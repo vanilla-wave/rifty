@@ -126,12 +126,7 @@ export class OpfsFsSync implements FsSync {
    */
   private readonly asyncSurface: PairedAsyncSurface | null;
 
-  /**
-   * `true` when the current realm is a Worker that exposes
-   * `FileSystemFileHandle.prototype.createSyncAccessHandle`. Always
-   * `false` in the main thread (no sync OPFS API) and in Node tests
-   * (no `FileSystemFileHandle` at all).
-   */
+  /** Realm-local paired OPFS admission (ADR-0476). */
   static isSupported(): boolean {
     const inWorker =
       typeof globalThis !== 'undefined' &&
@@ -141,8 +136,13 @@ export class OpfsFsSync implements FsSync {
     if (!inWorker) return false;
     const ctor = (globalThis as { FileSystemFileHandle?: { prototype?: unknown } })
       .FileSystemFileHandle;
-    const proto = ctor?.prototype as { createSyncAccessHandle?: unknown } | undefined;
-    return typeof proto?.createSyncAccessHandle === 'function';
+    const proto = ctor?.prototype as
+      | { createSyncAccessHandle?: unknown; createWritable?: unknown }
+      | undefined;
+    return (
+      typeof proto?.createSyncAccessHandle === 'function' &&
+      typeof proto.createWritable === 'function'
+    );
   }
 
   /** Bind a Worker mirror to one captured root and its physical writer. */

@@ -13,6 +13,7 @@
 
 import type { OpfsLayoutIssue } from './opfs-replica-types.ts';
 import { OpfsFsSync } from './opfs-sync.ts';
+import { acquireOpfsRoot } from './opfs.ts';
 import { installMemoryFs, installOpfsFs } from './sync-mirror.ts';
 
 export interface VfsStorageOptions {
@@ -80,16 +81,43 @@ export async function initializeBackend(
   let layoutIssue: OpfsLayoutIssue | undefined;
   if (choice === 'opfs') {
     const namespace = storage?.namespace;
-    const root =
-      namespace === undefined
-        ? undefined
-        : await (await navigator.storage.getDirectory()).getDirectoryHandle(namespace, {
-            create: true,
-          });
+    let root: FileSystemDirectoryHandle;
+    try {
+      const origin = await acquireOpfsRoot();
+      root =
+        namespace === undefined
+          ? origin
+          : await origin.getDirectoryHandle(namespace, { create: true });
+    } catch (cause) {
+      if (storage === undefined) throw cause;
+      const native = cause instanceof Error ? cause : new Error(String(cause));
+      throw Object.assign(
+        new Error(`OPFS storage unavailable: ${native.name}: ${native.message}`, { cause: native }),
+        {
+          name: 'StorageUnavailableError',
+          code: 'ERR_STORAGE_UNAVAILABLE',
+        },
+      );
+    }
     if (storage === undefined) await installOpfsFs(root);
     else ({ layoutIssue } = await installOpfsFs(root, { layout: 'replica' }));
   } else {
-    if (storage !== undefined) throw new Error('OPFS is unavailable in this realm');
+    if (storage !== undefined) {
+      const missingWritable =
+        typeof FileSystemFileHandle !== 'undefined' &&
+        typeof FileSystemFileHandle.prototype.createWritable !== 'function';
+      throw Object.assign(
+        new Error(
+          missingWritable
+            ? 'OPFS is unavailable: FileSystemFileHandle.createWritable is required'
+            : 'OPFS is unavailable in this realm',
+        ),
+        {
+          name: 'StorageCapabilityError',
+          code: 'ERR_STORAGE_CAPABILITY',
+        },
+      );
+    }
     installMemoryFs();
   }
   return { backend: choice, ...(layoutIssue === undefined ? {} : { layoutIssue }) };

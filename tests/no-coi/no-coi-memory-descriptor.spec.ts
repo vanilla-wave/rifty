@@ -1,4 +1,4 @@
-import { type Page, expect, test } from '@playwright/test';
+import { type Page, expect, test } from './fixtures/test.ts';
 
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const sdkModuleUrl = `/@fs${workspacePath}/packages/rifty/src/index.ts`;
@@ -129,11 +129,11 @@ async function disposeToolchainSandbox(page: Page): Promise<void> {
   });
 }
 
-test('headerless Chrome 148 native Memory reads descriptor fields once in order', async ({
+test('headerless native Memory reads descriptor fields once in order', async ({
   browser,
   page,
 }) => {
-  expect(browser.version()).toBe('148.0.7778.96');
+  test.info().annotations.push({ type: 'native-oracle-build', description: browser.version() });
   await openHeaderlessPage(page);
   const outcome = await page.evaluate(() => {
     const NativeMemory = globalThis.WebAssembly.Memory;

@@ -1,27 +1,35 @@
 name: CI — cross-browser
 
 on:
-  schedule:
-    - cron: '0 4 * * 1' # Mondays 04:00 UTC
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  e2e:
+  evidence:
+    name: ${{ matrix.lane }} / ${{ matrix.engine }} (record only)
     runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        engine: [chromium, firefox, webkit]
+        include:
+          - { lane: coi, engine: chromium, command: 'pnpm exec playwright test --project=chromium-heavy --project=chromium-light --workers=1' }
+          - { lane: coi, engine: firefox, command: 'pnpm test:e2e:firefox --workers=1' }
+          - { lane: coi, engine: webkit, command: 'pnpm test:e2e:webkit --workers=1' }
+          - { lane: no-coi, engine: chromium, command: 'pnpm test:no-coi' }
+          - { lane: no-coi, engine: firefox, command: 'pnpm test:no-coi:firefox' }
+          - { lane: no-coi, engine: webkit, command: 'pnpm test:no-coi:webkit' }
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.16.0 # exact executable node-cli eval oracle
+          node-version: 24.16.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-        # Skip the postinstall 3-browser download; the matrix installs only its
-        # own engine via the explicit step below.
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - id: pw-version
@@ -35,10 +43,27 @@ jobs:
         run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
       - if: steps.pw-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps ${{ matrix.engine }}
-      # chromium → two-lane `test:e2e`; firefox/webkit → full-suite single project.
-      - run: pnpm test:e2e${{ matrix.engine == 'chromium' && '' || format(':{0}', matrix.engine) }}
-      - if: failure()
+      - name: Record actual browser build
+        run: |
+          node --input-type=module -e '
+            import { ${{ matrix.engine }} as engine } from "@playwright/test";
+            const browser = await engine.launch();
+            console.log(JSON.stringify({ engine: engine.name(), build: browser.version(), date: new Date().toISOString(), sha: "${{ github.sha }}", run: "${{ github.run_id }}" }));
+            await browser.close();
+          ' > browser-build.json
+      - run: pnpm build:libs
+      - id: lane
+        name: Execute existing ${{ matrix.lane }} suite
+        run: ${{ matrix.command }}
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.engine }}
-          path: playwright-report
+          name: browser-evidence-${{ matrix.lane }}-${{ matrix.engine }}
+          path: |
+            browser-build.json
+            playwright-report
+            test-results
+      - if: always()
+        name: Record outcome (not a support claim)
+        run: |
+          echo '${{ matrix.lane }} / ${{ matrix.engine }}: ${{ steps.lane.outcome }}. Classify retained failures before updating docs/public/compat/browsers.md.' >> "$GITHUB_STEP_SUMMARY"

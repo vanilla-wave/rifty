@@ -1,6 +1,6 @@
-import { type Page, expect, test } from '@playwright/test';
 import { accessNativeReplica, encoded } from '../browser-unit/fixtures/opfs-storage-namespace.ts';
 import { nativeReplicaTree } from './fixtures/native-replica-page.ts';
+import { type Page, expect, test } from './fixtures/test.ts';
 
 const workspace = process.cwd().replaceAll('\\', '/');
 const pageFixtureUrl = `/@fs${workspace}/tests/no-coi/fixtures/no-coi-warm-open-page.ts`;
@@ -92,7 +92,7 @@ test('full page warm-open activates Vite and preserves dependency edits until ex
   context,
   browser,
 }) => {
-  console.log(`[warm-open] Chromium/${browser.version()}`);
+  console.log(`[warm-open] ${browser.browserType().name()}/${browser.version()}`);
   let registryRequests = 0;
   context.on('request', (request) => {
     if (request.url().includes('/npm-registry')) registryRequests++;

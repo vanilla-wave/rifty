@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Sort copied recovery/toolchain snapshots with ES2022 builtins; preserve input order and deterministic output.
+
+- Reject failed toolchain storage boot through structured terminal errors; preserve native cause without misreporting a Worker crash (ADR-0476).
+
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).

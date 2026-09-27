@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures/test.ts';
 
 test('agent project runs and rebuilds installed Vite with its file policy', async ({ page }) => {
   test.setTimeout(180_000);

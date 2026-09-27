@@ -1,6 +1,6 @@
 ---
 area: vfs
-status: draft
+status: ready
 title: Report an unavailable OPFS root under persistence required as a storage-unavailable error, not as NotImplementedError('sandbox.toolchain.worker') plus a worker crash
 created: 2026-09-27
 why: when navigator.storage.getDirectory() rejects in the worker realm, createSandbox({ persistence: 'required' }) rejects loudly but with the wrong name — "Not implemented: sandbox.toolchain.worker (toolchain Worker crashed during handshake …)" — for a feature that is implemented and a storage that is merely unavailable
@@ -20,12 +20,25 @@ Fidelity: the throw is loud but misnamed — "not implemented" and "worker crash
 
 ## Challenge
 
-<!-- Premise checked at goal FIT 2026-09-27 (goal.md §Challenge); recheck at PICKUP only for changed promises. -->
+challenge: 2026-09-28 — clear; accepted goal I4 and recorded P1/P2 unchanged; reproduced in real Chromium at pickup.
+
+## Acceptance
+
+1. A real Worker whose `getDirectory()` rejects exposes `StorageUnavailableError` / `ERR_STORAGE_UNAVAILABLE` at required startup, carrying native name/message in message and structured cause; never worker-crash or NotImplementedError. → I4
+2. Preferred/default retain memory fallback with native diagnosis; ephemeral bypasses native storage. → I4
+
+## Fault matrix
+
+| axis × operation | honest outcome | artifact / fault target | trace |
+|---|---|---|---|
+| quota-perm-fail × native root acquisition | structured startup rejection or visible memory fallback | no-coi-storage-capability.spec.ts | → I4 |
 
 ## Out of scope
 
 Retry/heal of a transient root failure (tier works); making Playwright's ephemeral WebKit context provide an OPFS root (test infra, item 5); the `preferred` fallback (already honest).
 
 ## Decisions
+
+- 2026-09-28 — RDY-8: observed P1/P2 baseline + real-browser RED; independent DEC-2 review approved ADR-0476; evidence `docs/backlog/vfs/reference/browser-support-storage-evidence.md`.
 
 - 2026-09-27 — re-cut from "no hang" to "named storage error" after probe P2 refuted the hang — trace: none

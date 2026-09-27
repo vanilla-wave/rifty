@@ -98,8 +98,8 @@ function snapshotFiles(): {
   };
   walk('/');
   return {
-    files: Object.freeze(files.toSorted((left, right) => left.path.localeCompare(right.path))),
-    directories: Object.freeze(directories.toSorted()),
+    files: Object.freeze([...files].sort((left, right) => left.path.localeCompare(right.path))),
+    directories: Object.freeze([...directories].sort()),
   };
 }
 

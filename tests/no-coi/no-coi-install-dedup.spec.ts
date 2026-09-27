@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
 import { nativeReplicaProbeSource } from './fixtures/native-replica-page.ts';
+import { expect, test } from './fixtures/test.ts';
 
 const root = process.cwd().replaceAll('\\', '/');
 
@@ -111,7 +111,9 @@ test('explicit cached install skips durable package writes and repairs changed b
     },
     { root, nativeReplicaProbeSource },
   );
-  console.log(`[install-dedup] Chrome/${browser.version()} ${JSON.stringify(result.measurements)}`);
+  console.log(
+    `[install-dedup] ${browser.browserType().name()}/${browser.version()} ${JSON.stringify(result.measurements)}`,
+  );
   expect(result.repaired).toBe(true);
   expect(result.rejected).toBe(true);
   expect(result.healed).toBe(true);

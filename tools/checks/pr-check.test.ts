@@ -35,6 +35,14 @@ const passed = (file: string) => ({
 });
 
 describe('pr:check lanes follow the diff class', () => {
+  it('checks package and playground outputs after both builds', () => {
+    const names = TASKS.map((task: { name: string }) => task.name);
+    expect(names.indexOf('check:es-floor')).toBeGreaterThan(names.indexOf('build:libs'));
+    expect(names.indexOf('check:es-floor')).toBeGreaterThan(names.indexOf('build:playground'));
+    expect(SOURCE_LANES.has('check:es-floor')).toBe(true);
+    expect(SOURCE_LANES.has('build:playground')).toBe(true);
+  });
+
   it('a documentation-only working tree skips exactly the source lanes and keeps every other check', () => {
     const paths = [
       'docs/process/rules/review.md',

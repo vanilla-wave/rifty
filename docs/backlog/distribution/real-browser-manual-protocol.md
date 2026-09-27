@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: One-URL manual protocol for real Safari 26 (macOS), iOS Safari and Yandex Browser rows in browsers.md
 created: 2026-09-27
 why: Playwright's WebKit is the engine, not Safari (no ITP, Lockdown, real quota, iOS memory); Yandex Browser (≈26 % RU traffic, Chromium ~150) is absent from caniuse; none can run in CI — the user runs them on own hardware (decision 2026-09-27) and browsers.md needs their dated rows
@@ -15,7 +15,7 @@ Transport and protocol. One https URL reachable from a Mac and an iPhone (deploy
 
 ## Challenge
 
-<!-- Premise checked at goal FIT 2026-09-27 (goal.md §Challenge); recheck at PICKUP only for changed promises. -->
+challenge: 2026-09-28 — clear; unchanged goal FIT premise reused. Proof tooling for existing behavior (RDY-8).
 
 ## Out of scope
 
@@ -24,3 +24,11 @@ Device farms / BrowserStack; Android devices beyond Yandex on desktop; COI tier 
 ## Decisions
 
 - 2026-09-27 — in the epic, user-run — user "В эпик"
+
+## Reference contract
+
+Accepted goal browser-support-floor, ADR-0469; proof of existing SDK behavior.
+
+## Acceptance
+
+1. Execute and record the Context/Question procedure; distinguish computed, executed, product failure and unavailable harness evidence. → I8

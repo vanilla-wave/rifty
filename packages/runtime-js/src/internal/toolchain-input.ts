@@ -28,8 +28,8 @@ export function exactInput(
   for (const descriptor of Object.values(descriptors)) {
     if (!('value' in descriptor)) throw new TypeError(`${label} has accessor fields`);
   }
-  const actual = Object.keys(descriptors).toSorted();
-  const expected = [...fields].toSorted();
+  const actual = Object.keys(descriptors).sort();
+  const expected = [...fields].sort();
   if (
     actual.length !== expected.length ||
     actual.some((field, index) => field !== expected[index])
@@ -280,12 +280,12 @@ export function validateActivationState(input: unknown, label: string): Toolchai
     ...(record.directories === undefined
       ? {}
       : { directories: validateDirectories(record.directories, label) }),
-    files: Object.freeze(files.toSorted((left, right) => left.path.localeCompare(right.path))),
+    files: Object.freeze([...files].sort((left, right) => left.path.localeCompare(right.path))),
   });
 }
 
 function validateDirectories(value: unknown, label: string): readonly string[] {
   if (!Array.isArray(value) || Object.keys(value).length !== value.length)
     throw new TypeError(`${label} directories must be a dense array`);
-  return Object.freeze(value.map((path) => absolutePath(path, `${label} directory`)).toSorted());
+  return Object.freeze(value.map((path) => absolutePath(path, `${label} directory`)).sort());
 }

@@ -1,5 +1,5 @@
-import { type Page, type Request, expect, test } from '@playwright/test';
 import type { RuntimeEvent, ToolchainSandbox } from '../../packages/rifty/src/index.ts';
+import { type Page, type Request, expect, test } from './fixtures/test.ts';
 
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const sdkModuleUrl = `/@fs${workspacePath}/packages/rifty/src/index.ts`;

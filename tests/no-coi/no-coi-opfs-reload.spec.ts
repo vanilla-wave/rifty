@@ -1,4 +1,4 @@
-import { type Browser, type Page, expect, test } from '@playwright/test';
+import { type Browser, type Page, expect, test } from './fixtures/test.ts';
 
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const workerUrl = `/@fs${workspacePath}/tests/browser-unit/fixtures/opfs-no-coi-policy-worker.ts`;
@@ -55,7 +55,7 @@ async function runWorker(page: Page, request: WorkerRequest): Promise<Record<str
 
 function logArtifact(browser: Browser, result: unknown): void {
   console.log(
-    `[opfs-no-coi] selected-no-coi-reload Chrome/${browser.version()} ${JSON.stringify(result)}`,
+    `[opfs-no-coi] selected-no-coi-reload ${browser.browserType().name()}/${browser.version()} ${JSON.stringify(result)}`,
   );
 }
 

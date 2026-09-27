@@ -1,6 +1,6 @@
 ---
 area: toolchain-build
-status: draft
+status: ready
 title: Rewrite the nine toSorted sites and guard the shipped ES2022 floor — pr:check fails on unconditional ES2023+ builtins or syntax in shipped bundles
 created: 2026-09-27
 why: the declared bundle target is es2022, shipped workers use ES2023 `toSorted` unconditionally at nine sites (Chrome floor 110 instead of 108, Chrome 109 = last for Windows 7/8.1 ≈ 3.4 % RU traffic), nothing checks; the next accidental builtin moves the computed browser floor silently
@@ -17,12 +17,20 @@ Decision recorded in ADR-0469 (user 2026-09-27 "a"): floor = ES2022; the nine `t
 
 ## Challenge
 
-<!-- Premise checked at goal FIT 2026-09-27 (goal.md §Challenge); recheck at PICKUP only for changed promises. -->
+challenge: 2026-09-27 — clear; goal FIT resolved ES2022 ceiling, own-method false positives, named guarded waitAsync exception.
+
+## Acceptance
+
+1. `tools/checks/es-floor.test.ts` rejects real builtin calls (`toSorted`, `toReversed`, `toSpliced`, `with`, `findLast`, `findLastIndex`, `Object.groupBy`, `Promise.withResolvers`, `Array.fromAsync`) and ES2023+ syntax, names file/location, accepts lib-name tables and known own methods; named `Atomics.waitAsync` exception preserves capability guards/probes → I2.
+2. `pnpm pr:check` builds package and playground bundles, checks every emitted JS recursively, rejects missing builds; no dist source-map or type-declaration false positives → I2.
+3. Nine sorting sites and playground preview reconciliation preserve observable ordering and caller data under ES2022; existing runtime/preview tests and emitted bundle scan pass → I2.
 
 ## Out of scope
 
 Polyfills; lowering below ES2022 (class fields / `#private` are shipped syntax); checking `node_modules` fixtures or test files; removing the guarded `waitAsync` use.
 
 ## Decisions
+
+- 2026-09-28 — RDY-8 tooling preparation: initial guard test fails because guard absent; existing built bundles reproduce nine `toSorted` calls before rewrites; final independent review covers proof and behavior-preserving rewrites.
 
 - 2026-09-27 — floor ES2022 with the `toSorted` rewrite — user "a", ADR-0469

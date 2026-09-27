@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Run the no-COI e2e lane on Firefox and WebKit (persistent context) by manual dispatch and record the named run's per-engine rows in browsers.md
 created: 2026-09-27
 why: the no-COI lane is chromium-only in config and CI; a one-off run shows Firefox 150 green (99/100, one version-pinned oracle) and WebKit 26.4 blocked only by Playwright's ephemeral context; without a lane the Firefox column can never show ✅ honestly
@@ -17,7 +17,14 @@ Needed: `firefox` + `webkit` projects; a `context`/`page` fixture on `launchPers
 
 ## Challenge
 
-<!-- Premise checked at goal FIT 2026-09-27 (goal.md §Challenge); recheck at PICKUP only for changed promises. -->
+challenge: 2026-09-28 — clear; unchanged goal FIT premise and ADR-0469 record-only decision. RDY-8: existing-behavior proof / test infrastructure; prior executed baseline in `docs/backlog/playground/reference/no-coi-lane-firefox-webkit-evidence.md`.
+
+## Acceptance
+
+1. Firefox and WebKit execute the existing no-COI suite; WebKit uses an isolated persistent profile per test. → I5
+2. Browser builds are annotations, never an assertion that rejects a different engine. → I5
+3. Native-write and install/run route waits fail with bounded, named diagnostics. → I5
+4. One manual-only non-gating workflow dispatch preserves per-engine reports and build versions; dated named-run rows land in browsers.md. → I5
 
 ## Out of scope
 
@@ -26,3 +33,5 @@ Gating PRs on Firefox/WebKit (ADR-0007, ADR-0469); fixing product reds found by 
 ## Decisions
 
 - 2026-09-27 — record-only for product reds — user "Только записать"
+
+- 2026-09-28 — pickup: reuse accepted evidence under RDY-8; relevant browser runs plus independent Final+GREEN; no new product promise.

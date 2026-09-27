@@ -1,6 +1,6 @@
 ---
 area: vfs
-status: draft
+status: ready
 title: Require createWritable in OPFS backend selection so a Safari-15–25 realm falls back to memory under preferred and is refused at boot under required, never selecting OPFS and losing data
 created: 2026-09-27
 why: `OpfsFsSync.isSupported()` checks only `createSyncAccessHandle`; both durable write paths call `createWritable()` unguarded; a realm with sync handles but no `createWritable` selects opfs, fails the first write with `SandboxPersistenceError`, keeps accepting writes into memory and loses them on reopen with no signal, while `checkSandboxSupport` says unsupported — runtime and probe disagree
@@ -19,12 +19,26 @@ Contract (user 2026-09-27 "1a"): `persistence: 'required'` → named loud throw 
 
 ## Challenge
 
-<!-- Premise checked at goal FIT 2026-09-27 (goal.md §Challenge); recheck at PICKUP only for changed promises. -->
+challenge: 2026-09-28 — clear; accepted goal I3 and recorded P1/P2 unchanged; reproduced in real Chromium at pickup.
+
+## Acceptance
+
+1. A real Worker without `createWritable` rejects required startup with `StorageCapabilityError` / `ERR_STORAGE_CAPABILITY`, naming `FileSystemFileHandle.createWritable`; no filesystem write is attempted. → I3
+2. Preferred and omitted policy select memory, expose the missing capability reason, and accept/read writes; ephemeral stays memory without a fallback reason. → I3
+3. `checkSandboxSupport({ persistence: 'required' })` reports the missing `createWritable` under unmet `opfs`. → I3
+
+## Fault matrix
+
+| axis × operation | honest outcome | artifact / fault target | trace |
+|---|---|---|---|
+| false-fallback × missing native createWritable | required rejects before ready; preferred/default visibly memory | no-coi-storage-capability.spec.ts | → I3 |
 
 ## Out of scope
 
 Persistent admission of Safari <26 via sync-access-handle writes — question `vfs/safari-pre-26-replica-without-createwritable`; memory fallback under `persistence: 'required'` (must stay a throw, ADR-0372); Chrome 102–107 (async sync-access-handle methods, `createWritable` present) passes this presence gate and still selects OPFS — its runtime behavior is unverified and its cell stays `❓` (≈ 0 traffic, 2022 builds), not a loud throw.
 
 ## Decisions
+
+- 2026-09-28 — RDY-8: observed P1/P2 baseline + real-browser RED; independent DEC-2 review approved ADR-0476; evidence `docs/backlog/vfs/reference/browser-support-storage-evidence.md`.
 
 - 2026-09-27 — gate lives in backend selection (worker realm), not in the write path — agent, carrier; this changes ADR-0372's selection predicate (sync capability alone) → short ADR at pickup citing ADR-0372 and ADR-0469

@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Publish docs/public/compat/browsers.md — mode × persistence × engine floors with the ADR-0469 legend and the traffic-share ratio
 created: 2026-06-08
 why: docs/public/compat/README.md promises browsers.md "with first cross-browser CI run"; floors are now computed and partly executed, the legend is decided (ADR-0469), the file still does not exist
@@ -26,7 +26,7 @@ Also carries the ADR-0469 correction of `AGENTS.md` if not yet merged. The `docs
 
 ## Challenge
 
-<!-- Premise checked at goal FIT 2026-09-27 (goal.md §Challenge); recheck at PICKUP only for changed promises. -->
+challenge: 2026-09-28 — clear; unchanged goal FIT premise reused. Proof tooling for existing behavior (RDY-8).
 
 ## Out of scope
 
@@ -35,3 +35,11 @@ Generated matrix (rejected route, goal §Decisions); the Node-module matrices al
 ## Decisions
 
 - 2026-09-27 — moved from `service-worker/` (area mismatch); predecessor content superseded by goal evidence — trace: none
+
+## Reference contract
+
+Accepted goal browser-support-floor, ADR-0469; proof of existing SDK behavior.
+
+## Acceptance
+
+1. Execute and record the Context/Question procedure; distinguish computed, executed, product failure and unavailable harness evidence. → I1, I9

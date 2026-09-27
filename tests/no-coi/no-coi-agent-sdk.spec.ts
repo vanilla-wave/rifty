@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
 import { nativeReplicaProbeSource } from './fixtures/native-replica-page.ts';
+import { expect, test, waitForBoundary } from './fixtures/test.ts';
 
 const root = process.cwd().replaceAll('\\', '/');
 const scenarioPath =
@@ -51,7 +51,7 @@ test('Stop retains an applied mutation through the pending native flush', async 
       },
       { root, nativeReplicaProbeSource },
     );
-    await request;
+    await waitForBoundary(request, 'native OPFS write did not request agent-flush-barrier');
     await page.evaluate(() => {
       void Reflect.get(globalThis, 'agentFaultRun').stop();
     });

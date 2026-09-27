@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures/test.ts';
 
 test('host exits the resident through replacement; restart still replays until explicit exit', async ({
   page,

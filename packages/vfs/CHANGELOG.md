@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Require createWritable before paired OPFS admission; identify native root acquisition failures with preserved cause (ADR-0476).
+
 - Treat a first HEAD created but never closed as uncommitted storage; fresh replay stays empty without a false corruption diagnosis.
 
 - Preserve layout diagnosis for internal boot composition while keeping the public backend-string result (ADR-0432).

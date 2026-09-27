@@ -1,6 +1,6 @@
 ---
 area: toolchain-build
-status: draft
+status: ready
 title: Floor-smoke lane — execute boot → install → build → reload → reopen on Chrome 108, Firefox 115 and WebKit 26.0 builds
 created: 2026-09-27
 why: every lane runs the current Playwright bundle (1.60 → Chromium 148 / Firefox 150 / WebKit 26.4); the computed floors 108 / 115 / 26.0 were never executed, so "works from version X" is a calculation
@@ -15,7 +15,7 @@ Carrier for a floor-smoke on old engine builds. Facts: Playwright bundles map on
 
 ## Challenge
 
-<!-- Premise checked at goal FIT 2026-09-27 (goal.md §Challenge); recheck at PICKUP only for changed promises. -->
+challenge: 2026-09-28 — clear; unchanged goal FIT premise reused. Proof tooling for existing behavior (RDY-8).
 
 ## Out of scope
 
@@ -24,3 +24,11 @@ Intermediate versions (monotonic APIs; per-device truth is `checkSandboxSupport`
 ## Decisions
 
 - 2026-09-27 — smoke, not the full suite; on demand only — agent + user "пока без расписания"
+
+## Reference contract
+
+Accepted goal browser-support-floor, ADR-0469; proof of existing SDK behavior.
+
+## Acceptance
+
+1. Execute and record the Context/Question procedure; distinguish computed, executed, product failure and unavailable harness evidence. → I7

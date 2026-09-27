@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>rifty browser support run</title>
+  </head>
+  <body>
+    <h1>Browser support run</h1>
+    <p>Runs a real npm install and Vite build, then reloads and reopens saved files. Keep this tab open.</p>
+    <p>Uses a new isolated storage namespace. Downloads packages through this host's registry proxy.</p>
+    <button id="start">Run persistent sandbox</button>
+    <button id="revisit">Check previous saved run</button>
+    <button id="copy">Copy report</button>
+    <pre id="status">Ready</pre>
+    <textarea id="report" rows="24" cols="90" aria-label="Browser result"></textarea>
+    <script type="module" src="/browser-support.js"></script>
+  </body>
+</html>
