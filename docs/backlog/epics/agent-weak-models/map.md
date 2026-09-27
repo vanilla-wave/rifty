@@ -7,21 +7,11 @@ item ordering (goal §Decisions "shared bench order").
 
 ## Items
 
-5. `distribution/ai-agent-budget-visibility` — **budgets** — defaults 100 /
-   600 s, `callsLeft`/`msLeft` in every rifty tool envelope (I9). I12 recorded.
-8. `distribution/ai-agent-edit-failure-diagnostics` — **edit-diagnostics** —
-   locating failure text for `edit_file` match failures, exact matching kept,
-   apply_patch and host-write semantics unchanged (I7). I12 recorded.
-9. `distribution/ai-agent-repeated-call-guard` — **repeat-guard** — third
-   identical call + identical result body → visible steering message (I8).
-   After 5 (budget fields excluded from the comparison).
-10. `distribution/ai-agent-verification-feed` — **verification** — Workbench
-    diagnostics appended to mutation results, `diagnostics: pending` on a
-    bounded wait, `diagnostics: unavailable` elsewhere (I10). I12 recorded.
-11. `distribution/ai-agent-prompt-recipe` — **recipe** — workflow paragraph,
-    profile id bump, `recipe:false` switch, ADR-0440 §4 note (I11). I12 recorded.
+5. `distribution/ai-agent-tool-feedback` — **tool feedback** — budgets,
+   precise edit failures, native repetition steering, host mutation diagnostics
+   and shared recipe (I7–I11). DEC-2 native end-event seam proven; ADR0475.
 12. `distribution/ai-agent-weak-model-rerun` — **re-run** — same config,
-    tasks and runs as item 4 after items 5–11 land; per-task comparison in the
+    tasks and runs as item 4 after tool feedback lands; per-task comparison in the
     report — the smallest `report --compare` over two summary directories,
     absorbed later by `distribution/agent-eval-comparison-report` (PR #341);
     a ±1-pass delta on 3 runs is marked as within noise; no per-task pass

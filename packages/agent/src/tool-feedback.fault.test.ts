@@ -1,0 +1,388 @@
+import { describe, expect, it } from 'vitest';
+import { modelCatalog } from '../../../tests/integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts';
+import {
+  type ScriptedReply,
+  scriptedProvider,
+} from '../../../tests/integration/fixtures/workbench-vite-consumer/src/agent-scripted-provider.ts';
+import { MemoryVfs } from '../../vfs/src/index.ts';
+import {
+  type AgentCapabilities,
+  type AgentSessionOptions,
+  Type,
+  createAgentSession,
+  getAgentPromptProfile,
+} from './index.ts';
+
+async function fixture(
+  replies: readonly ScriptedReply[],
+  options: Partial<AgentSessionOptions> & { recipe?: boolean } = {},
+  diagnostics?: AgentCapabilities['diagnostics'],
+) {
+  const vfs = new MemoryVfs();
+  await vfs.writeFile('/one.txt', 'hello');
+  let writes = 0;
+  const wire = scriptedProvider(replies);
+  const session = createAgentSession({
+    host: {
+      root: '/',
+      async close() {},
+      capabilities: () => ({
+        files: {
+          read: (path: string) => vfs.readFileText(path),
+          list: async (path: string) =>
+            (await vfs.readdir(path)).map((entry) => ({
+              path: `${path.replace(/\/$/, '')}/${entry.name}`,
+              kind: entry.isDirectory ? ('dir' as const) : ('file' as const),
+            })),
+          async change(path: string, transform: (value: string | null) => string | null) {
+            const next = transform((await vfs.exists(path)) ? await vfs.readFileText(path) : null);
+            if (next === null) await vfs.rm(path);
+            else await vfs.writeFile(path, next);
+            writes++;
+          },
+        },
+        ...(diagnostics ? { diagnostics } : {}),
+      }),
+    },
+    ...modelCatalog(undefined, wire.fetch),
+    ...options,
+  });
+  return { session, vfs, wire, writes: () => writes };
+}
+const call = (name: string, args: Record<string, unknown>) => ({ name, args });
+function text(message: { content: unknown }) {
+  return Array.isArray(message.content)
+    ? message.content
+        .map((block) => (typeof block === 'object' && block && 'text' in block ? block.text : ''))
+        .join('\n')
+    : '';
+}
+function envelope(value: string): Record<string, unknown> | undefined {
+  try {
+    return JSON.parse(value.split('\n')[0]!);
+  } catch {
+    return undefined;
+  }
+}
+const repeated = (events: readonly { event: { type: string } }[]) =>
+  events.filter(({ event }) => event.type === 'repeated-call');
+
+describe('honest tool feedback', () => {
+  it('uses 600s/100 defaults and decorates actual success, invalid and missing-tool receipts on wire', async () => {
+    const f = await fixture([
+      [
+        call('read_file', { path: 'one.txt' }),
+        call('read_file', {}),
+        call('missing', {}),
+        call('write_file', { path: 'one.txt', content: 'updated' }),
+      ],
+      'Done',
+    ]);
+    try {
+      await f.session.send('work');
+      const trace = await f.session.exportTrace();
+      expect(trace.config).toMatchObject({ runTimeoutMs: 600000, maxToolCalls: 100 });
+      const results = trace.transcript.filter((message) => message.role === 'toolResult');
+      expect(results.map((result) => envelope(text(result))?.callsLeft)).toEqual([99, 99, 99, 98]);
+      for (const result of results)
+        expect(envelope(text(result))?.msLeft).toEqual(expect.any(Number));
+      const wire = f.wire.requests[1]!.body.messages.filter((message) => message.role === 'tool');
+      expect(wire.map((message) => message.content)).toEqual(results.map(text));
+      expect(await f.vfs.readFileText('/one.txt')).toBe('updated');
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('[fault: provenance-lie] admission exhaustion reports zero calls without another write', async () => {
+    const f = await fixture(
+      [
+        [
+          call('write_file', { path: 'one.txt', content: 'one' }),
+          call('write_file', { path: 'one.txt', content: 'two' }),
+        ],
+      ],
+      { maxToolCalls: 1 },
+    );
+    try {
+      await f.session.send('work');
+      expect(f.session.status()).toBe('budget-exceeded');
+      expect(f.writes()).toBe(1);
+      const results = (await f.session.exportTrace()).transcript.filter(
+        (message) => message.role === 'toolResult',
+      );
+      expect(results).toHaveLength(2);
+      expect(results.map((message) => envelope(text(message))?.callsLeft)).toEqual([0, 0]);
+      expect(await f.vfs.readFileText('/one.txt')).toBe('one');
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('[fault: lossy-aggregate] keeps a complete budget heading and bounded Unicode body', async () => {
+    const f = await fixture([[call('read_file', { path: 'one.txt' })], 'Done']);
+    await f.vfs.writeFile('/one.txt', `HEAD${'🙂'.repeat(10000)}TAIL`);
+    try {
+      await f.session.send('read');
+      const result = (await f.session.exportTrace()).transcript.find(
+        (message) => message.role === 'toolResult',
+      )!;
+      expect(envelope(text(result))).toMatchObject({ callsLeft: 99, msLeft: expect.any(Number) });
+      expect(new TextEncoder().encode(text(result)).length).toBeLessThanOrEqual(16384);
+      expect(text(result)).toContain('HEAD');
+      expect(text(result)).toContain('TAIL');
+      expect(text(result)).toContain('[truncated');
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it.each([
+    ['same\n x \nsame\nsame\n', 'same', /3 matches[\s\S]*1[\s\S]*3[\s\S]*4/],
+    ['ababa', 'aba', /2 matches/],
+    [
+      'const zero = 0;\n  const answer = 42;\n',
+      '\tconst answer=42;',
+      /0 matches[\s\S]*hint[\s\S]*line 2/i,
+    ],
+  ])(
+    'exact edit reports locating information without writing (%s)',
+    async (content, old, expected) => {
+      const f = await fixture([
+        [call('edit_file', { path: 'one.txt', old, new: 'wrong' })],
+        'Done',
+      ]);
+      await f.vfs.writeFile('/one.txt', content);
+      try {
+        await f.session.send('edit');
+        const result = (await f.session.exportTrace()).transcript.find(
+          (message) => message.role === 'toolResult',
+        )!;
+        expect(result).toHaveProperty('isError', true);
+        expect(text(result)).toMatch(expected);
+        expect(await f.vfs.readFileText('/one.txt')).toBe(content);
+        expect(f.writes()).toBe(0);
+      } finally {
+        await f.session.dispose();
+      }
+    },
+  );
+  it('steers after third equal result despite budget changes/key order and executes the fourth batch call', async () => {
+    const f = await fixture([
+      [
+        call('write_file', { path: 'one.txt', content: 'same' }),
+        call('write_file', { content: 'same', path: 'one.txt' }),
+        call('write_file', { path: 'one.txt', content: 'same' }),
+        call('write_file', { path: 'one.txt', content: 'same' }),
+      ],
+      'Done',
+    ]);
+    try {
+      await f.session.send('write');
+      expect(f.writes()).toBe(4);
+      const trace = await f.session.exportTrace();
+      expect(repeated(trace.events)).toHaveLength(1);
+      expect(JSON.stringify(f.wire.requests[1]?.body.messages)).toMatch(/repeat[\s\S]*write_file/i);
+      expect(trace.transcript.filter((message) => message.role === 'toolResult')).toHaveLength(4);
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('preserves consecutive-call state across sends and clears it on reset', async () => {
+    const same = call('read_file', { path: 'one.txt' });
+    const f = await fixture([[same, same], 'One', [same], 'Two', [same, same], 'Three']);
+    try {
+      await f.session.send('first');
+      await f.session.send('second');
+      expect(repeated((await f.session.exportTrace()).events)).toHaveLength(1);
+      f.session.reset();
+      await f.session.send('fresh');
+      expect(repeated((await f.session.exportTrace()).events)).toHaveLength(0);
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('leaves consumer JSON-looking text alone and treats nested budget names as result data', async () => {
+    const body = '{"status":"exited","exitCode":0}\nconsumer body';
+    let count = 0;
+    const f = await fixture(
+      [
+        [call('plain', {}), call('changing', {}), call('changing', {}), call('changing', {})],
+        'Done',
+      ],
+      {
+        tools: [
+          {
+            name: 'plain',
+            label: 'Plain',
+            description: 'Consumer text',
+            parameters: Type.Object({}),
+            async execute() {
+              return { content: [{ type: 'text', text: body }], details: { custom: true } };
+            },
+          },
+          {
+            name: 'changing',
+            label: 'Changing',
+            description: 'Consumer data',
+            parameters: Type.Object({}),
+            async execute() {
+              return {
+                content: [
+                  { type: 'text', text: JSON.stringify({ nested: { callsLeft: ++count } }) },
+                ],
+                details: { custom: true },
+              };
+            },
+          },
+        ],
+      },
+    );
+    try {
+      await f.session.send('work');
+      const trace = await f.session.exportTrace();
+      expect(text(trace.transcript.find((message) => message.role === 'toolResult')!)).toBe(body);
+      expect(repeated(trace.events)).toHaveLength(0);
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('reports unavailable diagnostics after a real successful mutation', async () => {
+    const f = await fixture([
+      [call('write_file', { path: 'one.txt', content: 'written' })],
+      'Done',
+    ]);
+    try {
+      await f.session.send('write');
+      const result = (await f.session.exportTrace()).transcript.find(
+        (message) => message.role === 'toolResult',
+      )!;
+      expect(result).toHaveProperty('isError', false);
+      expect(text(result)).toMatch(/diagnostics:\s*unavailable/i);
+      expect(await f.vfs.readFileText('/one.txt')).toBe('written');
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('[fault: unbounded-read] bounds a stalled diagnostics boundary without losing the write', async () => {
+    const f = await fixture(
+      [[call('write_file', { path: 'one.txt', content: 'written' })], 'Done'],
+      {},
+      () => new Promise(() => {}),
+    );
+    try {
+      await f.session.send('write');
+      const result = (await f.session.exportTrace()).transcript.find(
+        (message) => message.role === 'toolResult',
+      )!;
+      expect(result).toHaveProperty('isError', false);
+      expect(text(result)).toMatch(/diagnostics:\s*pending/i);
+      expect(await f.vfs.readFileText('/one.txt')).toBe('written');
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('adds a shared v2 recipe by default, with a traceable opt-out', async () => {
+    const on = await fixture(['Done']);
+    const off = await fixture(['Done'], { recipe: false });
+    try {
+      await on.session.send('work');
+      await off.session.send('work');
+      const profile = getAgentPromptProfile() as unknown as { id: string; recipe: string };
+      expect(profile.id).toBe('pi-0.85.1+rifty-adapter-v2');
+      expect(profile.recipe).toBeTruthy();
+      for (const step of [/locat/i, /reproduc|inspect/i, /chang/i, /re.?run|verif/i, /edge/i])
+        expect(profile.recipe).toMatch(step);
+      expect(profile.recipe).not.toContain('\n\n');
+      const prompt = (f: typeof on) =>
+        String(
+          f.wire.requests[0]!.body.messages.find((message) => message.role === 'system')?.content,
+        );
+      expect(prompt(on)).toContain(profile.recipe);
+      expect(prompt(off)).not.toContain(profile.recipe);
+      expect((await on.session.exportTrace()).config).toHaveProperty('recipe', true);
+      expect((await off.session.exportTrace()).config).toHaveProperty('recipe', false);
+    } finally {
+      await on.session.dispose();
+      await off.session.dispose();
+    }
+  });
+  it('adds budgets to a corroborated preexisting consumer envelope', async () => {
+    const metadata = { status: 'exited', exitCode: 0, worker: 'retained' };
+    const f = await fixture([[call('external', {})], 'Done'], {
+      tools: [
+        {
+          name: 'external',
+          label: 'External',
+          description: 'Consumer envelope',
+          parameters: Type.Object({}),
+          async execute() {
+            return {
+              content: [{ type: 'text', text: `${JSON.stringify(metadata)}\nconsumer body` }],
+              details: metadata,
+            };
+          },
+        },
+      ],
+    });
+    try {
+      await f.session.send('work');
+      const result = (await f.session.exportTrace()).transcript.find(
+        (message) => message.role === 'toolResult',
+      )!;
+      expect(envelope(text(result))).toMatchObject({
+        ...metadata,
+        callsLeft: 99,
+        msLeft: expect.any(Number),
+      });
+      expect(text(result)).toContain('consumer body');
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('[fault: provenance-lie] host failure and cancelled batch members retain budget receipts without invented effects', async () => {
+    const f = await fixture([
+      [
+        call('read_file', { path: 'absent.txt' }),
+        call('write_file', { path: 'one.txt', content: 'once' }),
+        call('write_file', { path: 'never.txt', content: 'wrong' }),
+      ],
+    ]);
+    f.session.subscribe((event) => {
+      if (
+        event.type === 'agent' &&
+        event.event.type === 'tool_execution_end' &&
+        event.event.toolName === 'write_file'
+      )
+        void f.session.stop();
+    });
+    try {
+      await f.session.send('work');
+      const trace = await f.session.exportTrace();
+      expect(trace.status).toBe('aborted');
+      const results = trace.transcript.filter((message) => message.role === 'toolResult');
+      expect(results).toHaveLength(3);
+      expect(results.map((result) => envelope(text(result))?.callsLeft)).toEqual([99, 98, 98]);
+      expect(results[0]).toHaveProperty('isError', true);
+      expect(results[2]).toHaveProperty('isError', true);
+      expect(f.writes()).toBe(1);
+      expect(await f.vfs.exists('/never.txt')).toBe(false);
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('[fault: lossy-aggregate] capped repeated bodies stay equal across remaining-budget digit widths', async () => {
+    const read = call('read_file', { path: 'one.txt' });
+    const f = await fixture([[read, read, read], 'Done'], { maxToolCalls: 11 });
+    await f.vfs.writeFile('/one.txt', `HEAD${'界'.repeat(10000)}TAIL`);
+    try {
+      await f.session.send('read');
+      const trace = await f.session.exportTrace();
+      expect(repeated(trace.events)).toHaveLength(1);
+      const results = trace.transcript.filter((message) => message.role === 'toolResult');
+      expect(results.map((result) => envelope(text(result))?.callsLeft)).toEqual([10, 9, 8]);
+      expect(
+        new Set(results.map((result) => text(result).split('\n').slice(1).join('\n'))).size,
+      ).toBe(1);
+    } finally {
+      await f.session.dispose();
+    }
+  });
+});

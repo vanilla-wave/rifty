@@ -17,3 +17,8 @@
 - Agent owns execution context; public Pi utilities own retry/summary algorithms. ADR0474 projects compaction input from existing audit receipts, preserving native discarded-attempt semantics without another message ledger.
 - Proof: 20 fault tests +12 actual CLI differential cases; full Chromium chat15/15 and post-projection2/2; real lane retry/overflow5/5. Fresh unchanged-head pr:check25/25, no isolated rerun (`/private/tmp/rifty-pr359-continuation-pr-check-proof.log`).
 - Next: combine I7–I11 as tool feedback and shared recipe; independent DEC-2 probe proves native end-event decoration reaches actual model wire and preserves fourth batch call. I13 follows, frozen Luna config/tasks42 unchanged. Goal remains open.
+
+## 2026-09-28 — dependent fixture and tool-feedback pickup
+
+- Supplemental Final+GREEN PASS @5c6100731: browser recovery now supplies4 transient failures and proves native exhaustion before explicit continuation; independent Chromium17/17, zero findings. `distribution/reference/ai-agent-continuation-browser-fixture-final-green.json`.
+- Re-cut five drafts into `distribution/ai-agent-tool-feedback`, preserving I7–I11. DEC-2 native end-event probe reaches wire/history for invalid/missing calls and does not skip fourth batch call after steering. ADR0475 records route and narrow profile correction. Contract+RED remains before implementation.

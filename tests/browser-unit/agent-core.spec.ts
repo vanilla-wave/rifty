@@ -333,3 +333,24 @@ test('fresh headless session restores persisted native messages with a changed m
   expect(result.reset).toHaveProperty('restoredMessageCount', 0);
   expect(JSON.stringify(result.requests[2]?.body.messages)).not.toContain('Remember this work.');
 });
+
+test('diagnostics match after native write, edit and patch and reach next model request', async ({
+  page,
+}) => {
+  const result = await page.evaluate(
+    async (url) =>
+      ((await import(/* @vite-ignore */ url)) as typeof Proof).proveMutationDiagnostics(),
+    proofUrl,
+  );
+  expect(result.status).toBe('done');
+  expect(result.diagnostics.some((diagnostic) => diagnostic.code === 2322)).toBe(true);
+  const mutations = result.trace.transcript.filter((message) => message.role === 'toolResult');
+  expect(mutations).toHaveLength(3);
+  expect(mutations.every((message) => message.role === 'toolResult' && !message.isError)).toBe(
+    true,
+  );
+  expect(JSON.stringify(mutations[0]?.content)).toMatch(/diagnostics:[\s\S]*TS2322/);
+  expect(JSON.stringify(mutations[1]?.content)).toMatch(/diagnostics:[\s\S]*0/);
+  expect(JSON.stringify(mutations[2]?.content)).toMatch(/diagnostics:[\s\S]*TS2322/);
+  expect(JSON.stringify(result.requests[1]?.body.messages)).toContain('TS2322');
+});

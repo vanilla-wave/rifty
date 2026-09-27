@@ -584,3 +584,49 @@ export async function proveBomEdit() {
     await session.dispose();
   }
 }
+
+export async function proveMutationDiagnostics() {
+  const project = currentProject();
+  const companion = currentSessionTools();
+  const initial = 'export const n: number = 1;\n';
+  await project.files.writeFile('/diagnostic.ts', new TextEncoder().encode(initial), {
+    expectedVersion: null,
+  });
+  await companion.typescript.open('/diagnostic.ts', initial);
+  await companion.typescript.getSemanticDiagnostics('/diagnostic.ts');
+  const provider = scriptedProvider([
+    [
+      {
+        name: 'write_file',
+        args: { path: 'diagnostic.ts', content: 'export const n: number = "wrong";\n' },
+      },
+    ],
+    [{ name: 'edit_file', args: { path: 'diagnostic.ts', old: '"wrong"', new: '2' } }],
+    [
+      {
+        name: 'apply_patch',
+        args: {
+          patch:
+            '--- a/diagnostic.ts\n+++ b/diagnostic.ts\n@@ -1 +1 @@\n-export const n: number = 2;\n+export const n: number = "again";\n',
+        },
+      },
+    ],
+    'Checked mutation feedback.',
+  ]);
+  const session = createAgentSession({
+    host: createWorkbenchAgentHost({ session: project, companion }),
+    ...modelCatalog(settings, provider.fetch),
+  });
+  try {
+    await session.send('Change, repair, and inspect diagnostics.');
+    await companion.typescript.open('/diagnostic.ts', await file('/diagnostic.ts'));
+    return {
+      status: session.status(),
+      trace: await session.exportTrace(),
+      requests: provider.requests,
+      diagnostics: await companion.typescript.getSemanticDiagnostics('/diagnostic.ts'),
+    };
+  } finally {
+    await session.dispose();
+  }
+}

@@ -29,11 +29,7 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `landing-compare-page.md` | ready | webcontainers-alternative-search-slot | rifty.dev/compare — verifiable WebContainers-alternative table + link-checker |
 | `ai-sandbox-reference-demo.md` | draft | open-bolt-ai-sandbox-demo | open client-side AI sandbox (eval+install slice; live preview question remains) |
 | `landing-blog-surface.md` | ready | wasi-in-browser-showcase | rifty.dev/blog route + first WASI post |
-| `ai-agent-budget-visibility.md` | draft | agent-weak-models | default 600 s, `callsLeft`/`msLeft` in every rifty tool envelope |
-| `ai-agent-edit-failure-diagnostics.md` | draft | agent-weak-models | locating failure text for edit_file match failures, exact matching kept |
-| `ai-agent-repeated-call-guard.md` | draft | agent-weak-models | third identical call + result → visible steering message |
-| `ai-agent-verification-feed.md` | draft | agent-weak-models | Workbench diagnostics appended to mutation results |
-| `ai-agent-prompt-recipe.md` | draft | agent-weak-models | workflow paragraph in the prompt profile, id bump, `recipe:false` switch, ADR-0440 §4 note |
+| `ai-agent-tool-feedback.md` | ready | agent-weak-models | budgets, exact-edit hints, native repetition steer, host diagnostics and shared recipe |
 | `ai-agent-weak-model-rerun.md` | draft | agent-weak-models | same config/tasks re-run after the mechanism slices; per-task comparison, no pass regression |
 | `ai-agent-context-file-unicode-tags.md` | draft | — | question: strip invisible Unicode tag chars from loaded AGENTS.md/SKILL.md (pi byte parity vs Claude Code strip); user fork at pickup |
 
