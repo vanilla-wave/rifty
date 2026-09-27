@@ -45,3 +45,7 @@ Final source command: same real-source invocation above, grep limited to
 **4PASS** (Chromium + Firefox), log `/tmp/pr362-rival-final-source.log`; this verifies
 the final two-marker fixture and preserves the genuinely pre-bound error. Biome
 and scoped `git diff --check` pass.
+
+Required source CI after repair: run36359700726 / job108734348335,
+HEAD09c8f3515f19852145ea17be8c9003b198911f80: **110 passed (5.7m),0failed**;
+`no-coi-chromium` completed success at2026-09-27T23:53:30Z. No CI rerun.

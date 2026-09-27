@@ -21,3 +21,5 @@
 
 - 2026-09-28 — re-chart after browser-support-floor implementation (final-green PASS @09c8f3515f19852145ea17be8c9003b198911f80): I1–I7 and I9 proven/recorded; review docs/backlog/toolchain-build/reference/pr-362-final-green.json. Completed seven contracts removed; I8 protocol + native Yandex delivered, required real Safari/macOS+iOS reports remain. Goal not closed.
 - 2026-09-28 — final pr:check27/27 PASS on reviewed product tree; unit190.2s, parity71.4s, no isolated rerun needed. Source/test freeze held.
+
+- 2026-09-28 — source Chromium CI run36359700726 / job108734348335 @09c8f3515:110passed,0failed; earlier required CI fixture failure resolved. Final post-review changes are documentation only; pass binding valid.
