@@ -1,7 +1,12 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createAgentSession, createModels, createOpenAIProvider } from '@riftydev/agent';
+import {
+  type AgentSessionEvent,
+  createAgentSession,
+  createModels,
+  createOpenAIProvider,
+} from '@riftydev/agent';
 import { expect, it } from 'vitest';
 import { MemoryVfs } from '../../../packages/vfs/src/index.ts';
 import { scriptedProvider } from '../../../tests/integration/fixtures/workbench-vite-consumer/src/agent-scripted-provider.ts';
@@ -83,11 +88,13 @@ async function observed(replies: Parameters<typeof scriptedProvider>[0], cached 
       }),
     },
   });
+  const events: AgentSessionEvent[] = [];
+  session.subscribe((event) => events.push(structuredClone(event)));
   try {
     await session.send('Inspect the file.');
     return {
       trace: await session.exportTrace(),
-      observation: coreObservation(await session.exportTrace(), wire.requests),
+      observation: coreObservation(await session.exportTrace(), wire.requests, events),
       text: await vfs.readFileText('/one.txt'),
     };
   } finally {

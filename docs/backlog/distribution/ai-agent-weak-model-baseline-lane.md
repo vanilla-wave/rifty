@@ -8,7 +8,7 @@ user_story: As the maintainer measuring the agent on cheap models, I want `pnpm 
 epic: agent-weak-models
 blocked_by: []
 sources: [docs/backlog/distribution/reference/agent-weak-models-refine-evidence.md, tools/agent-bench/reports/summaries/2026-09-13-gpt-5.6-sol/README.md]
-code: [tools/agent-bench/src/config.ts, tools/agent-bench/src/report.ts, tools/agent-bench/src/runner.ts, tools/agent-bench/src/lanes/local-reference.ts]
+code: [tools/agent-bench/src/config.ts, tools/agent-bench/src/report.ts, tools/agent-bench/src/runner.ts, tools/agent-bench/src/lanes/core-observation.ts, tools/agent-bench/src/lanes/local-reference.ts, packages/agent/src/trace.ts, apps/playground/src/ai/AiChatPanel.tsx]
 ---
 
 ## Context

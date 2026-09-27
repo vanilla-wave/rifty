@@ -4,6 +4,7 @@ import {
   type AgentMessage,
   type AgentResourceReport,
   type AgentSession,
+  type AgentSessionEvent,
   type AgentStatus,
   type AgentTrace,
   type ImageContent,
@@ -52,6 +53,7 @@ interface ActiveSession {
 
 // agent-bench hook: external validation harness only. Not public API.
 interface BenchHook {
+  observe(listener: (event: AgentSessionEvent) => void): () => void;
   seed(input: {
     readonly taskId: string;
     readonly files: Readonly<Record<string, string>>;
@@ -442,6 +444,9 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
 
   // agent-bench hook: external validation harness only. Not public API.
   const hook: BenchHook = {
+    observe(listener) {
+      return ensureSession().agent.subscribe(listener);
+    },
     async seed(input) {
       if (running()) throw new Error('Benchmark seed requires an idle chat');
       setBusy(true);

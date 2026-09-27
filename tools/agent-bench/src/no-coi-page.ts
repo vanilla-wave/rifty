@@ -1,6 +1,7 @@
 import {
   type AgentRunLimits,
   type AgentSession,
+  type AgentSessionEvent,
   createAgentSession,
   createModels,
   createOpenAIProvider,
@@ -60,8 +61,20 @@ const bench = {
     return snapshot();
   },
   async run(prompt: string) {
-    await agent.send(prompt);
-    return agent.exportTrace();
+    const events: AgentSessionEvent[] = [];
+    const detach = agent.subscribe((event) => {
+      if (
+        (event.type === 'agent' && event.event.type === 'message_end') ||
+        ['retry', 'compaction', 'repeated-call'].includes(event.type)
+      )
+        events.push(structuredClone(event));
+    });
+    try {
+      await agent.send(prompt);
+      return { trace: await agent.exportTrace(), events };
+    } finally {
+      detach();
+    }
   },
   snapshot,
   async preview() {

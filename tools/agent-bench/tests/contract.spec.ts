@@ -497,6 +497,67 @@ for (const lane of ['rifty', 'local-reference'] as const) {
   });
 }
 
+for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
+  test(`${lane} measures tool failures and context before header privacy`, async () => {
+    const native = lane === 'local-reference';
+    const edit = native ? 'edit' : 'edit_file';
+    const model = await agentModelServer([
+      [
+        {
+          name: edit,
+          args: native
+            ? { path: 'src/pages/IssueList.tsx', oldText: 'MISSING-BENCH-TEXT', newText: 'unused' }
+            : { path: 'src/pages/IssueList.tsx', old: 'MISSING-BENCH-TEXT', new: 'unused' },
+        },
+      ],
+      [{ name: native ? 'read' : 'read_file', args: {} }],
+      { error: 'maximum context length is 32768 tokens' },
+    ]);
+    const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-private-metrics-'));
+    const config = join(out, 'input-config.json');
+    await writeFile(
+      config,
+      JSON.stringify({
+        endpoint: catalogEndpoint(model.baseUrl, {
+          headers: {
+            'X-Edit': edit,
+            'X-Validation': 'Validation failed for tool ',
+            'X-Context': 'maximum context length',
+          },
+        }),
+      }),
+    );
+    try {
+      const result = await cli([
+        'run',
+        '--lane',
+        lane,
+        '--task',
+        'add-search',
+        '--runs',
+        '1',
+        '--config',
+        config,
+        '--output',
+        out,
+      ]);
+      expect(result.code, result.output).toBe(0);
+      const report = JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as Report;
+      expect(report.runs[0]).toMatchObject({
+        editFailures: 1,
+        malformedToolCalls: 1,
+        contextExceeded: true,
+        outcome: 'context-exceeded',
+      });
+      const trace = await readFile(join(out, report.runs[0]!.artifacts.trace), 'utf8');
+      expect(trace).not.toContain('maximum context length');
+      expect(trace).not.toContain('Validation failed for tool ');
+    } finally {
+      await model.close();
+    }
+  });
+}
+
 for (const lane of ['rifty', 'local-reference'] as const) {
   test(`${lane} preserves report numbers and status for numeric and protocol-like headers`, async () => {
     const model = await agentModelServer([{ error: 'Private echo: 1 error "' }]);

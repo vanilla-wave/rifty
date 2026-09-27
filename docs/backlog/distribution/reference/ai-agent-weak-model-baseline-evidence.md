@@ -83,3 +83,40 @@ at this serialization boundary; no network recovery changed.
 - Repair prepared in isolated /private/tmp/rifty-pr359-bench-repair while the
   42-run baseline continued on clean 0fab1a861; no measured mechanism changed.
   Full gate and browser/native protocol-header contract remain before review.
+
+## Observation before privacy
+
+Reviewer extended the root-class sweep: header `edit_file` erased tool identity;
+`Validation failed for tool ` erased malformed-call recognition; `Operation
+aborted` hid the blocked proposal exclusion. A context-error keyword had the
+same lossy projection. `metrics-privacy.test.ts`: four real Agent/MemoryVfs REDs
+(/private/tmp/rifty-pr359-metrics-privacy-red.log), then GREEN.
+
+Browser lanes now collect final message/continuation events through existing
+AgentSession.subscribe, before privacy; COI exposes only a private opt-in hook
+delegate. The benchmark computes counters/call admission from these observations;
+raw events stay in memory, exported artifacts remain redacted. No public core
+API, second runtime history, classifier copy or extra string exception list.
+Native events already use the same pre-privacy boundary. Both original and
+new collector reproduce all10 metrics on all42 recorded runs exactly.
+
+## Recorded baseline
+
+`pnpm agent-bench run --config tools/agent-bench/configs/gpt-6-luna.json
+--output tools/agent-bench/reports/2026-09-27-luna-baseline`: exit0, 42 runs,
+40 pass. Source0fab1a861 clean; original output subsequently moved intact to
+/private/tmp/rifty-pr359-luna-baseline (raw generated files are not lint inputs).
+Committed summary: tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline.
+All42 source records roundtrip; gzip3158803 bytes, SHA256
+8e82df4ea1f13d20b4c2316c4c2bf4928ba9d7d4efc4085a2aced84ea7698ebe.
+
+Two `agent` failures, no replacement runs: URL no-COI3 removed useState import
+(original browser pageError); native Node2 claimed work after only read/ls,
+no changed bytes and real stats endpoint404. Per-lane15/15,11/12,14/15.
+No budget/context failures;13 rejected patch formats recovered. Config, task
+set and original measurements preserved for I13.
+
+CI on0fab1a861: all except browser-unit passed; sandbox-support repeated-call
+case reported page/context/browser closed. The exact case reran independently
+and passed (1/1,4.3s), no source repair; log
+/private/tmp/rifty-pr359-browser-ci-isolated.log. Final CI remains required.
