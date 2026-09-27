@@ -6,7 +6,7 @@ created: 2026-09-27
 why: Cheap endpoints rate-limit and fail transiently (11 of 12 calls 429 on one provider); today one failed request ends the run with error while the pi CLI retries 3× by default.
 user_story: As a developer running the agent against a rate-limited endpoint, I want a 429 or connection reset to be retried with backoff like pi does, but today `streamSimple` is called once and the run ends with `error`.
 epic: agent-weak-models
-blocked_by: [distribution/ai-agent-weak-model-baseline-lane]
+blocked_by: []
 sources: [docs/backlog/distribution/reference/agent-weak-models-refine-evidence.md, docs/adr/distribution/0424-headless-pi-agent-over-public-project-hosts.md]
 code: [packages/agent/src/session.ts]
 ---

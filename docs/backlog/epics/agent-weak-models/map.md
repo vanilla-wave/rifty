@@ -7,33 +7,26 @@ item ordering (goal §Decisions "shared bench order").
 
 ## Items
 
-4. `distribution/ai-agent-weak-model-baseline-lane` — **baseline** — bench
-   `endpoint` as a catalog entry, report header + per-run metric columns,
-   `context-exceeded` outcome, one recorded `gpt-6-luna` run of the existing
-   tasks (I12). After 1; before 5–11 (§Decisions "bench lane order") and before
-   the quality goal's `distribution/agent-eval-local-runner` (PR #341)
-   restructures runner/config/report (§Decisions "shared bench order").
 5. `distribution/ai-agent-budget-visibility` — **budgets** — defaults 100 /
-   600 s, `callsLeft`/`msLeft` in every rifty tool envelope (I9). After 4.
+   600 s, `callsLeft`/`msLeft` in every rifty tool envelope (I9). I12 recorded.
 6. `distribution/ai-agent-transient-request-retry` — **retry** — `retry`
    option (default on), pi 0.85.1 agent-level retry over the selected entry's
-   transport, visible attempts, ADR-0424 §4 correction (I6). After 4.
+   transport, visible attempts, ADR-0424 §4 correction (I6). I12 recorded.
 7. `distribution/ai-agent-context-compaction` — **compaction** — `compaction`
    option (default on), pi 0.85.1 compaction over the retained history, trace
    tokens and full usage totals, `context-exceeded`, plus the playground chat
-   marker and the `context-exceeded` switch offer (I5, I4 second half). After
-   4; fault matrix.
+   marker and the `context-exceeded` switch offer (I5, I4 second half). I12 recorded; fault matrix.
 8. `distribution/ai-agent-edit-failure-diagnostics` — **edit-diagnostics** —
    locating failure text for `edit_file` match failures, exact matching kept,
-   apply_patch and host-write semantics unchanged (I7). After 4.
+   apply_patch and host-write semantics unchanged (I7). I12 recorded.
 9. `distribution/ai-agent-repeated-call-guard` — **repeat-guard** — third
    identical call + identical result body → visible steering message (I8).
    After 5 (budget fields excluded from the comparison).
 10. `distribution/ai-agent-verification-feed` — **verification** — Workbench
     diagnostics appended to mutation results, `diagnostics: pending` on a
-    bounded wait, `diagnostics: unavailable` elsewhere (I10). After 4.
+    bounded wait, `diagnostics: unavailable` elsewhere (I10). I12 recorded.
 11. `distribution/ai-agent-prompt-recipe` — **recipe** — workflow paragraph,
-    profile id bump, `recipe:false` switch, ADR-0440 §4 note (I11). After 4.
+    profile id bump, `recipe:false` switch, ADR-0440 §4 note (I11). I12 recorded.
 12. `distribution/ai-agent-weak-model-rerun` — **re-run** — same config,
     tasks and runs as item 4 after items 5–11 land; per-task comparison in the
     report — the smallest `report --compare` over two summary directories,
@@ -50,7 +43,7 @@ item ordering (goal §Decisions "shared bench order").
   native available-context ceiling); absent temperature/top_p are omitted. Native
   reasoning_content replay verified through the proxy. Evidence: catalog unit.
 - Luna endpoint verified: temporary proxy on 10539, codexVersion 0.155.1;
-  gpt-6-luna listed and real request returned OK. I12 measurement remains open.
+  gpt-6-luna listed and real request returned OK. I12 recorded: 40/42 pass, two agent failures; source/artifacts frozen before mechanisms.
 - Playground carrier resolved: file picker; native images to prompt, other
   bytes under /attachments with unique names and ProjectFiles CAS; advanced
   native catalog JSON plus simple entry controls. I3/I4 reviewed c288a9cc9.

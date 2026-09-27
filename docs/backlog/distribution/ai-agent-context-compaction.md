@@ -6,7 +6,7 @@ created: 2026-09-27
 why: On a small-window endpoint the agent dies on context overflow — the user named compaction a survival mechanism, and pi's compaction already exists in pi-agent-core.
 user_story: As a developer running the agent on a 32k–128k endpoint, I want long tasks to survive by summarizing older history like the pi CLI does, but today the retained history grows until the provider rejects the request and the run ends with `error`.
 epic: agent-weak-models
-blocked_by: [distribution/ai-agent-weak-model-baseline-lane]
+blocked_by: []
 sources: [docs/backlog/distribution/reference/agent-weak-models-refine-evidence.md]
 code: [packages/agent/src/session.ts, packages/agent/src/types.ts, apps/playground/src/ai/AiChatPanel.tsx]
 ---

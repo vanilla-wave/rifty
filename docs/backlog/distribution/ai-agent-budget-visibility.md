@@ -6,7 +6,7 @@ created: 2026-09-27
 why: The 180 s default was tuned for a fast frontier model without thinking (a weak model with thinking hits it and ends budget-exceeded instead of finishing), and the model never learns how much budget is left.
 user_story: As a developer running the agent on a slow, cheap model, I want the run to have room to finish and the model to see its remaining budget so it stops exploring in time, but today the timeout is 180 s and tool results carry only status/exit/error.
 epic: agent-weak-models
-blocked_by: [distribution/ai-agent-weak-model-baseline-lane]
+blocked_by: []
 sources: [docs/backlog/distribution/reference/agent-weak-models-refine-evidence.md]
 code: [packages/agent/src/session.ts, packages/agent/src/tools.ts]
 ---

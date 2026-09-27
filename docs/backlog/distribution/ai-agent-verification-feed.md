@@ -6,7 +6,7 @@ created: 2026-09-27
 why: The model only sees type errors if it decides to call the diagnostics tool; feeding them after each edit is the verification signal harnesses credit for catching failures early, and the Workbench host already has the source.
 user_story: As a developer watching the agent edit TypeScript in the playground, I want the edit result to already show the new type errors, but today it says `edited <path>` and the model must call `diagnostics` itself.
 epic: agent-weak-models
-blocked_by: [distribution/ai-agent-weak-model-baseline-lane]
+blocked_by: []
 sources: [docs/backlog/distribution/reference/agent-weak-models-refine-evidence.md, docs/adr/distribution/0426-no-coi-agent-host-and-explicit-resident-exit.md]
 code: [packages/agent/src/tools.ts, packages/agent/src/workbench-host.ts, packages/agent/src/sandbox-host.ts]
 ---

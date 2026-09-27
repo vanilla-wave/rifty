@@ -147,3 +147,8 @@ keys, including JSON-escaped text. Ordinary tool metadata stays intact.
 - Earlier14 baseline contracts and2 opaque-header checks passed before the
   repairs; unchanged judge/isolation/deadline cases were not redefined.
   New final source gate and independent verify remain before I12 closure.
+
+Final source2a145487: `pnpm pr:check`25/25 PASS, no isolated retry
+(/private/tmp/rifty-pr359-baseline-proof-final.log). Independent final review:
+53 unit PASS;11/11 coverage,0 findings.
+Verdict: ai-agent-weak-model-baseline-lane-final-green.json.

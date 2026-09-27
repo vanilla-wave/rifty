@@ -6,7 +6,7 @@ created: 2026-09-27
 why: Weak models need the working procedure stated; a September 2026 ablation shows planning text is an accuracy scaffold for weaker models, and the mini-swe-agent prompt states exactly this recipe.
 user_story: As a developer running the agent on a weak model, I want it to reproduce before editing and re-run after, but today the profile says only "be concise, show file paths, follow project instructions".
 epic: agent-weak-models
-blocked_by: [distribution/ai-agent-weak-model-baseline-lane]
+blocked_by: []
 sources: [docs/backlog/distribution/reference/agent-weak-models-refine-evidence.md, docs/adr/distribution/0434-run-a-three-lane-pi-benchmark-with-shared-profile-and-native-judges.md]
 code: [packages/agent/src/prompt-profile.ts, packages/agent/src/prompt.ts, tools/agent-bench/tests/contract.spec.ts]
 ---

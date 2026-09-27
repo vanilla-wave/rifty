@@ -6,7 +6,7 @@ created: 2026-09-27
 why: Weak models loop on "string not found" / "not unique" because the result carries nothing to correct with; a precise failure reason is the most cited weak-model fix and keeps exact matching.
 user_story: As a developer watching the agent edit on a weak model, I want a failed edit to tell the model where the matches are or which line is closest, but today it says only `edit_file: string not found in <path>`.
 epic: agent-weak-models
-blocked_by: [distribution/ai-agent-weak-model-baseline-lane]
+blocked_by: []
 sources: [docs/backlog/distribution/reference/agent-weak-models-refine-evidence.md, docs/adr/distribution/0424-headless-pi-agent-over-public-project-hosts.md]
 code: [packages/agent/src/tools.ts, packages/agent/src/apply-patch.ts]
 ---
