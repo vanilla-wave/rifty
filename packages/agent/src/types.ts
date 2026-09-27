@@ -1,5 +1,5 @@
 import type { AgentEvent, AgentMessage, AgentTool } from '@earendil-works/pi-agent-core';
-import type { Api, Model, Models, SimpleStreamOptions } from '@earendil-works/pi-ai';
+import type { Api, ImageContent, Model, Models, SimpleStreamOptions } from '@earendil-works/pi-ai';
 import type { SandboxProjectOptions, ToolchainSandbox } from '@riftydev/sdk';
 import type { ProjectSession, ProjectTerminal } from '@riftydev/workbench';
 import type { PlaygroundSessionTools } from '@riftydev/workbench/playground';
@@ -171,7 +171,7 @@ export interface AgentSession {
   status(): AgentStatus;
   detail(): string | undefined;
   /** A new prompt continues the retained history, including prior tool results. */
-  send(prompt: string): Promise<void>;
+  send(prompt: string, images?: readonly ImageContent[]): Promise<void>;
   /** Re-read resources while idle; retains conversation history. */
   reload(): Promise<AgentResourceReport>;
   stop(): Promise<void>;

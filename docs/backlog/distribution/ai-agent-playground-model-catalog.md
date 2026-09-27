@@ -75,6 +75,8 @@ Compaction/context-exceeded UI remains linked to I5 after the baseline.
 
 ## Decisions
 
+ready-verdict: 2026-09-27 — Contract+RED @ 9837f10c20513055c12b0795b5dfea8b13a74108 — `reference/ai-agent-playground-model-catalog-contract-red.json`
+
 re-cut: 2026-09-27 — absorb draft predecessor distribution/ai-agent-prompt-images into this image/catalog chat unit; preserve I3/I4 and all existing scenarios — trace: none
 
 - Inherits goal decisions (catalog, images, entry defaults, tier). Automatic fallback is Out of scope (goal map): the UI offers, the user chooses.

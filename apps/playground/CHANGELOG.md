@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Edit/persist a model catalog, switch without resetting history, continue after provider errors, attach images or exact project-file bytes.
+
 - Create chat sessions through native pi model catalogs.
 
 - First pi skill/template command now shows the session refusal and preserves the draft; admission stays inside the run budget (ADR-0442).

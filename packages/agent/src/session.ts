@@ -1,5 +1,5 @@
 import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
-import type { ToolResultMessage } from '@earendil-works/pi-ai';
+import type { ImageContent, ToolResultMessage } from '@earendil-works/pi-ai';
 import { NotImplementedError } from '@riftydev/io';
 import { catalogSecrets, isOpenAIProvider, selectModel } from './catalog.ts';
 import { unsupportedChatCommand } from './chat-command.ts';
@@ -219,7 +219,26 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     return added;
   }
 
-  async function run(prompt: string): Promise<void> {
+  function checkImages(images: unknown): asserts images is readonly ImageContent[] | undefined {
+    if (images === undefined) return;
+    if (
+      !Array.isArray(images) ||
+      images.some(
+        (image) =>
+          !image ||
+          image.type !== 'image' ||
+          typeof image.mimeType !== 'string' ||
+          !image.mimeType.startsWith('image/'),
+      )
+    )
+      throw new NotImplementedError('agent.prompt-binary-input');
+    if (images.some((image) => typeof image.data !== 'string' || !image.data))
+      throw new TypeError('Image data must be a nonempty base64 string');
+    if (images.length && !model.input.includes('image'))
+      throw new TypeError(`Model ${model.id} does not accept images`);
+  }
+
+  async function run(prompt: string, images?: readonly ImageContent[]): Promise<void> {
     const startedAt = Date.now();
     let outcome: AgentStatus;
     let outcomeDetail: string | undefined;
@@ -239,7 +258,8 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
         const refreshed = refreshCapabilities();
         agent.state.systemPrompt = refreshed.systemPrompt;
         agent.state.tools = refreshed.tools;
-        await agent.prompt(prompt);
+        checkImages(images);
+        await agent.prompt(prompt, images ? [...images] : undefined);
       }
       if (budgetReason) {
         outcome = 'budget-exceeded';
@@ -271,15 +291,17 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     },
     status: () => status,
     detail: () => detail,
-    async send(prompt) {
+    async send(prompt, images) {
       if (disposed) throw new Error('Agent session is disposed');
       if (active) throw new Error('Agent run already in progress');
-      if (!prompt.trim()) throw new TypeError('Agent prompt is empty');
+      checkImages(images);
+      if (!prompt.trim() && !images?.length) throw new TypeError('Agent prompt is empty');
       stopRequested = false;
       budgetReason = undefined;
       toolCalls = 0;
       runEventStart = events.length;
-      active = Promise.resolve().then(() => run(prompt));
+      const copiedImages = images ? structuredClone(images) : undefined;
+      active = Promise.resolve().then(() => run(prompt, copiedImages));
       setStatus('running');
       try {
         await active;

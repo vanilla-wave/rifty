@@ -6,16 +6,23 @@ import {
   type AgentSession,
   type AgentStatus,
   type AgentTrace,
+  type ImageContent,
   createAgentSession,
-  createModels,
-  createOpenAIProvider,
 } from '@riftydev/agent';
 import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { downloadBlob } from '../glue/download.ts';
+import { CatalogSettings } from './CatalogSettings.tsx';
 import { ResourceReport } from './ResourceReport.tsx';
+import { type ChatAttachment, attachFile } from './attachments.ts';
 import { type PlaygroundAgentOptions, createPlaygroundAgentHost } from './playground-agent-host.ts';
-import { type ChatSettings, loadSettings, saveSettings, validateSettings } from './settings.ts';
+import {
+  type ChatSettings,
+  loadSettings,
+  saveSettings,
+  sessionCatalog,
+  validateSettings,
+} from './settings.ts';
 import './chat.css';
 
 type ChatItem =
@@ -24,6 +31,7 @@ type ChatItem =
       readonly id: number;
       readonly role: 'user' | 'assistant';
       readonly text: string;
+      readonly images?: readonly ImageContent[];
     }
   | {
       readonly kind: 'tool';
@@ -68,6 +76,12 @@ function messageText(message: AgentMessage): string {
         .join('');
 }
 
+function messageImages(message: AgentMessage): ImageContent[] {
+  return message.role === 'user' && Array.isArray(message.content)
+    ? message.content.filter((part) => part.type === 'image')
+    : [];
+}
+
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const json = (value: unknown) => JSON.stringify(value, null, 2) ?? String(value);
 
@@ -110,6 +124,7 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
   const [resources, setResources] = createSignal<AgentResourceReport>();
   const [reloaded, setReloaded] = createSignal(false);
   const [input, setInput] = createSignal('');
+  const [attachments, setAttachments] = createSignal<readonly ChatAttachment[]>([]);
   const [busy, setBusy] = createSignal(false);
   const [hasSession, setHasSession] = createSignal(false);
   let active: ActiveSession | undefined;
@@ -137,6 +152,7 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
       (event.message.role === 'user' || event.message.role === 'assistant')
     ) {
       if (event.message.role === 'assistant') assistantIndex = items().length;
+      else setAttachments([]);
       setItems((current) => [
         ...current,
         {
@@ -144,6 +160,7 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
           id: nextMessageId++,
           role: event.message.role as 'user' | 'assistant',
           text: messageText(event.message),
+          images: messageImages(event.message),
         },
       ]);
     } else if (
@@ -228,6 +245,7 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
             id: id(),
             role: message.role,
             text: messageText(message),
+            images: messageImages(message),
           });
           if (
             message.role === 'assistant' &&
@@ -265,35 +283,17 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
     const host = createPlaygroundAgentHost(props);
     try {
       const { maxToolCalls, runTimeoutMs } = selected;
-      const models = createModels();
-      models.setProvider(
-        createOpenAIProvider({
-          id: 'rifty',
-          apiKey: selected.apiKey,
-          models: [
-            {
-              id: selected.model,
-              name: selected.model,
-              api: 'openai-completions',
-              provider: 'rifty',
-              baseUrl: selected.baseUrl,
-              contextWindow: 128_000,
-              maxTokens: 8192,
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-            },
-          ],
-        }),
-      );
       const agent = createAgentSession({
         host,
-        models,
-        model: selected.model,
+        ...sessionCatalog(selected),
         maxToolCalls,
         runTimeoutMs,
       });
       const detach = agent.subscribe((event) => {
         if (!alive) return;
         if (event.type === 'agent') receive(event.event);
+        else if (event.type === 'model')
+          setSettings((current) => ({ ...current, model: event.model }));
         else if (event.type === 'resources') setResources(event.report);
         else if (event.type === 'status') {
           if (event.status === 'running') runStart = items().length;
@@ -325,7 +325,19 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
   async function send() {
     const draft = input();
     const text = draft.trim();
-    if (!text || running()) return;
+    const pendingAttachments = attachments();
+    if ((!text && !pendingAttachments.length) || running()) return;
+    const images = pendingAttachments.flatMap((attachment) =>
+      attachment.image ? [attachment.image] : [],
+    );
+    const prompt = [
+      text,
+      ...pendingAttachments.flatMap((attachment) =>
+        attachment.path ? [`Attached file: ${JSON.stringify(attachment.path)}`] : [],
+      ),
+    ]
+      .filter(Boolean)
+      .join('\n');
     try {
       const current = ensureSession();
       setInput('');
@@ -336,11 +348,12 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
         await current.agent.reload();
         setReloaded(true);
       } else {
-        await current.agent.send(text);
+        await current.agent.send(prompt, images);
         if (alive && current === active && current.agent.status() === 'error' && !input())
           setInput(draft);
       }
     } catch (error) {
+      if (!input()) setInput(draft);
       setStatus('error');
       setDetail(errorMessage(error));
     } finally {
@@ -384,8 +397,34 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
     }
   }
 
-  function changeDraft<K extends keyof ChatSettings>(key: K, value: ChatSettings[K]) {
-    setDraft((current) => ({ ...current, [key]: value }));
+  function pickModel(id: string) {
+    try {
+      active?.agent.setModel(id);
+      const next = { ...settings(), model: id };
+      setSettings(next);
+      setNotice(saveSettings(next) ? `Selected ${id}.` : `Selected ${id}; selection not saved.`);
+    } catch (error) {
+      setNotice(errorMessage(error));
+    }
+  }
+
+  async function attach(event: Event & { currentTarget: HTMLInputElement }) {
+    const files = Array.from(event.currentTarget.files ?? []);
+    event.currentTarget.value = '';
+    if (running()) return;
+    const projectFiles = props.context.session.files;
+    setBusy(true);
+    try {
+      for (const file of files) {
+        const attached = await attachFile(projectFiles, file);
+        if (!alive) return;
+        setAttachments((current) => [...current, attached]);
+      }
+    } catch (error) {
+      if (alive) setNotice(`Attachment failed: ${errorMessage(error)}`);
+    } finally {
+      if (alive) setBusy(false);
+    }
   }
 
   async function exportSession() {
@@ -493,69 +532,27 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
           Export session
         </button>
       </div>
+      <label class="rf-ai__model">
+        Chat model
+        <select
+          aria-label="Chat model"
+          value={settings().model}
+          onChange={(event) => pickModel(event.currentTarget.value)}
+        >
+          <For each={settings().models}>
+            {(model) => (
+              <option value={model.id}>{model.name || model.id || 'Configure a model'}</option>
+            )}
+          </For>
+        </select>
+      </label>
       <Show when={settingsOpen()}>
-        <form class="rf-ai__settings" onSubmit={(event) => void applySettings(event)}>
-          <fieldset disabled={running()}>
-            <label>
-              Base URL
-              <input
-                value={draft().baseUrl}
-                onInput={(event) => changeDraft('baseUrl', event.currentTarget.value)}
-                placeholder="/ai-proxy/v1"
-                required
-              />
-            </label>
-            <label>
-              Model
-              <input
-                value={draft().model}
-                onInput={(event) => changeDraft('model', event.currentTarget.value)}
-                required
-              />
-            </label>
-            <label>
-              API key (optional)
-              <input
-                type="password"
-                autocomplete="off"
-                value={draft().apiKey}
-                onInput={(event) => changeDraft('apiKey', event.currentTarget.value)}
-              />
-            </label>
-            <small>Only endpoint and model are saved. Key and limits stay in this chat.</small>
-            <div class="rf-ai__limits">
-              <label>
-                Tool limit
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={draft().maxToolCalls}
-                  onInput={(event) =>
-                    changeDraft('maxToolCalls', Number(event.currentTarget.value))
-                  }
-                  required
-                />
-              </label>
-              <label>
-                Time limit (seconds)
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={draft().runTimeoutMs / 1000}
-                  onInput={(event) =>
-                    changeDraft('runTimeoutMs', Number(event.currentTarget.value) * 1000)
-                  }
-                  required
-                />
-              </label>
-            </div>
-            <button type="submit" class="rf-btn">
-              Apply and reset chat
-            </button>
-          </fieldset>
-        </form>
+        <CatalogSettings
+          value={draft()}
+          disabled={running()}
+          onChange={setDraft}
+          onApply={(event) => void applySettings(event)}
+        />
       </Show>
       <Show when={resources()}>
         {(report) => <ResourceReport report={report()} reloaded={reloaded()} />}
@@ -567,6 +564,27 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
         <p class="rf-ai__error" role="alert">
           {detail()}
         </p>
+      </Show>
+      <Show when={status() === 'error' && hasSession() && settings().models.length > 1}>
+        <section class="rf-ai__notice" aria-label="Model alternatives">
+          <p>Choose another model to continue this conversation.</p>
+          <For each={settings().models.filter((model) => model.id !== settings().model)}>
+            {(model) => (
+              <button
+                type="button"
+                class="rf-btn rf-btn--ghost"
+                disabled={running()}
+                onClick={() => {
+                  pickModel(model.id);
+                  if (!attachments().length) setInput('continue');
+                  void send();
+                }}
+              >
+                Continue with {model.name || model.id}
+              </button>
+            )}
+          </For>
+        </section>
       </Show>
       <div
         class="rf-ai__messages"
@@ -585,10 +603,19 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
         <For each={items()}>
           {(item) =>
             item.kind === 'message' ? (
-              <Show when={item.text}>
+              <Show when={item.text || item.images?.length}>
                 <article class="rf-ai__message" data-role={item.role}>
                   <small>{item.role === 'user' ? 'you' : 'agent'}</small>
                   <p>{item.text}</p>
+                  <For each={item.images}>
+                    {(image) => (
+                      <img
+                        class="rf-ai__image"
+                        alt="Attachment"
+                        src={`data:${image.mimeType};base64,${image.data}`}
+                      />
+                    )}
+                  </For>
                 </article>
               </Show>
             ) : (
@@ -638,6 +665,36 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
           void send();
         }}
       >
+        <label>
+          Attach files
+          <input
+            type="file"
+            multiple
+            aria-label="Attach files"
+            disabled={running()}
+            onChange={(event) => void attach(event)}
+          />
+        </label>
+        <div data-testid="ai-attachments" class="rf-ai__attachments">
+          <For each={attachments()}>
+            {(attachment) => (
+              <span data-project-path={attachment.path}>
+                {attachment.path ?? attachment.name}
+                <button
+                  type="button"
+                  class="rf-btn rf-btn--ghost"
+                  aria-label={`Remove ${attachment.name}`}
+                  disabled={running()}
+                  onClick={() =>
+                    setAttachments((current) => current.filter((item) => item !== attachment))
+                  }
+                >
+                  ×
+                </button>
+              </span>
+            )}
+          </For>
+        </div>
         <textarea
           aria-label="Message"
           rows={3}
@@ -657,7 +714,11 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
           <Show
             when={status() === 'running'}
             fallback={
-              <button type="submit" class="rf-btn" disabled={running() || !input().trim()}>
+              <button
+                type="submit"
+                class="rf-btn"
+                disabled={running() || (!input().trim() && !attachments().length)}
+              >
                 Send
               </button>
             }

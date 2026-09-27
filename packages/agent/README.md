@@ -44,6 +44,13 @@ also applies. `agent.setModel(id)` preserves history and affects the next reques
 including during an active tool turn; missing or ambiguous ids throw. Subscribe
 to `type: 'model'` for switches. No automatic fallback.
 
+`send(prompt, images?)` accepts native pi ImageContent for entries whose input
+includes image. Image-only prompts are allowed; a text-only entry rejects them
+before a request, naming the model. Non-image binary data throws
+`NotImplementedError('agent.prompt-binary-input')`; put those files in the
+project and pass their paths. Playground's Attach files does that automatically
+under /attachments, preserving existing files.
+
 Restore a conversation by passing native Pi messages captured from `message_end`:
 
 ```ts
@@ -144,6 +151,8 @@ throw `NotImplementedError('agent.tool-image-result')`.
 |---|---|
 | UTF-8 edits and unified text patches, including Git-quoted paths | ✅ |
 | Binary patches | ❌ `NotImplementedError('agent.apply_patch.binary')` |
+| Image prompt input on image-capable models | ✅ |
+| Non-image binary prompt input | ❌ `NotImplementedError('agent.prompt-binary-input')` |
 | Image tool results | ❌ `NotImplementedError('agent.tool-image-result')` |
 
 An aborted partial model proposal was never dispatched: it stays an aborted

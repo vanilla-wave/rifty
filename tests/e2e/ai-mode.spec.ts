@@ -23,12 +23,12 @@ async function openChat(page: Page) {
 async function settings(
   page: Page,
   baseUrl: string,
-  options: { key?: string; calls?: number; seconds?: number } = {},
+  options: { key?: string; calls?: number; seconds?: number; model?: string } = {},
 ) {
   const panel = page.getByTestId('ai-panel');
   await panel.getByRole('button', { name: 'Settings', exact: true }).click();
   await panel.getByLabel('Base URL', { exact: true }).fill(baseUrl);
-  await panel.getByLabel('Model', { exact: true }).fill('scripted');
+  await panel.getByLabel('Model', { exact: true }).fill(options.model ?? 'scripted');
   await panel.getByLabel('API key (optional)', { exact: true }).fill(options.key ?? '');
   await panel.getByLabel('Tool limit', { exact: true }).fill(String(options.calls ?? 100));
   await panel
@@ -172,7 +172,7 @@ test('lazy +chat streams real React edits/build/preview into editor, SCM, Agent 
   }
 });
 
-test('settings keep only endpoint/model; Reset retains files and reload clears key/conversation/limits', async ({
+test('settings keep the catalog; Reset retains files and reload clears key/conversation/limits', async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -189,10 +189,24 @@ test('settings keep only endpoint/model; Reset retains files and reload clears k
     await pickStarter(page);
     await page.evaluate(() => localStorage.setItem('rf.ai.v2', '{broken'));
     await openChat(page);
-    await settings(page, model.baseUrl, { key, calls: 2, seconds: 7 });
-    expect(
-      await page.evaluate(() => JSON.parse(localStorage.getItem('rf.ai.v2') ?? 'null')),
-    ).toEqual({ baseUrl: model.baseUrl, model: 'scripted' });
+    await settings(page, ` ${model.baseUrl} `, { key, calls: 2, seconds: 7, model: ' scripted ' });
+    const storedSettings = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('rf.ai.v2') ?? 'null'),
+    );
+    expect(Object.keys(storedSettings).sort()).toEqual(['model', 'models']);
+    expect(storedSettings).toMatchObject({
+      model: 'scripted',
+      models: [
+        {
+          id: 'scripted',
+          baseUrl: model.baseUrl,
+          contextWindow: 128000,
+          maxTokens: 8192,
+          thinking: 'off',
+        },
+      ],
+    });
+    expect(JSON.stringify(storedSettings)).not.toContain(key);
     await send(page, 'Save a file.');
     const panel = page.getByTestId('ai-panel');
     await expect(panel).toHaveAttribute('data-status', 'done');
@@ -736,7 +750,7 @@ test('catalog controls switch providers after error without losing tool history'
   test.setTimeout(120_000);
   const first = await agentModelServer([
     [{ name: 'write_file', args: { path: 'catalog-proof.txt', content: 'written once' } }],
-    { error: 'capacity exhausted' },
+    { error: 'capacity exhausted CATALOG_HEADER_SECRET' },
   ]);
   const second = await agentModelServer(['Continued on second.']);
   try {
@@ -746,14 +760,13 @@ test('catalog controls switch providers after error without losing tool history'
     const panel = page.getByTestId('ai-panel');
     await panel.getByRole('button', { name: 'Settings', exact: true }).click();
     await panel.getByText('Advanced catalog', { exact: true }).click({ timeout: 5000 });
-    await panel
-      .getByLabel('Model catalog (JSON)', { exact: true })
-      .fill(
-        JSON.stringify([
-          entry('first', first.baseUrl),
-          { ...entry('second', second.baseUrl), temperature: 0.8, thinking: 'high' },
-        ]),
-      );
+    await panel.getByLabel('Model catalog (JSON)', { exact: true }).fill(
+      JSON.stringify([
+        { ...entry('first', first.baseUrl), headers: { 'X-Secret': 'CATALOG_HEADER_SECRET' } },
+        { ...entry('second', second.baseUrl), temperature: 0.8, thinking: 'high' },
+      ]),
+    );
+    await panel.getByLabel('API key (optional)', { exact: true }).fill('CATALOG_UI_SECRET');
     await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
     await panel.getByLabel('Message', { exact: true }).fill('Write the proof, then continue.');
     await panel.getByRole('button', { name: 'Send', exact: true }).click();
@@ -761,6 +774,7 @@ test('catalog controls switch providers after error without losing tool history'
     await panel.getByRole('button', { name: 'Continue with second', exact: true }).click();
     await expect(panel).toHaveAttribute('data-status', 'done');
     await expect(panel.getByLabel('Chat model', { exact: true })).toHaveValue('second');
+    expect(first.requests[0]?.authorization).toBe('Bearer CATALOG_UI_SECRET');
     const request = second.requests[0]?.body;
     expect(request).toMatchObject({
       model: 'second',
@@ -778,6 +792,8 @@ test('catalog controls switch providers after error without losing tool history'
     );
     expect(trace.transcript.filter((message) => message.role === 'toolResult')).toHaveLength(1);
     expect(trace.config).toMatchObject({ model: 'second', thinking: 'high', temperature: 0.8 });
+    expect(JSON.stringify(trace)).not.toContain('CATALOG_UI_SECRET');
+    expect(JSON.stringify(trace)).not.toContain('CATALOG_HEADER_SECRET');
     const stored = await page.evaluate(() =>
       JSON.parse(localStorage.getItem('rf.ai.v2') ?? 'null'),
     );
@@ -787,6 +803,31 @@ test('catalog controls switch providers after error without losing tool history'
         entry('first', first.baseUrl),
         { ...entry('second', second.baseUrl), temperature: 0.8, thinking: 'high' },
       ],
+    });
+    expect(JSON.stringify(stored)).not.toContain('CATALOG_UI_SECRET');
+    expect(JSON.stringify(stored)).not.toContain('CATALOG_HEADER_SECRET');
+    await page.reload();
+    await waitForProjectIndex(page);
+    if (await page.getByTestId('launcher').isVisible()) await openActiveProjectFromLauncher(page);
+    await openChat(page);
+    await expect(panel.getByLabel('Chat model', { exact: true })).toHaveValue('second');
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    await panel.getByLabel('Edit model', { exact: true }).selectOption('first');
+    await expect(panel.getByLabel('API key (optional)', { exact: true })).toHaveValue('');
+    await panel.getByText('Advanced catalog', { exact: true }).click();
+    expect(
+      JSON.parse(await panel.getByLabel('Model catalog (JSON)', { exact: true }).inputValue()),
+    ).toEqual(stored.models);
+    await panel.getByRole('button', { name: 'Add model', exact: true }).click();
+    const newEntry = JSON.parse(
+      await panel.getByLabel('Model catalog (JSON)', { exact: true }).inputValue(),
+    ).at(-1);
+    expect(newEntry).toMatchObject({
+      contextWindow: 128000,
+      maxTokens: 8192,
+      thinking: 'off',
+      reasoning: false,
+      input: ['text'],
     });
   } finally {
     await first.close();
@@ -836,6 +877,12 @@ test('image reaches the model; binary attachment is an exact project file with a
     const collisionPath = await attached.getAttribute('data-project-path');
     expect(collisionPath).toMatch(/^\/attachments\//);
     expect(collisionPath).not.toBe('/attachments/spec.pdf');
+    await page.locator('[data-action="open-palette"]').click();
+    await page
+      .getByTestId('command-palette')
+      .getByRole('button', { name: 'Stop project', exact: true })
+      .click();
+    await expect(page.locator('.rf-livepill')).toHaveAttribute('data-state', 'stopped');
     const download = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export', exact: true }).click();
     const file = await (await download).path();

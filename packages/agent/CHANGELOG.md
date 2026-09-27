@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Accept native image prompts, including image-only input; reject text-only/binary mismatches before dispatch.
+
 - Breaking: native pi Models catalog replaces settings/streamFn session forms; per-model defaults, active setModel and effective redacted trace.
 
 - Restore native `initialMessages` in fresh sessions; validate required native fields and tool pairs, expose trace provenance and count only new-run usage (ADR-0466).
