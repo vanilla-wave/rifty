@@ -12,6 +12,7 @@ import {
   createAgentSession,
   getAgentPromptProfile,
 } from './index.ts';
+import { toolReceipt } from './tool-feedback.ts';
 
 async function fixture(
   replies: readonly ScriptedReply[],
@@ -595,5 +596,149 @@ describe('honest tool feedback', () => {
     } finally {
       await f.session.dispose();
     }
+  });
+  it.each([2500, 6000])(
+    '[fault: provenance-lie] preserves all fitting shell effects on model wire (%s)',
+    async (size) => {
+      const effects = {
+        description: 'a'.repeat(size),
+        applied: 'unknown',
+        context: 'b'.repeat(size),
+      };
+      const f = await fixture([[call('shell', { command: 'probe' })], 'Done'], {
+        host: {
+          root: '/',
+          async close() {},
+          capabilities: () => ({
+            shell: async () => ({
+              status: 'cancelled',
+              exitCode: null,
+              stdout: 'actual body',
+              stderr: '',
+              worker: 'terminated',
+              effects,
+            }),
+          }),
+        },
+      });
+      try {
+        await f.session.send('inspect effects');
+        const result = (await f.session.exportTrace()).transcript.find(
+          (message) => message.role === 'toolResult',
+        )!;
+        const header = envelope(text(result));
+        expect(header?.effects).toEqual(effects);
+        expect(header).not.toHaveProperty('metadataTruncated');
+        expect(new TextEncoder().encode(text(result)).length).toBeLessThanOrEqual(16384);
+        expect(
+          f.wire.requests[1]?.body.messages.find((message) => message.role === 'tool')?.content,
+        ).toBe(text(result));
+      } finally {
+        await f.session.dispose();
+      }
+    },
+  );
+  it('keeps one normalized shell envelope when the host supplies an Error object', async () => {
+    const f = await fixture([[call('shell', { command: 'probe' })], 'Done'], {
+      host: {
+        root: '/',
+        async close() {},
+        capabilities: () => ({
+          shell: async () => ({
+            status: 'failed',
+            exitCode: null,
+            stdout: '',
+            stderr: 'actual body',
+            error: new Error('host failure'),
+          }),
+        }),
+      },
+    });
+    try {
+      await f.session.send('inspect');
+      const result = (await f.session.exportTrace()).transcript.find(
+        (message) => message.role === 'toolResult',
+      )!;
+      expect(envelope(text(result))).toMatchObject({
+        error: { name: 'Error', message: 'host failure' },
+        callsLeft: 99,
+      });
+      expect(text(result).split('\n').slice(1).join('\n')).toBe('actual body');
+    } finally {
+      await f.session.dispose();
+    }
+  });
+
+  it('[fault: provenance-lie] oversized effects keep their applied and persistence outcome explicit', async () => {
+    const effects = {
+      description: 'a'.repeat(20000),
+      applied: 'unknown',
+      persistence: 'failed',
+      context: 'b'.repeat(20000),
+    };
+    const f = await fixture([[call('shell', { command: 'probe' })], 'Done'], {
+      host: {
+        root: '/',
+        async close() {},
+        capabilities: () => ({
+          shell: async () => ({
+            status: 'cancelled',
+            exitCode: null,
+            stdout: 'body',
+            stderr: '',
+            worker: 'terminated',
+            effects,
+          }),
+        }),
+      },
+    });
+    try {
+      await f.session.send('inspect');
+      const result = (await f.session.exportTrace()).transcript.find(
+        (message) => message.role === 'toolResult',
+      )!;
+      expect(envelope(text(result))).toMatchObject({
+        effects: { applied: 'unknown', persistence: 'failed' },
+        metadataTruncated: true,
+      });
+      expect(new TextEncoder().encode(text(result)).length).toBeLessThanOrEqual(16384);
+    } finally {
+      await f.session.dispose();
+    }
+  });
+  it('[fault: lossy-aggregate] oversized patch/error metadata retains bounded explicit settlement facts', () => {
+    const applied = Array.from({ length: 2000 }, (_, index) => `changed-${index}.txt`);
+    const result = {
+      content: [{ type: 'text' as const, text: 'Patch failed after 2000 acknowledged changes' }],
+      details: {
+        status: 'failed',
+        applied,
+        error: {
+          description: 'x'.repeat(20000),
+          mutationOutcome: 'unknown',
+          effects: { applied: 'yes', persistence: 'failed' },
+          context: 'y'.repeat(20000),
+        },
+      },
+    };
+    toolReceipt(
+      result,
+      'apply_patch',
+      true,
+      true,
+      { callsLeft: 9, msLeft: 999 },
+      { maxToolCalls: 10, runTimeoutMs: 1000 },
+    );
+    const header = envelope(text(result));
+    expect(header).toMatchObject({
+      applied: {
+        count: 2000,
+        paths: ['changed-0.txt', 'changed-1.txt', 'changed-1999.txt'],
+        omitted: 1997,
+      },
+      error: { mutationOutcome: 'unknown', effects: { applied: 'yes', persistence: 'failed' } },
+      metadataTruncated: true,
+    });
+    expect(new TextEncoder().encode(text(result)).length).toBeLessThanOrEqual(16384);
   });
 });

@@ -1,5 +1,6 @@
 import type { AgentToolResult } from '@earendil-works/pi-agent-core';
 import { TOOL_RESULT_CAP_BYTES, capToolText } from './text.ts';
+import { hostError } from './workbench-host.ts';
 
 const encoder = new TextEncoder();
 const bytes = (text: string) => encoder.encode(text).length;
@@ -38,13 +39,51 @@ function existingEnvelope(text: string, details: unknown) {
       keys.every((key) => ['status', 'exitCode', 'worker', 'effects', 'error'].includes(key));
     if (
       (!preview && !shell) ||
-      keys.some((key) => canonical(metadata[key]) !== canonical(details[key]))
+      keys.some(
+        (key) =>
+          canonical(metadata[key]) !==
+          canonical(
+            key === 'error' && details[key] instanceof Error
+              ? hostError(details[key])
+              : details[key],
+          ),
+      )
     )
       return undefined;
     return { metadata, body: newline < 0 ? '' : text.slice(newline + 1) };
   } catch {
     return undefined;
   }
+}
+
+function settlement(value: unknown): Record<string, unknown> {
+  if (!record(value)) return {};
+  const result: Record<string, unknown> = {};
+  for (const key of ['applied', 'persistence', 'mutationOutcome', 'code', 'name']) {
+    const field = value[key];
+    if (
+      (typeof field === 'string' && bytes(JSON.stringify(field)) <= 128) ||
+      (key === 'mutationOutcome' && field === null)
+    )
+      result[key] = field;
+  }
+  if (Array.isArray(value.applied)) {
+    const all = value.applied;
+    const indices = [...new Set([0, 1, all.length - 1])].filter(
+      (index) => index >= 0 && index < all.length,
+    );
+    const paths = indices
+      .map((index) => all[index])
+      .filter((path: unknown) => typeof path === 'string' && bytes(JSON.stringify(path)) <= 256);
+    result.applied = { count: all.length, paths, omitted: all.length - paths.length };
+  }
+  return result;
+}
+
+function effectsSummary(value: Record<string, unknown>): Record<string, unknown> {
+  const summary = settlement(value);
+  if (Object.keys(value).some((key) => !Object.hasOwn(summary, key))) summary.detailsOmitted = true;
+  return summary;
 }
 
 /** One final text boundary: intact JSON, stable body capacity, actual remaining counters. */
@@ -82,7 +121,9 @@ export function toolReceipt(
   const maximum = { callsLeft: limits.maxToolCalls, msLeft: limits.runTimeoutMs };
   const header = (meta: Record<string, unknown>, budget = maximum) =>
     JSON.stringify({ ...meta, ...budget });
-  if (bytes(header(metadata)) > 4096) {
+  // Keep every fitting field. Only an oversized heading needs a bounded projection;
+  // leave room for the body's head/tail and truncation notice.
+  if (bytes(header(metadata)) > TOOL_RESULT_CAP_BYTES - 257) {
     const raw = JSON.stringify(metadata);
     const important: Record<string, unknown> = {};
     for (const [key, values] of Object.entries({
@@ -96,11 +137,20 @@ export function toolReceipt(
       if (typeof metadata[key] === 'number' && Number.isFinite(metadata[key]))
         important[key] = metadata[key];
     if (metadata.exitCode === null) important.exitCode = null;
+    Object.assign(important, settlement(metadata));
+    if (record(metadata.effects)) important.effects = effectsSummary(metadata.effects);
+    if (record(metadata.error)) {
+      const error = settlement(metadata.error);
+      if (record(metadata.error.effects)) error.effects = effectsSummary(metadata.error.effects);
+      important.error = error;
+    }
     const shell = { ...important, metadataTruncated: true, metadata: '' };
+    // Keep settlement facts first; reserve quoted context after them.
+    const projectionBudget = Math.max(4096, bytes(header(shell)) + 1024);
     // JSON text has no raw controls; quoting its capped form expands at most 2x.
     metadata = {
       ...shell,
-      metadata: capToolText(raw, Math.floor((4096 - bytes(header(shell))) / 2)),
+      metadata: capToolText(raw, Math.floor((projectionBudget - bytes(header(shell))) / 2)),
     };
   }
   const body = capToolText(

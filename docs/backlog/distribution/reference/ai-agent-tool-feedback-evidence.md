@@ -98,3 +98,23 @@ an agent request. Missing files exist after build. Sequential isolated proof is
 Keep the original failure `/private/tmp/rifty-pr359-tool-feedback-real-lanes.log`.
 Sequential no-COI budget rerun PASS1/1 (1.7m), same code, no build overlap.
 All required smoke/budget cases now have passing execution evidence.
+
+## Final review F1/N1 reception
+
+F1 accepted: fixed4096-byte metadata cutoff removed fitting effects from model
+wire. Independent probe BASE5134bytes includes applied:unknown, HEAD2102bytes
+lost it. Added REDs at2500/6000-char padding plus oversized effect/patch/error
+settlement cases. Fallback now preserves fitting metadata; only oversized headers
+project bounded explicit applied/persistence/mutation outcomes, applied-path counts
+and exact bounded samples, with omission marked. Remaining context is labelled
+truncated; body capacity remains fixed for the configured budget widths.
+
+N1 accepted: shell producer serializes Error through hostError; envelope comparison
+now uses the same normalization. A single heading retains the real error message.
+
+- `/private/tmp/rifty-pr359-feedback-effects-red.log`:3 RED.
+- `/private/tmp/rifty-pr359-feedback-effects-overflow-red.log`:oversized provenance RED.
+- `/private/tmp/rifty-pr359-feedback-original-review-probe-green.log`:original independent probe now GREEN; HEAD5165bytes, unknownVisible=true, actual next wire equals receipt.
+- `/private/tmp/rifty-pr359-feedback-settlement-final.log`:35/35 (29 fault +6metrics).
+F1/N1 repair full gate25/25, no isolated rerun:
+`/private/tmp/rifty-pr359-feedback-effects-pr-check.log`; current types/lint pass.
