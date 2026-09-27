@@ -3,6 +3,7 @@ import {
   createAgentSession,
   createWorkbenchAgentHost,
 } from '../../../packages/agent/src/index.ts';
+import { modelCatalog } from '../../integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts';
 import { scriptedProvider } from './agent-scripted-provider.ts';
 import { currentProject } from './sealed-playground-workbench.ts';
 
@@ -14,8 +15,11 @@ export async function proveHistory() {
   ]);
   const first = createAgentSession({
     host: createWorkbenchAgentHost({ session: currentProject() }),
-    settings: { baseUrl: 'https://scripted.invalid/v1', model: 'old-model' },
-    fetch: original.fetch,
+    ...modelCatalog(
+      { baseUrl: 'https://scripted.invalid/v1', model: 'old-model' },
+      original.fetch,
+      undefined,
+    ),
   });
   first.subscribe((event) => {
     if (event.type === 'agent' && event.event.type === 'message_end')
@@ -31,8 +35,12 @@ export async function proveHistory() {
   ]);
   const options = {
     host: createWorkbenchAgentHost({ session: currentProject() }),
-    settings: { baseUrl: 'https://scripted.invalid/v1', model: 'new-model' },
-    fetch: provider.fetch,
+    ...modelCatalog(
+      { baseUrl: 'https://scripted.invalid/v1', model: 'new-model' },
+      provider.fetch,
+      undefined,
+    ),
+
     initialMessages: seed,
     maxToolCalls: 1,
   };

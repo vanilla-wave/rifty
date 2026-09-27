@@ -1,8 +1,9 @@
 import {
   type AgentRunLimits,
   type AgentSession,
-  type AgentSettings,
   createAgentSession,
+  createModels,
+  createOpenAIProvider,
   createSandboxAgentHost,
 } from '@riftydev/agent';
 import { type ToolchainSandbox, createSandbox } from '@riftydev/sdk';
@@ -26,7 +27,10 @@ async function snapshot(): Promise<FileTree> {
   return files;
 }
 const bench = {
-  async boot(files: FileTree, options: AgentSettings & AgentRunLimits) {
+  async boot(
+    files: FileTree,
+    options: { baseUrl: string; model: string; apiKey?: string } & AgentRunLimits,
+  ) {
     if (crossOriginIsolated) throw new Error('Benchmark no-COI page unexpectedly isolated');
     sandbox = await createSandbox({
       requireCrossOriginIsolation: false,
@@ -37,9 +41,29 @@ const bench = {
     for (const [path, text] of Object.entries(files)) await project.fs.writeFile(path, text);
     await sandbox.toolchain.install({ cwd: '/bench', registryUrl: '/npm-registry' });
     const { maxToolCalls, runTimeoutMs, ...settings } = options;
+    const models = createModels();
+    models.setProvider(
+      createOpenAIProvider({
+        id: 'rifty',
+        apiKey: settings.apiKey,
+        models: [
+          {
+            id: settings.model,
+            name: settings.model,
+            api: 'openai-completions',
+            provider: 'rifty',
+            baseUrl: settings.baseUrl,
+            contextWindow: 128_000,
+            maxTokens: 8192,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          },
+        ],
+      }),
+    );
     agent = createAgentSession({
       host: createSandboxAgentHost({ sandbox, project: { root: '/bench' }, mode: () => mode }),
-      settings,
+      models,
+      model: settings.model,
       maxToolCalls,
       runTimeoutMs,
     });

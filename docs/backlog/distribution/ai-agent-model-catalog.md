@@ -103,6 +103,8 @@ goal slices. Tool image results remain `agent.tool-image-result` ❌.
 
 ## Decisions
 
+ready-verdict: 2026-09-27 — Contract+RED @ b505c2ffd — `reference/ai-agent-model-catalog-contract-red.json`
+
 - Inherits goal decisions (catalog, setModel timing, entry defaults, sampling, public API and ADRs, tier). Carrier questions live on the goal map §Open questions.
 
 - 2026-09-27 — ADR-0471 records DEC-2 independent catalog decision; preparation covers I1/I2 only, mechanisms wait for I12.

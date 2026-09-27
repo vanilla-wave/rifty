@@ -1,6 +1,15 @@
 export type * from './types.ts';
 export type { AgentEvent, AgentMessage, AgentTool, StreamFn } from '@earendil-works/pi-agent-core';
-export { Type } from '@earendil-works/pi-ai';
+export { Type, createModels, createProvider } from '@earendil-works/pi-ai';
+export type {
+  Api,
+  Model,
+  Models,
+  Provider,
+  SimpleStreamOptions,
+  ImageContent,
+} from '@earendil-works/pi-ai';
+export { createOpenAIProvider, type OpenAIModel, type OpenAIProviderOptions } from './catalog.ts';
 
 export { createAgentSession } from './session.ts';
 export { createWorkbenchAgentHost } from './workbench-host.ts';

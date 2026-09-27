@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Create chat sessions through native pi model catalogs.
+
 - First pi skill/template command now shows the session refusal and preserves the draft; admission stays inside the run budget (ADR-0442).
 - Show loaded agent files, skills and diagnostics; /reload applies editor changes without a model request.
 - Chat refuses `/skill:<loaded skill>` and `/<reported .pi/prompts template>` with a notice; other `/`-text (paths, comments, unknown names) is forwarded to the model as in pi.

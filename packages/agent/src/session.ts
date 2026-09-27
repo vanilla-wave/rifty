@@ -1,7 +1,7 @@
 import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
-import type { Model, ToolResultMessage } from '@earendil-works/pi-ai';
-import { streamSimple } from '@earendil-works/pi-ai/api/openai-completions';
+import type { ToolResultMessage } from '@earendil-works/pi-ai';
 import { NotImplementedError } from '@riftydev/io';
+import { catalogSecrets, isOpenAIProvider, selectModel } from './catalog.ts';
 import { unsupportedChatCommand } from './chat-command.ts';
 import { restoreMessages } from './history.ts';
 import { PROMPT_PROFILE_ID, systemPrompt } from './prompt.ts';
@@ -24,31 +24,13 @@ function positiveInteger(value: number, name: string): number {
 
 export function createAgentSession(options: AgentSessionOptions): AgentSession {
   const { host } = options;
-  const hasSettings = options.settings !== undefined;
-  const hasCustomStream = options.streamFn !== undefined;
-  if (hasSettings === hasCustomStream)
-    throw new TypeError('Exactly one agent transport is required: settings or streamFn');
-  const settings = options.settings;
-  if (!hasSettings && options.fetch !== undefined)
-    throw new TypeError('Custom agent transport owns fetch through streamFn');
-  if (settings && !settings.model.trim()) throw new TypeError('Agent model is required');
-  const model: Model<'openai-completions'> | undefined = settings
-    ? {
-        id: settings.model,
-        name: settings.model,
-        api: 'openai-completions',
-        provider: 'rifty',
-        baseUrl: new URL(
-          settings.baseUrl,
-          typeof location === 'undefined' ? undefined : location.href,
-        ).href,
-        reasoning: false,
-        input: ['text'],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 128_000,
-        maxTokens: 8192,
-      }
-    : undefined;
+  if (!options.models || 'settings' in options || 'streamFn' in options || 'fetch' in options)
+    throw new TypeError(
+      'Agent requires a model catalog (models and model); legacy transports are removed',
+    );
+  let model = selectModel(options.models, options.model);
+  const requestDefaults = () => options.modelOptions?.[model.id] ?? {};
+  const secrets = new Set(catalogSecrets(options.models));
   const maxToolCalls = positiveInteger(options.maxToolCalls ?? 100, 'maxToolCalls');
   const runTimeoutMs = positiveInteger(options.runTimeoutMs ?? 180_000, 'runTimeoutMs');
   const initialMessages = restoreMessages(options.initialMessages);
@@ -117,30 +99,27 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
 
   const agent = new Agent({
     initialState: {
-      ...(model ? { model } : {}),
+      model,
+      thinkingLevel: requestDefaults().reasoning ?? 'off',
       ...refreshCapabilities(),
       messages: initialMessages,
     },
     toolExecution: 'sequential',
-    streamFn:
-      options.streamFn ??
-      ((selected, context, requestOptions) => {
-        if (!settings) throw new TypeError('Default agent transport settings are unavailable');
-        if (selected.api !== 'openai-completions')
-          throw new TypeError('Default transport requires openai-completions');
-        return streamSimple(selected as Model<'openai-completions'>, context, {
-          ...requestOptions,
-          apiKey: settings.apiKey || 'unused-no-auth-sentinel',
-          ...(settings.apiKey ? {} : { headers: { Authorization: null } }),
-          ...(options.fetch ? { fetch: options.fetch } : {}),
-          maxRetries: 0,
-        });
+    streamFn: (selected, context, requestOptions) =>
+      options.models.streamSimple(selected, context, {
+        ...requestOptions,
+        ...(options.modelOptions?.[selected.id] ?? {}),
+        maxRetries: 0,
       }),
     prepareNextTurnWithContext: (context) => {
       const refreshed = refreshCapabilities();
       agent.state.systemPrompt = refreshed.systemPrompt;
       agent.state.tools = refreshed.tools;
-      return { context: { ...context.context, ...refreshed } };
+      return {
+        model,
+        thinkingLevel: requestDefaults().reasoning ?? 'off',
+        context: { ...context.context, ...refreshed },
+      };
     },
     beforeToolCall: async () => {
       if (toolCalls < maxToolCalls && budgetReason === undefined) {
@@ -281,6 +260,15 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
   }
 
   return {
+    setModel(id) {
+      if (disposed) throw new Error('Agent session is disposed');
+      const selected = selectModel(options.models, id);
+      model = selected;
+      agent.state.model = model;
+      agent.state.thinkingLevel = requestDefaults().reasoning ?? 'off';
+      for (const secret of catalogSecrets(options.models)) secrets.add(secret);
+      emit({ type: 'model', model: model.id, provider: model.provider });
+    },
     status: () => status,
     detail: () => detail,
     async send(prompt) {
@@ -349,18 +337,24 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
           finalDiff = { error: error instanceof Error ? error.message : String(error) };
         }
       }
+      const { id: _id, headers: _headers, ...modelConfig } = model;
       const trace: AgentTrace = {
         version: 1,
         profile: PROMPT_PROFILE_ID,
-        config: settings
-          ? {
-              transport: 'openai-compatible',
-              baseUrl: model?.baseUrl ?? settings.baseUrl,
-              model: settings.model,
-              maxToolCalls,
-              runTimeoutMs,
-            }
-          : { transport: 'custom', maxToolCalls, runTimeoutMs },
+        config: {
+          ...modelConfig,
+          model: model.id,
+          transport: isOpenAIProvider(options.models.getProvider(model.provider))
+            ? 'openai-compatible'
+            : 'custom',
+          thinking: requestDefaults().reasoning ?? 'off',
+          ...(requestDefaults().temperature === undefined
+            ? {}
+            : { temperature: requestDefaults().temperature }),
+          samplingParams: { ...model.samplingParams, ...requestDefaults().samplingParams },
+          maxToolCalls,
+          runTimeoutMs,
+        },
         transcript: agent.state.messages,
         restoredMessageCount,
         events,
@@ -369,10 +363,12 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
         usage,
         finalDiff,
       };
-      const apiKey = settings?.apiKey;
-      const serialized = JSON.stringify(trace, (_key, value: unknown) =>
-        typeof value === 'string' && apiKey ? value.split(apiKey).join('[redacted]') : value,
-      );
+      const serialized = JSON.stringify(trace, (_key, value: unknown) => {
+        if (typeof value !== 'string') return value;
+        let redacted = value;
+        for (const secret of secrets) redacted = redacted.split(secret).join('[redacted]');
+        return redacted;
+      });
       return JSON.parse(serialized) as AgentTrace;
     },
     async dispose() {

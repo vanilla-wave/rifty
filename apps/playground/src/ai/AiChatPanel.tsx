@@ -7,6 +7,8 @@ import {
   type AgentStatus,
   type AgentTrace,
   createAgentSession,
+  createModels,
+  createOpenAIProvider,
 } from '@riftydev/agent';
 import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
@@ -262,10 +264,30 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
     const selected = validateSettings(settings());
     const host = createPlaygroundAgentHost(props);
     try {
-      const { maxToolCalls, runTimeoutMs, ...transportSettings } = selected;
+      const { maxToolCalls, runTimeoutMs } = selected;
+      const models = createModels();
+      models.setProvider(
+        createOpenAIProvider({
+          id: 'rifty',
+          apiKey: selected.apiKey,
+          models: [
+            {
+              id: selected.model,
+              name: selected.model,
+              api: 'openai-completions',
+              provider: 'rifty',
+              baseUrl: selected.baseUrl,
+              contextWindow: 128_000,
+              maxTokens: 8192,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            },
+          ],
+        }),
+      );
       const agent = createAgentSession({
         host,
-        settings: transportSettings,
+        models,
+        model: selected.model,
         maxToolCalls,
         runTimeoutMs,
       });

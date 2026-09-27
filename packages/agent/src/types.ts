@@ -1,5 +1,5 @@
-import type { AgentEvent, AgentMessage, AgentTool, StreamFn } from '@earendil-works/pi-agent-core';
-import type { ProviderRequestOptions } from '@earendil-works/pi-ai';
+import type { AgentEvent, AgentMessage, AgentTool } from '@earendil-works/pi-agent-core';
+import type { Api, Model, Models, SimpleStreamOptions } from '@earendil-works/pi-ai';
 import type { SandboxProjectOptions, ToolchainSandbox } from '@riftydev/sdk';
 import type { ProjectSession, ProjectTerminal } from '@riftydev/workbench';
 import type { PlaygroundSessionTools } from '@riftydev/workbench/playground';
@@ -68,12 +68,6 @@ export interface SandboxAgentHostOptions {
   readonly preview?: () => AgentPreview | undefined;
 }
 
-export interface AgentSettings {
-  readonly baseUrl: string;
-  readonly model: string;
-  readonly apiKey?: string;
-}
-
 export interface AgentRunLimits {
   readonly maxToolCalls?: number;
   readonly runTimeoutMs?: number;
@@ -124,23 +118,18 @@ export interface AgentSessionCommonOptions extends AgentRunLimits {
   readonly userSkills?: readonly AgentSkill[];
 }
 
-export type AgentSessionOptions = AgentSessionCommonOptions &
-  (
-    | {
-        readonly settings: AgentSettings;
-        readonly fetch?: ProviderRequestOptions['fetch'];
-        readonly streamFn?: never;
-      }
-    | {
-        readonly streamFn: StreamFn;
-        readonly settings?: never;
-        readonly fetch?: never;
-      }
-  );
+export interface AgentSessionOptions extends AgentSessionCommonOptions {
+  readonly models: Models;
+  readonly model: string;
+  readonly modelOptions?: Readonly<
+    Record<string, Pick<SimpleStreamOptions, 'reasoning' | 'temperature' | 'samplingParams'>>
+  >;
+}
 
 export type AgentStatus = 'idle' | 'running' | 'done' | 'error' | 'aborted' | 'budget-exceeded';
 
 export type AgentSessionEvent =
+  | { readonly type: 'model'; readonly model: string; readonly provider: string }
   | { readonly type: 'resources'; readonly report: AgentResourceReport }
   | { readonly type: 'agent'; readonly event: AgentEvent }
   | { readonly type: 'status'; readonly status: AgentStatus; readonly detail?: string }
@@ -159,19 +148,14 @@ export type AgentSessionEvent =
 export interface AgentTrace {
   readonly version: 1;
   readonly profile: string;
-  readonly config:
-    | {
-        readonly transport: 'openai-compatible';
-        readonly baseUrl: string;
-        readonly model: string;
-        readonly maxToolCalls: number;
-        readonly runTimeoutMs: number;
-      }
-    | {
-        readonly transport: 'custom';
-        readonly maxToolCalls: number;
-        readonly runTimeoutMs: number;
-      };
+  readonly config: Omit<Model<Api>, 'id' | 'headers'> & {
+    readonly model: string;
+    readonly transport: 'openai-compatible' | 'custom';
+    readonly thinking: string;
+    readonly temperature?: number;
+    readonly maxToolCalls: number;
+    readonly runTimeoutMs: number;
+  };
   readonly transcript: readonly AgentMessage[];
   /** The first N transcript messages were restored, not emitted by this session. */
   readonly restoredMessageCount: number;
@@ -183,6 +167,7 @@ export interface AgentTrace {
 }
 
 export interface AgentSession {
+  setModel(id: string): void;
   status(): AgentStatus;
   detail(): string | undefined;
   /** A new prompt continues the retained history, including prior tool results. */

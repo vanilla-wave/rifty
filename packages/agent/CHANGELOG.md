@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Breaking: native pi Models catalog replaces settings/streamFn session forms; per-model defaults, active setModel and effective redacted trace.
+
 - Restore native `initialMessages` in fresh sessions; validate required native fields and tool pairs, expose trace provenance and count only new-run usage (ADR-0466).
 
 - Refuse pi-expandable commands inside `send` after resource discovery and budget/cancellation checks; first and later sends report the same error without model dispatch (ADR-0442).

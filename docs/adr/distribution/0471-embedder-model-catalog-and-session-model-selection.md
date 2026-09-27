@@ -32,7 +32,7 @@ Independent DEC-2 decision: `catalog_decision`, pi 0.85.1 executable probes in
    headers are redacted from exported content; custom transports keep
    ADR-0436's responsibility for credentials/metadata they privately introduce.
 5. Subsequent goal slices add `send(prompt, images?)`, retry/compaction options,
-   recipe=false and context-exceeded. They do not ship before I12's baseline.
+   recipe=false and context-exceeded. Mechanisms do not ship before I12's baseline; images may precede it.
    Images follow native ImageContent; binary input throws NotImplementedError.
 
 ## Alternatives

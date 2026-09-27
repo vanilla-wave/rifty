@@ -1,18 +1,28 @@
 # Agent
 
 Framework-free Pi coding agent over public rifty hosts. Runtime packages do not
-depend on it. ADR-0424/0436.
+depend on it. ADR-0424/0436/0471.
 
 ```ts
-import { createAgentSession, createWorkbenchAgentHost } from '@riftydev/agent';
+import { createAgentSession, createWorkbenchAgentHost, createModels, createOpenAIProvider } from '@riftydev/agent';
+
+const models = createModels();
+models.setProvider(createOpenAIProvider({
+  id: 'local', apiKey,
+  models: [{
+    id: model, name: model, provider: 'local', api: 'openai-completions', baseUrl,
+    contextWindow: 128_000, maxTokens: 8192,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  }],
+}));
 
 const agent = createAgentSession({
   host: createWorkbenchAgentHost({ session: projectSession }),
-  settings: { baseUrl, model },
+  models, model,
   maxToolCalls: 100,
   runTimeoutMs: 180_000,
   instructions: ['Follow the project coding conventions.'],
-  // tools: native Pi AgentTool[]; fetch is consumer-owned.
+  // tools: native Pi AgentTool[]; provider fetch is consumer-owned.
 });
 const unsubscribe = agent.subscribe(renderEvent);
 await agent.send('Inspect the project and fix the build.');
@@ -21,19 +31,18 @@ await agent.dispose();
 unsubscribe();
 ```
 
-For a consumer-owned model/wire/auth path, pass Pi's native `StreamFn` without
-OpenAI-compatible settings. It receives the current system prompt, messages,
-tools and request `AbortSignal`; close over the actual model/transport and return
-an `AssistantMessageEventStream` carrying its real response metadata.
+The catalog is native pi `Models`: register providers with `setProvider` and
+`createProvider`, or use the built-in `createOpenAIProvider`. The latter accepts
+native OpenAI models (reasoning defaults false, input defaults ['text']); limits
+are required. Custom providers own wire/auth and return native streams with real
+response metadata. The old session-level settings/streamFn/fetch forms are removed.
 
-```ts
-const agent = createAgentSession({
-  host,
-  streamFn: (_unusedModel, context, options) =>
-    streamThroughConsumerModel(context, { signal: options?.signal }),
-  tools: domainTools,
-});
-```
+`modelOptions: { [modelId]: { reasoning: 'medium', temperature: 1,
+samplingParams: { top_p: 0.95 } } }` supplies pi request defaults. Thinking defaults
+off; absent sampling fields use provider defaults. Native Model.samplingParams
+also applies. `agent.setModel(id)` preserves history and affects the next request,
+including during an active tool turn; missing or ambiguous ids throw. Subscribe
+to `type: 'model'` for switches. No automatic fallback.
 
 Restore a conversation by passing native Pi messages captured from `message_end`:
 
@@ -41,7 +50,7 @@ Restore a conversation by passing native Pi messages captured from `message_end`
 import type { AgentMessage } from '@riftydev/agent';
 
 const history: AgentMessage[] = loadNativeMessages(); // host-owned storage/decoding
-const agent = createAgentSession({ host, settings: { baseUrl, model }, initialMessages: history });
+const agent = createAgentSession({ host, models, model, initialMessages: history });
 agent.subscribe(event => {
   if (event.type === 'agent' && event.event.type === 'message_end') {
     history.push(event.event.message);
@@ -51,7 +60,7 @@ agent.subscribe(event => {
 await agent.send('Continue from the saved work.');
 ```
 
-`initialMessages` also works with `streamFn`; creation copies the history, so later
+`initialMessages` works with every catalog provider; creation copies history, so later
 caller mutations cannot alter it. Supply native Pi 0.85.1 `user`, `assistant` and
 `toolResult` messages with numeric timestamps and native content. Calls must have
 matching id/name results in the immediately following tool-result group. Missing,
@@ -66,7 +75,7 @@ Pi owns provider conversion. Storage, JSON decoding and migrations stay with the
 `reset()` clears restored and new messages. Also clear the host's stored history on
 conversation/project reset. `exportTrace().restoredMessageCount` marks the restored
 prefix of `transcript`; events, timings, aggregate usage and per-run limits describe
-only new runs. Reset clears that count. Trace export still redacts the settings key;
+only new runs. Reset clears that count. Trace export redacts built-in keys and catalog headers;
 persist native messages rather than the diagnostic trace when exact history matters.
 
 The session owns its host handle. The Workbench adapter opens/closes one
@@ -113,12 +122,12 @@ diagnostic tools are offered only when provided. Optional Workbench companion:
 `createBrowserAgentPreview({url: () => preview.url, frame: () => iframe})`;
 omitting `frame` offers fetch only. Inaccessible documents fail loudly.
 
-The settings transport is OpenAI-compatible chat completions. `apiKey` is
-optional and memory-only; absent means no Authorization header. Consumers own
-auth and request policy in their supplied fetch or full `streamFn`. No key is
-saved in trace config; supplied settings-key strings are redacted from exported
-values. Custom trace config identifies custom transport; actual model/provider/API
-metadata comes from retained assistant messages.
+The built-in provider uses OpenAI-compatible chat completions. `apiKey` is
+optional and memory-only; absent means no Authorization header. Trace config
+records the effective selected model, limits and request defaults; built-in keys
+and catalog headers are redacted throughout export. Custom providers remain
+responsible for private credentials they put in their returned messages.
+Actual assistant model/provider/API metadata stays in the transcript.
 
 Rifty-owned shell results begin with JSON status/exit/error/worker/effects;
 preview fetch begins with HTTP status. The envelope is included inside the same

@@ -9,6 +9,7 @@ import {
   createBrowserAgentPreview,
   createWorkbenchAgentHost,
 } from '../../../packages/agent/src/index.ts';
+import { modelCatalog } from '../../integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts';
 import { type ScriptedReply, scriptedProvider } from './agent-scripted-provider.ts';
 import { currentProject, currentSessionTools } from './sealed-playground-workbench.ts';
 
@@ -115,8 +116,8 @@ function setup(
   };
   const session = createAgentSession(
     customStream
-      ? { ...common, streamFn }
-      : { ...common, settings: { ...settings, apiKey }, fetch: provider.fetch },
+      ? { ...common, ...modelCatalog(undefined, undefined, streamFn) }
+      : { ...common, ...modelCatalog({ ...settings, apiKey }, provider.fetch, undefined) },
   );
   session.subscribe((event) => events.push(event));
   return { session, provider, events };
@@ -306,8 +307,7 @@ export async function proveCompanion() {
   ]);
   const session = createAgentSession({
     host: createWorkbenchAgentHost({ session: project, companion }),
-    settings,
-    fetch: provider.fetch,
+    ...modelCatalog(settings, provider.fetch, undefined),
   });
   try {
     await session.send('Inspect diagnostics.');
@@ -338,7 +338,10 @@ export async function provePreview() {
     [{ name: 'preview_query', args: { selector: 'output' } }],
     'Checked.',
   ]);
-  const session = createAgentSession({ host, settings, fetch: provider.fetch });
+  const session = createAgentSession({
+    host,
+    ...modelCatalog(settings, provider.fetch, undefined),
+  });
   try {
     await session.send('Check and interact with the host preview.');
     return {
@@ -375,22 +378,25 @@ export async function proveTimeBudget() {
   let aborted = false;
   const session = createAgentSession({
     host,
-    settings,
+    ...modelCatalog(
+      settings,
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          if (!signal) {
+            reject(new Error('Provider signal absent'));
+            return;
+          }
+          const onAbort = () => {
+            aborted = true;
+            reject(new DOMException('Aborted', 'AbortError'));
+          };
+          if (signal.aborted) onAbort();
+          else signal.addEventListener('abort', onAbort, { once: true });
+        }),
+      undefined,
+    ),
     runTimeoutMs: 100,
-    fetch: (_input, init) =>
-      new Promise<Response>((_resolve, reject) => {
-        const signal = init?.signal;
-        if (!signal) {
-          reject(new Error('Provider signal absent'));
-          return;
-        }
-        const onAbort = () => {
-          aborted = true;
-          reject(new DOMException('Aborted', 'AbortError'));
-        };
-        if (signal.aborted) onAbort();
-        else signal.addEventListener('abort', onAbort, { once: true });
-      }),
   });
   try {
     await session.send('Wait for provider.');
@@ -527,8 +533,7 @@ export async function provePartialStreamStop() {
   };
   const session = createAgentSession({
     host: createWorkbenchAgentHost({ session: currentProject() }),
-    settings,
-    fetch: transport,
+    ...modelCatalog(settings, transport, undefined),
   });
   let stopping: Promise<void> | undefined;
   session.subscribe((event) => {

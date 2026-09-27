@@ -148,6 +148,9 @@ describe('embedder model catalog', () => {
       (session as typeof session & { setModel(id: string): void }).setModel('small');
       await session.send('continue');
       expect(session.status()).toBe('done');
+      expect(
+        f.wire.requests.map((request) => (request.body as unknown as { model: string }).model),
+      ).toEqual(['small', 'large', 'small']);
       expect(JSON.stringify(f.wire.requests[2]?.body.messages)).toContain(
         'prior tool result retained',
       );
@@ -187,7 +190,7 @@ describe('embedder model catalog', () => {
   });
 
   it('redacts provider credentials echoed in errors and retains effective model metadata', async () => {
-    const f = fixture([{ error: 'failed catalog-secret' }]);
+    const f = fixture([{ error: 'failed catalog-secret header-secret' }]);
     const factory = (
       publicApi as unknown as {
         createOpenAIProvider(options: {
@@ -202,7 +205,7 @@ describe('embedder model catalog', () => {
     f.models.setProvider(
       factory({
         id: 'local',
-        models: [entry('small')],
+        models: [{ ...entry('small'), headers: { 'X-Api-Key': 'header-secret' } }],
         apiKey: 'catalog-secret',
         fetch: f.wire.fetch,
       }),
@@ -217,6 +220,7 @@ describe('embedder model catalog', () => {
       expect(session.status()).toBe('error');
       const trace = await session.exportTrace();
       expect(JSON.stringify(trace)).not.toContain('catalog-secret');
+      expect(JSON.stringify(trace)).not.toContain('header-secret');
       expect(trace.config).toMatchObject({
         model: 'small',
         provider: 'local',
