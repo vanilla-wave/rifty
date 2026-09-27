@@ -368,6 +368,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0473 | Continue agent sessions with native retry and compaction |
 | 0474 | Project native compaction history from session receipts |
 | 0475 | Feed tool outcomes and shared workflow back to the model |
+| 0478 | Compare fixed-config agent benchmark runs |
 
 ## Superseded (removed)
 
