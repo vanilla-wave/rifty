@@ -148,3 +148,96 @@ export function redact(text: string, keys?: string | readonly string[]): string 
   }
   return result;
 }
+
+/** Serialize payload strings privately without corrupting numbers or protocol tags. */
+export function redactJson(value: unknown, secrets: readonly string[], space?: number): string {
+  // Self-contained: the native CLI extension embeds this same serializer.
+  const tags: Record<string, readonly string[]> = {
+    type: [
+      'agent_start',
+      'agent_end',
+      'turn_start',
+      'turn_end',
+      'message_start',
+      'message_update',
+      'message_end',
+      'tool_execution_start',
+      'tool_execution_update',
+      'tool_execution_end',
+      'auto_retry_start',
+      'auto_retry_end',
+      'compaction_start',
+      'compaction_end',
+      'retry',
+      'compaction',
+      'repeated-call',
+      'agent',
+      'status',
+      'model',
+      'resources',
+      'capabilities',
+      'output',
+      'start',
+      'done',
+      'error',
+      'text_start',
+      'text_delta',
+      'text_end',
+      'thinking_start',
+      'thinking_delta',
+      'thinking_end',
+      'toolcall_start',
+      'toolcall_delta',
+      'toolcall_end',
+      'text',
+      'thinking',
+      'toolCall',
+      'image',
+    ],
+    role: ['user', 'assistant', 'toolResult', 'compactionSummary'],
+    stopReason: ['pending', 'stop', 'length', 'toolUse', 'error', 'aborted', 'deferred'],
+    agentStatus: [
+      'idle',
+      'running',
+      'done',
+      'error',
+      'aborted',
+      'budget-exceeded',
+      'context-exceeded',
+    ],
+    status: [
+      'idle',
+      'running',
+      'done',
+      'error',
+      'aborted',
+      'budget-exceeded',
+      'context-exceeded',
+      'exited',
+      'cancelled',
+      'failed',
+    ],
+    outcome: ['pass', 'fail', 'budget-exceeded', 'context-exceeded'],
+    lane: ['rifty', 'rifty-no-coi', 'local-reference'],
+    stage: ['setup', 'agent', 'judge', 'snapshot'],
+    budget: ['maxToolCalls', 'runTimeoutMs'],
+    phase: ['start', 'end'],
+  };
+  return JSON.stringify(
+    value,
+    (field: string, item: unknown) => {
+      if (field === 'headers' && item && typeof item === 'object' && !Array.isArray(item))
+        return Object.fromEntries(
+          Object.entries(item).map(([name, header]) => [
+            name,
+            typeof header === 'string' ? '[REDACTED]' : header,
+          ]),
+        );
+      if (typeof item !== 'string' || tags[field]?.includes(item)) return item;
+      let text = item;
+      for (const secret of secrets) if (secret) text = text.replaceAll(secret, '[REDACTED]');
+      return text;
+    },
+    space,
+  );
+}

@@ -1,5 +1,5 @@
 import { getAgentPromptProfile } from '@riftydev/agent';
-import type { Endpoint, Limits } from '../config.ts';
+import { type Endpoint, type Limits, redactJson } from '../config.ts';
 
 /** Public Pi extension hooks own admission and abort; no copied agent loop. */
 export function nativeExtension(directory: string, endpoint: Endpoint, limits: Limits): string {
@@ -11,7 +11,7 @@ export default function(pi) {
   const key=${endpoint.envKey ? `process.env[${JSON.stringify(endpoint.envKey)}]` : 'undefined'};
   const headers=JSON.parse(process.env.RIFTY_BENCH_MODEL_HEADERS ?? '{}');
   const secrets=[key,...Object.values(headers)].flatMap(value=>typeof value==='string' && value.length ? [value,value.trim(),value.trim().replace(/^Bearer\\s+/i,'')] : []).filter(Boolean);
-  const clean=value=>JSON.stringify(value,(_field,item)=>typeof item==='string' ? secrets.reduce((text,secret)=>text.replaceAll(secret,'[REDACTED]'),item) : item);
+  const clean=value=>(${redactJson.toString()})(value,secrets);
   let calls=0; let timer; let budget=null;
   const save=()=>writeFileSync(directory+'/native-admission.json',clean({calls,budget}));
   pi.on('before_agent_start', event=> {

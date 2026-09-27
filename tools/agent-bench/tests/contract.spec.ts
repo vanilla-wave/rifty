@@ -498,6 +498,56 @@ for (const lane of ['rifty', 'local-reference'] as const) {
 }
 
 for (const lane of ['rifty', 'local-reference'] as const) {
+  test(`${lane} preserves report numbers and status for numeric and protocol-like headers`, async () => {
+    const model = await agentModelServer([{ error: 'Private echo: 1 error "' }]);
+    const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-header-protocol-'));
+    const config = join(out, 'input-config.json');
+    await writeFile(
+      config,
+      JSON.stringify({
+        endpoint: catalogEndpoint(model.baseUrl, {
+          headers: { 'X-Number': '1', 'X-Tag': 'error', 'X-Quote': '"' },
+        }),
+      }),
+    );
+    try {
+      const result = await cli([
+        'run',
+        '--lane',
+        lane,
+        '--task',
+        'add-search',
+        '--runs',
+        '1',
+        '--config',
+        config,
+        '--output',
+        out,
+      ]);
+      expect(result.code, result.output).toBe(0);
+      expect(model.headers[0]).toMatchObject({ 'x-number': '1', 'x-tag': 'error', 'x-quote': '"' });
+      const report = JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as Report;
+      const run = report.runs[0]!;
+      expect(run).toMatchObject({
+        runIndex: 1,
+        agentStatus: 'error',
+        outcome: 'fail',
+        inputTokens: 0,
+        outputTokens: 0,
+        toolCalls: 0,
+      });
+      const trace = JSON.parse(await readFile(join(out, run.artifacts.trace), 'utf8'));
+      expect(JSON.stringify(trace)).not.toContain('Private echo: 1 error');
+      if (lane === 'rifty') expect(trace.status).toBe('error');
+      else
+        expect(trace.events.some((event: { type: string }) => event.type === 'agent_end')).toBe(
+          true,
+        );
+    } finally {
+      await model.close();
+    }
+  });
+
   test(`${lane} delivers catalog headers without copying their secrets into artifacts`, async () => {
     const secret = 'CATALOG_HEADER_ONLY_SECRET';
     const model = await agentModelServer([{ error: `Rejected ${secret}` }]);

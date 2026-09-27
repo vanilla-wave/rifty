@@ -33,7 +33,9 @@ are not sent. All lanes receive the same declared entry. The checked-in
 
 Optional `endpoint.envKey` names an existing key environment variable; the value
 never goes in config. Runs with keys or model headers omit raw Playwright traces/screenshots (these
-can contain provider errors verbatim); textual artifacts are redacted. Default
+can contain provider errors verbatim); textual artifacts are redacted. JSON
+numbers and public protocol tags stay intact; header values and payload strings
+are masked. Native metrics are derived before masking. Default
 playground port5289; override `playgroundPort` in config.
 
 `--lane all|rifty|rifty-no-coi|local-reference`, `--task <slug>`, `--runs N`.

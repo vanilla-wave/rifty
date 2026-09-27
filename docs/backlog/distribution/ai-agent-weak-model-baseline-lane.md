@@ -84,6 +84,7 @@ challenge: 2026-09-27 — inherits `epics/agent-weak-models/goal.md` §Challenge
 | edit/argument failure × metrics | real error counters, no action change | catalog-metrics.test.ts real Agent/MemoryVfs | → I12 |
 | provider context error × report | context-exceeded, original error status retained | catalog-metrics.test.ts and CLI contract | → I12 |
 | provider failure × run | original artifacts/manual failure classification | existing contract.spec.ts | → I12 + ADR-0434 |
+| corrupt-input/provenance-lie × credential serialization | valid JSON numbers and protocol tags; headers/payload strings private; metrics derived before masking | redaction.test.ts, real browser/native header contract | → I1 + I12 + ADR-0472 |
 
 ## Out of scope
 
@@ -92,8 +93,11 @@ Unsupported node-endpoint/no-COI stays explicitly excluded (ADR-0434).
 
 ## Decisions
 
+- re-cut: 2026-09-27 — observed credential-redaction defect in benchmark and Agent trace repaired in this unit; unchanged I1/I12 obligations, baseline runtime kept isolated — trace: none
+
 - Inherits goal decisions (first baseline endpoint, bench lane order, tier). The re-run is slice 12 (`distribution/ai-agent-weak-model-rerun`).
 
 - 2026-09-27 — RDY-8: private config/report measurement tooling over already-certified I1/I4 behavior; reuse those reviews, execute config/metrics RED and real smoke, then independent Final+GREEN. No new runtime promise or copied loop.
 - 2026-09-27 — ADR-0472 pins native pi overflow classification and metadata/privacy carriers; protocol parameters verified through public ModelRuntime before implementation.
 - 2026-09-27 — proxy launcher ignores CLI flags: a temporary copy sets handler codexVersion 0.155.1 on port 10539; model list includes gpt-6-luna and direct request returned OK. Original launcher unchanged.
+- 2026-09-27 — RDY-8 observed-defect route: raw header collision reproducer + RED, repair, independent Final+GREEN; no new continuation behavior.

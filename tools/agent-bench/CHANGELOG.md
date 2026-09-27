@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve JSON numbers and native protocol tags during credential redaction; derive native metrics before masking payload strings.
+
 - Accept native catalog endpoint/defaults in every lane; report full input/output tokens, continuation/tool-failure counters and separate context-exceeded outcomes.
 
 - Migrate browser lane session creation to native pi model catalogs.

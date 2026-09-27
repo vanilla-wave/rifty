@@ -7,6 +7,7 @@ import { restoreMessages } from './history.ts';
 import { PROMPT_PROFILE_ID, systemPrompt } from './prompt.ts';
 import { loadResources } from './resources.ts';
 import { isToolFailure, standardTools, wrapTool } from './tools.ts';
+import { redactTrace } from './trace.ts';
 import type {
   AgentResourceReport,
   AgentSession,
@@ -385,13 +386,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
         usage,
         finalDiff,
       };
-      const serialized = JSON.stringify(trace, (_key, value: unknown) => {
-        if (typeof value !== 'string') return value;
-        let redacted = value;
-        for (const secret of secrets) redacted = redacted.split(secret).join('[redacted]');
-        return redacted;
-      });
-      return JSON.parse(serialized) as AgentTrace;
+      return redactTrace(trace, secrets);
     },
     async dispose() {
       if (disposed) return;

@@ -161,7 +161,7 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
         const events = stdout
           .split('\n')
           .filter(Boolean)
-          .map((line) => JSON.parse(redact(line, secrets)) as Record<string, unknown>);
+          .map((line) => JSON.parse(line) as Record<string, unknown>);
         const end = events.findLast((event) => event.type === 'agent_end') as
           | {
               messages?: {
@@ -202,7 +202,7 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
             requests: requests
               .split('\n')
               .filter(Boolean)
-              .map((line) => JSON.parse(redact(line, secrets))),
+              .map((line) => JSON.parse(line)),
             admission,
             exitCode: code,
             stderr: redact(stderr, secrets),

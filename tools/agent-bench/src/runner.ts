@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { chromium } from '@playwright/test';
 import { getAgentPromptProfile } from '@riftydev/agent';
-import { type Config, readKey, redact, secretValues, taskSet } from './config.ts';
+import { type Config, readKey, redact, redactJson, secretValues, taskSet } from './config.ts';
 import { diffTrees } from './files.ts';
 import { prepareLocal } from './lanes/local-reference.ts';
 import { prepareNoCoi } from './lanes/rifty-no-coi.ts';
@@ -51,8 +51,7 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
   const hosts = await services(lanes, config.playgroundPort, output);
   const browser = await chromium.launch();
   report.header.versions.chromium = browser.version();
-  const persist = () =>
-    writeReport(output, JSON.parse(redact(JSON.stringify(report), secrets)) as Report);
+  const persist = () => writeReport(output, JSON.parse(redactJson(report, secrets)) as Report);
   try {
     for (const task of tasks)
       for (const lane of lanes) {
@@ -92,10 +91,7 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
               : lane === 'rifty-no-coi'
                 ? prepareNoCoi(input)
                 : prepareLocal(input));
-            await writeFile(
-              join(dir, 'before.json'),
-              redact(JSON.stringify(prepared.before, null, 2), secrets),
-            );
+            await writeFile(join(dir, 'before.json'), redactJson(prepared.before, secrets, 2));
             record.artifacts.before = `${name}/before.json`;
             if (prepared.workspace)
               record.artifacts.workspace = relative(output, prepared.workspace);
@@ -113,10 +109,7 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
             record.elapsedMs = Date.now() - started;
             const { trace, ...metrics } = observation;
             Object.assign(record, metrics);
-            await writeFile(
-              join(dir, 'trace.json'),
-              redact(JSON.stringify(trace, null, 2), secrets),
-            );
+            await writeFile(join(dir, 'trace.json'), redactJson(trace, secrets, 2));
             record.stage = 'judge';
             try {
               if (tracing) await prepared.context.tracing.group(`judge:${task.id}`);
@@ -130,10 +123,7 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
             }
             record.stage = 'snapshot';
             const after = await prepared.snapshot();
-            await writeFile(
-              join(dir, 'after.json'),
-              redact(JSON.stringify(after, null, 2), secrets),
-            );
+            await writeFile(join(dir, 'after.json'), redactJson(after, secrets, 2));
             record.artifacts.after = `${name}/after.json`;
             record.finalDiff = diffTrees(prepared.before, after);
             record.outcome =
@@ -156,10 +146,7 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
             if (prepared)
               try {
                 const after = await prepared.snapshot();
-                await writeFile(
-                  join(dir, 'after.json'),
-                  redact(JSON.stringify(after, null, 2), secrets),
-                );
+                await writeFile(join(dir, 'after.json'), redactJson(after, secrets, 2));
                 record.artifacts.after = `${name}/after.json`;
                 record.finalDiff = diffTrees(prepared.before, after);
               } catch (snapshotError) {

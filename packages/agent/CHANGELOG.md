@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Keep native trace statuses and event/message tags valid when a catalog header matches a protocol word; redact payloads and header values.
+
 - Accept native image prompts, including image-only input; reject text-only/binary mismatches before dispatch.
 
 - Breaking: native pi Models catalog replaces settings/streamFn session forms; per-model defaults, active setModel and effective redacted trace.

@@ -49,3 +49,37 @@ runs per supported lane; no mechanisms, no task/judge changes.
   equality and every planted-defect/common-judge assertion remain unchanged.
 - Native compaction summary test: real pi AgentSession.compact emitted its
   completed event; input/output counts equal the actual summary requests.
+
+## Review discovery — credential serialization
+
+Independent baseline_final_review: header `X-Version: "1"` made raw string
+replacement corrupt JSON numbers; header `"` broke JSON syntax. Own sweep:
+real Agent/native provider with header `X-Tag: error`, HTTP400, returned
+`session.status()=error` but `exportTrace().status=[redacted]` and a masked
+assistant stopReason. Existing I1/I12 violated; rifty-fix/RDY-8 repair.
+
+Boundary: owned in-process projection, corrupt-input/provenance-lie. Siblings:
+Agent exportTrace; benchmark report/trace/before/after; native JSONL events and
+request/admission files. Transport loss/duplicate/reorder physically excluded
+at this serialization boundary; no network recovery changed.
+
+- Bench RED: 3 fail/1 pass, numeric/quote/protocol headers;
+  /private/tmp/rifty-pr359-redaction-red.log.
+- Product RED: four real Agent protocol collisions;
+  /private/tmp/rifty-pr359-trace-redaction-red.log.
+- Repair: stringify strings structurally; public protocol tags retain their
+  meaning, explicit headers always mask values. Native metrics read raw events
+  before export. Native extension embeds the same private benchmark serializer;
+  Agent owns its public trace policy. One cross-boundary regression gate
+  `tools/agent-bench/src/redaction.test.ts` covers both policies, without a
+  benchmark-only public API or new runtime dependency.
+- 10 focused tests pass; history/catalog/metrics suite also passed (45 before
+  two extra privacy guards). Each bench/Agent tag/header guard was removed in
+  isolation: all four mutants failed actual assertions; original files restored.
+  Logs: /private/tmp/rifty-pr359-redaction-revert-{bench,agent}-{tags,headers}.log.
+- Native emitted extension loaded by real Pi CLI with `X-Test: 1`; retry and
+  compaction probes plus admission JSON passed. Source/output:
+  /private/tmp/rifty-pr359-native-redaction-probe.{mjs,out}.
+- Repair prepared in isolated /private/tmp/rifty-pr359-bench-repair while the
+  42-run baseline continued on clean 0fab1a861; no measured mechanism changed.
+  Full gate and browser/native protocol-header contract remain before review.
