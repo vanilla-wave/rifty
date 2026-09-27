@@ -30,7 +30,6 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `ai-sandbox-reference-demo.md` | draft | open-bolt-ai-sandbox-demo | open client-side AI sandbox (eval+install slice; live preview question remains) |
 | `landing-blog-surface.md` | ready | wasi-in-browser-showcase | rifty.dev/blog route + first WASI post |
 | `ai-agent-budget-visibility.md` | draft | agent-weak-models | default 600 s, `callsLeft`/`msLeft` in every rifty tool envelope |
-| `ai-agent-context-compaction.md` | ready | agent-weak-models | native retry/compaction, retained history/full usage, chat markers, context-exceeded |
 | `ai-agent-edit-failure-diagnostics.md` | draft | agent-weak-models | locating failure text for edit_file match failures, exact matching kept |
 | `ai-agent-repeated-call-guard.md` | draft | agent-weak-models | third identical call + result → visible steering message |
 | `ai-agent-verification-feed.md` | draft | agent-weak-models | Workbench diagnostics appended to mutation results |

@@ -9,9 +9,6 @@ item ordering (goal §Decisions "shared bench order").
 
 5. `distribution/ai-agent-budget-visibility` — **budgets** — defaults 100 /
    600 s, `callsLeft`/`msLeft` in every rifty tool envelope (I9). I12 recorded.
-6. `distribution/ai-agent-context-compaction` — **continuation** — native retry
-   and compaction, full usage, retained history, context-exceeded and remaining
-   chat markers/explicit switch offer (I2, I4, I5, I6). I12 recorded. ADR-0473.
 8. `distribution/ai-agent-edit-failure-diagnostics` — **edit-diagnostics** —
    locating failure text for `edit_file` match failures, exact matching kept,
    apply_patch and host-write semantics unchanged (I7). I12 recorded.
@@ -32,9 +29,8 @@ item ordering (goal §Decisions "shared bench order").
 
 ## Open questions
 
-- Compaction/retry carrier resolved by independent DEC-2 probe: retain Agent
-  and public retryAssistantCall/prepareCompaction/compact; native Harness needs
-  a new event/history/lane adapter. Implementation/proof remains after I12.
+- I5/I6 and remaining I4 reviewed b353ed8b0: Agent plus native utilities;
+  audit receipts supply faithful compaction input (ADR0474). No remaining carrier question.
 - Native request defaults resolved: streamSimple sends min(Model.maxTokens,
   native available-context ceiling); absent temperature/top_p are omitted. Native
   reasoning_content replay verified through the proxy. Evidence: catalog unit.

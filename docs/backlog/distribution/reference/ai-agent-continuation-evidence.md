@@ -109,3 +109,8 @@ During this run the new abort-backoff differential test first reproduced the
 adapter gap; automatic isolated rerun passed after the repair. This was a repaired
 RED, not a claimed flaky failure. Fresh unchanged-tree confirmation follows the
 implementation commit. Final typechecks and lint pass independently.
+
+Final+GREEN PASS @ b353ed8b0: 28/28 rows, zero findings. Independent re-run32/32
+(`/private/tmp/rifty-independent-continuation-green.log`), fresh unchanged-tree
+pr:check25/25, no isolation (`/private/tmp/rifty-pr359-continuation-pr-check-proof.log`).
+Verdict retained in `ai-agent-context-compaction-final-green.json`.
