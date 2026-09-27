@@ -40,6 +40,7 @@ function setup(
   maxToolCalls = 20,
   customStream = false,
   apiKey?: string,
+  runTimeoutMs = 20_000,
 ) {
   const provider = scriptedProvider(replies);
   const events: AgentSessionEvent[] = [];
@@ -68,7 +69,7 @@ function setup(
   const common = {
     host,
     maxToolCalls,
-    runTimeoutMs: 20_000,
+    runTimeoutMs,
     instructions: ['Project instruction: preserve the existing file.'],
     tools: [
       {
@@ -151,12 +152,18 @@ export async function proveTools() {
 }
 
 export async function proveRecovery() {
-  const { session, provider } = setup([
-    [{ name: 'write_file', args: { path: 'once.txt', content: 'committed-once' } }],
-    { error: 'provider failed after write' },
-    [{ name: 'shell', args: { command: 'cat once.txt' } }],
-    'Continued without repeating the write.',
-  ]);
+  const { session, provider } = setup(
+    [
+      [{ name: 'write_file', args: { path: 'once.txt', content: 'committed-once' } }],
+      ...Array.from({ length: 4 }, () => ({ error: 'provider failed after write' })),
+      [{ name: 'shell', args: { command: 'cat once.txt' } }],
+      'Continued without repeating the write.',
+    ],
+    20,
+    false,
+    undefined,
+    60_000,
+  );
   try {
     await session.send('Write once.');
     const failedStatus = session.status();

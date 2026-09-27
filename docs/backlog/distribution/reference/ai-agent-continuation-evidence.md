@@ -114,3 +114,19 @@ Final+GREEN PASS @ b353ed8b0: 28/28 rows, zero findings. Independent re-run32/32
 (`/private/tmp/rifty-independent-continuation-green.log`), fresh unchanged-tree
 pr:check25/25, no isolation (`/private/tmp/rifty-pr359-continuation-pr-check-proof.log`).
 Verdict retained in `ai-agent-context-compaction-final-green.json`.
+
+## 2026-09-28 — dependent browser fixture correction
+
+Observed baseline: `agent-core.spec.ts` provider-failure case expected terminal
+error after one HTTP503. Accepted I6 now retries that response, so the scripted
+continuation was consumed inside the first send. Isolated RED:
+`/private/tmp/rifty-pr359-continuation-browser-core-red.log` (done versus error).
+Fault: frozen-assumption at the network fixture boundary; production policy is
+the accepted native behavior. Sweep: catalog/network units explicitly disable
+retry; UI catalog already tests4 transient failures; retained-write UI/no-COI
+fixtures use400. This remaining browser case now supplies4 HTTP503s and asserts
+3 retry notices, 7 total requests, correct next-send wire index and one write.
+Its own run bound is60s to contain native2+4+8s backoff plus real host work; other
+fixture cases keep20s. No assertion removed.
+GREEN: complete browser Agent suite17/17,
+`/private/tmp/rifty-pr359-continuation-browser-core-green.log`.

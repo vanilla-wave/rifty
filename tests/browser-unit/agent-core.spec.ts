@@ -69,7 +69,13 @@ test('provider failure retains completed write and continuation receives its res
   expect(result.failedTrace.transcript.some((message) => message.role === 'toolResult')).toBe(true);
   expect(result.status).toBe('done');
   expect(result.file).toBe('committed-once');
-  expect(JSON.stringify(result.requests[2]?.body.messages)).toContain('call-0-0');
+  expect(
+    result.failedTrace.events.filter(
+      ({ event }) => event.type === 'retry' && event.phase === 'start',
+    ),
+  ).toHaveLength(3);
+  expect(result.requests).toHaveLength(7);
+  expect(JSON.stringify(result.requests[5]?.body.messages)).toContain('call-0-0');
   expect(
     result.trace.transcript.filter(
       (message) => message.role === 'toolResult' && message.toolName === 'write_file',
