@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 jobs:
-  evidence:
+  e2e:
     name: ${{ matrix.lane }} / ${{ matrix.engine }} (record only)
     runs-on: ubuntu-latest
     continue-on-error: true

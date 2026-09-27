@@ -32,7 +32,7 @@ node tools/floor-lane/run.mjs --engine webkit --output /tmp/webkit-floor.json
 ```
 
 Each default run installs one pinned runner in temporary storage with its own browser
-cache, avoiding protocol mixing and Playwright cache GC between versions. Runner pins:
+cache; installation uses Node18.20.8 (old extractors truncate/hang under Node24 on macOS26.6), avoiding protocol mixing and Playwright cache GC between versions. Runner pins:
 1.28.1 → Chromium 108.0.5359.29; 1.34.3 → **Firefox Beta 114.0b3** (its stable build is 113);
 1.55.1 → WebKit 26.0. Sources: each upstream release's `packages/playwright-core/browsers.json`.
 The beta run must never be labelled stable Firefox 114 or a stable-version certification.

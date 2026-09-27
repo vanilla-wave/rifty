@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { chromium, firefox, webkit } from '@playwright/test';
 const source = `self.onmessage = async ({data}) => {
   try {
+    if(typeof data === 'object') { self.postMessage({kind:data.directory.kind}); return; }
     if(data === 'eval') { self.postMessage({ ok: new Function('return 42')() }); return; }
     const root = await navigator.storage.getDirectory();
     const file = await root.getFileHandle('contention-probe', {create:true});
@@ -46,13 +47,27 @@ try {
               clearTimeout(timer);
               reject(new Error(event.message));
             };
-            worker.postMessage(data);
+            try {
+              worker.postMessage(data);
+            } catch (error) {
+              clearTimeout(timer);
+              reject(error);
+            }
           });
         const first = new Worker('/probe.js', { type: 'module' });
         const second = new Worker('/probe.js', { type: 'module' });
         const restricted = new Worker('/restricted.js', { type: 'module' });
         try {
+          let directoryTransfer;
+          try {
+            directoryTransfer = await ask(first, {
+              directory: await navigator.storage.getDirectory(),
+            });
+          } catch (error) {
+            directoryTransfer = { name: error.name, message: error.message };
+          }
           return {
+            directoryTransfer,
             documentCspWorkerEval: await ask(first, 'eval'),
             workerCspEval: await ask(restricted, 'eval'),
             firstLock: await ask(first, 'lock'),

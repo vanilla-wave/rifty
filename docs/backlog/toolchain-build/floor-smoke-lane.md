@@ -1,9 +1,9 @@
 ---
 area: toolchain-build
 status: ready
-title: Floor-smoke lane — execute boot → install → build → reload → reopen on Chrome 108, Firefox 115 and WebKit 26.0 builds
+title: Floor-smoke lane — execute boot → install → build → reload → reopen on Chrome 108, Firefox 114 and WebKit 26.0 builds
 created: 2026-09-27
-why: every lane runs the current Playwright bundle (1.60 → Chromium 148 / Firefox 150 / WebKit 26.4); the computed floors 108 / 115 / 26.0 were never executed, so "works from version X" is a calculation
+why: every lane runs the current Playwright bundle (1.60 → Chromium 148 / Firefox 150 / WebKit 26.4); the computed floors 108 / 114 / 26.0 were never executed, so "works from version X" is a calculation
 epic: browser-support-floor
 sources: [ADR-0469, docs/backlog/distribution/reference/browsers-compat-matrix-evidence.md]
 code: [playwright.no-coi.config.ts, package.json]
@@ -23,6 +23,8 @@ Intermediate versions (monotonic APIs; per-device truth is `checkSandboxSupport`
 
 ## Decisions
 
+- Carrier settled 2026-09-28: ADR-0477; pinned 1.28.1 Chromium108, 1.34.3 Firefox114.0b3 beta (stable114 remains unknown), 1.55.1 WebKit26.0; existing-proof page shared with real-device protocol.
+
 - 2026-09-27 — smoke, not the full suite; on demand only — agent + user "пока без расписания"
 
 ## Reference contract
@@ -32,3 +34,4 @@ Accepted goal browser-support-floor, ADR-0469; proof of existing SDK behavior.
 ## Acceptance
 
 1. Execute and record the Context/Question procedure; distinguish computed, executed, product failure and unavailable harness evidence. → I7
+

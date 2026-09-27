@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Publish dated browser/persistence floors and traffic method; add on-demand pinned floor and real-device proof protocol (ADR-0477).
+
 - Manual-only, record-only COI/non-COI browser lanes; WebKit persistent test profiles, build annotations and bounded boundary diagnostics.
 
 - Guard shipped package/playground JavaScript against post-ES2022 syntax and builtins in `pr:check` (ADR-0469).

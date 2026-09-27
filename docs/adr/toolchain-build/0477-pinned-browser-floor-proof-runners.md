@@ -14,7 +14,10 @@ ADR-0469 I7 requires floor builds, not today's bundled browsers. The upstream
 ## Decision
 
 `tools/floor-lane/run.mjs` installs isolated, pinned Playwright versions on demand;
-no workspace dependency or lockfile change. Each automatic install owns its browser
+no workspace dependency or lockfile change. Browser installation runs under pinned
+Node18.20.8: on macOS26.6, Node24 installers produced truncated binaries (Chromium208KB
+versus277KB) or hung extracting WebKit; the same Chromium installer under Node18
+completed with the full executable. Host/server and smoke controller remain Node24. Each automatic install owns its browser
 cache (new Playwright GC otherwise removes old-runner binaries; observed locally).
 Use each runner's native protocol with its browser. Firefox uses the named beta
 executable through the pinned 1.34.3 registry adapter. Reports explicitly say beta:

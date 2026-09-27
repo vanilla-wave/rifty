@@ -23,3 +23,11 @@ Acorn (existing dependency-cruiser parser) parses actual package/playground JS a
 `Atomics.waitAsync`: named ADR-0469 exception; existing kernel guards and support probes own availability, including cross-function calls. No general feature-detection waiver.
 
 Own methods remain distinct: TypeScript `ChangeTracker.with`, semver object updates, Monaco URI object updates and `getBracketPairsInRange(...).findLast` (CallbackIterable, monaco-editor 0.52.2 `esm/vs/base/common/arrays.js`). Ambiguous numeric `with` calls require exact Monaco 0.52.2 original file + call expression via its emitted sourcemap (Position, Dimension, InlayHintItem); unknown receiver, missing map, different source or changed expression fail. Trace mapping reuses Vitest's existing dependency. No polyfills/new dependencies.
+
+## Copied compiler fingerprint
+
+Full `pr:check` exposed the exact compiler-asset pin after rebuilding shared chunks (`traps.md` copied-asset-fingerprints). Baseline `3bef167de` rebuilt in memory using the publishing esbuild options and `git show` overlays for changed source files; no working source/dist mutation. Reconstructed worker exactly matches the old pin: 10,022,694 bytes, SHA256 `018ea49b3a1971609fdd02fb3f5b9db85daf0a4398fb500bbbf39bdda149b422`. Current worker: same size and 213,025 lines, SHA256 `2538b29ef2fc138bbb9cab5b4d4de8bbdec4dcf3fc95050fcc38e32dc933601d`.
+
+Exactly seven lines differ: shared-chunk import names at lines 5, 8, 9, 21, 22, 24 and dynamic module-loader import at 211003. Compiler bytes otherwise identical. Lexical compiler `chunk-EMDIREKY.js` unchanged at 4,893,418 bytes, SHA256 `39be666ac003c7361e9fbcd88abdda1ed51052350ade9b57b4d2716f1e296498`. Updated only the TypeScript worker SHA pin; size ceiling and negative raw/gzip/base64 payload tests unchanged. Packed-browser proof remains in the driver's final gate.
+
+Validation after the single pin change: `pnpm test:run tools/checks/esbuild-legacy-retirement.test.ts` 10/10 PASS, including unchanged raw/gzip/base64 rejection; `pnpm check:esbuild-legacy-retirement` PASS (10 paths, 25 references, exact emitted inventory).

@@ -25,6 +25,8 @@ if (!pin) throw new Error('--engine must be chromium, firefox or webkit');
 const result = {
   run: `floor-${values.engine}-${new Date().toISOString()}`,
   revision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+  worktreeDirty:
+    execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim().length > 0,
   platform: `${process.platform}/${process.arch}`,
   runner: values.current ? 'current' : pin.version,
   engine: values.engine,
@@ -51,13 +53,27 @@ try {
         '--no-fund',
         `playwright@${pin.version}`,
       ],
-      { stdio: 'inherit' },
+      { stdio: 'inherit', timeout: 180000 },
     );
     packagePath = join(directory, 'node_modules/playwright');
     process.env.PLAYWRIGHT_BROWSERS_PATH = join(directory, 'browsers');
-    execFileSync(process.execPath, [join(packagePath, 'cli.js'), 'install', pin.browser], {
-      stdio: 'inherit',
-    });
+    execFileSync(
+      'npm',
+      [
+        'exec',
+        '--yes',
+        '--package=node@18.20.8',
+        '--',
+        'node',
+        join(packagePath, 'cli.js'),
+        'install',
+        pin.browser,
+      ],
+      {
+        stdio: 'inherit',
+        timeout: 180000,
+      },
+    );
   }
   const rootRequire = createRequire(new URL('../../package.json', import.meta.url));
   const localRequire = packagePath
@@ -81,15 +97,37 @@ try {
     ...(executablePath ? { executablePath } : {}),
   });
   const browser = context.browser();
-  result.build = browser?.version();
+  const page = context.pages()[0] ?? (await context.newPage());
+  result.userAgent = await page.evaluate(() => navigator.userAgent);
+  result.build =
+    browser?.version() ??
+    result.userAgent.match(
+      values.engine === 'firefox'
+        ? /Firefox\/([\d.]+)/
+        : /(?:HeadlessChrome|Chrome|Version)\/([\d.]+)/,
+    )?.[1];
   if (!values.current && !values['executable-path'] && !pin.expected.test(result.build ?? ''))
     throw new Error(`Wrong build: ${result.build}; expected ${pin.expected}`);
-  const page = context.pages()[0] ?? (await context.newPage());
-  page.on('pageerror', (error) => result.pageErrors.push(error.message));
+  page.on('pageerror', (error) =>
+    result.pageErrors.push({ message: error.message, stack: error.stack }),
+  );
   phase = 'harness-navigation';
   const response = await page.goto(values.url, { timeout: 60000 });
   if (!response?.ok()) throw new Error(`Host HTTP ${response?.status()}`);
-  await page.locator('html[data-harness=ready]').waitFor({ timeout: 60000 });
+  await page.waitForFunction(
+    () =>
+      document.documentElement.dataset.harness === 'ready' ||
+      document.documentElement.dataset.result === 'fail',
+    null,
+    { timeout: 60000 },
+  );
+  if (await page.evaluate(() => document.documentElement.dataset.result === 'fail')) {
+    result.report = JSON.parse(await page.locator('#report').inputValue());
+    result.result = 'fail';
+    result.failingStep = 'sdk-import';
+    phase = 'sdk-import';
+    throw new Error('SDK module failed before boot; see report and pageErrors');
+  }
   phase = 'boot';
   await page.locator('#start').click();
   try {

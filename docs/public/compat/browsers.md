@@ -57,15 +57,37 @@ Current cross-engine commands, build IDs, failure classes and native API probes:
 Storage fault RED/GREEN:
 [admission evidence](../../backlog/vfs/reference/browser-support-storage-evidence.md).
 
-Floor builds and manual hardware rows are recorded below when executed. A floor
+Named manual [CI run 36356372850](https://github.com/vanilla-wave/rifty/actions/runs/36356372850),
+2026-09-28 local date, source850eeee26, Playwright1.60.0 on Ubuntu:
+
+| Non-COI engine/build | Result | Classification |
+|---|---|---|
+| Chromium148.0.7778.96 | ✅148 · 110/110 | full lane passed |
+| Firefox150.0.2 | ✅150 behavior · 109/110 | delayed-rival test expects a race after admission but it fires before admission under CI; recorded test-infra; local case passed |
+| WebKit26.4 (Linux) | ⚠26.4 · 40/110 | 66 missing-OPFS/downstream fixture failures, 1 credentialless COI assertion, 1 absent route barrier, 2 replacement/restart ENOENT findings |
+
+Linux WebKit lacks `navigator.storage`/`FileSystemFileHandle` in this build even in
+a persistent context. macOS26.4 native OPFS and exact-byte reload passed; platforms
+are not interchangeable. macOS support-probe handle transfer separately throws
+`DataCloneError` (direct Window→Worker `postMessage(directory)` probe); this does
+not establish that worker-local OPFS is absent. Details and findings: cross-engine evidence above.
+
+Current Chromium148 manual protocol passed install/build/flush/reload/exact-byte
+reopen/rebuild: [composed report](../../backlog/distribution/reference/browser-manual-chromium-proof.json).
+Floor command: `node tools/floor-lane/run.mjs --engine chromium|firefox|webkit` against
+the headerless host. [Chrome108 finding](../../backlog/runtime-js/chromium108-sdk-sync-wasm-import.md),
+[Firefox114 beta finding](../../backlog/vfs/firefox114-beta-reopen-missing-bytes.md),
+[WebKit26 launch artifact](../../backlog/toolchain-build/reference/webkit260-floor-harness.json).
+
+Floor builds and manual hardware rows: A floor
 harness failure stays `❓`, never a product `❌`. Firefox's pinned available
 114.0b3 is a beta; it cannot certify stable Firefox 114.
 
 | Floor / real hardware | Dated observation | Storage / memory / eviction |
 |---|---|---|
-| Chromium 108.0.5359.29 | ❓ floor run pending | pending |
-| Firefox 114.0b3 beta | ❓ floor run pending; stable 114 uncharacterized | pending |
-| WebKit 26.0 | ❓ floor run pending; not Safari | pending |
+| Chromium 108.0.5359.29 | ❌ 2026-09-28: SDK import throws on main-thread sync WASM >4KB | no boot/storage steps reached |
+| Firefox 114.0b3 beta (UA114.0) | ❌ 2026-09-28: install/build/flush pass, saved source ENOENT after reload | OPFS selected both boots; namespace unchanged; stable114 still uncharacterized |
+| WebKit 26.0, macOS26.6 | ❓ 2026-09-28: pinned runner fails `Playwright.setDownloadBehavior`: no default context | harness cannot launch; not a product failure or Safari result |
 | Safari 26 macOS, real device | ❓ 2026-09-28: awaiting user hardware run | estimate + steps absent; memory/eviction unobserved |
 | Safari iOS, real device | ❓ 2026-09-28: awaiting user hardware run | estimate + steps absent; total-memory API unavailable on non-COI; revisit required |
 | Yandex, real device | ❓ 2026-09-28: awaiting user hardware run | exact UA/build, estimate + steps absent; memory/eviction unobserved |

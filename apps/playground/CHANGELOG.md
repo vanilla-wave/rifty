@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add manual browser proof page: support, real Vite install/build, durable reload and reopen, copyable device report.
+
 - Select the latest new preview port without ES2023 `findLast`.
 
 - First pi skill/template command now shows the session refusal and preserves the draft; admission stays inside the run budget (ADR-0442).

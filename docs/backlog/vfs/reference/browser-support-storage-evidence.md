@@ -24,3 +24,10 @@ Independent DEC-2 review (parent's fresh reviewer, 2026-09-28) approved partial 
 - `RIFTY_PLAYGROUND_PORT=5444 pnpm test:browser-unit tests/browser-unit/sandbox-support.spec.ts -g 'missing createWritable'`: 1 passed; actual support worker reports opfs unmet naming createWritable.
 - `pnpm exec vitest run packages/vfs/src/opfs-sync.test.ts packages/runtime-js/src/worker-fs-rpc.test.ts packages/runtime-js/src/worker-fs-structured.test.ts`: 117 passed, 1 pre-existing skip.
 - `pnpm backlog:check`, `pnpm check:file-size`: pass.
+
+## Final verification
+
+- Clean final `RIFTY_NO_COI_PORT=5441 RIFTY_NO_COI_ORACLE_PORT=5442 RIFTY_NO_COI_RESOURCE_PORT=5443 pnpm test:no-coi tests/no-coi/no-coi-storage-capability.spec.ts tests/no-coi/no-coi-configured-startup.spec.ts tests/no-coi/no-coi-opfs-reload.spec.ts tests/no-coi/no-coi-preload-failure.spec.ts`: **17 passed (37.1s)**, Chromium 148.0.7778.96. The earlier >10s navigation failure did not reproduce; that test passed in 22.5s. Preload corruption still rejects and pending eval/fs settle.
+- Revert checks: independently remove the createWritable predicate, bypass root error classification, or bypass toolchain terminal transport; each required-policy browser case fails its intended assertion (1 failed per mutant). All source restored before the clean final run.
+- Legacy `initBackend()` with no storage options retains its native error; only configured storage gains the SDK identity. No existing assertion retargeted.
+- `RIFTY_PLAYGROUND_PORT=5444 pnpm test:browser-unit tests/browser-unit/opfs-no-coi-policy.spec.ts tests/browser-unit/sandbox-support.spec.ts -g 'permission failure loudly|missing createWritable'`: **2 passed (4.4s)**; legacy native `NotAllowedError: pickup denied` unchanged; missing writable report remains unsupported.

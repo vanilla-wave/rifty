@@ -80,9 +80,9 @@ async function build() {
 }
 async function finish() {
   await observations();
-  report.result = 'pass';
+  report.result = report.steps.some((row) => row.status === 'fail') ? 'fail' : 'pass';
   localStorage.setItem(savedKey, JSON.stringify(report));
-  status.textContent = 'Complete — copy report';
+  status.textContent = `${report.result === 'pass' ? 'Complete' : 'Completed with failures'} — copy report`;
   render();
 }
 async function execute(resume, revisit = false) {
@@ -99,12 +99,21 @@ async function execute(resume, revisit = false) {
         result: 'running',
         steps: [],
       };
-      await step('support', async () =>
+      const support = await step('support', async () =>
         checkSandboxSupport({
           probeBaseUrl: new URL('/browser-support-probes/', location.href),
           persistence: 'required',
         }),
       );
+      if (support.modes.nonCoi.conclusion !== 'supported') {
+        Object.assign(report.steps[0], {
+          status: 'fail',
+          error: {
+            name: 'SupportProbeFailure',
+            message: `non-COI ${support.modes.nonCoi.conclusion}: ${support.modes.nonCoi.unmet.join(', ')}`,
+          },
+        });
+      }
       await step('boot', boot);
       await step('seed', async () => {
         const files = {
@@ -169,14 +178,6 @@ async function execute(resume, revisit = false) {
   }
 }
 document.querySelector('#start').addEventListener('click', () => execute());
-document.querySelector('#copy').addEventListener('click', async () => {
-  try {
-    await navigator.clipboard.writeText(reportField.value);
-  } catch {
-    reportField.select();
-    status.textContent = 'Select and copy the report';
-  }
-});
 document.querySelector('#revisit').addEventListener('click', () => {
   const saved = localStorage.getItem(savedKey);
   if (saved) execute(JSON.parse(saved), true);

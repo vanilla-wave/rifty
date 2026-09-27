@@ -14,6 +14,24 @@
     <button id="copy">Copy report</button>
     <pre id="status">Ready</pre>
     <textarea id="report" rows="24" cols="90" aria-label="Browser result"></textarea>
+    <script>
+      document.querySelector('#copy').addEventListener('click', async () => {
+        const field = document.querySelector('#report');
+        try { await navigator.clipboard.writeText(field.value); }
+        catch { field.select(); document.querySelector('#status').textContent = 'Select and copy the report'; }
+      });
+      // Capture SDK import failure before its module can install the run handler.
+      addEventListener('error', (event) => {
+        if (document.documentElement.dataset.harness === 'ready') return;
+        const error = { name: event.error?.name ?? 'Error', message: event.message };
+        document.querySelector('#report').value = JSON.stringify({
+          date: new Date().toISOString(), userAgent: navigator.userAgent, result: 'fail',
+          steps: [{ step: 'sdk-import', status: 'fail', error }],
+        }, null, 2);
+        document.querySelector('#status').textContent = 'SDK import failed — copy report';
+        document.documentElement.dataset.result = 'fail';
+      });
+    </script>
     <script type="module" src="/browser-support.js"></script>
   </body>
 </html>
