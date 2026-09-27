@@ -91,7 +91,7 @@ function fixture(
           });
           const stream = createAssistantMessageEventStream();
           void Promise.resolve().then(async () => {
-            const response = await reply(context, options, requests.length);
+            const response = await reply(context, options ?? {}, requests.length);
             stream.push({ type: 'start', partial: response });
             stream.push(
               response.stopReason === 'error' || response.stopReason === 'aborted'
@@ -239,7 +239,7 @@ describe('native continuation boundary', () => {
             parameters: Type.Object({}),
             async execute() {
               effects++;
-              return { content: [{ type: 'text', text: 'effect settled' }] };
+              return { content: [{ type: 'text', text: 'effect settled' }], details: undefined };
             },
           },
         ],
