@@ -1,7 +1,7 @@
 ---
 area: distribution
 status: draft
-title: Export a framework-free transcript reducer over AgentSessionEvent and render the playground chat from it
+title: Export a framework-free transcript reducer over AgentSessionEvent
 created: 2026-09-27
 why: every renderer re-implements the same reduction of the low-level event stream into ordered user/assistant/tool items, and the two existing copies disagree on cancelled tools and drop two event kinds
 epic: no-coi-agent-host-kit
@@ -37,3 +37,5 @@ reducer framework-free).
 
 - shape `reduce(state, event) → state` (pure) is the minimal carrier; an
   observable/store wrapper is host code.
+- the playground chat consumes the reducer in the same unit (dogfood; goal
+  Decisions) — a carrier, not the observable I7 states.

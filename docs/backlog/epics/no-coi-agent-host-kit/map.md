@@ -58,6 +58,10 @@ no-registry outcome); 7 after all others and closes the goal.
   session defaults and snapshot → `open`; which knobs become bench variables
   vs adopted host defaults — owner: agent — item 7 pickup, together with
   `distribution/agent-tool-text-cap-and-run-budgets-measure`.
+- Bench import route: whether `tools/agent-bench` may import the reference
+  host module from `tests/integration/fixtures/workbench-vite-consumer` under
+  the arch/vitest wiring, or the module moves to a shared private location —
+  owner: agent — item 7 pickup.
 - Shell tool text ordering carrier: rebuild text from the ordered `output`
   events vs an ordered capture in `SandboxCommandOutcome` — owner: agent —
   item 9 pickup; ADR-0436 D4 status header unchanged.
@@ -105,7 +109,7 @@ no-registry outcome); 7 after all others and closes the goal.
 - 16 KiB tool-text cap and 100 / 180 s run budgets (ADR-0424 D7) — measured
   first: `distribution/agent-tool-text-cap-and-run-budgets-measure` (quality
   goal); the kit does not change them.
-- Command fidelity outside the agent: empty `process.env` + npm lifecycle
+- Command fidelity outside the kit (agent adapter and SDK commands): empty `process.env` + npm lifecycle
   vars, `spawn('npm'|'.bin/*')` ENOENT, `node -p`/`--input-type` on no-COI,
   `npx` nudge — finding drafts `distribution/no-coi-command-env-and-npm-
   lifecycle-vars`, `runtime-js/child-process-spawn-npm-and-bin-via-shell`,

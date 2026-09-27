@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: no-COI agent host kit — an existing app wires connections only
 created: 2026-09-27
 value: A team embeds a no-COI rifty sandbox plus the rifty agent into its existing web app by supplying only connections — asset URLs, a storage namespace, an OpenAI-compatible endpoint, a project root and policy values — while every part that affects agent quality ships and is measured inside rifty; the agent installs dependencies when a registry is connected and sees command output in terminal order.
@@ -18,8 +18,8 @@ into Pi: per-capability policy, per-turn settings, text-only message content,
 a transcript model — plus two shell-fidelity repairs the audit surfaced:
 `npm install <pkg>` works whenever the host connects a registry and fails
 loudly when it does not (I9), and command output reaches the model in
-terminal order (I10); other shell gaps the audit listed stay loud and are
-named out of scope. An in-repo reference host built from packed tarballs in CI
+terminal order (I10); the other gaps the audit listed stay outside the kit —
+loud ceilings or captured finding drafts (map §Out of scope). An in-repo reference host built from packed tarballs in CI
 proves the kit and fixes the boundary: host code is connections (URLs,
 namespace, endpoint settings, root, policy *values*); everything that shapes
 agent behaviour — policy enforcement, transport shaping, prompt and tool text,
@@ -75,10 +75,11 @@ Source: issue #345 and its triage; evidence
    an outcome naming the missing registry; the agent reports it instead of
    pretending, and its instructions never claim installs are the host's job
    when a registry is connected.
-7. `project.run('npm run build')` streams stdout/stderr chunks; the shell
-   tool's text to the model keeps them in terminal order; a second `run`
-   issued during the build settles as the typed busy outcome and is retried
-   after the first settles; `dist/index.html` is read through `project.fs`.
+7. The agent runs `npm run build` through its shell tool; the tool's text to
+   the model keeps stdout and stderr in terminal order. A host call
+   (`project.run` or a project fs mutation) issued while that build is in
+   flight settles as the typed busy outcome and the host retries it after the
+   build settles; the host then reads `dist/index.html` through `project.fs`.
 8. The same namespace opened in a second tab shows "waiting for storage
    writer" and settles as the outcome identified as occupied — whichever
    deadline fires first, the guard's or `startupTimeoutMs`; after the first
@@ -90,9 +91,9 @@ Source: issue #345 and its triage; evidence
    contains connections only: asset URLs, namespace, endpoint settings,
    optional `registryUrl`, project root and policy values (enforcement is
    rifty's), DOM targets, the host-owned applied `snapshotId` — plus exactly
-   three pieces of display-only host code that shape nothing the model sees:
-   an ANSI/CR line normalizer for the page, the trace download helper, one
-   promise chain serialising the host's own calls. No readiness polling,
+   three pieces of host glue that shape nothing the model sees: an ANSI/CR
+   line normalizer for the page, the trace download helper, one promise chain
+   serialising the host's own calls. No readiness polling,
    apply-state strings, busy flags, transport shaping, prompt or tool text.
 
 ## Invariants
@@ -161,7 +162,7 @@ Source: issue #345 and its triage; evidence
    output that today's ad-hoc reductions drop.
 8. I8. An in-repo no-COI reference host built from packed tarballs in CI runs
    scenario steps 2–8 end to end in both registry configurations, and its
-   source contains only connections plus the three display-only pieces step 9
+   source contains only connections plus the three host-glue pieces step 9
    names (ANSI/CR line normalizer, trace download helper, one promise chain):
    no readiness polling, apply-state strings, busy flags, transport shaping,
    prompt or tool text — nothing quality-relevant is host-authored; and
@@ -246,9 +247,9 @@ challenge: 2026-09-27 — 8 problems + 8 advisory (widened kit; resolution per l
   non-answer missing — fixed (ledger, Decisions).
 - A8 cheaper route for I5 (new session per turn) — `rejected route:` added.
 
-fidelity audit: 2026-09-27 — 26 rows (evidence §Fidelity audit); routed by the
-user's answers: agent `npm install` → I9 (item 8); tool-text order → I10
-(item 9); README allowlist defect → item 4; caps/budgets → quality goal
+fidelity audit: 2026-09-27 — 26 rows (evidence §Fidelity audit); agent
+`npm install` → I9 (item 8) by the user's answer; the remaining rows routed by
+the agent (Decisions): tool-text order → I10 (item 9); README allowlist defect → item 4; caps/budgets → quality goal
 question; env/npm vars, `spawn('npm')`, `node -p`, `npx` nudge → finding
 drafts outside the kit; recorded ceilings stay out of scope.
 
@@ -264,8 +265,8 @@ drafts outside the kit; recorded ceilings stay out of scope.
   lease) and re-opens the declined `page-locks` row.
 - 2026-09-27 — user: fork 2 «ок» (recommended option: boot + snapshot
   application) → I3.
-- 2026-09-27 — user: fork 3 (issue item 4) «можно развернуть в пустоту или
-  получить ошибку/сигнал, если там не пустота. Остальное проект должен
+- 2026-09-27 — user: fork 3 (issue item 4) «Не очень понял, но мысль такая -
+  можно развернуть в пустоту или получиить ошибку/сигнал, если там не пустота. Остальное проект должен
   менеджить сам, никакой проверки идентичности не нужно. Это может ломать
   среду».
 - 2026-09-27 — agent (from fork 3): no SDK-held applied identity, no
@@ -356,7 +357,7 @@ drafts outside the kit; recorded ceilings stay out of scope.
   re-install for discoverability alone; proves the kit no better than the
   consumer already in the lane.
 - 2026-09-27 — agent: no one-call composition entry is seeded; REV-7: after
-  I1–I7 the host's residual wiring is connections; if the reference host
+  I1–I7, I9, I10 the host's residual wiring is connections; if the reference host
   still carries mechanism, a child appears by re-chart, never pre-emptively.
 - bounded destination (fit.md 1, 2026-09-27, agent): closes when I1–I10 hold on
   main and the reference host runs the scenario in the packed-consumer lane;

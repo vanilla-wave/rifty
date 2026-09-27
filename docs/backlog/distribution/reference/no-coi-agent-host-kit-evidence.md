@@ -315,5 +315,5 @@ real `vite build` output size vs 16 KiB; Pi CLI default retries.
 ## User answer on agent install (2026-09-27, verbatim)
 
 «разрешаем, но оно может падать, если к песочнице не подключен npm
-registry(такое должно быть валидно с точки хрения конфигурации)» — routing
-of the remaining audit rows presented in the same message was not objected to.
+registry(такое должно быть валидно с точки хрения конфигурации)». The
+routing of the remaining audit rows is the agent's path (goal Decisions).

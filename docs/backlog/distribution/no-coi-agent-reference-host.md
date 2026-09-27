@@ -32,7 +32,8 @@ consumer (the existing-app persona) runs support check → boot with namespace
 → snapshot into an empty target (typed conflict otherwise) → sources written
 after the apply → agent turns (scripted provider) that edit a file and run
 `npm install ms` — once with the registry connection, once without (loud
-failure, valid configuration) → `vite build` → dist read → close →
+failure, valid configuration) → the agent's `npm run
+build` → dist read → close →
 second-tab occupied; its source contains only
 connections (asset URLs, namespace, endpoint settings, optional `registryUrl`,
 project root and policy values, DOM targets, the host-owned applied
