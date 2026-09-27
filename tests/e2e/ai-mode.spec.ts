@@ -710,3 +710,152 @@ test('project resources load at start; editor edits wait for chat /reload and vi
     await model.close();
   }
 });
+
+function entry(id: string, baseUrl: string, image = false) {
+  return {
+    id,
+    name: id,
+    provider: id,
+    api: 'openai-completions',
+    baseUrl,
+    input: image ? ['text', 'image'] : ['text'],
+    reasoning: true,
+    contextWindow: 32768,
+    maxTokens: 4096,
+    thinking: 'medium',
+    temperature: 0.4,
+    compat: { supportsReasoningEffort: true },
+    samplingParams: { top_p: 0.9 },
+    cost: { input: 0.1, output: 0.5, cacheRead: 0, cacheWrite: 0 },
+  };
+}
+
+test('catalog controls switch providers after error without losing tool history', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const first = await agentModelServer([
+    [{ name: 'write_file', args: { path: 'catalog-proof.txt', content: 'written once' } }],
+    { error: 'capacity exhausted' },
+  ]);
+  const second = await agentModelServer(['Continued on second.']);
+  try {
+    await page.goto('/?agentBench=1');
+    await pickStarter(page);
+    await page.getByRole('button', { name: '+chat', exact: true }).click();
+    const panel = page.getByTestId('ai-panel');
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    await panel.getByText('Advanced catalog', { exact: true }).click({ timeout: 5000 });
+    await panel
+      .getByLabel('Model catalog (JSON)', { exact: true })
+      .fill(
+        JSON.stringify([
+          entry('first', first.baseUrl),
+          { ...entry('second', second.baseUrl), temperature: 0.8, thinking: 'high' },
+        ]),
+      );
+    await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
+    await panel.getByLabel('Message', { exact: true }).fill('Write the proof, then continue.');
+    await panel.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-status', 'error');
+    await panel.getByRole('button', { name: 'Continue with second', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await expect(panel.getByLabel('Chat model', { exact: true })).toHaveValue('second');
+    const request = second.requests[0]?.body;
+    expect(request).toMatchObject({
+      model: 'second',
+      temperature: 0.8,
+      reasoning_effort: 'high',
+      top_p: 0.9,
+      max_completion_tokens: 4096,
+    });
+    expect(JSON.stringify(request?.messages)).toContain('catalog-proof.txt');
+    expect(request?.messages.filter((message) => message.role === 'tool')).toHaveLength(1);
+    const trace = await page.evaluate(async () =>
+      (
+        Reflect.get(globalThis, '__riftyAgentBench') as { exportTrace(): Promise<AgentTrace> }
+      ).exportTrace(),
+    );
+    expect(trace.transcript.filter((message) => message.role === 'toolResult')).toHaveLength(1);
+    expect(trace.config).toMatchObject({ model: 'second', thinking: 'high', temperature: 0.8 });
+    const stored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('rf.ai.v2') ?? 'null'),
+    );
+    expect(stored).toMatchObject({
+      model: 'second',
+      models: [
+        entry('first', first.baseUrl),
+        { ...entry('second', second.baseUrl), temperature: 0.8, thinking: 'high' },
+      ],
+    });
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
+test('image reaches the model; binary attachment is an exact project file with a prompt path', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const model = await agentModelServer(['Attachments received.']);
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4H8AAAAASUVORK5CYII=',
+    'base64',
+  );
+  const pdf = Buffer.from('%PDF-1.4\n\x00\xffspec bytes');
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await page.getByRole('button', { name: '+chat', exact: true }).click();
+    const panel = page.getByTestId('ai-panel');
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    await panel.getByText('Advanced catalog', { exact: true }).click({ timeout: 5000 });
+    await panel
+      .getByLabel('Model catalog (JSON)', { exact: true })
+      .fill(JSON.stringify([entry('vision', model.baseUrl, true)]));
+    await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
+    await panel.getByLabel('Message', { exact: true }).fill('Inspect the screenshot and spec.');
+    await panel.getByLabel('Attach files', { exact: true }).setInputFiles([
+      { name: 'screen.png', mimeType: 'image/png', buffer: png },
+      { name: 'spec.pdf', mimeType: 'application/pdf', buffer: pdf },
+    ]);
+    await expect(panel).toContainText('/attachments/spec.pdf');
+    await panel.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    const user = model.requests[0]?.body.messages.find((message) => message.role === 'user');
+    expect(JSON.stringify(user)).toContain(`data:image/png;base64,${png.toString('base64')}`);
+    expect(JSON.stringify(user)).toContain('/attachments/spec.pdf');
+    expect(JSON.stringify(user)).not.toContain(pdf.toString('base64'));
+    const replacement = Buffer.from('%PDF-1.4\nsecond file');
+    await panel
+      .getByLabel('Attach files', { exact: true })
+      .setInputFiles({ name: 'spec.pdf', mimeType: 'application/pdf', buffer: replacement });
+    const attached = panel.getByTestId('ai-attachments').locator('[data-project-path]');
+    await expect(attached).toHaveCount(1);
+    const collisionPath = await attached.getAttribute('data-project-path');
+    expect(collisionPath).toMatch(/^\/attachments\//);
+    expect(collisionPath).not.toBe('/attachments/spec.pdf');
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
+    const file = await (await download).path();
+    expect(file).toBeTruthy();
+    const archive = JSON.parse(await readFile(file!, 'utf8')) as {
+      files: { path: string; content: string }[];
+    };
+    expect(
+      Buffer.from(
+        archive.files.find((item) => item.path === 'attachments/spec.pdf')!.content,
+        'base64',
+      ),
+    ).toEqual(pdf);
+    expect(
+      Buffer.from(
+        archive.files.find((item) => `/${item.path}` === collisionPath)!.content,
+        'base64',
+      ),
+    ).toEqual(replacement);
+  } finally {
+    await model.close();
+  }
+});

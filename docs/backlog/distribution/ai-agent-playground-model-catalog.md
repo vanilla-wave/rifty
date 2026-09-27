@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Playground Settings hold the model catalog, the chat picks and switches the model, attaches images to the prompt and other files into the project, and offers another entry after a provider error
 created: 2026-09-27
 why: The playground is the first embedder of the catalog; without a UI for entries, switching and attachments the user scenarios "one model returns 429 → offer another" and "send a screenshot / a PDF" are not reachable by a user.
@@ -13,47 +13,73 @@ code: [packages/agent/src/session.ts, packages/agent/src/types.ts, apps/playgrou
 
 ## Context
 
-Absorbs `distribution/ai-agent-prompt-images`: native `send(prompt, images?)`
-for image-capable entries; text-only entries fail before provider dispatch;
-non-image binary input throws `agent.prompt-binary-input`. Tool image results
-remain unsupported. I3/I4 scope unchanged.
+Catalog I1/I2 is delivered (Final+GREEN c5bb64273). This unit absorbs draft
+`distribution/ai-agent-prompt-images` and connects native image input to the
+Playground catalog/picker/attachment flow (I3/I4). Existing /reload and resource
+report stay. The no-COI kit's transcript reducer follows this whole goal.
 
-finding — goal slice 3 (I4); after slices 1–2.
-
-- Ours: `apps/playground/src/ai/settings.ts:4-9,24-26` one baseUrl / model /
-  apiKey, budgets as constants (`rf.ai.v2`); `AiChatPanel.tsx` has no model
-  picker, attach or failure offer; the `/reload` chat command and the
-  loaded-resources report already landed (ADR-0440, `chat-command.ts`) — no
-  overlap.
-- Order: goals run in sequence (this goal first); the kit's transcript
-  reducer `distribution/agent-transcript-model` (PR #357) lands afterwards
-  and covers this slice's chat events (goal §Decisions "shared bench order").
-- After this slice: Settings edit catalog entries (the I1 fields; a new entry
-  prefilled with today's values 128 000 / 8192 / thinking off; persisted like
-  today's fields, keys memory-only as today); the chat shows the selected
-  entry and switches via `session.setModel`; the composer has one attach
-  control — an image goes to the prompt (`send(prompt, images)`, slice 2), any
-  other file is written into the project through the Workbench project files
-  API (folder: map fog) and its path is shown and inserted into the prompt
-  (user: «остальное — файлом в проект»; agent text tools keep rejecting
-  binary content, `workbench-host.ts:13-16`); when a run ends in `error` from
-  a provider failure, the chat offers switching to another entry and
-  continuing the retained history. The `context-exceeded` offer and the
-  compaction marker are slice 7's UI half (their events do not exist before
-  it).
-- Carrier notes for PICKUP: solid-js stays playground-only (D-002); the
-  no-COI page in agent-bench uses the packed SDK/agent and its own minimal UI
-  — the bench takes the catalog entry from config (slice 4), not from this UI.
-  e2e: Playwright over the real +chat controls as in the existing agent-bench
-  rifty lane; the file attach reuses the Workbench project file API (no new
-  upload mechanism).
+The browser has a built-in OpenAI-compatible transport; external embedders
+register custom native Providers. The catalog editor exposes native model
+fields and thinking/sampling defaults. Provider keys and headers remain in
+memory. Other file bytes go through public ProjectFiles into /attachments;
+text tools keep refusing binary reads. No automatic model fallback.
 
 ## Challenge
 
 challenge: 2026-09-27 — inherits `epics/agent-weak-models/goal.md` §Challenge (10 problems, resolved there); reuse for unchanged promises at PICKUP.
+
+## Reference contract
+
+- pi-agent-core/pi-ai 0.85.1: Agent.prompt(text, ImageContent[]) and native
+  OpenAI serialization. `packages/agent/src/images.test.ts` executes the same
+  prompt against native pi and rifty, including image-only input.
+- Project attachments use public ProjectFiles.writeFile with expectedVersion:null;
+  existing file bytes are never overwritten implicitly.
+
+## Acceptance
+
+1. send(prompt, images?) preserves native ImageContent in provider input and
+   trace, including a prompt with images and empty text, matching pi. → I3
+2. Text-only entries reject image sends before dispatch, naming the entry;
+   non-image binary input throws agent.prompt-binary-input, listed compat ❌;
+   tool image results remain unsupported. → I3
+3. Settings hold native catalog fields and per-entry thinking/sampling;
+   defaults 128000/8192/off for new entries; catalog/selection persist,
+   credentials and run limits remain memory-only. → I4
+4. Chat picker selects a model through setModel without losing history;
+   a provider error offers another entry and continuation; the next request
+   has that entry's effective defaults and prior tool results. → I4 + I2
+5. File picker attaches images to the prompt; other files are written byte-for-byte
+   into the project through ProjectFiles, and their visible paths enter the
+   prompt. Existing project files are preserved. → I4 + scenario
+
+## Parity cases
+
+1. The same image+text and image-only prompts produce identical native pi/rifty
+   user content on the wire and keep native images in the trace. → I3
+
+## Fault matrix
+
+| axis × operation | honest outcome | artifact / fault target | trace |
+|---|---|---|---|
+| text-only model × image send | named refusal, zero requests | images.test.ts | → I3 |
+| non-image bytes × model prompt | NotImplementedError, zero requests | images.test.ts | → I3 |
+| provider error × UI continuation | other model, history retained, no tool replay | ai-mode.spec.ts catalog controls | → I4 + I2 |
+| project filename collision × attach | unique path or visible failure; prior bytes preserved | ai-mode.spec.ts binary attachment collision | → I4 + scenario |
+
+## Out of scope
+
+Tool image results remain agent.tool-image-result ❌. Non-image model input
+remains agent.prompt-binary-input ❌. Automatic fallback is not added.
+Compaction/context-exceeded UI remains linked to I5 after the baseline.
 
 ## Decisions
 
 re-cut: 2026-09-27 — absorb draft predecessor distribution/ai-agent-prompt-images into this image/catalog chat unit; preserve I3/I4 and all existing scenarios — trace: none
 
 - Inherits goal decisions (catalog, images, entry defaults, tier). Automatic fallback is Out of scope (goal map): the UI offers, the user chooses.
+
+- 2026-09-27 — carrier: existing simple Base URL/Model/key controls plus native catalog JSON in an advanced section; keys scoped to provider, memory-only; browser built-in transport remains OpenAI-compatible, external embedders register other native Providers (ADR-0471).
+- 2026-09-27 — attachment carrier: file picker, images kept in the composer until admitted; binary files stored under /attachments with collision-safe names and expectedVersion:null; paths shown and appended to the sent prompt (I4, ProjectFiles authority).
+- 2026-09-27 — image-only prompts follow the executed pi oracle; empty text without images keeps its existing refusal (I3, unchanged baseline).
+- 2026-09-27 — source/authority: user chose catalog-only, manual switching and images-to-model/other-files-to-project; these are I3/I4, inherited scope check; no new user fork. Shape/UI/file folder are route decisions.
