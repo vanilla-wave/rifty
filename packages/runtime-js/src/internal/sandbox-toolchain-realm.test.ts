@@ -73,6 +73,16 @@ afterEach(() => {
 });
 
 describe('sandbox toolchain WebAssembly.Memory descriptor evaluation', () => {
+  it('preserves the guest-visible native constructor and property descriptor identity', () => {
+    const lexical = selectToolchainRealm();
+    const memory = new lexical.Memory({ initial: 1 });
+
+    expect(memory.constructor).toBe(lexical.Memory);
+    expect(lexical.Memory).toBe(globalThis.WebAssembly.Memory);
+    expect(Object.getOwnPropertyDescriptor(lexical, 'Memory')?.value).toBe(lexical.Memory);
+    expect(selectToolchainRealm().Memory).toBe(lexical.Memory);
+  });
+
   it('records the native Node v24.16.0 order and single-read oracle', () => {
     expect(process.version).toBe('v24.16.0');
     expect(observeMemory(WebAssembly.Memory, (read) => read > 1)).toEqual({
