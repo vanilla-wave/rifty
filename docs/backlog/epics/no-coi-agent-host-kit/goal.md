@@ -408,11 +408,14 @@ drafts outside the kit; recorded ceilings stay out of scope.
   item 1); «3 - a» run budgets are agent-weak-models I9 (100 calls / 600 s) —
   the audit-routing line above is amended:
   `distribution/agent-tool-text-cap-and-run-budgets-measure` narrows to the
-  16 KiB cap and names no owning goal; «6 - ок» item 3's reducer lands before
-  agent-weak-models items 3 and 7, whose chat UI halves extend it.
+  16 KiB cap and names no owning goal; «6 - ок», then simplified on the
+  user's «очень сложная последовательность»: no cross-goal ordering for item
+  3's reducer — it lands after agent-weak-models and covers its chat events.
 - 2026-09-27 — agent (user: «сделай так, чтобы разработка была проще»):
-  shared-bench order — agent-weak-models item 1 migrates the bench lanes to
-  the catalog before item 7 here swaps the no-COI lane onto the reference
-  host module; the quality goal's runner/report restructuring follows
-  agent-weak-models items 1 and 4. Cross-branch order is recorded in text,
+  the three goals run whole and in sequence, each by its own map:
+  `epics/agent-weak-models` → this goal → `epics/agent-code-quality-evaluation`;
+  no cross-goal item ordering. Why: agent-weak-models item 1 migrates the
+  bench lanes to the catalog before item 7 here swaps the no-COI lane onto
+  the reference host module; the quality goal's runner/report restructuring
+  follows agent-weak-models items 1 and 4. Cross-branch order is recorded in text,
   not `blocked_by` (the backlog checker resolves links within one tree).

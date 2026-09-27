@@ -6,8 +6,10 @@ independent except 8 after 1 (typed no-registry outcome); 5 is removed
 (model selection is `epics/agent-weak-models`, PR #359); 6 after
 agent-weak-models item 1 (the catalog entry it flags); 7 after all others and
 after agent-weak-models item 1 (bench no-COI lane on the catalog) and closes
-the goal. Cross-branch order is text, not `blocked_by` (checker scope = one
-tree).
+the goal. Goals run whole and in sequence: `epics/agent-weak-models` (PR
+#359) → this goal → `epics/agent-code-quality-evaluation` (PR #341); the
+per-item "after agent-weak-models item 1" notes follow from that. Cross-branch
+order is text, not `blocked_by` (checker scope = one tree).
 
 ## Items
 
@@ -18,9 +20,9 @@ tree).
 2. `distribution/sdk-boot-and-snapshot-progress-events` — **progress** — I1
    (waiting phase), I3; boot phases and apply counts on `runtime.on`.
 3. `distribution/agent-transcript-model` — **transcript** — I7; framework-free
-   reducer; playground chat consumes it (dogfood). Lands before
-   agent-weak-models items 3 and 7 (PR #359), whose chat UI halves (model
-   picker, attach, switch offer, compaction marker) extend it.
+   reducer; playground chat consumes it (dogfood). Covers the chat events
+   agent-weak-models (PR #359, lands before this goal) adds: model switch,
+   compaction marker, retry attempts, steering message, `context-exceeded`.
 4. `distribution/agent-per-capability-project-policy` — **policy** — I4; one
    host, distinct files/shell policy values over the SDK project policy; the
    README example that prohibits nested `npm run` stages is repaired and
