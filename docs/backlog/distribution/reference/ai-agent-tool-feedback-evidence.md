@@ -118,3 +118,7 @@ now uses the same normalization. A single heading retains the real error message
 - `/private/tmp/rifty-pr359-feedback-settlement-final.log`:35/35 (29 fault +6metrics).
 F1/N1 repair full gate25/25, no isolated rerun:
 `/private/tmp/rifty-pr359-feedback-effects-pr-check.log`; current types/lint pass.
+
+Final+GREEN PASS @481b2ab3a:25/25 coverage, zero findings. Independent41/41 and
+real-Agent settlement sibling probes pass (`/private/tmp/rifty-pr359-review-settlement-siblings.log`).
+Verdict `ai-agent-tool-feedback-final-green.json`; I13 remains required.

@@ -22,3 +22,9 @@
 
 - Supplemental Final+GREEN PASS @5c6100731: browser recovery now supplies4 transient failures and proves native exhaustion before explicit continuation; independent Chromium17/17, zero findings. `distribution/reference/ai-agent-continuation-browser-fixture-final-green.json`.
 - Re-cut five drafts into `distribution/ai-agent-tool-feedback`, preserving I7–I11. DEC-2 native end-event probe reaches wire/history for invalid/missing calls and does not skip fourth batch call after steering. ADR0475 records route and narrow profile correction. Contract+RED remains before implementation.
+
+## 2026-09-28 — tool feedback landed
+
+- re-chart after tool feedback (final-green PASS @481b2ab3a8046701536a21929e38f70ea5f4cd1b): I7–I11 complete; 25/25 coverage, zero findings/residuals. `distribution/reference/ai-agent-tool-feedback-final-green.json`. F1/N1 accepted and independently repaired: fitting/oversized effects and partial mutation provenance retained on actual model wire.
+- Independent41/41 plus real-Agent sibling probes; fullgate25/25; browser18/18, chat15+1, full14pair smoke and budget cases across all3lanes. Packed no-COI must not overlap a dist rebuild; serialized rerun passed.
+- I13 remains alone: same Luna config/five tasks/three cold runs per supported task/lane, record42 outcomes and compare against frozen40/42 baseline. Proxy10539 exposes gpt-6-luna. No task/judge recut or failure replacement.

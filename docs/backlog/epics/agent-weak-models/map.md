@@ -7,9 +7,6 @@ item ordering (goal §Decisions "shared bench order").
 
 ## Items
 
-5. `distribution/ai-agent-tool-feedback` — **tool feedback** — budgets,
-   precise edit failures, native repetition steering, host mutation diagnostics
-   and shared recipe (I7–I11). DEC-2 native end-event seam proven; ADR0475.
 12. `distribution/ai-agent-weak-model-rerun` — **re-run** — same config,
     tasks and runs as item 4 after tool feedback lands; per-task comparison in the
     report — the smallest `report --compare` over two summary directories,
