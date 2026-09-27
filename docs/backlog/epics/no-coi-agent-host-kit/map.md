@@ -1,8 +1,9 @@
 # Map — no-coi-agent-host-kit
 
 Live plan: index, not store. Minimal pattern first; each child a `draft`
-finding compiled to `ready` at its own PICKUP (`RDY-1`). 1–6 are independent
-except 6 after 5 (same transport file); 7 after 1–6 and closes the goal.
+finding compiled to `ready` at its own PICKUP (`RDY-1`). 1–6, 8, 9 are
+independent except 6 after 5 (same transport file) and 8 after 1 (typed
+no-registry outcome); 7 after all others and closes the goal.
 
 ## Items
 
@@ -15,25 +16,38 @@ except 6 after 5 (same transport file); 7 after 1–6 and closes the goal.
 3. `distribution/agent-transcript-model` — **transcript** — I7; framework-free
    reducer; playground chat consumes it (dogfood).
 4. `distribution/agent-per-capability-project-policy` — **policy** — I4; one
-   host, distinct files/shell policy values over the SDK project policy.
+   host, distinct files/shell policy values over the SDK project policy; the
+   README example that prohibits nested `npm run` stages is repaired and
+   tested (audit row 3).
 5. `distribution/agent-per-turn-settings` — **per-turn** — I5; `settings` as a
    function resolved before each turn; superseding ADR + ADR-0436 §Corrections.
 6. `distribution/agent-text-only-content-transport` — **text-content** — I6;
    opt-in string-content mode; short ADR citing ADR-0436. After 5.
 7. `distribution/no-coi-agent-reference-host` — **reference-host** — I8 and
-   scenario 1–8; the packed lane's Vite consumer refactored into a
-   connections-only `host.ts`, SDK README links it, packed-consumer lane runs
-   it, and `tools/agent-bench`'s no-COI lane boots the same module (user:
-   measure what we ship). After 1–6; closes the goal.
+   scenario 1–9; the packed lane's Vite consumer refactored into a
+   connections-only `host.ts` (registry connected / none), SDK README links
+   it, packed-consumer lane runs it, and `tools/agent-bench`'s no-COI lane
+   boots the same module (user: measure what we ship). After 1–6, 8, 9;
+   closes the goal.
+8. `distribution/no-coi-agent-npm-install` — **agent-install** — I9; the
+   agent's shell `npm install` over the existing installer; loud no-registry
+   outcome; truthful prompt text. After 1.
+9. `distribution/agent-shell-tool-output-order` — **output-order** — I10;
+   shell tool text in terminal order after the status line.
 
 ## Open questions
 
-- Fidelity audit of the no-COI + agent path (user 2026-09-27: «Отправь агента
-  проверить сценарий "nonCOI + agent" на fidelity») — owner: agent — running;
-  each finding is classified ceiling / policy-default / invented-limit /
-  silent-divergence; policy-defaults and silent divergences that touch the kit
-  scenario re-chart this map (new child or Out-of-scope loud throw) before the
-  goal flips ready.
+- Agent install carrier: how the shell's `npm install` reaches the installer
+  behind `toolchain.install` (same Worker, `installManifest`), how `<pkg>`
+  arguments update `package.json`/lockfile before resolution, and how the
+  operation joins the busy slot without a queue — owner: agent — item 8
+  pickup; ADR citing ADR-0418 D4 there.
+- No-registry outcome shape (typed identifier from item 1; message names the
+  missing connection) and the conditional prompt text — owner: agent — item 8
+  pickup.
+- Shell tool text ordering carrier: rebuild text from the ordered `output`
+  events vs an ordered capture in `SandboxCommandOutcome` — owner: agent —
+  item 9 pickup; ADR-0436 D4 status header unchanged.
 - Error identifier form: exported classes (need serialize/re-attach across the
   Worker hop, `errors.ts:217-277` precedent; fail under duplicated package
   copies) vs exported name constants + `isX(error)` predicates — owner: agent —
@@ -75,6 +89,17 @@ except 6 after 5 (same transport file); 7 after 1–6 and closes the goal.
   — carriers rejected (goal Decisions).
 - A one-call composition entry — not seeded; re-chart if I8's host still
   carries mechanism after 1–6.
+- 16 KiB tool-text cap and 100 / 180 s run budgets (ADR-0424 D7) — measured
+  first: `distribution/agent-tool-text-cap-and-run-budgets-measure` (quality
+  goal); the kit does not change them.
+- Command fidelity outside the agent: empty `process.env` + npm lifecycle
+  vars, `spawn('npm'|'.bin/*')` ENOENT, `node -p`/`--input-type` on no-COI,
+  `npx` nudge — finding drafts `distribution/no-coi-command-env-and-npm-
+  lifecycle-vars`, `runtime-js/child-process-spawn-npm-and-bin-via-shell`,
+  `distribution/no-coi-node-print-and-input-type-flags`,
+  `shell/npx-and-package-manager-nudge-honesty`.
+- `npx`, `yarn`, `pnpm`, postinstall scripts (`npm-client/postinstall-scripts`)
+  — not claimed by I9; loud today.
 - Other OpenAI-compatible endpoint quirks (fixed `Model` fields: context
   window, max tokens, reasoning, `compat`) — stay on the `streamFn` form
   (ADR-0436); only string content is claimed (I6).

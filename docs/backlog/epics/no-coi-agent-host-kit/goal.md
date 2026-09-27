@@ -3,7 +3,7 @@ kind: epic
 status: draft
 title: no-COI agent host kit — an existing app wires connections only
 created: 2026-09-27
-value: A team embeds a no-COI rifty sandbox plus the rifty agent into its existing web app by supplying only connections — asset URLs, a storage namespace, an OpenAI-compatible endpoint, a project root and policy values — while every part that affects agent quality ships and is measured inside rifty.
+value: A team embeds a no-COI rifty sandbox plus the rifty agent into its existing web app by supplying only connections — asset URLs, a storage namespace, an OpenAI-compatible endpoint, a project root and policy values — while every part that affects agent quality ships and is measured inside rifty, and the agent works as on a developer machine — including `npm install` when a registry is connected.
 user_story: As a developer embedding rifty into an existing non-COI product, I want `createSandbox` + `@riftydev/agent` to cover open → agent edit → build out of the box, but today I re-derive occupied/busy/progress state, splice two agent hosts for policy, write my own transcript reducer and a full Pi `streamFn` just to switch models and flatten message content.
 tier: works
 ---
@@ -15,7 +15,9 @@ The no-COI composition (`createSandbox({ toolchain })` → `project` →
 `openWorkbench` owns on the COI path — typed outcomes, a visible wait, real
 progress — and the agent parts an existing app cannot author without reaching
 into Pi: per-capability policy, per-turn settings, text-only message content,
-a transcript model. An in-repo reference host built from packed tarballs in CI
+a transcript model — and the agent's shell behaves as on a developer machine:
+`npm install <pkg>` works whenever the host connects a registry and fails
+loudly when it does not, command output reaches the model in terminal order. An in-repo reference host built from packed tarballs in CI
 proves the kit and fixes the boundary: host code is connections (URLs,
 namespace, endpoint settings, root, policy *values*); everything that shapes
 agent behaviour — policy enforcement, transport shaping, prompt and tool text,
@@ -61,21 +63,31 @@ Source: issue #345 and its triage; evidence
    cancelled). The user switches model before the next turn; history is kept.
    The endpoint accepts only string `content`; the session's text-only content
    mode makes it work without a consumer `streamFn` or a direct Pi dependency.
-6. `project.run('npm run build')` streams stdout/stderr chunks; a second
-   `run` issued during the build settles as the typed busy outcome and is
-   retried after the first settles; `dist/index.html` is read through
-   `project.fs`.
-7. The same namespace opened in a second tab shows "waiting for storage
+6. Second prompt: "format uptime with `ms`". The agent runs `npm install ms`
+   in its shell. With the host's registry connection configured the package
+   lands in `package.json`, the lockfile and `node_modules` through the same
+   installer the host's `toolchain.install` uses. A host that connected no
+   registry — a valid configuration — sees the same command fail loudly with
+   an outcome naming the missing registry; the agent reports it instead of
+   pretending, and its instructions never claim installs are the host's job
+   when a registry is connected.
+7. `project.run('npm run build')` streams stdout/stderr chunks; the shell
+   tool's text to the model keeps them in terminal order; a second `run`
+   issued during the build settles as the typed busy outcome and is retried
+   after the first settles; `dist/index.html` is read through `project.fs`.
+8. The same namespace opened in a second tab shows "waiting for storage
    writer" and settles as the outcome identified as occupied — whichever
    deadline fires first, the guard's or `startupTimeoutMs`; after the first
    tab closes, a retry succeeds.
-8. The reference host — the packed lane's Vite consumer app
+9. The reference host — the packed lane's Vite consumer app
    (`tests/integration/fixtures/workbench-vite-consumer`, the persona of step
-   1) — runs 2–7 against packed tarballs in CI with the scripted provider. Its
-   source contains connections only: asset URLs, namespace, endpoint settings,
-   project root and policy values (enforcement is rifty's), DOM targets, the
-   host-owned applied `snapshotId`. No readiness polling, apply-state strings,
-   busy flags, transport shaping, prompt or tool text.
+   1) — runs 2–8 against packed tarballs in CI with the scripted provider, in
+   both configurations of step 6 (registry connected / none). Its source
+   contains connections only: asset URLs, namespace, endpoint settings,
+   optional `registryUrl`, project root and policy values (enforcement is
+   rifty's), DOM targets, the host-owned applied `snapshotId`. No readiness
+   polling, apply-state strings, busy flags, transport shaping, prompt or tool
+   text.
 
 ## Invariants
 
@@ -96,7 +108,13 @@ Source: issue #345 and its triage; evidence
      proofs (workbench-vite-consumer/src/{no-coi-project-proof,
      sandbox-agent-proof}.ts) and tools/agent-bench/src/no-coi-page.ts are
      test-shaped drivers that poll readiness, keep apply-state strings and
-     accumulate output by hand; no connections-only host exists. -->
+     accumulate output by hand; no connections-only host exists. I9 — no-COI
+     shell `npm install` throws NotImplementedError('sandbox.project.
+     npm-install') (npm-shell-command.ts:287-291 via no-coi-project-command.
+     ts:182); prompt.ts:26-28 tells the model dependency policy belongs to the
+     host; toolchain.install is host-only with no package list. I10 —
+     tools.ts:319 builds the shell tool text as stdout then stderr. Evidence
+     §Fidelity audit rows 1, 2, 17, 21. -->
 
 1. I1. A second `createSandbox` on an occupied `storage.namespace` settles —
    whichever deadline fires first, the replica guard's or `startupTimeoutMs`
@@ -136,13 +154,25 @@ Source: issue #345 and its triage; evidence
    renderer built on it shows cancelled tools, capability changes and command
    output that today's ad-hoc reductions drop.
 8. I8. An in-repo no-COI reference host built from packed tarballs in CI runs
-   scenario steps 2–7 end to end, and its source contains only connections
-   (step 8's list): no readiness polling, apply-state strings, busy flags,
+   scenario steps 2–8 end to end in both registry configurations, and its
+   source contains only connections (step 9's list): no readiness polling, apply-state strings, busy flags,
    transport shaping, prompt or tool text — nothing quality-relevant is
    host-authored; and rifty's benchmark (`tools/agent-bench` no-COI lane)
    boots this host's composition module, so the measured configuration is the
    kit's reference configuration (unrestricted root, session defaults) and
    the kit's opt-in modes are toggles of that same module.
+9. I9. In the agent's shell `npm install [<pkg>…]` runs through the same
+   installer as the host's `toolchain.install` when the host connected a
+   registry (`registryUrl` is an optional connection): `package.json`, the
+   lockfile and `node_modules` change as npm would, the operation joins the
+   existing busy slot; with no registry connected the command fails loudly
+   with an outcome naming the missing registry — a valid configuration — and
+   the injected instructions describe installs truthfully for the active
+   configuration instead of steering the model away from dependencies.
+10. I10. The shell tool's text to the model presents stdout and stderr in the
+   order the command produced them — as the streaming `output` events and a
+   terminal do — after the status line ADR-0436 D4 requires, never
+   stdout-then-stderr.
 
 ## Challenge
 
@@ -206,6 +236,12 @@ challenge: 2026-09-27 — 8 problems + 8 advisory (widened kit; resolution per l
 - A7 ledger "1a, 2b" were not user words; fork/issue numbering mixed; fork-5
   non-answer missing — fixed (ledger, Decisions).
 - A8 cheaper route for I5 (new session per turn) — `rejected route:` added.
+
+fidelity audit: 2026-09-27 — 26 rows (evidence §Fidelity audit); routed by the
+user's answers: agent `npm install` → I9 (item 8); tool-text order → I10
+(item 9); README allowlist defect → item 4; caps/budgets → quality goal
+question; env/npm vars, `spawn('npm')`, `node -p`, `npx` nudge → finding
+drafts outside the kit; recorded ceilings stay out of scope.
 
 ## Decisions
 
@@ -272,6 +308,27 @@ challenge: 2026-09-27 — 8 problems + 8 advisory (widened kit; resolution per l
   issue #345 item 6) stays an opt-in capability with unrestricted defaults —
   the host's ask is kept, the restriction never becomes the reference; flagged
   for the final check as an agent derivation.
+- 2026-09-27 — user (agent `npm install`, after the fidelity audit):
+  «разрешаем, но оно может падать, если к песочнице не подключен npm
+  registry(такое должно быть валидно с точки хрения конфигурации)» → I9,
+  scenario 6, item 8.
+- 2026-09-27 — agent (from the install answer): `registryUrl` is an optional
+  host connection; the agent's `npm install` reuses the installer behind
+  `toolchain.install` (no second installer) and joins the existing busy slot
+  (ADR-0376); the no-registry outcome is typed (I2); the injected prompt text
+  follows the configuration (audit row 21); seam addition on ADR-0418 D4 →
+  short ADR citing it at item 8 pickup. rejected route: a rifty-specific
+  "install" tool instead of the real `npm install` command — violates Outcome
+  "as on a developer machine".
+- 2026-09-27 — agent (audit routing, accepted by the user without objection):
+  I10 tool-text order (item 9); README `allowedCommands` example that breaks
+  `npm run` → item 4 obligation; 16 KiB cap and 100/180 s budgets stay
+  ADR-0424 D7 until measured → question draft
+  `distribution/agent-tool-text-cap-and-run-budgets-measure` for the quality
+  goal; empty command env + npm lifecycle vars, `spawn('npm'|'.bin/*')`,
+  `node -p`/`--input-type` on no-COI, `npx` nudge → finding drafts outside the
+  kit; background jobs, drain cap, preview-mode tool removal → visual-debug
+  epic fog; `platform='rifty'`, shell features, net ceilings → existing items.
 - 2026-09-27 — agent: fork 5 carrier — the reference host is built on the
   packed lane's Vite consumer (`tests/integration/fixtures/workbench-vite-
   consumer`, whose `no-coi-project-proof.ts` / `sandbox-agent-proof.ts` already

@@ -28,6 +28,15 @@ connection, enforcement stays in the SDK project policy (two
 `sandbox.project()` handles over the same root is the obvious carrier), no
 second policy engine.
 
+Defect to repair in the same unit (fidelity audit row 3): `allowedCommands`
+is asserted on every stage including scripts spawned by `npm run`
+(`no-coi-project-command.ts:162-166`), so the README example
+`allowedCommands: ['npm', 'node']` (`packages/agent/README.md:50`) makes
+`npm run build` fail with `EACCES Command is prohibited: vite`; the
+combination is untested. The README example must run the goal scenario and
+the allowlist + nested-script case gets a test; the per-stage semantics
+themselves stay (an allowlist that `npm run` could bypass would be a lie).
+
 ## Out of scope
 
 - A filesystem jail or path escape guarantees beyond the existing root-as-path-origin (ADR-0418 D2).

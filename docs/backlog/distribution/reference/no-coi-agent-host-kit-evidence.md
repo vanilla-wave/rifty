@@ -270,3 +270,50 @@ timeout message; `dep-snapshot-application.ts:33-46` payload files;
   Pi sends the array; some OpenAI-compatible endpoints accept only the string,
   so the parts are joined into one string (wire format only, text-only
   conversations lose nothing).
+
+## Fidelity audit — "non-COI + agent" (2026-09-27, read-only subagent; top rows verified by the driver)
+
+Standard: agent behaves as on a developer machine (Pi + Node 24); gaps loud.
+Class: ceiling | policy-default | invented-limit | silent-divergence | parity.
+
+| # | where | agent hits | real machine | class | recorded | tests |
+|---|---|---|---|---|---|---|
+| 1 | `packages/workbench/src/glue/npm-shell-command.ts:287-291` via `no-coi-project-command.ts:182` | `npm install [pkg]` → `NotImplementedError('sandbox.project.npm-install','use toolchain.install')`; `toolchain.install({cwd, registryUrl})` is host-only, takes no package list | `npm install lodash` works | invented-limit / policy-default — the installer runs in the same Worker (`no-coi-toolchain-worker.ts:116-150`); COI shell wires `createNpmShellCommand` | ADR-0418 D4 lists bins/node/`npm run`; nothing records excluding install | none (no-COI) |
+| 2 | `packages/shell/src/shell.ts:225-231,851-856` | `npx`/`yarn`/`pnpm` → 127 + nudge "try: npm install …" which itself throws (#1) | `npx vite build` works | silent-divergence (misleading text) | none | none |
+| 3 | `no-coi-project-command.ts:59-63,162-166`; `packages/agent/README.md:50` | `allowedCommands` asserted on every stage incl. nested `npm run` scripts; README's `['npm','node']` makes `npm run build` → `EACCES Command is prohibited: vite` | no allowlist | policy-default; README reference config breaks the primary scenario | ADR-0418 D4; kit: unset = unrestricted | allowlist + `npm run` untested |
+| 4 | `packages/rifty/src/sandbox-project.ts:119` (`env ?? {}`), `sandbox-host.ts:66` "fresh environment" | every command's `process.env` = `{}`; adapter exposes no env | full user env | silent-divergence | ADR-0418 D2 (SDK); adapter gap unrecorded | env passthrough only |
+| 5 | `npm-shell-command.ts:510` `runPackageScript` | `npm run` injects no `npm_lifecycle_event` / `npm_package_*` / `npm_config_*` / PATH | npm injects them | silent-divergence | none | none |
+| 6 | `shell.ts:359-360` `allowBackground:false` | `cmd &` → `NotImplementedError('shell.background')`; dev server only via host `startBin` | works | invented-limit (loud) | ADR-0418 D4 | `agent-scenarios.ts:124` |
+| 7 | `no-coi-project-command.ts:123` `awaitDrain({capMs:600_000})` | command holding refs > 10 min → Worker replaced | runs forever | invented-limit (loud, value unrecorded) | none | cap untested |
+| 8 | `sandbox-host.ts:50-59`, `no-coi-toolchain-worker.ts:283-296` | preview mode removes file+shell tools; `resident-concurrency` NIE | edit + HMR while dev server runs | recorded one-Worker choice | ADR-0377 D1, ADR-0426 D2; kit: commands-only (user C) | `no-coi-pi-agent.spec.ts:183-197` |
+| 9 | `no-coi-toolchain-worker.ts:397-402` | host op concurrent with agent command → busy | concurrent ok | recorded | ADR-0376 D1, ADR-0418 D3 | `agent-scenarios.ts:166` |
+| 10 | `runtime-js/src/builtins/process-identity.ts:21-30` | `platform='rifty'`, `arch='wasm'` | linux/darwin | recorded honesty | ADR-0026; `runtime-js/process-versions-node-honesty` | unit |
+| 11 | `runtime-js/src/builtins/child_process.ts:323-325,461-466` | `spawn('npm'|'vite'|'git')` → ENOENT 127; only `node <script>` | any binary | ceiling for natives; invented gap for `npm` / `.bin` (shell could serve) | `child_process-ceiling.test.ts` | unit |
+| 12 | `packages/net/src/https.ts:77`, `net.ts:302` | `https.request`, `net.connect` → NIE; fetch/http = browser fetch, CORS | unrestricted | ceiling (loud) | ADR-0152 family | unit |
+| 13 | `no-coi-project-command.ts:203-215` | `node -p`, `--input-type=module -e`, `-r` → NIE; `node -e` ok | work | invented-limit (loud; COI has M11 `node -e/-p`) | none | none (no-COI) |
+| 14 | `packages/shell/src/tokenize.ts:70`, `builtins.ts:45-75` | `$(…)` NIE; no `sed/awk/sort/uniq/xargs/cut/tr/diff/curl/tar/test/[`, no if/for/heredoc → 127 | present | invented-limit (loud, JS-implementable) | shell backlog | shell unit |
+| 15 | `packages/agent/src/text.ts:1` `TOOL_RESULT_CAP_BYTES = 16 KiB`, `tools.ts:130` | all tool text capped 16 KiB head/tail | Pi: read 50 KB / 2000 lines, bash tail 50 KB | invented-limit (3× tighter than Pi) | ADR-0424 D7 | cap vs real `vite build` output untested |
+| 16 | `tools.ts:10,58,244` | list/glob/grep hard-exclude node_modules/.git/dist; 2000-entry walk; 500 matches | Pi: .gitignore-driven | invented-limit (mild) | none | none |
+| 17 | `tools.ts:319` `${outcome.stdout}${outcome.stderr}` | shell tool text = stdout then stderr, interleaving lost (streaming `output` events keep order) | interleaved terminal | silent-divergence | none | events tested, text not |
+| 18 | `session.ts:47-48` | defaults `maxToolCalls 100`, `runTimeoutMs 180 s` → `budget-exceeded` | Pi: none | invented-limit | ADR-0424 D7 | `session.test.ts`; bench 40 / 600 s |
+| 19 | `session.ts:104` `maxRetries:0` | one 429/5xx → run `error` | Pi CLI retries | policy-default (recorded) | ADR-0424 D4 | — |
+| 20 | `session.ts:30-45` | fixed Model (`reasoning:false`, ctx 128k, maxTokens 8192, no `compat`), content parts | provider-true | policy-default (recorded) | ADR-0436; kit items 5/6 | — |
+| 21 | `prompt.ts:26-28`, `sandbox-host.ts:66-67` | injected "No sudo, apt, brew … dependency policy belong to the host", `Project policy: {json}`, 16 KiB notice | Pi prompt: none | invented text (steers away from adding deps) | ADR-0424 D3 generic | prompt.test |
+| 22–25 | Stop semantics, `change`/`edit_file`, per-call cwd, exit codes 127/126/130 | — | same | parity | ADR-0418 D5, ADR-0426 D1 | pi-agent / agent-scenarios |
+| 26 | `workbench-host.ts:112-145` | no-COI lacks vs COI: TS diagnostics, SCM diff, CAS writes, persistent cwd/env, PTY, shell `npm install`, background jobs | — | gap list | ADR-0426 "absent stay absent" | asserted absent |
+
+Top findings: (a) #1+#2+#21 — the agent has no way to add a dependency; not a
+ceiling (same Worker installs). (b) #3 — README's reference policy silently
+breaks every `npm run` script. (c) #4+#5 — empty env, no npm lifecycle vars.
+(d) #6+#7+#8 — no dev-server loop for the agent (preview epic). (e)
+#15/#17/#18 — build output reaches the model capped, de-interleaved, under a
+180 s default budget. (f) #13/#14 — `node -p`, `$(…)`, coreutils missing
+(loud). Driver-verified rows: 1, 3, 4, 15, 17, 18, 21 (source read
+2026-09-27). Not verified by the audit: whether `model.maxTokens` caps output;
+real `vite build` output size vs 16 KiB; Pi CLI default retries.
+
+## User answer on agent install (2026-09-27, verbatim)
+
+«разрешаем, но оно может падать, если к песочнице не подключен npm
+registry(такое должно быть валидно с точки хрения конфигурации)» — routing
+of the remaining audit rows presented in the same message was not objected to.
