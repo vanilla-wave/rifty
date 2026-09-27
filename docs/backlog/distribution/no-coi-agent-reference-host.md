@@ -5,7 +5,7 @@ title: Refactor the packed lane's Vite consumer into a connections-only referenc
 created: 2026-09-27
 why: no in-repo host composes @riftydev/sdk + @riftydev/agent for embedders to copy; the packed proofs that already run sdk + agent + scripted provider are test-shaped and re-derive readiness, apply state, busy and output handling, so every consumer rewrites the same glue and nothing pins the host/rifty boundary
 epic: no-coi-agent-host-kit
-blocked_by: [distribution/sdk-typed-sandbox-outcomes, distribution/sdk-boot-and-snapshot-progress-events, distribution/agent-transcript-model, distribution/agent-per-capability-project-policy, distribution/agent-per-turn-settings, distribution/agent-text-only-content-transport, distribution/no-coi-agent-npm-install, distribution/agent-shell-tool-output-order]
+blocked_by: [distribution/sdk-typed-sandbox-outcomes, distribution/sdk-boot-and-snapshot-progress-events, distribution/agent-transcript-model, distribution/agent-per-capability-project-policy, distribution/agent-text-only-content-transport, distribution/no-coi-agent-npm-install, distribution/agent-shell-tool-output-order]
 sources: [ADR-0417, ADR-0420, ADR-0426, ADR-0436, docs/backlog/distribution/reference/no-coi-agent-host-kit-evidence.md]
 code: [tests/integration/fixtures/workbench-vite-consumer/src/no-coi-project-proof.ts, tests/integration/fixtures/workbench-vite-consumer/src/sandbox-agent-proof.ts, tests/integration/fixtures/workbench-vite-consumer/src/agent-scripted-provider.ts, tests/integration/workbench-packed-consumer.mjs, tests/integration/no-coi-agent-browser-proof.mjs, tools/agent-bench/src/no-coi-page.ts, packages/rifty/README.md]
 ---
@@ -40,7 +40,10 @@ project root and policy values, DOM targets, the host-owned applied
 `snapshotId` with `force` on a new id) plus the declined host glue as plain host code (line normalizer,
 download helper, one promise chain). The existing proof drivers keep
 asserting rifty behaviour over that host. `packages/rifty/README.md` links it
-as the embedding recipe. Closes the goal.
+as the embedding recipe. Closes the goal. The session is created from a
+one-entry model catalog (`epics/agent-weak-models` I1, PR #359); that goal's
+item 1 also migrates the bench no-COI lane to the catalog and lands before
+this item.
 
 User decision 2026-09-27 (goal Decisions): `tools/agent-bench`'s no-COI
 lane boots this host's composition module, so the benchmark measures the

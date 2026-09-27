@@ -14,8 +14,10 @@ The no-COI composition (`createSandbox({ toolchain })` → `project` →
 `createSandboxAgentHost` → `createAgentSession`) gains the lifecycle core that
 `openWorkbench` owns on the COI path — typed outcomes, a visible wait, real
 progress — and the agent parts an existing app cannot author without reaching
-into Pi: per-capability policy, per-turn settings, text-only message content,
-a transcript model — plus two shell-fidelity repairs the audit surfaced:
+into Pi: per-capability policy, a text-only message-content flag, a
+transcript model — model selection and switching come from
+`epics/agent-weak-models` (PR #359: embedder catalog + `setModel`), not from
+this goal — plus two shell-fidelity repairs the audit surfaced:
 `npm install <pkg>` works whenever the host connects a registry and fails
 loudly when it does not (I9), and command output reaches the model in
 terminal order (I10); the other gaps the audit listed stay outside the kit —
@@ -62,11 +64,13 @@ Source: issue #345 and its triage; evidence
    writes files and runs the project's own commands (`npm run build`, `node`)
    as on a developer machine; per-capability policy values stay an opt-in for
    hosts that want them (I4), never the reference default — and one session
-   over `settings` + `fetch`. Prompt: "add a /health route". The chat renders from the exported transcript reducer
+   from a one-entry model catalog (`epics/agent-weak-models` I1, PR #359) on
+   the built-in OpenAI-compatible `fetch` transport. Prompt: "add a /health route". The chat renders from the exported transcript reducer
    (user / assistant / tool items, tool state running → success | error |
-   cancelled). The user switches model before the next turn; history is kept.
-   The endpoint accepts only string `content`; the session's text-only content
-   mode makes it work without a consumer `streamFn` or a direct Pi dependency.
+   cancelled). The user switches model before the next turn through `session.setModel`
+   (agent-weak-models I2); history is kept. The endpoint accepts only string
+   `content`; the entry's text-only content flag makes it work without a
+   consumer `streamFn` or a direct Pi dependency.
 6. Second prompt: "format uptime with `ms`". The agent runs `npm install ms`
    in its shell. With the host's registry connection configured the package
    lands in `package.json`, the lockfile and `node_modules` through the same
@@ -106,8 +110,8 @@ Source: issue #345 and its triage; evidence
      test. I2 — SDK root exports zero error identifiers; README prescribes
      name/message matching. I3 — RuntimeEvent = ready|stdout|stderr|result|
      exit|diagnostic; toolchainReady internal. I4 — SandboxAgentHostOptions.
-     project is one SandboxProjectOptions. I5 — settings fixed at construction
-     (session.ts:22-46); ADR-0436 D2 forbids a second callback. I6 — default
+     project is one SandboxProjectOptions. I5 — no obligation here since 2026-09-27
+     (agent-weak-models I1/I2, PR #359). I6 — default
      transport = pi-ai openai-completions; user content is built and sent as
      parts; Model.compat 0.85.1 has no string-content flag. I7 — reduction
      exists only in apps/playground/src/ai/AiChatPanel.tsx:17-253 (isError
@@ -146,14 +150,17 @@ Source: issue #345 and its triage; evidence
    (e.g. a shell that may not write while file tools may) as an opt-in;
    unset = unrestricted, which is what the reference host and the benchmark
    run; enforcement stays in the SDK project policy, no second policy engine.
-5. I5. A session created over OpenAI-compatible `settings` resolves endpoint
-   and model before each model turn when the consumer supplies them as a
-   function, keeping the session history; ADR-0436 D2's "no model-selection
-   API" clause is superseded for this form only (`DEC-2`).
-6. I6. The OpenAI-compatible transport offers an opt-in text-only message
-   content mode: an endpoint that accepts only string `content` completes the
-   scenario turn over `settings` + `fetch`, without a consumer `streamFn` or a
-   direct `@earendil-works/pi-ai` dependency.
+5. I5. Model selection and mid-session switching with retained history are
+   `epics/agent-weak-models` I1/I2 (embedder catalog + `session.setModel`,
+   PR #359) — user 2026-09-27 «1 - a»; this goal adds no `settings`-form
+   mechanism and no second model-selection API, and the reference host
+   creates its session from a one-entry catalog.
+6. I6. A model-catalog entry (agent-weak-models I1) carries an opt-in
+   text-only message-content flag: an endpoint that accepts only string
+   `content` completes the scenario turn on the built-in `fetch` transport,
+   without a consumer `streamFn` or a direct `@earendil-works/pi-ai`
+   dependency; `send` with images to a flagged entry fails before any request
+   (agent-weak-models I3 path).
 7. I7. `@riftydev/agent` exports a framework-free transcript reducer over
    `AgentSessionEvent` — ordered user / assistant / tool items, streaming text
    apart from the finished message, tool state running → success | error |
@@ -237,7 +244,8 @@ challenge: 2026-09-27 — 8 problems + 8 advisory (widened kit; resolution per l
 - A2 I1 "never a generic preload failure" vs ADR-0428 expiry identity — I1
   keeps `OpfsPreloadError` identity + discriminator.
 - A3 Model fields stay rifty-fixed — item 6 records that other endpoint
-  compat needs re-enter through `streamFn`.
+  compat needs re-enter through `streamFn`. Superseded 2026-09-27: per-entry
+  fields are the agent-weak-models catalog (PR #359).
 - A4 host applied flag keyed by `snapshotId` + `force` on change — scenario 4.
 - A5 I7 "playground chat renders from it" is a carrier — moved to Decisions;
   I7 states the observable.
@@ -246,6 +254,7 @@ challenge: 2026-09-27 — 8 problems + 8 advisory (widened kit; resolution per l
 - A7 ledger "1a, 2b" were not user words; fork/issue numbering mixed; fork-5
   non-answer missing — fixed (ledger, Decisions).
 - A8 cheaper route for I5 (new session per turn) — `rejected route:` added.
+  I5 moved to agent-weak-models 2026-09-27.
 
 fidelity audit: 2026-09-27 — 26 rows (evidence §Fidelity audit); agent
 `npm install` → I9 (item 8) by the user's answer; the remaining rows routed by
@@ -288,7 +297,13 @@ drafts outside the kit; recorded ceilings stay out of scope.
   (I6). agent: ADR-0436 D2 is partially overturned → `DEC-2`: decision
   subagent + short superseding ADR naming D2, dated §Corrections note on
   ADR-0436 pointing at it (item 5's PR); text-only content is a seam addition
-  on ADR-0436 → short ADR citing it (item 6's PR).
+  on ADR-0436 → short ADR citing it (item 6's PR). amended 2026-09-27
+  (three-goal review; user «1 - a», «2 - a»): per-turn `settings` dropped —
+  model selection is the agent-weak-models catalog + `setModel`, whose item-1
+  ADR is the only supersession of ADR-0436 §2/§3 (no second ADR from this
+  goal); text-only content becomes a per-entry flag of that catalog, item 6
+  follows agent-weak-models item 1 and keeps its short ADR citing ADR-0436
+  and the catalog ADR.
 - 2026-09-27 — user: «С - пока не делаем. Отдельный эпик про визуальный
   дебаг» — preview out of this goal; captured as draft
   `epics/no-coi-visual-debug`. agent: baseline stays `startBin` →
@@ -374,9 +389,8 @@ drafts outside the kit; recorded ceilings stay out of scope.
 - rejected route: serialise `run()`/project fs inside the SDK — violates
   ADR-0376 D1 (declined row "Queue overlapping no-COI toolchain calls");
   scenario 7 keeps the loud busy outcome.
-- rejected route: a new session per model turn instead of per-turn `settings`
-  — loses the Pi-owned history (ADR-0424 D2); violates I5 "keeping the
-  session history".
+- rejected route: a new session per model turn instead of `setModel` (I5 →
+  agent-weak-models I2) — loses the Pi-owned history (ADR-0424 D2).
 - rejected route: published conformance/test-fixture package
   (`@riftydev/verify`, `@webcontainer/test`-style) — user triage 2026-09-17;
   I8's in-repo CI host carries the upgrade confidence; revival needs new
@@ -387,3 +401,18 @@ drafts outside the kit; recorded ceilings stay out of scope.
 - rejected route: fold into `epics/open-bolt-ai-sandbox-demo` — different
   persona (public demo + launch), excludes the Pi harness and preview-gated;
   it may later build on this kit.
+- 2026-09-27 — user (three-goal review with `epics/agent-weak-models`, PR
+  #359, and `epics/agent-code-quality-evaluation`, PR #341): «1 - a» catalog
+  + `setModel` only (I5 re-pointed, item 5 removed); «2 - a» text-only
+  content is a per-entry catalog flag (I6; item 6 after agent-weak-models
+  item 1); «3 - a» run budgets are agent-weak-models I9 (100 calls / 600 s) —
+  the audit-routing line above is amended:
+  `distribution/agent-tool-text-cap-and-run-budgets-measure` narrows to the
+  16 KiB cap and names no owning goal; «6 - ок» item 3's reducer lands before
+  agent-weak-models items 3 and 7, whose chat UI halves extend it.
+- 2026-09-27 — agent (user: «сделай так, чтобы разработка была проще»):
+  shared-bench order — agent-weak-models item 1 migrates the bench lanes to
+  the catalog before item 7 here swaps the no-COI lane onto the reference
+  host module; the quality goal's runner/report restructuring follows
+  agent-weak-models items 1 and 4. Cross-branch order is recorded in text,
+  not `blocked_by` (the backlog checker resolves links within one tree).

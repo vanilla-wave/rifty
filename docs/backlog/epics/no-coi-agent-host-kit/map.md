@@ -1,9 +1,13 @@
 # Map — no-coi-agent-host-kit
 
 Live plan: index, not store. Minimal pattern first; each child a `draft`
-finding compiled to `ready` at its own PICKUP (`RDY-1`). 1–6, 8, 9 are
-independent except 6 after 5 (same transport file) and 8 after 1 (typed
-no-registry outcome); 7 after all others and closes the goal.
+finding compiled to `ready` at its own PICKUP (`RDY-1`). 1–4, 8, 9 are
+independent except 8 after 1 (typed no-registry outcome); 5 is removed
+(model selection is `epics/agent-weak-models`, PR #359); 6 after
+agent-weak-models item 1 (the catalog entry it flags); 7 after all others and
+after agent-weak-models item 1 (bench no-COI lane on the catalog) and closes
+the goal. Cross-branch order is text, not `blocked_by` (checker scope = one
+tree).
 
 ## Items
 
@@ -14,21 +18,27 @@ no-registry outcome); 7 after all others and closes the goal.
 2. `distribution/sdk-boot-and-snapshot-progress-events` — **progress** — I1
    (waiting phase), I3; boot phases and apply counts on `runtime.on`.
 3. `distribution/agent-transcript-model` — **transcript** — I7; framework-free
-   reducer; playground chat consumes it (dogfood).
+   reducer; playground chat consumes it (dogfood). Lands before
+   agent-weak-models items 3 and 7 (PR #359), whose chat UI halves (model
+   picker, attach, switch offer, compaction marker) extend it.
 4. `distribution/agent-per-capability-project-policy` — **policy** — I4; one
    host, distinct files/shell policy values over the SDK project policy; the
    README example that prohibits nested `npm run` stages is repaired and
    tested (audit row 3).
-5. `distribution/agent-per-turn-settings` — **per-turn** — I5; `settings` as a
-   function resolved before each turn; superseding ADR + ADR-0436 §Corrections.
+5. removed 2026-09-27 (user «1 - a») — model selection and switching are
+   `distribution/ai-agent-model-catalog` (agent-weak-models item 1, PR #359:
+   catalog + `setModel`); I5 re-pointed there; no `settings`-form mechanism.
 6. `distribution/agent-text-only-content-transport` — **text-content** — I6;
-   opt-in string-content mode; short ADR citing ADR-0436. After 5.
+   opt-in per-entry string-content flag on the agent-weak-models catalog
+   entry; short ADR citing ADR-0436 and the catalog ADR. After
+   agent-weak-models item 1 (PR #359).
 7. `distribution/no-coi-agent-reference-host` — **reference-host** — I8 and
    scenario 1–9; the packed lane's Vite consumer refactored into a
    connections-only `host.ts` (registry connected / none), SDK README links
    it, packed-consumer lane runs it, and `tools/agent-bench`'s no-COI lane
-   boots the same module (user: measure what we ship). After 1–6, 8, 9;
-   closes the goal.
+   boots the same module (user: measure what we ship). After 1–4, 6, 8, 9
+   and agent-weak-models item 1 (PR #359: session from a one-entry catalog,
+   bench lanes migrated); closes the goal.
 8. `distribution/no-coi-agent-npm-install` — **agent-install** — I9; the
    agent's shell `npm install` over the existing installer; loud no-registry
    outcome; truthful prompt text. After 1.
@@ -55,9 +65,11 @@ no-registry outcome); 7 after all others and closes the goal.
 - Bench boots the host module (I8): today's lane differs in limits (40 calls /
   600 s, `tools/agent-bench/src/config.ts:60-61`) and provisioning
   (`toolchain.install` from `/npm-registry`, `no-coi-page.ts:37`) vs the kit's
-  session defaults and snapshot → `open`; which knobs become bench variables
-  vs adopted host defaults — owner: agent — item 7 pickup, together with
-  `distribution/agent-tool-text-cap-and-run-budgets-measure`.
+  session defaults (100 calls / 600 s once agent-weak-models I9 lands; only
+  `maxToolCalls` differs) and snapshot → `open`; which knobs become bench
+  variables vs adopted host defaults — owner: agent — item 7 pickup; the cap
+  question `distribution/agent-tool-text-cap-and-run-budgets-measure` stays
+  separate.
 - Bench import route: whether `tools/agent-bench` may import the reference
   host module from `tests/integration/fixtures/workbench-vite-consumer` under
   the arch/vitest wiring, or the module moves to a shared private location —
@@ -84,7 +96,7 @@ no-registry outcome); 7 after all others and closes the goal.
 - Text-only content carrier: pi-ai 0.85.1 `Model.compat`
   (`OpenAICompletionsCompat`) has no string-content flag; rifty-side message
   conversion before `streamSimple` vs an upstream compat flag — owner: agent —
-  item 6 pickup.
+  item 6 pickup. The flag lives on the catalog entry (user «2 - a»).
 
 ## Out of scope
 
@@ -106,9 +118,10 @@ no-registry outcome); 7 after all others and closes the goal.
   — carriers rejected (goal Decisions).
 - A one-call composition entry — not seeded; re-chart if I8's host still
   carries mechanism after 1–6, 8, 9.
-- 16 KiB tool-text cap and 100 / 180 s run budgets (ADR-0424 D7) — measured
-  first: `distribution/agent-tool-text-cap-and-run-budgets-measure` (quality
-  goal); the kit does not change them.
+- 16 KiB tool-text cap (ADR-0424 D7) — measured first:
+  `distribution/agent-tool-text-cap-and-run-budgets-measure` (no owning
+  goal); run budgets are `epics/agent-weak-models` I9 (100 calls / 600 s,
+  user «3 - a»); the kit changes neither.
 - Command fidelity outside the kit (agent adapter and SDK commands): empty `process.env` + npm lifecycle
   vars, `spawn('npm'|'.bin/*')` ENOENT, `node -p`/`--input-type` on no-COI,
   `npx` nudge — finding drafts `distribution/no-coi-command-env-and-npm-
@@ -117,9 +130,11 @@ no-registry outcome); 7 after all others and closes the goal.
   `shell/npx-and-package-manager-nudge-honesty`.
 - `npx`, `yarn`, `pnpm`, postinstall scripts (`npm-client/postinstall-scripts`)
   — not claimed by I9; loud today.
-- Other OpenAI-compatible endpoint quirks (fixed `Model` fields: context
-  window, max tokens, reasoning, `compat`) — stay on the `streamFn` form
-  (ADR-0436); only string content is claimed (I6).
+- Other OpenAI-compatible endpoint quirks (context window, max tokens,
+  reasoning, `compat`) — per-entry fields of the agent-weak-models catalog
+  (PR #359); this goal claims only the text-only flag (I6).
+- Model selection / switching API — `epics/agent-weak-models` (catalog +
+  `setModel`); the per-turn `settings` item was removed 2026-09-27 («1 - a»).
 - Agent subagent orchestration, project resources (AGENTS.md/skills) —
   `distribution/ai-agent-subagent-orchestration`,
   `epics/agent-pi-project-resources`.
