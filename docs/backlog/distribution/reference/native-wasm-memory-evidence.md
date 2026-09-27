@@ -108,3 +108,10 @@ fallback stays as before. Selected toolchain Workers cannot reach that path.
 - `pnpm test:no-coi tests/no-coi/no-coi-memory-descriptor.spec.ts tests/no-coi/no-coi-sandbox-build-loop.spec.ts -g 'descriptor|native WASM allocation|capability and no-COI|package-generic bounded|threaded-WASM: Vite 8|request-identical Vite|non-shared WebAssembly|build parity: headerless'`:
   9 pass (1.7 min). Vite 7 exact COI/no-COI build bytes; Vite 8 terminal
   loader error with named Worker diagnostic and absent dist (8.5 s).
+
+Build pin: `typescript-worker.js` remains 10,022,694 bytes. Compared with the
+existing sibling build: only five chunk names and one dynamic module-loader
+import name differ; normalizing these generated import names yields identical
+SHA-256 `1ef49b04e016a2cf47425b8b9b9bd6088dac38d6b0b1224860b597f5ae162234`.
+Update only the emitted artifact SHA in the existing exact inventory; retain
+its negative payload tests and 2 MB ceiling. Standalone retirement gate passes.
