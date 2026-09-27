@@ -31,3 +31,9 @@ Full `pr:check` exposed the exact compiler-asset pin after rebuilding shared chu
 Exactly seven lines differ: shared-chunk import names at lines 5, 8, 9, 21, 22, 24 and dynamic module-loader import at 211003. Compiler bytes otherwise identical. Lexical compiler `chunk-EMDIREKY.js` unchanged at 4,893,418 bytes, SHA256 `39be666ac003c7361e9fbcd88abdda1ed51052350ade9b57b4d2716f1e296498`. Updated only the TypeScript worker SHA pin; size ceiling and negative raw/gzip/base64 payload tests unchanged. Packed-browser proof remains in the driver's final gate.
 
 Validation after the single pin change: `pnpm test:run tools/checks/esbuild-legacy-retirement.test.ts` 10/10 PASS, including unchanged raw/gzip/base64 rejection; `pnpm check:esbuild-legacy-retirement` PASS (10 paths, 25 references, exact emitted inventory).
+
+## Integrated gate reception
+
+First full `pnpm pr:check`: lint JSON formatting, exact compiler fingerprint and CI Node-oracle job-name test failed; test failure reproduced in one isolated rerun (0 Vitest timeouts). Formatting fixed; fingerprint proof above; restored existing workflow job ID `e2e`, unchanged `ci-change-scope.test.ts` passes 5/5. No correctness criterion weakened. Final complete gate rerun follows.
+
+- `pnpm test:packed-toolchain-surface`: PASS on ef446585d product tree — 15 first-party +72 external tarballs, strict TypeScript + generic SDK/Worker graphs; includes real-browser compiler loading, VM/SDK/installed toolchain and agent scenarios. Output: `Packed toolchain surface passed`.

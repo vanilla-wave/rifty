@@ -11,10 +11,7 @@
 
 ## Open questions
 
-- WebKit OPFS contention error name (Chromium/Firefox: `NoModificationAllowedError`, the only name `opfs-replica-store.ts:57-67` retries) — owner: agent — probe under `launchPersistentContext` in item 5.
-- CSP inheritance into module workers on Firefox/WebKit (loader = `new Function` + indirect eval; Chromium takes the worker response's policy) — owner: agent — one run per engine with a document CSP lacking `unsafe-eval`; result → cut-off row in item 1/5.
-- Which old Playwright releases bundle Chrome 108 / Firefox 114 / WebKit 26.0 (expected ≈ 1.28 / 1.35 / 1.55–1.56) and whether a pinned old runner is needed per engine (new runner cannot drive an old Firefox; CDP compat with old Chromium unverified) — owner: agent — settles at item 7 pickup.
-- Transport for the iOS row (https reachable from the device: deployed playground vs local tunnel) and memory signal (`performance.measureUserAgentSpecificMemory` availability per engine) — owner: agent — design at item 8 pickup.
+- Real Safari26/macOS, iOS Safari and Yandex result blocks — owner: user — run `tools/floor-lane/README.md` protocol; requested in-session 2026-09-28. I8 remains required; no engine substitute.
 
 ## Out of scope
 

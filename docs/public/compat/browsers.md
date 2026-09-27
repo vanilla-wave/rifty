@@ -73,7 +73,9 @@ are not interchangeable. macOS support-probe handle transfer separately throws
 not establish that worker-local OPFS is absent. Details and findings: cross-engine evidence above.
 
 Current Chromium148 manual protocol passed install/build/flush/reload/exact-byte
-reopen/rebuild: [composed report](../../backlog/distribution/reference/browser-manual-chromium-proof.json).
+reopen/rebuild: [composed report on clean ef446585d](../../backlog/distribution/reference/browser-manual-chromium-final.json).
+macOS WebKit26.4 runs the same complete sequence successfully, but the support probe
+fails its handle-clone boundary; [overall report stays fail](../../backlog/distribution/reference/browser-manual-webkit-final.json).
 Floor command: `node tools/floor-lane/run.mjs --engine chromium|firefox|webkit` against
 the headerless host. [Chrome108 finding](../../backlog/runtime-js/chromium108-sdk-sync-wasm-import.md),
 [Firefox114 beta finding](../../backlog/vfs/firefox114-beta-reopen-missing-bytes.md),
