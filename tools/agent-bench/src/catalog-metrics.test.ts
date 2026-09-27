@@ -122,7 +122,10 @@ it('counts actual pi usage, edit failure and argument validation without changin
 
 it('classifies real provider context errors and renders metrics/effective catalog values', async () => {
   const result = await observed([{ error: 'maximum context length is 32768 tokens' }]);
-  expect(result.observation).toMatchObject({ agentStatus: 'error', contextExceeded: true });
+  expect(result.observation).toMatchObject({
+    agentStatus: 'context-exceeded',
+    contextExceeded: true,
+  });
   const dir = await mkdtemp(join(tmpdir(), 'rifty-bench-report-'));
   try {
     const report = {

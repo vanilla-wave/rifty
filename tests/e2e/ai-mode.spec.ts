@@ -250,7 +250,7 @@ test('provider error and real Stop preserve history; next command, close and pro
   test.setTimeout(180_000);
   const model = await agentModelServer([
     [{ name: 'write_file', args: { path: 'agent-history.txt', content: 'committed' } }],
-    { error: 'provider failed after write' },
+    { error: 'provider failed after write', status: 400 },
     [{ name: 'shell', args: { command: 'echo AGENT_UI_ENTERED && sleep 20' } }],
     [{ name: 'shell', args: { command: 'cat agent-history.txt && echo AGENT_UI_NEXT' } }],
     'Continued.',
@@ -268,7 +268,7 @@ test('provider error and real Stop preserve history; next command, close and pro
     await settings(page, model.baseUrl);
     const panel = page.getByTestId('ai-panel');
     await send(page, 'Commit a write.');
-    await expect(panel).toHaveAttribute('data-status', 'error');
+    await expect(panel).toHaveAttribute('data-status', 'error', { timeout: 25000 });
     await expect(panel).toContainText('provider failed after write');
     await send(page, 'Continue with a long command.');
     await expect.poll(() => terminalBuffer(page)).toMatch(/(?:^|\n)AGENT_UI_ENTERED(?:\r?\n|$)/);
@@ -335,7 +335,7 @@ test('storage refusal stays usable; network errors name proxy remedy and budgets
     await expect(panel).toContainText('not saved');
     await page.route('**/broken-model/v1/chat/completions', (route) => route.abort('failed'));
     await send(page, 'Try the endpoint.');
-    await expect(panel).toHaveAttribute('data-status', 'error');
+    await expect(panel).toHaveAttribute('data-status', 'error', { timeout: 25000 });
     await expect(panel).toContainText('RIFTY_AI_PROXY_TARGET');
     await expect(panel).toContainText('/ai-proxy/v1');
     await settings(page, model.baseUrl, { seconds: 1 });
@@ -586,7 +586,7 @@ test('first pi command is refused before model dispatch and keeps the draft', as
     for (const [index, command] of ['/skill:deploy', '/review'].entries()) {
       await settings(page, model.baseUrl);
       await send(page, command);
-      await expect(panel).toHaveAttribute('data-status', 'error');
+      await expect(panel).toHaveAttribute('data-status', 'error', { timeout: 25000 });
       await expect(panel.getByRole('alert')).toContainText(`Unsupported chat command ${command}`);
       await expect(panel.getByLabel('Message', { exact: true })).toHaveValue(command);
       expect(model.requests).toHaveLength(index);
@@ -750,7 +750,10 @@ test('catalog controls switch providers after error without losing tool history'
   test.setTimeout(120_000);
   const first = await agentModelServer([
     [{ name: 'write_file', args: { path: 'catalog-proof.txt', content: 'written once' } }],
-    { error: 'capacity exhausted CATALOG_HEADER_SECRET' },
+    ...Array.from({ length: 4 }, () => ({
+      error: 'capacity exhausted CATALOG_HEADER_SECRET',
+      status: 429,
+    })),
   ]);
   const second = await agentModelServer(['Continued on second.']);
   try {
@@ -770,7 +773,9 @@ test('catalog controls switch providers after error without losing tool history'
     await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
     await panel.getByLabel('Message', { exact: true }).fill('Write the proof, then continue.');
     await panel.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(panel).toHaveAttribute('data-status', 'error');
+    await expect(panel).toHaveAttribute('data-status', 'error', { timeout: 25000 });
+    await expect(panel.getByTestId('ai-continuation')).toHaveCount(3);
+    expect(first.requests).toHaveLength(5);
     await panel.getByRole('button', { name: 'Continue with second', exact: true }).click();
     await expect(panel).toHaveAttribute('data-status', 'done');
     await expect(panel.getByLabel('Chat model', { exact: true })).toHaveValue('second');
@@ -904,5 +909,63 @@ test('image reaches the model; binary attachment is an exact project file with a
     ).toEqual(replacement);
   } finally {
     await model.close();
+  }
+});
+
+test('native compaction marker survives settlement; overflow offers larger model with retained summary', async ({
+  page,
+}) => {
+  test.setTimeout(180000);
+  const small = await agentModelServer([
+    'First answer',
+    {
+      text: 'Second answer',
+      usage: { prompt_tokens: 20000, completion_tokens: 3, total_tokens: 20003 },
+    },
+    'Saved old context',
+    'Recent answer',
+    { error: 'maximum context length is 5000 tokens', status: 400 },
+    'Recovery summary',
+    { error: 'maximum context length is 5000 tokens', status: 400 },
+  ]);
+  const large = await agentModelServer(['Continued with retained summary.']);
+  try {
+    await page.goto('/?agentBench=1');
+    await pickStarter(page);
+    await openChat(page);
+    const panel = page.getByTestId('ai-panel');
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    await panel.getByText('Advanced catalog', { exact: true }).click();
+    await panel.getByLabel('Model catalog (JSON)', { exact: true }).fill(
+      JSON.stringify([
+        { ...entry('small', small.baseUrl), contextWindow: 32000 },
+        { ...entry('large', large.baseUrl), contextWindow: 1000000 },
+      ]),
+    );
+    await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
+    await send(page, 'first '.repeat(10000));
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await send(page, 'old '.repeat(30000));
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await expect(panel.getByTestId('ai-continuation')).toContainText('Context compacted:');
+    expect(small.requests).toHaveLength(3);
+    await send(page, 'recent '.repeat(16000));
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await send(page, 'continue after compaction');
+    await expect(panel).toHaveAttribute('data-status', 'context-exceeded');
+    expect(small.requests).toHaveLength(7);
+    await expect(panel.getByTestId('ai-continuation')).toHaveCount(2);
+    await panel.getByRole('button', { name: 'Continue with large', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await expect(panel).toContainText('Continued with retained summary.');
+    expect(JSON.stringify(large.requests[0]?.body.messages)).toContain('Recovery summary');
+    const trace = await exported(page);
+    expect(trace.transcript[0]?.role).toBe('compactionSummary');
+    expect(trace.usage.totalTokens).toBeGreaterThan(20003);
+    expect(trace.events.filter(({ event }) => event.type === 'retry')).toHaveLength(0);
+    await expect(panel.getByTestId('ai-continuation')).toHaveCount(2);
+  } finally {
+    await small.close();
+    await large.close();
   }
 });

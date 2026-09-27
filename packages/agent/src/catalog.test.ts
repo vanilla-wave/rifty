@@ -65,6 +65,7 @@ describe('embedder model catalog', () => {
     const reference = fixture(['ok']);
     const requestDefaults = { small: { reasoning: 'medium' as const, temperature: 1 } };
     const session = createAgentSession({
+      retry: { enabled: false },
       host,
       models: actual.models,
       model: 'small',
@@ -123,6 +124,7 @@ describe('embedder model catalog', () => {
     ]);
     const { Type } = await import('@earendil-works/pi-ai');
     const session = createAgentSession({
+      retry: { enabled: false },
       host,
       models: f.models,
       model: 'small',
@@ -211,6 +213,7 @@ describe('embedder model catalog', () => {
       }),
     );
     const session = createAgentSession({
+      retry: { enabled: false },
       host,
       models: f.models,
       model: 'small',

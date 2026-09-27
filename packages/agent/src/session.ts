@@ -1,8 +1,20 @@
-import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
-import type { ImageContent, ToolResultMessage } from '@earendil-works/pi-ai';
+import {
+  Agent,
+  type AgentMessage,
+  convertToLlm,
+  estimateContextTokens,
+  shouldCompact,
+} from '@earendil-works/pi-agent-core';
+import {
+  type AssistantMessage,
+  type ImageContent,
+  type ToolResultMessage,
+  isContextOverflow,
+} from '@earendil-works/pi-ai';
 import { NotImplementedError } from '@riftydev/io';
 import { catalogSecrets, isOpenAIProvider, selectModel } from './catalog.ts';
 import { unsupportedChatCommand } from './chat-command.ts';
+import { createContinuation } from './continuation.ts';
 import { restoreMessages } from './history.ts';
 import { PROMPT_PROFILE_ID, systemPrompt } from './prompt.ts';
 import { loadResources } from './resources.ts';
@@ -51,6 +63,78 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
   let budgetReason: string | undefined;
   let toolCalls = 0;
   let runEventStart = 0;
+  let runController: AbortController | undefined;
+  let overflowRecoveryAttempted = false;
+  const continuation = createContinuation(options, () => model, emit);
+
+  // Reconstruct Pi's persisted compaction input from the existing audit receipts.
+  // Failed attempts remain here even when Agent drops them from request context.
+  function compactionHistory(): AgentMessage[] {
+    let messages = restoredMessageCount ? [...initialMessages] : [];
+    for (const { event } of events) {
+      if (event.type === 'agent' && event.event.type === 'message_end')
+        messages.push(event.event.message);
+      else if (
+        event.type === 'retry' &&
+        event.phase === 'start' &&
+        event.source === 'assistant' &&
+        event.message
+      )
+        messages.push(event.message);
+      else if (
+        event.type === 'compaction' &&
+        event.phase === 'end' &&
+        event.success &&
+        event.summary &&
+        event.retainedMessageCount !== undefined
+      ) {
+        messages = [
+          event.summary,
+          ...(event.retainedMessageCount ? messages.slice(-event.retainedMessageCount) : []),
+        ];
+      }
+    }
+    return messages;
+  }
+
+  async function compactHistory(
+    reason: 'threshold' | 'overflow',
+    staleGuard = false,
+    overflowResponse?: AssistantMessage,
+  ) {
+    const messages = agent.state.messages;
+    const estimate = estimateContextTokens(messages);
+    if (reason === 'threshold') {
+      const summary = messages[0];
+      const source =
+        estimate.lastUsageIndex === null ? undefined : messages[estimate.lastUsageIndex];
+      if (
+        staleGuard &&
+        summary?.role === 'compactionSummary' &&
+        source &&
+        source.timestamp <= summary.timestamp
+      )
+        return false;
+      if (!shouldCompact(estimate.tokens, model.contextWindow, continuation.compaction))
+        return false;
+    }
+    if (!runController) return false;
+    const retained = await continuation.compactMessages(
+      compactionHistory(),
+      reason,
+      runController.signal,
+    );
+    if (!retained) return false;
+    // Native CLI prepares from its persisted overflow entry, then removes it again before continue.
+    const last = retained.at(-1);
+    agent.state.messages =
+      overflowResponse &&
+      last?.role === 'assistant' &&
+      (last.stopReason === 'error' || last.stopReason === 'length')
+        ? retained.slice(0, -1)
+        : retained;
+    return true;
+  }
 
   function emit(event: AgentSessionEvent): void {
     events.push({ at: Date.now(), event: structuredClone(event) });
@@ -98,7 +182,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     };
   }
 
-  const agent = new Agent({
+  const agent: Agent = new Agent({
     initialState: {
       model,
       thinkingLevel: requestDefaults().reasoning ?? 'off',
@@ -106,20 +190,17 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       messages: initialMessages,
     },
     toolExecution: 'sequential',
-    streamFn: (selected, context, requestOptions) =>
-      options.models.streamSimple(selected, context, {
-        ...requestOptions,
-        ...(options.modelOptions?.[selected.id] ?? {}),
-        maxRetries: 0,
-      }),
-    prepareNextTurnWithContext: (context) => {
+    convertToLlm,
+    streamFn: continuation.stream,
+    prepareNextTurnWithContext: async (context) => {
+      await compactHistory('threshold');
       const refreshed = refreshCapabilities();
       agent.state.systemPrompt = refreshed.systemPrompt;
       agent.state.tools = refreshed.tools;
       return {
         model,
         thinkingLevel: requestDefaults().reasoning ?? 'off',
-        context: { ...context.context, ...refreshed },
+        context: { ...context.context, ...refreshed, messages: agent.state.messages.slice() },
       };
     },
     beforeToolCall: async () => {
@@ -136,20 +217,46 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     },
   });
   const detach = agent.subscribe((event) => {
+    // retryAssistantCall synthesizes an aborted response when sleep is cancelled;
+    // the CLI keeps only the discarded attempt receipt, not that synthetic message.
+    if (continuation.cancelledBackoff) {
+      if (event.type === 'message_end' && event.message.role === 'assistant') {
+        agent.state.messages = agent.state.messages.slice(0, -1);
+        return;
+      }
+      if (
+        (event.type === 'message_start' && event.message.role === 'assistant') ||
+        event.type === 'turn_end'
+      )
+        return;
+    }
+    if (
+      event.type === 'message_end' &&
+      event.message.role === 'assistant' &&
+      event.message.stopReason !== 'error' &&
+      event.message.stopReason !== 'length'
+    )
+      overflowRecoveryAttempted = false;
     if (event.type === 'agent_start' && stopRequested) agent.abort();
     if (event.type === 'agent_end') {
-      const count = event.messages.length + completeSkippedCalls();
+      const added = completeSkippedCalls();
       emit({
         type: 'agent',
-        event: { ...event, messages: count ? agent.state.messages.slice(-count) : [] },
+        event: {
+          ...event,
+          messages: [
+            ...(continuation.cancelledBackoff ? event.messages.slice(0, -1) : event.messages),
+            ...added,
+          ],
+        },
       });
       return;
     }
     emit({ type: 'agent', event });
   });
 
-  function completeSkippedCalls(): number {
-    let added = 0;
+  function completeSkippedCalls(): ToolResultMessage[] {
+    const added: ToolResultMessage[] = [];
     const messages: AgentMessage[] = [];
     const original = agent.state.messages;
     for (let index = 0; index < original.length; index++) {
@@ -201,7 +308,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
           details: { status: 'cancelled', applied: started ? 'unknown' : 'no' },
         };
         messages.push(result);
-        added++;
+        added.push(result);
         emit({ type: 'agent', event: { type: 'message_end', message: result } });
         emit({
           type: 'agent',
@@ -241,10 +348,13 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
 
   async function run(prompt: string, images?: readonly ImageContent[]): Promise<void> {
     const startedAt = Date.now();
+    runController = new AbortController();
+    let contextExceeded = false;
     let outcome: AgentStatus;
     let outcomeDetail: string | undefined;
     const timer = setTimeout(() => {
       budgetReason = `Run time limit reached (${runTimeoutMs}ms)`;
+      runController?.abort();
       agent.abort();
     }, runTimeoutMs);
     try {
@@ -260,21 +370,60 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
         agent.state.systemPrompt = refreshed.systemPrompt;
         agent.state.tools = refreshed.tools;
         checkImages(images);
-        await agent.prompt(prompt, images ? [...images] : undefined);
+        await compactHistory('threshold', true);
+        if (!runController.signal.aborted)
+          await agent.prompt(prompt, images ? [...images] : undefined);
+        while (!runController.signal.aborted) {
+          const last = agent.state.messages.at(-1);
+          const overflow =
+            last?.role === 'assistant' && isContextOverflow(last, model.contextWindow);
+          if (!overflow || last.stopReason === 'stop') {
+            if (last?.role === 'assistant' && last.stopReason !== 'aborted')
+              await compactHistory(
+                overflow && last.model === model.id && last.provider === model.provider
+                  ? 'overflow'
+                  : 'threshold',
+                true,
+              );
+            break;
+          }
+          contextExceeded = true;
+          outcomeDetail = last.errorMessage ?? 'Context exceeds the selected model window';
+          if (
+            last.model !== model.id ||
+            last.provider !== model.provider ||
+            overflowRecoveryAttempted ||
+            !continuation.compaction.enabled
+          )
+            break;
+          overflowRecoveryAttempted = true;
+          agent.state.messages = agent.state.messages.slice(0, -1);
+          if (!(await compactHistory('overflow', false, last)) || runController.signal.aborted)
+            break;
+          contextExceeded = false;
+          await agent.continue();
+        }
       }
       if (budgetReason) {
         outcome = 'budget-exceeded';
         outcomeDetail = budgetReason;
-      } else if (stopRequested) outcome = 'aborted';
+      } else if (stopRequested) {
+        outcome = 'aborted';
+        outcomeDetail = undefined;
+      } else if (contextExceeded) outcome = 'context-exceeded';
       else if (agent.state.errorMessage) {
         outcome = 'error';
         outcomeDetail = agent.state.errorMessage;
-      } else outcome = 'done';
+      } else {
+        outcome = 'done';
+        outcomeDetail = undefined;
+      }
     } catch (error) {
       outcome = budgetReason ? 'budget-exceeded' : stopRequested ? 'aborted' : 'error';
       outcomeDetail = error instanceof Error ? error.message : String(error);
     } finally {
       clearTimeout(timer);
+      runController = undefined;
       timings.push({ startedAt, endedAt: Date.now() });
     }
     setStatus(outcome, outcomeDetail);
@@ -300,6 +449,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       stopRequested = false;
       budgetReason = undefined;
       toolCalls = 0;
+      overflowRecoveryAttempted = false;
       runEventStart = events.length;
       const copiedImages = images ? structuredClone(images) : undefined;
       active = Promise.resolve().then(() => run(prompt, copiedImages));
@@ -324,6 +474,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     },
     async stop() {
       stopRequested = true;
+      runController?.abort();
       agent.abort();
       await active;
     },
@@ -331,6 +482,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       if (active || reloading) throw new Error('Stop the agent before Reset');
       if (disposed) throw new Error('Agent session is disposed');
       agent.reset();
+      continuation.reset();
       restoredMessageCount = 0;
       events.length = 0;
       timings.length = 0;
@@ -344,13 +496,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       };
     },
     async exportTrace(): Promise<AgentTrace> {
-      const usage = { input: 0, output: 0, totalTokens: 0 };
-      for (const message of agent.state.messages.slice(restoredMessageCount)) {
-        if (message.role !== 'assistant') continue;
-        usage.input += message.usage.input;
-        usage.output += message.usage.output;
-        usage.totalTokens += message.usage.totalTokens;
-      }
+      const usage = { ...continuation.usage };
       const diff = host.capabilities().diff;
       let finalDiff: unknown = { unavailable: 'Host does not provide SCM diff' };
       if (diff) {
@@ -375,6 +521,8 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
             ? {}
             : { temperature: requestDefaults().temperature }),
           samplingParams: { ...model.samplingParams, ...requestDefaults().samplingParams },
+          retry: continuation.retry,
+          compaction: continuation.compaction,
           maxToolCalls,
           runTimeoutMs,
         },
@@ -392,6 +540,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       if (disposed) return;
       disposed = true;
       stopRequested = true;
+      runController?.abort();
       agent.abort();
       await active;
       await pending.catch(() => {});

@@ -101,7 +101,12 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
         },
       }),
     );
-    await writeFile(join(home, 'settings.json'), JSON.stringify({ retry: { enabled: false } }));
+    await writeFile(
+      join(home, 'settings.json'),
+      JSON.stringify({
+        retry: { enabled: true, maxRetries: 3, baseDelayMs: 2000, provider: { maxRetries: 0 } },
+      }),
+    );
     return {
       context,
       page,

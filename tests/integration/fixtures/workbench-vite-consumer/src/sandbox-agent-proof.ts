@@ -41,7 +41,7 @@ export async function sandboxAgentPolicy(sandbox: ToolchainSandbox) {
       { name: 'shell', args: { command: 'touch forbidden.txt' } },
       { name: 'shell', args: { command: priorCommand } },
     ],
-    { error: 'provider failed after committed write' },
+    { error: 'provider failed after committed write', status: 400 },
     [{ name: 'shell', args: { command: nextCommand } }],
     'Continued with the retained write.',
   ]);

@@ -1,5 +1,19 @@
-import type { AgentEvent, AgentMessage, AgentTool } from '@earendil-works/pi-agent-core';
-import type { Api, ImageContent, Model, Models, SimpleStreamOptions } from '@earendil-works/pi-ai';
+import type {
+  AgentEvent,
+  AgentMessage,
+  AgentTool,
+  CompactionSettings,
+} from '@earendil-works/pi-agent-core';
+import type {
+  Api,
+  AssistantMessage,
+  ImageContent,
+  Model,
+  Models,
+  RetryPolicy,
+  SimpleStreamOptions,
+  Usage,
+} from '@earendil-works/pi-ai';
 import type { SandboxProjectOptions, ToolchainSandbox } from '@riftydev/sdk';
 import type { ProjectSession, ProjectTerminal } from '@riftydev/workbench';
 import type { PlaygroundSessionTools } from '@riftydev/workbench/playground';
@@ -119,6 +133,8 @@ export interface AgentSessionCommonOptions extends AgentRunLimits {
 }
 
 export interface AgentSessionOptions extends AgentSessionCommonOptions {
+  readonly retry?: Partial<RetryPolicy>;
+  readonly compaction?: Partial<CompactionSettings>;
   readonly models: Models;
   readonly model: string;
   readonly modelOptions?: Readonly<
@@ -126,9 +142,42 @@ export interface AgentSessionOptions extends AgentSessionCommonOptions {
   >;
 }
 
-export type AgentStatus = 'idle' | 'running' | 'done' | 'error' | 'aborted' | 'budget-exceeded';
+export type AgentStatus =
+  | 'idle'
+  | 'running'
+  | 'done'
+  | 'error'
+  | 'aborted'
+  | 'budget-exceeded'
+  | 'context-exceeded';
 
 export type AgentSessionEvent =
+  | {
+      readonly type: 'retry';
+      readonly phase: 'start' | 'end';
+      readonly source: 'assistant' | 'summary';
+      /** Discarded assistant attempt, retained for native compaction provenance. */
+      readonly message?: AssistantMessage;
+      readonly attempt: number;
+      readonly maxAttempts?: number;
+      readonly delayMs?: number;
+      readonly success?: boolean;
+      readonly errorMessage?: string;
+    }
+  | {
+      readonly type: 'compaction';
+      readonly phase: 'start' | 'end';
+      readonly reason: 'threshold' | 'overflow';
+      readonly source: 'usage' | 'estimate';
+      readonly tokensBefore: number;
+      readonly tokensAfter?: number;
+      readonly success?: boolean;
+      readonly aborted?: boolean;
+      readonly errorMessage?: string;
+      readonly usage?: Usage;
+      readonly summary?: AgentMessage;
+      readonly retainedMessageCount?: number;
+    }
   | { readonly type: 'model'; readonly model: string; readonly provider: string }
   | { readonly type: 'resources'; readonly report: AgentResourceReport }
   | { readonly type: 'agent'; readonly event: AgentEvent }
@@ -153,11 +202,13 @@ export interface AgentTrace {
     readonly transport: 'openai-compatible' | 'custom';
     readonly thinking: string;
     readonly temperature?: number;
+    readonly retry: RetryPolicy;
+    readonly compaction: CompactionSettings;
     readonly maxToolCalls: number;
     readonly runTimeoutMs: number;
   };
   readonly transcript: readonly AgentMessage[];
-  /** The first N transcript messages were restored, not emitted by this session. */
+  /** Number of messages admitted at creation; compaction may replace them. Reset clears it. */
   readonly restoredMessageCount: number;
   readonly events: readonly { readonly at: number; readonly event: AgentSessionEvent }[];
   readonly status: AgentStatus;

@@ -85,7 +85,15 @@ function fixture(
         },
         streamSimple: (selected, context, options) => {
           requests.push({
-            context: structuredClone(context),
+            context: {
+              ...context,
+              messages: structuredClone(context.messages),
+              tools: context.tools?.map(({ name, description, parameters }) => ({
+                name,
+                description,
+                parameters,
+              })),
+            },
             options: { ...options },
             model: selected.id,
           });
@@ -247,9 +255,9 @@ describe('native continuation boundary', () => {
     );
     try {
       await session.send('do work');
+      expect(requests).toHaveLength(3);
       expect(session.status()).toBe('done');
       expect(effects).toBe(1);
-      expect(requests).toHaveLength(3);
       expect(requests[2]?.context.messages).toEqual(requests[1]?.context.messages);
     } finally {
       await session.dispose();
@@ -400,6 +408,241 @@ describe('native continuation boundary', () => {
       expect(
         (await session.exportTrace()).transcript.some((m) => m.role === 'compactionSummary'),
       ).toBe(false);
+    } finally {
+      await session.dispose();
+    }
+  });
+  it('compacts inside the real Agent tool loop without duplicating messages or losing usage', async () => {
+    let effect = 0;
+    const initialMessages = history().map((m) =>
+      m.role === 'assistant' ? { ...m, usage: answer().usage } : m,
+    );
+    const { session, requests } = fixture(
+      (context, _options, count) => {
+        if (summaryRequest(context)) return answer('Saved context');
+        if (count === 1)
+          return {
+            ...answer('', 20000, 'toolUse'),
+            content: [{ type: 'toolCall', id: 'once', name: 'effect', arguments: {} }],
+          };
+        return answer('Done');
+      },
+      {
+        initialMessages,
+        tools: [
+          {
+            name: 'effect',
+            label: 'Effect',
+            description: 'External effect',
+            parameters: Type.Object({}),
+            async execute() {
+              effect++;
+              return { content: [{ type: 'text', text: 'settled' }], details: undefined };
+            },
+          },
+        ],
+      },
+    );
+    try {
+      await session.send('current turn');
+      expect(session.status()).toBe('done');
+      expect(requests.map((r) => summaryRequest(r.context))).toEqual([false, true, false]);
+      expect(effect).toBe(1);
+      const trace = await session.exportTrace();
+      expect(trace.transcript.filter((m) => m.role === 'toolResult')).toHaveLength(1);
+      expect(
+        trace.transcript.filter(
+          (m) => m.role === 'user' && JSON.stringify(m.content).includes('current turn'),
+        ),
+      ).toHaveLength(1);
+      expect(trace.usage.totalTokens).toBe(20026);
+      const ended = trace.events.flatMap(({ event }) =>
+        event.type === 'agent' && event.event.type === 'agent_end' ? event.event.messages : [],
+      );
+      expect(ended.map((m) => m.role)).toEqual(['user', 'assistant', 'toolResult', 'assistant']);
+    } finally {
+      await session.dispose();
+    }
+  });
+  it('accounts failed summary attempts and changes model/defaults during summary backoff', async () => {
+    const { session, requests } = fixture(
+      (context, _options, count) =>
+        summaryRequest(context)
+          ? answer(
+              count === 1 ? '429' : 'Saved context',
+              count === 1 ? 7 : 10,
+              count === 1 ? 'error' : 'stop',
+            )
+          : answer('Done'),
+      {
+        initialMessages: history(),
+        retry: { baseDelayMs: 1 },
+        modelOptions: {
+          small: { reasoning: 'medium', temperature: 0.1 },
+          large: { temperature: 0.7 },
+        },
+      },
+    );
+    session.subscribe((event) => {
+      if (event.type === 'retry' && event.source === 'summary' && event.phase === 'start')
+        session.setModel('large');
+    });
+    try {
+      await session.send('continue');
+      expect(session.status()).toBe('done');
+      expect(
+        requests.map((r) => [
+          r.model,
+          r.options.temperature,
+          r.options.reasoning,
+          r.options.maxRetries,
+        ]),
+      ).toEqual([
+        ['small', 0.1, 'medium', 0],
+        ['large', 0.7, undefined, 0],
+        ['large', 0.7, undefined, 0],
+      ]);
+      expect((await session.exportTrace()).usage.totalTokens).toBe(33);
+    } finally {
+      await session.dispose();
+    }
+  });
+  it('preserves native summary file details and previous summary through repeated JSON restores', async () => {
+    const initialMessages = history();
+    initialMessages.splice(
+      1,
+      0,
+      {
+        ...answer('', 10, 'toolUse'),
+        timestamp: 0,
+        content: [
+          { type: 'toolCall', id: 'read', name: 'read', arguments: { path: '/tracked.ts' } },
+        ],
+      },
+      {
+        role: 'toolResult',
+        toolName: 'read',
+        toolCallId: 'read',
+        content: [{ type: 'text', text: 'tracked content' }],
+        isError: false,
+        timestamp: 0,
+      },
+    );
+    let restored = initialMessages;
+    for (let round = 0; round < 3; round++) {
+      const { session, requests } = fixture(
+        (context) => answer(summaryRequest(context) ? `Summary ${round}` : 'Done'),
+        { initialMessages: restored },
+      );
+      try {
+        await session.send('continue');
+        const trace = await session.exportTrace();
+        expect(trace.transcript[0]).toMatchObject({
+          role: 'compactionSummary',
+          details: { readFiles: ['/tracked.ts'], modifiedFiles: [] },
+        });
+        if (round)
+          expect(JSON.stringify(requests[0]?.context.messages)).toContain(`Summary ${round - 1}`);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        restored = JSON.parse(
+          JSON.stringify([
+            ...trace.transcript,
+            ...history().map((message) => ({ ...message, timestamp: Date.now() })),
+          ]),
+        );
+      } finally {
+        await session.dispose();
+      }
+    }
+  });
+  it('[fault: corrupt-input] rejects malformed summary envelopes before touching host', () => {
+    let touched = 0;
+    const guarded = {
+      ...host,
+      capabilities() {
+        touched++;
+        return {};
+      },
+    };
+    const valid = {
+      role: 'compactionSummary',
+      timestamp: 1,
+      summary: 'old',
+      tokensBefore: 20,
+      details: { readFiles: [], modifiedFiles: [] },
+    };
+    for (const initialMessages of [
+      [{ ...valid, summary: 42 }],
+      [{ ...valid, tokensBefore: -1 }],
+      [{ ...valid, details: { readFiles: [42], modifiedFiles: [] } }],
+      [{ role: 'user', timestamp: 0, content: 'old' }, valid],
+      [valid, valid],
+    ])
+      expect(() =>
+        fixture(() => answer(), {
+          host: guarded,
+          initialMessages: initialMessages as unknown as AgentMessage[],
+        }),
+      ).toThrow(/initialMessages/);
+    expect(touched).toBe(0);
+  });
+  it('[fault: torn-state] deadline aborts summary and keeps original history', async () => {
+    const { session, requests } = fixture(
+      async (_context, options) => {
+        await new Promise<void>((resolve) =>
+          options.signal?.addEventListener('abort', () => resolve(), { once: true }),
+        );
+        return answer('partial', 10, 'aborted');
+      },
+      { initialMessages: history(), runTimeoutMs: 20 },
+    );
+    try {
+      await session.send('continue');
+      expect(session.status()).toBe('budget-exceeded');
+      expect(requests).toHaveLength(1);
+      expect(summaryRequest(requests[0]!.context)).toBe(true);
+      expect((await session.exportTrace()).transcript).toEqual(history());
+    } finally {
+      await session.dispose();
+    }
+  });
+  it('does not compact a stale overflow response after selecting a different model', async () => {
+    const initialMessages = history().map((message) =>
+      message.role === 'assistant' ? { ...message, usage: answer().usage } : message,
+    );
+    const { session, requests } = fixture(
+      (context) => {
+        if (summaryRequest(context)) return answer('Unexpected summary');
+        session.setModel('large');
+        return answer('maximum context length is 5000 tokens', 10, 'error');
+      },
+      { initialMessages },
+    );
+    try {
+      await session.send('continue');
+      expect(requests).toHaveLength(1);
+      expect((await session.exportTrace()).config.model).toBe('large');
+    } finally {
+      await session.dispose();
+    }
+  });
+  it('clears the overflow detail after successful native recovery', async () => {
+    const initialMessages = history().map((message) =>
+      message.role === 'assistant' ? { ...message, usage: answer().usage } : message,
+    );
+    const { session } = fixture(
+      (context, _options, count) =>
+        summaryRequest(context)
+          ? answer('Saved context')
+          : count === 1
+            ? answer('maximum context length is 5000 tokens', 10, 'error')
+            : answer('Done'),
+      { initialMessages },
+    );
+    try {
+      await session.send('continue');
+      expect(session.status()).toBe('done');
+      expect(session.detail()).toBeUndefined();
     } finally {
       await session.dispose();
     }

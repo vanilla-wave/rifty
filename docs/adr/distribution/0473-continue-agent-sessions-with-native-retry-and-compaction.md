@@ -49,3 +49,8 @@ Corrects ADR-0466's admitted envelope list and restored-prefix interpretation.
 - Public options add partial native retry/compaction settings; trace records effective settings.
 - Native file-operation extraction retains its names; Rifty tool names are not relabelled.
 - Contract tests and actual CLI differential probes protect adapter seams.
+
+## Corrections
+
+2026-09-27 — ADR-0474 projects persisted compaction input from existing audit
+receipts, including discarded assistant attempts. Agent remains the sole execution-context owner.

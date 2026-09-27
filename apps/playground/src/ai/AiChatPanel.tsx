@@ -132,6 +132,7 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
   let active: ActiveSession | undefined;
   let assistantIndex = -1;
   let runStart = 0;
+  const [continuationNotices, setContinuationNotices] = createSignal<string[]>([]);
   let nextMessageId = 1;
   let alive = true;
   let taskId: string | undefined;
@@ -149,6 +150,7 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
 
   function receive(event: AgentEvent) {
     if (!alive) return;
+    if (event.type === 'agent_start') runStart = items().length;
     if (
       event.type === 'message_start' &&
       (event.message.role === 'user' || event.message.role === 'assistant')
@@ -297,8 +299,25 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
         else if (event.type === 'model')
           setSettings((current) => ({ ...current, model: event.model }));
         else if (event.type === 'resources') setResources(event.report);
-        else if (event.type === 'status') {
-          if (event.status === 'running') runStart = items().length;
+        else if (event.type === 'retry' && event.phase === 'start') {
+          setContinuationNotices((current) => [
+            ...current,
+            `Retry ${event.attempt}/${event.maxAttempts} in ${event.delayMs} ms (${event.source}).`,
+          ]);
+          if (event.source === 'assistant')
+            setItems((current) =>
+              current.map((item, index) =>
+                index === assistantIndex && item.kind === 'message' ? { ...item, text: '' } : item,
+              ),
+            );
+        } else if (event.type === 'compaction' && event.phase === 'end') {
+          setContinuationNotices((current) => [
+            ...current,
+            event.success
+              ? `Context compacted: ${event.tokensBefore} → ${event.tokensAfter} tokens (${event.source}).`
+              : `Compaction ${event.aborted ? 'aborted' : 'failed'}: ${event.errorMessage ?? ''}`,
+          ]);
+        } else if (event.type === 'status') {
           setStatus(event.status);
           setDetail(playgroundAgentDetail(event.detail ?? ''));
         }
@@ -368,6 +387,7 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
     active?.agent.reset();
     assistantIndex = -1;
     setItems([]);
+    setContinuationNotices([]);
     setStatus('idle');
     setDetail('');
     setNotice('');
@@ -389,6 +409,7 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
       );
       setSettingsOpen(false);
       setItems([]);
+      setContinuationNotices([]);
       setStatus('idle');
       setDetail('');
       assistantIndex = -1;
@@ -570,7 +591,13 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
           {detail()}
         </p>
       </Show>
-      <Show when={status() === 'error' && hasSession() && settings().models.length > 1}>
+      <Show
+        when={
+          (status() === 'error' || status() === 'context-exceeded') &&
+          hasSession() &&
+          settings().models.length > 1
+        }
+      >
         <section class="rf-ai__notice" aria-label="Model alternatives">
           <p>Choose another model to continue this conversation.</p>
           <For each={settings().models.filter((model) => model.id !== settings().model)}>
@@ -605,6 +632,13 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
             send a request.
           </p>
         </Show>
+        <For each={continuationNotices()}>
+          {(notice) => (
+            <p class="rf-ai__notice" data-testid="ai-continuation">
+              {notice}
+            </p>
+          )}
+        </For>
         <For each={items()}>
           {(item) =>
             item.kind === 'message' ? (

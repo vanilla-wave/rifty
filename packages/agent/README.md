@@ -80,8 +80,8 @@ Text-only aborted/error messages remain accepted. The host may change models for
 Pi owns provider conversion. Storage, JSON decoding and migrations stay with the host.
 
 `reset()` clears restored and new messages. Also clear the host's stored history on
-conversation/project reset. `exportTrace().restoredMessageCount` marks the restored
-prefix of `transcript`; events, timings, aggregate usage and per-run limits describe
+conversation/project reset. `exportTrace().restoredMessageCount` counts originally admitted messages
+until reset, independent of compaction; events, timings, aggregate usage and per-run limits describe
 only new runs. Reset clears that count. Trace export redacts built-in keys and catalog headers;
 persist native messages rather than the diagnostic trace when exact history matters.
 
@@ -202,3 +202,23 @@ through `reload()`; direct `send('/reload')` follows template discovery.
 | `.pi/APPEND_SYSTEM.md` | ❌ reported unsupported |
 | `.pi/settings.json` | ❌ reported unsupported |
 | `.pi/npm` / packages / `pi install` | ❌ reported unsupported |
+
+
+### Native continuation
+
+Retry defaults: `{ enabled: true, maxRetries: 3, baseDelayMs: 2000 }`.
+Compaction defaults: `{ enabled: true, reserveTokens: 16384, keepRecentTokens: 20000 }`.
+Pass partial `retry` / `compaction` options; `{ enabled: false }` disables each.
+Transport retries remain zero; completed tools never replay. A model selection
+made during backoff applies to the next request, including summary requests.
+
+Compaction retains one native summary (with file-operation details) and recent
+messages. This shape is accepted by `initialMessages`; malformed/non-leading
+summaries reject before host work. Trace usage includes every current-session
+request attempt, even failed/discarded responses and summaries; restored usage
+is excluded. `reset()` clears current usage.
+
+`retry` events expose attempt/delay; `compaction` events expose reason, outcome,
+tokens before/after and whether the source was provider usage or an estimate.
+Unrecovered native overflow ends `context-exceeded`; select a larger entry and
+send another prompt to continue. No automatic fallback.

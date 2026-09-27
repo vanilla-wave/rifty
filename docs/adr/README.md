@@ -366,6 +366,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0471 | Embedder model catalog and session model selection |
 | 0472 | Measure catalog benchmarks with pinned pi event semantics |
 | 0473 | Continue agent sessions with native retry and compaction |
+| 0474 | Project native compaction history from session receipts |
 
 ## Superseded (removed)
 

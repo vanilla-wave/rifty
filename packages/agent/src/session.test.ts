@@ -164,6 +164,7 @@ describe('public agent transport contract', () => {
 
   it('keeps generic network errors free of Playground deployment advice', async () => {
     const session = createAgentSession({
+      retry: { enabled: false },
       host: host(),
       ...modelCatalog({ baseUrl: 'https://model.invalid/v1', model: 'model' }, async () => {
         throw new TypeError('fetch failed');

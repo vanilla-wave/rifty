@@ -489,7 +489,7 @@ for (const lane of ['rifty', 'local-reference'] as const) {
       expect(result.code, result.output).toBe(0);
       const report = JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as Report;
       expect(report.runs[0]).toMatchObject({
-        agentStatus: 'error',
+        agentStatus: lane === 'rifty' ? 'context-exceeded' : 'error',
         outcome: 'context-exceeded',
         retries: 0,
         compactions: 0,
@@ -705,6 +705,45 @@ for (const lane of ['rifty', 'local-reference'] as const) {
             await readFile(join(out, dirname(run.artifacts.trace), file), 'utf8'),
           ).not.toContain(secret);
       }
+    } finally {
+      await model.close();
+    }
+  });
+}
+
+for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
+  test(`${lane} records native default retry over the real lane`, async () => {
+    const model = await agentModelServer([
+      { error: 'rate limit', status: 429 },
+      'Done after retry.',
+    ]);
+    const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-retry-'));
+    const config = join(out, 'config.json');
+    await writeFile(config, JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl) }));
+    try {
+      const result = await cli([
+        'run',
+        '--lane',
+        lane,
+        '--task',
+        'add-search',
+        '--runs',
+        '1',
+        '--config',
+        config,
+        '--output',
+        out,
+      ]);
+      expect(result.code, result.output).toBe(0);
+      const report = JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as Report;
+      expect(report.runs[0]).toMatchObject({
+        agentStatus: 'done',
+        retries: 1,
+        inputTokens: 10,
+        outputTokens: 3,
+        toolCalls: 0,
+      });
+      expect(model.requests).toHaveLength(2);
     } finally {
       await model.close();
     }

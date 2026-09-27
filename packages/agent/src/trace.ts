@@ -12,6 +12,15 @@ const tags = new Set([
   'error',
   'aborted',
   'budget-exceeded',
+  'context-exceeded',
+  'retry',
+  'compaction',
+  'end',
+  'summary',
+  'threshold',
+  'overflow',
+  'estimate',
+  'usage',
   'exited',
   'cancelled',
   'failed',
@@ -79,7 +88,11 @@ export function redactTrace(trace: AgentTrace, secrets: ReadonlySet<string>): Ag
           Object.entries(item).map(([name, value]) => [privateText(name, secrets), value]),
         );
       if (typeof item !== 'string') return item;
-      if (!payload && ['type', 'role', 'stopReason', 'status'].includes(field) && tags.has(item))
+      if (
+        !payload &&
+        ['type', 'role', 'stopReason', 'status', 'phase', 'reason', 'source'].includes(field) &&
+        tags.has(item)
+      )
         return item;
       return privateText(item, secrets);
     });

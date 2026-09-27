@@ -80,6 +80,8 @@ probes resolve Agent versus Harness and restorable summary carrier.
 
 ## Decisions
 
+ready-verdict: 2026-09-27 — Contract+RED @ 7321e33e8 — `reference/ai-agent-context-compaction-contract-red.json`
+
 - re-cut: 2026-09-27 — absorb former transient-request-retry draft into one continuation boundary with compaction and remaining chat markers; all I4/I5/I6 obligations retained — trace: none
 - Native oracle may emit a larger estimated token count after compaction; no invented fit test on estimate+reserve. Actual overflow governs bounded recovery.
 - ADR-0424 §4 and ADR-0466 envelopes/count semantics require dated corrections via the continuation ADR; no changes to action replay prohibition or host recovery.
