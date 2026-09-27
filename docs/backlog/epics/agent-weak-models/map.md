@@ -7,13 +7,6 @@ item ordering (goal §Decisions "shared bench order").
 
 ## Items
 
-3. `distribution/ai-agent-playground-model-catalog` — **playground** —
-   Native send(prompt, images), Settings catalog editor, chat model picker, attach control (image → prompt,
-   other file → project via the project files API + path in prompt), switch
-   offer after provider `error` (I3/I4). Catalog I1/I2 landed; former image item absorbed here. The `context-exceeded` offer
-   and the compaction marker are item 7's UI half; the kit's transcript
-   reducer (`distribution/agent-transcript-model`, PR #357) lands after this
-   goal and covers these chat events.
 4. `distribution/ai-agent-weak-model-baseline-lane` — **baseline** — bench
    `endpoint` as a catalog entry, report header + per-run metric columns,
    `context-exceeded` outcome, one recorded `gpt-6-luna` run of the existing
@@ -58,14 +51,12 @@ item ordering (goal §Decisions "shared bench order").
   reasoning_content replay verified through the proxy. Evidence: catalog unit.
 - Luna endpoint verified: temporary proxy on 10539, codexVersion 0.155.1;
   gpt-6-luna listed and real request returned OK. I12 measurement remains open.
-- Playground attach: image sources (file picker, paste, preview screenshot)
-  and the project folder for non-image files — owner: agent — item 3 carrier;
-  pi accepts `ImageContent` only.
+- Playground carrier resolved: file picker; native images to prompt, other
+  bytes under /attachments with unique names and ProjectFiles CAS; advanced
+  native catalog JSON plus simple entry controls. I3/I4 reviewed c288a9cc9.
 - Rule-based pruning stage before the LLM summary — owner: agent — only if
   the I13 re-run shows overflow/VERIFY failures the pi compaction does not
   remove.
-- Playground Settings layout for catalog entries (advanced section, per-field
-  validation) — owner: agent — item 3 carrier.
 
 ## Out of scope
 

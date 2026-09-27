@@ -1,0 +1,193 @@
+{
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "c288a9cc99d8981a2f87d11a6805d9bbce96382b",
+  "unit_goal_source": "docs/backlog/distribution/ai-agent-playground-model-catalog.md; BASE c5bb64273b863696b97d4f27977e6761dbd2bb0e; HEAD c288a9cc99d8981a2f87d11a6805d9bbce96382b. Fresh independent reviewer images_ui_final_review, read-only tracked tree. Authority: goal agent-weak-models I3/I4, I2 interaction; raw answers 4–6 in reference/agent-weak-models-refine-evidence.md; ADR-0471. Full BASE diff and Contract+RED @ 9837f10c20513055c12b0795b5dfea8b13a74108 checked. PR-4: storage criterion migrated from exact endpoint/model to accepted catalog shape, secret/limit/reset assertions retained and whitespace normalization added; archive Stop action fixes setup only, exact byte/collision criteria unchanged. Contract advisory addressed by reload, new-entry defaults and credential/header cases. Independent pnpm exec vitest run packages/agent/src/images.test.ts packages/agent/src/catalog.test.ts: 10/10 GREEN (/private/tmp/rifty-pr359-review-images-green.log). Independent targeted Chromium settings/catalog/attachment: 3/3 GREEN (/private/tmp/rifty-pr359-review-ui-green.log), after sandbox localhost EPERM and authorized rerun. Read full producer ai-mode log: 14/14 GREEN; pr:check: 25/25, one npm-client file passed isolated rerun, 0 timeouts, unresolved cause explicitly recorded. Existing resource/reload/Stop/history interactions retained. Goal revision unchanged; required later work stays linked.",
+  "overall_verdict": "pass",
+  "merge_call": "Срез I3/I4 принят: 0 blockers. Независимо 10/10 unit и 3/3 Chromium GREEN; полные логи 14/14 e2e, pr:check 25/25 проверены. Продолжить goal; I4 compaction UI и I5–I13 открыты.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Acceptance 1: native image+text и image-only input сохранены в запросе и trace",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/agent/src/images.test.ts:48",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: text-only отказ до dispatch с именем entry; binary prompt loud refusal; tool images остаются unsupported",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/agent/src/images.test.ts:73; packages/agent/src/images.test.ts:85; packages/agent/src/tools.ts:386; packages/agent/README.md:154",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: native catalog/defaults, persistence catalog/selection, credentials и limits только в памяти",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:175; tests/e2e/ai-mode.spec.ts:747",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: picker/setModel, ручное продолжение после provider error, новые defaults и сохранённые tool results",
+      "source": "acceptance",
+      "trace": "I4 + I2",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:747; apps/playground/src/ai/AiChatPanel.tsx:400",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: image в prompt; остальные файлы через ProjectFiles, точные bytes/path, без overwrite",
+      "source": "acceptance",
+      "trace": "I4 + scenario",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:838",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: одинаковые native pi/rifty user content для image+text и image-only, image в trace",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/agent/src/images.test.ts:48",
+      "note": ""
+    },
+    {
+      "row": "text-only model × image send: named refusal, zero requests",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/agent/src/images.test.ts:73",
+      "note": ""
+    },
+    {
+      "row": "non-image bytes × model prompt: NotImplementedError, zero requests",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/agent/src/images.test.ts:85",
+      "note": ""
+    },
+    {
+      "row": "provider error × UI continuation: other model, history retained, no tool replay",
+      "source": "fault-matrix",
+      "trace": "I4 + I2",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:747",
+      "note": ""
+    },
+    {
+      "row": "project filename collision × attach: unique path, prior bytes preserved",
+      "source": "fault-matrix",
+      "trace": "I4 + scenario",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:869",
+      "note": ""
+    },
+    {
+      "row": "AgentSession.send(prompt, images?): native images admitted, unsupported binary/text-only rejected",
+      "source": "public-api",
+      "trace": "I3 + ADR-0471",
+      "status": "pass",
+      "citation": "packages/agent/src/types.ts:174; packages/agent/src/images.test.ts:48; packages/agent/src/images.test.ts:73; packages/agent/src/images.test.ts:85",
+      "note": ""
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4 + I5",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:28",
+      "summary": "Compaction marker и context-exceeded switch offer — следующий compaction slice после baseline."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:28",
+      "summary": "Pi-parity compaction, полный usage, context-exceeded."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:25",
+      "summary": "Pi-parity agent retry после baseline."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:33",
+      "summary": "Локализующая диагностика edit_file."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:36",
+      "summary": "Steering повторных одинаковых вызовов/результатов."
+    },
+    {
+      "clause": "I9",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:23",
+      "summary": "600 s default и budget fields в tool results."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:39",
+      "summary": "Workbench diagnostics после мутаций."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:42",
+      "summary": "Prompt recipe и recipe:false."
+    },
+    {
+      "clause": "I12",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:17",
+      "summary": "Catalog-aware bench metrics и записанный Luna baseline до механизмов."
+    },
+    {
+      "clause": "I13",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:44",
+      "summary": "Повтор тех же задач/config/count, сравнение и отсутствие регрессии по задачам."
+    }
+  ],
+  "goal_complete": false
+}
