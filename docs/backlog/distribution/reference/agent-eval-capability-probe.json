@@ -1,0 +1,120 @@
+{
+  "node": "v24.16.0",
+  "artifact": "tools/agent-bench/reports/summaries/2026-09-13-gpt-5.6-sol/source-artifacts.json.gz",
+  "limitations": [
+    "Standalone real Shell + MemoryFsSync; no installed bins or host registration; not browser-host proof.",
+    "Token scanning is heuristic, not a shell parser; matches are investigation candidates.",
+    "Retained agent trials; no new model call."
+  ],
+  "coreCommands": [
+    "basename",
+    "cat",
+    "cd",
+    "clear",
+    "cp",
+    "dirname",
+    "echo",
+    "env",
+    "false",
+    "find",
+    "git",
+    "grep",
+    "head",
+    "help",
+    "jobs",
+    "ls",
+    "mkdir",
+    "mv",
+    "printf",
+    "pwd",
+    "realpath",
+    "rm",
+    "seq",
+    "sleep",
+    "tail",
+    "touch",
+    "true",
+    "wc",
+    "which"
+  ],
+  "shellResults": [
+    {
+      "command": "python3 --version",
+      "exitCode": 127,
+      "stdout": "",
+      "stderr": "python3: command not found\n"
+    },
+    {
+      "command": "python --version",
+      "exitCode": 127,
+      "stdout": "",
+      "stderr": "python: command not found\n"
+    },
+    {
+      "command": "sed -n 1p file.txt",
+      "exitCode": 127,
+      "stdout": "",
+      "stderr": "sed: command not found\n"
+    },
+    {
+      "command": "curl --version",
+      "exitCode": 127,
+      "stdout": "",
+      "stderr": "curl: command not found\n"
+    },
+    {
+      "command": "jq --version",
+      "exitCode": 127,
+      "stdout": "",
+      "stderr": "jq: command not found\n"
+    }
+  ],
+  "heuristicCandidateCounts": {
+    "rifty": {
+      "npm": 12,
+      "node": 4
+    },
+    "rifty-no-coi": {
+      "npm": 12,
+      "node": 1
+    },
+    "local-reference": {
+      "sed": 18,
+      "git": 22,
+      "npm": 12,
+      "node": 7,
+      "curl": 6,
+      "tsc": 1
+    }
+  },
+  "pythonCandidates": 0,
+  "selectedExamples": [
+    {
+      "run": "fix-date-sort/local-reference/1",
+      "callId": "call_64MShTJQs9CvUykmoC4VDcLb",
+      "tool": "bash",
+      "command": "ls -la && find . -maxdepth 2 -type f | sort | sed -n '1,200p'",
+      "tokens": ["sed"],
+      "isError": false,
+      "outputExcerpt": "total 176\ndrwxr-xr-x@ 12 vanilla-wave  wheel    384 Sep 13 07:32 .\ndrwxr-xr-x@ 11 vanilla-wave  wheel    352 Sep 13 07:32 ..\ndrwxr-xr-x@ 12 vanilla-wave  wheel    384 Sep 13 07:32 .git\n-rw-r--r--@  1 vanilla-wave  wheel     41 Sep 13 07:32 .gitignore"
+    },
+    {
+      "run": "new-issue-form/local-reference/2",
+      "callId": "call_NSi9xIY9HhRagKKXcDtq8i5T",
+      "tool": "bash",
+      "command": "curl -sS http://127.0.0.1:58589/issues | head -20",
+      "tokens": ["curl"],
+      "isError": false,
+      "outputExcerpt": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <script type=\"module\">import { injectIntoGlobalHook } from \"/@react-refresh\";\ninjectIntoGlobalHook(window);\nwindow.$RefreshReg$ = () => {};\nwindow.$RefreshSig$ = () => (type) => type;</script>\n\n    <scrip"
+    },
+    {
+      "run": "node-endpoint/local-reference/3",
+      "callId": "call_cF7hAvvfbYAJ9ZXaEoPu17Tt",
+      "tool": "bash",
+      "command": "curl -sS -i http://127.0.0.1:3321/api/stats",
+      "tokens": ["curl"],
+      "isError": true,
+      "outputExcerpt": "curl: (7) Failed to connect to 127.0.0.1 port 3321 after 0 ms: Couldn't connect to server\n\n\nCommand exited with code 7"
+    }
+  ]
+}

@@ -37,3 +37,9 @@ Consume the local runner's persisted series records for I8/I9; retain partial
 versus completed series identity and visible missing work. Report generation
 is deterministic over the same evidence and never calls a model. An operator
 may explain or separately annotate results, never rewrite measured scores.
+
+I10/I11 diagnostics reuse these records but remain a separate view/campaign:
+operation differences, recovered obstacles, attempted difficulty levels and
+boundary-confirmation evidence. Do not mix adaptively selected failures into
+the representative aggregate or call a shared model/budget limit a Rifty
+ceiling. Closing this item's I5 pilot leaves the diagnostics obligation open.

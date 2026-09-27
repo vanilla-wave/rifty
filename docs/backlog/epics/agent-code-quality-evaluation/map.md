@@ -4,6 +4,7 @@
 2. `distribution/agent-eval-codex-reference` — native Codex reference over one existing task; use item 1's runner contract and establish the adapter's real execution proof.
 3. `distribution/agent-eval-project-corpus` — judge-substrate probe first (which test runners install and run in COI/no-COI, how a test or CLI result is captured inside each lane), then six diverse pilot candidates, validated cards/reference solutions/judges, then an expanded frozen corpus; I1/I6/I7. Candidate curation can start independently; all-environment controls compose with items 1/2.
 4. `distribution/agent-eval-comparison-report` — expanded experiment identity, uncertainty and honest matrix accounting; then a real reference campaign and regeneration proof. Depends on items 1–3; report arithmetic and I5 campaign reuse the runner's series/results owner.
+5. `distribution/agent-eval-boundary-diagnostics` — observed environment/tool differences and executed escalation/confirmation beyond the pilot; I10/I11. Reuse the same runner, corpus and reporting owner; retained-trace research can start independently, final proof composes with items 1–4.
 
 ## Open questions
 
@@ -12,6 +13,8 @@
 - Campaign size: roughly 20–30 cases × 4 environments × 3 trials ≈ 240–360 live runs plus reference solutions per environment; 2026-09-13 medians 62–83 s agent time with tails 329–541 s, plus cold real-project install in the browser — owner: agent — report PICKUP records the declared matrix, expected runs, wall-clock and usage before a campaign starts; the pilot corpus frozen under I7 closes I5, expansion carries its own campaign.
 - Exact finite projects, starter versions, task snapshots and judge controls — owner: agent — follow the corpus item's pilot/admission route; record coverage gaps and selection reasons before the campaign, no success-selected pruning.
 - Uncertainty estimator, number/order of trials and comparable-run rules — owner: agent — report PICKUP records the estimand and validates the calculation before the reference campaign; no automatic quality threshold.
+- Boundary-search task families, substantive levels, controls and stopping bounds — owner: agent — diagnostics PICKUP predeclares the finite protocol; each path escalates beyond pilot, preserves outcomes and confirms candidate boundaries in fresh frozen series. Pilot closure of I5 leaves I10/I11 open.
+- Difference-catalog candidates and causal confirmation — owner: agent — extract actual calls/results including recovery; test exact relevant operations through both public Rifty hosts and native, mark unresolved context/semantic causes honestly. A standalone Shell probe is not browser-host proof.
 
 These are implementation details within settled scope, not alternatives about
 whose workflows or quality count. Draft children are compiled only at PICKUP.
@@ -20,6 +23,8 @@ storage service or parallel-run coordinator is presumed.
 Runner child owns series execution/interruption, report child owns comparison
 arithmetic and reference-campaign proof; both extend the same existing tool.
 Codex is the local entry point and explanation layer, never the score oracle.
+Boundary diagnostics add no execution coordinator: declared levels use the
+same scripts; report records exploration versus frozen confirmation provenance.
 Corpus cards and pilot evidence stay with item 3; exact projects are selected
 there, not asserted by the illustrative scenario list. Roughly 20–30 scored
 cases and an app-heavy mix guide curation without replacing I6/I7 proof.
@@ -38,3 +43,4 @@ finding, not tolerated drift.
 - New product UI, subagent orchestration, hosted eval platform and general runtime compatibility expansion: agent scope cut; measurement failures stay explicit, required harness defects are repaired in this goal.
 - Erasing the old diagnostic's exclusions/history or claiming unsupported software works: never. New selected trials retain unsuccessful/unevaluable records and reasons.
 - Resuming an interrupted series: user chose partial report plus a new series.
+- Automatically implementing missing Python/system utilities or repairing every measured runtime gap: not requested. The catalog keeps gaps explicit; harness/judge defects that would invalidate measurement remain required repairs.

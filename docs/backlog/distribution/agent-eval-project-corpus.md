@@ -80,6 +80,9 @@ No pilot, new reference solution or live task has been executed during refine.
 - Controls: reference, baseline and plausible partial solutions; commands/results.
 - Environment evidence: reference outcome per lane, failure reason or unknown.
 - Selection: pilot findings, calibration/evaluation family and version rationale.
+- Boundary-study eligibility: meaningful next difficulty/pressure level and
+  changed dimension, where applicable; selected diagnostic cases retain that
+  provenance and do not replace the representative corpus (I11).
 
 Checks are trusted independently of agent-editable files. Hidden input data is
 allowed; hidden requirements are not. New apps must admit different working UI
