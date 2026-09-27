@@ -38,10 +38,10 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `agent-per-capability-project-policy.md` | draft | no-coi-agent-host-kit | distinct files/shell policy in one sandbox agent host |
 | `agent-per-turn-settings.md` | draft | no-coi-agent-host-kit | settings resolved per model turn; ADR-0436 D2 correction |
 | `agent-text-only-content-transport.md` | draft | no-coi-agent-host-kit | opt-in string-content mode for OpenAI-compatible endpoints |
-| `no-coi-agent-reference-host.md` | draft | no-coi-agent-host-kit | packed fixture → connections-only reference host in CI; closes the goal |
+| `no-coi-agent-reference-host.md` | draft | no-coi-agent-host-kit | packed lane's Vite consumer → connections-only reference host in CI; closes the goal |
 | `no-coi-agent-npm-install.md` | draft | no-coi-agent-host-kit | agent shell `npm install` over the existing installer; loud without a registry |
 | `agent-shell-tool-output-order.md` | draft | no-coi-agent-host-kit | shell tool text in terminal order |
-| `agent-tool-text-cap-and-run-budgets-measure.md` | draft | agent-code-quality-evaluation | measure the 16 KiB cap / run budgets before changing ADR-0424 D7 |
+| `agent-tool-text-cap-and-run-budgets-measure.md` | draft | quality goal (PR #341) | measure the 16 KiB cap / run budgets before changing ADR-0424 D7 |
 | `no-coi-command-env-and-npm-lifecycle-vars.md` | draft | — | real env + npm lifecycle vars for no-COI commands |
 | `no-coi-node-print-and-input-type-flags.md` | draft | — | `node -p` / `--input-type` / `-r` on the no-COI path |
 

@@ -24,9 +24,9 @@ the other into a hand-written `AgentHost` (≈60 lines).
 
 Goal obligation: I4 — one host, distinct `readonlyPaths` / `allowedCommands`
 values for the file tools and for the shell; policy values are a host
-connection, enforcement stays in the SDK project policy (two
-`sandbox.project()` handles over the same root is the obvious carrier), no
-second policy engine.
+connection, enforcement stays in the SDK project policy (candidate carrier:
+two `sandbox.project()` handles over the same root — a seam on ADR-0426 D1
+that the pickup ADR decides), no second policy engine.
 
 Defect to repair in the same unit (fidelity audit row 3): `allowedCommands`
 is asserted on every stage including scripts spawned by `npm run`

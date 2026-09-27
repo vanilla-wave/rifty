@@ -112,7 +112,7 @@ opencode's tool layer needs native process spawn (a browser
 ceiling) plus permanent vendoring; the agent is built instead on the embeddable **Pi**
 harness (`@earendil-works/pi-agent-core`, verified browser-clean), registering rifty-native
 tools as plain pluggable functions. The agent loop ships as `@riftydev/agent` (ADR-0424,
-published under ADR-0436); model transport, keys and UI stay with the consumer, and rifty's
+published under ADR-0436); endpoint, keys and UI stay with the consumer, and rifty's
 AI-agnostic capabilities (TS language service, git over VFS) serve it. Positioning:
 `docs/research/open-webcontainers-alternative-2026-06.md`.
 Delivered foundation: headless Pi agent over public Workbench/no-COI hosts,

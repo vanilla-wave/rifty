@@ -43,8 +43,10 @@ installs truthfully for the active configuration.
 
 ## Decisions
 
-- carrier: the shell command reaches the Worker's existing install owner;
-  `<pkg>` arguments edit the manifest before resolution the npm way; seam
-  addition on ADR-0418 D4 → short ADR citing it at pickup.
+- candidate carrier (open until pickup, map fog): the shell command reaches
+  the Worker's existing install owner; `<pkg>` arguments edit the manifest
+  before resolution the npm way; where the registry connection lives
+  (sandbox-level vs per-call) is the public-API fork; the pickup ADR cites
+  ADR-0418 D4 and ADR-0376 D2.
 - rejected route: a rifty-specific "install" agent tool — violates the goal's
   "as on a developer machine" clause; the agent types the real command.

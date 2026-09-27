@@ -3,7 +3,7 @@ kind: epic
 status: draft
 title: no-COI agent host kit — an existing app wires connections only
 created: 2026-09-27
-value: A team embeds a no-COI rifty sandbox plus the rifty agent into its existing web app by supplying only connections — asset URLs, a storage namespace, an OpenAI-compatible endpoint, a project root and policy values — while every part that affects agent quality ships and is measured inside rifty, and the agent works as on a developer machine — including `npm install` when a registry is connected.
+value: A team embeds a no-COI rifty sandbox plus the rifty agent into its existing web app by supplying only connections — asset URLs, a storage namespace, an OpenAI-compatible endpoint, a project root and policy values — while every part that affects agent quality ships and is measured inside rifty; the agent installs dependencies when a registry is connected and sees command output in terminal order.
 user_story: As a developer embedding rifty into an existing non-COI product, I want `createSandbox` + `@riftydev/agent` to cover open → agent edit → build out of the box, but today I re-derive occupied/busy/progress state, splice two agent hosts for policy, write my own transcript reducer and a full Pi `streamFn` just to switch models and flatten message content.
 tier: works
 ---
@@ -15,9 +15,11 @@ The no-COI composition (`createSandbox({ toolchain })` → `project` →
 `openWorkbench` owns on the COI path — typed outcomes, a visible wait, real
 progress — and the agent parts an existing app cannot author without reaching
 into Pi: per-capability policy, per-turn settings, text-only message content,
-a transcript model — and the agent's shell behaves as on a developer machine:
+a transcript model — plus two shell-fidelity repairs the audit surfaced:
 `npm install <pkg>` works whenever the host connects a registry and fails
-loudly when it does not, command output reaches the model in terminal order. An in-repo reference host built from packed tarballs in CI
+loudly when it does not (I9), and command output reaches the model in
+terminal order (I10); other shell gaps the audit listed stay loud and are
+named out of scope. An in-repo reference host built from packed tarballs in CI
 proves the kit and fixes the boundary: host code is connections (URLs,
 namespace, endpoint settings, root, policy *values*); everything that shapes
 agent behaviour — policy enforcement, transport shaping, prompt and tool text,
@@ -50,7 +52,9 @@ Source: issue #345 and its triage; evidence
    counts; the app writes its own sources afterwards. The host records the
    applied `snapshotId` in its own storage; later opens call
    `toolchain.open({ cwd })`; a deploy with a new `snapshotId` re-applies with
-   `force`. An apply onto non-empty payload targets (`package.json`,
+   `force`, which replaces the payload targets — including dependencies the
+   agent added in step 6 — so the host's recipe reconciles them afterwards
+   (map fog, item 7). An apply onto non-empty payload targets (`package.json`,
    `package-lock.json`, `node_modules`) without `force` settles as the typed
    snapshot-conflict outcome, never a silent overwrite.
 5. The user pastes baseUrl / model / key. The app creates one agent host over
@@ -85,9 +89,11 @@ Source: issue #345 and its triage; evidence
    both configurations of step 6 (registry connected / none). Its source
    contains connections only: asset URLs, namespace, endpoint settings,
    optional `registryUrl`, project root and policy values (enforcement is
-   rifty's), DOM targets, the host-owned applied `snapshotId`. No readiness
-   polling, apply-state strings, busy flags, transport shaping, prompt or tool
-   text.
+   rifty's), DOM targets, the host-owned applied `snapshotId` — plus exactly
+   three pieces of display-only host code that shape nothing the model sees:
+   an ANSI/CR line normalizer for the page, the trace download helper, one
+   promise chain serialising the host's own calls. No readiness polling,
+   apply-state strings, busy flags, transport shaping, prompt or tool text.
 
 ## Invariants
 
@@ -155,17 +161,20 @@ Source: issue #345 and its triage; evidence
    output that today's ad-hoc reductions drop.
 8. I8. An in-repo no-COI reference host built from packed tarballs in CI runs
    scenario steps 2–8 end to end in both registry configurations, and its
-   source contains only connections (step 9's list): no readiness polling, apply-state strings, busy flags,
-   transport shaping, prompt or tool text — nothing quality-relevant is
-   host-authored; and rifty's benchmark (`tools/agent-bench` no-COI lane)
+   source contains only connections plus the three display-only pieces step 9
+   names (ANSI/CR line normalizer, trace download helper, one promise chain):
+   no readiness polling, apply-state strings, busy flags, transport shaping,
+   prompt or tool text — nothing quality-relevant is host-authored; and
+   rifty's benchmark (`tools/agent-bench` no-COI lane)
    boots this host's composition module, so the measured configuration is the
    kit's reference configuration (unrestricted root, session defaults) and
    the kit's opt-in modes are toggles of that same module.
 9. I9. In the agent's shell `npm install [<pkg>…]` runs through the same
-   installer as the host's `toolchain.install` when the host connected a
-   registry (`registryUrl` is an optional connection): `package.json`, the
-   lockfile and `node_modules` change as npm would, the operation joins the
-   existing busy slot; with no registry connected the command fails loudly
+   installer as the host's `toolchain.install` when the host configured a
+   registry connection (where that connection lives — sandbox option or
+   per-call — is item 8's ADR): `package.json`, the lockfile and
+   `node_modules` change as npm would, and a host operation overlapping the
+   install is rejected busy exactly as today; with no registry connected the command fails loudly
    with an outcome naming the missing registry — a valid configuration — and
    the injected instructions describe installs truthfully for the active
    configuration instead of steering the model away from dependencies.
@@ -207,7 +216,7 @@ challenge: 2026-09-27 — 8 problems + 8 advisory (widened kit; resolution per l
 - P2 carrier premise wrong: the surface-only packed fixture excludes
   `@riftydev/agent` and has no scripted provider; the sdk+agent proof is
   `workbench-vite-consumer/src/sandbox-agent-proof.ts` — carrier switched
-  (scenario 8, item 7, evidence corrected).
+  (scenario 9, item 7, evidence corrected).
 - P3 I1 unreachable under defaults (`startupTimeoutMs` 10 s < guard 30 s) —
   I1 reworded: identified as occupied whichever deadline fires first.
 - P4 DEC-2 form: partial overturn of ADR-0436 needs a decision subagent and a
@@ -262,9 +271,10 @@ drafts outside the kit; recorded ceilings stay out of scope.
 - 2026-09-27 — agent (from fork 3): no SDK-held applied identity, no
   `ensure`, no producer metadata sidecar; `applySnapshot` keeps ADR-0417/0420
   semantics; the signal is the typed conflict outcome (I2). "Не пустота" =
-  conflicting payload targets, by authority: ADR-0417 ("Force means
-  conflicting payload targets … not whole-project reset", refine record
-  2026-09-01) and `dep-snapshot-application.ts:33-46` (`package.json`,
+  conflicting payload targets, by authority: ADR-0417 (generic payload
+  conflict preflight; `force` selects overwrite) and the 2026-09-01 refine
+  record `no-coi-project-open-refine.md:92` ("Force means conflicting payload
+  targets … not whole-project reset") and `dep-snapshot-application.ts:33-46` (`package.json`,
   `package-lock.json`, `node_modules`). Consequence: the host applies first
   and writes sources afterwards; the host-owned applied `snapshotId` and the
   `force`-on-new-id recipe are host policy the reference host demonstrates.
@@ -312,15 +322,20 @@ drafts outside the kit; recorded ceilings stay out of scope.
   «разрешаем, но оно может падать, если к песочнице не подключен npm
   registry(такое должно быть валидно с точки хрения конфигурации)» → I9,
   scenario 6, item 8.
-- 2026-09-27 — agent (from the install answer): `registryUrl` is an optional
-  host connection; the agent's `npm install` reuses the installer behind
-  `toolchain.install` (no second installer) and joins the existing busy slot
-  (ADR-0376); the no-registry outcome is typed (I2); the injected prompt text
-  follows the configuration (audit row 21); seam addition on ADR-0418 D4 →
-  short ADR citing it at item 8 pickup. rejected route: a rifty-specific
-  "install" tool instead of the real `npm install` command — violates Outcome
-  "as on a developer machine".
-- 2026-09-27 — agent (audit routing, accepted by the user without objection):
+- 2026-09-27 — agent (from the install answer): the registry is a host
+  connection whose location (sandbox-level option vs today's per-call
+  `install({ registryUrl })`, `protocol.ts:90-98`) is a public-API fork for
+  item 8's ADR; the agent's `npm install` reuses the installer behind
+  `toolchain.install` (no second installer) and overlapping host operations
+  stay busy-rejected (ADR-0376 D1; D2's host-side input validation applies to
+  a shell-originated install running inside an admitted `run`); the
+  no-registry outcome is typed (I2); the injected prompt text follows the
+  configuration (audit row 21); seam addition on ADR-0418 D4 → short ADR
+  citing 0418 D4 and 0376 D2 at item 8 pickup. rejected route: a
+  rifty-specific "install" tool instead of the real `npm install` command —
+  violates I9 (the agent types the command it would type on a machine).
+- 2026-09-27 — agent: routing of the remaining audit rows (path, `RDY-5`;
+  user authority covers only the audit request and the install answer):
   I10 tool-text order (item 9); README `allowedCommands` example that breaks
   `npm run` → item 4 obligation; 16 KiB cap and 100/180 s budgets stay
   ADR-0424 D7 until measured → question draft
@@ -343,7 +358,7 @@ drafts outside the kit; recorded ceilings stay out of scope.
 - 2026-09-27 — agent: no one-call composition entry is seeded; REV-7: after
   I1–I7 the host's residual wiring is connections; if the reference host
   still carries mechanism, a child appears by re-chart, never pre-emptively.
-- bounded destination (fit.md 1, 2026-09-27, agent): closes when I1–I8 hold on
+- bounded destination (fit.md 1, 2026-09-27, agent): closes when I1–I10 hold on
   main and the reference host runs the scenario in the packed-consumer lane;
   no standing invariant is carried — the quality boundary is checked by I8's
   CI run, not by a policy.
@@ -357,7 +372,7 @@ drafts outside the kit; recorded ceilings stay out of scope.
   rows at pickup.
 - rejected route: serialise `run()`/project fs inside the SDK — violates
   ADR-0376 D1 (declined row "Queue overlapping no-COI toolchain calls");
-  scenario 6 keeps the loud busy outcome.
+  scenario 7 keeps the loud busy outcome.
 - rejected route: a new session per model turn instead of per-turn `settings`
   — loses the Pi-owned history (ADR-0424 D2); violates I5 "keeping the
   session history".

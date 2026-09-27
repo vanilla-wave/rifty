@@ -45,6 +45,19 @@ no-registry outcome); 7 after all others and closes the goal.
 - No-registry outcome shape (typed identifier from item 1; message names the
   missing connection) and the conditional prompt text — owner: agent — item 8
   pickup.
+- Registry connection location for I9 (sandbox-level option vs per-call
+  `install({ registryUrl })`, `protocol.ts:90-98`; user words «к песочнице не
+  подключен» point at sandbox level) — owner: agent — item 8's ADR; public API.
+- Reference recipe after a new `snapshotId` when the agent added dependencies
+  (scenario 4 × 6): `force` replaces `package.json`/lock/`node_modules`; the
+  host reconciles (re-run install after apply vs manifest diff) — owner: agent
+  — item 7 pickup; host policy under ADR-0417, never an SDK merge.
+- Bench boots the host module (I8): today's lane differs in limits (40 calls /
+  600 s, `tools/agent-bench/src/config.ts:60-61`) and provisioning
+  (`toolchain.install` from `/npm-registry`, `no-coi-page.ts:37`) vs the kit's
+  session defaults and snapshot → `open`; which knobs become bench variables
+  vs adopted host defaults — owner: agent — item 7 pickup, together with
+  `distribution/agent-tool-text-cap-and-run-budgets-measure`.
 - Shell tool text ordering carrier: rebuild text from the ordered `output`
   events vs an ordered capture in `SandboxCommandOutcome` — owner: agent —
   item 9 pickup; ADR-0436 D4 status header unchanged.
@@ -88,7 +101,7 @@ no-registry outcome); 7 after all others and closes the goal.
 - New `examples/` directory; the surface-only packed fixture as the host base
   — carriers rejected (goal Decisions).
 - A one-call composition entry — not seeded; re-chart if I8's host still
-  carries mechanism after 1–6.
+  carries mechanism after 1–6, 8, 9.
 - 16 KiB tool-text cap and 100 / 180 s run budgets (ADR-0424 D7) — measured
   first: `distribution/agent-tool-text-cap-and-run-budgets-measure` (quality
   goal); the kit does not change them.
