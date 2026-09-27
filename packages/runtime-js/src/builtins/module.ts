@@ -44,8 +44,17 @@ export function createRequire(from: string | URL): RequireFn {
   return impl(fromPath) as RequireFn;
 }
 
-export function builtinModules(): string[] {
-  return listBuiltins();
+let builtinModulesSnapshot: readonly string[] = Object.freeze([]);
+
+export function builtinModules(): readonly string[] {
+  const names = listBuiltins();
+  if (
+    names.length !== builtinModulesSnapshot.length ||
+    names.some((name, index) => name !== builtinModulesSnapshot[index])
+  ) {
+    builtinModulesSnapshot = Object.freeze(names);
+  }
+  return builtinModulesSnapshot;
 }
 
 export const constants = {
@@ -86,7 +95,7 @@ export function isBuiltin(specifier: string): boolean {
 
 // Some tools read `Module.builtinModules` as a property; provide a frozen view.
 const moduleClass: {
-  builtinModules: string[];
+  builtinModules: readonly string[];
   createRequire: typeof createRequire;
   constants: typeof constants;
   enableCompileCache: typeof enableCompileCache;
@@ -95,7 +104,7 @@ const moduleClass: {
   isBuiltin: typeof isBuiltin;
 } = {
   get builtinModules() {
-    return listBuiltins();
+    return builtinModules();
   },
   createRequire,
   constants,
@@ -112,16 +121,9 @@ const moduleModule = {
   flushCompileCache,
   getCompileCacheDir,
   isBuiltin,
-  builtinModules: new Proxy([] as string[], {
-    get(_target, prop) {
-      const arr = listBuiltins();
-      const value = (arr as unknown as Record<string | symbol, unknown>)[prop];
-      return value;
-    },
-    has(_target, prop) {
-      return prop in listBuiltins();
-    },
-  }),
+  get builtinModules() {
+    return builtinModules();
+  },
   Module: moduleClass,
   default: moduleClass,
   // syncBuiltinESMExports is a Node hook used by deep-tooling. Best-effort no-op.

@@ -18,13 +18,10 @@ import {
 import {
   type WorkerInitMessage,
   type WorkerSpawnSpec,
+  finalizeWorkerEntry,
   runEntryLifecycle,
 } from '../../../packages/kernel/src/worker-entry.ts';
-import {
-  bindWorkerStdioOutput,
-  sealWorkerOutput,
-  workerOutputAttestation,
-} from '../../../packages/kernel/src/worker-stdio-drain.ts';
+import { bindWorkerStdioOutput } from '../../../packages/kernel/src/worker-stdio-drain.ts';
 import { runNodeEntry } from '../../../packages/runtime-js/src/builtins/node-entry.ts';
 import {
   beginNodeEvalUnhandled,
@@ -436,7 +433,7 @@ async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
   });
   const outcome = await runEntryLifecycle(spec, {
     preEntryHook: installObservedNodeRuntime,
-    drainHook: null,
+    drainHook: () => awaitDrain({ capMs: Number.POSITIVE_INFINITY }),
     async runEntry(entry) {
       if (entry.kind !== 'url' || entry.url !== 'parity://node-entry') {
         throw new Error('worker-env parity received an unexpected node entry');
@@ -449,17 +446,14 @@ async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
   });
   await stdioDeliveryProof;
 
-  // `worker_threads.Worker` uses serve:true. A clean entry stays alive for its
-  // parentPort; only setup failure is reaped by the production kernel contract.
-  if (outcome.threw) {
-    if (sealWorkerOutput(spec.outputState)) {
-      hostPort.postMessage({
-        type: 'exit',
-        code: outcome.code,
-        attestation: workerOutputAttestation(spec.outputState),
-      });
-    }
-  }
+  finalizeWorkerEntry(
+    {
+      postMessage: (message) => hostPort.postMessage(message),
+      close: () => hostPort.close(),
+    },
+    spec,
+    outcome,
+  );
 }
 
 hostPort.once('message', (message: unknown) => {

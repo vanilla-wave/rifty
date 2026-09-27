@@ -1,13 +1,4 @@
-/**
- * Node-compatible `node:fs` (subset).
- *
- * Sync and async APIs share one in-process tree via `syncMirror()`; async wraps
- * sync. OPFS backend (M4+) swaps the mirror for a `FileSystemSyncAccessHandle`
- * one inside the Worker.
- *
- * Encoding: no encoding → Uint8Array (Buffer-tagged); `'utf8'` → string. Matches
- * Node.
- */
+/** Node fs subset; synchronous and asynchronous operations share syncMirror(). */
 
 import { NotImplementedError, bytesToString } from '@riftydev/io';
 import { VfsError } from '@riftydev/vfs';
@@ -1563,7 +1554,12 @@ import {
 } from './fs-streams.ts';
 import { FSWatcher, unwatchFile, watch, watchFile } from './fs-watch.ts';
 
+export function statfsSync(): never {
+  throw new NotImplementedError('fs.statfsSync');
+}
+
 const fs = {
+  statfsSync,
   promises,
   open,
   close,

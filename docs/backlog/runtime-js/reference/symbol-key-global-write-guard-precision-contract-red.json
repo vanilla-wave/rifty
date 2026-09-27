@@ -1,0 +1,116 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS. Node v24.16.0 oracles reproduced; 16 symbol RED + 20 safety GREEN, both parity RED at named ceilings. Implement then Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "57602c71af088f69e2f973aa54ae3334644e8150",
+  "unit_goal_source": "docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md @ 57602c71af088f69e2f973aa54ae3334644e8150; BASE 7a12d3214; accepted docs/backlog/epics/vitest-run-in-browser/goal.md and map.md; fresh reviewer /root/guard_ipc_contract_review",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1\u2013I7 whole-goal acceptance",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:8",
+      "summary": "Preparation only: implement these prepared units and remaining map obligations; run actual browser Vitest forks/threads acceptance and final review before the requested one green PR closes."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: computed keys evaluate once in position; real symbols including const/inline forms retain native values",
+      "source": "acceptance",
+      "trace": "I6+ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-global-writes-cjs.case.ts:6; tools/node-parity-runner/cases/modules/symbol-global-writes-esm.case.ts:7",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: member, Object/Reflect, accessor and literal-map mutation family shares key rule; opaque maps retain ceilings",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-global-writes-cjs.case.ts:6; tools/node-parity-runner/cases/modules/symbol-global-writes-esm.case.ts:7; packages/runtime-js/src/module-loader/symbol-global-writes.test.ts:44; tests/conformance/modules/resolver.test.ts:1667; tests/conformance/modules/resolver.test.ts:3166",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: non-symbol dynamic keys throw after expression, before mutation; no coercion; static Function stays rejected",
+      "source": "acceptance",
+      "trace": "ADR-0171+ADR-0444",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/symbol-global-writes.test.ts:44; packages/runtime-js/src/module-loader/symbol-global-writes.test.ts:111; tests/conformance/modules/resolver.test.ts:1605; tests/conformance/modules/resolver.test.ts:3102",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: mutable/shadowed bindings are classified by actual symbol value",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/symbol-global-writes.test.ts:32; packages/runtime-js/src/module-loader/symbol-global-writes.test.ts:89",
+      "note": ""
+    },
+    {
+      "row": "Parity: both loaders preserve mutation-family values, order, shadowing and deletion",
+      "source": "acceptance",
+      "trace": "I6+ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-global-writes-cjs.case.ts:4; tools/node-parity-runner/cases/modules/symbol-global-writes-esm.case.ts:4",
+      "note": ""
+    },
+    {
+      "row": "Frozen CJS native oracle stdout",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-global-writes-cjs.case.ts:44",
+      "note": ""
+    },
+    {
+      "row": "Frozen ESM native oracle stdout",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-global-writes-esm.case.ts:45",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

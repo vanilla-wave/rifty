@@ -7,6 +7,18 @@ import { type Edit, applyEdits, uniqueHelperName } from './cjs-source-rewrite.ts
 import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
+import {
+  type GlobalSymbolKeyValidator,
+  createGlobalSymbolKeyValidator,
+  guardGlobalMutationCall,
+  guardGlobalMutationMember,
+  isComputedMember,
+  literalString,
+  propertyMayBeFunction,
+  staticPropertyKeyName,
+  staticPropertyName,
+  unwrapChain,
+} from './global-mutation-keys.ts';
 import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
@@ -127,6 +139,7 @@ interface Scope {
 }
 
 interface FunctionRewriteCtx {
+  readonly symbolKeyHelperName: string;
   readonly edits: Edit[];
   readonly scopes: Scope[];
   readonly functionHelperName: string;
@@ -208,6 +221,7 @@ function rewriteCjsFunctionConstructorReferences(
   functionHelperName: string,
   webAssemblyHelperName: string,
   dynamicImportHelperName: string,
+  symbolKeyHelperName: string,
 ): string {
   if (!functionRoutingAnalysisToken.test(source)) return source;
   let program: Program;
@@ -239,6 +253,7 @@ function rewriteCjsFunctionConstructorReferences(
     functionHelperName,
     webAssemblyHelperName,
     dynamicImportHelperName,
+    symbolKeyHelperName,
     hasGlobalFunctionWrite: false,
     hasDynamicFunctionScope: false,
     hasWithDynamicFunctionScope: false,
@@ -689,7 +704,14 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
     case 'CallExpression': {
       const callee = n.callee as AnyNodeShape | undefined;
       const args = (n as unknown as { arguments?: unknown[] }).arguments ?? [];
-      if (isGlobalFunctionMutationCall(n, ctx)) {
+      if (
+        guardGlobalMutationCall(
+          n,
+          ctx,
+          (name) => isShadowed(ctx, name),
+          (value) => isGlobalObjectExpression(value, ctx),
+        )
+      ) {
         ctx.hasGlobalFunctionWrite = true;
       }
       if (calleeMayBeHostFunction(callee, ctx)) {
@@ -888,7 +910,7 @@ function walkAssignmentTarget(target: unknown, ctx: FunctionRewriteCtx): void {
     return;
   }
   if (t.type === 'MemberExpression') {
-    if (isGlobalFunctionWriteMember(t, ctx)) {
+    if (guardGlobalMutationMember(t, ctx, isGlobalObjectExpression(t.object, ctx))) {
       ctx.hasGlobalFunctionWrite = true;
     }
     walkFunctionReferences(t.object, ctx);
@@ -1443,12 +1465,6 @@ function isGlobalFunctionReadMember(node: AnyNodeShape, ctx: FunctionRewriteCtx)
   return isGlobalObjectExpression(node.object, ctx) && staticPropertyName(node) === 'Function';
 }
 
-function isGlobalFunctionWriteMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
-  if (!isGlobalObjectExpression(node.object, ctx)) return false;
-  const propertyName = staticPropertyName(node);
-  return propertyName === 'Function' || (propertyName === undefined && isComputedMember(node));
-}
-
 function expressionMayBeHostFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
   if (!node || typeof node !== 'object') return false;
   const n = node as AnyNodeShape;
@@ -1630,130 +1646,9 @@ function isGlobalObjectExpression(node: unknown, ctx: FunctionRewriteCtx): boole
   return typeof name === 'string' && isGlobalAlias(ctx, name);
 }
 
-function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
-  const call = node as unknown as { callee?: AnyNodeShape; arguments?: unknown[] };
-  const callee = call.callee;
-  const args = call.arguments ?? [];
-  if (!callee || callee.type !== 'MemberExpression') return false;
-  const calleeMember = callee as unknown as { object?: AnyNodeShape };
-  const object = calleeMember.object;
-  const objectName =
-    object?.type === 'Identifier' ? (object as unknown as { name?: string }).name : undefined;
-  const propertyName = staticPropertyName(callee);
-
-  const isBuiltinObject = objectName === 'Object' && !isShadowed(ctx, 'Object');
-  const isBuiltinReflect = objectName === 'Reflect' && !isShadowed(ctx, 'Reflect');
-
-  if (isBuiltinObject && propertyName === 'assign' && isGlobalObjectExpression(args[0], ctx)) {
-    return args.slice(1).some((arg) => objectMayContainFunctionKey(arg));
-  }
-
-  const isObjectDefine =
-    isBuiltinObject && (propertyName === 'defineProperty' || propertyName === 'defineProperties');
-  const isReflectMutation =
-    isBuiltinReflect &&
-    (propertyName === 'defineProperty' ||
-      propertyName === 'set' ||
-      propertyName === 'deleteProperty');
-  if ((isObjectDefine || isReflectMutation) && isGlobalObjectExpression(args[0], ctx)) {
-    if (propertyName === 'defineProperties') {
-      return objectMayContainFunctionKey(args[1]);
-    }
-    return propertyMayBeFunction(args[1]);
-  }
-
-  if (
-    isGlobalObjectExpression(object, ctx) &&
-    (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
-  ) {
-    return propertyMayBeFunction(args[0]);
-  }
-
-  return false;
-}
-
-function propertyMayBeFunction(node: unknown): boolean {
-  const value = literalString(node);
-  return value === 'Function' || value === undefined;
-}
-
 function propertyMayBeConstructor(node: unknown): boolean {
   const value = literalString(node);
   return value === 'constructor' || value === undefined;
-}
-
-function objectMayContainFunctionKey(node: unknown): boolean {
-  if (!node || typeof node !== 'object') return true;
-  const object = node as AnyNodeShape;
-  if (object.type !== 'ObjectExpression') return true;
-  const properties = (object as unknown as { properties?: AnyNodeShape[] }).properties ?? [];
-  return properties.some((property) => {
-    if (property.type === 'SpreadElement') return true;
-    const key = staticPropertyKeyName(property);
-    return key === 'Function' || key === undefined;
-  });
-}
-
-function staticPropertyName(node: AnyNodeShape): string | undefined {
-  const n = unwrapChain(node) as AnyNodeShape;
-  const member = n as unknown as { computed?: boolean; property?: AnyNodeShape };
-  const property = member.property;
-  if (!property) return undefined;
-  if (!member.computed && property.type === 'Identifier') {
-    return (property as unknown as { name?: string }).name;
-  }
-  return member.computed ? literalString(property) : undefined;
-}
-
-function isComputedMember(node: AnyNodeShape): boolean {
-  return Boolean((unwrapChain(node) as unknown as { computed?: boolean }).computed);
-}
-
-function staticPropertyKeyName(node: AnyNodeShape): string | undefined {
-  const property = node as unknown as { computed?: boolean; key?: AnyNodeShape };
-  const key = property.key;
-  if (!key) return undefined;
-  if (!property.computed && key.type === 'Identifier') {
-    return (key as unknown as { name?: string }).name;
-  }
-  return literalString(key);
-}
-
-function literalString(node: unknown): string | undefined {
-  if (!node || typeof node !== 'object') return undefined;
-  const n = unwrapChain(node) as AnyNodeShape;
-  if (n.type === 'Literal') {
-    const value = (n as unknown as { value?: unknown }).value;
-    return typeof value === 'string' ? value : undefined;
-  }
-  if (n.type === 'BinaryExpression' && (n as unknown as { operator?: string }).operator === '+') {
-    const left = literalString(n.left);
-    const right = literalString(n.right);
-    return left !== undefined && right !== undefined ? left + right : undefined;
-  }
-  if (n.type === 'TemplateLiteral') {
-    const expressions = (n as unknown as { expressions?: unknown[] }).expressions ?? [];
-    if (expressions.length > 0) return undefined;
-    const quasis = (n as unknown as { quasis?: AnyNodeShape[] }).quasis ?? [];
-    return quasis
-      .map((quasi) => {
-        const value = quasi.value as { cooked?: unknown } | undefined;
-        return typeof value?.cooked === 'string' ? value.cooked : '';
-      })
-      .join('');
-  }
-  return undefined;
-}
-
-function unwrapChain(node: unknown): unknown {
-  if (!node || typeof node !== 'object') return node;
-  const n = node as AnyNodeShape;
-  if (n.type === 'ChainExpression') return unwrapChain(n.expression);
-  if (n.type === 'SequenceExpression') {
-    const expressions = (n as unknown as { expressions?: unknown[] }).expressions ?? [];
-    return unwrapChain(expressions[expressions.length - 1]);
-  }
-  return node;
 }
 
 function walkDefaultForFunctionReferences(n: AnyNodeShape, ctx: FunctionRewriteCtx): void {
@@ -1797,6 +1692,7 @@ function compileCjsSource(
     __riftyDynamicImport: (specifier: unknown) => Promise<Record<string, unknown>>,
     __riftyFunction: FunctionConstructor,
     __riftyWebAssembly: typeof WebAssembly,
+    symbolKey: GlobalSymbolKeyValidator,
   ) => void;
 
   const routedConstructors = createFunctionImportRouting(dynamicImport, filename);
@@ -1811,12 +1707,14 @@ function compileCjsSource(
     '__riftyWebAssembly',
     new Set([dynamicImportHelperName, functionHelperName]),
   );
+  const symbolKeyHelperName = uniqueHelperName(sourceText, '__riftyGlobalSymbolKey');
   const source = rewriteCjsFunctionConstructorReferences(
     rewriteDynamicImports(sourceText, filename, dynamicImportHelperName),
     filename,
     functionHelperName,
     webAssemblyHelperName,
     dynamicImportHelperName,
+    symbolKeyHelperName,
   );
   let fn: CjsFactory;
   try {
@@ -1829,6 +1727,7 @@ function compileCjsSource(
       dynamicImportHelperName,
       functionHelperName,
       webAssemblyHelperName,
+      symbolKeyHelperName,
       `${source}\n//# sourceURL=${filename}`,
     ) as CjsFactory;
   } catch (error) {
@@ -1853,6 +1752,7 @@ function compileCjsSource(
     dynamicImport,
     routedConstructors.Function,
     deps.WebAssembly,
+    createGlobalSymbolKeyValidator('cjs'),
   );
 }
 

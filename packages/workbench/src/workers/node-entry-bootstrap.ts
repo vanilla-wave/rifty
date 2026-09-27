@@ -191,6 +191,10 @@ if (nodeServe) {
   });
 } else {
   await runEntry();
+  if (launch.kind === 'worker-thread') {
+    await awaitDrain({ capMs: Number.POSITIVE_INFINITY });
+    proc.exit();
+  }
   // Honor process.exitCode on a clean return (Node parity, ADR-0157 D4): the kernel
   // reaps a no-throw return as exit 0, so a `.bin`/execSync CLI that set a non-zero
   // process.exitCode must surface it (proc.exit throws RIFTY_PROCESS_EXIT → kernel

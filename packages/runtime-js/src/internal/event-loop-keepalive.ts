@@ -13,6 +13,11 @@
  */
 
 import { setKernelDrainHook } from '@riftydev/kernel';
+import {
+  dispatchProcessError,
+  isProcessExitSignal,
+  notifyProcessExit,
+} from '../builtins/process-error-events.ts';
 
 const PromiseConstructorPrimordial = Promise;
 const promiseResolvePrimordial = Promise.resolve;
@@ -356,6 +361,7 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
   const start = now();
   return new PromiseConstructorPrimordial<void>((resolve, reject) => {
     let terminal = false;
+    let idleCheckpoint = false;
     const finish = (
       outcome:
         | { readonly kind: 'resolved' }
@@ -418,11 +424,15 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
         return;
       }
       if (state.refCount <= 0 && !opts.hasRef?.()) {
-        // TODO(backlog: runtime-js/late-unhandled-rejection-drain): cover a late
-        // browser unhandledrejection task without a second drain owner.
+        if (!idleCheckpoint) {
+          idleCheckpoint = true;
+          schedule(tick);
+          return;
+        }
         finish({ kind: 'resolved' });
         return;
       }
+      idleCheckpoint = false;
       if (now() - start > capMs) {
         if (state.nodeEvalDrainOwner === nodeEvalDrainLease) {
           state.nodeEvalDrainOwner = null;
@@ -442,6 +452,7 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
 
 interface RejectionEventLike {
   reason: unknown;
+  promise?: unknown;
   preventDefault?(): void;
 }
 interface RejectionTarget {
@@ -481,7 +492,20 @@ export function installUnhandledErrorTrap(
         : typeof event.message === 'string'
           ? new Error(event.message)
           : new Error('Worker terminated by an uncaught error');
-    if (!beginNodeEvalUnhandled(reason, 'uncaught-error')) return;
+    try {
+      if (dispatchProcessError(reason, 'uncaughtException')) {
+        event.preventDefault?.();
+        return;
+      }
+    } catch (error) {
+      if (!isProcessExitSignal(error)) throw error;
+      event.preventDefault?.();
+      return;
+    }
+    if (!beginNodeEvalUnhandled(reason, 'uncaught-error')) {
+      if (!isProcessExitSignal(reason)) notifyProcessExit(1);
+      return;
+    }
     event.preventDefault?.();
   });
 }
@@ -500,10 +524,21 @@ export function installUnhandledRejectionTrap(
   target: RejectionTarget = self as unknown as RejectionTarget,
 ): void {
   target.addEventListener('unhandledrejection', (ev: RejectionEventLike) => {
+    try {
+      if (dispatchProcessError(ev.reason, 'unhandledRejection', ev.promise)) {
+        ev.preventDefault?.();
+        return;
+      }
+    } catch (error) {
+      if (!isProcessExitSignal(error)) throw error;
+      ev.preventDefault?.();
+      return;
+    }
     if (beginNodeEvalUnhandled(ev.reason, 'rejection')) {
       ev.preventDefault?.();
       return;
     }
+    if (!isProcessExitSignal(ev.reason)) notifyProcessExit(1);
     recordRejection(ev.reason);
   });
 }

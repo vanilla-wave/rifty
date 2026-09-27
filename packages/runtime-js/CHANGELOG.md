@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+- Use one native advanced IPC snapshot; refuse binary graphs with a named ceiling. Remove custom Buffer serialization, Promise probes and runtime-wide Proxy capture (ADR-0467; user scope amendment).
+- Preserve VM Map/Set/Error cause backings and dense frozen builtinModules; document Proxy-backed VM mirrors as outside native IPC cloning.
+
+- Filter the canonical eval source pair from default fork startup while preserving explicit execArgv.
+
+- Execute child startup preloads, conditions and flagged import.meta.resolve parent URLs; preserve Worker trusted inheritance and fork public defaults through exact node-entry v6 (ADR-0456).
+- Deliver originating Worker failures before exit; distinguish explicit exits, handled exceptions and unsupported custom-inspect projection (ADR-0460).
+- Preserve native postMessage return values used by Node BroadcastChannel infrastructure.
+- Keep vm.constants importable and refuse DONT_CONTEXTIFY with its named ceiling instead of jsdom's undefined-property TypeError.
+- Count manual refs on local native MessagePorts; preserve raw infrastructure channels and reject managed transfer before detachment (ADR-0452).
+- Record explicit VM retained-mirror, missing-exotic and replaced-stack-hook limitations.
+- Count Worker and parentPort lifetimes through drain; carry real stdio and accept empty execArgv (ADR-0449).
+
+- Allow actual symbol global mutation keys through shared CJS/ESM validation; preserve Function ceilings and helper binding hygiene.
+- Add advanced fork IPC value graphs and typed launch v5; keep JSON and private control separate (ADR-0446).
+- Preserve unset process.exitCode so CLI startup failures can select Node's nonzero default.
+
+- Deliver process error/exit events before terminal handling and allow a browser rejection checkpoint before natural drain (ADR-0445).
+- Honor host vm script offsets, including escaped functions and native CallSite positions (ADR-0443).
+
+- Make statfsSync, spawnSync and process.memoryUsage callable named ceilings, so uncalled capabilities do not prevent module loading.
+
+- Register path/posix and path/win32 using existing namespaces; expose process methods as own named ESM exports.
+
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).
@@ -677,7 +701,7 @@
   kernel path's `serve:true` (keeps a message-driven Worker alive — Node parity +
   Rolldown's pool) means a run-to-completion Worker does not auto-emit `'exit'`
   like Node; marked explicit at the spawn site and tracked at
-  `backlog/runtime-js/worker-threads-kernel-run-to-completion-exit` (the same-realm
+  ADR-0449 / `backlog/runtime-js/reference/worker-thread-lifecycle-evidence.md` (the same-realm
   path already auto-exits). (c) `worker-realm-compat.ts` header corrected — the
   realm shims install via `installNodeRuntime` (the host's registered pre-entry
   hook; the kernel ships no default) gated to Node workers, not a mythical

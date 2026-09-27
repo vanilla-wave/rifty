@@ -39,6 +39,7 @@ describe('event-loop keepalive', () => {
     expect(queue).toHaveLength(1);
     unref();
     queue.shift()!();
+    queue.shift()!();
     await expect(drain).resolves.toBeUndefined();
     recordRejection(new Error('next invocation'));
     const next = awaitDrain({ scheduleMacrotask: (callback) => queue.push(callback) });
@@ -70,6 +71,7 @@ describe('event-loop keepalive', () => {
     expect(flushed).toEqual([]);
     unref();
     queue.shift()!();
+    queue.shift()!();
     await drain;
     expect(flushed).toEqual(['print']);
   });
@@ -92,13 +94,14 @@ describe('event-loop keepalive', () => {
     expect(activeRefs()).toBe(1);
   });
 
-  it('awaitDrain resolves once refCount reaches 0 (after a macrotask)', async () => {
+  it('awaitDrain resolves after zero refs survive the rejection checkpoint', async () => {
     ref();
     const queue: Array<() => void> = [];
     const p = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
     queue.shift()!(); // first tick: refCount=1, re-schedules
     unref();
-    queue.shift()!(); // next tick: refCount=0 → resolves
+    queue.shift()!(); // zero refs: let browser rejection reporting run
+    queue.shift()!(); // still idle: resolve
     await expect(p).resolves.toBeUndefined();
   });
 
@@ -122,14 +125,25 @@ describe('event-loop keepalive', () => {
     await expect(p).rejects.toThrow(/exceeded keepalive drain cap/);
   });
 
-  it('awaitDrain resolves on the first tick when already drained (refCount 0)', async () => {
+  it('awaitDrain rechecks already-idle state after browser rejection reporting', async () => {
     // No ref() — refCount stays 0
     const queue: Array<() => void> = [];
     const p = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
     expect(queue.length).toBe(1);
-    queue.shift()!(); // first tick: refCount=0 → resolves immediately
-    expect(queue.length).toBe(0); // no second tick queued
+    queue.shift()!();
+    expect(queue.length).toBe(1);
+    queue.shift()!();
+    expect(queue.length).toBe(0);
     await expect(p).resolves.toBeUndefined();
+  });
+
+  it('rejects a failure reported after the first zero-ref sample', async () => {
+    const queue: Array<() => void> = [];
+    const drain = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
+    queue.shift()!();
+    recordRejection(new Error('late rejection'));
+    queue.shift()?.();
+    await expect(drain).rejects.toThrow('late rejection');
   });
 
   it('recordRejection keeps the FIRST reason', async () => {
@@ -165,6 +179,7 @@ describe('event-loop keepalive', () => {
         terminateUnhandled: (reason) => reason,
       });
       drain = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
+      queue.shift()!();
       queue.shift()!();
       interceptedCalls = calls;
     } finally {

@@ -11,6 +11,7 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
+import { hostScriptSource } from '../../module-loader/source-maps.ts';
 import { recordDivergence } from '../../telemetry/divergence-sink.ts';
 import { selectEngine } from './engine-config.ts';
 import {
@@ -191,12 +192,34 @@ function assertSupportedRunOptions(options: RunningScriptOptions, feature: strin
   }
 }
 
-function assertSupportedScriptOptions(options: ScriptOptions, feature: string): void {
+function scriptOffset(value: number | undefined, name: string): number {
+  if (value === undefined) return 0;
+  if (typeof value !== 'number') {
+    throw Object.assign(new TypeError(`The "options.${name}" property must be of type number.`), {
+      code: 'ERR_INVALID_ARG_TYPE',
+    });
+  }
+  if (!Number.isInteger(value) || value < -2147483648 || value > 2147483647) {
+    throw Object.assign(new RangeError(`The value of "options.${name}" is out of range.`), {
+      code: 'ERR_OUT_OF_RANGE',
+    });
+  }
+  return value;
+}
+
+function assertSupportedScriptOptions(
+  options: ScriptOptions,
+  feature: string,
+  hostOffsets = false,
+): void {
   assertSupportedRunOptions(options, feature);
-  if (options.lineOffset !== undefined && options.lineOffset !== 0) {
+  if (hostOffsets) {
+    scriptOffset(options.lineOffset, 'lineOffset');
+    scriptOffset(options.columnOffset, 'columnOffset');
+  } else if (options.lineOffset !== undefined && options.lineOffset !== 0) {
     throw new NotImplementedError(`${feature}.lineOffset`);
   }
-  if (options.columnOffset !== undefined && options.columnOffset !== 0) {
+  if (!hostOffsets && options.columnOffset !== undefined && options.columnOffset !== 0) {
     throw new NotImplementedError(`${feature}.columnOffset`);
   }
   if (options.cachedData !== undefined) {
@@ -333,7 +356,19 @@ export function isContext(value: unknown): boolean {
 
 export function runInThisContext(code: string, options?: VmOptions): unknown {
   const normalized = normalizeOptions(options);
-  assertSupportedScriptOptions(normalized, 'vm.runInThisContext');
+  assertSupportedScriptOptions(normalized, 'vm.runInThisContext', true);
+  const lineOffset = scriptOffset(normalized.lineOffset, 'lineOffset');
+  const columnOffset = scriptOffset(normalized.columnOffset, 'columnOffset');
+  if (lineOffset !== 0 || columnOffset !== 0) {
+    return runGlobalScript(
+      hostScriptSource(
+        asSource(code),
+        normalized.filename ?? 'evalmachine.<anonymous>',
+        lineOffset,
+        columnOffset,
+      ),
+    );
+  }
   return runGlobalScript(withSourceURL(asSource(code), normalized.filename));
 }
 
@@ -367,6 +402,8 @@ export function runInNewContext(
 export class Script {
   readonly #code: string;
   readonly #filename?: string;
+  readonly #lineOffset: number;
+  readonly #columnOffset: number;
   // Memoised compiled payload — compile once, reuse across every run of this
   // Script instance. The engine keys its own per-script state (the rewrite, a
   // quickjs handle, …) on this stable CompiledScript identity, so reuse here is
@@ -375,9 +412,11 @@ export class Script {
 
   constructor(code: string, options?: VmOptions) {
     const normalized = normalizeOptions(options);
-    assertSupportedScriptOptions(normalized, 'vm.Script');
+    assertSupportedScriptOptions(normalized, 'vm.Script', true);
     this.#code = asSource(code);
     this.#filename = normalized.filename;
+    this.#lineOffset = scriptOffset(normalized.lineOffset, 'lineOffset');
+    this.#columnOffset = scriptOffset(normalized.columnOffset, 'columnOffset');
   }
 
   #getCompiled(): CompiledScript {
@@ -386,10 +425,19 @@ export class Script {
   }
 
   runInThisContext(options?: VmOptions): unknown {
-    return runInThisContext(this.#code, { ...normalizeOptions(options), filename: this.#filename });
+    return runInThisContext(this.#code, {
+      ...normalizeOptions(options),
+      filename: this.#filename,
+      lineOffset: this.#lineOffset,
+      columnOffset: this.#columnOffset,
+    });
   }
 
   runInContext(contextifiedObject: Record<string, unknown>, options?: VmOptions): unknown {
+    assertSupportedScriptOptions(
+      { lineOffset: this.#lineOffset, columnOffset: this.#columnOffset },
+      'vm.Script',
+    );
     const normalized = { ...normalizeOptions(options), filename: this.#filename };
     assertSupportedScriptOptions(normalized, 'vm.Script');
     assertContextified(contextifiedObject);
@@ -403,6 +451,10 @@ export class Script {
     if (contextObject === null) {
       throw new TypeError('The "object" argument must be of type object. Received null');
     }
+    assertSupportedScriptOptions(
+      { lineOffset: this.#lineOffset, columnOffset: this.#columnOffset },
+      'vm.Script',
+    );
     const normalized = { ...normalizeOptions(options), filename: this.#filename };
     assertSupportedScriptOptions(normalized, 'vm.Script');
     const context = createContext(contextObject === undefined ? {} : contextObject);
@@ -424,8 +476,16 @@ export function compileFunction(
   return new Function(...params, asSource(code)) as (...args: unknown[]) => unknown;
 }
 
+export const constants = Object.freeze({
+  get DONT_CONTEXTIFY(): never {
+    // Unwrapped guest globals: docs/backlog/epics/jsdom-environment-in-browser/goal.md.
+    throw new NotImplementedError('vm.constants.DONT_CONTEXTIFY');
+  },
+});
+
 const vmModule = {
   Script,
+  constants,
   compileFunction,
   createContext,
   isContext,

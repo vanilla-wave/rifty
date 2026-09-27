@@ -1,0 +1,306 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "MessagePort unit: Final+GREEN PASS; B1 исправлен и независимо перепроверен. PR не merge-ready: общий Vitest outcome и goal residuals остаются.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "35bcb59343c8cb6f84e2d9720ce191c03aaf8a65",
+  "unit_goal_source": "docs/backlog/runtime-js/message-port-ref-keepalive.md @ 35bcb59343c8cb6f84e2d9720ce191c03aaf8a65; Contract+RED BASE 9836df2e0b839c5d4849dc5f4409449812a3b82d. Независимая read-only verification в detached /private/tmp/rifty-message-port-final-review. Только MessagePort/kernel primordial; VM/IPC/source и Worker-startup implementation исключены. Contract/goal не ослаблены; tracked tree чист, root не менялся. ИСТОРИЯ: исходный полный BLOCK на a728f986a3376a9d273bcaa5dfc80c7f6e208fdd сохранён в docs/backlog/runtime-js/reference/message-port-ref-keepalive-final-green.json в дереве 35bcb59343c8cb6f84e2d9720ce191c03aaf8a65. B1 принят как FIX, не опровергнут и не понижен; спорного blocker/critic adjudication не было. Его authority: Acceptance 4 → I4, provenance-lie × ownership-losing transfer, ADR-0452. Оригинальное evidence B1: Scratch /private/tmp/rifty-message-port-final-review @ a728f986a3376a9d273bcaa5dfc80c7f6e208fdd, fresh server 5423. node /private/tmp/rifty-message-port-review-probes.mjs: Chromium 148.0.7778.96 native reads=1, DataCloneError, bufferLength=3, received=[1,2,3]; shim reads=3, outcome=\"sent\", bufferLength=0, received=null. Input options: {get [Symbol.iterator](){return ++reads===1?undefined:function*(){yield managed;yield buffer;}}, transfer:[]}. node /private/tmp/rifty-message-port-review-transfer-sweep.mjs: actual CJS owner exit=0, {reads:3,outcome:\"sent\",bufferLength:0,hasRef:true,bytes:null}; same detachment via MessagePort.postMessage, native Worker.postMessage and DedicatedWorkerGlobalScope.postMessage. structuredClone/window dictionary controls retain length=3 and bytes. Native Node v24.16.0 same input: reads=1, DataCloneError(code=25), length=3, bytes=[1,2,3] (/private/tmp/rifty-message-port-review-transfer-native.log). node /private/tmp/rifty-message-port-review-option-getter.mjs: ordinary buffer options whose iterator getter throws on a second read succeed natively (reads=1, detached, bytes=[2,5,9]); shim reads=2, Error(\"iterator reread\"), length=3, bytes=null. JSON outputs use the corresponding /private/tmp/rifty-message-port-review-*.json paths. ИСПРАВЛЕНИЕ: packages/runtime-js/src/internal/message-port-keepalive.ts:151 возвращает уже выбранный iterator; :161 сохраняет ранний native TypeError без чтения transfer getter; :164 передаёт выбранное значение facade. Новый committed carrier tests/browser-unit/message-port-transfer-options.spec.ts:104 проверяет changing/once/invalid через MessagePort, Worker, worker-global и structuredClone-control с exact reads, outcomes, detachment и delivered/retained bytes. НЕЗАВИСИМЫЙ GREEN: RIFTY_PLAYGROUND_PORT=5435 pnpm test:browser-unit tests/browser-unit/message-port-keepalive.spec.ts tests/browser-unit/message-port-transfer-options.spec.ts — 15/15 PASS, 17.9s, fresh server reuseExistingServer:false; /private/tmp/rifty-message-port-verify-green-5435.log. pnpm test:run packages/runtime-js/src/ipc/worker-realm-compat.test.ts packages/runtime-js/src/builtins/worker_threads.test.ts packages/runtime-js/src/internal/event-loop-keepalive.test.ts packages/kernel/src/shared-globals-binary-sync.test.ts — 62/62 PASS; /private/tmp/rifty-message-port-verify-unit.log. runtime-js tsc --noEmit и pnpm check:arch PASS. Live Node v24.16.0: девять shared scenarios exit0, stderr empty; /private/tmp/rifty-message-port-verify-native.log. B1 PROBES: node /private/tmp/rifty-message-port-verify-probes.mjs; node /private/tmp/rifty-message-port-verify-transfer-sweep.mjs — native и shim reads=1, DataCloneError, bufferLength=3, retained bytes=[1,2,3], включая real CJS owner, MessagePort, Worker, worker-global; structuredClone/window dictionary controls сохраняют bytes. node /private/tmp/rifty-message-port-verify-option-getter.mjs — native/shim reads=1, sent, byteLength=0, received=[2,5,9]. node /private/tmp/rifty-message-port-b1-native.mjs — changing: reads1/DataCloneError/length3/[4,8,12]; once: reads1/sent/length0/[2,5,9]; повторный вывод /private/tmp/rifty-message-port-verify-b1-native.log. node /private/tmp/rifty-message-port-verify-ceiling.mjs — MessagePort/Worker/worker-global/structuredClone бросают NotImplementedError(MessagePort.transfer.managed), buffer length3 и original peer bytes=[4,8,12] сохранены, даже с buffer первым в transfer list. ДИСКРИМИНАЦИЯ: независимая временная копия committed suite с browserContext.route удаляет только `if (key === Symbol.iterator) return iterator;` из HTTP-response; tracked source не менялся. RIFTY_PLAYGROUND_PORT=5435 pnpm test:browser-unit tests/browser-unit/message-port-b1-verify-mutant.spec.ts — 3 affected RED + structuredClone control PASS; /private/tmp/rifty-message-port-verify-mutant-5435.log; probe сохранён /private/tmp/rifty-message-port-verify-mutant.spec.ts. Native expectations проходят, mutant снова даёт reads3/sent/detached/bytes=null и once reads2/Error. C2 закрыт этим committed carrier и killed mutant. C1 остаётся закрытым: node /private/tmp/rifty-message-port-verify-c1-mutant.mjs — oldRowsPass=true, newBytesPass=false, mutantKilled=true при реальном detachment. node /private/tmp/rifty-message-port-verify-state.mjs — второй экземпляр installer/kernel сохраняет primordial и constructor, refs 1→1→0; raw bytes=[6,9]; queued [[1,2],[3,4],[5,6]] до close; lateRef=false, finalRefs=0. Raw producer RED /private/tmp/rifty-message-port-b1-red.log прочитан: 3 behavioral RED + 1 control PASS до ремонта; независимый HTTP-mutant воспроизводит класс. Unit residual снят по новому исполненному доказательству, исторический B1 остаётся валидным для старого SHA. Полный Vitest goal этим review не проверялся. Валидация: review-schema.json соответствует; node tools/review/blockers.mjs /private/tmp/rifty-message-port-final-review-35bcb5934.json — exit0, 30 pass, 0 weak/missing, 0 findings; goal continue (2 residuals).",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4 + I5 + User scenario 3–4: общий Vitest outcome на forks/threads",
+      "location": "docs/backlog/runtime-js/reference/message-port-ref-keepalive-evidence.md:222",
+      "summary": "Нет full-scenario PASS: fresh5419 дошёл до Worker.execArgv ceiling. Обязательны TS config/collection, 1passed/1failed и diff/exit1, исправленный exit0, npm test и verbose на обоих pools; startup-продолжение остаётся у goal driver."
+    },
+    {
+      "clause": "I6 + I7: claimed module path и точная compat-документация/проверенные ceilings",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "После закрытия startup ceiling нужен общий end-to-end acceptance и compat proof exact Vitest4.1.11/Vite8.0.16, включая loud unclaimed modes. Эта MessagePort slice цель не закрывает."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: manual ref держит CJS parent до позднего сообщения unref Worker; повторные ref и один unref не оставляют hold",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: default/raw infrastructure drain, native identity/transfer, global/builtin aliases без listener-only keepalive",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:17",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: own/peer close асинхронен и однократен; queued bytes и partial order сохранены; поздний ref не оживляет",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:64",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: managed transfer запрещён до любого detachment; обычные ArrayBuffer transfers и native identity сохранены",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:65; tests/browser-unit/message-port-transfer-options.spec.ts:104",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: shared primordial переживает второй bundle и повторный install; raw kernel ports не становятся managed",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: optional manual refs, sole hold, idempotence, return values, hasRef transitions",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: global/builtin aliases и unref Worker/kernel infrastructure drain",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:17",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: own/peer close, exact queued bytes, callback counts, native identity, partial order",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:64",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: managed transfer ceiling без partial detach; native ArrayBuffer transfer",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:65; tests/browser-unit/message-port-transfer-options.spec.ts:104",
+      "note": ""
+    },
+    {
+      "row": "Parity 5: второй kernel bundle и однократная public installation",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "torn-state × repeated ref/unref/close: count/release once, closed handle не оживает",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:45",
+      "note": ""
+    },
+    {
+      "row": "observable-order × queued send then close: data и immediate до close; без выдуманного total order",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:92",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × ownership-losing transfer: named throw до всех detachments",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:65; tests/browser-unit/message-port-transfer-options.spec.ts:104",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × global/builtin и raw/private channels: тот же guest API, неизменная инфраструктура",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:17",
+      "note": ""
+    },
+    {
+      "row": "frozen-assumption × second-bundle primordial capture: исходный constructor после public replacement",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "kernel.getKernelHostMessageChannel(): realm-shared primordial",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "globalThis.MessageChannel: реальные native local pairs, once-only wrapper",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "node:worker_threads.MessageChannel: alias глобального constructor",
+      "source": "public-api",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:17",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.ref(): idempotent manual hold, undefined return, без revival после close",
+      "source": "public-api",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:45",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.unref(): один release после повторных ref, undefined return",
+      "source": "public-api",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:45",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.hasRef(): initial false, manual transitions, false после close",
+      "source": "public-api",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:45",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.close(): own/peer async notification, release once, queued partial order",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:64",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.start(): native delivery queue с отслеживанием queued close",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:92",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.postMessage(): native bytes/overloads; managed transfer guard",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-transfer-options.spec.ts:104; tests/browser-unit/message-port-keepalive.spec.ts:65",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.onmessage setter: native delivery/start для queued tracking",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:133",
+      "note": ""
+    },
+    {
+      "row": "structuredClone(): checked transfer dictionary, frozen options, intact rejected endpoint/companion",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:79",
+      "note": ""
+    },
+    {
+      "row": "Worker.prototype.postMessage(): native transfers через общий managed-transfer guard",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-transfer-options.spec.ts:104; tests/browser-unit/message-port-keepalive.spec.ts:65",
+      "note": ""
+    },
+    {
+      "row": "globalThis.postMessage(): native transfer entry через общий managed-transfer guard",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-transfer-options.spec.ts:104; tests/browser-unit/message-port-keepalive.spec.ts:65",
+      "note": ""
+    },
+    {
+      "row": "Зафиксированные Node v24.16.0 oracle outputs: refs, async close, queued bytes/order, native buffer transfer",
+      "source": "frozen-artifact",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:15",
+      "note": ""
+    },
+    {
+      "row": "Зафиксированные native transfer-options outcomes: changing/once/invalid, getter counts, errors, detached length и retained/delivered bytes для четырёх entry points",
+      "source": "frozen-artifact",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-transfer-options.spec.ts:142",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

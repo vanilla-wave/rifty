@@ -1252,6 +1252,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
             hostRuntime: NODE_WORKER_RUNTIME_ENV,
             launch: {
               kind: 'program',
+              execArgv: [],
               bin: false,
               remoteFs: true,
               remoteFsRoot: ROOT,
@@ -1339,7 +1340,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         kind: 'url',
         url: NODE_ENTRY_WORKER_URL,
         bootstrap: {
-          protocol: 'rifty.node-entry/v4',
+          protocol: 'rifty.node-entry/v6',
           payload: {
             hostRuntime: NODE_WORKER_RUNTIME_ENV,
             launch: {
@@ -1478,7 +1479,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         expect(spec).toMatchObject({
           entry: {
             bootstrap: {
-              protocol: 'rifty.node-entry/v4',
+              protocol: 'rifty.node-entry/v6',
               payload: {
                 launch: {
                   kind: 'eval',
@@ -1562,7 +1563,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
           argv: [NODE_PROCESS_IDENTITY.execPath, ...scriptArgs],
           entry: {
             bootstrap: {
-              protocol: 'rifty.node-entry/v4',
+              protocol: 'rifty.node-entry/v6',
               payload: {
                 launch: {
                   kind: 'eval',
@@ -1607,7 +1608,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         argv: [NODE_PROCESS_IDENTITY.execPath],
         entry: {
           bootstrap: {
-            protocol: 'rifty.node-entry/v4',
+            protocol: 'rifty.node-entry/v6',
             payload: {
               launch: {
                 kind: 'eval',
@@ -1654,7 +1655,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
           argv: [NODE_PROCESS_IDENTITY.execPath, '', 'alpha', '-x'],
           entry: {
             bootstrap: {
-              protocol: 'rifty.node-entry/v4',
+              protocol: 'rifty.node-entry/v6',
               payload: {
                 launch: {
                   kind: 'eval',
@@ -1829,7 +1830,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         argv: [NODE_PROCESS_IDENTITY.execPath, ...scriptArgs],
         entry: {
           bootstrap: {
-            protocol: 'rifty.node-entry/v4',
+            protocol: 'rifty.node-entry/v6',
             payload: {
               launch: {
                 kind: 'eval',
@@ -1905,7 +1906,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       argv: [NODE_PROCESS_IDENTITY.execPath, 'argv-a'],
       entry: {
         bootstrap: {
-          protocol: 'rifty.node-entry/v4',
+          protocol: 'rifty.node-entry/v6',
           payload: {
             launch: {
               kind: 'eval',
@@ -1924,7 +1925,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       argv: [NODE_PROCESS_IDENTITY.execPath, 'argv-b'],
       entry: {
         bootstrap: {
-          protocol: 'rifty.node-entry/v4',
+          protocol: 'rifty.node-entry/v6',
           payload: {
             launch: {
               kind: 'eval',
@@ -2336,6 +2337,7 @@ describe('Workbench project runtime', () => {
             },
             launch: expect.objectContaining({
               kind: 'program',
+              execArgv: [],
               bin: true,
               remoteFs: true,
               remoteFsRoot: ROOT,

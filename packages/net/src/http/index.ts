@@ -2,6 +2,7 @@
  * Barrel for the streaming `@riftydev/net` HTTP layer (ADR-0017 phase 1).
  */
 
+export { Agent } from './agent.ts';
 export { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 export { METHODS, maxHeaderSize } from './methods.ts';
 export { ServerResponse } from './response.ts';

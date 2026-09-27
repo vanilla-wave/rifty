@@ -1,0 +1,193 @@
+{
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "ef3da9c95855540a3c8f1d8a685e946cc19b5541",
+  "unit_goal_source": "docs/backlog/runtime-js/worker-threads-handle-keepalive.md @ ef3da9c95855540a3c8f1d8a685e946cc19b5541; BASE 63414c693. Fresh independent reviewer /root/worker_contract_review. Raw handoff: «Поставь цель реализовать эпик vitest-run-in-browser\nРезультат принеси одним зеленым ПРом». Read goal.md, map.md, predecessor drafts, ADR-0152, source fixtures and raw reference evidence. RDY-6: merge preserves I2/I5 and exact-pair/both-pools/TS scope; no new user policy or narrowing; node -e parent is an execArgv discrimination carrier, not expanded Worker eval support. REV-5: live Node v24.16.0 all 11 cases exit 0 with recorded output; RIFTY_PLAYGROUND_PORT=5402 pnpm test:browser-unit tests/browser-unit/worker-thread-lifecycle.spec.ts gives 9 expected behavioral RED and 2 controls PASS (39.3s), /tmp/rifty-worker-review-red.log. Missing parent liveness gives absent message/exit, child natural/port cases timeout after expected message, stdio absent, explicit [] throws named ceiling. No new Worker implementation in reviewed diff. Stream EOF and exit both settle; no EOF-before-exit claim. Subsequent unrelated acceptance edits excluded.",
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted with advisory duplicate-exit coverage weakness; continue implementation, then independent Final+GREEN. Not a product merge approval.",
+  "coverage": [
+    {
+      "row": "Acceptance 1: sole live Worker holds CJS parent; ref/unref idempotence and restoration",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:39",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: child natural exit and parentPort close/remove/unref lifetime",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:53",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: terminate releases once; repeat returns undefined, no duplicate exit",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "weak",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:132",
+      "note": "Executed duplicate-exit probe survives the once-only observer; count discrimination is advisory under REV-4. Termination result, release and repeat-call output remain covered."
+    },
+    {
+      "row": "Acceptance 4: readable stdout/stderr, capture/default forwarding, exact output and EOF",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:84",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: explicit empty execArgv overrides native eval parent; real file Worker",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:119",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: parent-live-worker / parent-ref-after-unref / parent-unref",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:39",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: child-natural-exit / parent-port-close / remove / unref",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:53",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: terminate-releases-once",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "weak",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:132",
+      "note": "Executed duplicate-exit probe survives the once-only observer; count discrimination is advisory under REV-4. Termination result, release and repeat-call output remain covered."
+    },
+    {
+      "row": "Parity 4: stdio-capture / stdio-default",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:84",
+      "note": ""
+    },
+    {
+      "row": "Parity 5: explicit-empty-exec-argv",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:119",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: observable-order × natural parent drain",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:39",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: torn-state × ref/unref and terminal release",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "weak",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:132",
+      "note": "Executed duplicate-exit probe survives the once-only observer; count discrimination is advisory under REV-4. Termination result, release and repeat-call output remain covered."
+    },
+    {
+      "row": "Fault matrix: sibling-drift × parentPort lifetime release paths",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:61",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: observable-order × stdout/stderr completion",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:84",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: provenance-lie × inherited launch options",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:119",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:26",
+          "summary": "terminate-releases-once cannot observe duplicate exit events because the only committed observer uses once('exit'). An executed duplicate-exit probe keeps its exact expected rows. Consider a persistent exit counter.",
+          "authority": "",
+          "evidence": "node --import tsx /tmp/rifty-worker-duplicate-probe.mjs (Node v24.16.0): PROBE|exit-count=2; committed-comparison-equal=true; code=0, stdout WORKER rows identical. Probe wraps native Worker.emit so its real exit emits twice before native cleanup. Full source /tmp/rifty-worker-duplicate-probe.mjs, output /tmp/rifty-worker-duplicate-probe.log."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2/I5 Worker lifecycle delivery",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:28",
+      "summary": "Implement reviewed Worker contract, GREEN and independent final review."
+    },
+    {
+      "clause": "I1–I7 whole-goal acceptance and one green PR",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:16",
+      "summary": "Remaining mapped delivery, both-pool exact-pair TS scenario fail/fix proof, loud ceilings, compatibility documentation and full PR gates remain with parent goal run."
+    }
+  ],
+  "goal_complete": false
+}

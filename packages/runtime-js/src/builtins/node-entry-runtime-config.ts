@@ -5,7 +5,7 @@ import {
 } from '@riftydev/kernel';
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
 
-export const NODE_ENTRY_BOOTSTRAP_PROTOCOL = 'rifty.node-entry/v4' as const;
+export const NODE_ENTRY_BOOTSTRAP_PROTOCOL = 'rifty.node-entry/v6' as const;
 
 export interface NodeEntryTerminalBootstrap {
   readonly stdinIsTTY: boolean;
@@ -22,10 +22,11 @@ export interface NodeEntryRuntimeBinding {
 
 export interface NodeEntryProgramLaunch {
   readonly kind: 'program';
+  readonly execArgv: readonly string[];
   readonly bin: boolean;
   readonly remoteFs: boolean;
   /** Public Node fork lane. Omitted and `none` are equivalent for non-fork launches. */
-  readonly ipc?: 'none' | 'json';
+  readonly ipc?: 'none' | 'json' | 'advanced';
   /** Host-only physical root behind the child's public `/` namespace. */
   readonly remoteFsRoot?: string;
   readonly nodeServe: boolean;
@@ -49,6 +50,7 @@ export interface NodeEntryEvalLaunch {
 
 export interface NodeEntryWorkerThreadLaunch {
   readonly kind: 'worker-thread';
+  readonly execArgv: readonly string[];
   readonly remoteFs: boolean;
   /** Inherited host-only physical root behind the worker's public `/` namespace. */
   readonly remoteFsRoot?: string;
@@ -277,6 +279,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       record,
       [
         'kind',
+        'execArgv',
         'bin',
         'remoteFs',
         'remoteFsRoot',
@@ -292,8 +295,8 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
     const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
     const remoteFsRoot = remoteFsRootValue(optionalOwnField(record, 'remoteFsRoot'), remoteFs);
     const ipc = optionalOwnField(record, 'ipc');
-    if (ipc !== undefined && ipc !== 'none' && ipc !== 'json') {
-      throw new TypeError('node-entry bootstrap launch.ipc must be none or json');
+    if (ipc !== undefined && ipc !== 'none' && ipc !== 'json' && ipc !== 'advanced') {
+      throw new TypeError('node-entry bootstrap launch.ipc must be none, json or advanced');
     }
     const nodeServe = booleanOwnField(record, 'nodeServe', 'node-entry bootstrap launch');
     const previewScope = previewScopeValue(optionalOwnField(record, 'previewScope'));
@@ -301,6 +304,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
     const runtimeBindings = optionalOwnField(record, 'runtimeBindings');
     return Object.freeze({
       kind: 'program',
+      execArgv: stringArrayOwnField(record, 'execArgv', 'node-entry bootstrap launch'),
       bin,
       remoteFs,
       ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
@@ -354,7 +358,15 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
   if (kind === 'worker-thread') {
     assertAllowedOwnFields(
       record,
-      ['kind', 'remoteFs', 'remoteFsRoot', 'threadId', 'workerDataJson', 'runtimeBindings'],
+      [
+        'kind',
+        'execArgv',
+        'remoteFs',
+        'remoteFsRoot',
+        'threadId',
+        'workerDataJson',
+        'runtimeBindings',
+      ],
       'node-entry bootstrap worker-thread launch',
     );
     const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
@@ -377,6 +389,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
     }
     return Object.freeze({
       kind: 'worker-thread',
+      execArgv: stringArrayOwnField(record, 'execArgv', 'node-entry bootstrap launch'),
       remoteFs,
       ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
       threadId,

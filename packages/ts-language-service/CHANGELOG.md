@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Remove the Proxy-capture bootstrap role/closer after adopting native non-binary IPC (ADR-0467).
+
+
 ### Changed
 
 - **Owner-FS relay consumes the complete SyncRpc v5 API (ADR-0366).** The

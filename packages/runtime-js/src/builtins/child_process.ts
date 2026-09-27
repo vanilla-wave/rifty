@@ -29,7 +29,12 @@ import {
 import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
-import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import {
+  type NodeIpcSerialization,
+  deserializeNodeIpcMessage,
+  serializeNodeIpcMessage,
+} from '../internal/node-ipc-serialization.ts';
+import { compileNodeStartupOptions } from '../internal/node-startup-options.ts';
 import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { SameRealmStdinPipe, execScript } from './child_process-exec.ts';
@@ -55,6 +60,12 @@ import {
   readActiveNodeProcessBootstrap,
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
+import { currentNodeProcess } from './process.ts';
+
+const arrayLastIndexOf = Array.prototype.lastIndexOf;
+const arraySlice = Array.prototype.slice;
+const arraySplice = Array.prototype.splice;
+const reflectApply = Reflect.apply;
 
 // ADR-0011 phase 3 / ADR-0039: the runtime-js `'execSync'` handler. Kernel ships
 // no default handlers after ADR-0039 — execSync is Node-API knowledge and lives
@@ -83,6 +94,7 @@ export function ensureExecSyncHandlerInstalled(): void {
 }
 
 interface SpawnOptions {
+  execArgv?: readonly string[];
   cwd?: string;
   env?: Record<string, string>;
   stdio?: SpawnStdio;
@@ -139,6 +151,7 @@ class ChildProcess extends EventEmitter {
       readonly expose: readonly [boolean, boolean, boolean];
       readonly slots: number;
     },
+    serialization: NodeIpcSerialization = 'json',
   ) {
     super();
     this.handle = handle;
@@ -177,9 +190,14 @@ class ChildProcess extends EventEmitter {
           throw new NotImplementedError('child_process.send.arguments');
         }
         if (!this.connected) return false;
-        const serialized = serializeNodeIpcMessage(message);
+        const serialized = serializeNodeIpcMessage(message, serialization);
         if (handle.kind === 'worker') return handle.send(serialized);
-        queueMicrotask(() => this.inboundIpc.emit('childMessage', serialized));
+        queueMicrotask(() =>
+          this.inboundIpc.emit(
+            'childMessage',
+            deserializeNodeIpcMessage(serialized, serialization),
+          ),
+        );
         return true;
       };
       this.disconnect = (): void => {
@@ -189,7 +207,7 @@ class ChildProcess extends EventEmitter {
       };
       if (handle.kind === 'worker') {
         handle.on('message', (message) => {
-          this.emitToOwner('message', serializeNodeIpcMessage(message));
+          this.emitToOwner('message', deserializeNodeIpcMessage(message, serialization));
         });
         handle.on('disconnect', () => this.finishIpc());
       }
@@ -321,12 +339,6 @@ function rejectedChildCwd(cwd: string): ChildProcess | null {
 }
 
 export function spawn(command: string, args: string[] = [], opts: SpawnOptions = {}): ChildProcess {
-  if (opts.serialization === 'advanced') {
-    throw new NotImplementedError(
-      'child_process.serialization.advanced',
-      "Node's advanced IPC serializer is not implemented; use default JSON",
-    );
-  }
   const stdio = resolveWorkerStdio(
     opts.stdio,
     activeProcessStdio(),
@@ -351,17 +363,30 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
       cwd: opts.cwd,
       env: opts.env,
       fork: opts.__fork === true,
+      execArgv: opts.__fork === true ? opts.execArgv : [],
+      serialization: opts.serialization,
     });
     if (handle.kind !== 'worker') throw new Error('child_process.spawn: expected Worker handle');
-    const child = new ChildProcess(handle, stdio.ipc, {
-      stdin: handle.stdin(),
-      stdout: handle.stdout(),
-      stderr: handle.stderr(),
-      expose: stdio.expose,
-      slots: stdio.slots,
-    });
+    const child = new ChildProcess(
+      handle,
+      stdio.ipc,
+      {
+        stdin: handle.stdin(),
+        stdout: handle.stdout(),
+        stderr: handle.stderr(),
+        expose: stdio.expose,
+        slots: stdio.slots,
+      },
+      opts.serialization,
+    );
     forwardWorkerStdio(handle, stdio);
     return child;
+  }
+  if (opts.__fork && opts.execArgv?.length) {
+    throw new NotImplementedError(
+      'child_process.fork.execArgv',
+      'startup options require an isolated child',
+    );
   }
   return spawnViaSameRealm(command, args, opts, stdio);
 }
@@ -428,13 +453,18 @@ function spawnViaSameRealm(
   wiring.handle = handle;
   handle.on('stdout', (chunk) => stdout.push(chunk));
   handle.on('stderr', (chunk) => stderr.push(chunk));
-  const child = new ChildProcess(handle, stdio.ipc, {
-    stdin,
-    stdout,
-    stderr,
-    expose: stdio.expose,
-    slots: stdio.slots,
-  });
+  const child = new ChildProcess(
+    handle,
+    stdio.ipc,
+    {
+      stdin,
+      stdout,
+      stderr,
+      expose: stdio.expose,
+      slots: stdio.slots,
+    },
+    opts.serialization,
+  );
   wiring.child = child;
   if (stdio.stdout) {
     stdout.on('data', (chunk) => stdio.stdout?.write(chunk));
@@ -663,7 +693,19 @@ export function fork(
   args: string[] = [],
   opts: SpawnOptions = {},
 ): ChildProcess {
-  return spawn('node', [modulePath, ...args], { ...opts, __fork: true });
+  const parent = currentNodeProcess() as { readonly execArgv?: unknown; readonly _eval?: unknown };
+  const options = { ...opts };
+  let selected = options.execArgv === undefined ? (parent.execArgv ?? []) : options.execArgv;
+  // Native fork removes the last source pair only for the actual public argv array.
+  if (selected === parent.execArgv && parent._eval != null && Array.isArray(selected)) {
+    const index = reflectApply(arrayLastIndexOf, selected, [parent._eval]) as number;
+    if (index > 0) {
+      selected = reflectApply(arraySlice, selected, []) as unknown[];
+      reflectApply(arraySplice, selected, [index - 1, 2]);
+    }
+  }
+  const execArgv = compileNodeStartupOptions(selected, 'fork').execArgv;
+  return spawn('node', [modulePath, ...args], { ...options, execArgv, __fork: true });
 }
 
 // `execSync` lives in `./child_process-sync.ts` to keep the SAB-vs-fallback
@@ -673,5 +715,17 @@ export { execSync };
 
 export const ChildProcess_ = ChildProcess;
 
-const child_process = { spawn, exec, execFile, fork, execSync, ChildProcess: ChildProcess_ };
+export function spawnSync(): never {
+  throw new NotImplementedError('child_process.spawnSync');
+}
+
+const child_process = {
+  spawn,
+  spawnSync,
+  exec,
+  execFile,
+  fork,
+  execSync,
+  ChildProcess: ChildProcess_,
+};
 export default child_process;

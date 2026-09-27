@@ -33,6 +33,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `http.maxHeaderSize` | ⚠️ | Exposes the 16384 default but ADVISORY ONLY — header framing is the SW/fetch bridge’s, never enforced from this value |
 | `writeContinue` / `writeEarlyHints` / `addTrailers` | ❌ | Interim 100/103 + trailers are unmodelable over the single-status fetch/SW Response bridge — throw `NotImplementedError` (never fake-ack) |
 | `https.request` / `https.get` client | ✅ | Client `request`/`get` over a normal `https:` URL route through the browser-validated `fetch` (reuses the `node:http` external-`https` path); POST body, `drain` backpressure, 3-arg merge, 204/304 null-body; `globalAgent` is a readable config object (ADR-0181) |
+| `http.Agent` socket pool | ❌ | Default and named HTTP facades share a constructor; import and subclass declarations are safe. Construction, including subclass super(), throws `NotImplementedError('node:http.Agent')`; no fake pooling (ADR-0459). |
 | `https` TLS server / socket surface | ❌ | `createServer`, `new Agent()`, TLS/socket options (`cert`/`key`/`ca`/`rejectUnauthorized:false`/custom `agent`), and loopback `https:` throw `NotImplementedError` — no in-browser TLS server/socket layer (ADR-0010 ceiling, ADR-0181) |
 | Real OS sockets | ❌ | Browser runtime uses port registry, not kernel TCP sockets |
 | HTTP/2 implementation | ❌ | `node:http2` is only a loud surface stub today |
@@ -40,6 +41,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 ## Test Sources
 
 - `tests/conformance/builtins/http.test.ts`
+- `packages/net/src/http/agent.test.ts`
 - `tests/conformance/builtins/http-incoming-body.test.ts`
 - `tests/conformance/builtins/https.test.ts`
 - `packages/net/src/https.test.ts`

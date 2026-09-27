@@ -54,7 +54,7 @@ cannot request even an empty install, so the Node helper consumes the existing
 produced Vite snapshot with its matching manifest/template identity. A CJS
 `prove().then(console.log)` attempt exited 0 without output, including after
 `await command.close()`; no diagnosed product cause. Its exact historical fixture and
-parent-lifetime question stay in `runtime-js/worker-threads-kernel-run-to-completion-exit.md`.
+parent-lifetime question stay in `runtime-js/reference/vitest-delivery-evidence.md` (Historical adjacent observation; original item at f98099bf7).
 The configuration proof now explicitly awaits the Worker result in ESM, as the
 existing recursive browser suite does; no keepalive/sleep workaround.
 

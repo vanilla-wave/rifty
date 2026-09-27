@@ -43,6 +43,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0347 | Idempotent process-manager kill during settlement |
 | 0351 | Async pre-entry readiness gates worker entry |
 | 0366 | Binary request frames for hot fs sync-RPC |
+| 0460 | Carry originating runtime failures in sealed Worker exits |
 
 ### runtime-js
 
@@ -98,6 +99,15 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0383 | No COI VM default and preboot worker selection |
 | 0385 | Keep one foreground drain across HTTP server close |
 | 0422 | Retire callbacks with completed command invocations |
+| 0443 | Preserve host vm offsets in immutable source identities |
+| 0444 | Validate symbol keys before guarded global mutations |
+| 0445 | Deliver process lifecycle events before terminal handling |
+| 0446 | Carry advanced fork IPC through the typed Node launch |
+| 0449 | Count Worker and parentPort lifetimes through the existing drain |
+| 0452 | Reference locally owned native MessagePorts without counting infrastructure listeners |
+| 0453 | Track guest Proxy provenance before advanced IPC snapshots |
+| 0456 | Carry Node child startup options in node-entry v6 |
+| 0467 | Use native non-binary advanced IPC snapshots |
 
 ### runtime-wasi
 
@@ -126,6 +136,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0189 | Preview loopback WebSocket bridge |
 | 0315 | Report the effective virtual server address |
 | 0354 | Preview WebSocket browser Origin propagation |
+| 0459 | Expose unsupported HTTP Agent construction as a named ceiling |
 
 ### service-worker
 
@@ -363,6 +374,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0440 | Load pi project resources through rooted agent hosts |
 | 0442 | Refuse pi-expandable commands inside agent session admission |
 | 0466 | Restore native agent conversation history |
+| 0468 | Admit session teardown before Workbench owner shutdown |
 
 ## Superseded (removed)
 
@@ -370,6 +382,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 
 | removed | superseded by | note |
 |---|---|---|
+| 0465 | 0467 | native non-binary IPC removes Proxy capture phase and runtime-bootstrap role |
 | 0013 | 0072 | OPFS hot path; context grafted |
 | 0025 | 0043 | dev-server realm; page-realm globals-guard grafted |
 | 0028 | 0133 | prod npm-registry proxy; deploy/routing/env contract reshaped, context grafted |
@@ -414,6 +427,8 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0446 binary graph preservation | 0467 / note 2026-09-25 | user chooses native non-binary IPC and explicit binary refusal; launch/control retained |
+| 0453 Proxy provenance owner | 0467 / note 2026-09-25 | native clone owns rejection; independent builtinModules/VM backing repairs retained |
 | 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
 | 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |
@@ -498,6 +513,9 @@ superseded.
 | 0054 pipe-sink deferral | 0154 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
+| 0152 §3 unconditional rejection fatal/default report | 0445 | handled process errors continue; unhandled fatal and drain ownership retained |
+| 0326 advanced ceiling / JSON-only program IPC | 0446 / note 2026-09-23 | explicit advanced codec over existing public lane; default JSON/private control retained |
+| 0416 active node-entry v4 version | 0446 / note 2026-09-23 | atomic v5 adds advanced IPC; SQLite and dev-server contracts retained |
 | 0155 §5 loud-only interactive-stdin clause | 0230 / note 2026-07-13 | owner PTY pump ships flowing stdin, explicit EOF, and pause/resume; ADR-0225 ships live resize; pull/raw gaps stay loud |
 | 0157 §4 forward-target/interim-guard clause | 0230 / note 2026-07-13 | Node and `.bin` children consume flowing stdin; pull/raw surfaces remain exact loud gaps |
 | 0135 §4 slug = preset.id reuse key | 0165 | multi-project: install-stamp slug becomes project-scoped (`slug=projectId\|'scratch'`); same-Starter projects must not share node_modules; cleanup fires on root/projectId change |

@@ -31,13 +31,16 @@ export function resolveOverride(
 ): ResolvedOverrideTarget | null {
   const key = parent ? `${parent}>${name}` : name;
   const userMatch = userOverrides[key] ?? userOverrides[name];
-  if (userMatch) return { ...parseTarget(userMatch), source: 'user' };
+  if (userMatch) return { ...parseTarget(userMatch, name), source: 'user' };
   const builtin = bakedOverrides[name];
   if (builtin) return { ...parseTarget(builtin), source: 'baked' };
   return null;
 }
 
-function parseTarget(target: string): { name: string; range: string | null } {
+function parseTarget(
+  target: string,
+  requestedName?: string,
+): { name: string; range: string | null } {
   // Accept formats:
   //   "bcryptjs"             → name=bcryptjs, range=null (latest)
   //   "bcryptjs@2.x"         → name=bcryptjs, range="2.x"
@@ -45,6 +48,10 @@ function parseTarget(target: string): { name: string; range: string | null } {
   let str = target;
   if (str.startsWith('npm:')) str = str.slice(4);
   const at = str.lastIndexOf('@');
-  if (at <= 0) return { name: str, range: null };
+  if (at <= 0) {
+    return requestedName && !target.startsWith('npm:')
+      ? { name: requestedName, range: str }
+      : { name: str, range: null };
+  }
   return { name: str.slice(0, at), range: str.slice(at + 1) };
 }

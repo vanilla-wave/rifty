@@ -148,6 +148,7 @@ export interface WorkerExitMessage {
    * kernel-owned output state, which guests never receive.
    */
   readonly attestation: string;
+  readonly fatalError?: { readonly reason: unknown };
 }
 
 /**
@@ -198,6 +199,29 @@ export function getKernelPreEntryHook(): KernelPreEntryHook | null {
 export type KernelDrainHook = (spec: WorkerSpawnSpec) => Promise<void>;
 
 let drainHook: KernelDrainHook | null = null;
+
+/** Runtime-owned projection; kernel transports the clone-safe failure without Node policy. */
+let fatalErrorSerializer: ((reason: unknown) => unknown) | null = null;
+export function setKernelFatalErrorSerializer(
+  serializer: ((reason: unknown) => unknown) | null,
+): void {
+  fatalErrorSerializer = serializer;
+}
+const cloneFatalReason = globalThis.structuredClone.bind(globalThis);
+const isNativeError = Reflect.get(Error, 'isError') as (value: unknown) => boolean;
+function projectFatalError(reason: unknown): { readonly reason: unknown } {
+  try {
+    return {
+      reason: cloneFatalReason(fatalErrorSerializer ? fatalErrorSerializer(reason) : reason),
+    };
+  } catch (failure) {
+    try {
+      return { reason: cloneFatalReason(failure) };
+    } catch (cloneFailure) {
+      return { reason: cloneFailure };
+    }
+  }
+}
 
 /** Register the drain hook (idempotent replace; `null` unregisters). */
 export function setKernelDrainHook(hook: KernelDrainHook | null): void {
@@ -311,6 +335,7 @@ function closeWorkerPorts(ports: WorkerStdioPorts): void {
 export interface WorkerEntryOutcome {
   readonly threw: boolean;
   readonly code: number;
+  readonly fatalError?: { readonly reason: unknown };
 }
 
 /**
@@ -350,6 +375,7 @@ async function runEntryLifecycleInternal(
 ): Promise<WorkerEntryOutcome> {
   let code = 0;
   let threw = false;
+  let fatalError: WorkerEntryOutcome['fatalError'];
   try {
     deps.prepareEntry?.(spec);
     // One publication boundary for every entry lifecycle. URL entries expose
@@ -367,15 +393,19 @@ async function runEntryLifecycleInternal(
       code = err.exitCode;
     } else {
       code = 1;
-      const message = err instanceof Error ? `${err.stack ?? err.message}\n` : `${String(err)}\n`;
+      fatalError = projectFatalError(err);
       try {
+        const error = err as Error;
+        const message = isNativeError(err)
+          ? `${error.stack ?? error.message}\n`
+          : `${String(err)}\n`;
         deps.writeStderr(STDIO_ENCODER.encode(message));
       } catch {
-        /* stderr may already be closed */
+        /* A closed stream or unprintable throw must not lose the captured terminal. */
       }
     }
   }
-  return { threw, code };
+  return { threw, code, ...(fatalError === undefined ? {} : { fatalError }) };
 }
 
 export function runEntryLifecycle(
@@ -408,6 +438,7 @@ export function finalizeWorkerEntry(
   const exitMessage: WorkerExitMessage = {
     type: 'exit',
     code: outcome.code,
+    ...(outcome.fatalError === undefined ? {} : { fatalError: outcome.fatalError }),
     attestation: workerOutputAttestation(spec.outputState),
   };
   let firstError: unknown;

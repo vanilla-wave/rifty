@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Resolve npm bare-version overrides against the original dependency name; preserve explicit and baked aliases.
+
 - Match npm tar root stripping for DefinitelyTyped and other named roots; preserve ordinary property-name files and traversal rejection.
 
 

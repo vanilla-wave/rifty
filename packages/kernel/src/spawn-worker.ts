@@ -16,6 +16,7 @@ import { NotImplementedError } from '@riftydev/io';
 import { getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
 import { DEFAULT_PAYLOAD_CAPACITY, type SabRing, createSabRing } from './ipc/sab-ring.ts';
 import type { SyncRpcCallerContext, SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
+import { getKernelHostMessageChannel } from './shared-globals.ts';
 import type {
   WorkerEntryDescriptor,
   WorkerInitMessage,
@@ -112,7 +113,7 @@ export interface SpawnWorkerResult {
   /** The SAB ring the dispatcher is attached to (parent-side view). */
   readonly ring: SabRing;
   /** Subscribe to the worker's exit message. Returns an `unsubscribe`. */
-  onExit(cb: (code: number) => void): () => void;
+  onExit(cb: (code: number, fatalError?: { readonly reason: unknown }) => void): () => void;
   /** Subscribe to `messageerror` (structured-clone failures during
    * `postMessage`). Listeners receive the raw event; the worker is NOT
    * terminated (matches browser semantics). Review fix §1.10. */
@@ -159,15 +160,15 @@ export function spawnKernelWorker(
   let ports: WorkerStdioPorts | null = null;
   let fullSpec: WorkerSpawnSpec | null = null;
   const acquiredFixedPorts: MessagePort[] = [];
-  const exitListeners: ((code: number) => void)[] = [];
+  const exitListeners: ((code: number, fatalError?: { readonly reason: unknown }) => void)[] = [];
   const messageErrorListeners: ((ev: MessageEvent) => void)[] = [];
   const uncaughtErrorListeners: ((message: string, outputSealedByChild: boolean) => void)[] = [];
   let sealedExitCode: number | null = null;
   let uncaughtErrorObserved = false;
 
-  const dispatchExit = (code: number): void => {
+  const dispatchExit = (code: number, fatalError?: { readonly reason: unknown }): void => {
     // Snapshot so a handler that unsubscribes itself doesn't skip a peer.
-    for (const cb of [...exitListeners]) cb(code);
+    for (const cb of [...exitListeners]) cb(code, fatalError);
   };
 
   const dispatchMessageError = (ev: MessageEvent): void => {
@@ -260,6 +261,7 @@ export function spawnKernelWorker(
             readonly type?: unknown;
             readonly code?: unknown;
             readonly attestation?: unknown;
+            readonly fatalError?: unknown;
           })
         : null;
     // Guests share this channel by design, so an unattested frame is ordinary
@@ -267,7 +269,12 @@ export function spawnKernelWorker(
     // frame carrying the kernel-minted attestation is judged as an exit claim.
     if (candidate === null || candidate.attestation !== expectedExitAttestation()) return;
     if (
-      Object.keys(value).length !== 3 ||
+      Object.keys(value).length !== (Object.hasOwn(value, 'fatalError') ? 4 : 3) ||
+      (Object.hasOwn(value, 'fatalError') &&
+        (typeof candidate.fatalError !== 'object' ||
+          candidate.fatalError === null ||
+          Object.keys(candidate.fatalError).length !== 1 ||
+          !Object.hasOwn(candidate.fatalError, 'reason'))) ||
       candidate.type !== 'exit' ||
       !Number.isSafeInteger(candidate.code) ||
       (candidate.code as number) < 0
@@ -278,7 +285,7 @@ export function spawnKernelWorker(
     const code = candidate.code as number;
     if (sealedExitCode === null) {
       sealedExitCode = code;
-      dispatchExit(code);
+      dispatchExit(code, candidate.fatalError as { readonly reason: unknown } | undefined);
       return;
     }
     if (sealedExitCode !== code) {
@@ -352,7 +359,8 @@ export function spawnKernelWorker(
     ring = createdRing.ring;
 
     const createTrackedChannel = (): MessageChannel => {
-      const channel = new MessageChannel();
+      const HostMessageChannel = getKernelHostMessageChannel();
+      const channel = new HostMessageChannel();
       acquiredFixedPorts.push(channel.port1, channel.port2);
       return channel;
     };

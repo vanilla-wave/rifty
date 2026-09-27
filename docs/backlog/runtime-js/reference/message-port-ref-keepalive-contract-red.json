@@ -1,0 +1,209 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted with advisory C1; proceed to implementation, not product merge.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/message-port-ref-keepalive.md @9836df2e0; BASE ec65eec40. Scope: new MessagePort promise/preparation only. Independent detached copy /private/tmp/rifty-message-port-contract-review. Executed live Node v24.16.0 oracle: eight scenarios exit 0 with recorded outputs. RIFTY_PLAYGROUND_PORT=5416 pnpm test:browser-unit tests/browser-unit/message-port-keepalive.spec.ts: nine expected RED, one default-infrastructure PASS (14.0s), /private/tmp/rifty-message-port-review-red.log. Missing methods/new seam are the planned behavior absence, not harness/import/typecheck failures. PR-4: MessagePort criteria newly added, native oracle unchanged; e2e assertion additions strengthen coverage and moving owner-shell-vitest into heavy lane retains assertions.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4: deliver manual port lifetime and real Vitest outcome",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:49",
+      "summary": "MessagePort implementation and Final+GREEN remain; preparation does not close I4."
+    },
+    {
+      "clause": "I1\u2013I7 accepted goal",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:12",
+      "summary": "Other goal map obligations and final both-pool acceptance/compat proof remain outside this checkpoint."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: manually referenced global port holds unref Worker result; repeated ref plus one unref drains",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: default/raw infrastructure drain and native identity/transfer retained; global/builtin aliases",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:17",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: own/peer async closure once, queued bytes and partial order, no revival",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:64",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: managed transfer fails before any detachment; native buffer transfer and port identity",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "weak",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:79",
+      "note": "C1: executed detach-then-throw mutant preserves the asserted hasRef=true while the source endpoint is detached; companion-buffer protection and named error remain discriminating."
+    },
+    {
+      "row": "Acceptance 5: shared primordial, repeated installation and second bundle preserve constructor; raw kernel stays unmanaged",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:115",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: optional manual refs, idempotence, returns and hasRef",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: constructor aliases and infrastructure remains unrefed",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:17",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: own/peer close and queued-message partial order",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:64",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: transfer ceiling/no partial detach and ordinary buffer transfer",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "weak",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:79",
+      "note": "C1: executed detach-then-throw mutant preserves the asserted hasRef=true while the source endpoint is detached; companion-buffer protection and named error remain discriminating."
+    },
+    {
+      "row": "Parity 5: second kernel bundle and once-only public installation",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:115",
+      "note": ""
+    },
+    {
+      "row": "torn-state \u00d7 repeated ref/unref/close",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:45",
+      "note": ""
+    },
+    {
+      "row": "observable-order \u00d7 queued send then close",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:92",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie \u00d7 ownership-losing transfer",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "weak",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:79",
+      "note": "C1: executed detach-then-throw mutant preserves the asserted hasRef=true while the source endpoint is detached; companion-buffer protection and named error remain discriminating."
+    },
+    {
+      "row": "sibling-drift \u00d7 global/builtin and raw/private channels",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:17",
+      "note": ""
+    },
+    {
+      "row": "frozen-assumption \u00d7 second-bundle primordial capture",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:115",
+      "note": ""
+    },
+    {
+      "row": "Proposed kernel getKernelHostMessageChannel shared primordial public seam",
+      "source": "public-api",
+      "trace": "ADR-0452 + Acceptance 5 \u2192 I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:115",
+      "note": ""
+    },
+    {
+      "row": "Recorded Node v24.16.0 reference outputs agree with rerun of all eight shared scenarios",
+      "source": "frozen-artifact",
+      "trace": "Acceptance 1\u20134 \u2192 I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:15",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/message-port-keepalive.spec.ts:89",
+          "summary": "C1: ceiling assertion does not discriminate source-port detachment before the named throw.",
+          "authority": "",
+          "evidence": "Executed node /private/tmp/rifty-message-port-detach-mutant.mjs; output: v24.16.0 {\"existingCeilingAssertion\":\"PASS\",\"sourcePortDetached\":true,\"outcomes\":[[\"NotImplementedError\",\"MessagePort.transfer.managed\",4,true],[\"NotImplementedError\",\"MessagePort.transfer.managed\",4,true]]}. The mutant uses real Node native transfer and the unchanged outcomes assertion from lines 89\u2013108. It violates Acceptance 4's port-detachment clause, but an existing carrier remains: weak/advisory under REV-4, not missing."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "9836df2e0b839c5d4849dc5f4409449812a3b82d"
+}

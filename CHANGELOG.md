@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Run Vitest4.1.11/Vite8.0.16 TypeScript projects in the browser shell on forks and threads; exact fail/fix counts and exit codes. Advanced IPC uses native non-binary cloning with explicit binary refusal; other versions/modes remain outside the guarantee (ADR-0467).
+
+- Pin browser-unit CI to the existing Node24.16.0 eval oracle; retain version-drift rejection.
 - e2e: `pickStarter`/`selectPreset`/`resetSandboxThroughUi` open the launcher through one `openLauncher`, and specs touching the App shell after `goto`/`reload` wait `waitForProjectIndex`, instead of 2s/5s deadlines (hosted webpack flake on cold CI runners; closes `toolchain-build/hosted-webpack-launcher-readiness-timeout`).
 
 - Add the public `checkSandboxSupport()` browser prerequisite report to `@riftydev/workbench`, and settle its probe teardown against the terminated Worker's OPFS lock (ADR-0437, ADR-0438, ADR-0439). SDK README samples keep gating on `checkCapabilities().sufficient`; the published support assets build from one publishing step the browser suite reuses in a scratch directory.

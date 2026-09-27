@@ -16,6 +16,9 @@ type VmScript = {
 };
 
 type VmRunOptions = {
+  filename?: string;
+  lineOffset?: number;
+  columnOffset?: number;
   cachedData?: Uint8Array;
   displayErrors?: boolean;
   timeout?: number;
@@ -92,6 +95,20 @@ describe('node:vm subset', () => {
       globalThis.__riftyVmConformanceCount;
     `);
     expect(script.runInThisContext()).toBe(10);
+  });
+
+  it('keeps nonzero sandbox and compileFunction offsets loud', () => {
+    const context = vm.createContext({});
+    for (const offsets of [{ lineOffset: 2 }, { columnOffset: -2 }]) {
+      expect(() => vm.runInContext('1', context, offsets)).toThrow(NotImplementedError);
+      expect(() => vm.runInNewContext('1', {}, offsets)).toThrow(NotImplementedError);
+      expect(() => vm.compileFunction('return 1', [], offsets)).toThrow(NotImplementedError);
+      const script = new vm.Script('1', offsets);
+      expect(() => script.runInContext(context)).toThrow(NotImplementedError);
+      expect(() => script.runInNewContext({})).toThrow(NotImplementedError);
+      expect(() => new vm.Script('1').runInContext(context, offsets)).toThrow(NotImplementedError);
+      expect(() => new vm.Script('1').runInNewContext({}, offsets)).toThrow(NotImplementedError);
+    }
   });
 
   it('runs scripts against explicit contexts', () => {
