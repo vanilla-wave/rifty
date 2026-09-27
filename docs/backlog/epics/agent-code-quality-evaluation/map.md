@@ -1,9 +1,9 @@
 ## Items
 
-1. `distribution/agent-eval-local-runner` — documented local scripts for Codex to invoke; resolved inputs, progress, partial reports and fresh series; I8/I9. Prove the smallest path on an existing task first.
+1. `distribution/agent-eval-local-runner` — documented local scripts for Codex to invoke; resolved inputs, progress, partial reports and fresh series; I8/I9. Prove the smallest path on an existing task first. Starts after `epics/agent-weak-models` items 1 and 4 (PR #359: bench `endpoint` as a catalog entry, per-run metric columns, `context-exceeded`, recorded baseline) land, so the restructured runner/config/report carries them (goal §Decisions, shared bench).
 2. `distribution/agent-eval-codex-reference` — native Codex reference over one existing task; use item 1's runner contract and establish the adapter's real execution proof.
 3. `distribution/agent-eval-project-corpus` — judge-substrate probe first (which test runners install and run in COI/no-COI, how a test or CLI result is captured inside each lane), then six diverse pilot candidates, validated cards/reference solutions/judges, then an expanded frozen corpus; I1/I6/I7. Candidate curation can start independently; all-environment controls compose with items 1/2.
-4. `distribution/agent-eval-comparison-report` — expanded experiment identity, uncertainty and honest matrix accounting; then a real reference campaign and regeneration proof. Depends on items 1–3; report arithmetic and I5 campaign reuse the runner's series/results owner.
+4. `distribution/agent-eval-comparison-report` — expanded experiment identity, uncertainty and honest matrix accounting; then a real reference campaign and regeneration proof. Depends on items 1–3; report arithmetic and I5 campaign reuse the runner's series/results owner. Absorbs agent-weak-models item 12's smallest `report --compare` (two summaries of one config, PR #359) instead of a second comparison design.
 5. `distribution/agent-eval-boundary-diagnostics` — observed environment/tool differences and executed escalation/confirmation beyond the pilot; I10/I11. Reuse the same runner, corpus and reporting owner; retained-trace research can start independently, final proof composes with items 1–4.
 
 ## Open questions
@@ -19,7 +19,11 @@
 These are implementation details within settled scope, not alternatives about
 whose workflows or quality count. Draft children are compiled only at PICKUP.
 The existing runner/report owns shared experiment state; no new scheduler,
-storage service or parallel-run coordinator is presumed.
+storage service or parallel-run coordinator is presumed. The tool is shared
+with `epics/agent-weak-models` (PR #359) and `epics/no-coi-agent-host-kit`
+(PR #357): the no-COI lane's page composition is swapped onto the kit's
+reference host module by its item 7 after the lane's catalog migration; this
+goal's lanes then measure that module (goal §Decisions, shared bench).
 Runner child owns series execution/interruption, report child owns comparison
 arithmetic and reference-campaign proof; both extend the same existing tool.
 Codex is the local entry point and explanation layer, never the score oracle.

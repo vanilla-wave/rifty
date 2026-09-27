@@ -42,3 +42,12 @@ Deterministic model-boundary controls prove plumbing only; I5 still requires
 real agent trials. PICKUP traces physically reachable interruption, output
 collision and persistence failures to I8/I9; before introducing coordination
 or a new persistence mechanism, perform the existing fault-class inventory.
+
+Order (2026-09-27, three-goal review): starts after `epics/agent-weak-models`
+items 1 and 4 (PR #359) land — bench `endpoint` as a model-catalog entry,
+per-run metric columns and the `context-exceeded` outcome, one recorded
+weak-endpoint baseline — so the restructured runner/config/report carries
+them instead of being rewritten under them. The kit's item 7
+(`epics/no-coi-agent-host-kit`, PR #357) swaps the no-COI lane's page
+composition onto its reference host module; the series/interruption contract
+here is independent of that swap.

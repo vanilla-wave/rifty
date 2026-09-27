@@ -43,3 +43,10 @@ operation differences, recovered obstacles, attempted difficulty levels and
 boundary-confirmation evidence. Do not mix adaptively selected failures into
 the representative aggregate or call a shared model/budget limit a Rifty
 ceiling. Closing this item's I5 pilot leaves the diagnostics obligation open.
+
+Shared bench (2026-09-27, three-goal review): this owner absorbs
+`epics/agent-weak-models` item 12's smallest `report --compare` (PR #359: two
+summary directories of one config, per-task before/after with a ±1-pass on 3
+runs marked as noise) instead of leaving a second comparison design in
+`report.ts`; that before/after measures harness mechanisms, separate from
+this goal's Rifty-vs-native comparison and its uncertainty.
