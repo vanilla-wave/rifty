@@ -32,7 +32,21 @@ if (command === 'report') {
   if (!tasks.length) throw new Error(`Unknown task ${parsed.values.task}`);
   const mock = parsed.values['mock-model'] ? await observedSmokeModel() : undefined;
   try {
-    if (mock) config.endpoint = { baseUrl: mock.baseUrl, model: 'scripted' };
+    if (mock)
+      config.endpoint = {
+        id: 'scripted',
+        name: 'scripted',
+        api: 'openai-completions',
+        provider: 'bench',
+        baseUrl: mock.baseUrl,
+        contextWindow: 128000,
+        maxTokens: 8192,
+        input: ['text'],
+        reasoning: false,
+        thinking: 'off',
+        compat: {},
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      };
     await run(
       config,
       tasks,

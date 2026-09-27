@@ -7,6 +7,7 @@ import {
   createSandboxAgentHost,
 } from '@riftydev/agent';
 import { type ToolchainSandbox, createSandbox } from '@riftydev/sdk';
+import type { Endpoint } from './config.ts';
 import type { FileTree } from './files.ts';
 let sandbox: ToolchainSandbox;
 let agent: AgentSession;
@@ -27,10 +28,7 @@ async function snapshot(): Promise<FileTree> {
   return files;
 }
 const bench = {
-  async boot(
-    files: FileTree,
-    options: { baseUrl: string; model: string; apiKey?: string } & AgentRunLimits,
-  ) {
+  async boot(files: FileTree, options: { endpoint: Endpoint; apiKey?: string } & AgentRunLimits) {
     if (crossOriginIsolated) throw new Error('Benchmark no-COI page unexpectedly isolated');
     sandbox = await createSandbox({
       requireCrossOriginIsolation: false,
@@ -40,30 +38,22 @@ const bench = {
     project = sandbox.project({ root: '/bench' });
     for (const [path, text] of Object.entries(files)) await project.fs.writeFile(path, text);
     await sandbox.toolchain.install({ cwd: '/bench', registryUrl: '/npm-registry' });
-    const { maxToolCalls, runTimeoutMs, ...settings } = options;
+    const { maxToolCalls, runTimeoutMs } = options;
+    const { thinking, temperature, envKey: _envKey, ...model } = options.endpoint;
     const models = createModels();
     models.setProvider(
-      createOpenAIProvider({
-        id: 'rifty',
-        apiKey: settings.apiKey,
-        models: [
-          {
-            id: settings.model,
-            name: settings.model,
-            api: 'openai-completions',
-            provider: 'rifty',
-            baseUrl: settings.baseUrl,
-            contextWindow: 128_000,
-            maxTokens: 8192,
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          },
-        ],
-      }),
+      createOpenAIProvider({ id: model.provider, apiKey: options.apiKey, models: [model] }),
     );
     agent = createAgentSession({
       host: createSandboxAgentHost({ sandbox, project: { root: '/bench' }, mode: () => mode }),
       models,
-      model: settings.model,
+      model: model.id,
+      modelOptions: {
+        [model.id]: {
+          ...(thinking && thinking !== 'off' ? { reasoning: thinking } : {}),
+          ...(temperature === undefined ? {} : { temperature }),
+        },
+      },
       maxToolCalls,
       runTimeoutMs,
     });

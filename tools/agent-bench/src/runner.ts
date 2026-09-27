@@ -3,12 +3,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { chromium } from '@playwright/test';
 import { getAgentPromptProfile } from '@riftydev/agent';
-import { type Config, readKey, redact, taskSet } from './config.ts';
+import { type Config, readKey, redact, secretValues, taskSet } from './config.ts';
 import { diffTrees } from './files.ts';
 import { prepareLocal } from './lanes/local-reference.ts';
 import { prepareNoCoi } from './lanes/rifty-no-coi.ts';
 import { prepareRifty } from './lanes/rifty.ts';
 import type { Lane, Prepared } from './lanes/types.ts';
+import { emptyMetrics } from './metrics.ts';
 import { type Report, type Run, caveat, writeReport } from './report.ts';
 import { services } from './services.ts';
 import type { Task } from './tasks.ts';
@@ -16,6 +17,7 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
   if (!config.endpoint) throw new Error('Endpoint required: --config or --mock-model');
   const endpoint = config.endpoint;
   const key = readKey(endpoint);
+  const secrets = secretValues(endpoint, key);
   const profile = getAgentPromptProfile().id;
   await mkdir(output, { recursive: true });
   const report: Report = {
@@ -35,7 +37,7 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
           ) as { version: string }
         ).version,
       },
-      model: endpoint.model,
+      model: endpoint.id,
       profile,
       taskSet,
       endpoint,
@@ -50,7 +52,7 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
   const browser = await chromium.launch();
   report.header.versions.chromium = browser.version();
   const persist = () =>
-    writeReport(output, JSON.parse(redact(JSON.stringify(report), key)) as Report);
+    writeReport(output, JSON.parse(redact(JSON.stringify(report), secrets)) as Report);
   try {
     for (const task of tasks)
       for (const lane of lanes) {
@@ -61,6 +63,7 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
           await mkdir(dir, { recursive: true });
           console.log(`START ${name}`);
           const record: Run = {
+            ...emptyMetrics(),
             task: task.id,
             lane,
             runIndex: index,
@@ -91,12 +94,12 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
                 : prepareLocal(input));
             await writeFile(
               join(dir, 'before.json'),
-              redact(JSON.stringify(prepared.before, null, 2), key),
+              redact(JSON.stringify(prepared.before, null, 2), secrets),
             );
             record.artifacts.before = `${name}/before.json`;
             if (prepared.workspace)
               record.artifacts.workspace = relative(output, prepared.workspace);
-            if (!key) {
+            if (!secrets.length) {
               await prepared.context.tracing.start({
                 screenshots: true,
                 snapshots: false,
@@ -110,12 +113,15 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
             record.elapsedMs = Date.now() - started;
             const { trace, ...metrics } = observation;
             Object.assign(record, metrics);
-            await writeFile(join(dir, 'trace.json'), redact(JSON.stringify(trace, null, 2), key));
+            await writeFile(
+              join(dir, 'trace.json'),
+              redact(JSON.stringify(trace, null, 2), secrets),
+            );
             record.stage = 'judge';
             try {
               if (tracing) await prepared.context.tracing.group(`judge:${task.id}`);
               record.judge = await task.judge(await prepared.preview());
-              if (!key) {
+              if (!secrets.length) {
                 await prepared.page.screenshot({ path: join(dir, 'screen.png') });
                 record.artifacts.screen = `${name}/screen.png`;
               }
@@ -124,34 +130,40 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
             }
             record.stage = 'snapshot';
             const after = await prepared.snapshot();
-            await writeFile(join(dir, 'after.json'), redact(JSON.stringify(after, null, 2), key));
+            await writeFile(
+              join(dir, 'after.json'),
+              redact(JSON.stringify(after, null, 2), secrets),
+            );
             record.artifacts.after = `${name}/after.json`;
             record.finalDiff = diffTrees(prepared.before, after);
             record.outcome =
               record.agentStatus === 'budget-exceeded'
                 ? 'budget-exceeded'
-                : record.agentStatus === 'done' && record.judge.pass
-                  ? 'pass'
-                  : 'fail';
+                : record.contextExceeded
+                  ? 'context-exceeded'
+                  : record.agentStatus === 'done' && record.judge.pass
+                    ? 'pass'
+                    : 'fail';
             record.stage = undefined;
           } catch (error) {
             record.error = redact(
               error instanceof Error ? (error.stack ?? error.message) : String(error),
-              key,
+              secrets,
             );
             record.elapsedMs ||= Date.now() - started;
             if (record.agentStatus === 'budget-exceeded') record.outcome = 'budget-exceeded';
+            else if (record.contextExceeded) record.outcome = 'context-exceeded';
             if (prepared)
               try {
                 const after = await prepared.snapshot();
                 await writeFile(
                   join(dir, 'after.json'),
-                  redact(JSON.stringify(after, null, 2), key),
+                  redact(JSON.stringify(after, null, 2), secrets),
                 );
                 record.artifacts.after = `${name}/after.json`;
                 record.finalDiff = diffTrees(prepared.before, after);
               } catch (snapshotError) {
-                record.error += `\nSnapshot failed: ${redact(String(snapshotError), key)}`;
+                record.error += `\nSnapshot failed: ${redact(String(snapshotError), secrets)}`;
               }
             await writeFile(
               join(dir, 'failure.json'),

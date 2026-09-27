@@ -14,8 +14,7 @@ export async function prepareNoCoi(input: Input): Promise<Prepared> {
       {
         files: input.task.files,
         settings: {
-          baseUrl: input.endpoint.baseUrl,
-          model: input.endpoint.model,
+          endpoint: input.endpoint,
           apiKey: input.key,
           ...input.config.limits,
         },

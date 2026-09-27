@@ -364,6 +364,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0442 | Refuse pi-expandable commands inside agent session admission |
 | 0466 | Restore native agent conversation history |
 | 0471 | Embedder model catalog and session model selection |
+| 0472 | Measure catalog benchmarks with pinned pi event semantics |
 
 ## Superseded (removed)
 

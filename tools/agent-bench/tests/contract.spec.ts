@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 import type { AgentPromptProfile } from '@riftydev/agent';
 import { agentModelServer } from '../../../tests/e2e/fixtures/agent-model-server.ts';
+import { catalogEndpoint } from './catalog-endpoint.ts';
 import { observedSmokeModel } from './observed-smoke-model.ts';
 
 function getAgentPromptProfile(): AgentPromptProfile {
@@ -30,6 +31,13 @@ interface RunRecord {
   agentStatus: string;
   outcome: string;
   toolCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  retries: number;
+  compactions: number;
+  repeatedCallNotices: number;
+  editFailures: number;
+  malformedToolCalls: number;
   terminalTail: string;
   judge: { pass: boolean; probes: unknown[] };
   artifacts: { trace: string; browserTrace?: string; workspace?: string };
@@ -80,10 +88,7 @@ test('all three real mock-model lanes run the entire task set with identical jud
   // The provider lives outside the runner: report-only fabrication makes zero requests.
   const model = await observedSmokeModel();
   const config = join(out, 'config.json');
-  await writeFile(
-    config,
-    JSON.stringify({ endpoint: { baseUrl: model.baseUrl, model: 'scripted' } }),
-  );
+  await writeFile(config, JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl) }));
   let result: Awaited<ReturnType<typeof cli>>;
   try {
     result = await cli(['run', '--runs', '1', '--config', config, '--output', out]);
@@ -99,8 +104,15 @@ test('all three real mock-model lanes run the entire task set with identical jud
   const profile = getAgentPromptProfile();
   for (const request of completedReads) {
     expect(request.authorization).toBeNull();
+    expect(request.body).toMatchObject({
+      model: 'scripted',
+      temperature: 1,
+      top_p: 0.95,
+      reasoning_effort: 'medium',
+      max_completion_tokens: 4096,
+    });
     const system = request.body.messages
-      .filter((message) => message.role === 'system')
+      .filter((message) => message.role === 'system' || message.role === 'developer')
       .map((message) => message.content)
       .join('\n');
     for (const part of [profile.intro, profile.guidance, profile.recovery, profile.verification])
@@ -133,6 +145,15 @@ test('all three real mock-model lanes run the entire task set with identical jud
       expect(run.judge.pass).toBe(false);
       expect(run.judge.probes.length).toBeGreaterThan(0);
       expect(run.toolCalls).toBe(1);
+      expect(run).toMatchObject({
+        inputTokens: 20,
+        outputTokens: 6,
+        retries: 0,
+        compactions: 0,
+        repeatedCallNotices: 0,
+        editFailures: 0,
+        malformedToolCalls: 0,
+      });
       const nativeStderr =
         run.lane === 'local-reference'
           ? await readFile(join(out, dirname(run.artifacts.trace), 'native-stderr.log'), 'utf8')
@@ -222,7 +243,7 @@ for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
     await writeFile(
       config,
       JSON.stringify({
-        endpoint: { baseUrl: model.baseUrl, model: 'scripted' },
+        endpoint: catalogEndpoint(model.baseUrl),
         limits: { maxToolCalls: 1, runTimeoutMs: 60000 },
       }),
     );
@@ -268,10 +289,7 @@ test('provider failure after a real UI write retains its evidence in the run rep
   ]);
   const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-provider-'));
   const config = join(out, 'config.json');
-  await writeFile(
-    config,
-    JSON.stringify({ endpoint: { baseUrl: model.baseUrl, model: 'scripted' } }),
-  );
+  await writeFile(config, JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl) }));
   try {
     const result = await cli([
       'run',
@@ -309,7 +327,7 @@ test('configured key reaches only the provider and is absent from every persiste
   await writeFile(
     config,
     JSON.stringify({
-      endpoint: { baseUrl: model.baseUrl, model: 'scripted', envKey: 'RIFTY_BENCH_TEST_KEY' },
+      endpoint: catalogEndpoint(model.baseUrl, { envKey: 'RIFTY_BENCH_TEST_KEY' }),
     }),
   );
   try {
@@ -364,7 +382,7 @@ for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
     await writeFile(
       config,
       JSON.stringify({
-        endpoint: { baseUrl: model.baseUrl, model: 'scripted' },
+        endpoint: catalogEndpoint(model.baseUrl),
         limits: { maxToolCalls: 100, runTimeoutMs: 1000 },
       }),
     );
@@ -408,10 +426,7 @@ test('native project cannot inherit checkout dependencies when reports live in t
     'Dependency boundary observed.',
   ]);
   const config = join(out, 'config.json');
-  await writeFile(
-    config,
-    JSON.stringify({ endpoint: { baseUrl: model.baseUrl, model: 'scripted' } }),
-  );
+  await writeFile(config, JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl) }));
   try {
     const result = await cli(
       [
@@ -444,3 +459,94 @@ test('native project cannot inherit checkout dependencies when reports live in t
     await rm(out, { recursive: true, force: true });
   }
 });
+
+for (const lane of ['rifty', 'local-reference'] as const) {
+  test(`${lane} classifies provider context overflow separately with observed token columns`, async () => {
+    const model = await agentModelServer([{ error: 'maximum context length is 32768 tokens' }]);
+    const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-context-'));
+    const config = join(out, 'config.json');
+    await writeFile(config, JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl) }));
+    try {
+      const result = await cli([
+        'run',
+        '--lane',
+        lane,
+        '--task',
+        'add-search',
+        '--runs',
+        '1',
+        '--config',
+        config,
+        '--output',
+        out,
+      ]);
+      expect(result.code, result.output).toBe(0);
+      const report = JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as Report;
+      expect(report.runs[0]).toMatchObject({
+        agentStatus: 'error',
+        outcome: 'context-exceeded',
+        retries: 0,
+        compactions: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+      expect(model.requests).toHaveLength(1);
+    } finally {
+      await model.close();
+    }
+  });
+}
+
+for (const lane of ['rifty', 'local-reference'] as const) {
+  test(`${lane} delivers catalog headers without copying their secrets into artifacts`, async () => {
+    const secret = 'CATALOG_HEADER_ONLY_SECRET';
+    const model = await agentModelServer([{ error: `Rejected ${secret}` }]);
+    const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-header-'));
+    const config = join(out, 'input-config.json');
+    await writeFile(
+      config,
+      JSON.stringify({
+        endpoint: catalogEndpoint(model.baseUrl, {
+          headers: { 'X-Catalog-Key': `Bearer ${secret}` },
+        }),
+      }),
+    );
+    try {
+      const result = await cli([
+        'run',
+        '--lane',
+        lane,
+        '--task',
+        'add-search',
+        '--runs',
+        '1',
+        '--config',
+        config,
+        '--output',
+        out,
+      ]);
+      expect(result.code, result.output).toBe(0);
+      expect(model.headers[0]?.['x-catalog-key']).toBe(`Bearer ${secret}`);
+      const json = await readFile(join(out, 'report.json'), 'utf8');
+      expect(json).not.toContain(secret);
+      const report = JSON.parse(json) as Report;
+      const run = report.runs[0]!;
+      expect(run.artifacts.browserTrace).toBeUndefined();
+      expect(await readFile(join(out, run.artifacts.trace), 'utf8')).not.toContain(secret);
+      expect(await readFile(join(out, 'summary.md'), 'utf8')).not.toContain(secret);
+      if (lane === 'local-reference') {
+        for (const file of [
+          'native-extension.ts',
+          'pi-home/models.json',
+          'provider-requests.jsonl',
+          'native-stderr.log',
+        ])
+          expect(
+            await readFile(join(out, dirname(run.artifacts.trace), file), 'utf8'),
+          ).not.toContain(secret);
+      }
+    } finally {
+      await model.close();
+    }
+  });
+}

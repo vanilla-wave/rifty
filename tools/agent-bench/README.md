@@ -14,13 +14,25 @@ Config (no-auth example):
 
 ```json
 {
-  "endpoint": { "baseUrl": "http://127.0.0.1:10530/v1", "model": "gpt-5.6-sol" },
+  "endpoint": {
+    "id": "gpt-6-luna", "name": "GPT-6 Luna", "provider": "codex-proxy",
+    "api": "openai-completions", "baseUrl": "http://127.0.0.1:10539/v1",
+    "contextWindow": 1000000, "maxTokens": 8192, "reasoning": true,
+    "input": ["text"], "thinking": "medium", "compat": { "supportsReasoningEffort": true },
+    "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+  },
   "limits": { "maxToolCalls": 40, "runTimeoutMs": 600000 }
 }
 ```
 
+The endpoint uses native pi Model fields; contextWindow/maxTokens are required.
+Optional reasoning/input/thinking/compat default to false/text/off/empty. Temperature
+and samplingParams (including top_p) are optional provider defaults; absent values
+are not sent. All lanes receive the same declared entry. The checked-in
+[local Luna config](configs/gpt-6-luna.json) is used for the goal baseline/re-run.
+
 Optional `endpoint.envKey` names an existing key environment variable; the value
-never goes in config. Keyed runs omit raw Playwright traces/screenshots (these
+never goes in config. Runs with keys or model headers omit raw Playwright traces/screenshots (these
 can contain provider errors verbatim); textual artifacts are redacted. Default
 playground port5289; override `playgroundPort` in config.
 
@@ -47,7 +59,13 @@ common judge evidence across lanes. Smoke success proves execution, not repair.
 
 Each run retains transcript/events/provider requests, usage, elapsed time, tool
 count, terminal tail, actual before/after file trees (including dependency locks), file diff, judge probes, browser trace/screenshot
-when keyless. Header records source revision/dirty state and native/browser/Pi versions. JSON/Markdown distinguish budget-exceeded from ordinary failure.
+when keyless. Header records source revision/dirty state and native/browser/Pi versions. JSON/Markdown distinguish budget-exceeded and context-exceeded from ordinary
+failure, retaining the actual agent status. Input tokens include pi input plus
+cacheRead/cacheWrite; output tokens use pi output. Counts derive from emitted
+retry starts, successful compactions (including summary usage), repeated-call
+notices and errored edit/validation tool results. Counters may overlap; manual
+failure classification stays separate. Legacy reports show absent metrics as —.
+Native compaction remains on and native agent-level retry remains off in this lane.
 Assign `failureClass` and `note` manually in report.json, then regenerate Markdown;
 existing assignments survive. Classes: agent, rifty-runtime, rifty-tooling,
 ai-mode-ux, provider, task-bad. Unclassified remains null. Failed setup/judging

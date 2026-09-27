@@ -1,8 +1,12 @@
 import type { AgentTrace } from '@riftydev/agent';
+import { eventMetrics } from '../metrics.ts';
 import type { Observation } from './types.ts';
 export function coreObservation(trace: AgentTrace, requests: unknown[]): Observation {
   const tools = trace.transcript.filter((message) => message.role === 'toolResult');
   return {
+    ...eventMetrics(trace.events, trace.config.contextWindow, trace.status),
+    inputTokens: trace.usage.totalTokens - trace.usage.output,
+    outputTokens: trace.usage.output,
     agentStatus: trace.status,
     turns: trace.transcript.filter((message) => message.role === 'assistant').length,
     // Pi emits an error result when admission aborts; core skipped proposals carry applied:no.

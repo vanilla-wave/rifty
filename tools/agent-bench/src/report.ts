@@ -10,7 +10,7 @@ export interface Run extends Omit<Observation, 'trace'> {
   lane: Lane;
   runIndex: number;
   profile: string;
-  outcome: 'pass' | 'fail' | 'budget-exceeded';
+  outcome: 'pass' | 'fail' | 'budget-exceeded' | 'context-exceeded';
   elapsedMs: number;
   judge: JudgeVerdict;
   finalDiff: unknown;
@@ -51,29 +51,30 @@ export async function writeReport(dir: string, report: Report) {
     '',
     `Profile: ${report.header.profile}; task set: ${report.header.taskSet}; runs/task: ${report.header.runsPerTask}.`,
     `Limits: ${JSON.stringify(report.header.limits)}.`,
+    `Catalog entry: ${JSON.stringify(report.header.endpoint)}.`,
     `Source: ${report.header.sourceRevision}${report.header.sourceDirty ? ' (working tree modified)' : ''}; versions: ${JSON.stringify(report.header.versions)}.`,
     '',
     report.header.toolContextCaveat,
     '',
     `Excluded: ${report.header.unsupported.join('; ')}.`,
     '',
-    'Outcomes: pass, fail, budget-exceeded (separate; never counted as ordinary fail).',
+    'Outcomes: pass, fail, budget-exceeded, context-exceeded (separate; never counted as ordinary fail).',
     'Failure classes are manual: agent, rifty-runtime, rifty-tooling, ai-mode-ux, provider, task-bad. Unclassified stays null.',
     '',
-    '| Task | Lane | Run | Outcome | Agent | Seconds | Tools | Class | Note |',
-    '|---|---|---:|---|---|---:|---:|---|---|',
+    '| Task | Lane | Run | Outcome | Agent | Seconds | Tools | Input tokens | Output tokens | Retries | Compactions | Repeated calls | Edit failures | Malformed calls | Class | Note |',
+    '|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|',
   ];
   const cell = (value: string | null) => value?.replaceAll('|', '\\|').replaceAll('\n', ' ') ?? '—';
   for (const run of report.runs)
     lines.push(
-      `| ${run.task} | ${run.lane} | ${run.runIndex} | ${run.outcome} | ${run.agentStatus} | ${(run.elapsedMs / 1000).toFixed(1)} | ${run.toolCalls} | ${cell(run.failureClass)} | ${cell(run.note)} |`,
+      `| ${run.task} | ${run.lane} | ${run.runIndex} | ${run.outcome} | ${run.agentStatus} | ${(run.elapsedMs / 1000).toFixed(1)} | ${run.toolCalls} | ${run.inputTokens ?? '—'} | ${run.outputTokens ?? '—'} | ${run.retries ?? '—'} | ${run.compactions ?? '—'} | ${run.repeatedCallNotices ?? '—'} | ${run.editFailures ?? '—'} | ${run.malformedToolCalls ?? '—'} | ${cell(run.failureClass)} | ${cell(run.note)} |`,
     );
   lines.push(
     '',
-    'Per-task pass-rate delta versus local-reference (budget counts remain visible):',
+    'Per-task pass-rate delta versus local-reference (budget/context counts remain visible):',
     '',
-    '| Task | Lane | Pass / runs | Budget | Delta |',
-    '|---|---|---:|---:|---:|',
+    '| Task | Lane | Pass / runs | Budget | Context | Delta |',
+    '|---|---|---:|---:|---:|---:|',
   );
   for (const task of [...new Set(report.runs.map((run) => run.task))]) {
     const native = report.runs.filter((run) => run.task === task && run.lane === 'local-reference');
@@ -85,7 +86,7 @@ export async function writeReport(dir: string, report: Report) {
       if (!rows.length) continue;
       const pass = rows.filter((run) => run.outcome === 'pass').length;
       lines.push(
-        `| ${task} | ${lane} | ${pass}/${rows.length} | ${rows.filter((run) => run.outcome === 'budget-exceeded').length} | ${reference === null ? 'unavailable' : (pass / rows.length - reference).toFixed(3)} |`,
+        `| ${task} | ${lane} | ${pass}/${rows.length} | ${rows.filter((run) => run.outcome === 'budget-exceeded').length} | ${rows.filter((run) => run.outcome === 'context-exceeded').length} | ${reference === null ? 'unavailable' : (pass / rows.length - reference).toFixed(3)} |`,
       );
     }
   }

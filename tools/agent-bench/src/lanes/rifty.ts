@@ -54,8 +54,9 @@ export async function prepareRifty(input: Input): Promise<Prepared> {
     const panel = page.getByTestId('ai-panel');
     await expect(panel).toBeVisible();
     await panel.getByRole('button', { name: 'Settings', exact: true }).click();
-    await panel.getByLabel('Base URL', { exact: true }).fill(endpoint.baseUrl);
-    await panel.getByLabel('Model', { exact: true }).fill(endpoint.model);
+    const { envKey: _envKey, ...entry } = endpoint;
+    await panel.getByText('Advanced catalog', { exact: true }).click();
+    await panel.getByLabel('Model catalog (JSON)', { exact: true }).fill(JSON.stringify([entry]));
     await panel.getByLabel('API key (optional)', { exact: true }).fill(key ?? '');
     await panel.getByLabel('Tool limit', { exact: true }).fill(String(config.limits.maxToolCalls));
     await panel
@@ -90,7 +91,7 @@ export async function prepareRifty(input: Input): Promise<Prepared> {
         await panel.getByRole('button', { name: 'Send', exact: true }).click();
         await expect(panel).toHaveAttribute(
           'data-status',
-          /^(done|error|aborted|budget-exceeded)$/,
+          /^(done|error|aborted|budget-exceeded|context-exceeded)$/,
           { timeout: config.limits.runTimeoutMs + 120000 },
         );
         const trace = await page.evaluate(async () => {

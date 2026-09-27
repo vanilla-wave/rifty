@@ -8,6 +8,7 @@ import { loadConfig } from '../src/config.ts';
 import type { Lane } from '../src/lanes/types.ts';
 import { run } from '../src/runner.ts';
 import { loadTasks } from '../src/tasks.ts';
+import { catalogEndpoint } from './catalog-endpoint.ts';
 
 // Separate diagnostic programs; never part of the42 quality-task denominator.
 const lane = process.argv[2] as Lane;
@@ -43,7 +44,7 @@ const script: ScriptedReply[] = [
 ];
 const model = await agentModelServer(script);
 const config = await loadConfig();
-config.endpoint = { baseUrl: model.baseUrl, model: 'scripted' };
+config.endpoint = catalogEndpoint(model.baseUrl);
 config.runsPerTask = 1;
 config.limits = { maxToolCalls: 30, runTimeoutMs: 300000 };
 const original = (await loadTasks())[0]!;
