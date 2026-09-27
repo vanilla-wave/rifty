@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Make an embedder-supplied pi-ai model catalog with per-entry parameters and transports the only session form, select the model and switch it mid-session, and record the selected entry in the trace
 created: 2026-09-27
 why: The session builds one hardcoded Model (reasoning off, 8192 output tokens, 128k window) behind two exclusive transport forms and ADR-0436 §2 forbids a catalog or model selection; the user expects a list of models with parameters, a way to call each, and switching in a session when one fails — and chose to drop the legacy forms.
@@ -63,6 +63,46 @@ finding — goal slice 1 (I1, I2); leads every other slice.
 
 challenge: 2026-09-27 — inherits `epics/agent-weak-models/goal.md` §Challenge (10 problems, resolved there); reuse for unchanged promises at PICKUP.
 
+## Reference contract
+
+- pi-ai / pi-agent-core 0.85.1; native Models, createProvider, streamSimple
+  and Agent.prepareNextTurnWithContext. Executed oracle probes and RED output:
+  `reference/ai-agent-model-catalog-evidence.md`.
+
+## Acceptance
+
+1. Session admits only native Models + selected id; removed settings/streamFn
+   forms and invalid ids fail before host work. → I1
+2. Effective model limits, reasoning, sampling and transport match native pi;
+   trace config names those values and redacts built-in keys and catalog headers. → I1
+3. setModel applies on the next request, including an active tool turn;
+   provider errors preserve prior tool results for the next send; model events
+   make switches observable. → I2
+4. Playground, bench and installed-consumer fixtures migrate to the catalog;
+   their existing real host acceptance remains green. → I1
+
+## Parity cases
+
+1. Native pi streamSimple and rifty send the same selected model, output
+   limit, temperature, top_p and reasoning_effort. → I1
+2. Native pi active model selection retains prior user/tool messages at the
+   next request; rifty retains them across a provider failure and send. → I2
+
+## Fault matrix
+
+| axis × operation | honest outcome | artifact / fault target | trace |
+|---|---|---|---|
+| provider error × selected request | error, retained history, no replay | catalog.test.ts active-switch test | → I2 |
+| invalid id × admission | throw before host work | catalog.test.ts admission test | → I1 |
+| credential in provider error × export | redacted export, effective metadata | catalog.test.ts redaction test | → I1 |
+
+## Out of scope
+
+Images, catalog editor, retry/compaction and tool hygiene stay in their linked
+goal slices. Tool image results remain `agent.tool-image-result` ❌.
+
 ## Decisions
 
 - Inherits goal decisions (catalog, setModel timing, entry defaults, sampling, public API and ADRs, tier). Carrier questions live on the goal map §Open questions.
+
+- 2026-09-27 — ADR-0471 records DEC-2 independent catalog decision; preparation covers I1/I2 only, mechanisms wait for I12.
