@@ -14,7 +14,10 @@ code: [tools/agent-bench/src/config.ts, tools/agent-bench/src/report.ts, tools/a
 ## Context
 
 finding — goal slice 4 (I12); after slice 1, before slices 5–11 (goal
-§Decisions "bench lane order").
+§Decisions "bench lane order") and before the quality goal's
+`distribution/agent-eval-local-runner` (PR #341) restructures
+runner/config/report, so that restructuring carries the catalog endpoint and
+these columns (goal §Decisions "shared bench order").
 
 - Ours: `tools/agent-bench/src/config.ts:3-7,46` `endpoint = {baseUrl, model,
   envKey}`; `report.ts:14,25,69` per-run outcome / agentStatus / elapsedMs /

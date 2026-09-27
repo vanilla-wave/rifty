@@ -20,6 +20,9 @@ finding — goal slice 3 (I4); after slices 1–2.
   picker, attach or failure offer; the `/reload` chat command and the
   loaded-resources report already landed (ADR-0440, `chat-command.ts`) — no
   overlap.
+- Order: the kit's `distribution/agent-transcript-model` (PR #357) lands
+  first and the chat renders from its reducer; this slice adds the picker,
+  attach control and switch offer on top (user 2026-09-27 «6 - ок»).
 - After this slice: Settings edit catalog entries (the I1 fields; a new entry
   prefilled with today's values 128 000 / 8192 / thinking off; persisted like
   today's fields, keys memory-only as today); the chat shows the selected

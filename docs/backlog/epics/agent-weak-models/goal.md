@@ -253,3 +253,32 @@ Pass 4: 1 blocker → I6 no longer promises `Retry-After` handling (pi: fixed ex
 - rejected route: remaining budget in the system prompt — violates §Decisions "budget carrier" (cache prefix).
 - rejected route: transport-level automatic retries (`pi-ai` `maxRetries`) — violates I6 last clause and ADR-0424 §4.
 - rejected route: stricter-than-pi retry (never after partial text) — violates §Decisions "defaults" (pi parity) and I6; critic finding 3.
+- cross-goal reconciliation: 2026-09-27 — user (three-goal review with
+  `epics/no-coi-agent-host-kit`, PR #357, and
+  `epics/agent-code-quality-evaluation`, PR #341): «1 - a» the catalog +
+  `setModel` is the only model-selection mechanism for every consumer, the
+  kit included — its per-turn `settings` item is removed and its reference
+  host creates the session from a one-entry catalog; the item-1 ADR is the
+  only supersession of ADR-0436 §2/§3. «2 - a» the kit's text-only
+  message-content mode is a per-entry flag of this catalog
+  (`distribution/agent-text-only-content-transport`, after item 1), so `send`
+  with images to a flagged entry fails before any request like a text-only
+  `input` entry (I3); no session-level toggle. «3 - a» the 600 s default (I9)
+  stands; the kit's measure-first question narrows to the 16 KiB cap. «5 -
+  ок» three cold runs stay; a ±1-pass delta on 3 runs is marked as within
+  noise in the comparison table — I13's regression rule still applies (fix or
+  explicit user amendment). «6 - ок» the kit's transcript reducer
+  (`distribution/agent-transcript-model`) lands before items 3 and 7, whose
+  chat UI halves (picker, attach, switch offer, compaction marker) extend it.
+- shared bench order: 2026-09-27 — agent (user: «сделай так, чтобы разработка
+  была проще») — `tools/agent-bench` is shared with PR #341 and PR #357:
+  item 1 (catalog endpoint, lanes migrated) and item 4 (per-run metric
+  columns, `context-exceeded`, recorded baseline) land before the quality
+  goal's runner/report restructuring (`distribution/agent-eval-local-runner`),
+  which then carries them; item 12 ships the smallest `report --compare` over
+  two summary directories of one config and the quality goal's report owner
+  (`distribution/agent-eval-comparison-report`) absorbs it — no second
+  comparison design; the kit's no-COI lane swap
+  (`distribution/no-coi-agent-reference-host`) follows item 1's lane
+  migration. Cross-branch order is recorded in text, not `blocked_by` (the
+  backlog checker resolves links within one tree).

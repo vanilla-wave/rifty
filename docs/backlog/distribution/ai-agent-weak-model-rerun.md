@@ -22,7 +22,11 @@ finding — goal slice 12 (I13); last.
   lane: passes / runs, budget-exceeded, context-exceeded, median seconds,
   median tools, input/output tokens, retries, compactions, repeated-call
   notices, edit failures — for both runs and the delta; the new summary lands
-  under `reports/summaries/` with manual failure classes.
+  under `reports/summaries/` with manual failure classes. Smallest carrier:
+  two summary directories of one config; the quality goal's report owner
+  `distribution/agent-eval-comparison-report` (PR #341) absorbs it (goal
+  §Decisions "shared bench order"). A ±1-pass delta on 3 runs is marked as
+  within noise in the table (user 2026-09-27 «5 - ок»).
 - Criterion (goal §Decisions "re-run criterion"): no task with fewer passes
   than the baseline (3 runs each); a regression is a defect → `rifty-fix` on
   the responsible slice before CLOSE, or an explicit user amendment

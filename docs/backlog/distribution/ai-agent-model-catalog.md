@@ -50,6 +50,14 @@ finding — goal slice 1 (I1, I2); leads every other slice.
   handling of unset `max_tokens`/`temperature` (map fog) and the
   AgentHarness-vs-Agent carrier. Null case first: a one-entry catalog with
   today's values behaves as today's `settings` session.
+- Cross-goal (user 2026-09-27, three-goal review): the no-COI kit
+  (`epics/no-coi-agent-host-kit`, PR #357) uses this catalog too — its
+  per-turn `settings` item is removed («1 - a»), its reference host creates
+  the session from a one-entry catalog, and its text-only content mode is a
+  per-entry flag of this entry shape («2 - a»), no session-level toggle; the
+  ADR here is the only supersession of ADR-0436 §2/§3. This slice also
+  migrates the bench lanes, ahead of the kit's no-COI lane swap and the
+  quality goal's runner restructuring (goal §Decisions "shared bench order").
 
 ## Challenge
 

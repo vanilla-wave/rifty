@@ -1,6 +1,9 @@
 # Map — agent-weak-models
 
 Live plan: index, not store. Frontier = open children with `epic:` backlinks.
+Shared files with `epics/no-coi-agent-host-kit` (PR #357) and
+`epics/agent-code-quality-evaluation` (PR #341): order in goal §Decisions
+"cross-goal reconciliation" / "shared bench order".
 
 ## Items
 
@@ -8,7 +11,11 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
    pi-ai `Models` catalog with per-entry params and transports as the only
    session form (0.1.0 `settings`/`streamFn` removed), initial selection,
    `setModel` mid-session, trace `config` (I1, I2). ADR superseding ADR-0436
-   §2/§3. Leads: every other item reads the selected entry.
+   §2/§3. Leads: every other item reads the selected entry. Migrates the
+   playground and agent-bench lanes; the kit's no-COI lane swap
+   (`distribution/no-coi-agent-reference-host`, PR #357) and the quality
+   goal's runner restructuring (`distribution/agent-eval-local-runner`, PR
+   #341) follow it.
 2. `distribution/ai-agent-prompt-images` — **images** — `send(prompt,
    images?)` as pi `ImageContent` on image-capable entries; loud failure on
    text-only entries; `NotImplementedError` + compat ❌ for non-image binary
@@ -16,12 +23,16 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 3. `distribution/ai-agent-playground-model-catalog` — **playground** —
    Settings catalog editor, chat model picker, attach control (image → prompt,
    other file → project via the project files API + path in prompt), switch
-   offer after provider `error` (I4). After 1–2. The `context-exceeded` offer
-   and the compaction marker are item 7's UI half.
+   offer after provider `error` (I4). After 1–2 and the kit's transcript
+   reducer `distribution/agent-transcript-model` (PR #357), which the picker,
+   attach control and switch offer extend. The `context-exceeded` offer and
+   the compaction marker are item 7's UI half.
 4. `distribution/ai-agent-weak-model-baseline-lane` — **baseline** — bench
    `endpoint` as a catalog entry, report header + per-run metric columns,
    `context-exceeded` outcome, one recorded `gpt-6-luna` run of the existing
-   tasks (I12). After 1; before 5–11 (§Decisions "bench lane order").
+   tasks (I12). After 1; before 5–11 (§Decisions "bench lane order") and before
+   the quality goal's `distribution/agent-eval-local-runner` (PR #341)
+   restructures runner/config/report (§Decisions "shared bench order").
 5. `distribution/ai-agent-budget-visibility` — **budgets** — defaults 100 /
    600 s, `callsLeft`/`msLeft` in every rifty tool envelope (I9). After 4.
 6. `distribution/ai-agent-transient-request-retry` — **retry** — `retry`
@@ -31,7 +42,8 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
    option (default on), pi 0.85.1 compaction over the retained history, trace
    tokens and full usage totals, `context-exceeded`, plus the playground chat
    marker and the `context-exceeded` switch offer (I5, I4 second half). After
-   4; fault matrix.
+   4 and the kit's reducer `distribution/agent-transcript-model` (PR #357),
+   which the marker and offer extend; fault matrix.
 8. `distribution/ai-agent-edit-failure-diagnostics` — **edit-diagnostics** —
    locating failure text for `edit_file` match failures, exact matching kept,
    apply_patch and host-write semantics unchanged (I7). After 4.
@@ -45,7 +57,10 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
     profile id bump, `recipe:false` switch, ADR-0440 §4 note (I11). After 4.
 12. `distribution/ai-agent-weak-model-rerun` — **re-run** — same config,
     tasks and runs as item 4 after items 5–11 land; per-task comparison in the
-    report; no per-task pass regression (I13). Last.
+    report — the smallest `report --compare` over two summary directories,
+    absorbed later by `distribution/agent-eval-comparison-report` (PR #341);
+    a ±1-pass delta on 3 runs is marked as within noise; no per-task pass
+    regression (I13). Last.
 
 ## Open questions
 
@@ -103,3 +118,9 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
   question draft `distribution/ai-agent-context-file-unicode-tags` (the
   resources goal landed and closed on main `99fdf6c91`); user fork at its
   pickup.
+- A per-turn `settings` function as a second model-selection mechanism —
+  user 2026-09-27 («1 - a», three-goal review); the kit's item is removed,
+  every consumer uses the catalog + `setModel`.
+- The text-only message-content flag itself — the kit's
+  `distribution/agent-text-only-content-transport` (PR #357), a per-entry
+  flag of this catalog after item 1 (user «2 - a»).
