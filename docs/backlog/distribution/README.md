@@ -29,6 +29,19 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `landing-compare-page.md` | ready | webcontainers-alternative-search-slot | rifty.dev/compare — verifiable WebContainers-alternative table + link-checker |
 | `ai-sandbox-reference-demo.md` | draft | open-bolt-ai-sandbox-demo | open client-side AI sandbox (eval+install slice; live preview question remains) |
 | `landing-blog-surface.md` | ready | wasi-in-browser-showcase | rifty.dev/blog route + first WASI post |
+| `ai-agent-model-catalog.md` | draft | agent-weak-models | embedder-supplied pi-ai model catalog as the only session form (settings/streamFn removed), `setModel` mid-session, trace config; ADR superseding ADR-0436 §2/§3 |
+| `ai-agent-prompt-images.md` | draft | agent-weak-models | `send(prompt, images)` as pi ImageContent; NotImplementedError for other binary input |
+| `ai-agent-playground-model-catalog.md` | draft | agent-weak-models | playground catalog Settings, model picker, attach (image → prompt, file → project), switch offer after provider error |
+| `ai-agent-weak-model-baseline-lane.md` | draft | agent-weak-models | bench endpoint fields, per-run metric columns, `context-exceeded` outcome, recorded `gpt-6-luna` baseline |
+| `ai-agent-budget-visibility.md` | draft | agent-weak-models | default 600 s, `callsLeft`/`msLeft` in every rifty tool envelope |
+| `ai-agent-transient-request-retry.md` | draft | agent-weak-models | pi 0.85.1 agent-level retry of retryable assistant errors (incl. after partial text), never after a dispatched tool call; ADR-0424 §4 correction |
+| `ai-agent-context-compaction.md` | draft | agent-weak-models | pi 0.85.1 compaction over retained history, chat marker, `context-exceeded` |
+| `ai-agent-edit-failure-diagnostics.md` | draft | agent-weak-models | locating failure text for edit_file match failures, exact matching kept |
+| `ai-agent-repeated-call-guard.md` | draft | agent-weak-models | third identical call + result → visible steering message |
+| `ai-agent-verification-feed.md` | draft | agent-weak-models | Workbench diagnostics appended to mutation results |
+| `ai-agent-prompt-recipe.md` | draft | agent-weak-models | workflow paragraph in the prompt profile, id bump, `recipe:false` switch, ADR-0440 §4 note |
+| `ai-agent-weak-model-rerun.md` | draft | agent-weak-models | same config/tasks re-run after the mechanism slices; per-task comparison, no pass regression |
+| `ai-agent-context-file-unicode-tags.md` | draft | — | question: strip invisible Unicode tag chars from loaded AGENTS.md/SKILL.md (pi byte parity vs Claude Code strip); user fork at pickup |
 
 ## Dependency map
 
