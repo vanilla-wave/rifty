@@ -80,14 +80,47 @@ identical to the first table.
 
 [Run 36356372850](https://github.com/vanilla-wave/rifty/actions/runs/36356372850),
 SHA `850eeee2640aae0793c5c629994acd20821cbf95`, Ubuntu, Playwright 1.60.0.
-Each artifact includes `browser-build.json`, actual test reports and retained
-failure traces. UTC dates below; local Belgrade date 2026-09-28.
+Workflow completed `success` with record-only `continue-on-error`; per-lane
+test outcomes are below. Each artifact includes `browser-build.json`, actual
+test reports and retained failure traces. UTC dates below; local Belgrade date 2026-09-28.
 
 | Lane | Engine build | Start (UTC) | Executed result | Artifact |
 |---|---|---|---|---|
 | non-COI | Chromium 148.0.7778.96 | 2026-09-27 22:47:55 | 110 passed; 6m35s | `browser-evidence-no-coi-chromium` (10943742819) |
 | non-COI | WebKit 26.4 (Linux) | 2026-09-27 22:47:52 | 40 passed / 70 failed; 7m01s | `browser-evidence-no-coi-webkit` (10944680481) |
 | non-COI | Firefox 150.0.2 | 2026-09-27 22:47:54 | 109 passed / 1 failed; 9m50s | `browser-evidence-no-coi-firefox` (10944596693) |
+| COI | Chromium 148.0.7778.96 | 2026-09-27 22:47:39 | 197 passed / 4 declared skips; 26m23s | `browser-evidence-coi-chromium` (10944791158) |
+| COI | WebKit 26.4 (Linux) | 2026-09-27 22:47:20 | 12 failed / 185 not run / 4 declared skips; 45m56s | `browser-evidence-coi-webkit` (10944892278) |
+| COI | Firefox 150.0.2 | 2026-09-27 22:48:03 | 12 failed / 185 not run / 4 declared skips; 47m07s | `browser-evidence-coi-firefox` (10944209450) |
+
+### COI Firefox classification
+
+12 `ai-mode` tests failed; maxFailures stopped 185; four existing declared
+skips. All **36** retained attempt contexts remain at `Booting rifty…`;
+project-index readiness never appears. One retained retry trace
+(`ai-mode-provider-error-and-7b32d-tch-use-the-correct-session-firefox-retry1`)
+contains 436 HTTP200 responses and the Vite WebSocket101, only Vite connect
+messages, no page error. Class: engine-behavior, boot-stall cause unisolated.
+Unlike WebKit this is not an observed COI capability refusal. The separate
+live COI build oracle in the non-COI Firefox suite passes. Draft:
+`docs/backlog/playground/firefox-coi-playground-boot-stall.md`.
+
+### COI Chromium coverage
+
+No failed or flaky tests. Four pre-existing declared skips: retired
+`m10-dev-hmr`, opt-in `m10-hmr`, opt-in `manual-vite-install`, and the
+`terminal-mouse-reporting` foreground-stdin gap. These do not prove the
+skipped behavior; the count stays explicit.
+
+### COI WebKit classification
+
+12 `ai-mode` tests failed; maxFailures stopped the remaining 185; four
+pre-existing skips remain declared. All **36** retained attempt contexts
+show the same real admission alert: `Cross-origin isolation is not active`.
+The project-index launcher waits fail downstream. Class: capability-missing
+under D-001 `COEP: credentialless`, consistent with the native posture probe.
+No product fix; the policy-widening question remains
+`docs/backlog/distribution/coi-on-webkit-require-corp.md`.
 
 ### Firefox CI classification
 
@@ -97,8 +130,10 @@ bin ownership error. Its 20 ms rival is armed before the eval roundtrip and
 `startBin` admission. The returned error names the existing pre-bound admission
 branch; same timing fault as the repaired sibling fixtures in
 `docs/backlog/distribution/reference/agent-bench-ci-resident-evidence.md`.
-Local full-lane execution passed this unchanged case. Draft:
-`docs/backlog/playground/no-coi-delayed-rival-fixture-ordering.md`.
+Local full-lane execution passed this unchanged case. The later gating
+Chromium run reproduced the same ordering fault; repair proof:
+`docs/backlog/playground/reference/pr362-resident-rival-ordering-evidence.md`.
+This named-run row remains the historical result before that fixture repair.
 
 ### Linux WebKit classification
 

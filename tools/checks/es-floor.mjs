@@ -54,7 +54,37 @@ const CONSTRUCTORS = new Set([
   'AsyncIterator',
   'DisposableStack',
   'AsyncDisposableStack',
+  'Float16Array',
 ]);
+
+// Ambiguous names (grow/resize/transfer/map) need an explicit intrinsic receiver.
+const PROTOTYPE_BUILTINS = new Set([
+  'ArrayBuffer.prototype.resize',
+  'ArrayBuffer.prototype.transfer',
+  'ArrayBuffer.prototype.transferToFixedLength',
+  'ArrayBuffer.prototype.resizable',
+  'ArrayBuffer.prototype.maxByteLength',
+  'ArrayBuffer.prototype.detached',
+  'SharedArrayBuffer.prototype.grow',
+  'SharedArrayBuffer.prototype.growable',
+  'SharedArrayBuffer.prototype.maxByteLength',
+  'DataView.prototype.getFloat16',
+  'DataView.prototype.setFloat16',
+]);
+
+function intrinsicName(member) {
+  const name = memberName(member)?.replace(/^globalThis\./, '');
+  if (
+    STATIC_BUILTINS.has(name) ||
+    PROTOTYPE_BUILTINS.has(name) ||
+    CONSTRUCTORS.has(name?.split('.')[0])
+  )
+    return name;
+  if (member.object?.type !== 'NewExpression') return null;
+  const constructor = memberName(member.object.callee)?.replace(/^globalThis\./, '');
+  const prototype = `${constructor}.prototype.${propertyName(member)}`;
+  return PROTOTYPE_BUILTINS.has(prototype) ? prototype : null;
+}
 
 // Exact own-method calls in the currently shipped Monaco version; maps bind minified receivers.
 const MONACO_WITH_CALLS = {
@@ -88,13 +118,13 @@ function memberName(node) {
   const property = propertyName(node);
   return object && property ? `${object}.${property}` : null;
 }
-function walk(node, visit) {
+function walk(node, visit, parent = null, grandparent = null) {
   if (!node || typeof node !== 'object') return;
-  if (typeof node.type === 'string') visit(node);
+  if (typeof node.type === 'string') visit(node, parent, grandparent);
   for (const value of Object.values(node)) {
     if (Array.isArray(value)) {
-      for (const child of value) walk(child, visit);
-    } else if (value && typeof value === 'object') walk(value, visit);
+      for (const child of value) walk(child, visit, node, parent);
+    } else if (value && typeof value === 'object') walk(value, visit, node, parent);
   }
 }
 
@@ -132,21 +162,85 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
     const line = sourceContentFor(sourceMap, origin.source)?.split('\n')[origin.line - 1];
     return calls.some((call) => line?.slice(origin.column).startsWith(call));
   }
-  walk(tree, (node) => {
-    if (node.type === 'MemberExpression') {
-      const member = memberName(node)?.replace(/^globalThis\./, '');
-      if (STATIC_BUILTINS.has(member)) report(node, member);
+  function inspectMethod(member, call) {
+    const method = propertyName(member);
+    // Monaco's bracket query returns CallbackIterable, whose own findLast predates ES2023.
+    const bracketIterable =
+      method === 'findLast' &&
+      member.object?.type === 'CallExpression' &&
+      member.object.callee.type === 'MemberExpression' &&
+      propertyName(member.object.callee) === 'getBracketPairsInRange';
+    if (METHODS.has(method) && !bracketIterable) report(member, method);
+    if (method !== 'with') return;
+    if (
+      member.object?.type === 'MemberExpression' &&
+      propertyName(member.object) === 'ChangeTracker'
+    )
+      return;
+    const argument = call?.arguments[0];
+    const ownChange =
+      member.object?.type !== 'ArrayExpression' &&
+      call?.arguments.length === 1 &&
+      argument?.type === 'ObjectExpression' &&
+      argument.properties.length > 0 &&
+      argument.properties.every(
+        (property) =>
+          property.type === 'Property' &&
+          !property.computed &&
+          OWN_WITH_FIELDS.has(property.key.name ?? property.key.value),
+      );
+    if (!ownChange && !monacoOwnWith(member)) report(member, 'with');
+  }
+  function inspectPattern(pattern, receiver) {
+    for (const property of pattern.properties) {
+      if (property.type !== 'Property') continue;
+      const member = {
+        type: 'MemberExpression',
+        object: receiver,
+        property: property.key,
+        computed: property.computed,
+        start: property.start,
+      };
+      const intrinsic = intrinsicName(member);
+      if (intrinsic) report(property, intrinsic);
+      inspectMethod(member, null);
+      if (property.value.type === 'ObjectPattern') inspectPattern(property.value, member);
     }
-    if (node.type === 'VariableDeclarator' && node.id.type === 'ObjectPattern') {
-      const object = memberName(node.init)?.replace(/^globalThis\./, '');
-      for (const property of node.id.properties) {
-        const name = `${object}.${property.key?.name ?? property.key?.value}`;
-        if (STATIC_BUILTINS.has(name)) report(property, name);
-      }
+  }
+  walk(tree, (node, parent, grandparent) => {
+    if (node.type === 'MemberExpression') {
+      const intrinsic = intrinsicName(node);
+      if (intrinsic) report(node, intrinsic);
+      // esbuild's import attributes are data; Monaco URI predicates only inspect availability.
+      const fields =
+        grandparent?.type === 'ObjectExpression'
+          ? grandparent.properties.map((property) => property.key?.name ?? property.key?.value)
+          : [];
+      const withData =
+        propertyName(node) === 'with' &&
+        ((parent?.type === 'AssignmentExpression' && parent.left === node) ||
+          (parent?.type === 'UnaryExpression' && parent.operator === 'typeof') ||
+          (parent?.type === 'Property' &&
+            (parent.key.name ?? parent.key.value) === 'with' &&
+            ['path', 'namespace', 'pluginData'].every((key) => fields.includes(key))));
+      // Reject the reference itself, including extraction, .call/.apply and .bind.
+      if (!withData)
+        inspectMethod(
+          node,
+          parent?.type === 'CallExpression' && parent.callee === node ? parent : null,
+        );
+    }
+    if (node.type === 'ObjectPattern') {
+      const receiver =
+        parent?.type === 'VariableDeclarator'
+          ? parent.init
+          : parent?.type === 'AssignmentExpression'
+            ? parent.right
+            : null;
+      if (parent?.type !== 'Property') inspectPattern(node, receiver);
     }
     if (node.type !== 'CallExpression' && node.type !== 'NewExpression') return;
-    const callee = node.callee;
-    const name = memberName(callee);
+    const name = memberName(node.callee)?.replace(/^globalThis\./, '');
     if (name && Object.hasOwn(GUARDED_BUILTINS, name)) return;
     if (CONSTRUCTORS.has(name)) {
       report(node, name);
@@ -157,38 +251,8 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
       node.arguments[1]?.type === 'Literal' &&
       typeof node.arguments[1].value === 'string' &&
       node.arguments[1].value.includes('v')
-    ) {
-      report(node, 'RegExp v');
-      return;
-    }
-    if (callee.type !== 'MemberExpression') return;
-    const method = propertyName(callee);
-    // Monaco's bracket query returns CallbackIterable, whose own findLast predates ES2023.
-    const bracketIterable =
-      method === 'findLast' &&
-      callee.object.type === 'CallExpression' &&
-      callee.object.callee.type === 'MemberExpression' &&
-      propertyName(callee.object.callee) === 'getBracketPairsInRange';
-    if (METHODS.has(method) && !bracketIterable) report(node, method);
-    if (method !== 'with') return;
-    if (
-      callee.object.type === 'MemberExpression' &&
-      propertyName(callee.object) === 'ChangeTracker'
     )
-      return;
-    const argument = node.arguments[0];
-    const ownChange =
-      callee.object.type !== 'ArrayExpression' &&
-      node.arguments.length === 1 &&
-      argument?.type === 'ObjectExpression' &&
-      argument.properties.length > 0 &&
-      argument.properties.every(
-        (property) =>
-          property.type === 'Property' &&
-          !property.computed &&
-          OWN_WITH_FIELDS.has(property.key.name ?? property.key.value),
-      );
-    if (!ownChange && !monacoOwnWith(node)) report(node, 'with');
+      report(node, 'RegExp v');
   });
   return errors;
 }

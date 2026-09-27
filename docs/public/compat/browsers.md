@@ -66,6 +66,21 @@ Named manual [CI run 36356372850](https://github.com/vanilla-wave/rifty/actions/
 | Firefox150.0.2 | ✅150 behavior · 109/110 | delayed-rival test expects a race after admission but it fires before admission under CI; recorded test-infra; local case passed |
 | WebKit26.4 (Linux) | ⚠26.4 · 40/110 | 66 missing-OPFS/downstream fixture failures, 1 credentialless COI assertion, 1 absent route barrier, 2 replacement/restart ENOENT findings |
 
+Same named run, COI suite:
+
+| Engine/build | Result | Classification |
+|---|---|---|
+| Chromium148.0.7778.96 | ✅148 · 197 passed, 4 existing skips | skips: retired dev-HMR, opt-in HMR/manual-install, existing mouse-reporting gap |
+| WebKit26.4 Linux | ❌ COI · 0 passed, 12 failed, 185 not run after failure limit, 4 declared skips | all 36 attempts: host reports cross-origin isolation inactive; `credentialless` capability-missing, downstream launcher waits |
+| Firefox150.0.2 | ⚠150 · 0 passed, 12 failed, 185 not run after failure limit, 4 declared skips | all 36 attempts remain at `Booting rifty`; engine boot-stall, root cause unisolated; not classified as missing API |
+
+The delayed-rival fixture was subsequently repaired with an entry-admission marker;
+its expected ownership assertion remains. Exact CI failure reproduced under a1s RPC
+delay, repaired scenario and sibling cases passed in Chromium/Firefox. Historical
+109/110 above is unchanged. [Repair proof](../../backlog/playground/reference/pr362-resident-rival-ordering-evidence.md).
+Firefox COI [boot-stall finding](../../backlog/playground/firefox-coi-playground-boot-stall.md)
+retains the unknown cause; no product repair or COEP change is included.
+
 Linux WebKit lacks `navigator.storage`/`FileSystemFileHandle` in this build even in
 a persistent context. macOS26.4 native OPFS and exact-byte reload passed; platforms
 are not interchangeable. macOS support-probe handle transfer separately throws
@@ -90,9 +105,16 @@ harness failure stays `❓`, never a product `❌`. Firefox's pinned available
 | Chromium 108.0.5359.29 | ❌ 2026-09-28: SDK import throws on main-thread sync WASM >4KB | no boot/storage steps reached |
 | Firefox 114.0b3 beta (UA114.0) | ❌ 2026-09-28: install/build/flush pass, saved source ENOENT after reload | OPFS selected both boots; namespace unchanged; stable114 still uncharacterized |
 | WebKit 26.0, macOS26.6 | ❓ 2026-09-28: pinned runner fails `Playwright.setDownloadBehavior`: no default context | harness cannot launch; not a product failure or Safari result |
-| Safari 26 macOS, real device | ❓ 2026-09-28: awaiting user hardware run | estimate + steps absent; memory/eviction unobserved |
+| Safari26.6.2 macOS, real device | ❓ 2026-09-28: WebDriver refuses session (Remote Automation disabled); manual run still required | estimate + steps absent; memory/eviction unobserved |
 | Safari iOS, real device | ❓ 2026-09-28: awaiting user hardware run | estimate + steps absent; total-memory API unavailable on non-COI; revisit required |
-| Yandex, real device | ❓ 2026-09-28: awaiting user hardware run | exact UA/build, estimate + steps absent; memory/eviction unobserved |
+| Yandex26.8.0.0 / Chromium150, macOSarm64 | ✅ 2026-09-28: actual installed browser, isolated headless profile; all protocol steps passed | quota10,767,150,993 B; usage29,732,753 B; memory/eviction unknown |
+
+[Native Yandex report](../../backlog/distribution/reference/browser-manual-yandex-native.json),
+clean a57da96b8: `node tools/floor-lane/run.mjs --current --executable-path
+/Applications/Yandex.app/Contents/MacOS/Yandex --url http://127.0.0.1:5611/browser-support.html`.
+This measures that desktop build/profile, not all Yandex versions or mobile devices.
+[Safari driver response](../../backlog/distribution/reference/browser-manual-safari-driver-unavailable.json)
+is a harness limitation, not a Safari failure; settings were not changed.
 
 Use the [one-URL protocol](../../../tools/floor-lane/README.md). One report includes
 support, boot, install, build, reload, exact persisted bytes, reopen and rebuild.

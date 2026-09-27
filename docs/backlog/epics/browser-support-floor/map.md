@@ -11,7 +11,7 @@
 
 ## Open questions
 
-- Real Safari26/macOS, iOS Safari and Yandex result blocks — owner: user — run `tools/floor-lane/README.md` protocol; requested in-session 2026-09-28. I8 remains required; no engine substitute.
+- Real Safari26/macOS and iOS Safari result blocks — owner: user — run `tools/floor-lane/README.md` protocol; requested in-session 2026-09-28. I8 remains required; no engine substitute.
 
 ## Out of scope
 

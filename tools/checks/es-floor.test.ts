@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { transformSync } from 'esbuild';
 import { afterEach, describe, expect, it } from 'vitest';
 import { bundleViolations, checkBundleRoots } from './es-floor.mjs';
 
@@ -38,6 +39,98 @@ describe('shipped ES2022 floor', () => {
     expect(violations(source).join('\n')).toContain(builtin);
   });
 
+  it.each([
+    ['Array.prototype.toSorted.call(items, compare)', 'toSorted'],
+    ['Array.prototype["toSorted"].apply(items, [compare])', 'toSorted'],
+    ['const sort = Array.prototype.toSorted; sort.call(items)', 'toSorted'],
+    ['const sort = items.toSorted; sort.call(items)', 'toSorted'],
+    ['const { toSorted: sort } = Array.prototype; sort.call(items)', 'toSorted'],
+    ['let sort; ({ toSorted: sort } = Array.prototype); sort.call(items)', 'toSorted'],
+    ['const { prototype: { toSorted: sort } } = Array; sort.call(items)', 'toSorted'],
+    ['Array.prototype.toReversed.call(items)', 'toReversed'],
+    ['const reverse = items.toReversed.bind(items); reverse()', 'toReversed'],
+    ['const { toSpliced } = items; toSpliced.call(items, 1)', 'toSpliced'],
+    ['Array.prototype.findLast.call(items, predicate)', 'findLast'],
+    ['const { findLastIndex: last } = items; last.call(items, predicate)', 'findLastIndex'],
+    ['const replace = Uint8Array.prototype.with; replace.call(items, 0, 1)', 'with'],
+    ['const { with: replace } = items; replace.call(items, 0, 1)', 'with'],
+    ['const { withResolvers: make } = Promise; make()', 'Promise.withResolvers'],
+    ['const { fromAsync: make } = Array; make(source)', 'Array.fromAsync'],
+  ])('rejects indirect builtin access: %s', (source, builtin) => {
+    expect(violations(source).join('\n')).toContain(builtin);
+  });
+
+  it.each([
+    ['Iterator.from(items).toArray()', 'Iterator.from'],
+    ['const from = Iterator.from; from(items)', 'Iterator.from'],
+    ['const { from } = Iterator; from(items)', 'Iterator.from'],
+    ['globalThis.Iterator.from(items)', 'Iterator.from'],
+    ['Iterator.prototype.map.call(iterator, f)', 'Iterator.prototype.map'],
+    ['new ArrayBuffer(8).transfer()', 'ArrayBuffer.prototype.transfer'],
+    ['ArrayBuffer.prototype.transfer.call(buffer)', 'ArrayBuffer.prototype.transfer'],
+    [
+      'const transfer = ArrayBuffer.prototype.transfer; transfer.call(buffer)',
+      'ArrayBuffer.prototype.transfer',
+    ],
+    [
+      'const { transfer } = ArrayBuffer.prototype; transfer.call(buffer)',
+      'ArrayBuffer.prototype.transfer',
+    ],
+    ['new ArrayBuffer(8, { maxByteLength: 16 }).resize(16)', 'ArrayBuffer.prototype.resize'],
+    ['ArrayBuffer.prototype.resize.call(buffer, 16)', 'ArrayBuffer.prototype.resize'],
+    [
+      'new SharedArrayBuffer(8, { maxByteLength: 16 }).grow(16)',
+      'SharedArrayBuffer.prototype.grow',
+    ],
+    ['SharedArrayBuffer.prototype.grow.call(buffer, 16)', 'SharedArrayBuffer.prototype.grow'],
+    [
+      'const { prototype: { transfer } } = ArrayBuffer; transfer.call(buffer)',
+      'ArrayBuffer.prototype.transfer',
+    ],
+    [
+      'const { prototype: { getFloat16 } } = DataView; getFloat16.call(view, 0)',
+      'DataView.prototype.getFloat16',
+    ],
+    ['const { Object: { groupBy } } = globalThis; groupBy(items, key)', 'Object.groupBy'],
+    ['new Float16Array(4)', 'Float16Array'],
+    ['Float16Array.from(values)', 'Float16Array.from'],
+    ['DataView.prototype.getFloat16.call(view, 0)', 'DataView.prototype.getFloat16'],
+    [
+      'const get = DataView.prototype.getFloat16; get.call(view, 0)',
+      'DataView.prototype.getFloat16',
+    ],
+    [
+      'const { setFloat16 } = DataView.prototype; setFloat16.call(view, 0, 1)',
+      'DataView.prototype.setFloat16',
+    ],
+    ['new DataView(buffer).setFloat16(0, 1)', 'DataView.prototype.setFloat16'],
+  ])('rejects post-floor intrinsic: %s', (source, builtin) => {
+    expect(violations(source).join('\n')).toContain(builtin);
+  });
+
+  it('preserves pre-floor Array, WebAssembly memory and own iterator methods', () => {
+    expect(
+      violations(`
+      Array.from(items).map(f);
+      new Uint16Array(4).map(f);
+      new WebAssembly.Memory({ initial: 1 }).grow(1);
+      memory.grow(1); terminal.resize(80, 24); port.transfer(value);
+      iterator.map(f); iterator.from(items);
+    `),
+    ).toEqual([]);
+  });
+
+  it('rejects the real emitted ES2022 prototype-call regression', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'rifty-es-floor-'));
+    scratch.push(directory);
+    const emitted = transformSync(
+      'const files=[{path:"/b"},{path:"/a"}]; globalThis.result=Array.prototype.toSorted.call(files, (a,b)=>a.path.localeCompare(b.path));',
+      { target: 'es2022', minify: true },
+    ).code;
+    writeFileSync(join(directory, 'worker.js'), emitted);
+    expect(checkBundleRoots([directory]).errors.join('\n')).toContain('toSorted');
+  });
+
   it.each(['/x/v', 'using resource = acquire();', 'import x from "x" with { type: "json" };'])(
     'rejects post-ES2022 syntax: %s',
     (source) => {
@@ -57,6 +150,9 @@ describe('shipped ES2022 floor', () => {
       
       this.getBracketPairsInRange(range).findLast(predicate);
       const copy = [...items].sort(compare); copy.at(-1);
+      request.with = importAttributes;
+      typeof uri.with === 'function';
+      callback({ path: request.path, namespace: request.namespace, pluginData, with: request.with });
     `),
     ).toEqual([]);
   });

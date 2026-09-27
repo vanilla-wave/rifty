@@ -37,3 +37,23 @@ Validation after the single pin change: `pnpm test:run tools/checks/esbuild-lega
 First full `pnpm pr:check`: lint JSON formatting, exact compiler fingerprint and CI Node-oracle job-name test failed; test failure reproduced in one isolated rerun (0 Vitest timeouts). Formatting fixed; fingerprint proof above; restored existing workflow job ID `e2e`, unchanged `ci-change-scope.test.ts` passes 5/5. No correctness criterion weakened. Final complete gate rerun follows.
 
 - `pnpm test:packed-toolchain-surface`: PASS on ef446585d product tree — 15 first-party +72 external tarballs, strict TypeScript + generic SDK/Worker graphs; includes real-browser compiler loading, VM/SDK/installed toolchain and agent scenarios. Output: `Packed toolchain surface passed`.
+
+## Final review F1 — method references
+
+Independent review reproduced `Array.prototype.toSorted.call(files, comparator)` after real esbuild ES2022/minify: old guard returned `{files: 1, errors: []}`; Chromium 108.0.5359.29 threw `TypeError: Cannot read properties of undefined (reading 'call')`. Fault: checker classified the outer `call`, never the forbidden member reference.
+
+RED: 15 newly executed failures (45 total tests): prototype `.call`/`.apply`, method extraction, `.bind`, renamed/declaration/assignment/nested destructuring, same-list sibling methods, and the real minified emitted-bundle fixture. `/tmp/pr362-es-floor-f1-red.log` preserves the run.
+
+Fix: classify forbidden method references themselves and ObjectPattern reads, regardless of the later call form; preserve the existing named own-method exceptions. `.with` writes, availability-only `typeof`, and esbuild import-attribute record copies (`path` + `namespace` + `pluginData` + `with`) are data, not a builtin invocation. Unknown callable `.with` references remain rejected. No type inference or new dependencies.
+
+GREEN: `pnpm test:run tools/checks/es-floor.test.ts tools/checks/pr-check.test.ts` 52/52; `pnpm check:es-floor` 329 real emitted bundles PASS; scoped Biome PASS. The reviewer's unchanged emitted mutant now reports `worker.js:1:53: post-ES2022 builtin toSorted`. No source bundles rebuilt or product files changed for this tooling repair.
+
+## Intrinsic catalog follow-up
+
+The review's `Iterator.from(items)` and `new ArrayBuffer(8).transfer()` probes also passed the original catalog. Nineteen new executed REDs precede the catalog fix (`/tmp/pr362-es-floor-intrinsics-red.log`). The same member-reference path now covers constructor-qualified members of Iterator/AsyncIterator, DisposableStack/AsyncDisposableStack and Float16Array; explicit ArrayBuffer prototype resize/transfer/transferToFixedLength and resizable/maxByteLength/detached accessors; SharedArrayBuffer grow/growable/maxByteLength; DataView getFloat16/setFloat16. Prototype references, method extraction/destructuring, `globalThis` qualification and immediate `new` receivers share one lookup.
+
+Boundary: a finite AST catalog, not dynamic type inference. Ambiguous arbitrary `value.grow`, `value.resize`, `value.transfer` or `value.map` cannot establish an intrinsic receiver; WebAssembly.Memory.grow, PTY resize and own methods remain valid. Computed dynamic property names, reflection and opaque receivers are not statically classified. Named explicit intrinsic uses cannot hide behind `.call`, `.apply`, `.bind`, method aliases or destructuring. Catalog updates accompany newly introduced intrinsic families.
+
+Nested prototype/globalThis destructuring added three further REDs; recursive ObjectPattern traversal preserves the explicit receiver path.
+
+GREEN: `pnpm test:run tools/checks/es-floor.test.ts tools/checks/pr-check.test.ts` 75/75 (68 guard + 7 wiring), scoped Biome PASS, `pnpm check:es-floor` 329 actual bundles PASS. Product bundles unchanged; no build, packed test or browser run repeated.

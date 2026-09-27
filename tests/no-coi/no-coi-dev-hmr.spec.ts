@@ -520,7 +520,16 @@ http.createServer((_req, res) => res.end('aux')).listen(5194, '127.0.0.1', () =>
       }),
       '/port-proof/node_modules/plain-dev/server.cjs': `const http = require('node:http');
 const selected = http.createServer((_req, res) => res.end('selected'));
-setTimeout(() => selected.listen(5196, '127.0.0.1'), 100);`,
+const fs = require('node:fs');
+fs.writeFileSync('/port-proof/selected-entered-5196', 'ready');
+function afterRivalBound() {
+  if (!fs.existsSync('/port-proof/rival-bound-5196')) {
+    setTimeout(afterRivalBound, 5);
+    return;
+  }
+  selected.listen(5196, '127.0.0.1');
+}
+afterRivalBound();`,
     });
     const rival = await page.evaluate(async () => {
       const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
@@ -528,9 +537,21 @@ setTimeout(() => selected.listen(5196, '127.0.0.1'), 100);`,
       sandbox.runtime.on((event) => {
         if (event.type === 'exit') events.push(event);
       });
-      await sandbox.runtime.eval(`setTimeout(() => {
-        require('node:http').createServer((_req, res) => res.end('rival')).listen(5196, '127.0.0.1');
-      }, 20).unref(); 'scheduled'`);
+      const scheduled = await sandbox.runtime.eval(`const http = require('node:http');
+const rival = http.createServer((_req, res) => res.end('rival'));
+const fs = require('node:fs');
+function afterSelectedEntry() {
+  if (!fs.existsSync('/port-proof/selected-entered-5196')) {
+    setTimeout(afterSelectedEntry, 5).unref();
+    return;
+  }
+  setTimeout(() => rival.listen(5196, '127.0.0.1', () => {
+    fs.writeFileSync('/port-proof/rival-bound-5196', 'ready');
+  }), 20).unref();
+}
+afterSelectedEntry();
+'scheduled';`);
+      if (!scheduled.ok) throw new Error(scheduled.error.message);
       let failure: unknown;
       try {
         await sandbox.toolchain.startBin({
