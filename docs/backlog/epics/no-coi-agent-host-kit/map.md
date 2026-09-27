@@ -23,16 +23,17 @@ except 6 after 5 (same transport file); 7 after 1–6 and closes the goal.
 7. `distribution/no-coi-agent-reference-host` — **reference-host** — I8 and
    scenario 1–8; the packed lane's Vite consumer refactored into a
    connections-only `host.ts`, SDK README links it, packed-consumer lane runs
-   it. After 1–6; closes the goal. Scope of the bench relation waits on the
-   open user question below.
+   it, and `tools/agent-bench`'s no-COI lane boots the same module (user:
+   measure what we ship). After 1–6; closes the goal.
 
 ## Open questions
 
-- Must rifty's benchmark run the reference host's configuration (read-only
-  shell, per-turn settings, text-only content) rather than only share entry
-  points? — owner: user — asked 2026-09-27 (goal Decisions, critic-2 P1);
-  answer (a) adds "bench lane boots the reference host module" to item 7,
-  answer (b) records an explicit scope reduction; goal stays draft until then.
+- Fidelity audit of the no-COI + agent path (user 2026-09-27: «Отправь агента
+  проверить сценарий "nonCOI + agent" на fidelity») — owner: agent — running;
+  each finding is classified ceiling / policy-default / invented-limit /
+  silent-divergence; policy-defaults and silent divergences that touch the kit
+  scenario re-chart this map (new child or Out-of-scope loud throw) before the
+  goal flips ready.
 - Error identifier form: exported classes (need serialize/re-attach across the
   Worker hop, `errors.ts:217-277` precedent; fail under duplicated package
   copies) vs exported name constants + `isX(error)` predicates — owner: agent —

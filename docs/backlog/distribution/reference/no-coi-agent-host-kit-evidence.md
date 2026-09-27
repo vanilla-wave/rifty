@@ -258,3 +258,15 @@ Verified by the driver 2026-09-27: `workbench-packed-consumer.mjs:193`
 (`provePackedAgent`); `host.ts:170` default startup timeout, `:433` handshake
 timeout message; `dep-snapshot-application.ts:33-46` payload files;
 `decisions.md` DEC-2 wording; ROADMAP:114.
+
+## User answers (2026-09-27, later)
+
+- Critic-2 P1: «Ответ на вопрос - да. Проверям качество на том, что отдаем».
+- On "shell read-only, the agent cannot run `npm run build` to self-verify":
+  «вот это вообще не ок. Опять откуда-то ограничения взялись. Отправь агента
+  проверить сценарий "nonCOI + agent" на fidelity».
+- On "сообщения сплющены в текст": «не понял что это значит» — explained in
+  session: OpenAI chat `content` may be a string or an array of typed parts;
+  Pi sends the array; some OpenAI-compatible endpoints accept only the string,
+  so the parts are joined into one string (wire format only, text-only
+  conversations lose nothing).

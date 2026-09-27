@@ -39,10 +39,12 @@ download helper, one promise chain). The existing proof drivers keep
 asserting rifty behaviour over that host. `packages/rifty/README.md` links it
 as the embedding recipe. Closes the goal.
 
-Open user question (goal Decisions, critic-2 P1): whether
-`tools/agent-bench`'s no-COI lane must boot this host's composition module so
-the measured configuration is the kit's reference configuration; answer (a)
-adds that wiring here.
+User decision 2026-09-27 (goal Decisions): `tools/agent-bench`'s no-COI
+lane boots this host's composition module, so the benchmark measures the
+kit's reference configuration — unrestricted root (the agent runs `npm run
+build`/`node` and writes files as on a developer machine), session defaults;
+per-capability policy and text-only content are opt-in toggles of the same
+module.
 
 ## Out of scope
 

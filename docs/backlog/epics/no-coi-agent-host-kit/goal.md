@@ -51,10 +51,12 @@ Source: issue #345 and its triage; evidence
    `force`. An apply onto non-empty payload targets (`package.json`,
    `package-lock.json`, `node_modules`) without `force` settles as the typed
    snapshot-conflict outcome, never a silent overwrite.
-5. The user pastes baseUrl / model / key. The app creates one agent host with
-   distinct policy values per capability (shell read-only, writes only through
-   the file tools) and one session over `settings` + `fetch`. Prompt: "add a
-   /health route". The chat renders from the exported transcript reducer
+5. The user pastes baseUrl / model / key. The app creates one agent host over
+   the project root with no restrictions beyond it — the agent reads and
+   writes files and runs the project's own commands (`npm run build`, `node`)
+   as on a developer machine; per-capability policy values stay an opt-in for
+   hosts that want them (I4), never the reference default — and one session
+   over `settings` + `fetch`. Prompt: "add a /health route". The chat renders from the exported transcript reducer
    (user / assistant / tool items, tool state running → success | error |
    cancelled). The user switches model before the next turn; history is kept.
    The endpoint accepts only string `content`; the session's text-only content
@@ -116,8 +118,9 @@ Source: issue #345 and its triage; evidence
    separate progress callback.
 4. I4. `createSandboxAgentHost` accepts distinct `readonlyPaths` /
    `allowedCommands` values for the file tools and for the shell in one host
-   (shell read-only while file tools may write); enforcement stays in the SDK
-   project policy, no second policy engine.
+   (e.g. a shell that may not write while file tools may) as an opt-in;
+   unset = unrestricted, which is what the reference host and the benchmark
+   run; enforcement stays in the SDK project policy, no second policy engine.
 5. I5. A session created over OpenAI-compatible `settings` resolves endpoint
    and model before each model turn when the consumer supplies them as a
    function, keeping the session history; ADR-0436 D2's "no model-selection
@@ -136,8 +139,10 @@ Source: issue #345 and its triage; evidence
    scenario steps 2–7 end to end, and its source contains only connections
    (step 8's list): no readiness polling, apply-state strings, busy flags,
    transport shaping, prompt or tool text — nothing quality-relevant is
-   host-authored. Whether rifty's benchmark must run this host's reference
-   configuration is an open user question (Decisions, P1).
+   host-authored; and rifty's benchmark (`tools/agent-bench` no-COI lane)
+   boots this host's composition module, so the measured configuration is the
+   kit's reference configuration (unrestricted root, session defaults) and
+   the kit's opt-in modes are toggles of that same module.
 
 ## Challenge
 
@@ -165,9 +170,10 @@ challenge: 2026-09-26 — 6 problems (narrow draft; each re-entered the intervie
 
 challenge: 2026-09-27 — 8 problems + 8 advisory (widened kit; resolution per line)
 
-- P1 I8 "same composition as `tools/agent-bench`" ≠ what the kit host runs
-  (bench: no policy, static settings, content parts, SW preview) — open user
-  fork (Decisions); the clause is removed from I8 until answered.
+- P1 I8 "same composition as `tools/agent-bench`" ≠ what the kit host runs —
+  user: (a) «да. Проверяем качество на том, что отдаем»; I8 now requires the
+  bench to boot the reference host's module; the reference configuration
+  itself is unrestricted (user, below).
 - P2 carrier premise wrong: the surface-only packed fixture excludes
   `@riftydev/agent` and has no scripted provider; the sdk+agent proof is
   `workbench-vite-consumer/src/sandbox-agent-proof.ts` — carrier switched
@@ -251,15 +257,21 @@ challenge: 2026-09-27 — 8 problems + 8 advisory (widened kit; resolution per l
   prompt/tool text and transcript reduction are rifty package obligations.
   The playground chat consumes the exported reducer (dogfood; carrier, not an
   invariant clause).
-- 2026-09-27 — open — owner: user (critic-2 P1): rifty's benchmark today
-  (`tools/agent-bench` no-COI lane) runs no policy, static settings and
-  content parts; the kit's reference host runs a read-only shell, per-turn
-  settings and text-only content. Options: (a) the bench lane boots the
-  reference host's composition module so the measured configuration is the
-  kit's reference configuration (scope: item 7 in this goal; the quality goal
-  may re-cut lanes later); (b) entry-point sameness suffices — host-chosen
-  values are declared connections outside measurement, recorded as an explicit
-  scope reduction. Recommendation: (a). Until answered the goal stays draft.
+- 2026-09-27 — user (critic-2 P1, bench vs kit configuration): «Ответ на
+  вопрос - да. Проверям качество на том, что отдаем» → (a): the bench lane
+  boots the reference host's composition module (item 7); the quality goal
+  may re-cut lanes later.
+- 2026-09-27 — user (on the draft's "shell read-only, the agent cannot run
+  `npm run build` to self-verify"): «вот это вообще не ок. Опять откуда-то
+  ограничения взялись. Отправь агента проверить сценарий "nonCOI + agent" на
+  fidelity» — the reference configuration is unrestricted: the agent runs the
+  project's own commands and writes files as on a developer machine; a
+  read-only fidelity audit of the no-COI + agent path was launched, its
+  findings land in the evidence file and re-chart this map before `ready`.
+- 2026-09-27 — agent (from the fidelity answer): per-capability policy (I4,
+  issue #345 item 6) stays an opt-in capability with unrestricted defaults —
+  the host's ask is kept, the restriction never becomes the reference; flagged
+  for the final check as an agent derivation.
 - 2026-09-27 — agent: fork 5 carrier — the reference host is built on the
   packed lane's Vite consumer (`tests/integration/fixtures/workbench-vite-
   consumer`, whose `no-coi-project-proof.ts` / `sandbox-agent-proof.ts` already
