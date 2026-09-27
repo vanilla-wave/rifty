@@ -13,13 +13,14 @@ code: [packages/agent/src/session.ts, packages/agent/src/types.ts]
 ## Context
 
 Finding. The default transport is pi-ai's `streamSimple` for
-`openai-completions` (`packages/agent/src/session.ts:3,99`); pi-ai 0.85.1
-serialises message content as parts and exposes provider quirks through
-`Model.compat` (`OpenAICompletionsCompat`: `supportsDeveloperRole`,
-`requiresToolResultName`, `thinkingFormat`, …) with no string-content flag
-visible in `dist/types.d.ts:465-500`. Issue #345's host flattened content to a
-string inside its own `streamFn`. Per the user's 2026-09-27 decision, anything
-that shapes what the model receives is a rifty obligation, not host code.
+`openai-completions` (`packages/agent/src/session.ts:3,99`); pi-agent-core
+builds user content as parts and pi-ai 0.85.1 sends user parts as arrays
+(assistant/tool/system go as strings); `Model.compat`
+(`OpenAICompletionsCompat`, `dist/types.d.ts:465-500`) exposes provider
+quirks with no string-content flag, and rifty passes no `compat`
+(`grep -n compat packages/agent/src/session.ts` → 0). Issue #345's host
+flattened content inside its own `streamFn`. Per the user's 2026-09-27
+decision, anything that shapes what the model receives is a rifty obligation.
 
 Goal obligation: I6 — an opt-in text-only content mode over `settings` +
 `fetch` completes the scenario turn against a string-only endpoint, without a
@@ -30,6 +31,9 @@ short ADR citing it at pickup.
 
 - Multimodal / image content (unsupported today, `packages/agent/README.md`).
 - Auto-detection of endpoint capabilities; the mode is explicit.
+- Other fixed `Model` fields (`session.ts:30-46`: context window, max tokens,
+  reasoning, `compat`) — endpoints needing those still use the `streamFn`
+  form (ADR-0436); recorded, not claimed.
 
 ## Decisions
 

@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Docs: ROADMAP M12 no longer says "AI lives outside rifty" — the agent loop ships as `@riftydev/agent` (ADR-0424, ADR-0436); refine + FIT drafts for the no-COI agent host kit goal from issue #345 (`docs/backlog/epics/no-coi-agent-host-kit`), seven declined-concept rows.
+
 - Add the public `checkSandboxSupport()` browser prerequisite report to `@riftydev/workbench`, and settle its probe teardown against the terminated Worker's OPFS lock (ADR-0437, ADR-0438, ADR-0439). SDK README samples keep gating on `checkCapabilities().sufficient`; the published support assets build from one publishing step the browser suite reuses in a scratch directory.
 
 - Make replica browser fixture setup join native settlement before judging short

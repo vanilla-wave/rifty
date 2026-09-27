@@ -27,6 +27,11 @@ writer" phase. Declined row (`docs/adr/README.md:630`): a separate
 `onLifecycle` subscription duplicates `runtime.on` — phases ride the existing
 event channel. ADR-0413 fixes the honesty rule for counts.
 
+The "waiting for storage writer" phase must be posted before the toolchain
+handshake completes (the host-side `startupTimeoutMs` deadline, `host.ts:433`,
+can fire while the guard still retries); whether the Worker can post phases
+before `ready` is unverified — probe at pickup.
+
 ## Out of scope
 
 - Percent-of-whole or time estimates; totals the source does not declare are

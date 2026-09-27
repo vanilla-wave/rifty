@@ -6,6 +6,27 @@ host" (2026-09-17) + the maintainer triage comment (2026-09-17). User request
 what fits the plan; 2026-09-26: "оформляй эпик". Baseline: main `7f8f4708e`.
 All commands run from the repo root on 2026-09-26 unless noted.
 
+## Dedup (rifty-to-backlog §2, 2026-09-19/26)
+
+Searched `docs/backlog/**/*.md` titles/`code:`, goal `map.md` files, child
+`epic:` links, `docs/process/traps.md` and `docs/adr/README.md` §Declined
+concepts for: `ensureSnapshot`, snapshot identity, transcript, boot progress,
+per-capability, per-turn, `migrateLegacyStorage`, `OpfsLayoutIssue`,
+`SandboxOccupiedError`, `SandboxToolchainBusyError`, occupied, busy, embedder,
+headless, conformance, verify, `#345`. No matching item, goal or declined row
+for the kit as a whole; issue #345 left no trace in the repo before this
+refine (no declined row dated after 2026-09-04). Partial overlaps kept as
+related, not merged: `distribution/embed-host-vite-example` (COI reference
+host, `embeddable-dev-loop`), `distribution/ai-sandbox-reference-demo` +
+`epics/open-bolt-ai-sandbox-demo` (public demo persona, excludes the Pi
+harness), `distribution/public-api-ai-agent-contract-snapshot-restore`
+(whole-sandbox snapshot/restore/fork), `distribution/public-api-ai-agent-
+preview-question` (preview; now `epics/no-coi-visual-debug`),
+`distribution/reference/embedder-gaps-evidence.md` rows I1/I8 (2026-09-07
+COI-era intake). Declined rows that bound carriers (all 2026-09-04): queue
+overlapping calls, host-side admission boolean, package/project FIFO,
+separate `onLifecycle`, public Workbench project surface for no-COI.
+
 ## Structural gap (why one epic, not five items)
 
 COI path: `createSandbox` → `openWorkbench` (origin lease, health/progress,
@@ -99,6 +120,12 @@ above workbench, so the composition belongs in `packages/rifty`.
 
 - No `examples/` entry imports `@riftydev/sdk`, `@riftydev/agent` or
   `@riftydev/workbench` (grep over `examples/`, node_modules excluded → 0).
+  Correction 2026-09-27 (critic 2): the sdk + agent + scripted-provider packed
+  proof already runs in the default packed lane —
+  `tests/integration/fixtures/workbench-vite-consumer/src/sandbox-agent-proof.ts`
+  via `workbench-packed-consumer.mjs:1253` → `no-coi-agent-browser-proof.mjs`;
+  the surface-only closure excludes `@riftydev/agent`
+  (`workbench-packed-consumer.mjs:193`) and that fixture has no scripted provider.
 - Closest SDK-only hosts: `tools/agent-bench/src/no-coi-page.ts` (70 lines),
   `tests/integration/fixtures/workbench-vite-consumer/src/no-coi-project-proof.ts`
   (128), `tests/no-coi/fixtures/no-coi-snapshot-page.ts` (98),
@@ -202,3 +229,32 @@ ensure-on-mismatch must force or fail; P4 typed OpfsLayoutIssue vs ADR-0432,
 no host value under (a); P5 packed fixture already is the CI headless host,
 `examples/` = wiring for discoverability; P6 classes vs names+predicates
 (advisory). Resolutions: goal.md §Challenge.
+
+## Critic 2 (2026-09-27, widened kit) — verbatim verdict
+
+verdict: 8 problems (+8 advisory) — P1 I8 "same composition as
+tools/agent-bench" ≠ the kit host's configuration (bench: no policy, static
+settings, content parts) → user fork; P2 surface-only fixture excludes
+`@riftydev/agent`, sdk+agent+scripted proof is `workbench-vite-consumer/src/
+sandbox-agent-proof.ts`; P3 I1 unreachable under defaults (`startupTimeoutMs`
+10 s < guard 30 s; ADR-0428 "outer SDK startup timeout remains authoritative
+when shorter"); P4 DEC-2 needs decision subagent + superseding ADR, not a
+§Corrections note alone; P5 «не пустота» settled by ADR-0417 + 2026-09-01
+record, `package.json`/lock are payload targets (`dep-snapshot-application.
+ts:33-46`); P6 attribution mixing in user lines, "policy" both connection and
+obligation; P7 `epics/agent-code-quality-evaluation` not on main (PR #341);
+P8 ROADMAP:114 "AI lives outside rifty" overtaken by ADR-0424/0436. Advisory
+A1 I4 vs ADR-0426 D1; A2 I1 vs ADR-0428 expiry identity; A3 fixed Model
+fields; A4 applied flag keyed by snapshotId; A5 I7 playground clause is a
+carrier; A6 grep is not an acceptance oracle; A7 ledger letters / numbering /
+fork-5 non-answer; A8 rejected route new-session-per-turn. False-on-main
+verified for I1–I8 by the critic (I6: pi-agent-core `agent.js:263-268` builds
+user content as parts; pi-ai `openai-completions.js:926-953` sends them as
+parts). Resolutions: goal.md §Challenge (2026-09-27 block); P1 open, owner:
+user.
+
+Verified by the driver 2026-09-27: `workbench-packed-consumer.mjs:193`
+(`if (!surfaceOnly) pending.push('@riftydev/agent')`), `:1253`
+(`provePackedAgent`); `host.ts:170` default startup timeout, `:433` handshake
+timeout message; `dep-snapshot-application.ts:33-46` payload files;
+`decisions.md` DEC-2 wording; ROADMAP:114.
