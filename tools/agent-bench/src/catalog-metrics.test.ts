@@ -45,7 +45,11 @@ it('loads a native catalog endpoint without inventing its window or output limit
   }
 });
 
-async function observed(replies: Parameters<typeof scriptedProvider>[0], cached = 0) {
+async function observed(
+  replies: Parameters<typeof scriptedProvider>[0],
+  cached = 0,
+  maxToolCalls?: number,
+) {
   const wire = scriptedProvider(replies);
   const models = createModels();
   models.setProvider(
@@ -66,6 +70,7 @@ async function observed(replies: Parameters<typeof scriptedProvider>[0], cached 
   const vfs = new MemoryVfs();
   await vfs.writeFile('/one.txt', 'hello');
   const session = createAgentSession({
+    maxToolCalls,
     models,
     model: endpoint.id,
     host: {
@@ -275,4 +280,19 @@ it('input-token totals include the cache hits reported by the real pi parser', a
   const result = await observed(['Done.'], 6);
   expect(result.trace.usage).toMatchObject({ input: 4, output: 3, totalTokens: 13 });
   expect(result.observation).toMatchObject({ inputTokens: 10, outputTokens: 3 });
+});
+
+it('does not count a budget-blocked proposal as an executed tool after receipt formatting', async () => {
+  const result = await observed(
+    [
+      [
+        { name: 'write_file', args: { path: 'one.txt', content: 'one' } },
+        { name: 'write_file', args: { path: 'one.txt', content: 'must not write' } },
+      ],
+    ],
+    0,
+    1,
+  );
+  expect(result.observation).toMatchObject({ agentStatus: 'budget-exceeded', toolCalls: 1 });
+  expect(result.text).toBe('one');
 });

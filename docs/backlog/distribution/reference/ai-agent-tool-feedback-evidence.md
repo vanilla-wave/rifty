@@ -33,3 +33,17 @@ Result formatting happens once at an owned boundary, with a fixed budget-heading
 reservation before body truncation. Never interpret file bytes as metadata merely
 because they resemble JSON. No new dispatcher, history owner, correlation map,
 diagnostics cache or epoch. ADR0475 records API/profile decisions.
+
+Contract+RED F1 accepted: headless-only recipe mutant passes the original core
+recipe test while actual native extension omits it. Added committed actual Pi
+SDK/extension wire test `tools/agent-bench/src/prompt-recipe-parity.test.ts`.
+It loads the generated nativeExtension, proves actual request/system-prompt file
+agree and old paragraphs exist, then fails on absent recipe. RED:
+`/private/tmp/rifty-pr359-native-recipe-red.log`. No production change.
+
+Added unchanged-baseline metric guard: a real Agent/MemoryVfs budget-blocked
+proposal remains uncounted after envelope formatting; I12 semantics stay fixed.
+The new native test also kills the reviewer's headless-only mutant on actual
+model wire: `/private/tmp/rifty-pr359-native-recipe-mutant-red.log` (profile.recipe
+exists; native prompt lacks it). Agent-bench typecheck passes; metric guard6/6
+passes `/private/tmp/rifty-pr359-feedback-metrics-baseline.log`.
