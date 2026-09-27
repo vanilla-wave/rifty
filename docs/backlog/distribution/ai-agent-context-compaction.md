@@ -41,8 +41,8 @@ provider classifier, summary algorithm or second message ledger.
 6. Compaction event carries reason, success/failure/abort and tokens before/after;
    successful summary has a persistent visible chat marker. Estimates use native
    rules when provider usage absent. → I4, I5
-7. Native context overflow is separate from transient retry. At most one
-   compact-and-retry for an overflowing request; unrecovered overflow ends
+7. Successful assistant/tool responses reset overflow recovery. Native context overflow is separate from transient retry. At most one
+   compact-and-retry per consecutive overflow episode; unrecovered overflow ends
    context-exceeded. Completed tools are never replayed. The UI offers another
    entry and explicit continue with retained history. → I4, I5, I6
 8. Stop/deadline settles retries and summary work, installs no partial summary;
@@ -67,7 +67,7 @@ provider classifier, summary algorithm or second message ledger.
 | Boundary / axis | Injection | Observable result | Authority |
 |---|---|---|---|
 | Model network / unbounded-read | 429 + Retry-After; 5xx or partial-stream loss | Native bounded retries/delays, no transport retries or tool replay | → I6 |
-| Model network / torn-state | Threshold summary fails | History unchanged, failure event; next response allowed; ensuing overflow terminates context-exceeded | → I5 |
+| Model network / torn-state | Threshold summary fails | History unchanged, failure event; next response allowed; ensuing overflow gets one separate recovery attempt; failure terminates context-exceeded | → I5 |
 | Model network / torn-state | Stop or deadline while summary/backoff pending | Aborted/budget terminal; no partial summary or later attempt/effect | → I5, I6, ADR-0424 |
 | Native projection / provenance-lie | Provider omits usage, retained old usage after compaction | Native estimate marked; full recorded request usage never reconstructed from retained history | → I5 |
 | Model network / unbounded-read | Context still overflows after summary, or no native cut point | One recovery maximum, context-exceeded, explicit model-switch offer | → I4, I5 |

@@ -25,3 +25,13 @@ Run cancellation must also reach summary work after Agent's loop settles.
 Remaining GREEN proof: active-loop compaction, partial-response discard,
 summary retry/full usage, malformed restore, no-usage estimates, real CLI
 comparisons in committed tests, Chromium markers and explicit continuation.
+
+Preparation corrections (native evidence, no scope reduction):
+- `/private/tmp/rifty-pr359-cli-failed-summary-probe.{mjs,out}`: failed threshold
+  summary → overflow → one separate summary attempt. Corrected false expectation.
+- Overflow bound applies per consecutive overflow episode; successful assistant
+  responses (including tool calls) reset native recovery. ADR-0473 clarified.
+- Stop test now asserts summary request identity; separate default-backoff test;
+  added native zero-usage estimate/event assertion before implementation.
+- Updated RED `/private/tmp/rifty-pr359-continuation-red-v3.log`: 11 failed,
+  2 passed. All failures behavioral assertions; no import/runtime harness failure.

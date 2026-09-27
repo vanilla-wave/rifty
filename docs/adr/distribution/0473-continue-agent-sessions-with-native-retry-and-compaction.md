@@ -27,8 +27,8 @@ model-selection adapters; its extra ownership is unnecessary here.
    Preserve details across JSON restore and subsequent compaction. Use native
    conversion on wire. Do not reject from estimated post-summary size alone:
    the actual CLI can send such a context successfully.
-4. Context overflow permits one compact-and-continue after removing the failed
-   assistant response; no tools replay. Failed/no-cut compaction or another
+4. Context overflow permits one compact-and-continue per consecutive overflow episode after removing the failed
+   assistant response; successful assistant/tool responses reset recovery. No tools replay. Failed/no-cut compaction or another
    overflow ends `context-exceeded`; the user may select another entry and
    continue. Stop/deadline abort summary and backoff as well as Agent.
 5. Usage counts every current-session request, including failed/discarded and
@@ -38,8 +38,8 @@ model-selection adapters; its extra ownership is unnecessary here.
    the chat retains successful compaction markers and offers explicit model
    selection/continuation for `context-exceeded`.
 
-Corrects ADR-0424 §4's zero-agent-retry policy; §2's ban on raw continuation of
-an assistant error remains, with §4 above's explicit recovery exception.
+Corrects ADR-0424 §4's zero-agent-retry policy; partially overrides §2: raw continuation remains forbidden except after failed
+overflow-response removal and successful compaction (§4 above).
 ADR-0424 §6 action replay prohibition and ADR-0376/0377 host recovery remain.
 Corrects ADR-0466's admitted envelope list and restored-prefix interpretation.
 

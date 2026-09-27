@@ -179,7 +179,7 @@ describe('native continuation boundary', () => {
       }
     }
   });
-  it('[fault: torn-state] default backoff is abortable and next request reads new model/defaults', async () => {
+  it('next retry request reads the selected model and defaults', async () => {
     const { session, requests } = fixture(
       (_c, _o, n) => (n === 1 ? answer('429', 10, 'error') : answer()),
       {
@@ -199,6 +199,8 @@ describe('native continuation boundary', () => {
     } finally {
       await session.dispose();
     }
+  });
+  it('[fault: torn-state] default backoff is abortable', async () => {
     const stopped = fixture(() => answer('429', 10, 'error'));
     let delay = 0;
     stopped.session.subscribe((e) => {
@@ -291,6 +293,35 @@ describe('native continuation boundary', () => {
       await session.dispose();
     }
   });
+  it('[fault: provenance-lie] native no-usage estimate is marked in the compaction event', async () => {
+    const zero = answer().usage;
+    zero.input = 0;
+    zero.output = 0;
+    zero.totalTokens = 0;
+    const seed = history().map((m) => (m.role === 'assistant' ? { ...m, usage: zero } : m));
+    const { session } = fixture((c) => answer(summaryRequest(c) ? 'Saved context' : 'Done'), {
+      initialMessages: seed,
+    });
+    try {
+      await session.send('continue');
+      const ends = (await session.exportTrace()).events
+        .map(({ event }) => event)
+        .filter(
+          (e) =>
+            (e.type as string) === 'compaction' &&
+            (e as unknown as { phase: string }).phase === 'end',
+        );
+      expect(ends[0]).toMatchObject({
+        reason: 'threshold',
+        success: true,
+        source: 'estimate',
+        tokensBefore: expect.any(Number),
+        tokensAfter: expect.any(Number),
+      });
+    } finally {
+      await session.dispose();
+    }
+  });
   it('compaction can be disabled without pruning history', async () => {
     const { session, requests } = fixture(() => answer(), {
       initialMessages: history(),
@@ -304,7 +335,7 @@ describe('native continuation boundary', () => {
       await session.dispose();
     }
   });
-  it('[fault: torn-state] summary failure leaves history; subsequent overflow terminates without another summary loop', async () => {
+  it('[fault: torn-state] summary failure leaves history; overflow gets one separate native recovery attempt', async () => {
     const { session, requests } = fixture(
       (c) =>
         answer(
@@ -316,7 +347,7 @@ describe('native continuation boundary', () => {
     );
     try {
       await session.send('continue');
-      expect(requests.map((r) => summaryRequest(r.context))).toEqual([true, false]);
+      expect(requests.map((r) => summaryRequest(r.context))).toEqual([true, false, true]);
       expect(session.status()).toBe('context-exceeded');
       expect((await session.exportTrace()).transcript.slice(0, 6)).toEqual(history());
     } finally {
@@ -365,6 +396,7 @@ describe('native continuation boundary', () => {
       await run;
       expect(session.status()).toBe('aborted');
       expect(requests).toHaveLength(1);
+      expect(summaryRequest(requests[0]!.context)).toBe(true);
       expect(
         (await session.exportTrace()).transcript.some((m) => m.role === 'compactionSummary'),
       ).toBe(false);
