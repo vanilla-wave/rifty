@@ -33,7 +33,7 @@ Date: 2026-09-15. Baseline: `51440931aeb5e322ddfcab930e02068e7083922e`.
   separate observations. Workbench COI gate remains.
 - ADR-0375/0383/0419: non-COI admission, VM choice, configured storage/startup.
 - Related, separate: `playground/project-compatibility-preflight` predicts
-  project/package compatibility; `service-worker/cross-browser-compat-matrix`
+  project/package compatibility; `distribution/browsers-compat-matrix`
   owns generated per-engine reporting. Neither supplies this callable API.
 - Searched backlog titles/code/maps, traps, ADR index/Declined concepts. No
   declined match for support diagnostics. Existing declined non-COI Workbench

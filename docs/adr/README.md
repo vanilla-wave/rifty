@@ -363,6 +363,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0440 | Load pi project resources through rooted agent hosts |
 | 0442 | Refuse pi-expandable commands inside agent session admission |
 | 0466 | Restore native agent conversation history |
+| 0469 | Browser support tiers and evidence legend |
 
 ## Superseded (removed)
 
@@ -554,7 +555,7 @@ Promoted `OPEN_QUESTIONS` ids → ADRs.
 | D-003 | 0004 |
 | D-004 | 0005 |
 | D-005 | 0006 |
-| D-006 | 0007 |
+| D-006 | 0007, 0469 (tiers + legend) |
 
 D-007..D-009 (stop-on-irreversible → record-and-continue, inflections) were process decisions; process is no longer recorded in ADRs — see `AGENTS.md` + `docs/process/decision-workflow.md`.
 
