@@ -23,6 +23,8 @@ Device farms / BrowserStack; Android devices beyond Yandex on desktop; COI tier 
 
 ## Decisions
 
+- 2026-09-28 — protocol delivered at `tools/floor-lane/README.md`; native Yandex26.8 proof in browsers.md; required Safari/macOS+iOS reports remain, Safari WebDriver unavailable without user setting change.
+
 - 2026-09-27 — in the epic, user-run — user "В эпик"
 
 ## Reference contract

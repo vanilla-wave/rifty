@@ -1,0 +1,348 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Текущий slice PASS: F1/F2 исправлены и независимо проверены, oracle rival сохранён; I8 Safari/macOS+iOS остаётся обязательным goal residual. Эпик не завершён.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "09c8f3515f19852145ea17be8c9003b198911f80",
+  "unit_goal_source": "Независимый /root/verify_final, depth 1, без детей; read-only tracked tree. PR362: BASE99fdf6c91c02439c0b22967f0207be3def20a07e; новая проверка a57da96b8eac17c93e08e5a58f44e3ebab8cc492..09c8f3515f19852145ea17be8c9003b198911f80. Авторитет: docs/backlog/epics/browser-support-floor/goal.md, неизменён от принятого 3bef167de. История F1/F2 и неизменённая проверка всех прежних обязательств сохранены в docs/backlog/toolchain-build/reference/pr-362-review-1.json; повторно проверены только изменённые carriers и новое defect evidence (REV-1/8/12). F1 FIXED: AST теперь проверяет сами member references и nested ObjectPatterns; RED15 и RED19 прочитаны; собственный запуск 75/75 PASS (/tmp/pr362-verify-final-unit.log), неизменённый исходный emitted mutant теперь worker.js:1:53 post-ES2022 builtin toSorted (/tmp/pr362-verify-final-mutant.json). Собственные методы/guarded waitAsync сохранены; конечный AST catalog не является dynamic type inference. F2 FIXED: независимо прочитаны все шесть raw results.json/browser-build.json run36356372850; 197pass/4skips ChromiumCOI, Firefox/WebKit12fail/185notrun/4skips. Проверены 36/36 Firefox Booting, 36/36 WebKit COI refusal; retry trace436xHTTP200+101, только Vite console, без pageError; нижний live COI build oracle Firefox PASS. Новый Firefox draft фактически верен, cause не выдуман; дедуп не нашёл другого владельца. Сводка /tmp/pr362-verify-final-raw.json. PR-4: rival diff сравнен с BASE, assertions ownership/error/exit/workerCount и соседний EADDRINUSE не изменены; два реальных VFS marker убирают оба недоказанных порядка, production неизменён. Прочитаны actual stress fixture/config и raw RED1000ms/RED300ms, GREEN1000ms+300ms, конечные 4 Chromium/Firefox PASS (/tmp/pr362-rival-final-source.log). Native Yandex JSON совпадает со всеми 11 шагами, exact bytes, quota/usage и честными memory/eviction unknown; Safari WebDriver refusal не назван product failure. Full gate frozen SHA: /tmp/pr362-pr-check-reviewed-fixes.log, 27 lanes PASS. Исходные coverage rows сохранены; F1/F2 изменены по приведённому доказательству; deleted completed rival draft заменён proof citation, новая I8 raw evidence добавлена.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I8; User scenario 6",
+      "location": "docs/backlog/epics/browser-support-floor/goal.md:44",
+      "summary": "Реальные Safari26/macOS и iOS Safari ещё требуют hardware result blocks: дата, storage estimate, per-step outcomes, memory/eviction либо явные unknown с причиной. Safari26.6.2 WebDriver refused: Remote Automation disabled; macOS Playwright WebKit не подмена Safari. Native Yandex26.8/Chromium150 на macOSarm64 уже доказан: 11 шагов PASS, exact persisted bytes, quota/usage; memory/eviction явно unknown. I8 остаётся в map, goal_complete=false."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Matrix Acceptance 1: режим × persistence × engine, API, legend, cut-offs, датированные доли и tiers",
+      "source": "acceptance",
+      "trace": "I1 + I9",
+      "status": "pass",
+      "citation": "docs/public/compat/browsers.md:13; docs/adr/distribution/0469-browser-support-tiers-and-evidence-legend.md:20; /tmp/pr362-review-browser-share.json",
+      "note": ""
+    },
+    {
+      "row": "ES-floor Acceptance 1: запрещённые builtin-вызовы/синтаксис отклоняются, собственные методы различаются",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/checks/es-floor.test.ts:42; tools/checks/es-floor.test.ts:63; tools/checks/es-floor.test.ts:123; tools/checks/es-floor.mjs:209; /tmp/pr362-verify-final-unit.log; /tmp/pr362-verify-final-mutant.json",
+      "note": ""
+    },
+    {
+      "row": "ES-floor Acceptance 2: pr:check строит packages/playground, проверяет весь emitted JS, отвергает отсутствующие builds",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/checks/pr-check.mjs:139; tools/checks/es-floor.test.ts:96; /tmp/pr362-review-unit-checks.log",
+      "note": ""
+    },
+    {
+      "row": "ES-floor Acceptance 3: девять сортировок и preview сохраняют порядок и данные вызывающего",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/toolchain-input.ts:280; apps/playground/src/components/PreviewPanel.tsx:77; /tmp/pr362-review-unit-checks.log; /tmp/pr362-packed-surface.log",
+      "note": ""
+    },
+    {
+      "row": "createWritable Acceptance 1: required отклоняется до записи с capability identity и именем API",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-storage-capability.spec.ts:50; packages/vfs/src/opfs-sync.ts:138; /tmp/pr362-review-storage-green.log; /tmp/pr362-storage-revert-admission.log",
+      "note": ""
+    },
+    {
+      "row": "createWritable Acceptance 2: preferred/default открыто используют memory; запись/чтение работают; ephemeral без fallback reason",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-storage-capability.spec.ts:67; /tmp/pr362-review-storage-green.log",
+      "note": ""
+    },
+    {
+      "row": "createWritable Acceptance 3: required support report содержит unmet opfs и createWritable",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:260; /tmp/pr362-review-support-green.log",
+      "note": ""
+    },
+    {
+      "row": "false-fallback × missing createWritable: required отклонён до ready, preferred/default явно memory",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-storage-capability.spec.ts:5; /tmp/pr362-storage-revert-admission.log; /tmp/pr362-review-storage-green.log",
+      "note": ""
+    },
+    {
+      "row": "Root Acceptance 1: StorageUnavailableError/ERR_STORAGE_UNAVAILABLE сохраняет native name/message и cause",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-storage-capability.spec.ts:52; /tmp/pr362-storage-revert-root-classification.log; /tmp/pr362-storage-revert-terminal-transport.log; /tmp/pr362-review-storage-green.log",
+      "note": ""
+    },
+    {
+      "row": "Root Acceptance 2: preferred/default явно memory; ephemeral обходит native storage",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-storage-capability.spec.ts:67; /tmp/pr362-review-storage-green.log",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail × root acquisition: структурированный отказ либо видимый memory fallback",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/vfs/src/boot.ts:92; tests/no-coi/no-coi-storage-capability.spec.ts:5; /tmp/pr362-review-storage-green.log",
+      "note": ""
+    },
+    {
+      "row": "No-COI Acceptance 1: Firefox/WebKit запускают existing suite; WebKit получает отдельный persistent profile",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/test.ts:10; /tmp/browser-floor-ci-36356372850/no-coi-firefox/playwright-report/no-coi/results.json; /tmp/browser-floor-ci-36356372850/no-coi-webkit/playwright-report/no-coi/results.json",
+      "note": ""
+    },
+    {
+      "row": "No-COI Acceptance 2: build — аннотация, не запрещающий другой engine version pin",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-memory-descriptor.spec.ts:136; /tmp/browser-floor-ci-36356372850/no-coi-firefox/playwright-report/no-coi/results.json",
+      "note": ""
+    },
+    {
+      "row": "No-COI Acceptance 3: ожидания native-write и install/run routes ограничены, ошибки именованы",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/test.ts:44; tests/no-coi/no-coi-agent-sdk.spec.ts:54; tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2735; /tmp/browser-floor-webkit-isolated.json",
+      "note": ""
+    },
+    {
+      "row": "No-COI Acceptance 4: manual non-gating run сохраняет reports/builds и датированные matrix rows",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "docs/public/compat/browsers.md:60; docs/backlog/playground/reference/browser-floor-cross-engine-evidence.md:81; /tmp/browser-floor-ci-36356372850/no-coi-chromium/browser-build.json",
+      "note": ""
+    },
+    {
+      "row": "COI Acceptance 1: manual non-gating dispatch запускает корректные команды всех engines",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": ".github/workflows/ci-cross-browser.yml:16; /tmp/pr362-review-ci-status.json",
+      "note": ""
+    },
+    {
+      "row": "COI Acceptance 2: named-run results/build/date/classes записаны в matrix",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "docs/public/compat/browsers.md:73; docs/backlog/playground/reference/browser-floor-cross-engine-evidence.md:81; /tmp/pr362-verify-final-raw.json",
+      "note": ""
+    },
+    {
+      "row": "COI Acceptance 3: product reds записаны/классифицированы; без product repair и смены COEP",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "docs/backlog/playground/reference/browser-floor-cross-engine-evidence.md:96; docs/backlog/playground/firefox-coi-playground-boot-stall.md:12; /tmp/pr362-verify-final-raw.json",
+      "note": ""
+    },
+    {
+      "row": "Floor Acceptance 1: pinned attempts выполнены; product failure отделён от unavailable harness",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tools/floor-lane/run.mjs:90; docs/public/compat/browsers.md:84; docs/backlog/runtime-js/reference/chromium108-sdk-wasm-import-canonical.json:1; docs/backlog/vfs/reference/firefox114-beta-reopen-missing-bytes-canonical.json:1; docs/backlog/toolchain-build/reference/webkit260-floor-harness.json:1",
+      "note": ""
+    },
+    {
+      "row": "Manual Acceptance 1, поставленная часть: один URL, полный протокол, копируемые наблюдения",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "apps/playground/browser-support.js:85; tools/floor-lane/README.md:5; docs/backlog/distribution/reference/browser-manual-chromium-final.json:1",
+      "note": ""
+    },
+    {
+      "row": "Record-only findings сохраняют факты, владельца и неизвестные неизолированные причины",
+      "source": "acceptance",
+      "trace": "I5 + I6 + I7 + scenario 4",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/webkit-memory-replacement-enoent.md:12; docs/backlog/distribution/webkit-support-probe-opfs-clone.md:12; docs/backlog/playground/reference/pr362-resident-rival-ordering-evidence.md:1; docs/backlog/playground/firefox-coi-playground-boot-stall.md:12; docs/backlog/vfs/webkit-opfs-contention-error.md:12; docs/backlog/runtime-js/chromium108-sdk-sync-wasm-import.md:12; docs/backlog/vfs/firefox114-beta-reopen-missing-bytes.md:12; /tmp/browser-floor-native-api-final.json",
+      "note": ""
+    },
+    {
+      "row": "Public API: storage capability error и выбор backend",
+      "source": "public-api",
+      "trace": "I3 + ADR-0476",
+      "status": "pass",
+      "citation": "packages/vfs/src/opfs-sync.ts:130; packages/vfs/src/boot.ts:108; tests/no-coi/no-coi-storage-capability.spec.ts:52",
+      "note": ""
+    },
+    {
+      "row": "Public API: storage-unavailable startup error; legacy native error сохранён",
+      "source": "public-api",
+      "trace": "I4 + ADR-0476",
+      "status": "pass",
+      "citation": "packages/vfs/src/boot.ts:92; packages/runtime-js/src/protocol.ts:74; packages/runtime-js/src/worker-entry.ts:291; /tmp/pr362-review-support-green.log",
+      "note": ""
+    },
+    {
+      "row": "Frozen artifact: usage weights, знаменатель и доли API eligibility",
+      "source": "frozen-artifact",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/browser-floor-share.json:1; /tmp/pr362-review-browser-share.json",
+      "note": ""
+    },
+    {
+      "row": "Frozen artifact, браузерное наблюдение: browser-manual-chromium-proof.json",
+      "source": "frozen-artifact",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/browser-manual-chromium-proof.json:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen artifact, браузерное наблюдение: browser-manual-chromium-final.json",
+      "source": "frozen-artifact",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/browser-manual-chromium-final.json:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen artifact, браузерное наблюдение: browser-manual-webkit-final.json",
+      "source": "frozen-artifact",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/browser-manual-webkit-final.json:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen artifact, браузерное наблюдение: chromium108-sdk-wasm-import.json",
+      "source": "frozen-artifact",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/chromium108-sdk-wasm-import.json:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen artifact, браузерное наблюдение: chromium108-sdk-wasm-import-canonical.json",
+      "source": "frozen-artifact",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/chromium108-sdk-wasm-import-canonical.json:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen artifact, браузерное наблюдение: firefox114-beta-reopen-missing-bytes.json",
+      "source": "frozen-artifact",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "docs/backlog/vfs/reference/firefox114-beta-reopen-missing-bytes.json:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen artifact, браузерное наблюдение: firefox114-beta-reopen-missing-bytes-canonical.json",
+      "source": "frozen-artifact",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "docs/backlog/vfs/reference/firefox114-beta-reopen-missing-bytes-canonical.json:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen artifact, браузерное наблюдение: webkit260-floor-harness.json",
+      "source": "frozen-artifact",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "docs/backlog/toolchain-build/reference/webkit260-floor-harness.json:1",
+      "note": ""
+    },
+    {
+      "row": "Compiler fingerprint: только семь import names; size/payload rejection сохранены",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:101; /tmp/pr362-review-compiler-pin.log; /tmp/pr362-packed-surface.log",
+      "note": ""
+    },
+    {
+      "row": "Rival fixture repair: исходный post-admission ownership rejection и pre-bound EADDRINUSE oracle сохранены",
+      "source": "acceptance",
+      "trace": "I5 + named baseline resident readiness/port ownership",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-dev-hmr.spec.ts:368; tests/no-coi/no-coi-dev-hmr.spec.ts:522; tests/no-coi/no-coi-dev-hmr.spec.ts:578; docs/backlog/playground/reference/pr362-resident-rival-ordering-evidence.md:31; /tmp/pr362-rival-workerpause-red.log; /tmp/pr362-rival-workerpause-green.log; /tmp/pr362-rival-final-source.log",
+      "note": ""
+    },
+    {
+      "row": "Frozen artifact: native Yandex26.8/Chromium150 macOS protocol, steps, storage estimate, explicit memory/eviction unknown",
+      "source": "frozen-artifact",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/browser-manual-yandex-native.json:1; docs/backlog/distribution/reference/browser-manual-yandex-native.json:508; docs/public/compat/browsers.md:113",
+      "note": ""
+    },
+    {
+      "row": "Frozen artifact: Safari WebDriver refusal записан как harness unknown, не product failure/закрытие I8",
+      "source": "frozen-artifact",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/browser-manual-safari-driver-unavailable.json:1; docs/public/compat/browsers.md:111; docs/backlog/epics/browser-support-floor/map.md:14",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

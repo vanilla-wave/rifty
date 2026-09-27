@@ -18,3 +18,6 @@
 
 - 2026-09-28 — run36356372850 complete: noCOI Chromium110pass,Firefox109pass/1fixture failure,WebKitLinux40pass/70fail; COI Chromium197pass/4existing skips,Firefox/WebKit0pass/12fail/185notrun/4skips. All classes and native platform distinctions recorded; FirefoxCOI boot-stall cause unisolated, record-only draft.
 - 2026-09-28 — required Chromium CI36357501105 reproduced the recorded delayed-rival fixture race.1s RPC delay reproduces the exact mismatch; repair synchronizes actual selected-entry/rival-listen observations, keeps original assertions. Runtime unchanged; proof docs/backlog/playground/reference/pr362-resident-rival-ordering-evidence.md.
+
+- 2026-09-28 — re-chart after browser-support-floor implementation (final-green PASS @09c8f3515f19852145ea17be8c9003b198911f80): I1–I7 and I9 proven/recorded; review docs/backlog/toolchain-build/reference/pr-362-final-green.json. Completed seven contracts removed; I8 protocol + native Yandex delivered, required real Safari/macOS+iOS reports remain. Goal not closed.
+- 2026-09-28 — final pr:check27/27 PASS on reviewed product tree; unit190.2s, parity71.4s, no isolated rerun needed. Source/test freeze held.

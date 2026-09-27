@@ -14,7 +14,7 @@ Is the widening worth its cost, and when. Cost: replica durability today rides `
 
 ## User scenario
 
-A host embeds the non-COI tier; an iPhone on iOS 18.6 opens it; today `createSandbox` with storage selects opfs and the first write fails; after `vfs/opfs-createwritable-capability-gate` it runs ephemeral under `preferred` and is refused under `required`; with this change install/build persist on that device.
+A host embeds the non-COI tier; an iPhone on iOS 18.6 opens it; today ADR-0476 makes `createSandbox` run ephemeral under `preferred` and refuse `required`; with this change install/build persist on that device.
 
 ## Out of scope
 
