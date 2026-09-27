@@ -87,3 +87,4 @@ for mechanism slices after I12; this slice retains the existing Agent owner.
   installed agent, Vite preview/HMR and fresh Chromium.
 - Final clean-tree `pnpm pr:check`: 25/25 pass; test:run passed directly (191.6s),
   no isolated rerun. Full parity lane passed.
+- `pnpm agent-bench run --mock-model --runs 1 --output /private/tmp/rifty-pr359-catalog-smoke`: 14/14 runs, all three lanes, every agentStatus=done/toolCalls=1, no setup/judge exceptions. All 14 task judges fail as intended for the read-package-only smoke. Own fresh playground server recorded in output/playground.log.

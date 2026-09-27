@@ -7,23 +7,10 @@ item ordering (goal §Decisions "shared bench order").
 
 ## Items
 
-1. `distribution/ai-agent-model-catalog` — **catalog** — embedder-supplied
-   pi-ai `Models` catalog with per-entry params and transports as the only
-   session form (0.1.0 `settings`/`streamFn` removed), initial selection,
-   `setModel` mid-session, trace `config` (I1, I2). ADR superseding ADR-0436
-   §2/§3. Leads: every other item reads the selected entry. Migrates the
-   playground and agent-bench lanes; the kit's no-COI lane swap
-   (`distribution/no-coi-agent-reference-host`, PR #357) and the quality
-   goal's runner restructuring (`distribution/agent-eval-local-runner`, PR
-   #341) follow it.
-2. `distribution/ai-agent-prompt-images` — **images** — `send(prompt,
-   images?)` as pi `ImageContent` on image-capable entries; loud failure on
-   text-only entries; `NotImplementedError` + compat ❌ for non-image binary
-   input (I3). After 1.
 3. `distribution/ai-agent-playground-model-catalog` — **playground** —
-   Settings catalog editor, chat model picker, attach control (image → prompt,
+   Native send(prompt, images), Settings catalog editor, chat model picker, attach control (image → prompt,
    other file → project via the project files API + path in prompt), switch
-   offer after provider `error` (I4). After 1–2. The `context-exceeded` offer
+   offer after provider `error` (I3/I4). Catalog I1/I2 landed; former image item absorbed here. The `context-exceeded` offer
    and the compaction marker are item 7's UI half; the kit's transcript
    reducer (`distribution/agent-transcript-model`, PR #357) lands after this
    goal and covers these chat events.
@@ -63,21 +50,14 @@ item ordering (goal §Decisions "shared bench order").
 
 ## Open questions
 
-- Compaction/retry carrier: adopt `AgentHarness` (retry + compaction +
-  thinking + `Models` in one) or keep the low-level `Agent` with
-  `transformContext`, `compactWithRequest` over an `AgentMessage[]`→`Entry[]`
-  adapter and a retry wrapper — owner: agent — item 1 PICKUP probe (which path
-  keeps ADR-0424 §2 history ownership and the per-entry transport); items 6/7
-  inherit the answer.
-- Does pi-ai omit `max_tokens` / `temperature` from the request when the field
-  is unset, or always send `Model.maxTokens`? — owner: agent — item 1 probe
-  (decides whether "not sent" is expressible for sampling fields).
-- `reasoning_content` replay for DeepSeek-style endpoints behind a proxy URL
-  (auto-detect defeated) — owner: agent — item 1 probe with the compat flag; a
-  later Flash-class bench run proves it.
-- Proxy served models: `gpt-6-luna` requires `--codex-version` ≥ 0.155.1 on
-  the user's codex-proxy — owner: agent — item 4 run (boot the proxy, read the
-  printed model list).
+- Compaction/retry carrier resolved by independent DEC-2 probe: retain Agent
+  and public retryAssistantCall/prepareCompaction/compact; native Harness needs
+  a new event/history/lane adapter. Implementation/proof remains after I12.
+- Native request defaults resolved: streamSimple sends min(Model.maxTokens,
+  native available-context ceiling); absent temperature/top_p are omitted. Native
+  reasoning_content replay verified through the proxy. Evidence: catalog unit.
+- Luna endpoint verified: temporary proxy on 10539, codexVersion 0.155.1;
+  gpt-6-luna listed and real request returned OK. I12 measurement remains open.
 - Playground attach: image sources (file picker, paste, preview screenshot)
   and the project folder for non-image files — owner: agent — item 3 carrier;
   pi accepts `ImageContent` only.

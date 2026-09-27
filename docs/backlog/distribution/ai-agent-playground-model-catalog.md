@@ -6,12 +6,17 @@ created: 2026-09-27
 why: The playground is the first embedder of the catalog; without a UI for entries, switching and attachments the user scenarios "one model returns 429 → offer another" and "send a screenshot / a PDF" are not reachable by a user.
 user_story: As a developer in the playground, I want to keep several models with their parameters, pick one for the chat, attach a screenshot or a spec file, and switch to another model when the first fails, but today Settings hold one Base URL/model and the chat has no picker, no attach and no switch offer.
 epic: agent-weak-models
-blocked_by: [distribution/ai-agent-model-catalog, distribution/ai-agent-prompt-images]
+blocked_by: []
 sources: [docs/backlog/distribution/reference/agent-weak-models-refine-evidence.md]
-code: [apps/playground/src/ai/settings.ts, apps/playground/src/ai/AiChatPanel.tsx, apps/playground/src/ai/playground-agent-host.ts]
+code: [packages/agent/src/session.ts, packages/agent/src/types.ts, apps/playground/src/ai/settings.ts, apps/playground/src/ai/AiChatPanel.tsx, apps/playground/src/ai/playground-agent-host.ts]
 ---
 
 ## Context
+
+Absorbs `distribution/ai-agent-prompt-images`: native `send(prompt, images?)`
+for image-capable entries; text-only entries fail before provider dispatch;
+non-image binary input throws `agent.prompt-binary-input`. Tool image results
+remain unsupported. I3/I4 scope unchanged.
 
 finding — goal slice 3 (I4); after slices 1–2.
 
@@ -48,5 +53,7 @@ finding — goal slice 3 (I4); after slices 1–2.
 challenge: 2026-09-27 — inherits `epics/agent-weak-models/goal.md` §Challenge (10 problems, resolved there); reuse for unchanged promises at PICKUP.
 
 ## Decisions
+
+re-cut: 2026-09-27 — absorb draft predecessor distribution/ai-agent-prompt-images into this image/catalog chat unit; preserve I3/I4 and all existing scenarios — trace: none
 
 - Inherits goal decisions (catalog, images, entry defaults, tier). Automatic fallback is Out of scope (goal map): the UI offers, the user chooses.

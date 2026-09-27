@@ -6,7 +6,7 @@ created: 2026-09-27
 why: The only recorded bench run is gpt-5.6-sol at 42/42 — it distinguishes environments, not harness mechanisms — and that model is no longer served; every later mechanism of the goal needs a weak-endpoint baseline to beat.
 user_story: As the maintainer measuring the agent on cheap models, I want `pnpm agent-bench run --config luna.json` to carry the catalog entry's thinking/limits/compat and report tokens, retries, compactions and edit failures per run, but today the config knows only baseUrl/model/envKey and rows show elapsed and tool counts.
 epic: agent-weak-models
-blocked_by: [distribution/ai-agent-model-catalog]
+blocked_by: []
 sources: [docs/backlog/distribution/reference/agent-weak-models-refine-evidence.md, tools/agent-bench/reports/summaries/2026-09-13-gpt-5.6-sol/README.md]
 code: [tools/agent-bench/src/config.ts, tools/agent-bench/src/report.ts, tools/agent-bench/src/runner.ts, tools/agent-bench/src/lanes/local-reference.ts]
 ---

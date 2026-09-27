@@ -7,3 +7,4 @@
 - 2026-09-27 — user: «очень сложная последовательность» → simplified: goals run whole and in sequence (this goal → kit → quality goal), no cross-goal item ordering; the reducer-first clause of «6 - ок» dropped (map items 3/7, playground and compaction drafts).
 
 - 2026-09-27 — PR 359 whole-goal hand-off; current branch merged PR head ce81e179c onto f112e5f35. Item 1 PICKUP: ADR-0471, native Models decision, 34-test baseline and catalog RED; evidence `distribution/reference/ai-agent-model-catalog-evidence.md`.
+- 2026-09-27 — re-chart after distribution/ai-agent-model-catalog (final-green PASS @ c5bb64273b863696b97d4f27977e6761dbd2bb0e): I1/I2 delivered; reference/ai-agent-model-catalog-final-green.json has 0 blockers, 1 advisory (different-defaults regression carrier; reviewer probe passes). Next unit combines former items 2/3 under ai-agent-playground-model-catalog, preserving I3/I4. I12 still precedes every mechanism.

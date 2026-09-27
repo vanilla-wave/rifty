@@ -29,8 +29,6 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `landing-compare-page.md` | ready | webcontainers-alternative-search-slot | rifty.dev/compare — verifiable WebContainers-alternative table + link-checker |
 | `ai-sandbox-reference-demo.md` | draft | open-bolt-ai-sandbox-demo | open client-side AI sandbox (eval+install slice; live preview question remains) |
 | `landing-blog-surface.md` | ready | wasi-in-browser-showcase | rifty.dev/blog route + first WASI post |
-| `ai-agent-model-catalog.md` | draft | agent-weak-models | embedder-supplied pi-ai model catalog as the only session form (settings/streamFn removed), `setModel` mid-session, trace config; ADR superseding ADR-0436 §2/§3 |
-| `ai-agent-prompt-images.md` | draft | agent-weak-models | `send(prompt, images)` as pi ImageContent; NotImplementedError for other binary input |
 | `ai-agent-playground-model-catalog.md` | draft | agent-weak-models | playground catalog Settings, model picker, attach (image → prompt, file → project), switch offer after provider error |
 | `ai-agent-weak-model-baseline-lane.md` | draft | agent-weak-models | bench endpoint fields, per-run metric columns, `context-exceeded` outcome, recorded `gpt-6-luna` baseline |
 | `ai-agent-budget-visibility.md` | draft | agent-weak-models | default 600 s, `callsLeft`/`msLeft` in every rifty tool envelope |
