@@ -40,14 +40,20 @@ interface RunRecord {
   malformedToolCalls: number;
   terminalTail: string;
   judge: { pass: boolean; probes: unknown[] };
-  artifacts: { trace: string; browserTrace?: string; workspace?: string };
+  artifacts: { trace: string; after?: string; browserTrace?: string; workspace?: string };
   profile: string;
   finalDiff: unknown;
   failureClass: string | null;
   note: string | null;
 }
 interface Report {
-  header: { model: string; profile: string; runsPerTask: number; toolContextCaveat: string };
+  header: {
+    model: string;
+    profile: string;
+    runsPerTask: number;
+    toolContextCaveat: string;
+    sourceRevision: string;
+  };
   runs: RunRecord[];
 }
 
@@ -497,6 +503,45 @@ for (const lane of ['rifty', 'local-reference'] as const) {
   });
 }
 
+test('a real credential-named file stays private in snapshot keys and report payloads', async () => {
+  const secret = 'HEADER_PATH_SECRET';
+  const model = await agentModelServer([
+    [{ name: 'write_file', args: { path: `${secret}.txt`, content: 'body' } }],
+    'Done.',
+  ]);
+  const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-private-path-'));
+  const config = join(out, 'input-config.json');
+  await writeFile(
+    config,
+    JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl, { headers: { 'X-Key': secret } }) }),
+  );
+  try {
+    const result = await cli([
+      'run',
+      '--lane',
+      'rifty',
+      '--task',
+      'add-search',
+      '--runs',
+      '1',
+      '--config',
+      config,
+      '--output',
+      out,
+    ]);
+    expect(result.code, result.output).toBe(0);
+    const json = await readFile(join(out, 'report.json'), 'utf8');
+    const report = JSON.parse(json) as Report;
+    expect(report.runs[0]).toMatchObject({ agentStatus: 'done', toolCalls: 1 });
+    expect(json).not.toContain(secret);
+    const after = await readFile(join(out, report.runs[0]!.artifacts.after!), 'utf8');
+    expect(after).not.toContain(secret);
+    expect(JSON.parse(after)['[REDACTED].txt']).toBe('body');
+  } finally {
+    await model.close();
+  }
+});
+
 for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
   test(`${lane} measures tool failures and context before header privacy`, async () => {
     const native = lane === 'local-reference';
@@ -589,6 +634,10 @@ for (const lane of ['rifty', 'local-reference'] as const) {
       expect(model.headers[0]).toMatchObject({ 'x-number': '1', 'x-tag': 'error', 'x-quote': '"' });
       const report = JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as Report;
       const run = report.runs[0]!;
+      expect(report.header.sourceRevision).toBe(
+        execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+      );
+      expect(report.header.profile).toBe(getAgentPromptProfile().id);
       expect(run).toMatchObject({
         runIndex: 1,
         agentStatus: 'error',

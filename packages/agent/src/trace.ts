@@ -52,20 +52,37 @@ const tags = new Set([
   'image',
 ]);
 
+function privateText(text: string, secrets: ReadonlySet<string>): string {
+  let result = text;
+  for (const secret of secrets)
+    if (secret)
+      result = result
+        .split(JSON.stringify(secret).slice(1, -1))
+        .join('[redacted]')
+        .split(secret)
+        .join('[redacted]');
+  return result;
+}
+
 export function redactTrace(trace: AgentTrace, secrets: ReadonlySet<string>): AgentTrace {
-  const serialized = JSON.stringify(trace, (field, value: unknown) => {
-    if (field === 'headers' && value && typeof value === 'object' && !Array.isArray(value))
-      return Object.fromEntries(
-        Object.entries(value).map(([name, header]) => [
-          name,
-          typeof header === 'string' ? '[redacted]' : header,
-        ]),
-      );
-    if (typeof value !== 'string') return value;
-    if (['type', 'role', 'stopReason', 'status'].includes(field) && tags.has(value)) return value;
-    let text = value;
-    for (const secret of secrets) if (secret) text = text.split(secret).join('[redacted]');
-    return text;
-  });
-  return JSON.parse(serialized) as AgentTrace;
+  function serialize(value: unknown, payload = false): string {
+    return JSON.stringify(value, (field, item: unknown) => {
+      if (
+        !payload &&
+        item &&
+        typeof item === 'object' &&
+        ['headers', 'args', 'arguments', 'details', 'finalDiff', 'payload', 'body'].includes(field)
+      )
+        return JSON.parse(serialize(item, true));
+      if (payload && item && typeof item === 'object' && !Array.isArray(item))
+        return Object.fromEntries(
+          Object.entries(item).map(([name, value]) => [privateText(name, secrets), value]),
+        );
+      if (typeof item !== 'string') return item;
+      if (!payload && ['type', 'role', 'stopReason', 'status'].includes(field) && tags.has(item))
+        return item;
+      return privateText(item, secrets);
+    });
+  }
+  return JSON.parse(serialize(trace)) as AgentTrace;
 }

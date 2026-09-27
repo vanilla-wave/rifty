@@ -9,49 +9,67 @@ import { scriptedProvider } from '../../../tests/integration/fixtures/workbench-
 import { catalogEndpoint } from '../tests/catalog-endpoint.ts';
 import { redactJson, secretValues } from './config.ts';
 
-it('keeps echoed headers private inside a real consumer tool result', async () => {
-  const wire = scriptedProvider([[{ name: 'header_info', args: {} }], 'Done.']);
-  const models = createModels();
-  models.setProvider(
-    createOpenAIProvider({
-      id: 'bench',
-      models: [catalogEndpoint('https://bench.invalid/v1', { headers: { 'X-Key': 'assistant' } })],
-      fetch: wire.fetch,
-    }),
-  );
-  const session = createAgentSession({
-    models,
-    model: 'scripted',
-    host: {
-      root: '/',
-      capabilities: () => ({}),
-      async close() {},
-    },
-    tools: [
-      {
-        name: 'header_info',
-        label: 'header_info',
-        description: 'Return header metadata',
-        parameters: Type.Object({}),
-        execute: async () => ({
-          content: [{ type: 'text', text: 'Headers received' }],
-          details: { headers: { role: 'assistant', type: 'assistant' } },
-        }),
+it.each([true, false])(
+  'keeps consumer payload private without masking ordinary headers (credential: %s)',
+  async (credential) => {
+    const wire = scriptedProvider([[{ name: 'header_info', args: {} }], 'Done.']);
+    const models = createModels();
+    models.setProvider(
+      createOpenAIProvider({
+        id: 'bench',
+        models: [
+          catalogEndpoint(
+            'https://bench.invalid/v1',
+            credential ? { headers: { 'X-Key': 'assistant' } } : {},
+          ),
+        ],
+        fetch: wire.fetch,
+      }),
+    );
+    const session = createAgentSession({
+      models,
+      model: 'scripted',
+      host: {
+        root: '/',
+        capabilities: () => ({}),
+        async close() {},
       },
-    ],
-  });
-  try {
-    await session.send('Inspect headers');
-    const trace = await session.exportTrace();
-    expect(trace.status).toBe('done');
-    expect(trace.transcript.find((message) => message.role === 'toolResult')).toMatchObject({
-      role: 'toolResult',
-      details: { headers: { role: '[redacted]', type: '[redacted]' } },
+      tools: [
+        {
+          name: 'header_info',
+          label: 'header_info',
+          description: 'Return header metadata',
+          parameters: Type.Object({}),
+          execute: async () => ({
+            content: [{ type: 'text', text: 'Headers received' }],
+            details: {
+              headers: { role: 'assistant', type: 'assistant', 'Content-Type': 'text/plain' },
+              data: { 'assistant.txt': 'body' },
+            },
+          }),
+        },
+      ],
     });
-  } finally {
-    await session.dispose();
-  }
-});
+    try {
+      await session.send('Inspect headers');
+      const trace = await session.exportTrace();
+      expect(trace.status).toBe('done');
+      expect(trace.transcript.find((message) => message.role === 'toolResult')).toMatchObject({
+        role: 'toolResult',
+        details: {
+          headers: {
+            role: credential ? '[redacted]' : 'assistant',
+            type: credential ? '[redacted]' : 'assistant',
+            'Content-Type': 'text/plain',
+          },
+          data: { [credential ? '[redacted].txt' : 'assistant.txt']: 'body' },
+        },
+      });
+    } finally {
+      await session.dispose();
+    }
+  },
+);
 
 it('redacts header values even when header names and values resemble protocol tags', () => {
   expect(
@@ -131,3 +149,11 @@ it.each(['error', 'assistant', 'agent_end', 'status'])(
     }
   },
 );
+
+it('redacts payload dictionary keys as well as values, preserving nonsecret bytes', () => {
+  const files = { 'HEADER_PATH_SECRET.txt': 'echo HEADER_PATH_SECRET', 'other.txt': 'untouched' };
+  expect(JSON.parse(redactJson(files, ['HEADER_PATH_SECRET'], undefined, 'payload'))).toEqual({
+    '[REDACTED].txt': 'echo [REDACTED]',
+    'other.txt': 'untouched',
+  });
+});

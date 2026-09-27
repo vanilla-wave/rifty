@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Config, Endpoint } from './config.ts';
+import { type Config, type Endpoint, redact, redactJson } from './config.ts';
+import type { diffTrees } from './files.ts';
 import type { JudgeVerdict } from './judge/context.ts';
 import type { Lane, Observation } from './lanes/types.ts';
 export const caveat =
@@ -13,7 +14,7 @@ export interface Run extends Omit<Observation, 'trace'> {
   outcome: 'pass' | 'fail' | 'budget-exceeded' | 'context-exceeded';
   elapsedMs: number;
   judge: JudgeVerdict;
-  finalDiff: unknown;
+  finalDiff: ReturnType<typeof diffTrees>;
   artifacts: {
     trace: string;
     before?: string;
@@ -44,6 +45,39 @@ export interface Report {
   };
   runs: Run[];
 }
+/** Harness provenance and artifact addresses are not credential-derived payloads. */
+export function privateReport(report: Report, secrets: readonly string[]): Report {
+  const text = (value: string) => redact(value, secrets);
+  return {
+    header: {
+      ...report.header,
+      model: text(report.header.model),
+      endpoint: JSON.parse(redactJson(report.header.endpoint, secrets)) as Endpoint,
+    },
+    runs: report.runs.map((run) => ({
+      ...run,
+      terminalTail: text(run.terminalTail),
+      finalDiff: run.finalDiff.map((change) => ({
+        path: text(change.path),
+        before: change.before === null ? null : text(change.before),
+        after: change.after === null ? null : text(change.after),
+      })),
+      judge: {
+        pass: run.judge.pass,
+        probes: run.judge.probes.map((probe) => ({
+          ...probe,
+          evidence:
+            probe.evidence === undefined
+              ? undefined
+              : JSON.parse(redactJson(probe.evidence, secrets, undefined, 'payload')),
+        })),
+      },
+      note: run.note === null ? null : text(run.note),
+      ...(run.error === undefined ? {} : { error: text(run.error) }),
+    })),
+  };
+}
+
 export async function writeReport(dir: string, report: Report) {
   await writeFile(join(dir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
   const lines = [

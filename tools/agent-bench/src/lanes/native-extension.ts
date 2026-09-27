@@ -1,5 +1,5 @@
 import { getAgentPromptProfile } from '@riftydev/agent';
-import { type Endpoint, type Limits, redactJson } from '../config.ts';
+import { type Endpoint, type Limits, redact, redactJson } from '../config.ts';
 
 /** Public Pi extension hooks own admission and abort; no copied agent loop. */
 export function nativeExtension(directory: string, endpoint: Endpoint, limits: Limits): string {
@@ -11,7 +11,8 @@ export default function(pi) {
   const key=${endpoint.envKey ? `process.env[${JSON.stringify(endpoint.envKey)}]` : 'undefined'};
   const headers=JSON.parse(process.env.RIFTY_BENCH_MODEL_HEADERS ?? '{}');
   const secrets=[key,...Object.values(headers)].flatMap(value=>typeof value==='string' && value.length ? [value,value.trim(),value.trim().replace(/^Bearer\\s+/i,'')] : []).filter(Boolean);
-  const clean=value=>(${redactJson.toString()})(value,secrets);
+  const redact=${redact.toString()};
+  const clean=(value,mode='protocol')=>(${redactJson.toString()})(value,secrets,undefined,mode);
   let calls=0; let timer; let budget=null;
   const save=()=>writeFileSync(directory+'/native-admission.json',clean({calls,budget}));
   pi.on('before_agent_start', event=> {
@@ -24,7 +25,7 @@ export default function(pi) {
     return {systemPrompt};
   });
   pi.on('before_provider_headers', event=> { ${endpoint.envKey ? '' : 'event.headers.Authorization=null;'} Object.assign(event.headers,headers); });
-  pi.on('before_provider_request', event=> {appendFileSync(directory+'/provider-requests.jsonl',clean(event.payload)+'\\n');});
+  pi.on('before_provider_request', event=> {appendFileSync(directory+'/provider-requests.jsonl',clean(event.payload,'payload')+'\\n');});
   pi.on('agent_start', (_event,ctx)=>{ save();timer=setTimeout(()=>{budget='runTimeoutMs';save();ctx.abort();},${limits.runTimeoutMs}); });
   pi.on('agent_end', ()=> {clearTimeout(timer);save();});
   pi.on('tool_call', (event,ctx)=> {

@@ -150,8 +150,13 @@ export function redact(text: string, keys?: string | readonly string[]): string 
 }
 
 /** Serialize payload strings privately without corrupting numbers or protocol tags. */
-export function redactJson(value: unknown, secrets: readonly string[], space?: number): string {
-  // Self-contained: the native CLI extension embeds this same serializer.
+export function redactJson(
+  value: unknown,
+  secrets: readonly string[],
+  space?: number,
+  mode: 'protocol' | 'payload' = 'protocol',
+): string {
+  // The native CLI extension embeds this serializer and redact together.
   const tags: Record<string, readonly string[]> = {
     type: [
       'agent_start',
@@ -226,17 +231,30 @@ export function redactJson(value: unknown, secrets: readonly string[], space?: n
   return JSON.stringify(
     value,
     (field: string, item: unknown) => {
-      if (field === 'headers' && item && typeof item === 'object' && !Array.isArray(item))
+      if (
+        mode === 'protocol' &&
+        item &&
+        typeof item === 'object' &&
+        [
+          'headers',
+          'args',
+          'arguments',
+          'details',
+          'finalDiff',
+          'providerRequests',
+          'requests',
+          'payload',
+          'body',
+        ].includes(field)
+      )
+        return JSON.parse(redactJson(item, secrets, undefined, 'payload'));
+      if (mode === 'payload' && item && typeof item === 'object' && !Array.isArray(item))
         return Object.fromEntries(
-          Object.entries(item).map(([name, header]) => [
-            name,
-            typeof header === 'string' ? '[REDACTED]' : header,
-          ]),
+          Object.entries(item).map(([name, value]) => [redact(name, secrets), value]),
         );
-      if (typeof item !== 'string' || tags[field]?.includes(item)) return item;
-      let text = item;
-      for (const secret of secrets) if (secret) text = text.replaceAll(secret, '[REDACTED]');
-      return text;
+      if (typeof item !== 'string' || (mode === 'protocol' && tags[field]?.includes(item)))
+        return item;
+      return redact(item, secrets);
     },
     space,
   );

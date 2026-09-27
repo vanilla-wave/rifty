@@ -120,3 +120,30 @@ CI on0fab1a861: all except browser-unit passed; sandbox-support repeated-call
 case reported page/context/browser closed. The exact case reran independently
 and passed (1/1,4.3s), no source repair; log
 /private/tmp/rifty-pr359-browser-ci-isolated.log. Final CI remains required.
+
+## Final privacy/provenance verification
+
+Full `pnpm pr:check` on5fa57bc9:25/25 PASS, no isolated retries
+(/private/tmp/rifty-pr359-baseline-pr-check-green.log). Independent reviewer:
+51 unit PASS; all209 raw artifact hashes,42 records,308 actual Luna requests,
+token totals/classes and replay-source hashes verified.
+
+Focused acceptance: three-lane14-pair smoke, all three budget admissions and
+all three raw tool/context privacy cases PASS. Numeric-header cases exposed
+masked artifact links and revision/profile; FileTree probe exposed an unmasked
+credential filename. Same observed class, so ownership changed rather than
+adding more word exceptions: typed report retains generated provenance,
+addresses and judge/diff structure; only caller/project payload is private.
+Protocol frames preserve tags; opaque payload masks string values AND dictionary
+keys, including JSON-escaped text. Ordinary tool metadata stays intact.
+
+- Metadata/path RED: /private/tmp/rifty-pr359-baseline-acceptance.log (9PASS/2RED);
+  /private/tmp/rifty-pr359-private-path-red.log (real write, snapshot-key leak).
+- Three payload/ordinary-header REDs: /private/tmp/rifty-pr359-payload-privacy-red.log.
+- GREEN:21 unit (/private/tmp/rifty-pr359-payload-privacy-green.log), typecheck;
+  five real browser/native privacy cases, including unchanged numeric-header
+  checks and the credential-named write
+  (/private/tmp/rifty-pr359-report-payload-acceptance.log):5/5 PASS,1.7m.
+- Earlier14 baseline contracts and2 opaque-header checks passed before the
+  repairs; unchanged judge/isolation/deadline cases were not redefined.
+  New final source gate and independent verify remain before I12 closure.

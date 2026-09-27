@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Keep native trace statuses and event/message tags valid when a catalog header matches a protocol word; redact payloads and header values.
+- Keep native trace statuses and event/message tags valid when a catalog header matches a protocol word; mask credentials in payload values/keys, preserving ordinary tool metadata.
 
 - Accept native image prompts, including image-only input; reject text-only/binary mismatches before dispatch.
 

@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Preserve JSON numbers and native protocol tags during credential redaction; derive every lane's metrics from live events before masking payload strings.
+- Keep generated report addresses/revisions valid while masking credential-bearing payload keys, including filenames.
 
 - Accept native catalog endpoint/defaults in every lane; report full input/output tokens, continuation/tool-failure counters and separate context-exceeded outcomes.
 
