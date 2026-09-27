@@ -18,6 +18,7 @@ import {
 } from '@riftydev/kernel';
 import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { fileURLToPathPosix, isNodeUrl } from '../internal/posix-file-url.ts';
+import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -106,6 +107,12 @@ export class Worker extends EventEmitter {
     this.ownerProcess = (globalThis as { process?: unknown }).process;
     this.ownerBootstrap = readActiveNodeProcessBootstrap();
     const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
+    if (isSandboxToolchainRealm()) {
+      throw new NotImplementedError(
+        'worker_threads.Worker',
+        'no-COI toolchain Workers require a separate event loop; use cross-origin isolation and the kernel-backed runtime',
+      );
+    }
     const inheritedLaunch = readNodeEntryBootstrapIfPresent()?.launch;
     if (
       Object.prototype.hasOwnProperty.call(opts, 'execArgv') ||

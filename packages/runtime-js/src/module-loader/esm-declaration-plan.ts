@@ -27,7 +27,6 @@ export interface TransformHelperNames {
   readonly assetPath: string;
   readonly metaResolve: string;
   readonly runtimeObject: string;
-  readonly webAssembly: string;
 }
 
 export interface EsmAstEdit {

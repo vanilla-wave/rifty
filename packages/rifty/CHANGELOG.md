@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Report no-COI Worker/threaded-WASM capability as the explicit worker_threads.Worker gap; shared memory allocation remains native (ADR-0470).
+
 - Clarify checkCapabilities as synchronous realm presence; link active Workbench diagnostics without changing SDK behavior.
 
 - Add stopResident: reuse whole-Worker replacement without resident replay,

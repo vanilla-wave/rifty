@@ -68,12 +68,8 @@ const expectedDescriptorOutcome = {
   firstTruthy: {
     log: ['initial', 'maximum', 'shared'],
     sharedReads: 1,
-    error: {
-      name: 'NotImplementedError',
-      feature: 'toolchain.threaded-wasm',
-      constructorName: 'NotImplementedError',
-      plainErrorPrototype: false,
-    },
+    bufferBrand: '[object SharedArrayBuffer]',
+    identity: expectedNativeIdentity,
   },
 } as const;
 
@@ -182,7 +178,8 @@ test('headerless Chrome 148 native Memory reads descriptor fields once in order'
             prototypeIsNative: Object.getPrototypeOf(memory) === NativeMemory.prototype,
             constructorIsGuestBinding: memory.constructor === WebAssembly.Memory,
             bindingIsGlobal: WebAssembly.Memory === globalThis.WebAssembly.Memory,
-            descriptorIsBinding: Object.getOwnPropertyDescriptor(WebAssembly, 'Memory')?.value === WebAssembly.Memory,
+            descriptorIsBinding:
+              Object.getOwnPropertyDescriptor(WebAssembly, 'Memory')?.value === WebAssembly.Memory,
           },
         };
       } catch (error) {

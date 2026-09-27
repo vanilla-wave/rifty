@@ -265,7 +265,6 @@ function factoryArguments(
     assetPath,
     metaResolve,
     routedConstructors.Function,
-    deps.WebAssembly,
   ];
 }
 
