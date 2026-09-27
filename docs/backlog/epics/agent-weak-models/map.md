@@ -9,13 +9,9 @@ item ordering (goal §Decisions "shared bench order").
 
 5. `distribution/ai-agent-budget-visibility` — **budgets** — defaults 100 /
    600 s, `callsLeft`/`msLeft` in every rifty tool envelope (I9). I12 recorded.
-6. `distribution/ai-agent-transient-request-retry` — **retry** — `retry`
-   option (default on), pi 0.85.1 agent-level retry over the selected entry's
-   transport, visible attempts, ADR-0424 §4 correction (I6). I12 recorded.
-7. `distribution/ai-agent-context-compaction` — **compaction** — `compaction`
-   option (default on), pi 0.85.1 compaction over the retained history, trace
-   tokens and full usage totals, `context-exceeded`, plus the playground chat
-   marker and the `context-exceeded` switch offer (I5, I4 second half). I12 recorded; fault matrix.
+6. `distribution/ai-agent-context-compaction` — **continuation** — native retry
+   and compaction, full usage, retained history, context-exceeded and remaining
+   chat markers/explicit switch offer (I2, I4, I5, I6). I12 recorded. ADR-0473.
 8. `distribution/ai-agent-edit-failure-diagnostics` — **edit-diagnostics** —
    locating failure text for `edit_file` match failures, exact matching kept,
    apply_patch and host-write semantics unchanged (I7). I12 recorded.

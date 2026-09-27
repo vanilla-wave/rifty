@@ -31,3 +31,7 @@ ADR-0424 owns the session; ADR-0436 publishes native Pi 0.85.1 types.
 
 Pi 0.85.1 initialState.messages and reset probe, RED and browser proof:
 docs/backlog/distribution/reference/agent-history-evidence.md.
+
+## Corrections
+
+2026-09-27 — ADR-0473 additionally admits one leading native compaction summary with details; restoredMessageCount counts originally admitted messages, not a retained prefix after compaction; usage includes only current-session requests.

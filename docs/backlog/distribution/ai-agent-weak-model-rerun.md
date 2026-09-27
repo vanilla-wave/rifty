@@ -6,7 +6,7 @@ created: 2026-09-27
 why: Without a post-change measurement every mechanism of the goal could hold while task solving gets worse (critic finding 1); the delta on the same tasks is the goal's own evidence.
 user_story: As the maintainer, I want to see per task whether compaction, retry, budgets, edit diagnostics, the repeat guard, the verification feed and the recipe changed pass, budget, tokens and time on the same weak endpoint, but today there is no second run to compare and no comparison table.
 epic: agent-weak-models
-blocked_by: [distribution/ai-agent-budget-visibility, distribution/ai-agent-transient-request-retry, distribution/ai-agent-context-compaction, distribution/ai-agent-edit-failure-diagnostics, distribution/ai-agent-repeated-call-guard, distribution/ai-agent-verification-feed, distribution/ai-agent-prompt-recipe]
+blocked_by: [distribution/ai-agent-budget-visibility, distribution/ai-agent-context-compaction, distribution/ai-agent-context-compaction, distribution/ai-agent-edit-failure-diagnostics, distribution/ai-agent-repeated-call-guard, distribution/ai-agent-verification-feed, distribution/ai-agent-prompt-recipe]
 sources: [docs/backlog/distribution/reference/agent-weak-models-refine-evidence.md]
 code: [tools/agent-bench/src/report.ts, tools/agent-bench/src/cli.ts]
 ---

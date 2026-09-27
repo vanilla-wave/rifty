@@ -30,7 +30,7 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `ai-sandbox-reference-demo.md` | draft | open-bolt-ai-sandbox-demo | open client-side AI sandbox (eval+install slice; live preview question remains) |
 | `landing-blog-surface.md` | ready | wasi-in-browser-showcase | rifty.dev/blog route + first WASI post |
 | `ai-agent-budget-visibility.md` | draft | agent-weak-models | default 600 s, `callsLeft`/`msLeft` in every rifty tool envelope |
-| `ai-agent-transient-request-retry.md` | draft | agent-weak-models | pi 0.85.1 agent-level retry of retryable assistant errors (incl. after partial text), never after a dispatched tool call; ADR-0424 §4 correction |
+| `ai-agent-context-compaction.md` | draft | agent-weak-models | pi 0.85.1 agent-level retry of retryable assistant errors (incl. after partial text), never after a dispatched tool call; ADR-0424 §4 correction |
 | `ai-agent-context-compaction.md` | draft | agent-weak-models | pi 0.85.1 compaction over retained history, chat marker, `context-exceeded` |
 | `ai-agent-edit-failure-diagnostics.md` | draft | agent-weak-models | locating failure text for edit_file match failures, exact matching kept |
 | `ai-agent-repeated-call-guard.md` | draft | agent-weak-models | third identical call + result → visible steering message |

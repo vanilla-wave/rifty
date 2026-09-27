@@ -1,66 +1,90 @@
 ---
 area: distribution
-status: draft
-title: Compact the retained history before the next model request as pi 0.85.1 does, visibly and with full usage totals, and end a run that cannot fit with a distinct context-exceeded status
+status: ready
+title: Continue catalog sessions through native Pi retry and compaction without replaying tools
 created: 2026-09-27
-why: On a small-window endpoint the agent dies on context overflow — the user named compaction a survival mechanism, and pi's compaction already exists in pi-agent-core.
-user_story: As a developer running the agent on a 32k–128k endpoint, I want long tasks to survive by summarizing older history like the pi CLI does, but today the retained history grows until the provider rejects the request and the run ends with `error`.
+why: Small-window and flaky endpoints need the same continuation policy as Pi 0.85.1.
+user_story: As a developer using a small or rate-limited catalog entry, I want the session to preserve completed work, retry transient responses and compact older context, with visible progress and an honest terminal outcome.
 epic: agent-weak-models
-blocked_by: []
-sources: [docs/backlog/distribution/reference/agent-weak-models-refine-evidence.md]
-code: [packages/agent/src/session.ts, packages/agent/src/types.ts, apps/playground/src/ai/AiChatPanel.tsx]
+sources: [docs/backlog/epics/agent-weak-models/goal.md, docs/adr/distribution/0424-headless-pi-agent-over-public-project-hosts.md]
+code: [packages/agent/src/session.ts, packages/agent/src/history.ts, packages/agent/src/types.ts, apps/playground/src/ai/AiChatPanel.tsx]
 ---
 
 ## Context
 
-finding — goal slice 7 (I5); after slice 4 (baseline first); adds the `compaction` option (default on) over the entry's `contextWindow` (per entry,
-`compaction` option).
+Goal I5/I6 and remaining I4. I12 baseline must be recorded before implementation.
+Native low-level Agent remains the history/loop owner. Public Pi 0.85.1 retry,
+compaction preparation/generation and converter supply behavior; no copied
+provider classifier, summary algorithm or second message ledger.
 
-- Ours: no compaction; `AgentStatus` (`types.ts:141`) has no
-  `context-exceeded`; a provider context-length error ends the run at once
-  with `error` (`session.ts:269-271`); `exportTrace` sums usage from the
-  retained assistant messages only (`session.ts:335-341`).
-- Reference: pi 0.85.1 — `pi-agent-core` `shouldCompact(contextTokens,
-  contextWindow, settings)`, `prepareCompaction(entries, settings)`,
-  `compactWithRequest(preparation, options, request, context)`,
-  `estimateTokens`, `DEFAULT_COMPACTION_SETTINGS`
-  (`harness/compaction/compaction.d.ts:59-125`); CLI defaults reserve 16384 /
-  keep recent 20000; trigger `contextTokens > contextWindow − reserveTokens`
-  checked after tool results, before the next assistant response; compaction
-  happens inside the run and resumes with summary + retained tail (upstream
-  pi doc `compaction.md`, packages/coding-agent/docs).
-- After this slice: the summary is generated through the selected entry's
-  transport; the summary stays in history; a compaction event with tokens
-  before/after is emitted, rendered as a marker in the playground chat (this
-  slice owns that UI half and the chat's `context-exceeded` switch offer, I4;
-  the kit's later reducer `distribution/agent-transcript-model`, PR #357,
-  covers these events) and kept in the exported trace; trace usage totals keep the compacted-away
-  messages and add the summary requests (critic finding 10); a request that
-  cannot fit after compaction — e.g. a window smaller than reserve + retained
-  tail — ends the run with `context-exceeded`, distinct from `budget-exceeded`
-  and `error`; `compaction: { enabled: false }` disables.
-- Carrier fog (goal map): `AgentHarness` adoption vs low-level `Agent` +
-  `transformContext` with an `AgentMessage[]`→`Entry[]` adapter; the choice
-  must keep ADR-0424 §2 (pi owns history) and the per-entry transport.
-- Parity cases at PICKUP: the same scripted conversation against the pi CLI
-  0.85.1 with a small `contextWindow` in `models.json` — trigger turn,
-  summary placement, retained tail and resumed run must match.
-- Fault matrix expected at PICKUP (`AGENTS.md` §DoD): summary request fails
-  (provider error) → as pi 0.85.1 does for threshold compaction
-  (`agent-session.js:1867-1889` reports the error and returns `false`; the
-  hook `:274-286` continues the next request with the unchanged history) — the
-  error is an event, history untouched, no loop beyond the retry slice's
-  policy; if that next request then overflows, `context-exceeded`; compaction during
-  `stop()` → settles aborted, no partial summary retained; proxy omits `usage`
-  → token estimate from `estimateTokens`, noted in the event; window smaller
-  than reserve + retained tail → `context-exceeded`.
-- Out of this slice: rule-based pruning stage (goal map fog), branch
-  summarization / session tree (pi CLI features outside ADR-0424).
+## Acceptance
+
+1. Retry defaults enabled/maxRetries3/baseDelayMs2000; native exponential
+   scheduling, classifier and partial-response discard. Retry-After ignored;
+   transport maxRetries0. Option enabled:false disables. Trace records effective
+   settings and visible retry attempts; chat discards failed partial text. → I6
+2. A request after completed tool work retries only its assistant response;
+   every dispatched tool has one effect, prior results remain. Selection changed
+   during backoff applies at the next request with that entry's defaults. → I2, I6, ADR-0424
+3. Compaction defaults enabled/reserve16384/keepRecent20000, optional native
+   settings; threshold check before the next request and on resumed history.
+   Selected catalog transport generates summary; history becomes native summary
+   and retained tail. enabled:false disables. → I5
+4. Summary survives later requests, model switch, another compaction and JSON
+   export/initialMessages restore; native file-operation details survive too.
+   One leading summary is admitted before host work; malformed restores reject.
+   Restored-message count names originally admitted messages, not a prefix after
+   compaction. → I1, I2, I5, ADR-0466
+5. Trace usage totals include all current-session assistant/summary attempts,
+   including compacted-away and failed attempts; restored usage excluded and
+   reset clears current totals. → I5, ADR-0466
+6. Compaction event carries reason, success/failure/abort and tokens before/after;
+   successful summary has a persistent visible chat marker. Estimates use native
+   rules when provider usage absent. → I4, I5
+7. Native context overflow is separate from transient retry. At most one
+   compact-and-retry for an overflowing request; unrecovered overflow ends
+   context-exceeded. Completed tools are never replayed. The UI offers another
+   entry and explicit continue with retained history. → I4, I5, I6
+8. Stop/deadline settles retries and summary work, installs no partial summary;
+   existing aborted/budget-exceeded status and completed tool effects remain
+   honest. → I5, I6, ADR-0424
+
+## Parity cases
+
+1. Actual Pi CLI and Rifty: 429×2 then success, 429×4, partial text then
+   connection failure, failure after an executed tool; counts, delays, retained
+   history and tool effects match. → I6
+2. Actual Pi CLI and Rifty with the same conversation/small catalog window:
+   threshold before next response, summary placement, retained tail, continuation;
+   public native preparation/generation additionally probes repeated compaction.
+   → I5
+3. Retry/compaction disabled: one failed request / unchanged growing history,
+   respectively. Native overflow still has the distinct Rifty terminal status.
+   → I5, I6
+
+## Fault matrix
+
+| Boundary / axis | Injection | Observable result | Authority |
+|---|---|---|---|
+| Model network / unbounded-read | 429 + Retry-After; 5xx or partial-stream loss | Native bounded retries/delays, no transport retries or tool replay | → I6 |
+| Model network / torn-state | Threshold summary fails | History unchanged, failure event; next response allowed; ensuing overflow terminates context-exceeded | → I5 |
+| Model network / torn-state | Stop or deadline while summary/backoff pending | Aborted/budget terminal; no partial summary or later attempt/effect | → I5, I6, ADR-0424 |
+| Native projection / provenance-lie | Provider omits usage, retained old usage after compaction | Native estimate marked; full recorded request usage never reconstructed from retained history | → I5 |
+| Model network / unbounded-read | Context still overflows after summary, or no native cut point | One recovery maximum, context-exceeded, explicit model-switch offer | → I4, I5 |
+| Restore / corrupt-input | Malformed summary/details or orphan tool result | Rejected before host/model work; valid own export round-trips | → I5, ADR-0466 |
 
 ## Challenge
 
-challenge: 2026-09-27 — inherits `epics/agent-weak-models/goal.md` §Challenge (10 problems, resolved there); reuse for unchanged promises at PICKUP.
+challenge: 2026-09-27 — inherited accepted goal; independent DEC-2 native
+probes resolve Agent versus Harness and restorable summary carrier.
 
 ## Decisions
 
-- Inherits goal decisions (defaults, compaction reference, tier).
+- re-cut: 2026-09-27 — absorb former transient-request-retry draft into one continuation boundary with compaction and remaining chat markers; all I4/I5/I6 obligations retained — trace: none
+- Native oracle may emit a larger estimated token count after compaction; no invented fit test on estimate+reserve. Actual overflow governs bounded recovery.
+- ADR-0424 §4 and ADR-0466 envelopes/count semantics require dated corrections via the continuation ADR; no changes to action replay prohibition or host recovery.
+
+## Out of scope
+
+Tool feedback/recipe (I7–I11), benchmark rerun (I13), action replay, automatic
+model fallback, copied Pi algorithms and alternate history ownership.
