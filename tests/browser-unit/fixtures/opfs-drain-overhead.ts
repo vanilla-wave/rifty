@@ -7,12 +7,12 @@ export interface FlushOverheadSample {
   readonly batchedMkdirPerOpMeanMs: number;
 }
 
-/** Existing two independent bounds expressed as their maximum. */
+/** Sum each shape's overhead over its actual faithful-loop population. */
 export function pendingFlushOverheadMs(sample: FlushOverheadSample): number {
-  return Math.max(
-    Math.max(0, sample.singlePendingFlushMeanMs - sample.batchedPerOpMeanMs) *
-      sample.faithfulOpCount,
+  const writeCalls = sample.faithfulOpCount - sample.faithfulMkdirCount;
+  return (
+    Math.max(0, sample.singlePendingFlushMeanMs - sample.batchedPerOpMeanMs) * writeCalls +
     Math.max(0, sample.singlePendingMkdirFlushMeanMs - sample.batchedMkdirPerOpMeanMs) *
-      sample.faithfulMkdirCount,
+      sample.faithfulMkdirCount
   );
 }

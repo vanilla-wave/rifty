@@ -174,30 +174,11 @@ test('durability drain on a real 26k-file node_modules tree beats the same-run s
   expect(result.emptyFlushMeanMs * result.faithfulOpCount).toBeLessThanOrEqual(
     0.1 * result.faithfulMs,
   );
-  // PENDING-ONLY closure: the empty probe cannot see overhead that manifests
-  // only when ops are pending — such a mutant inflates the faithful
-  // baseline's 2×files NONEMPTY flushes while the empty probe and the
-  // product's ONE flush stay cheap. Same-run delta probe on the drained
-  // faithful instance: (a) singlePendingFlushMeanMs repeats the faithful
-  // loop's exact per-op shape (one pending op per awaited flush); (b)
-  // batchedPerOpMeanMs amortizes flush machinery to one call (the product's
-  // own shape) — max(0, a−b) is the per-nonempty-flush overhead, and scaled
-  // across every faithful flush it must stay ≤10% of the baseline; the
-  // pending-MKDIR sibling probe below completes the sweep.
+  // Each pending shape contributes only its actual population: files writes
+  // and files mkdirs. Sum both costs under the SAME10% budget; do not charge
+  // write-only overhead to mkdirs or let separate bounds hide their total.
   expect(result.singlePendingFlushMeanMs).toBeGreaterThan(0);
   expect(result.batchedPerOpMeanMs).toBeGreaterThan(0);
-  // MKDIR-SHAPE closure: the write-shape probe cannot see overhead that
-  // manifests only on pending-MKDIR flushes — the faithful loop awaits
-  // ~files = 26 811 mkdir flushes (one per file) vs the product's 2 315
-  // mkdir ops (11.6:1 asymmetry), so mkdir-persist-only overhead could
-  // inflate the baseline unswept. Same-run delta probe on the SAME drained
-  // faithful instance, scratch outside the verified tree: (c)
-  // singlePendingMkdirFlushMeanMs repeats the faithful loop's per-mkdir
-  // shape (one pending mkdir per awaited flush); (d) batchedMkdirPerOpMeanMs
-  // amortizes flush machinery to one call (the product's own shape) —
-  // max(0, c−d) scaled across every faithful mkdir flush must stay ≤10% of
-  // the baseline. Three probe shapes now sweep the faithful loop's entire
-  // flush population: empty, pending-write, pending-mkdir.
   expect(result.faithfulMkdirCount).toBe(result.files);
   expect(result.singlePendingMkdirFlushMeanMs).toBeGreaterThan(0);
   expect(result.batchedMkdirPerOpMeanMs).toBeGreaterThan(0);

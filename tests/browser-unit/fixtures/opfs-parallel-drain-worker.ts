@@ -121,26 +121,11 @@ const FILL_STRIDE = 251;
  * pending-write, pending-mkdir — and the batched shape is the product's own. */
 const EMPTY_FLUSH_PROBE_N = 2000;
 
-/** Single-pending delta probe size — closes the PENDING-ONLY overhead hole
- * the empty probe cannot see: flush() overhead that manifests only when ops
- * are pending (~0.7ms/call scale) would inflate the faithful baseline's
- * 2×files NONEMPTY flushes while the empty probe and the product's ONE flush
- * stay cheap. On the drained faithful instance, outside all timed windows:
- * (a) K iterations of { writeFileSync(tiny fresh path); await flush() } —
- * EXACTLY the faithful loop's per-op shape, one pending op per flush →
- * singlePendingFlushMeanMs; (b) K tiny fresh-path writes then ONE awaited
- * flush → batchedPerOpMeanMs — the raw per-op OPFS cost with flush machinery
- * amortized to one call (the product's own shape). max(0, a−b) is the
- * per-nonempty-flush overhead; the spec gates it × faithfulOpCount ≤ 0.1 ×
- * faithfulMs, so a pending-only mutant inflates (a) but not (b) and fails in
- * the same run, on the SHIPPED code. The same K drives the mkdir sibling:
- * (c) K × { mkdirSync(fresh scratch dir); await flush() } →
- * singlePendingMkdirFlushMeanMs; (d) K fresh-dir mkdirs + ONE flush →
- * batchedMkdirPerOpMeanMs — closes the mkdir-persist-only hole the write
- * probe cannot see (the faithful loop awaits ~files = 26 811 mkdir flushes
- * vs the product's 2 315 mkdir ops, 11.6:1 asymmetry). Three probe shapes
- * now sweep the faithful loop's flush population: empty, pending-write,
- * pending-mkdir; batched = the product's own shape. */
+/** Same-directory serial probes isolate per-shape flush placement: K awaited
+ * single-op flushes versus one batched flush, for writes and mkdirs separately.
+ * Both shapes retain the scheduler's sibling order. Their positive per-call
+ * deltas are weighted by their actual faithful-loop populations and SUMMED
+ * under one10% bound; empty-flush overhead has its separate guard above. */
 const SINGLE_PENDING_PROBE_K = 200;
 
 /** Tiny payload for the single-pending probe — probe cost must be flush

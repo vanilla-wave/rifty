@@ -53,3 +53,14 @@ before repair; exact two CI records, combined-cost counterexample and no negativ
 credit. Write-only/mkdir-only/common-overhead violations already reject.
 `/private/tmp/rifty-pr359-opfs-overhead-red.log`. No mocked rifty package or
 relabelled benchmark outcomes; frozen recorded measurements supply regression data.
+
+## GREEN and reversion
+
+Weighted sum:7/7 regression tests PASS; restoring the old helper produces the
+same4 RED/3 PASS, restoring the fix returns7/7. Logs
+`/private/tmp/rifty-pr359-opfs-overhead-{green,revert,final-green}.log`.
+Actual unchanged acceptance spec in Linux Chromium148:1/1 PASS (2.4m),
+serial88252ms/product22170ms,3.98061×; all26,811 files/2,314 dirs byte-exact,
+clean ledgers. Original2.5×1.05/10% bounds retained. Docker Playwright1.60.0
+jammy arm64, read-only checkout; actual test runner, not a copied predicate.
+`/private/tmp/rifty-pr359-opfs-linux-green.log`. No concurrent build or test load.

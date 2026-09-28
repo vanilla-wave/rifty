@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Correct OPFS acceptance overhead accounting: weight write/mkdir probes by actual call counts under one unchanged10% budget; retain speedup and full-tree durability gates.
+
 - Treat a first HEAD created but never closed as uncommitted storage; fresh replay stays empty without a false corruption diagnosis.
 
 - Preserve layout diagnosis for internal boot composition while keeping the public backend-string result (ADR-0432).
