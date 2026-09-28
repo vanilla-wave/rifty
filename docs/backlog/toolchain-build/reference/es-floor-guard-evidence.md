@@ -57,3 +57,17 @@ Boundary: a finite AST catalog, not dynamic type inference. Ambiguous arbitrary 
 Nested prototype/globalThis destructuring added three further REDs; recursive ObjectPattern traversal preserves the explicit receiver path.
 
 GREEN: `pnpm test:run tools/checks/es-floor.test.ts tools/checks/pr-check.test.ts` 75/75 (68 guard + 7 wiring), scoped Biome PASS, `pnpm check:es-floor` 329 actual bundles PASS. Product bundles unchanged; no build, packed test or browser run repeated.
+
+## PR comment 4123923080 — waitAsync waiver
+
+Supersedes the initial name-only exception above. Fault: `lossy-aggregate` at the owned policy/graph boundary; a builtin name collapsed verified feature detection and an unconditional native call into one PASS. `rifty-fix`: direct/globalThis/aliased/extracted/destructured native calls and wrong/missing guards reproduced nine REDs; the real emitted SabRing wrapper supplied a further RED after enforcement. A sibling sweep added three REDs for function-scoped `var`, assigned aliases and global-object destructuring.
+
+The single exception now requires AST evidence at its use: a positive local `typeof` branch, an early return/throw for absence, or an immutable captured method whose uses are all checked. Symbol lookup respects lexical declarations; no runtime type inference. An inline support callback is admitted only when its locally resolved runner invokes that callback once inside try/catch (awaited for async callbacks) and the catch records a `failed` result through the actual Map setter or global postMessage. A mere try elsewhere, unrelated feature check, wrong branch, missing failure record or callback invocation outside try cannot grant the exception.
+
+The ring wrapper gained its own three-line feature check, preserving available native behavior and the existing missing-API TypeError. Both async ring entries were tested without native waitAsync before the edit (37 tests PASS). Removing the new check from real esbuild output is RED; removing stdio's typeof check or appending an unguarded alias call is RED. Both real support source graphs are bundled in tests; mutating their emitted `failed` reports to `passed` is RED. No whole-bundle waiver, new pin inventory or general callback/type framework.
+
+Validation: focused guard/wiring/kernel/capability/negative-carrier tests passed; final count recorded below. `pnpm build:libs` + `pnpm build:playground` PASS; `pnpm check:es-floor` checked 329 actual emitted bundles PASS. Browser support tests `published probe assets perform real browser operations` and `repeated call observes new denial`: 2/2 PASS on dedicated port 5493. Initial sandbox launch refused localhost binding (EPERM); authorized escalation rerun passed. Biome and diff whitespace checks passed.
+
+Compiler refresh: saved the pre-build worker before rebuilding. Both versions remain 10,022,694 bytes; exactly five import-name lines changed (5, 8, 9, 21, 211003), no compiler body differences. Worker SHA256 moved `2538b29ef2fc138bbb9cab5b4d4de8bbdec4dcf3fc95050fcc38e32dc933601d` → `6eb0c238139fb6413a84fe4f235a4fb019c9fa5e406ab73ee46b199199df1fa1`. Updated only that SHA pin. Unchanged negative raw/gzip/base64 tests 10/10 and exact retirement inventory PASS; lexical compiler pin unchanged.
+
+Final focused run: 170/170 (guard 87, wiring 7, ring 37, dispatcher 13, capabilities 4, stdio 12, carrier negatives 10). Runtime-source freeze follows this proof; full PR gate remains the driver's responsibility.

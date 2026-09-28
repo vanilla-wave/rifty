@@ -1,7 +1,7 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { transformSync } from 'esbuild';
+import { buildSync, transformSync } from 'esbuild';
 import { afterEach, describe, expect, it } from 'vitest';
 import { bundleViolations, checkBundleRoots } from './es-floor.mjs';
 
@@ -179,6 +179,107 @@ describe('shipped ES2022 floor', () => {
       bundleViolations('worker.js', generated, () => map(origin, 'array.with(0, 1)')).join('\n'),
     ).toContain('with');
   });
+
+  it.each([
+    'Atomics.waitAsync(words, 0, 0)',
+    'globalThis.Atomics.waitAsync(words, 0, 0)',
+    'const native = Atomics; native.waitAsync(words, 0, 0)',
+    'if (true) { var native = Atomics; } native.waitAsync(words, 0, 0)',
+    'let native; native = Atomics; native.waitAsync(words, 0, 0)',
+    'const { Atomics: native } = globalThis; native.waitAsync(words, 0, 0)',
+    'const wait = Atomics.waitAsync; wait(words, 0, 0)',
+    'const { waitAsync: wait } = Atomics; wait(words, 0, 0)',
+    'Atomics.waitAsync.call(Atomics, words, 0, 0)',
+    'if (typeof Atomics.waitAsync !== "function") Atomics.waitAsync(words, 0, 0)',
+    'if (typeof unrelated === "function") Atomics.waitAsync(words, 0, 0)',
+    'const wait = Atomics.waitAsync; try { throw unrelated; } catch (wait) { if (typeof wait === "function") Atomics.waitAsync(words, 0, 0); }',
+  ])('rejects unguarded waitAsync: %s', (source) => {
+    expect(violations(source).join('\n')).toContain('Atomics.waitAsync');
+  });
+
+  it('binds a local waitAsync exception to its own positive feature check', () => {
+    const source = 'if (typeof Atomics.waitAsync === "function") Atomics.waitAsync(words, 0, 0);';
+    expect(violations(source)).toEqual([]);
+    expect(
+      violations(source.replace('typeof Atomics.waitAsync === "function"', 'true')).join('\n'),
+    ).toContain('Atomics.waitAsync');
+    expect(violations('typeof Atomics.waitAsync === "function"')).toEqual([]);
+    expect(
+      violations('typeof Atomics.waitAsync === "function" && Atomics.waitAsync(words, 0, 0)'),
+    ).toEqual([]);
+  });
+
+  it('accepts captured stdio binding only while every use is feature-guarded', () => {
+    const source = `const native = Atomics;
+      const wait = native.waitAsync;
+      const bound = typeof wait === 'function' ? wait.bind(native) : null;
+      bound?.(words, 0, 0);`;
+    expect(violations(source)).toEqual([]);
+    expect(violations(source.replace("typeof wait === 'function'", 'true')).join('\n')).toContain(
+      'Atomics.waitAsync',
+    );
+    expect(violations(`${source} wait(words, 0, 0);`).join('\n')).toContain('Atomics.waitAsync');
+  });
+
+  it('checks the real ring wrapper before and after removing its local guard', () => {
+    const source = readFileSync('packages/kernel/src/ipc/sab-ring.ts', 'utf8');
+    const emitted = transformSync(source, { loader: 'ts', target: 'es2022', minify: true }).code;
+    expect(violations(emitted)).toEqual([]);
+    const unguarded = emitted.replace(/if\(typeof [^;]+?throw new TypeError\([^;]+?;/, '');
+    expect(unguarded).not.toBe(emitted);
+    expect(violations(unguarded).join('\n')).toContain('Atomics.waitAsync');
+  });
+
+  it('allows probes only while invocation and failure reporting stay bound to try/catch', () => {
+    const source = `function probe(id, operation) {
+      try { operation(); }
+      catch (error) { globalThis.postMessage({ status: 'failed', error }); }
+    }
+    probe('shared-memory', () => Atomics.waitAsync(words, 0, 0));`;
+    expect(violations(source)).toEqual([]);
+    expect(violations(source.replace("status: 'failed'", "status: 'passed'")).join('\n')).toContain(
+      'Atomics.waitAsync',
+    );
+    expect(
+      violations(source.replace('try { operation(); }', 'operation(); try {}')).join('\n'),
+    ).toContain('Atomics.waitAsync');
+    expect(
+      violations(source.replace('operation();', 'if (false) operation();')).join('\n'),
+    ).toContain('Atomics.waitAsync');
+    expect(violations(`${source} Atomics.waitAsync(words, 0, 0);`).join('\n')).toContain(
+      'Atomics.waitAsync',
+    );
+  });
+
+  it('requires awaiting an async probe to catch native rejection', () => {
+    const source = `async function probe(id, operation) {
+      try { await operation(); }
+      catch (error) { globalThis.postMessage({ status: 'failed', error }); }
+    }
+    probe('shared-memory', async () => Atomics.waitAsync(words, 0, 0));`;
+    expect(violations(source)).toEqual([]);
+    expect(violations(source.replace('await operation()', 'operation()')).join('\n')).toContain(
+      'Atomics.waitAsync',
+    );
+  });
+
+  it.each(['support-worker.ts', 'check-sandbox-support.ts'])(
+    'binds the real emitted %s callback to its failure recorder',
+    (entry) => {
+      const emitted = buildSync({
+        entryPoints: [`packages/workbench/src/support/${entry}`],
+        bundle: true,
+        write: false,
+        format: 'esm',
+        platform: 'browser',
+        target: 'es2022',
+      }).outputFiles[0].text;
+      expect(violations(emitted)).toEqual([]);
+      const withoutFailureRecord = emitted.replaceAll('status: "failed"', 'status: "passed"');
+      expect(withoutFailureRecord).not.toBe(emitted);
+      expect(violations(withoutFailureRecord).join('\n')).toContain('Atomics.waitAsync');
+    },
+  );
 
   it('allows only the named guarded Atomics.waitAsync exception', () => {
     expect(

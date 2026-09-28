@@ -41,6 +41,9 @@ interface AtomicsWithWaitAsync {
   ): WaitAsyncResult;
 }
 function atomicsWaitAsync(ia: Int32Array, i: number, v: number, t: number): WaitAsyncResult {
+  if (typeof (Atomics as unknown as AtomicsWithWaitAsync).waitAsync !== 'function') {
+    throw new TypeError('Atomics.waitAsync is not a function');
+  }
   return (Atomics as unknown as AtomicsWithWaitAsync).waitAsync(ia, i, v, t);
 }
 

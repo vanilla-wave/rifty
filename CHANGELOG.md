@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Retain hosted/prod e2e failure traces and screenshots from test-results in CI.
+
+- Pin the browser-floor workflow actions and restrict its GitHub token to read-only repository contents.
+
 - Publish dated browser/persistence floors and traffic method; add on-demand pinned floor and real-device proof protocol (ADR-0477).
 
 - Manual-only, record-only COI/non-COI browser lanes; WebKit persistent test profiles, build annotations and bounded boundary diagnostics.

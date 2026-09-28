@@ -236,7 +236,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ matrix.lane }}${{ matrix.shardTotal && format('-{0}', matrix.shard) || '' }}
-          path: playwright-report
+          path: |
+            playwright-report
+            test-results
 
   browser-unit-chromium:
     needs: change-scope
