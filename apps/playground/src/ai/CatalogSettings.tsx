@@ -120,7 +120,8 @@ export function CatalogSettings(props: {
           The key applies to provider “{selected().provider}”; Add model creates its own provider.
           Catalog and selection are saved. Keys, headers and run limits stay in this chat; keys and
           values of headers named auth/key/token/secret/cookie/session are masked in provider errors
-          (a non-credential match such as Idempotency-Key too).
+          (a non-credential match such as Idempotency-Key too; header values under 8 characters are
+          not).
         </small>
         <details>
           <summary>Advanced catalog</summary>

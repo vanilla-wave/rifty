@@ -25,7 +25,8 @@ custom-transport credentials to the embedder with no way to declare them.
    creation). Each also masks in its JSON-escaped form: pi formats HTTP error bodies as
    `<status>: <JSON>`. Headers are not implicit secrets; embedders declare private ones
    (Playground: values of headers named auth/key/token/secret/cookie/session, plus the bare
-   `Bearer` token; a non-credential match such as `Idempotency-Key` is masked too).
+   `Bearer` token, each only if ≥ 8 chars so `X-Session-Pool: 5` cannot turn `500: …` into
+   `[redacted]00: …`; a non-credential match such as `Idempotency-Key` is masked too).
 3. `trace.ts` and export-time redaction are deleted; `exportTrace()` returns a detached copy.
 
 ## Alternatives

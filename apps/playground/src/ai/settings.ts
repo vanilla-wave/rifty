@@ -189,11 +189,12 @@ export function sessionCatalog(settings: ChatSettings) {
     models.setProvider(createOpenAIProvider({ id, models: entries, apiKey: settings.apiKeys[id] }));
   // Playground policy: credential-named headers are secrets, raw and as the bare Bearer token;
   // ordinary ones (X-Title, HTTP-Referer) stay visible; a non-credential match (Idempotency-Key)
-  // is masked too. apiKeys are masked by the provider.
+  // is masked too. Strings under 8 chars are not: `X-Session-Pool: 5` would turn `500: …` into
+  // `[redacted]00: …` and break retry classification. apiKeys are masked by the provider.
   const secrets = settings.models.flatMap((model) =>
     Object.entries(model.headers ?? {}).flatMap(([name, value]) =>
       /auth|key|token|secret|cookie|session/i.test(name)
-        ? [value, value.replace(/^bearer\s+/i, '')]
+        ? [value, value.replace(/^bearer\s+/i, '')].filter((secret) => secret.length >= 8)
         : [],
     ),
   );
