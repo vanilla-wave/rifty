@@ -23,3 +23,6 @@
 - 2026-09-28 — final pr:check27/27 PASS on reviewed product tree; unit190.2s, parity71.4s, no isolated rerun needed. Source/test freeze held.
 
 - 2026-09-28 — source Chromium CI run36359700726 / job108734348335 @09c8f3515:110passed,0failed; earlier required CI fixture failure resolved. Final post-review changes are documentation only; pass binding valid.
+
+- 2026-09-28 — user enabled Safari automation and requested comment triage, independent review and merge preparation. PR362 comments checked: no inline comments/reviews; only Netlify preview bot link. All current CI checks green.
+- 2026-09-28 — native Safari26.6.2/macOS run: support probe DataCloneError (existing finding), ten subsequent SDK steps pass including durable reload/reopen/rebuild. Raw docs/backlog/distribution/reference/browser-manual-safari-native.json. Real iOS WebDriver session refused; no product observation, I8 physical-iOS report remains required.

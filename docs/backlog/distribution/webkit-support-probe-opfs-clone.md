@@ -28,3 +28,11 @@ Reproducer: `pnpm exec playwright test --config playwright.no-coi.config.ts
 Owner: workbench support probe. Trigger: WebKit support-report fidelity work.
 Deferred by the browser-support-floor user's record-only choice; not a goal
 child. Dedup found no existing item for the persistent-context clone failure.
+
+## Native Safari observation
+
+2026-09-28, Safari26.6.2 on macOS, native WebDriver: same required-persistence
+`opfs` DataCloneError; boot/install/build/flush/reload/exact-byte reopen/rebuild
+pass. Source: docs/backlog/distribution/reference/browser-manual-safari-native.json.
+The direct handle-transfer probe above remains WebKit evidence; no new Safari
+root-cause isolation is claimed. Same owner/finding, no duplicate.

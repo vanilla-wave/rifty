@@ -23,6 +23,8 @@ Device farms / BrowserStack; Android devices beyond Yandex on desktop; COI tier 
 
 ## Decisions
 
+- 2026-09-28 — native Safari26.6.2 measured after user enabled WebDriver; SDK sequence passes, support probe remains recorded failure. Native Yandex already measured. Only physical-iOS result remains required.
+
 - 2026-09-28 — protocol delivered at `tools/floor-lane/README.md`; native Yandex26.8 proof in browsers.md; required Safari/macOS+iOS reports remain, Safari WebDriver unavailable without user setting change.
 
 - 2026-09-27 — in the epic, user-run — user "В эпик"

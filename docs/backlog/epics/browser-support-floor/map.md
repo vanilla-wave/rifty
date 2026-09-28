@@ -1,10 +1,10 @@
 ## Items
 
-1. `distribution/real-browser-manual-protocol` — protocol and native Yandex proof delivered; required Safari/macOS and iOS reports remain. Use `tools/floor-lane/README.md`; preserve unknown memory/eviction reasons → I8.
+1. `distribution/real-browser-manual-protocol` — protocol and native Yandex proof delivered; native Safari/macOS measured; required iOS report remains. Use `tools/floor-lane/README.md`; preserve unknown memory/eviction reasons → I8.
 
 ## Open questions
 
-- Real Safari26/macOS and iOS Safari result blocks — owner: user — run `tools/floor-lane/README.md` protocol; requested in-session 2026-09-28. I8 remains required; no engine substitute.
+- Real iOS Safari result block — owner: user — run `tools/floor-lane/README.md` protocol; requested in-session 2026-09-28. I8 remains required; no engine substitute.
 
 ## Out of scope
 

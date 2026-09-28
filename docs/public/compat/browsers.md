@@ -105,16 +105,27 @@ harness failure stays `❓`, never a product `❌`. Firefox's pinned available
 | Chromium 108.0.5359.29 | ❌ 2026-09-28: SDK import throws on main-thread sync WASM >4KB | no boot/storage steps reached |
 | Firefox 114.0b3 beta (UA114.0) | ❌ 2026-09-28: install/build/flush pass, saved source ENOENT after reload | OPFS selected both boots; namespace unchanged; stable114 still uncharacterized |
 | WebKit 26.0, macOS26.6 | ❓ 2026-09-28: pinned runner fails `Playwright.setDownloadBehavior`: no default context | harness cannot launch; not a product failure or Safari result |
-| Safari26.6.2 macOS, real device | ❓ 2026-09-28: WebDriver refuses session (Remote Automation disabled); manual run still required | estimate + steps absent; memory/eviction unobserved |
-| Safari iOS, real device | ❓ 2026-09-28: awaiting user hardware run | estimate + steps absent; total-memory API unavailable on non-COI; revisit required |
+| Safari26.6.2 macOS, real device | ⚠26.6.2 · 2026-09-28: native Safari WebDriver; support probe DataCloneError, all ten subsequent SDK steps pass | quota82,463,372,084 B; usage37,721,687 B; memory/eviction unknown |
+| Safari iOS, real device | ❓ 2026-09-28: real-device WebDriver session refused; device readiness unresolved | estimate + steps absent; memory/eviction unobserved |
 | Yandex26.8.0.0 / Chromium150, macOSarm64 | ✅ 2026-09-28: actual installed browser, isolated headless profile; all protocol steps passed | quota10,767,150,993 B; usage29,732,753 B; memory/eviction unknown |
 
 [Native Yandex report](../../backlog/distribution/reference/browser-manual-yandex-native.json),
 clean a57da96b8: `node tools/floor-lane/run.mjs --current --executable-path
 /Applications/Yandex.app/Contents/MacOS/Yandex --url http://127.0.0.1:5611/browser-support.html`.
 This measures that desktop build/profile, not all Yandex versions or mobile devices.
-[Safari driver response](../../backlog/distribution/reference/browser-manual-safari-driver-unavailable.json)
-is a harness limitation, not a Safari failure; settings were not changed.
+[Native Safari report](../../backlog/distribution/reference/browser-manual-safari-native.json):
+after the user enabled Remote Automation, real Safari26.6.2 completed boot, seed,
+install, build, flush, reload, exact saved-byte readback, reopen and rebuild.
+The required-persistence support probe alone fails with the already recorded
+`DataCloneError`; the overall result stays fail. WebDriver isolates its profile;
+post-session retention and seven-day eviction are unmeasured.
+[Reproducer](../../backlog/distribution/reference/native-safari-webdriver-run.mjs)
+uses the same page and real button click. Start the host on5611 and `safaridriver -p5615`,
+then run the script with Node. The earlier
+[disabled-driver response](../../backlog/distribution/reference/browser-manual-safari-driver-unavailable.json)
+remains history. [Real-iOS admission](../../backlog/distribution/reference/browser-manual-ios-admission.json)
+requested `safari:useSimulator:false`; no session was created, so no iOS product
+claim is made. A usable physical device and completed report remain required.
 
 Use the [one-URL protocol](../../../tools/floor-lane/README.md). One report includes
 support, boot, install, build, reload, exact persisted bytes, reopen and rebuild.
