@@ -26,3 +26,5 @@
 
 - 2026-09-28 — user enabled Safari automation and requested comment triage, independent review and merge preparation. PR362 comments checked: no inline comments/reviews; only Netlify preview bot link. All current CI checks green.
 - 2026-09-28 — native Safari26.6.2/macOS run: support probe DataCloneError (existing finding), ten subsequent SDK steps pass including durable reload/reopen/rebuild. Raw docs/backlog/distribution/reference/browser-manual-safari-native.json. Real iOS WebDriver session refused; no product observation, I8 physical-iOS report remains required.
+
+- 2026-09-28 — re-chart after native-safari-proof (final-green PASS @10b1a14bfec7361b27a6a55aa8f4ff1078733f6a): independent Standards/Spec reviewers found zero slice blockers; full pr:check27/27 PASS (unit183.1s, parity59.7s, no retries). Verdict docs/backlog/distribution/reference/pr-362-merge-final-green.json. Only physical-iOS report remains required; goal not closed. User requested PR readiness, not merge.
