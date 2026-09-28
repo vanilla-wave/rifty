@@ -6,7 +6,6 @@ import { __setCreateRequireImpl } from '../builtins/module.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
 import { createRequirePath } from '../internal/create-require-path.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
-import { sandboxToolchainWebAssembly } from '../internal/sandbox-toolchain-realm.ts';
 import { createCjsInteropAuthority } from './cjs-interop-authority.ts';
 import {
   type CjsExtensionHook,
@@ -484,7 +483,6 @@ function createModuleLoaderCore(
     sourceMaps,
     transformSource: cachedTransform,
     transformEsm: cachedTransformEsm,
-    WebAssembly: sandboxToolchainWebAssembly(),
     staticImportNames: cjsInterop.staticImportNames,
     resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule {
       return resolver.resolve(specifier, { fromFile, esm });

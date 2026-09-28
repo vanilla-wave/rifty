@@ -1,0 +1,19 @@
+{
+  "endpoint": {
+    "id": "gpt-6-luna",
+    "name": "GPT-6 Luna",
+    "provider": "codex-proxy",
+    "api": "openai-completions",
+    "baseUrl": "http://127.0.0.1:10539/v1",
+    "input": ["text"],
+    "contextWindow": 1000000,
+    "maxTokens": 8192,
+    "reasoning": true,
+    "thinking": "medium",
+    "compat": { "supportsReasoningEffort": true },
+    "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+  },
+  "limits": { "maxToolCalls": 40, "runTimeoutMs": 600000 },
+  "runsPerTask": 3,
+  "playgroundPort": 5397
+}

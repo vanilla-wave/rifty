@@ -1,0 +1,110 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Можно принимать: независимо 5 browser + 5 product unit + 10 retirement unit GREEN; retirement gate PASS; полный pr:check GREEN подтверждён сырым логом.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "67baa678817cf6af143cf38693c2417b3bf4e59c",
+  "unit_goal_source": "Standalone observed-defect repair PR #360: user request to restore native WebAssembly fidelity in no-COI and deliver a green PR; native Node baseline + ADR-0470; BASE f112e5f35d09fb4434d718814644da55b9cfa780. Separate backlog contract/goal absent; native-wasm-memory-evidence.md is the probe journal, not a contract. Исходные ADR-0375/ADR-0011 и изменённые критерии проверены по PR-4. Новый fingerprint проверен непосредственно; нормализованные current/sibling compiler bytes совпадают. Старый pinned artifact локально отсутствует.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Native WebAssembly identity across REPL, CJS, ESM and installed bin",
+      "source": "acceptance",
+      "trace": "ADR-0470 decision 1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-memory-descriptor.spec.ts:209",
+      "note": ""
+    },
+    {
+      "row": "Selected toolchain Worker synchronously throws canonical NotImplementedError before child effects",
+      "source": "acceptance",
+      "trace": "ADR-0470 decision 2",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/worker-threads-toolchain-ceiling.test.ts:15",
+      "note": ""
+    },
+    {
+      "row": "SDK Worker and threaded-WASM capabilities identify the Worker construction gap",
+      "source": "public-api",
+      "trace": "ADR-0470 decision 3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:1134",
+      "note": ""
+    },
+    {
+      "row": "Real Vite 8 terminates with original dependency error, named Worker diagnostic and absent dist",
+      "source": "acceptance",
+      "trace": "ADR-0470 decision 4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2420",
+      "note": ""
+    },
+    {
+      "row": "Retained named causes retain bounded package-generic projection",
+      "source": "acceptance",
+      "trace": "ADR-0470 decision 4 + ADR-0375 decision 5",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2016",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie / sibling-drift: guest bindings preserve native constructor and namespace identity",
+      "source": "fault-matrix",
+      "trace": "ADR-0470 decision 1",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/sandbox-toolchain-realm.test.ts:62",
+      "note": ""
+    },
+    {
+      "row": "observable-order: descriptor and newTarget evaluation match native Node",
+      "source": "fault-matrix",
+      "trace": "ADR-0470 decision 1",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/sandbox-toolchain-realm.test.ts:10",
+      "note": ""
+    },
+    {
+      "row": "false-fallback: selected toolchain Worker cannot enter same-realm execution",
+      "source": "fault-matrix",
+      "trace": "ADR-0470 decision 2",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/worker-threads-toolchain-ceiling.test.ts:15",
+      "note": ""
+    },
+    {
+      "row": "frozen-assumption: shared allocation remains native independently of threaded workload support",
+      "source": "fault-matrix",
+      "trace": "ADR-0470 decisions 1 and 3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-memory-descriptor.spec.ts:134; tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2420",
+      "note": ""
+    },
+    {
+      "row": "Supported Vite 7 build retains exact COI/no-COI output bytes",
+      "source": "acceptance",
+      "trace": "ADR-0375 decision 6 + ADR-0470 consequences",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2341",
+      "note": ""
+    },
+    {
+      "row": "Compiler fingerprint remains exact; renamed esbuild payloads and oversized substitutes remain rejected",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:102; tools/checks/esbuild-legacy-retirement.test.ts:51",
+      "note": ""
+    }
+  ],
+  "axes": [
+    { "axis": "Completeness", "verdict": "pass", "findings": [] },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    { "axis": "Bugs", "verdict": "pass", "findings": [] },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+  ]
+}

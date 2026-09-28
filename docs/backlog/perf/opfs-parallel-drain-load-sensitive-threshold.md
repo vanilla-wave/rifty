@@ -17,3 +17,16 @@ median-of-N phases, CPU-time instead of wall clock, or marking the ratio
 report-only on shared runners while asserting it locally. Judge against
 `docs/process/rules/testing.md` before implementation; do not silently widen the
 threshold — that erases the regression signal the gate exists for.
+
+
+## PR359 evidence (2026-09-28)
+
+CI36365591064 attempts1/2 both failed the pending-write guard; isolated native
+macOS/Linux passed. A distinct population-accounting defect was reproduced:
+write cost charged to both write+mkdir calls, while independent bounds could
+hide combined overhead. [Captured values and RED/GREEN](reference/pr359-opfs-overhead-accounting.md).
+The current repair weights both measured shapes by actual counts under one
+unchanged10% budget; no change to raw speedup or full-tree proof. General
+phase-to-phase sampling noise remains this draft's question, not a proven
+runtime regression. Owner: agent at pickup; trigger: another unexplained timing
+failure or work on performance measurement.

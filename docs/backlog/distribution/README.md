@@ -29,6 +29,7 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `landing-compare-page.md` | ready | webcontainers-alternative-search-slot | rifty.dev/compare — verifiable WebContainers-alternative table + link-checker |
 | `ai-sandbox-reference-demo.md` | draft | open-bolt-ai-sandbox-demo | open client-side AI sandbox (eval+install slice; live preview question remains) |
 | `landing-blog-surface.md` | ready | wasi-in-browser-showcase | rifty.dev/blog route + first WASI post |
+| `ai-agent-context-file-unicode-tags.md` | draft | — | question: strip invisible Unicode tag chars from loaded AGENTS.md/SKILL.md (pi byte parity vs Claude Code strip); user fork at pickup |
 
 ## Dependency map
 

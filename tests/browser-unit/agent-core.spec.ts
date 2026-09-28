@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { bootOwner, gotoHarness } from './fixtures.ts';
 import type * as Proof from './fixtures/agent-core-proof.ts';
+import type * as HistoryProof from './fixtures/agent-history-proof.ts';
 
 const proofUrl = `/@fs${process.cwd()}/tests/browser-unit/fixtures/agent-core-proof.ts`;
 
@@ -68,7 +69,13 @@ test('provider failure retains completed write and continuation receives its res
   expect(result.failedTrace.transcript.some((message) => message.role === 'toolResult')).toBe(true);
   expect(result.status).toBe('done');
   expect(result.file).toBe('committed-once');
-  expect(JSON.stringify(result.requests[2]?.body.messages)).toContain('call-0-0');
+  expect(
+    result.failedTrace.events.filter(
+      ({ event }) => event.type === 'retry' && event.phase === 'start',
+    ),
+  ).toHaveLength(3);
+  expect(result.requests).toHaveLength(7);
+  expect(JSON.stringify(result.requests[5]?.body.messages)).toContain('call-0-0');
   expect(
     result.trace.transcript.filter(
       (message) => message.role === 'toolResult' && message.toolName === 'write_file',
@@ -149,9 +156,13 @@ test('diagnostics match the real companion and export includes SCM state', async
   const resultMessage = result.trace.transcript.find(
     (message) => message.role === 'toolResult' && message.toolName === 'diagnostics',
   );
-  expect(resultMessage?.content).toEqual([
-    { type: 'text', text: JSON.stringify(result.expectedDiagnostics) },
-  ]);
+  if (resultMessage?.role !== 'toolResult') throw new Error('Missing diagnostics result');
+  const text = resultMessage.content
+    .map((part) => (part.type === 'text' ? part.text : ''))
+    .join('\n');
+  const [receipt, ...body] = text.split('\n');
+  expect(JSON.parse(receipt!)).toMatchObject({ callsLeft: 99, msLeft: expect.any(Number) });
+  expect(JSON.parse(body.join('\n'))).toEqual(result.expectedDiagnostics);
   expect(JSON.stringify(result.trace.finalDiff)).toContain('diagnostic.ts');
   expect(result.trace.finalDiff).not.toHaveProperty('error');
 });
@@ -185,7 +196,9 @@ test('tool result cap preserves UTF-8 head and tail with an explicit omitted-byt
       .join('') ?? '';
   expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(16 * 1024);
   expect(text).toContain('HEAD');
-  expect(text.startsWith('\ufeffHEAD')).toBe(true);
+  const [receipt, ...body] = text.split('\n');
+  expect(JSON.parse(receipt!)).toMatchObject({ callsLeft: 19, msLeft: expect.any(Number) });
+  expect(body.join('\n').startsWith('\ufeffHEAD')).toBe(true);
   expect(text).toContain('TAIL');
   expect(text).toMatch(/\[truncated \d+ bytes\]/);
   expect(text).not.toContain('\ufffd');
@@ -233,7 +246,7 @@ test('Workbench host retains the read CAS version when an editor saves concurren
   expect(result).toEqual({ file: 'editor-change', error: 'FileConflictError' });
 });
 
-test('supplied API key reaches only the transport and is removed from exported values', async ({
+test('supplied API key reaches only the transport; provider echoes are scrubbed at ingress', async ({
   page,
 }) => {
   const result = await page.evaluate(
@@ -242,8 +255,11 @@ test('supplied API key reaches only the transport and is removed from exported v
   );
   expect(result.authorization).toBe(`Bearer ${result.key}`);
   expect(result.trace.config).not.toHaveProperty('apiKey');
-  expect(JSON.stringify(result.trace)).not.toContain(JSON.stringify(result.key).slice(1, -1));
-  expect(JSON.stringify(result.trace)).toContain('[redacted]');
+  expect(result.detail).toContain('Denied [redacted].');
+  const serialized = JSON.stringify(result.trace);
+  for (const form of [result.key, JSON.stringify(result.key).slice(1, -1)])
+    expect(serialized).not.toContain(JSON.stringify(form).slice(1, -1));
+  expect(serialized).toContain('[redacted]');
 });
 
 test('agent shell stdout, stderr and owner exit match the real user terminal', async ({ page }) => {
@@ -297,4 +313,53 @@ test('exact edit preserves the UTF-8 BOM outside the replaced text', async ({ pa
     proofUrl,
   );
   expect(bytes).toEqual(Array.from(new TextEncoder().encode('\ufeffbeta')));
+});
+
+test('fresh headless session restores persisted native messages with a changed model', async ({
+  page,
+}) => {
+  const result = await page.evaluate(async (url) => {
+    const proof = (await import(/* @vite-ignore */ url)) as typeof HistoryProof;
+    return proof.proveHistory();
+  }, `/@fs${process.cwd()}/tests/browser-unit/fixtures/agent-history-proof.ts`);
+  expect(result.status).toBe('done');
+  expect(result.file).toBe('persisted work');
+  expect(result.restored.transcript).toEqual(result.seed);
+  expect(result.restored).toMatchObject({
+    restoredMessageCount: result.seed.length,
+    timings: [],
+    usage: { totalTokens: 0 },
+  });
+  expect(JSON.stringify(result.requests[0]?.body.messages)).toContain('Remember this work.');
+  expect(JSON.stringify(result.requests[0]?.body.messages)).toContain('Write remember.txt');
+  expect(result.requests[0]?.body).toHaveProperty('model', 'new-model');
+  expect(
+    result.continued.transcript.filter(
+      (m) => m.role === 'toolResult' && m.toolName === 'write_file',
+    ),
+  ).toHaveLength(1);
+  expect(result.continued.timings).toHaveLength(1);
+  expect(result.reset).toHaveProperty('restoredMessageCount', 0);
+  expect(JSON.stringify(result.requests[2]?.body.messages)).not.toContain('Remember this work.');
+});
+
+test('diagnostics match after native write, edit and patch and reach next model request', async ({
+  page,
+}) => {
+  const result = await page.evaluate(
+    async (url) =>
+      ((await import(/* @vite-ignore */ url)) as typeof Proof).proveMutationDiagnostics(),
+    proofUrl,
+  );
+  expect(result.status).toBe('done');
+  expect(result.diagnostics.some((diagnostic) => diagnostic.code === 2322)).toBe(true);
+  const mutations = result.trace.transcript.filter((message) => message.role === 'toolResult');
+  expect(mutations).toHaveLength(3);
+  expect(mutations.every((message) => message.role === 'toolResult' && !message.isError)).toBe(
+    true,
+  );
+  expect(JSON.stringify(mutations[0]?.content)).toMatch(/diagnostics:[\s\S]*TS2322/);
+  expect(JSON.stringify(mutations[1]?.content)).toMatch(/diagnostics:[\s\S]*0/);
+  expect(JSON.stringify(mutations[2]?.content)).toMatch(/diagnostics:[\s\S]*TS2322/);
+  expect(JSON.stringify(result.requests[1]?.body.messages)).toContain('TS2322');
 });

@@ -115,7 +115,6 @@ function compileEsmFactory(
       helper.assetPath,
       helper.metaResolve,
       'Function',
-      helper.webAssembly,
       globalKeyCheck,
       `const ${helper.runtimeObject} = Object; return (${asyncBody ? 'async ' : ''}function* () {\nconst ${helper.importMeta} = { url: ${helper.importMetaUrl}, dirname: ${helper.metaDirname}, filename: ${helper.metaFilename}, resolve: ${helper.metaResolve} }; ${transformed.instantiationBody} yield;\n${transformed.body}\n})();\n//# sourceURL=${resolved.id}`,
     ) as EsmFactory;
@@ -156,7 +155,6 @@ function compileDirectEsmFactory(
       helper.assetPath,
       helper.metaResolve,
       'Function',
-      helper.webAssembly,
       globalKeyCheck,
       `const ${helper.runtimeObject} = Object; return (async function () {
 const ${helper.importMeta} = { url: ${helper.importMetaUrl}, dirname: ${helper.metaDirname}, filename: ${helper.metaFilename}, resolve: ${helper.metaResolve} }; ${transformed.instantiationBody}

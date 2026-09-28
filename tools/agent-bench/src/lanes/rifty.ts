@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { type Page, expect } from '@playwright/test';
-import type { AgentTrace } from '@riftydev/agent';
+import type { AgentSessionEvent, AgentTrace } from '@riftydev/agent';
 import {
   openShellTerminal,
   pickStarter,
@@ -54,8 +54,9 @@ export async function prepareRifty(input: Input): Promise<Prepared> {
     const panel = page.getByTestId('ai-panel');
     await expect(panel).toBeVisible();
     await panel.getByRole('button', { name: 'Settings', exact: true }).click();
-    await panel.getByLabel('Base URL', { exact: true }).fill(endpoint.baseUrl);
-    await panel.getByLabel('Model', { exact: true }).fill(endpoint.model);
+    const { envKey: _envKey, ...entry } = endpoint;
+    await panel.getByText('Advanced catalog', { exact: true }).click();
+    await panel.getByLabel('Model catalog (JSON)', { exact: true }).fill(JSON.stringify([entry]));
     await panel.getByLabel('API key (optional)', { exact: true }).fill(key ?? '');
     await panel.getByLabel('Tool limit', { exact: true }).fill(String(config.limits.maxToolCalls));
     await panel
@@ -86,20 +87,40 @@ export async function prepareRifty(input: Input): Promise<Prepared> {
       page,
       before,
       async run() {
-        await panel.getByLabel('Message', { exact: true }).fill(task.prompt);
-        await panel.getByRole('button', { name: 'Send', exact: true }).click();
-        await expect(panel).toHaveAttribute(
-          'data-status',
-          /^(done|error|aborted|budget-exceeded)$/,
-          { timeout: config.limits.runTimeoutMs + 120000 },
-        );
-        const trace = await page.evaluate(async () => {
+        const observation = await page.evaluateHandle(() => {
           const hook = Reflect.get(globalThis, '__riftyAgentBench') as {
-            exportTrace(): Promise<AgentTrace>;
+            observe(listener: (event: AgentSessionEvent) => void): () => void;
           };
-          return hook.exportTrace();
+          const events: AgentSessionEvent[] = [];
+          const detach = hook.observe((event) => {
+            if (
+              (event.type === 'agent' && event.event.type === 'message_end') ||
+              ['retry', 'compaction', 'repeated-call'].includes(event.type)
+            )
+              events.push(structuredClone(event));
+          });
+          return { events, detach };
         });
-        return coreObservation(trace, requests);
+        try {
+          await panel.getByLabel('Message', { exact: true }).fill(task.prompt);
+          await panel.getByRole('button', { name: 'Send', exact: true }).click();
+          await expect(panel).toHaveAttribute(
+            'data-status',
+            /^(done|error|aborted|budget-exceeded|context-exceeded)$/,
+            { timeout: config.limits.runTimeoutMs + 120000 },
+          );
+          const trace = await page.evaluate(async () => {
+            const hook = Reflect.get(globalThis, '__riftyAgentBench') as {
+              exportTrace(): Promise<AgentTrace>;
+            };
+            return hook.exportTrace();
+          });
+          const events = await observation.evaluate((value) => value.events);
+          return coreObservation(trace, requests, events);
+        } finally {
+          await observation.evaluate((value) => value.detach());
+          await observation.dispose();
+        }
       },
       async preview() {
         const element = await page.locator('[data-testid="preview"] iframe').elementHandle();

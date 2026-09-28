@@ -109,6 +109,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0458 | Read the realm-bound `node:process` registry entry uncached in io |
 | 0464 | Named-loud members for charted unclaimed-mode ceilings |
 | 0480 | Refuse advanced IPC view constructor accessors |
+| 0470 | Preserve native WebAssembly in no-COI guests |
 
 ### runtime-wasi
 
@@ -374,6 +375,14 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0439 | Settle probe cleanup against the terminated Worker's OPFS lock |
 | 0440 | Load pi project resources through rooted agent hosts |
 | 0442 | Refuse pi-expandable commands inside agent session admission |
+| 0466 | Restore native agent conversation history |
+| 0471 | Embedder model catalog and session model selection |
+| 0472 | Measure catalog benchmarks with pinned pi event semantics |
+| 0473 | Continue agent sessions with native retry and compaction |
+| 0474 | Project native compaction history from session receipts |
+| 0475 | Feed tool outcomes and shared workflow back to the model |
+| 0478 | Compare fixed-config agent benchmark runs |
+| 0479 | Scrub declared secrets at the provider ingress |
 
 ## Superseded (removed)
 

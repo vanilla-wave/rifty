@@ -269,7 +269,6 @@ function factoryArguments(
     assetPath,
     metaResolve,
     routedConstructors.Function,
-    deps.WebAssembly,
     createGlobalWriteKeyCheck(
       'module-loader.esm-global-function-assignment',
       `ESM module ${resolved.id} writes the global Function property through a runtime key; rifty cannot emulate that without mutating the host constructor`,

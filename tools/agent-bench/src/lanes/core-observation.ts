@@ -1,10 +1,21 @@
-import type { AgentTrace } from '@riftydev/agent';
+import type { AgentSessionEvent, AgentTrace } from '@riftydev/agent';
+import { eventMetrics } from '../metrics.ts';
 import type { Observation } from './types.ts';
-export function coreObservation(trace: AgentTrace, requests: unknown[]): Observation {
-  const tools = trace.transcript.filter((message) => message.role === 'toolResult');
+export function coreObservation(
+  trace: AgentTrace,
+  requests: unknown[],
+  events: readonly AgentSessionEvent[],
+): Observation {
+  const messages = events.flatMap((event) =>
+    event.type === 'agent' && event.event.type === 'message_end' ? [event.event.message] : [],
+  );
+  const tools = messages.filter((message) => message.role === 'toolResult');
   return {
+    ...eventMetrics(events, trace.config.contextWindow, trace.status),
+    inputTokens: trace.usage.totalTokens - trace.usage.output,
+    outputTokens: trace.usage.output,
     agentStatus: trace.status,
-    turns: trace.transcript.filter((message) => message.role === 'assistant').length,
+    turns: messages.filter((message) => message.role === 'assistant').length,
     // Pi emits an error result when admission aborts; core skipped proposals carry applied:no.
     // Count dispatched results, never the blocked proposal or unexecuted tail.
     toolCalls: tools.filter((message) => {

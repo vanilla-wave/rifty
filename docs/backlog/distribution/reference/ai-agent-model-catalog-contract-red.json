@@ -1,0 +1,166 @@
+{
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/ai-agent-model-catalog.md; goal agent-weak-models I1/I2; ADR-0436 с corrections и ADR-0471; BASE ce81e179ccfaf4c68deb22cf2f3799415fdc698b; HEAD b505c2ffd",
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED принят; можно IMPLEMENT. Merge — после реализации, миграций и Final+GREEN.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1–I2",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:10",
+      "summary": "Каталог пока только подготовлен: реализация, миграции потребителей и GREEN впереди."
+    },
+    {
+      "clause": "I3–I4",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:19",
+      "summary": "Изображения и playground catalog/picker/attachments остаются в связанных items 2–3."
+    },
+    {
+      "clause": "I5–I13",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:30",
+      "summary": "Baseline, механизмы, диагностика, бюджеты, recipe и сравнительный повторный прогон остаются в items 4–12."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: catalog-only admission; legacy forms и invalid id отклоняются до host work",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:164",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: native effective parameters, transport, trace metadata и redaction",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:63",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: active setModel, retained tool history после ошибки, observable model events",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:118",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: миграция потребителей с сохранением существующей real-host acceptance",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:68; tests/no-coi/no-coi-pi-agent.spec.ts:3; tests/integration/fixtures/workbench-vite-consumer/src/agent-proof.ts:27",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: selected model, output limit, temperature, top_p, reasoning_effort совпадают с native pi",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:74",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: active selection сохраняет историю; provider failure не теряет tool results",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:118; docs/backlog/distribution/reference/ai-agent-model-catalog-evidence.md:55",
+      "note": ""
+    },
+    {
+      "row": "provider error × selected request: error, retained history, no replay",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:118",
+      "note": ""
+    },
+    {
+      "row": "invalid id × admission: throw before host work",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:164",
+      "note": ""
+    },
+    {
+      "row": "credential in provider error × export: redacted export, effective metadata",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:189",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/agent/src/catalog.test.ts:189",
+          "summary": "Redaction RED содержит apiKey, но не catalog header. Стоит добавить отдельный header secret, отражённый provider error; текущая проверка не показывает эту ветку Acceptance 2. Без выполненного surviving-mutant artifact покрытие остаётся pass по REV-4.",
+          "authority": "",
+          "evidence": "pnpm exec vitest run packages/agent/src/catalog.test.ts: 4/4 RED; redaction case падает на отсутствующем createOpenAIProvider. В fixture этого case задан только apiKey."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/distribution/0471-embedder-model-catalog-and-session-model-selection.md:34",
+          "summary": "«They do not ship before I12's baseline» грамматически относит запрет и к images; map ставит images перед baseline. Уточнить, что ограничение касается mechanisms; пользовательский scope не изменён.",
+          "authority": "",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/agent/src/catalog.test.ts:148",
+          "summary": "После второго setModel тест проверяет retained result, но не третий model id и смену request defaults. Полезно дать entries разные defaults и проверить следующий запрос. Это advisory; surviving mutant не исполнялся.",
+          "authority": "",
+          "evidence": "Независимый node --input-type=module probe с native pi-agent-core/pi-ai 0.85.1, scriptedProvider и prepareNextTurnWithContext: models=[\"small\",\"large\",\"small\"], первый запрос max_completion_tokens=4096, temperature=1, top_p=0.95, reasoning_effort=\"medium\"; третий запрос roles=[\"user\",\"assistant\",\"tool\",\"user\"], retained=true. pnpm exec vitest run packages/agent/src/session.test.ts packages/agent/src/history.test.ts: 34/34 PASS."
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "b505c2ffd0e77775cb9736540f4cb1ace739a080"
+}

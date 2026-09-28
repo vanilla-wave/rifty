@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+- Repeated-call detection ignores mutation host-diagnostics timing (pending vs settled); README/ADR-0475 note state exactly which consumer results get budget receipts.
+- Breaking: scrub built-in keys and declared `secrets` once at provider ingress in provider error text only (`errorMessage`, retry/compaction errors, thrown request errors; assistant text/thinking stay raw); headers are no longer implicit secrets; export-time redaction removed (ADR-0479).
+
+- Clarify native assistant retries versus the prohibition on tool-action replay.
+
+- Default600s and model-facing budget receipts; exact-edit hints, third-repeat native steering, bounded post-mutation diagnostics and shared recipe v2 with opt-out.
+
+- Native Pi retry/compaction, bounded context recovery, restorable summary details and full current-session attempt usage.
+
+- Keep native trace statuses and event/message tags valid when a catalog header matches a protocol word; mask credentials in payload values/keys, preserving ordinary tool metadata.
+
+- Accept native image prompts, including image-only input; reject text-only/binary mismatches before dispatch.
+
+- Breaking: native pi Models catalog replaces settings/streamFn session forms; per-model defaults, active setModel and effective redacted trace.
+
+- Restore native `initialMessages` in fresh sessions; validate required native fields and tool pairs, expose trace provenance and count only new-run usage (ADR-0466).
+
 - Refuse pi-expandable commands inside `send` after resource discovery and budget/cancellation checks; first and later sends report the same error without model dispatch (ADR-0442).
 - Load pi 0.85.1 project context/skills by default; resource reports, opt-outs and explicit reload. Preserve profile paragraphs; adopt custom-prompt tail (ADR-0440 supersedes ADR-0434 tail clause).
 - `reload()` retries a failed startup read; `list` entries outside the listed directory are reported; unreadable ignore files skip silently as the CLI.

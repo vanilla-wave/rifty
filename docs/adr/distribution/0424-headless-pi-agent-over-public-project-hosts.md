@@ -74,3 +74,7 @@ not enforce its `replay` declaration.
 - Embedders own UI, permission/dependency policy, auth and domain tools.
 - Workbench and SDK keep their distinct documented cwd/CAS/persistence behavior.
 - Native Pi tools and model types are part of the agent interface; version is pinned.
+
+## Corrections
+
+2026-09-27 — ADR-0473 admits native agent-level retries (§4) and bounded overflow continuation after failed-response removal and successful compaction (§2); transport retries and action replay remain forbidden.
