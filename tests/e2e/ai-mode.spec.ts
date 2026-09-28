@@ -57,6 +57,15 @@ async function exported(page: Page): Promise<AgentTrace> {
 
 const toolResults = (trace: AgentTrace) =>
   trace.transcript.filter((entry) => entry.role === 'toolResult');
+// User turns as the provider received them (string or text parts).
+const userTexts = (messages: readonly Record<string, unknown>[] = []) =>
+  messages
+    .filter((message) => message.role === 'user')
+    .map(({ content }) =>
+      typeof content === 'string'
+        ? content
+        : (content as { text?: string }[]).map((part) => part.text ?? '').join(''),
+    );
 
 test('lazy +chat streams real React edits/build/preview into editor, SCM, Agent terminal and export', async ({
   page,
@@ -804,14 +813,7 @@ test('catalog controls switch providers after error without losing tool history'
       max_completion_tokens: 4096,
     });
     // The auto-restored prompt is already history: Continue sends `continue`, not a duplicate.
-    const userTexts = request?.messages
-      .filter((message) => message.role === 'user')
-      .map(({ content }) =>
-        typeof content === 'string'
-          ? content
-          : (content as { text?: string }[]).map((part) => part.text ?? '').join(''),
-      );
-    expect(userTexts).toEqual(['Write the proof, then continue.', 'continue']);
+    expect(userTexts(request?.messages)).toEqual(['Write the proof, then continue.', 'continue']);
     expect(JSON.stringify(request?.messages)).toContain('catalog-proof.txt');
     expect(request?.messages.filter((message) => message.role === 'tool')).toHaveLength(1);
     const trace = await page.evaluate(async () =>
@@ -1120,6 +1122,53 @@ test('Continue with another model sends the edited draft instead of continue', a
     const users = second.requests[0]?.body.messages.filter((entry) => entry.role === 'user');
     expect(JSON.stringify(users?.at(-1))).toContain('use the edited draft');
     expect(JSON.stringify(users)).not.toMatch(/"(?:content|text)":"continue"/);
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
+test('Continue with another model sends a pending attachment without the auto-restored prompt', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const first = await agentModelServer([
+    [{ name: 'write_file', args: { path: 'attach-proof.txt', content: 'written once' } }],
+    { error: 'first model rejected', status: 400 },
+  ]);
+  const second = await agentModelServer(['Read the attached notes.']);
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await openChat(page);
+    const panel = page.getByTestId('ai-panel');
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    await panel.getByText('Advanced catalog', { exact: true }).click();
+    await panel
+      .getByLabel('Model catalog (JSON)', { exact: true })
+      .fill(JSON.stringify([entry('first', first.baseUrl), entry('second', second.baseUrl)]));
+    await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
+    const prompt = 'Write the proof, then read my notes.';
+    await send(page, prompt);
+    await expect(panel).toHaveAttribute('data-status', 'error', { timeout: 25000 });
+    await expect(panel.getByLabel('Message', { exact: true })).toHaveValue(prompt);
+    await panel
+      .getByLabel('Attach files', { exact: true })
+      .setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('note\n') });
+    const attached = panel.getByTestId('ai-attachments').locator('[data-project-path]');
+    await expect(attached).toHaveCount(1);
+    const path = await attached.getAttribute('data-project-path');
+    expect(path).toMatch(/^\/attachments\/notes/);
+    await panel.getByRole('button', { name: 'Continue with second', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await expect(panel).toContainText('Read the attached notes.');
+    const request = second.requests[0]?.body;
+    expect(JSON.stringify(request?.messages)).toContain('attach-proof.txt');
+    // The restored prompt is already history: the attachment alone is the next turn.
+    expect(userTexts(request?.messages)).toEqual([
+      prompt,
+      `Attached file: ${JSON.stringify(path)}`,
+    ]);
   } finally {
     await first.close();
     await second.close();
