@@ -128,6 +128,7 @@ describe('CI change scope', () => {
 
     const lint = jobBlock(workflow, 'lint-and-typecheck');
     expect(lint).toContain('pnpm check:compat-drift');
+    expect(lint).toContain('pnpm check:es-floor');
     expect(lint).toContain('pnpm test:docs-contract');
     for (const contract of [
       'apps/playground/src/App.test.ts',
