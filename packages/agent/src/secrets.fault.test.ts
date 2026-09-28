@@ -5,6 +5,7 @@ import { scriptedProvider } from '../../../tests/integration/fixtures/workbench-
 import {
   type AgentSessionEvent,
   type AgentSessionOptions,
+  type Models,
   type OpenAIModel,
   Type,
   createAgentSession,
@@ -35,6 +36,7 @@ function entry(id: string, provider: string, headers?: Record<string, string>): 
 function setup(
   replies: Parameters<typeof scriptedProvider>[0],
   overrides: Partial<AgentSessionOptions> = {},
+  wrap: (models: Models) => Models = (models) => models,
 ) {
   const wire = scriptedProvider(replies);
   const models = createModels();
@@ -49,7 +51,7 @@ function setup(
   );
   const session = createAgentSession({
     host,
-    models,
+    models: wrap(models),
     model: 'small',
     retry: { baseDelayMs: 1 },
     secrets: [DECLARED, ''],
@@ -81,6 +83,9 @@ const messageEnds = (events: readonly AgentSessionEvent[]) =>
   events.flatMap((event) =>
     event.type === 'agent' && event.event.type === 'message_end' ? [event.event.message] : [],
   );
+// Everything but model-visible `content`, which ingress never alters.
+const outsideContent = (value: unknown): unknown =>
+  JSON.parse(JSON.stringify(value, (key, entry) => (key === 'content' ? undefined : entry)));
 
 describe('provider ingress scrubbing', () => {
   it('[fault: corrupt-input] rejects secrets that are not an array of strings', () => {
@@ -90,7 +95,7 @@ describe('provider ingress scrubbing', () => {
       );
   });
 
-  it('[fault: sibling-drift] keys and declared secrets never reach history, status, retry or trace', async () => {
+  it('[fault: sibling-drift] provider error echoes never reach history, status, retry or trace', async () => {
     const { session, events } = setup([
       { error: `rate limit reached for ${KEY} and ${DECLARED}`, status: 429 },
       `Recovered. Key ${KEY}, token ${DECLARED}.`,
@@ -103,10 +108,6 @@ describe('provider ingress scrubbing', () => {
       expect(retries.map((event) => event.phase)).toEqual(['start', 'end']);
       expect(leaks(retries)).toEqual([]);
       expect(JSON.stringify(retries)).toContain('rate limit reached for [redacted] and [redacted]');
-      const reply = messageEnds(events).at(-1) as AssistantMessage;
-      expect(reply.content).toEqual([
-        { type: 'text', text: 'Recovered. Key [redacted], token [redacted].' },
-      ]);
 
       await session.send('second');
       expect(session.status()).toBe('error');
@@ -114,12 +115,61 @@ describe('provider ingress scrubbing', () => {
       expect(leaks(session.detail())).toEqual([]);
       const status = events.filter((event) => event.type === 'status').at(-1);
       expect(status).toMatchObject({ status: 'error', detail: session.detail() });
+      const failure = messageEnds(events).at(-1) as AssistantMessage;
+      expect(failure.errorMessage).toContain('invalid request from [redacted] with [redacted]');
 
-      expect(leaks(messageEnds(events))).toEqual([]);
-      expect(leaks(settled(events))).toEqual([]);
+      // The successful reply's raw echo lives only in `content` (next test).
+      expect(leaks(outsideContent(settled(events)))).toEqual([]);
+      const { events: traced, ...trace } = await session.exportTrace();
+      expect(leaks(outsideContent(trace))).toEqual([]);
+      expect(leaks(outsideContent(settled(traced.map(({ event }) => event))))).toEqual([]);
+    } finally {
+      await session.dispose();
+    }
+  });
+
+  it('a successful reply echoing a secret stays raw in history and trace', async () => {
+    const text = `Recovered. Key ${KEY}, token ${DECLARED}.`;
+    const { session, events } = setup([text]);
+    try {
+      await session.send('first');
+      expect(session.status()).toBe('done');
+      // Model context fidelity: pi sends assistant text back on later turns, so masking it
+      // would rewrite ordinary text equal to a short key (`lm-studio`, `test`, `1`).
+      expect(messageEnds(events).at(-1)).toMatchObject({ content: [{ type: 'text', text }] });
       const trace = await session.exportTrace();
-      expect(leaks(trace.transcript)).toEqual([]);
-      expect(leaks(settled(trace.events.map(({ event }) => event)))).toEqual([]);
+      expect(trace.transcript.at(-1)).toMatchObject({ content: [{ type: 'text', text }] });
+      expect(JSON.stringify(trace)).not.toContain('[redacted]');
+    } finally {
+      await session.dispose();
+    }
+  });
+
+  it('[fault: sibling-drift] a thrown provider exception naming a key reaches status scrubbed', async () => {
+    // pi's catalog turns provider failures into error messages; a consumer Models may throw.
+    const { session, events } = setup(
+      [],
+      {},
+      (models) =>
+        new Proxy(models, {
+          get(target, property) {
+            if (property === 'streamSimple')
+              return () => {
+                throw new TypeError(`fetch failed for key ${KEY} and ${DECLARED}`);
+              };
+            const value: unknown = Reflect.get(target, property, target);
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        }),
+    );
+    try {
+      await session.send('probe');
+      expect(session.status()).toBe('error');
+      expect(session.detail()).toBe('fetch failed for key [redacted] and [redacted]');
+      const status = events.filter((event) => event.type === 'status').at(-1);
+      expect(status).toMatchObject({ status: 'error', detail: session.detail() });
+      expect(leaks(settled(events))).toEqual([]);
+      expect(leaks(await session.exportTrace())).toEqual([]);
     } finally {
       await session.dispose();
     }
