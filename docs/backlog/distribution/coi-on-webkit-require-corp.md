@@ -10,7 +10,7 @@ code: [apps/playground/vite.config.ts]
 
 ## Question
 
-Whether any deployment should supersede D-001 (`ADR-0002`: `credentialless` chosen so third-party assets load without CORP headers). Share at stake: Safari ≈ 15.9 % worldwide / 5.9 % RU of all traffic (StatCounter 2026-08, research §4; RU desktop 1.5 %). Switching admits Safari 16.4+ to COI (persistence still Safari 26 via `createWritable`) at the cost of CORP/CORS on every cross-origin subresource of that deployment. ADR-0375 already names the shared-memory-free tier the destination for hosts that cannot ship COI; the playground is the only COI deployment. Outside `epics/browser-support-floor` — user 2026-09-27 "2a" (record only). Trigger: a host needing `execSync`/SAB features on WebKit.
+Whether any deployment should supersede D-001 (`ADR-0002`: `credentialless` chosen so third-party assets load without CORP headers). Share at stake: Safari ≈ 15.9 % worldwide / 5.9 % RU of all traffic (StatCounter 2026-08, research §4; RU desktop 1.5 %). Switching admits Safari 16.4+ to COI (persistence still Safari 26 via `createWritable`) at the cost of CORP/CORS on every cross-origin subresource of that deployment. ADR-0375 already names the shared-memory-free tier the destination for hosts that cannot ship COI; the playground is the only COI deployment. Outside the closed browser-support-floor goal (ADR-0469; closure `docs/backlog/distribution/reference/browser-support-floor-closure.md`) — user 2026-09-27 "2a" (record only). Trigger: a host needing `execSync`/SAB features on WebKit.
 
 ## User scenario
 

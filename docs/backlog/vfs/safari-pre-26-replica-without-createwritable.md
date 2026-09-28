@@ -10,7 +10,7 @@ code: [packages/vfs/src/opfs-replica-store.ts, packages/vfs/src/opfs.ts, package
 
 ## Question
 
-Is the widening worth its cost, and when. Cost: replica durability today rides `createWritable`'s atomic swap (Chromium `.crswap`, `opfs-errors.ts:62-89`); sync-access-handle writes are in-place, so HEAD/segment atomicity and crash consistency must be re-derived and carried by a fault matrix (`docs/backlog/README.md` §Tier robust/production of `epics/fault-honest-opfs-persistence`); `opfs.ts` non-replica path too. Value decays monthly. Outside `epics/browser-support-floor` — user 2026-09-27 "2a" (record only). Trigger: a host naming Safari <26 traffic it cannot drop, or a 2027-03 re-read of the share.
+Is the widening worth its cost, and when. Cost: replica durability today rides `createWritable`'s atomic swap (Chromium `.crswap`, `opfs-errors.ts:62-89`); sync-access-handle writes are in-place, so HEAD/segment atomicity and crash consistency must be re-derived and carried by a fault matrix (`docs/backlog/README.md` §Tier robust/production of `epics/fault-honest-opfs-persistence`); `opfs.ts` non-replica path too. Value decays monthly. Outside the closed browser-support-floor goal (ADR-0469; closure `docs/backlog/distribution/reference/browser-support-floor-closure.md`) — user 2026-09-27 "2a" (record only). Trigger: a host naming Safari <26 traffic it cannot drop, or a 2027-03 re-read of the share.
 
 ## User scenario
 

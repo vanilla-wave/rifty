@@ -1,4 +1,4 @@
-# Browser support — 2026-09-28
+# Browser support — 2026-09-29
 
 Hand-maintained, dated evidence; ADR-0469. Node API compatibility is a separate axis.
 A computed version floor is **not** an executed support claim. Run
@@ -20,10 +20,16 @@ Default `preferred` uses OPFS when available, otherwise memory with the reason i
 
 | Mode / persistence | Chrome | Edge | Firefox | Safari macOS | Chrome Android | Safari iOS | Samsung Internet | Yandex |
 |---|---|---|---|---|---|---|---|---|
-| Non-COI / ephemeral | 98 · clone | 98 · clone | 114 · modules | 16.4 · decompress | 98 · clone | 16.4 · decompress | 18 · clone | ❓ exact build needed |
-| Non-COI / persistent | 108 · sync OPFS | 108 · sync OPFS | 114 · modules | 26 · writable | 109 · OPFS | 26 · writable | 21 · OPFS | ❓ exact build needed |
-| COI / ephemeral | 98 · clone | 98 · clone | 145 · waitAsync | ❌ credentialless | 98 · clone | ❌ credentialless | 18 · clone | ❓ exact build needed |
-| COI / persistent | 108 · sync OPFS | 108 · sync OPFS | 145 · waitAsync | ❌ credentialless | 109 · OPFS | ❌ credentialless | 21 · OPFS | ❓ exact build needed |
+| Non-COI / ephemeral | 98 · clone · ❌108 sdk-import | 98 · clone | 114 · modules | 16.4 · decompress | 98 · clone | 16.4 · decompress | 18 · clone | ❓ exact build needed |
+| Non-COI / persistent | 108 · sync OPFS · ❌108 sdk-import | 108 · sync OPFS | 114 · modules | 26 · writable | 109 · OPFS | 26 · writable | 21 · OPFS | ❓ exact build needed |
+| COI / ephemeral | 98 · clone · ❌108 sdk-import | 98 · clone | 145 · waitAsync | ❌ credentialless | 98 · clone | ❌ credentialless | 18 · clone | ❓ exact build needed |
+| COI / persistent | 108 · sync OPFS · ❌108 sdk-import | 108 · sync OPFS | 145 · waitAsync | ❌ credentialless | 109 · OPFS | ❌ credentialless | 21 · OPFS | ❓ exact build needed |
+
+`❌108 sdk-import`: Playwright Chromium 108.0.5359.29, headerless protocol page, fails
+the SDK import itself (main-thread sync WASM >4KB refused), before mode or storage
+choice; real SDK-import floor is above 108 and unmeasured, outside the bindings below;
+[finding](../../backlog/runtime-js/chromium108-sdk-sync-wasm-import.md). Edge shares
+that Chromium base, but no Edge build was run: no mark.
 
 Bindings: clone = `structuredClone`; modules = module Workers; decompress =
 `DecompressionStream`; writable = `FileSystemFileHandle.createWritable`; sync OPFS =

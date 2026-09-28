@@ -23,6 +23,9 @@ Cross-Origin-Embedder-Policy: require-corp   # or: credentialless
 The explicit shared-memory-free toolchain mode below runs in an existing
 headerless page; threaded-WASM toolchains remain a loud named gap.
 
+Browser versions per mode and persistence, with executed evidence: the
+[browser support matrix](https://github.com/vanilla-wave/rifty/blob/main/docs/public/compat/browsers.md).
+
 `createSandbox()` cannot ship host wiring for you. Consumers still own:
 
 - COOP/COEP headers for cross-origin isolation.
