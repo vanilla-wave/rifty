@@ -97,7 +97,10 @@ export async function readJson<T>(dir: string, name: string): Promise<T> {
 async function writeJson(dir: string, name: string, value: unknown) {
   const text = `${JSON.stringify(value, null, 2)}\n`;
   const gzip = !existsSync(join(dir, 'report.json')) && existsSync(join(dir, 'report.json.gz'));
-  await writeFile(join(dir, gzip ? `${name}.gz` : name), gzip ? gzipSync(text) : text);
+  if (!gzip) return writeFile(join(dir, name), text);
+  const bytes = gzipSync(text);
+  bytes[9] = 0x03; // RFC 1952 OS byte: zlib writes host OS (macOS 0x13); pin Unix → same bytes on every OS.
+  await writeFile(join(dir, `${name}.gz`), bytes);
 }
 export async function writeReport(dir: string, report: Report) {
   await writeJson(dir, 'report.json', report);

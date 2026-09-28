@@ -16,9 +16,9 @@ Comparison requires identical endpoint/limits/task set and complete matching run
 Any lost pass exits1 after writing artifacts; ±1/3 is labelled within noise, still a regression.
 
 Committed summaries (`reports/summaries/`) store every JSON artifact as deterministic gzip
-`<name>.json.gz` (test-enforced); Markdown/screenshots stay plain. `report` reads either
-`<name>.json` or `<name>.json.gz`; a directory holding only `report.json.gz` gets gzip
-report/comparison JSON back, fresh run directories stay plain.
+(mtime 0, OS byte normalized) `<name>.json.gz` (test-enforced); Markdown/screenshots stay
+plain. `report` reads either `<name>.json` or `<name>.json.gz`; a directory holding only
+`report.json.gz` gets gzip report/comparison JSON back, fresh run directories stay plain.
 
 Config (no-auth example):
 

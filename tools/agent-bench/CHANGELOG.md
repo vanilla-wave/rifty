@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Commit summary JSON artifacts as deterministic gzip; `report`/`--compare` read plain or gzip and write back in the directory's format.
+- Commit summary JSON artifacts as deterministic gzip (mtime 0, OS header byte pinned to Unix, byte-identical across OS); `report`/`--compare` read plain or gzip and write back in the directory's format.
 
 - Count successful core compactions only; failed summary attempts no longer inflate the benchmark counter.
 
