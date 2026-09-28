@@ -28,3 +28,8 @@
 - re-chart after tool feedback (final-green PASS @481b2ab3a8046701536a21929e38f70ea5f4cd1b): I7–I11 complete; 25/25 coverage, zero findings/residuals. `distribution/reference/ai-agent-tool-feedback-final-green.json`. F1/N1 accepted and independently repaired: fitting/oversized effects and partial mutation provenance retained on actual model wire.
 - Independent41/41 plus real-Agent sibling probes; fullgate25/25; browser18/18, chat15+1, full14pair smoke and budget cases across all3lanes. Packed no-COI must not overlap a dist rebuild; serialized rerun passed.
 - I13 remains alone: same Luna config/five tasks/three cold runs per supported task/lane, record42 outcomes and compare against frozen40/42 baseline. Proxy10539 exposes gpt-6-luna. No task/judge recut or failure replacement.
+
+## 2026-09-28 — whole goal proven
+
+- re-chart after distribution/ai-agent-weak-model-rerun (final-green PASS @136c94ade523ef1b65837cd65a4a36d6ac78e4b5): I13 complete; same-config42/42 vs40/42, no task/lane loss. Verdict34/34, zero findings/residuals; whole I1–I13 and composed transitions independently verified.
+- Fresh107 tests, Chromium4chat+1diagnostics; independent419 artifact hashes,84 full source/trace roundtrips and event-metric replay; actual comparison CLI. Fullgate25/25, no isolated reruns. Only final PR CI/bookkeeping remains; map empty, continue CLOSE.

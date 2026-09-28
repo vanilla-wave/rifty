@@ -7,13 +7,6 @@ item ordering (goal §Decisions "shared bench order").
 
 ## Items
 
-12. `distribution/ai-agent-weak-model-rerun` — **re-run** — same config,
-    tasks and runs as item 4 after tool feedback lands; per-task comparison in the
-    report — the smallest `report --compare` over two summary directories,
-    absorbed later by `distribution/agent-eval-comparison-report` (PR #341);
-    a ±1-pass delta on 3 runs is marked as within noise; no per-task pass
-    regression (I13). Last.
-
 ## Open questions
 
 - I5/I6 and remaining I4 reviewed b353ed8b0: Agent plus native utilities;

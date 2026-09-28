@@ -40,3 +40,14 @@ Fullgate25/25 (test:run10597 pass,0 fail; no isolation),
 CI61605476e all20 jobs green, including Chromium/no-COI/native parity.
 I1–I12 accepted review/e2e/differential proofs stay unchanged; final whole-goal
 review remains before CLOSE.
+
+## Final+GREEN and CLOSE
+
+Independent whole-goal PASS @136c94ade523ef1b65837cd65a4a36d6ac78e4b5:
+[verdict](ai-agent-weak-model-rerun-final-green.json),34/34 coverage, zero findings
+or required residuals. I1–I13 and composed model/image/retry/compaction/mutation
+transitions proven. Fresh107 tests plus Chromium4chat+1diagnostics passed;
+419 original hashes,84 full trace/source sets and all event metrics replayed.
+Actual CLI comparison/ordinary regeneration preserve the frozen baseline.
+Finalgate25/25, no isolated reruns. Re-chart leaves no open unit; CLOSE removes
+completed goal/item documents. Remaining kit/quality goals retain their own scope.
