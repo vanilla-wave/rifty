@@ -73,7 +73,7 @@ cacheRead/cacheWrite; output tokens use pi output. Counts derive from emitted
 retry starts, successful compactions (including summary usage), repeated-call
 notices and errored edit/validation tool results. Counters may overlap; manual
 failure classification stays separate. Legacy reports show absent metrics as —.
-Native compaction remains on and native agent-level retry remains off in this lane.
+Native compaction and agent-level retries are on; provider retries remain off.
 Assign `failureClass` and `note` manually in report.json, then regenerate Markdown;
 existing assignments survive. Classes: agent, rifty-runtime, rifty-tooling,
 ai-mode-ux, provider, task-bad. Unclassified remains null. Failed setup/judging

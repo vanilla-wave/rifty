@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Clarify native assistant retries versus the prohibition on tool-action replay.
+
 - Default600s and model-facing budget receipts; exact-edit hints, third-repeat native steering, bounded post-mutation diagnostics and shared recipe v2 with opt-out.
 
 - Native Pi retry/compaction, bounded context recovery, restorable summary details and full current-session attempt usage.

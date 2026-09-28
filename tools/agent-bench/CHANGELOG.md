@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Count successful core compactions only; failed summary attempts no longer inflate the benchmark counter.
+
 - Compare fixed-config recorded runs with exact identities, per-task/lane metric deltas, preserved provenance and visible regressions.
 
 - Preserve JSON numbers and native protocol tags during credential redaction; derive every lane's metrics from live events before masking payload strings.

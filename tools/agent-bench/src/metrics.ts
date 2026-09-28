@@ -55,7 +55,7 @@ export function eventMetrics(
     const compaction =
       event.type === 'compaction_end'
         ? record(event.result)
-        : event.type === 'compaction' && event.phase === 'end'
+        : event.type === 'compaction' && event.phase === 'end' && event.success === true
           ? event
           : undefined;
     if (compaction && event.aborted !== true) {

@@ -118,10 +118,10 @@ forced Stop returns the SDK's unknown effects. Diagnostics/SCM are unavailable.
 
 `send` continues retained history, including after errors. `stop` resolves after
 the host command settles and the slot is reusable. `reset` requires an idle
-session. No automatic retries, approvals or action replay. Host failures retain
-their effects; skipped tool calls get explicit non-execution results. Consumer
-tools must honor the abort signal; the library cannot forcibly stop arbitrary
-consumer JavaScript.
+session. Assistant retries follow the native Pi policy above; no approvals or
+tool-action replay. Host failures retain their effects; skipped tool calls get
+explicit non-execution results. Consumer tools must honor the abort signal; the
+library cannot forcibly stop arbitrary consumer JavaScript.
 
 `host.capabilities()` is read before each model turn. File/shell/preview and
 diagnostic tools are offered only when provided. Optional Workbench companion:

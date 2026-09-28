@@ -21,6 +21,7 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { type AgentMessage, createAgentSession } from '@riftydev/agent';
 import { expect, it } from 'vitest';
+import { eventMetrics } from './metrics.ts';
 
 const model: Model<'openai-completions'> = {
   id: 'probe',
@@ -83,6 +84,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
   const dir = await mkdtemp(join(tmpdir(), 'rifty-continuation-parity-'));
   const requests: { summary: boolean; messages: Context['messages']; maxRetries?: number }[] = [];
   const retries: { attempt: number; delayMs: number }[] = [];
+  const compactionEvents: unknown[] = [];
   const compactions: {
     reason: string;
     success: boolean;
@@ -260,7 +262,8 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
       });
       switchModel = () => session.setModel(modelRuntime.getModel('probe', 'large')!);
       session.subscribe((event) => {
-        if (event.type === 'compaction_end')
+        if (event.type === 'compaction_end') {
+          compactionEvents.push(event);
           compactions.push({
             reason: event.reason,
             success: !!event.result,
@@ -271,6 +274,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
                 }
               : {}),
           });
+        }
         if (event.type === 'auto_retry_start' && scenario === 'abort-backoff')
           setTimeout(() => {
             void session.abort();
@@ -306,7 +310,8 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
       });
       switchModel = () => session.setModel('large');
       session.subscribe((event) => {
-        if (event.type === 'compaction' && event.phase === 'end')
+        if (event.type === 'compaction' && event.phase === 'end') {
+          compactionEvents.push(event);
           compactions.push({
             reason: event.reason,
             success: !!event.success,
@@ -314,6 +319,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
               ? { tokensBefore: event.tokensBefore, tokensAfter: event.tokensAfter }
               : {}),
           });
+        }
         if (event.type === 'retry' && event.phase === 'start' && scenario === 'abort-backoff')
           setTimeout(() => {
             void session.stop();
@@ -339,6 +345,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
       requests: requests.map((r) => ({ ...r, messages: normalized(r.messages) })),
       retries,
       compactions,
+      reportedCompactions: eventMetrics(compactionEvents, model.contextWindow, 'done').compactions,
       ...(scenario === 'retry-overflow-tail' ? { failure } : {}),
       messages: normalized(messages),
       effects,
@@ -366,6 +373,12 @@ it.each<Scenario>([
   async (scenario) => {
     const native = await run('native', scenario);
     const rifty = await run('rifty', scenario);
+    expect(rifty.reportedCompactions).toBe(
+      rifty.compactions.filter((event) => event.success).length,
+    );
+    expect(native.reportedCompactions).toBe(
+      native.compactions.filter((event) => event.success).length,
+    );
     expect(rifty).toEqual(native);
     if (scenario === 'after-tool' || scenario === 'overflow-episodes')
       expect(rifty.effects).toBe(1);
