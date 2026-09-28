@@ -36,9 +36,10 @@ function moduleTransformLines(output: string): readonly string[] {
 
 const threadedWasmProbeExpression = `(() => {
   const NativeMemory = globalThis.WebAssembly.Memory;
-  const inherited = Object.assign(Object.create({ shared: true }), { initial: 1 });
+  const inherited = Object.assign(Object.create({ shared: true }), { initial: 1, maximum: 1 });
   const accessor = Object.defineProperties({}, {
     initial: { value: 1, enumerable: true },
+    maximum: { value: 1, enumerable: true },
     shared: { get: () => true, enumerable: true },
   });
   const callable = Object.assign(function memoryDescriptor() {}, {
@@ -47,11 +48,11 @@ const threadedWasmProbeExpression = `(() => {
     shared: true,
   });
   const shared = [
-    ['own-literal-true', { initial: 1, shared: true }],
+    ['own-literal-true', { initial: 1, maximum: 1, shared: true }],
     ['inherited-literal-true', inherited],
     ['accessor-literal-true', accessor],
-    ['own-truthy-number', { initial: 1, shared: 1 }],
-    ['own-truthy-string', { initial: 1, shared: 'yes' }],
+    ['own-truthy-number', { initial: 1, maximum: 1, shared: 1 }],
+    ['own-truthy-string', { initial: 1, maximum: 1, shared: 'yes' }],
     ['callable-literal-true', callable],
   ].map(([form, descriptor]) => {
     try {
@@ -62,7 +63,11 @@ const threadedWasmProbeExpression = `(() => {
     }
   });
   const memory = new WebAssembly.Memory({ initial: 1 });
+  let worker;
+  try { new (require('node:worker_threads').Worker)('/unused-worker.cjs'); }
+  catch (error) { worker = { name: error.name, feature: error.feature }; }
   return {
+    worker,
     shared,
     identity: {
       globalConstructorUnchanged: globalThis.WebAssembly.Memory === NativeMemory,
@@ -117,8 +122,8 @@ const expectedCapabilityReport = {
     },
     {
       feature: 'worker_threads.Worker',
-      status: 'degraded',
-      warning: 'same-realm execution has no parallelism; first use warns once',
+      status: 'throwing',
+      error: { name: 'NotImplementedError', feature: 'worker_threads.Worker' },
     },
     {
       feature: 'os.parallelism',
@@ -134,7 +139,7 @@ const expectedCapabilityReport = {
     {
       feature: 'toolchain.threaded-wasm',
       status: 'throwing',
-      error: { name: 'NotImplementedError', feature: 'toolchain.threaded-wasm' },
+      error: { name: 'NotImplementedError', feature: 'worker_threads.Worker' },
     },
     { feature: 'toolchain.dev-hmr', status: 'working' },
     {
@@ -1188,16 +1193,14 @@ test('capability and no-COI degradation contract — designed RED', async ({ pag
           });
           const first = await run();
           const second = await run();
-          const thread = await new Promise((resolve, reject) => {
-            const worker = new wt.Worker('/project/thread.cjs');
-            worker.once('error', reject);
-            worker.once('exit', (code) => resolve({ code }));
-          });
+          let thread;
+          try { new wt.Worker('/project/thread.cjs'); }
+          catch (error) { thread = { name: error.name, feature: error.feature }; }
           let execSync;
           try { cp.execSync('node /project/child.cjs'); }
           catch (error) { execSync = { name: error.name, feature: error.feature }; }
           let sharedWasm;
-          try { new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true }); }
+          try { sharedWasm = Object.prototype.toString.call(new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true }).buffer); }
           catch (error) {
             sharedWasm = { name: error.name, feature: error.feature, message: error.message };
           }
@@ -1228,20 +1231,17 @@ test('capability and no-COI degradation contract — designed RED', async ({ pag
     expect(surfaces.value).toEqual({
       first: { code: 0, signal: null, out: 'child-console\n', err: 'child-error\n' },
       second: { code: 0, signal: null, out: 'child-console\n', err: 'child-error\n' },
-      thread: { code: 0 },
+      thread: { name: 'NotImplementedError', feature: 'worker_threads.Worker' },
       cpus: 1,
       parallelism: 1,
       execSync: { name: 'NotImplementedError', feature: 'child_process.execSync' },
-      sharedWasm: expect.objectContaining({
-        name: 'NotImplementedError',
-        feature: 'toolchain.threaded-wasm',
-      }),
+      sharedWasm: '[object SharedArrayBuffer]',
       privateWasmBytes: 65_536,
       privateConstructorIsGlobal: true,
       privatePrototypeIsGlobal: true,
     });
     expect((surfaces.stderr.match(/\[rifty:child_process\].*same-realm/gu) ?? []).length).toBe(1);
-    expect((surfaces.stderr.match(/\[rifty:worker_threads\].*same-realm/gu) ?? []).length).toBe(1);
+    expect(surfaces.stdout).not.toContain('thread-console');
     assertHostSnapshot(await hostSnapshot(host), baseline);
   } finally {
     await disposeSandbox(host);
@@ -1897,7 +1897,7 @@ test('exact nanoid manifest runs its installed bin without Vite authority', asyn
   }
 });
 
-test('threaded-WASM guard covers real installed bin, CJS, ESM and REPL descriptors', async ({
+test('native WASM allocation covers real installed bin, CJS, ESM and REPL descriptors', async ({
   page,
 }) => {
   const { host } = await openHeaderlessHost(page);
@@ -1980,6 +1980,7 @@ test('threaded-WASM guard covers real installed bin, CJS, ESM and REPL descripto
       { probeExpression: threadedWasmProbeExpression },
     );
     const expected = {
+      worker: { name: 'NotImplementedError', feature: 'worker_threads.Worker' },
       shared: [
         'own-literal-true',
         'inherited-literal-true',
@@ -1989,8 +1990,7 @@ test('threaded-WASM guard covers real installed bin, CJS, ESM and REPL descripto
         'callable-literal-true',
       ].map((form) => ({
         form,
-        name: 'NotImplementedError',
-        feature: 'toolchain.threaded-wasm',
+        name: 'resolved',
       })),
       identity: {
         globalConstructorUnchanged: true,
@@ -2047,11 +2047,11 @@ const wrap = (error, count) => {
 };
 const makeGap = (feature, hint) => {
   try {
-    new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true });
+    new (require('node:worker_threads').Worker)('/unused-worker.cjs');
   } catch (error) {
     return new error.constructor(feature, hint);
   }
-  throw new Error('shared-memory gap constructor did not throw');
+  throw new Error('Worker gap constructor did not throw');
 };
 const decorateOuter = (error, label) => {
   error.name = 'PackageLoaderError';
@@ -2417,7 +2417,9 @@ test('build parity: headerless SDK dist equals live COI product bytes — design
   }
 });
 
-test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', async ({ page }) => {
+test('threaded-WASM: Vite 8 Rolldown fails at the unavailable Worker boundary', async ({
+  page,
+}) => {
   const { host } = await openHeaderlessHost(page);
   try {
     const state = await createToolchainSandbox(host);
@@ -2506,14 +2508,25 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
         }
       });
       try {
-        const result = await sandbox.toolchain.runBin({
-          cwd: root,
-          binPath: `${root}/node_modules/.bin/vite`,
-          args: ['build'],
-        });
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const result = await Promise.race([
+          sandbox.toolchain.runBin({
+            cwd: root,
+            binPath: `${root}/node_modules/.bin/vite`,
+            args: ['build'],
+          }),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () =>
+                reject(new Error(`Vite8 run did not settle within 30 seconds; ${output.join('')}`)),
+              30_000,
+            );
+          }),
+        ]).finally(() => clearTimeout(timer));
         return { threw: false, result, output: output.join(''), provenance };
       } catch (error) {
         const inspected = error as Error & { cause?: unknown; feature?: string };
+        if (inspected.message.startsWith('Vite8 run did not settle')) throw inspected;
         let dist: string;
         try {
           await sandbox.fs.readFile(`${root}/dist/index.html`, 'utf8');
@@ -2544,18 +2557,14 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
     });
     if (!failure.threw)
       throw new Error(`Vite 8 boundary did not throw: ${JSON.stringify(failure)}`);
-    if (failure.name !== 'NotImplementedError') {
-      throw new Error(`Vite 8 boundary threw the wrong error: ${JSON.stringify(failure)}`);
-    }
     expect(failure).toMatchObject({
       threw: true,
-      name: 'NotImplementedError',
-      feature: 'toolchain.threaded-wasm',
+      name: 'Error',
+      message: 'WASI binding not found and NAPI_RS_FORCE_WASI is set to error',
       dist: 'absent',
     });
-    expect(failure.message).toMatch(/shared WebAssembly\.Memory/i);
-    expect(failure.message).toMatch(/SharedArrayBuffer/i);
-    expect(failure.message).toMatch(/cross-origin isolation/i);
+    expect(failure.output).toContain('NotImplementedError: Not implemented: worker_threads.Worker');
+    expect(failure.output).toContain('cross-origin isolation');
     expect(failure.provenance.manifest).toMatchObject({
       name: 'vite',
       version: '8.0.16',

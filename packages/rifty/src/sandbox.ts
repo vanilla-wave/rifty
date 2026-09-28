@@ -198,8 +198,8 @@ const TOOLCHAIN_CAPABILITY_REPORT = freezeDeep({
     },
     {
       feature: 'worker_threads.Worker',
-      status: 'degraded',
-      warning: 'same-realm execution has no parallelism; first use warns once',
+      status: 'throwing',
+      error: { name: 'NotImplementedError', feature: 'worker_threads.Worker' },
     },
     {
       feature: 'os.parallelism',
@@ -215,7 +215,7 @@ const TOOLCHAIN_CAPABILITY_REPORT = freezeDeep({
     {
       feature: 'toolchain.threaded-wasm',
       status: 'throwing',
-      error: { name: 'NotImplementedError', feature: 'toolchain.threaded-wasm' },
+      error: { name: 'NotImplementedError', feature: 'worker_threads.Worker' },
     },
     { feature: 'toolchain.dev-hmr', status: 'working' },
   ],

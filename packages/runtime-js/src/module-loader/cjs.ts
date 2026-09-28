@@ -63,7 +63,6 @@ export interface CjsLoaderDeps {
   readonly extensions: CjsExtensions;
   /** Loader-owned `.js` identity; replacements own unregistered suffixes. */
   readonly defaultJsExtension: CjsExtensionHook;
-  readonly WebAssembly: typeof WebAssembly;
   /** Create a require bound to `fromFile`, including the shared extensions table. */
   makeRequire(fromFile: string, parent?: CjsModule): CjsRequire;
   /**
@@ -130,7 +129,6 @@ interface FunctionRewriteCtx {
   readonly edits: Edit[];
   readonly scopes: Scope[];
   readonly functionHelperName: string;
-  readonly webAssemblyHelperName: string;
   readonly dynamicImportHelperName: string;
   hasGlobalFunctionWrite: boolean;
   hasDynamicFunctionScope: boolean;
@@ -143,7 +141,7 @@ interface FunctionRewriteCtx {
 // TODO(backlog: runtime-js/function-constructor-exhaustive-metaprogramming-ceiling):
 // finite guard for known Function/eval import escapes, not proof-complete JS alias analysis.
 const functionRoutingAnalysisToken =
-  /\bFunction\b|\bWebAssembly\b|\bconstructor\b|\bglobalThis\b|\bglobal\b|\bObject\b|\bReflect\b|__define(?:Getter|Setter)__|\beval\b|\bwith\b/;
+  /\bFunction\b|\bconstructor\b|\bglobalThis\b|\bglobal\b|\bObject\b|\bReflect\b|__define(?:Getter|Setter)__|\beval\b|\bwith\b/;
 
 function rewriteDynamicImports(source: string, id: string, helperName: string): string {
   if (!/\bimport\b/.test(source)) return source;
@@ -206,7 +204,6 @@ function rewriteCjsFunctionConstructorReferences(
   source: string,
   id: string,
   functionHelperName: string,
-  webAssemblyHelperName: string,
   dynamicImportHelperName: string,
 ): string {
   if (!functionRoutingAnalysisToken.test(source)) return source;
@@ -237,7 +234,6 @@ function rewriteCjsFunctionConstructorReferences(
     edits: [],
     scopes: [rootScope],
     functionHelperName,
-    webAssemblyHelperName,
     dynamicImportHelperName,
     hasGlobalFunctionWrite: false,
     hasDynamicFunctionScope: false,
@@ -553,9 +549,6 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
         ctx.hasRoutedFunctionReference = true;
         ctx.edits.push({ start: n.start, end: n.end, text: ctx.functionHelperName });
       }
-      if (name === 'WebAssembly' && !isShadowed(ctx, name)) {
-        ctx.edits.push({ start: n.start, end: n.end, text: ctx.webAssemblyHelperName });
-      }
       return;
     }
 
@@ -644,13 +637,6 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
         if (name === 'Function' && !isShadowed(ctx, name)) {
           ctx.hasRoutedFunctionReference = true;
           ctx.edits.push({ start: p.value.start, end: p.value.start, text: 'Function: ' });
-        }
-        if (name === 'WebAssembly' && !isShadowed(ctx, name)) {
-          ctx.edits.push({
-            start: p.value.start,
-            end: p.value.start,
-            text: 'WebAssembly: ',
-          });
         }
       }
       walkFunctionReferences(p.value, ctx);
@@ -1796,7 +1782,6 @@ function compileCjsSource(
     __dirname: string,
     __riftyDynamicImport: (specifier: unknown) => Promise<Record<string, unknown>>,
     __riftyFunction: FunctionConstructor,
-    __riftyWebAssembly: typeof WebAssembly,
   ) => void;
 
   const routedConstructors = createFunctionImportRouting(dynamicImport, filename);
@@ -1806,16 +1791,10 @@ function compileCjsSource(
     '__riftyFunction',
     new Set([dynamicImportHelperName]),
   );
-  const webAssemblyHelperName = uniqueHelperName(
-    sourceText,
-    '__riftyWebAssembly',
-    new Set([dynamicImportHelperName, functionHelperName]),
-  );
   const source = rewriteCjsFunctionConstructorReferences(
     rewriteDynamicImports(sourceText, filename, dynamicImportHelperName),
     filename,
     functionHelperName,
-    webAssemblyHelperName,
     dynamicImportHelperName,
   );
   let fn: CjsFactory;
@@ -1828,7 +1807,6 @@ function compileCjsSource(
       '__dirname',
       dynamicImportHelperName,
       functionHelperName,
-      webAssemblyHelperName,
       `${source}\n//# sourceURL=${filename}`,
     ) as CjsFactory;
   } catch (error) {
@@ -1852,7 +1830,6 @@ function compileCjsSource(
     dirname(filename),
     dynamicImport,
     routedConstructors.Function,
-    deps.WebAssembly,
   );
 }
 

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve native WebAssembly identity in no-COI guests; remove lexical Memory guards and reject unsupported toolchain Worker construction synchronously (ADR-0470).
+
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).
