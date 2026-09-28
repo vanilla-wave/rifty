@@ -25,3 +25,9 @@ Device memory, quota, eviction and persistence remain unmeasured.
 Unchanged proof: prior full38-row independent review at10b1a14bf and follow-up
 12-row review at9491c8d51; full local gate27/27 and final CI36449465390 at9ca45daa0
 passed. Product source/tests/workflows unchanged by this amendment.
+
+Independent Final+GREEN/CLOSE PASS at amended goal revision
+`1c928612afe9e1103d107bd94e2867ce3917691a`: 0 findings, no required residuals,
+`goal_complete=true`. Verdict: `pr-362-ios-scope-final-green.json`. Completed
+goal and manual-protocol contract removed; their accepted scope and append-only
+ledger remain in git at that revision. No merge performed.

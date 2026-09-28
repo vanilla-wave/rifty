@@ -1,0 +1,53 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "RDY-6 amendment + docs Final+GREEN PASS; accepted browser-floor goal complete. CLOSE cleanup allowed: remove completed goal/map/ledger and manual-protocol contract, retain evidence/amendment/verdict, then docs checks and pass binding. No merge performed or newly authorized.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "1c928612afe9e1103d107bd94e2867ce3917691a",
+  "unit_goal_source": "Fresh independent reviewer /root/ios_scope_close, read-only tracked tree, no children. PR362 docs-only boundary BASE9ca45daa06f2c3faff5ccc7b6fbc75bffc18fe11..1c928612afe9e1103d107bd94e2867ce3917691a. Read AGENTS.md, process map, checkpoint-run/CLOSE and review/readiness rules; inspected all seven changed files, final goal/map/manual contract, ADR-0469, public matrix, one-URL protocol, native Safari/Yandex/iOS artifacts and both canonical prior review reports. Raw user sequence supplied: xcode недостаточно? followed by explanation that Simulator is distinct from physical evidence, then explicit давай без физического прогона. Final I8/scenario6 and amend/re-cut records faithfully remove only the remaining physical-iOS execution obligation; neither mandatory simulator installation/execution nor successful iOS support follows from that consent. Dated iOS row stays unknown, admission artifact created no session; CLT/simctl absence records tool availability only. No tier widened and no product observation invented. Goal I1/I9 retain matrix/legend/share proof; I2 retains emitted-bundle guard/rewrite and follow-up negative/positive proof; I3/I4 retain storage boot/error/fallback proof; I5/I6 retain dated classified manual lane observations under the accepted record-only policy; I7 retains discriminated product-failure versus harness-unknown floor observations. REV-1/RDY-8/CLOSE reuse verified: prior full38-row docs/backlog/distribution/reference/pr-362-merge-final-green.json @10b1a14bfec7361b27a6a55aa8f4ff1078733f6a plus followup12-row docs/backlog/distribution/reference/pr-362-review-followup-final-green.json @9491c8d5138ade60b6825d7fc9b9ee12b6f09cc5 validate PASS; both reviewed SHAs are ancestors. git diff --quiet confirms apps/packages/tools/tests/.github unchanged since9491. Historical product suites are reused, not claimed rerun. I8 remaining protocol and native desktop obligations retain composed boot/install/build/flush/reload/readback/reopen/rebuild evidence, estimates and explicit unknown memory/eviction; amended iOS reporting clause is satisfied by existing dated unknown plus explicit waiver. Previous sole goal residual was physical execution, now removed by user authority rather than technical failure. Record-only defects remain outside accepted repair scope, with their existing carriers. Empty map has no remaining accepted action; completed child backlink/document removal is CLOSE bookkeeping after this verdict. This reviewer executed pnpm docs:check and pnpm check:contract-drift: exit0, backlog/refs OK and contract-drift OK (historical absent-path git diagnostics did not make gate red); validated both prior reports, exact SHA, ancestry and unchanged source/workflow paths. Driver-supplied current lint PASS and prior full27/27+CI36449465390 @9ca are baseline evidence, not newly executed product coverage. Current documentation change introduces no new product API, behavior, oracle or RED obligation; coverage intentionally empty. No findings or required residuals.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -38,4 +38,4 @@ Evidence, 2026-09 (`docs/backlog/distribution/reference/browsers-compat-matrix-e
 
 - "Which devices run it" is answered by a dated table, not an argument; a stale cell is visible by its date.
 - Cross-engine reds from a dispatched run become recorded findings — bounded triage load (record-only); nothing runs on a schedule.
-- Follow-ups: epic `docs/backlog/epics/browser-support-floor/`.
+- Delivered: `docs/public/compat/browsers.md`; closure/evidence: `docs/backlog/distribution/reference/browser-support-floor-closure.md`.
