@@ -99,7 +99,7 @@ async function writeJson(dir: string, name: string, value: unknown) {
   const gzip = !existsSync(join(dir, 'report.json')) && existsSync(join(dir, 'report.json.gz'));
   if (!gzip) return writeFile(join(dir, name), text);
   const bytes = gzipSync(text);
-  bytes[9] = 0x03; // RFC 1952 OS byte: zlib writes host OS (macOS 0x13); pin Unix → same bytes on every OS.
+  bytes[9] = 0x03; // RFC 1952 OS byte: zlib writes host OS (macOS 0x13); pin Unix. Deflate stream: per zlib build.
   await writeFile(join(dir, `${name}.gz`), bytes);
 }
 export async function writeReport(dir: string, report: Report) {

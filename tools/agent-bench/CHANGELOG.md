@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Commit summary JSON artifacts as deterministic gzip (mtime 0, OS header byte pinned to Unix, byte-identical across OS); `report`/`--compare` read plain or gzip and write back in the directory's format.
+- Commit summary JSON artifacts as gzip; report-written JSON gets a normalized header (mtime 0, OS byte 0x03), deflate stream identical per zlib build (not proven across OS); frozen `source-artifacts.json.gz` bundles keep their measured bytes, manifest sizes/SHA256 test-checked; `report`/`--compare` read plain or gzip and write back in the directory's format.
 
 - Count successful core compactions only; failed summary attempts no longer inflate the benchmark counter.
 

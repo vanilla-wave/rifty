@@ -15,9 +15,12 @@ Comparison requires identical endpoint/limits/task set and complete matching run
 `comparison.json`/`comparison.md` retain both headers and per-task/lane metric deltas.
 Any lost pass exits1 after writing artifacts; ±1/3 is labelled within noise, still a regression.
 
-Committed summaries (`reports/summaries/`) store every JSON artifact as deterministic gzip
-(mtime 0, OS byte normalized) `<name>.json.gz` (test-enforced); Markdown/screenshots stay
-plain. `report` reads either `<name>.json` or `<name>.json.gz`; a directory holding only
+Committed summaries (`reports/summaries/`) store every JSON artifact as gzip
+`<name>.json.gz` (test-enforced); Markdown/screenshots stay plain. Report-written JSON gets
+a normalized gzip header (mtime 0, OS byte 0x03); its deflate stream is identical for the
+same zlib build, not proven across OS. Frozen `source-artifacts.json.gz` bundles keep
+their measured bytes; manifest sizes/SHA256 are test-checked against committed files.
+`report` reads either `<name>.json` or `<name>.json.gz`; a directory holding only
 `report.json.gz` gets gzip report/comparison JSON back, fresh run directories stay plain.
 
 Config (no-auth example):
@@ -79,7 +82,8 @@ retry starts, successful compactions (including summary usage), repeated-call
 notices and errored edit/validation tool results. Counters may overlap; manual
 failure classification stays separate. Legacy reports show absent metrics as —.
 Native compaction and agent-level retries are on; provider retries remain off.
-Assign `failureClass` and `note` manually in report.json, then regenerate Markdown;
+Assign `failureClass` and `note` manually in report.json (committed summaries:
+report.json.gz), then regenerate Markdown;
 existing assignments survive. Classes: agent, rifty-runtime, rifty-tooling,
 ai-mode-ux, provider, task-bad. Unclassified remains null. Failed setup/judging
 retains its stage/error and previously completed records.
