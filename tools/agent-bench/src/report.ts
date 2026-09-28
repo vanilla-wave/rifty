@@ -1,6 +1,8 @@
+import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { type Config, type Endpoint, redact, redactJson } from './config.ts';
 import type { diffTrees } from './files.ts';
 import type { JudgeVerdict } from './judge/context.ts';
@@ -79,8 +81,26 @@ export function privateReport(report: Report, secrets: readonly string[]): Repor
   };
 }
 
+/** Committed summaries keep JSON as deterministic gzip (`name.gz`); fresh run dirs plain. */
+export async function readJson<T>(dir: string, name: string): Promise<T> {
+  const path = join(dir, name);
+  const absent = (error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return undefined;
+    throw error;
+  };
+  const text =
+    (await readFile(path).catch(absent)) ?? (await readFile(`${path}.gz`).then(gunzipSync, absent));
+  if (!text) throw new Error(`Missing ${path} or ${path}.gz`);
+  return JSON.parse(text.toString('utf8')) as T;
+}
+/** Output format follows the directory: gzip only where `report.json.gz` alone exists. */
+async function writeJson(dir: string, name: string, value: unknown) {
+  const text = `${JSON.stringify(value, null, 2)}\n`;
+  const gzip = !existsSync(join(dir, 'report.json')) && existsSync(join(dir, 'report.json.gz'));
+  await writeFile(join(dir, gzip ? `${name}.gz` : name), gzip ? gzipSync(text) : text);
+}
 export async function writeReport(dir: string, report: Report) {
-  await writeFile(join(dir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
+  await writeJson(dir, 'report.json', report);
   const lines = [
     `# Agent benchmark: ${report.header.model}`,
     '',
@@ -128,7 +148,7 @@ export async function writeReport(dir: string, report: Report) {
   await writeFile(join(dir, 'summary.md'), `${lines.join('\n')}\n`);
 }
 export async function regenerate(dir: string) {
-  await writeReport(dir, JSON.parse(await readFile(join(dir, 'report.json'), 'utf8')) as Report);
+  await writeReport(dir, await readJson<Report>(dir, 'report.json'));
 }
 
 const metricKeys = [
@@ -236,8 +256,7 @@ export function compareReports(before: Report, after: Report) {
   };
 }
 export async function writeComparison(current: string, baseline: string) {
-  const read = async (dir: string) =>
-    JSON.parse(await readFile(join(dir, 'report.json'), 'utf8')) as Report;
+  const read = (dir: string) => readJson<Report>(dir, 'report.json');
   const comparison = {
     ...compareReports(await read(baseline), await read(current)),
     artifacts: { baseline, current },
@@ -267,7 +286,7 @@ export async function writeComparison(current: string, baseline: string) {
       lines.push(`| ${key} | ${row.before[key]} | ${row.after[key]} | ${row.delta[key]} |`);
     lines.push('');
   }
-  await writeFile(join(current, 'comparison.json'), `${JSON.stringify(comparison, null, 2)}\n`);
+  await writeJson(current, 'comparison.json', comparison);
   await writeFile(join(current, 'comparison.md'), `${lines.join('\n')}\n`);
   return comparison;
 }

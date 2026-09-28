@@ -28,9 +28,9 @@ recovery. No task/judge changes or replacement measurements.
   identical. Final response claimed `/api/stats` implemented; both actual
   initial/post-write HTTP probes returned404.
 
-[Captured failure evidence](failure-evidence.json) includes the original page
-error and native assistant messages. [Original measurements](original-report.json)
-are preserved; [annotated report](report.json) adds only manual classes/notes.
+[Captured failure evidence](failure-evidence.json.gz) includes the original page
+error and native assistant messages. [Original measurements](original-report.json.gz)
+are preserved; [annotated report](report.json.gz) adds only manual classes/notes.
 [Summary](summary.md) retains every run and per-task/lane counts. I13 compares
 the unchanged config/tasks/count against this baseline, including both failures.
 
@@ -43,11 +43,11 @@ No-COI node-endpoint stays unsupported, yielding42 rather than45 runs.
 
 - `source-artifacts.json.gz`: all42 `{id,trace,before,after}` records, including
   dependency locks. Compression roundtrip and every original JSON value verified.
-- `manifest.json`: original artifact sizes/SHA256, config hash and committed
+- `manifest.json.gz`: original artifact sizes/SHA256, config hash and committed
   screenshot locations. Original Playwright ZIPs remain local at
   `/private/tmp/rifty-pr359-luna-baseline`; failed URL run has captured pageError,
   no post-judge screenshot because the judge threw.
-- `measurement-replay.json`: all10 reported metrics for all42 runs match the
+- `measurement-replay.json.gz`: all10 reported metrics for all42 runs match the
   repaired observer, with exact observer source hashes. Measurement had no auth
   headers; later privacy repairs do not change this baseline's values.
 

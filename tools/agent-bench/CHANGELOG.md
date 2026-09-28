@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Commit summary JSON artifacts as deterministic gzip; `report`/`--compare` read plain or gzip and write back in the directory's format.
+
 - Count successful core compactions only; failed summary attempts no longer inflate the benchmark counter.
 
 - Compare fixed-config recorded runs with exact identities, per-task/lane metric deltas, preserved provenance and visible regressions.

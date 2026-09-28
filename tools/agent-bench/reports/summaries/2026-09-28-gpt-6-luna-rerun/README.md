@@ -27,13 +27,13 @@ or selected replacement measurements.
 
 ## Artifacts
 
-- [Original report](original-report.json), [report](report.json), [summary](summary.md),
-  [machine comparison](comparison.json): all42 original outcomes, exact source/config.
+- [Original report](original-report.json.gz), [report](report.json.gz), [summary](summary.md),
+  [machine comparison](comparison.json.gz): all42 original outcomes, exact source/config.
 - `source-artifacts.json.gz`: all42 full `{id,trace,before,after}` records,
   including provider requests and dependency locks. Every JSON value roundtripped
   against the original files; bundle SHA256
   `6fab272bd4ba98758f6ff41e27acd997485f8d81cdd9c1c84fd59228fb9fcd8a`.
-- [Manifest](manifest.json):210 original artifact sizes/hashes, config hash and
+- [Manifest](manifest.json.gz):210 original artifact sizes/hashes, config hash and
   one screenshot per lane. Original Playwright ZIPs remain local at
   `/private/tmp/rifty-pr359-luna-rerun`; hashes identify them. The gzip bundle
   is JSON, not a Playwright ZIP.

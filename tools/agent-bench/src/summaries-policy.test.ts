@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { readdir, readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
@@ -9,7 +9,9 @@ const files = (await readdir(root, { recursive: true })).sort();
 
 it('commits summary machine artifacts gzip-compressed only', async () => {
   expect(files.filter((file) => file.endsWith('.json'))).toEqual([]);
-  const runs = (await readdir(root, { withFileTypes: true })).filter((entry) => entry.isDirectory());
+  const runs = (await readdir(root, { withFileTypes: true })).filter((entry) =>
+    entry.isDirectory(),
+  );
   expect(runs.length).toBeGreaterThan(0);
   for (const run of runs) expect(files).toContain(join(run.name, 'report.json.gz'));
 });
