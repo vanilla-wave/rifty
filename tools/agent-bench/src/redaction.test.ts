@@ -62,7 +62,7 @@ it.each([true, false])(
       });
       const toolResult = (value: typeof trace) =>
         value.transcript.find((message) => message.role === 'toolResult');
-      // The agent scrubs provider text only; the bench artifact masks payload.
+      // The agent scrubs provider error text only; the bench artifact masks payload.
       expect(toolResult(trace)).toMatchObject(payload(false));
       const artifact = JSON.parse(redactJson(trace, secretValues(endpoint))) as typeof trace;
       expect(toolResult(artifact)).toMatchObject(payload(credential));

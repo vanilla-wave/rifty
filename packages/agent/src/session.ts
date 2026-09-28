@@ -582,7 +582,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
         usage,
         finalDiff,
       };
-      // Detached JSON snapshot; provider text was already scrubbed at ingress.
+      // Detached JSON snapshot; provider error text was already scrubbed at ingress.
       return JSON.parse(JSON.stringify(trace)) as AgentTrace;
     },
     async dispose() {

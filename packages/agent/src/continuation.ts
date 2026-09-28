@@ -39,10 +39,6 @@ function continuationSettings(options: AgentSessionOptions) {
   return { retry, compaction };
 }
 
-function scrubText(text: string, secrets: readonly string[]): string {
-  return secrets.reduce((result, secret) => result.replaceAll(secret, '[redacted]'), text);
-}
-
 class OverflowResponse {
   constructor(readonly response: AssistantMessage) {}
 }
@@ -68,24 +64,14 @@ export function createContinuation(
           .flatMap((secret) => [secret, JSON.stringify(secret).slice(1, -1)]),
       ),
     ].sort((a, b) => b.length - a.length);
-  const scrubbed = (text: string) => scrubText(text, secrets());
-  // Provider ingress: every exit (history, status, retry, overflow, trace) sees this copy.
-  // Streamed deltas stay raw; the final message replaces them and errors never stream.
+  const scrubbed = (text: string) =>
+    secrets().reduce((result, secret) => result.replaceAll(secret, '[redacted]'), text);
+  // Provider ingress, error text only: every exit (history, status, retry, overflow, trace)
+  // sees this copy. Content stays raw: the model reads it back, a short key would corrupt it.
   function scrub(message: AssistantMessage): AssistantMessage {
-    const list = secrets();
-    return {
-      ...message,
-      content: message.content.map((block) =>
-        block.type === 'text'
-          ? { ...block, text: scrubText(block.text, list) }
-          : block.type === 'thinking'
-            ? { ...block, thinking: scrubText(block.thinking, list) }
-            : block,
-      ),
-      ...(message.errorMessage === undefined
-        ? {}
-        : { errorMessage: scrubText(message.errorMessage, list) }),
-    };
+    return message.errorMessage === undefined
+      ? message
+      : { ...message, errorMessage: scrubbed(message.errorMessage) };
   }
   const usage: { input: number; output: number; totalTokens: number } = {
     input: 0,
@@ -97,6 +83,7 @@ export function createContinuation(
     usage.output += message.usage.output;
     usage.totalTokens += message.usage.totalTokens;
   }
+  // Retry errorMessage is the already-scrubbed response's (pi retryAssistantCall).
   function callbacks(
     source: 'assistant' | 'summary',
     response?: () => AssistantMessage | undefined,
@@ -111,17 +98,10 @@ export function createContinuation(
           attempt,
           maxAttempts,
           delayMs,
-          errorMessage: scrubbed(errorMessage),
+          errorMessage,
         }),
       onRetryFinished: (success, attempt, errorMessage) =>
-        emit({
-          type: 'retry',
-          phase: 'end',
-          source,
-          success,
-          attempt,
-          errorMessage: errorMessage === undefined ? undefined : scrubbed(errorMessage),
-        }),
+        emit({ type: 'retry', phase: 'end', source, success, attempt, errorMessage }),
     };
   }
   function requestOptions(base: SimpleStreamOptions = {}): SimpleStreamOptions {
@@ -176,7 +156,15 @@ export function createContinuation(
           },
         );
       } catch (error) {
-        if (!(error instanceof OverflowResponse)) throw error;
+        if (!(error instanceof OverflowResponse)) {
+          if (error instanceof Error) {
+            const message = scrubbed(error.message);
+            // Same object for Agent's normalization; defineProperty covers DOMException's getter.
+            if (message !== error.message)
+              Object.defineProperty(error, 'message', { value: message });
+          }
+          throw error;
+        }
         result = error.response;
         if (retryAttempt) notices.onRetryFinished?.(false, retryAttempt, result.errorMessage);
       }

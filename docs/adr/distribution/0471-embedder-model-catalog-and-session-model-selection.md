@@ -57,5 +57,5 @@ Independent DEC-2 decision: `catalog_decision`, pi 0.85.1 executable probes in
 ## Corrections (active)
 
 - 2026-09-28: ADR-0479 supersedes decision 4's redaction clause. Declared secrets and built-in
-  keys are scrubbed at provider ingress; export no longer redacts; headers are not implicit
+  keys are scrubbed in provider error text at ingress; export no longer redacts; headers are not implicit
   secrets. Trace config still omits headers.

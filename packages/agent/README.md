@@ -134,14 +134,14 @@ optional and memory-only; absent means no Authorization header. Trace config
 records the effective selected model, limits and request defaults (never headers).
 Actual assistant model/provider/API metadata stays in the transcript.
 
-Secrets are scrubbed once at provider ingress (ADR-0479), not at export: built-in
-provider apiKeys plus `secrets: string[]` (exact strings, also JSON-escaped; empty
-ignored) become `[redacted]` in each final assistant `errorMessage`/text/thinking
-and in retry/compaction errors, before history, `status`/`detail`, events or trace.
-Headers are not implicit secrets: declare private header values and custom-provider
-credentials in `secrets`. Streamed `message_update` deltas stay raw; `message_end`
-replaces them and provider errors never stream. Tool-call arguments, tool results,
-user text and provider diagnostics are not scrubbed.
+Secrets are scrubbed once at provider ingress (ADR-0479), not at export, in provider
+error text only: built-in provider apiKeys plus `secrets: string[]` (exact strings,
+also JSON-escaped; empty ignored) become `[redacted]` in each final assistant
+`errorMessage`, retry/compaction error strings and the message of an `Error` thrown
+out of a request. Assistant text/thinking stay raw (the model reads them back; a
+short key would corrupt them); provider errors never stream. Headers are not implicit
+secrets: declare private header values and custom-provider credentials in `secrets`.
+Tool-call arguments, tool results, user text and provider diagnostics are not scrubbed.
 
 Rifty-owned shell results begin with JSON status/exit/error/worker/effects;
 preview fetch begins with HTTP status. The envelope is included inside the same

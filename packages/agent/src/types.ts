@@ -142,8 +142,9 @@ export interface AgentSessionOptions extends AgentSessionCommonOptions {
     Record<string, Pick<SimpleStreamOptions, 'reasoning' | 'temperature' | 'samplingParams'>>
   >;
   /**
-   * Exact strings masked as `[redacted]` in provider text at ingress, besides built-in
-   * provider apiKeys. Catalog headers are not implicit secrets. Copied at creation.
+   * Exact strings masked as `[redacted]` in provider error text at ingress, besides built-in
+   * provider apiKeys; assistant content stays raw. Catalog headers are not implicit secrets.
+   * Copied at creation.
    */
   readonly secrets?: readonly string[];
 }
