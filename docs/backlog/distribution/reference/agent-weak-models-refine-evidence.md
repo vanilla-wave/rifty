@@ -1,6 +1,7 @@
 # agent-weak-models — refine/FIT evidence (2026-09-27)
 
-Goal: `docs/backlog/epics/agent-weak-models/`. Driver: Claude (refine session,
+Closed goal: agent-weak-models; accepted goal retained at136c94ade.
+Closure: [whole-goal verdict](ai-agent-weak-model-rerun-final-green.json). Driver: Claude (refine session,
 user present, 2026-09-19…27). Main at `99fdf6c91` (rebased 2026-09-27 from `7f8f4708e`; anchors below re-verified on the new main).
 
 ## Request (verbatim)
