@@ -751,11 +751,11 @@ test('catalog controls switch providers after error without losing tool history'
   const first = await agentModelServer([
     [{ name: 'write_file', args: { path: 'catalog-proof.txt', content: 'written once' } }],
     ...Array.from({ length: 4 }, () => ({
-      error: 'capacity exhausted CATALOG_HEADER_SECRET',
+      error: 'capacity exhausted CATALOG_UI_SECRET CATALOG_HEADER_SECRET catalog-title',
       status: 429,
     })),
   ]);
-  const second = await agentModelServer(['Continued on second.']);
+  const second = await agentModelServer(['Continued on second. catalog-title']);
   try {
     await page.goto('/?agentBench=1');
     await pickStarter(page);
@@ -765,7 +765,10 @@ test('catalog controls switch providers after error without losing tool history'
     await panel.getByText('Advanced catalog', { exact: true }).click({ timeout: 5000 });
     await panel.getByLabel('Model catalog (JSON)', { exact: true }).fill(
       JSON.stringify([
-        { ...entry('first', first.baseUrl), headers: { 'X-Secret': 'CATALOG_HEADER_SECRET' } },
+        {
+          ...entry('first', first.baseUrl),
+          headers: { 'X-Api-Key': 'Bearer CATALOG_HEADER_SECRET', 'X-Title': 'catalog-title' },
+        },
         { ...entry('second', second.baseUrl), temperature: 0.8, thinking: 'high' },
       ]),
     );
@@ -774,14 +777,24 @@ test('catalog controls switch providers after error without losing tool history'
     await panel.getByLabel('Message', { exact: true }).fill('Write the proof, then continue.');
     await panel.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(panel).toHaveAttribute('data-status', 'error', { timeout: 25000 });
+    expect(first.requests[0]?.authorization).toBe('Bearer CATALOG_UI_SECRET');
+    expect(first.headers[0]).toMatchObject({
+      'x-api-key': 'Bearer CATALOG_HEADER_SECRET',
+      'x-title': 'catalog-title',
+    });
+    // Key and bare Bearer header token are masked; an ordinary header value is not a secret.
+    await expect(panel).toContainText('capacity exhausted [redacted] [redacted] catalog-title');
     await expect(panel).not.toContainText('CATALOG_HEADER_SECRET');
     await expect(panel).not.toContainText('CATALOG_UI_SECRET');
     await expect(panel.getByTestId('ai-continuation')).toHaveCount(3);
     expect(first.requests).toHaveLength(5);
+    await expect(panel.getByLabel('Message', { exact: true })).toHaveValue(
+      'Write the proof, then continue.',
+    );
     await panel.getByRole('button', { name: 'Continue with second', exact: true }).click();
     await expect(panel).toHaveAttribute('data-status', 'done');
     await expect(panel.getByLabel('Chat model', { exact: true })).toHaveValue('second');
-    expect(first.requests[0]?.authorization).toBe('Bearer CATALOG_UI_SECRET');
+    await expect(panel).toContainText('Continued on second. catalog-title');
     const request = second.requests[0]?.body;
     expect(request).toMatchObject({
       model: 'second',
@@ -790,6 +803,15 @@ test('catalog controls switch providers after error without losing tool history'
       top_p: 0.9,
       max_completion_tokens: 4096,
     });
+    // The auto-restored prompt is already history: Continue sends `continue`, not a duplicate.
+    const userTexts = request?.messages
+      .filter((message) => message.role === 'user')
+      .map(({ content }) =>
+        typeof content === 'string'
+          ? content
+          : (content as { text?: string }[]).map((part) => part.text ?? '').join(''),
+      );
+    expect(userTexts).toEqual(['Write the proof, then continue.', 'continue']);
     expect(JSON.stringify(request?.messages)).toContain('catalog-proof.txt');
     expect(request?.messages.filter((message) => message.role === 'tool')).toHaveLength(1);
     const trace = await page.evaluate(async () =>
@@ -799,6 +821,7 @@ test('catalog controls switch providers after error without losing tool history'
     );
     expect(trace.transcript.filter((message) => message.role === 'toolResult')).toHaveLength(1);
     expect(trace.config).toMatchObject({ model: 'second', thinking: 'high', temperature: 0.8 });
+    expect(JSON.stringify(trace.transcript)).toContain('Continued on second. catalog-title');
     expect(JSON.stringify(trace)).not.toContain('CATALOG_UI_SECRET');
     expect(JSON.stringify(trace)).not.toContain('CATALOG_HEADER_SECRET');
     const stored = await page.evaluate(() =>
