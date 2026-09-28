@@ -20,6 +20,7 @@
  */
 import { type Page, expect, test } from '@playwright/test';
 import { gotoHarness } from './fixtures.ts';
+import { pendingFlushOverheadMs } from './fixtures/opfs-drain-overhead.ts';
 
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const workerModuleUrl = `/@fs${workspacePath}/tests/browser-unit/fixtures/opfs-parallel-drain-worker.ts?worker&url`;
@@ -185,10 +186,6 @@ test('durability drain on a real 26k-file node_modules tree beats the same-run s
   // pending-MKDIR sibling probe below completes the sweep.
   expect(result.singlePendingFlushMeanMs).toBeGreaterThan(0);
   expect(result.batchedPerOpMeanMs).toBeGreaterThan(0);
-  expect(
-    Math.max(0, result.singlePendingFlushMeanMs - result.batchedPerOpMeanMs) *
-      result.faithfulOpCount,
-  ).toBeLessThanOrEqual(0.1 * result.faithfulMs);
   // MKDIR-SHAPE closure: the write-shape probe cannot see overhead that
   // manifests only on pending-MKDIR flushes — the faithful loop awaits
   // ~files = 26 811 mkdir flushes (one per file) vs the product's 2 315
@@ -204,10 +201,7 @@ test('durability drain on a real 26k-file node_modules tree beats the same-run s
   expect(result.faithfulMkdirCount).toBe(result.files);
   expect(result.singlePendingMkdirFlushMeanMs).toBeGreaterThan(0);
   expect(result.batchedMkdirPerOpMeanMs).toBeGreaterThan(0);
-  expect(
-    Math.max(0, result.singlePendingMkdirFlushMeanMs - result.batchedMkdirPerOpMeanMs) *
-      result.faithfulMkdirCount,
-  ).toBeLessThanOrEqual(0.1 * result.faithfulMs);
+  expect(pendingFlushOverheadMs(result)).toBeLessThanOrEqual(0.1 * result.faithfulMs);
   // THE I3 gate — RED on main (serial drain ⇒ ~1.3x), GREEN post-ADR-0358.
   // RAW unrounded ratio (`speedup` is log-only rounding), scaled by the
   // calibrated ceiling of the baseline's per-op-flush inflation.
