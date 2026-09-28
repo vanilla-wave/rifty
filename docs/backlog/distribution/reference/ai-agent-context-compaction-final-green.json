@@ -1,0 +1,309 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Unit PASS; PR-4: ослабления критериев не найдено. Свежий неизменённый HEAD: pr:check 25/25 (/private/tmp/rifty-pr359-continuation-pr-check-proof.log); мой повтор 32/32 (/private/tmp/rifty-independent-continuation-green.log); Chromium 15/15 + 2/2, real lanes 5/5. Продолжать goal; I7–I11/I13 открыты.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/distribution/ai-agent-context-compaction.md; BASE 6d63e96b7; HEAD b353ed8b0091ec0d6089d9493624a0c988200ad9; goal I2/I4/I5/I6, ADR-0424/0466/0473/0474; raw evidence: docs/backlog/distribution/reference/ai-agent-continuation-evidence.md",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Диагностика несовпавших edit."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Сигнал повторяющихся вызовов."
+    },
+    {
+      "clause": "I9",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Видимый бюджет; default 600 s."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Диагностика Workbench после мутаций."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Workflow recipe и opt-out."
+    },
+    {
+      "clause": "I13",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Повтор baseline benchmark; без per-task регрессий."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "A1: native retry defaults, delays, classifier, partial discard, off, trace/UI",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:131; tools/agent-bench/src/continuation-parity.test.ts:351; tests/e2e/ai-mode.spec.ts:750",
+      "note": ""
+    },
+    {
+      "row": "A2: retry после tool без повторного эффекта; выбор модели/defaults при backoff",
+      "source": "acceptance",
+      "trace": "I2 + I6 + ADR-0424",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:190; packages/agent/src/continuation.fault.test.ts:229; tools/agent-bench/src/continuation-parity.test.ts:370",
+      "note": ""
+    },
+    {
+      "row": "A3: native threshold/defaults/summary/tail; resumed history; compaction off",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:266; packages/agent/src/continuation.fault.test.ts:333; packages/agent/src/continuation.fault.test.ts:415; tools/agent-bench/src/continuation-parity.test.ts:356",
+      "note": ""
+    },
+    {
+      "row": "A4: summary/details сохраняются при restore, смене модели и повторной компакции; admission/count",
+      "source": "acceptance",
+      "trace": "I1 + I2 + I5 + ADR-0466",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:266; packages/agent/src/continuation.fault.test.ts:510; packages/agent/src/continuation.fault.test.ts:558",
+      "note": ""
+    },
+    {
+      "row": "A5: usage всех текущих попыток, включая summary/ошибки; restored excluded; reset",
+      "source": "acceptance",
+      "trace": "I5 + ADR-0466",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:154; packages/agent/src/continuation.fault.test.ts:280; packages/agent/src/continuation.fault.test.ts:458; packages/agent/src/continuation.fault.test.ts:467",
+      "note": ""
+    },
+    {
+      "row": "A6: compaction reason/outcome/tokens/estimate; постоянный chat marker",
+      "source": "acceptance",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:304; tools/agent-bench/src/continuation-parity.test.ts:262; tests/e2e/ai-mode.spec.ts:915",
+      "note": ""
+    },
+    {
+      "row": "A7: overflow отдельно от retry; одна recovery на эпизод; context-exceeded; explicit continue",
+      "source": "acceptance",
+      "trace": "I4 + I5 + I6",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:162; packages/agent/src/continuation.fault.test.ts:365; tools/agent-bench/src/continuation-parity.test.ts:359; tests/e2e/ai-mode.spec.ts:915",
+      "note": ""
+    },
+    {
+      "row": "A8: stop/deadline прекращают backoff/summary без частичной установки и новых эффектов",
+      "source": "acceptance",
+      "trace": "I5 + I6 + ADR-0424",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:211; packages/agent/src/continuation.fault.test.ts:385; packages/agent/src/continuation.fault.test.ts:589; tools/agent-bench/src/continuation-parity.test.ts:363",
+      "note": ""
+    },
+    {
+      "row": "P1: actual Pi CLI — retry/exhaustion/partial/after-tool; counts/delays/history/effects",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/continuation-parity.test.ts:351",
+      "note": ""
+    },
+    {
+      "row": "P2: actual Pi CLI threshold/summary/tail/continuation; repeated compaction",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/continuation-parity.test.ts:356; packages/agent/src/continuation.fault.test.ts:510",
+      "note": ""
+    },
+    {
+      "row": "P3: retry/compaction off; distinct overflow status",
+      "source": "acceptance",
+      "trace": "I5 + I6",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:175; packages/agent/src/continuation.fault.test.ts:333; tools/agent-bench/tests/contract.spec.ts:470",
+      "note": ""
+    },
+    {
+      "row": "F1: network unbounded-read — bounded native retries; transport0; no tool replay",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:131; packages/agent/src/continuation.fault.test.ts:229; tools/agent-bench/src/continuation-parity.test.ts:354; tools/agent-bench/tests/contract.spec.ts:715",
+      "note": ""
+    },
+    {
+      "row": "F2: summary failure сохраняет history; следующий overflow получает отдельную recovery",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:346; tools/agent-bench/src/continuation-parity.test.ts:358",
+      "note": ""
+    },
+    {
+      "row": "F3: stop/deadline во время summary/backoff",
+      "source": "fault-matrix",
+      "trace": "I5 + I6 + ADR-0424",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:211; packages/agent/src/continuation.fault.test.ts:385; packages/agent/src/continuation.fault.test.ts:589; tools/agent-bench/src/continuation-parity.test.ts:363",
+      "note": ""
+    },
+    {
+      "row": "F4: native estimates без usage; полные totals независимо от retained history",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:304; packages/agent/src/continuation.fault.test.ts:415; packages/agent/src/continuation.fault.test.ts:467",
+      "note": ""
+    },
+    {
+      "row": "F5: repeated overflow/no cut — bounded recovery, context-exceeded, model offer",
+      "source": "fault-matrix",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:162; packages/agent/src/continuation.fault.test.ts:365; tests/e2e/ai-mode.spec.ts:915",
+      "note": ""
+    },
+    {
+      "row": "F6: malformed summary/details/orphan rejected до host; valid restore",
+      "source": "fault-matrix",
+      "trace": "I5 + ADR-0466",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:510; packages/agent/src/continuation.fault.test.ts:558; packages/agent/src/history.test.ts:197",
+      "note": ""
+    },
+    {
+      "row": "createAgentSession.retry: native options/defaults/off",
+      "source": "public-api",
+      "trace": "I6 + ADR-0473",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:131; packages/agent/src/continuation.fault.test.ts:175; packages/agent/src/continuation.fault.test.ts:211",
+      "note": ""
+    },
+    {
+      "row": "createAgentSession.compaction: native options/defaults/off",
+      "source": "public-api",
+      "trace": "I5 + ADR-0473",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:266; packages/agent/src/continuation.fault.test.ts:333; tools/agent-bench/src/continuation-parity.test.ts:302",
+      "note": ""
+    },
+    {
+      "row": "createAgentSession.initialMessages: leading summary/details admission",
+      "source": "public-api",
+      "trace": "I5 + ADR-0466 + ADR-0473",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:266; packages/agent/src/continuation.fault.test.ts:510; packages/agent/src/continuation.fault.test.ts:558",
+      "note": ""
+    },
+    {
+      "row": "send: native continuation и retained history",
+      "source": "public-api",
+      "trace": "I2 + I5 + I6 + ADR-0424",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:415; tools/agent-bench/src/continuation-parity.test.ts:351; tests/e2e/ai-mode.spec.ts:915",
+      "note": ""
+    },
+    {
+      "row": "setModel: следующая assistant/summary попытка использует новые defaults",
+      "source": "public-api",
+      "trace": "I2 + ADR-0473",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:190; packages/agent/src/continuation.fault.test.ts:467",
+      "note": ""
+    },
+    {
+      "row": "status/detail: context-exceeded; успешная recovery очищает старую ошибку",
+      "source": "public-api",
+      "trace": "I5 + ADR-0473",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:365; packages/agent/src/continuation.fault.test.ts:629",
+      "note": ""
+    },
+    {
+      "row": "subscribe: retry/compaction events и journal receipts",
+      "source": "public-api",
+      "trace": "I5 + I6 + ADR-0473 + ADR-0474",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:142; packages/agent/src/continuation.fault.test.ts:304; tools/agent-bench/src/continuation-parity.test.ts:308",
+      "note": ""
+    },
+    {
+      "row": "stop: отмена summary/backoff с settlement",
+      "source": "public-api",
+      "trace": "I5 + I6 + ADR-0424",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:211; packages/agent/src/continuation.fault.test.ts:385; tools/agent-bench/src/continuation-parity.test.ts:363",
+      "note": ""
+    },
+    {
+      "row": "dispose: continuation отменяется вместе с Agent до закрытия host",
+      "source": "public-api",
+      "trace": "ADR-0424 + ADR-0473",
+      "status": "pass",
+      "citation": "packages/agent/src/session.ts:539; packages/agent/src/continuation.fault.test.ts:385; tests/e2e/ai-mode.spec.ts:287",
+      "note": ""
+    },
+    {
+      "row": "reset: история, receipts, restored count и текущая usage очищаются",
+      "source": "public-api",
+      "trace": "I5 + ADR-0466 + ADR-0474",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:295; packages/agent/src/history.test.ts:92",
+      "note": ""
+    },
+    {
+      "row": "exportTrace: effective retry/compaction, summary, original restored count, full usage",
+      "source": "public-api",
+      "trace": "I5 + I6 + ADR-0466 + ADR-0473",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:266; packages/agent/src/continuation.fault.test.ts:467; tests/e2e/ai-mode.spec.ts:962",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "b353ed8b0091ec0d6089d9493624a0c988200ad9"
+}

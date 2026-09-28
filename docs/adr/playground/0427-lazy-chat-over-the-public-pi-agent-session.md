@@ -56,3 +56,9 @@ One conversation belongs to one bound project. UI keeps Pi event/result meanings
 including provider error, Stop and budget-exceeded. Export uses core redaction
 and real SCM diff. Existing App helpers may move to focused modules to keep its
 file-size ratchet; no unrelated behavior change.
+
+## Corrections (active)
+
+- 2026-09-28: ADR-0479 removes core export redaction. Playground declares credential-named
+  catalog header values (auth/key/token/secret/cookie/session), raw and bare Bearer token, as
+  session `secrets`; provider echoes are scrubbed at ingress, before UI and export.

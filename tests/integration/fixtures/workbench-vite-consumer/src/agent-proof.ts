@@ -5,6 +5,7 @@ import {
 } from '@riftydev/agent';
 import type { ProjectSession } from '@riftydev/workbench';
 import type { PlaygroundSessionTools } from '@riftydev/workbench/playground';
+import { modelCatalog } from './agent-catalog';
 import { scriptedProvider } from './agent-scripted-provider';
 
 export async function provePackedAgent(
@@ -30,12 +31,15 @@ export async function provePackedAgent(
       companion,
       preview: () => createBrowserAgentPreview({ url: () => previewUrl, frame: () => frame }),
     }),
-    settings: {
-      baseUrl: new URL('/mock-model/v1', location.href).href,
-      model: 'scripted',
-    },
+    ...modelCatalog(
+      {
+        baseUrl: new URL('/mock-model/v1', location.href).href,
+        model: 'scripted',
+      },
+      provider.fetch,
+      undefined,
+    ),
     runTimeoutMs: 120_000,
-    fetch: provider.fetch,
   });
   try {
     await agent.send('Repair the build using the installed dependencies.');
@@ -75,8 +79,11 @@ export async function agentWriteMessage(project: ProjectSession<unknown>, messag
   ]);
   const agent = createAgentSession({
     host: createWorkbenchAgentHost({ session: project }),
-    settings: { baseUrl: new URL('/mock-model/v1', location.href).href, model: 'scripted' },
-    fetch: provider.fetch,
+    ...modelCatalog(
+      { baseUrl: new URL('/mock-model/v1', location.href).href, model: 'scripted' },
+      provider.fetch,
+      undefined,
+    ),
   });
   try {
     await agent.send('Update the preview text.');

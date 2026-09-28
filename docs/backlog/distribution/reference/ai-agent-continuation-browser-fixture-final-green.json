@@ -1,0 +1,109 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Supplemental PASS. PR-4: assertions сохранены; 4 HTTP503 исчерпывают 3 native retry, затем отдельный send сохраняет результат единственной записи. Timeout 60 s только у recovery; остальные 20 s, проверка deadline неизменна. Независимый Chromium 17/17: /private/tmp/rifty-pr359-browser-fixture-independent-green.log. Lint/typecheck GREEN; прежний production pr:check 25/25 применим: production diff пуст.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR359 observed agent-core provider-failure fixture; BASE b2474eae8; HEAD 5c6100731c1f13560beab59e45dfccc7d395c317; goal agent-weak-models I2/I6, ADR-0424 §6. Исходный RED: /private/tmp/rifty-pr359-continuation-browser-core-red.log — один HTTP503, expected error / received done. Дополнительная проверка; предыдущий принятый unit остаётся завершённым.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Диагностика несовпавших edit."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Сигнал повторяющихся вызовов."
+    },
+    {
+      "clause": "I9",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Видимый бюджет; default 600 s."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Диагностика Workbench после мутаций."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Workflow recipe и opt-out."
+    },
+    {
+      "clause": "I13",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Повтор baseline benchmark; без per-task регрессий."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Retryable provider failure: исходная попытка + 3 retry завершаются error до явного продолжения.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/agent-core-proof.ts:158; tests/browser-unit/agent-core.spec.ts:57; tests/browser-unit/agent-core.spec.ts:72",
+      "note": ""
+    },
+    {
+      "row": "После error отдельный send продолжает сохранённую историю с результатом выполненного tool.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/agent-core-proof.ts:168; tests/browser-unit/agent-core.spec.ts:69; tests/browser-unit/agent-core.spec.ts:78",
+      "note": ""
+    },
+    {
+      "row": "Завершённая запись не повторяется при retry и следующем send; реальный файл сохранён.",
+      "source": "acceptance",
+      "trace": "I6 + ADR-0424",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:63; tests/browser-unit/agent-core.spec.ts:71; tests/browser-unit/agent-core.spec.ts:79",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "5c6100731c1f13560beab59e45dfccc7d395c317"
+}

@@ -1,6 +1,6 @@
 # Agent benchmark: gpt-5.6-sol
 
-Original judge: **38/42**. Retained-artifact recheck: **42/42**, from the same42 model runs; no new model execution. [Original report](original-report.json) · [Recheck evidence](rechecks.json) · [Interpretation](README.md).
+Original judge: **38/42**. Retained-artifact recheck: **42/42**, from the same42 model runs; no new model execution. [Original report](original-report.json.gz) · [Recheck evidence](rechecks.json.gz) · [Interpretation](README.md).
 
 Profile: pi-0.85.1+rifty-adapter-v1; task set: trackline-300+hono-v1; runs/task: 3.
 Limits: {"maxToolCalls":40,"runTimeoutMs":600000}.

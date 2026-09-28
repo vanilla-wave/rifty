@@ -5,6 +5,7 @@ import {
   createSandboxAgentHost,
 } from '@riftydev/agent';
 import type { ToolchainSandbox } from '@riftydev/sdk';
+import { modelCatalog } from './agent-catalog';
 import { scriptedProvider } from './agent-scripted-provider';
 
 const settings = { baseUrl: 'https://scripted.invalid/v1', model: 'scripted' };
@@ -40,7 +41,7 @@ export async function sandboxAgentPolicy(sandbox: ToolchainSandbox) {
       { name: 'shell', args: { command: 'touch forbidden.txt' } },
       { name: 'shell', args: { command: priorCommand } },
     ],
-    { error: 'provider failed after committed write' },
+    { error: 'provider failed after committed write', status: 400 },
     [{ name: 'shell', args: { command: nextCommand } }],
     'Continued with the retained write.',
   ]);
@@ -50,8 +51,7 @@ export async function sandboxAgentPolicy(sandbox: ToolchainSandbox) {
       project: projectOptions,
       mode: () => 'commands',
     }),
-    settings,
-    fetch: provider.fetch,
+    ...modelCatalog(settings, provider.fetch, undefined),
   });
   try {
     await agent.send('Edit and search the project, respecting its policy.');
@@ -110,8 +110,7 @@ export async function sandboxAgentStop(sandbox: ToolchainSandbox, hard: boolean)
       project: { root: '/agent-stop' },
       mode: () => 'commands',
     }),
-    settings,
-    fetch: provider.fetch,
+    ...modelCatalog(settings, provider.fetch, undefined),
   });
   let entered!: () => void;
   const entrance = new Promise<void>((resolve) => {
@@ -187,9 +186,8 @@ export async function sandboxAgentCycle(
   });
   const agent = createAgentSession({
     host,
-    settings,
+    ...modelCatalog(settings, provider.fetch, undefined),
     runTimeoutMs: 180_000,
-    fetch: provider.fetch,
   });
   const start = async () => {
     const resident = await sandbox.toolchain.startBin({

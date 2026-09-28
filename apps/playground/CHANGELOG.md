@@ -5,6 +5,18 @@
 - Add manual browser proof page: support, real Vite install/build, durable reload and reopen, copyable device report.
 
 - Select the latest new preview port without ES2023 `findLast`.
+- Catalog JSON keeps the typed text while it is the edit source; other catalog edits re-serialize it.
+- Models created in Settings get their own provider, so each carries its own API key.
+- "Continue with …" sends an edited draft as-is; the auto-restored failed prompt is dropped, never a duplicate user turn: a pending attachment goes alone, otherwise `continue`.
+- Declare credential-named catalog header values (name contains auth/key/token/secret/cookie/session; raw and bare `Bearer` token, each only when at least 8 characters, so a short value such as `5` cannot corrupt `500: …` error text) as chat secrets; provider error echoes are masked before they reach history, status or UI; a non-credential match (Idempotency-Key) is masked too; other headers stay visible (ADR-0479).
+
+- Default AI run budget600s; built-in results expose remaining budget and mutation diagnostics, native repeated-call notices appear in history.
+
+- Show retry/compaction notices and offer explicit model continuation after context overflow.
+
+- Edit/persist a model catalog, switch without resetting history, continue after provider errors, attach images or exact project-file bytes.
+
+- Create chat sessions through native pi model catalogs.
 
 - First pi skill/template command now shows the session refusal and preserves the draft; admission stays inside the run budget (ADR-0442).
 - Show loaded agent files, skills and diagnostics; /reload applies editor changes without a model request.

@@ -2,6 +2,8 @@ import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core';
 import { type Static, type TSchema, Type } from '@earendil-works/pi-ai';
 import { NotImplementedError } from '@riftydev/io';
 import { parseUnifiedPatch, planUnifiedPatch } from './apply-patch.ts';
+import { editMatchFailure } from './edit-hint.ts';
+import { mutationDiagnostics } from './mutation-diagnostics.ts';
 import { capToolText, projectPath } from './text.ts';
 import type { AgentCapabilities, AgentFiles, AgentSessionEvent } from './types.ts';
 import { hostError } from './workbench-host.ts';
@@ -9,6 +11,7 @@ import { hostError } from './workbench-host.ts';
 type Tool = AgentTool<TSchema, unknown>;
 const excluded = new Set(['node_modules', '.git', 'dist']);
 const failure = Symbol('agent tool failure');
+const outcome = Symbol('agent mutation outcome without host diagnostics');
 
 function result(text: string, details: unknown = {}): AgentToolResult<unknown> {
   return { content: [{ type: 'text', text }], details };
@@ -16,6 +19,23 @@ function result(text: string, details: unknown = {}): AgentToolResult<unknown> {
 
 function failedResult(text: string, details: Record<string, unknown>): AgentToolResult<unknown> {
   return result(text, { ...details, [failure]: true });
+}
+
+function mutationResult(
+  text: string,
+  diagnostics: string,
+  details: Record<string, unknown> = {},
+): AgentToolResult<unknown> {
+  return result(`${text}\n${diagnostics}`, { ...details, [outcome]: text });
+}
+
+/** Mutation text minus host diagnostics, whose timing varies between equal calls. */
+export function outcomeWithoutDiagnostics(value: AgentToolResult<unknown>): string | undefined {
+  const text =
+    value.details !== null && typeof value.details === 'object'
+      ? Reflect.get(value.details, outcome)
+      : undefined;
+  return typeof text === 'string' ? text : undefined;
 }
 
 function modelResultText(metadata: Record<string, unknown>, body: string): string {
@@ -150,10 +170,11 @@ export function standardTools(
         'write_file',
         'Create or replace a project text file; creates parent directories.',
         Type.Object({ path: Type.String(), content: Type.String() }),
-        async (args) => {
+        async (args, signal) => {
           await files.change(path(args.path), () => args.content);
-          return result(
+          return mutationResult(
             `wrote ${new TextEncoder().encode(args.content).length} bytes to ${args.path}`,
+            await mutationDiagnostics(capabilities, [{ path: path(args.path) }], signal),
           );
         },
       ),
@@ -161,24 +182,26 @@ export function standardTools(
         'edit_file',
         'Replace exactly one unique occurrence of old with new; no fuzzy matching.',
         Type.Object({ path: Type.String(), old: Type.String(), new: Type.String() }),
-        async (args) => {
+        async (args, signal) => {
           await files.change(path(args.path), (current) => {
             if (current === null) throw new Error(`File does not exist: ${args.path}`);
             if (!args.old) throw new Error('edit_file: old must not be empty');
             const at = current.indexOf(args.old);
-            if (at < 0) throw new Error(`edit_file: string not found in ${args.path}`);
-            if (current.indexOf(args.old, at + 1) >= 0)
-              throw new Error(`edit_file: string is not unique in ${args.path}`);
+            const failure = editMatchFailure(current, args.old, args.path);
+            if (failure) throw new Error(failure);
             return current.slice(0, at) + args.new + current.slice(at + args.old.length);
           });
-          return result(`edited ${args.path}`);
+          return mutationResult(
+            `edited ${args.path}`,
+            await mutationDiagnostics(capabilities, [{ path: path(args.path) }], signal),
+          );
         },
       ),
       tool(
         'apply_patch',
         'Apply a standard unified diff. All hunks are checked before writes; no fuzzy matching. A host failure may leave explicitly reported partial writes.',
         Type.Object({ patch: Type.String() }),
-        async (args) => {
+        async (args, signal) => {
           const before = new Map<string, string | null>();
           for (const patch of parseUnifiedPatch(args.patch)) {
             for (const name of [patch.oldPath, patch.newPath]) {
@@ -209,7 +232,18 @@ export function standardTools(
               { status: 'failed', applied, error: hostError(error) },
             );
           }
-          return result(`patched ${applied.join(', ')}`, { applied });
+          return mutationResult(
+            `patched ${applied.join(', ')}`,
+            await mutationDiagnostics(
+              capabilities,
+              changes.map((change) => ({
+                path: path(change.path),
+                deleted: change.action === 'delete',
+              })),
+              signal,
+            ),
+            { applied },
+          );
         },
       ),
       tool(
@@ -377,11 +411,11 @@ export function standardTools(
   return tools;
 }
 
-export function wrapTool(original: Tool): Tool {
+export function wrapTool(original: Tool, capFinal = true): Tool {
   return {
     ...original,
     async execute(id, args, signal, update) {
-      const capped = (value: AgentToolResult<unknown>) => {
+      const capped = (value: AgentToolResult<unknown>, cap = capFinal) => {
         if (value.content.some((block) => block.type !== 'text'))
           throw new NotImplementedError('agent.tool-image-result');
         return {
@@ -389,7 +423,7 @@ export function wrapTool(original: Tool): Tool {
           content: [
             {
               type: 'text' as const,
-              text: capToolText(
+              text: (cap ? capToolText : (text: string) => text)(
                 value.content.map((block) => (block.type === 'text' ? block.text : '')).join('\n'),
               ),
             },
@@ -403,7 +437,7 @@ export function wrapTool(original: Tool): Tool {
             id,
             args,
             signal,
-            update ? (value) => update(capped(value)) : undefined,
+            update ? (value) => update(capped(value, true)) : undefined,
           ),
         );
       } catch (error) {

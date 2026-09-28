@@ -7,9 +7,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "0.85.1",
     "@earendil-works/pi-coding-agent": "0.85.1",
+    "@playwright/test": "^1.49.0",
     "@riftydev/agent": "workspace:*",
-    "@riftydev/sdk": "workspace:*",
-    "@playwright/test": "^1.49.0"
+    "@riftydev/sdk": "workspace:*"
   }
 }

@@ -14,8 +14,8 @@ profile pi-0.85.1+rifty-adapter-v1,40 tools/600s per run.
 No budget/provider failures. Original model time/tool counts remain unchanged.
 Four original failures were `task-bad`: repaired judges rechecked the retained
 programs, with no source repair or additional model run. Every other artifact
-keeps its original judgment. [Original report](original-report.json),
-[annotated report](report.json), [per-task deltas](summary.md), [rechecks](rechecks.json).
+keeps its original judgment. [Original report](original-report.json.gz),
+[annotated report](report.json.gz), [per-task deltas](summary.md), [rechecks](rechecks.json.gz).
 
 ## Four rechecks
 
@@ -66,10 +66,10 @@ explicit legacy-esbuild admission ceiling; native Vitest test passes.
 
 - `source-artifacts.json.gz`: gzip JSON array `{id,trace,before,after}` for all42
   runs, including dependency locks. This is JSON, not a Playwright ZIP.
-- `manifest.json`: original artifact sizes/SHA256 and committed locations.
+- `manifest.json.gz`: original artifact sizes/SHA256 and committed locations.
   Original Playwright ZIPs remain local; screenshots include all original failures
   and one example per lane. The COI URL recheck screenshot is also retained.
-- `rechecks.json`: independent native results, exact-version scheduling
+- `rechecks.json.gz`: independent native results, exact-version scheduling
   discriminator, actual COI replay and hashes of the corrected judges.
 
 Run again with an available endpoint using the [benchmark CLI](../../../README.md).

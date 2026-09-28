@@ -53,3 +53,7 @@ root/cwd and read/list; no ambient home or symlink API. ADR-0424 owns hosts.
 
 `docs/backlog/distribution/reference/agent-pi-project-resources-pickup-evidence.md`.
 Independent DEC-2 decision reviewer: resource_decision; raw full CLI/core probe.
+
+## Corrections
+
+2026-09-28 — ADR-0475 supersedes §4’s “Preserve profile id/paragraphs” clause: profile v2 adds one default workflow recipe; recipe:false omits only that paragraph. Profile/date → instructions → project context → skills → cwd ordering remains.

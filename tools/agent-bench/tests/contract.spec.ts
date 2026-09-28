@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 import type { AgentPromptProfile } from '@riftydev/agent';
 import { agentModelServer } from '../../../tests/e2e/fixtures/agent-model-server.ts';
+import { catalogEndpoint } from './catalog-endpoint.ts';
 import { observedSmokeModel } from './observed-smoke-model.ts';
 
 function getAgentPromptProfile(): AgentPromptProfile {
@@ -30,16 +31,29 @@ interface RunRecord {
   agentStatus: string;
   outcome: string;
   toolCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  retries: number;
+  compactions: number;
+  repeatedCallNotices: number;
+  editFailures: number;
+  malformedToolCalls: number;
   terminalTail: string;
   judge: { pass: boolean; probes: unknown[] };
-  artifacts: { trace: string; browserTrace?: string; workspace?: string };
+  artifacts: { trace: string; after?: string; browserTrace?: string; workspace?: string };
   profile: string;
   finalDiff: unknown;
   failureClass: string | null;
   note: string | null;
 }
 interface Report {
-  header: { model: string; profile: string; runsPerTask: number; toolContextCaveat: string };
+  header: {
+    model: string;
+    profile: string;
+    runsPerTask: number;
+    toolContextCaveat: string;
+    sourceRevision: string;
+  };
   runs: RunRecord[];
 }
 
@@ -70,8 +84,14 @@ async function cli(args: string[], extraEnv: Record<string, string> = {}) {
 // RED scaffold is callable and loud; it cannot substitute a fabricated successful report.
 test('the public shared coding profile is available to browser and native CLI consumers', () => {
   const profile = getAgentPromptProfile();
-  expect(profile.id).toBe('pi-0.85.1+rifty-adapter-v1');
-  for (const part of [profile.intro, profile.guidance, profile.recovery, profile.verification])
+  expect(profile.id).toBe('pi-0.85.1+rifty-adapter-v2');
+  for (const part of [
+    profile.intro,
+    profile.guidance,
+    profile.recovery,
+    profile.verification,
+    profile.recipe,
+  ])
     expect(part.length).toBeGreaterThan(20);
 });
 
@@ -80,10 +100,7 @@ test('all three real mock-model lanes run the entire task set with identical jud
   // The provider lives outside the runner: report-only fabrication makes zero requests.
   const model = await observedSmokeModel();
   const config = join(out, 'config.json');
-  await writeFile(
-    config,
-    JSON.stringify({ endpoint: { baseUrl: model.baseUrl, model: 'scripted' } }),
-  );
+  await writeFile(config, JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl) }));
   let result: Awaited<ReturnType<typeof cli>>;
   try {
     result = await cli(['run', '--runs', '1', '--config', config, '--output', out]);
@@ -99,11 +116,24 @@ test('all three real mock-model lanes run the entire task set with identical jud
   const profile = getAgentPromptProfile();
   for (const request of completedReads) {
     expect(request.authorization).toBeNull();
+    expect(request.body).toMatchObject({
+      model: 'scripted',
+      temperature: 1,
+      top_p: 0.95,
+      reasoning_effort: 'medium',
+      max_completion_tokens: 4096,
+    });
     const system = request.body.messages
-      .filter((message) => message.role === 'system')
+      .filter((message) => message.role === 'system' || message.role === 'developer')
       .map((message) => message.content)
       .join('\n');
-    for (const part of [profile.intro, profile.guidance, profile.recovery, profile.verification])
+    for (const part of [
+      profile.intro,
+      profile.guidance,
+      profile.recovery,
+      profile.verification,
+      profile.recipe,
+    ])
       expect(system).toContain(part);
     const result = JSON.stringify(
       request.body.messages.filter((message) => message.role === 'tool'),
@@ -133,6 +163,15 @@ test('all three real mock-model lanes run the entire task set with identical jud
       expect(run.judge.pass).toBe(false);
       expect(run.judge.probes.length).toBeGreaterThan(0);
       expect(run.toolCalls).toBe(1);
+      expect(run).toMatchObject({
+        inputTokens: 20,
+        outputTokens: 6,
+        retries: 0,
+        compactions: 0,
+        repeatedCallNotices: 0,
+        editFailures: 0,
+        malformedToolCalls: 0,
+      });
       const nativeStderr =
         run.lane === 'local-reference'
           ? await readFile(join(out, dirname(run.artifacts.trace), 'native-stderr.log'), 'utf8')
@@ -222,7 +261,7 @@ for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
     await writeFile(
       config,
       JSON.stringify({
-        endpoint: { baseUrl: model.baseUrl, model: 'scripted' },
+        endpoint: catalogEndpoint(model.baseUrl),
         limits: { maxToolCalls: 1, runTimeoutMs: 60000 },
       }),
     );
@@ -268,10 +307,7 @@ test('provider failure after a real UI write retains its evidence in the run rep
   ]);
   const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-provider-'));
   const config = join(out, 'config.json');
-  await writeFile(
-    config,
-    JSON.stringify({ endpoint: { baseUrl: model.baseUrl, model: 'scripted' } }),
-  );
+  await writeFile(config, JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl) }));
   try {
     const result = await cli([
       'run',
@@ -309,7 +345,7 @@ test('configured key reaches only the provider and is absent from every persiste
   await writeFile(
     config,
     JSON.stringify({
-      endpoint: { baseUrl: model.baseUrl, model: 'scripted', envKey: 'RIFTY_BENCH_TEST_KEY' },
+      endpoint: catalogEndpoint(model.baseUrl, { envKey: 'RIFTY_BENCH_TEST_KEY' }),
     }),
   );
   try {
@@ -364,7 +400,7 @@ for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
     await writeFile(
       config,
       JSON.stringify({
-        endpoint: { baseUrl: model.baseUrl, model: 'scripted' },
+        endpoint: catalogEndpoint(model.baseUrl),
         limits: { maxToolCalls: 100, runTimeoutMs: 1000 },
       }),
     );
@@ -408,10 +444,7 @@ test('native project cannot inherit checkout dependencies when reports live in t
     'Dependency boundary observed.',
   ]);
   const config = join(out, 'config.json');
-  await writeFile(
-    config,
-    JSON.stringify({ endpoint: { baseUrl: model.baseUrl, model: 'scripted' } }),
-  );
+  await writeFile(config, JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl) }));
   try {
     const result = await cli(
       [
@@ -444,3 +477,287 @@ test('native project cannot inherit checkout dependencies when reports live in t
     await rm(out, { recursive: true, force: true });
   }
 });
+
+for (const lane of ['rifty', 'local-reference'] as const) {
+  test(`${lane} classifies provider context overflow separately with observed token columns`, async () => {
+    const model = await agentModelServer([{ error: 'maximum context length is 32768 tokens' }]);
+    const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-context-'));
+    const config = join(out, 'config.json');
+    await writeFile(config, JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl) }));
+    try {
+      const result = await cli([
+        'run',
+        '--lane',
+        lane,
+        '--task',
+        'add-search',
+        '--runs',
+        '1',
+        '--config',
+        config,
+        '--output',
+        out,
+      ]);
+      expect(result.code, result.output).toBe(0);
+      const report = JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as Report;
+      expect(report.runs[0]).toMatchObject({
+        agentStatus: lane === 'rifty' ? 'context-exceeded' : 'error',
+        outcome: 'context-exceeded',
+        retries: 0,
+        compactions: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+      expect(model.requests).toHaveLength(1);
+    } finally {
+      await model.close();
+    }
+  });
+}
+
+test('a real credential-named file stays private in snapshot keys and report payloads', async () => {
+  const secret = 'HEADER_PATH_SECRET';
+  const model = await agentModelServer([
+    [{ name: 'write_file', args: { path: `${secret}.txt`, content: 'body' } }],
+    'Done.',
+  ]);
+  const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-private-path-'));
+  const config = join(out, 'input-config.json');
+  await writeFile(
+    config,
+    JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl, { headers: { 'X-Key': secret } }) }),
+  );
+  try {
+    const result = await cli([
+      'run',
+      '--lane',
+      'rifty',
+      '--task',
+      'add-search',
+      '--runs',
+      '1',
+      '--config',
+      config,
+      '--output',
+      out,
+    ]);
+    expect(result.code, result.output).toBe(0);
+    const json = await readFile(join(out, 'report.json'), 'utf8');
+    const report = JSON.parse(json) as Report;
+    expect(report.runs[0]).toMatchObject({ agentStatus: 'done', toolCalls: 1 });
+    expect(json).not.toContain(secret);
+    const after = await readFile(join(out, report.runs[0]!.artifacts.after!), 'utf8');
+    expect(after).not.toContain(secret);
+    expect(JSON.parse(after)['[REDACTED].txt']).toBe('body');
+  } finally {
+    await model.close();
+  }
+});
+
+for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
+  test(`${lane} measures tool failures and context before header privacy`, async () => {
+    const native = lane === 'local-reference';
+    const edit = native ? 'edit' : 'edit_file';
+    const model = await agentModelServer([
+      [
+        {
+          name: edit,
+          args: native
+            ? { path: 'src/pages/IssueList.tsx', oldText: 'MISSING-BENCH-TEXT', newText: 'unused' }
+            : { path: 'src/pages/IssueList.tsx', old: 'MISSING-BENCH-TEXT', new: 'unused' },
+        },
+      ],
+      [{ name: native ? 'read' : 'read_file', args: {} }],
+      { error: 'maximum context length is 32768 tokens' },
+    ]);
+    const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-private-metrics-'));
+    const config = join(out, 'input-config.json');
+    await writeFile(
+      config,
+      JSON.stringify({
+        endpoint: catalogEndpoint(model.baseUrl, {
+          headers: {
+            'X-Edit': edit,
+            'X-Validation': 'Validation failed for tool ',
+            'X-Context': 'maximum context length',
+          },
+        }),
+      }),
+    );
+    try {
+      const result = await cli([
+        'run',
+        '--lane',
+        lane,
+        '--task',
+        'add-search',
+        '--runs',
+        '1',
+        '--config',
+        config,
+        '--output',
+        out,
+      ]);
+      expect(result.code, result.output).toBe(0);
+      const report = JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as Report;
+      expect(report.runs[0]).toMatchObject({
+        editFailures: 1,
+        malformedToolCalls: 1,
+        contextExceeded: true,
+        outcome: 'context-exceeded',
+      });
+      const trace = await readFile(join(out, report.runs[0]!.artifacts.trace), 'utf8');
+      expect(trace).not.toContain('maximum context length');
+      expect(trace).not.toContain('Validation failed for tool ');
+    } finally {
+      await model.close();
+    }
+  });
+}
+
+for (const lane of ['rifty', 'local-reference'] as const) {
+  test(`${lane} preserves report numbers and status for numeric and protocol-like headers`, async () => {
+    const model = await agentModelServer([{ error: 'Private echo: 1 error "' }]);
+    const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-header-protocol-'));
+    const config = join(out, 'input-config.json');
+    await writeFile(
+      config,
+      JSON.stringify({
+        endpoint: catalogEndpoint(model.baseUrl, {
+          headers: { 'X-Number': '1', 'X-Tag': 'error', 'X-Quote': '"' },
+        }),
+      }),
+    );
+    try {
+      const result = await cli([
+        'run',
+        '--lane',
+        lane,
+        '--task',
+        'add-search',
+        '--runs',
+        '1',
+        '--config',
+        config,
+        '--output',
+        out,
+      ]);
+      expect(result.code, result.output).toBe(0);
+      expect(model.headers[0]).toMatchObject({ 'x-number': '1', 'x-tag': 'error', 'x-quote': '"' });
+      const report = JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as Report;
+      const run = report.runs[0]!;
+      expect(report.header.sourceRevision).toBe(
+        execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+      );
+      expect(report.header.profile).toBe(getAgentPromptProfile().id);
+      expect(run).toMatchObject({
+        runIndex: 1,
+        agentStatus: 'error',
+        outcome: 'fail',
+        inputTokens: 0,
+        outputTokens: 0,
+        toolCalls: 0,
+      });
+      const trace = JSON.parse(await readFile(join(out, run.artifacts.trace), 'utf8'));
+      expect(JSON.stringify(trace)).not.toContain('Private echo: 1 error');
+      if (lane === 'rifty') expect(trace.status).toBe('error');
+      else
+        expect(trace.events.some((event: { type: string }) => event.type === 'agent_end')).toBe(
+          true,
+        );
+    } finally {
+      await model.close();
+    }
+  });
+
+  test(`${lane} delivers catalog headers without copying their secrets into artifacts`, async () => {
+    const secret = 'CATALOG_HEADER_ONLY_SECRET';
+    const model = await agentModelServer([{ error: `Rejected ${secret}` }]);
+    const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-header-'));
+    const config = join(out, 'input-config.json');
+    await writeFile(
+      config,
+      JSON.stringify({
+        endpoint: catalogEndpoint(model.baseUrl, {
+          headers: { 'X-Catalog-Key': `Bearer ${secret}` },
+        }),
+      }),
+    );
+    try {
+      const result = await cli([
+        'run',
+        '--lane',
+        lane,
+        '--task',
+        'add-search',
+        '--runs',
+        '1',
+        '--config',
+        config,
+        '--output',
+        out,
+      ]);
+      expect(result.code, result.output).toBe(0);
+      expect(model.headers[0]?.['x-catalog-key']).toBe(`Bearer ${secret}`);
+      const json = await readFile(join(out, 'report.json'), 'utf8');
+      expect(json).not.toContain(secret);
+      const report = JSON.parse(json) as Report;
+      const run = report.runs[0]!;
+      expect(run.artifacts.browserTrace).toBeUndefined();
+      expect(await readFile(join(out, run.artifacts.trace), 'utf8')).not.toContain(secret);
+      expect(await readFile(join(out, 'summary.md'), 'utf8')).not.toContain(secret);
+      if (lane === 'local-reference') {
+        for (const file of [
+          'native-extension.ts',
+          'pi-home/models.json',
+          'provider-requests.jsonl',
+          'native-stderr.log',
+        ])
+          expect(
+            await readFile(join(out, dirname(run.artifacts.trace), file), 'utf8'),
+          ).not.toContain(secret);
+      }
+    } finally {
+      await model.close();
+    }
+  });
+}
+
+for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
+  test(`${lane} records native default retry over the real lane`, async () => {
+    const model = await agentModelServer([
+      { error: 'rate limit', status: 429 },
+      'Done after retry.',
+    ]);
+    const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-retry-'));
+    const config = join(out, 'config.json');
+    await writeFile(config, JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl) }));
+    try {
+      const result = await cli([
+        'run',
+        '--lane',
+        lane,
+        '--task',
+        'add-search',
+        '--runs',
+        '1',
+        '--config',
+        config,
+        '--output',
+        out,
+      ]);
+      expect(result.code, result.output).toBe(0);
+      const report = JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as Report;
+      expect(report.runs[0]).toMatchObject({
+        agentStatus: 'done',
+        retries: 1,
+        inputTokens: 10,
+        outputTokens: 3,
+        toolCalls: 0,
+      });
+      expect(model.requests).toHaveLength(2);
+    } finally {
+      await model.close();
+    }
+  });
+}

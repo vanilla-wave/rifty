@@ -26,7 +26,6 @@ import { installWebGlobals } from './builtins/web-globals.ts';
 import {
   isSandboxToolchainRealm,
   isSandboxToolchainResidentTransitionActive,
-  sandboxToolchainWebAssembly,
 } from './internal/sandbox-toolchain-realm.ts';
 import {
   composeRuntimeWorkerFs,
@@ -88,7 +87,7 @@ async function evaluateExpression(req: EvalRequest): Promise<EvalResult> {
     setProcessCwd(req.cwd);
   }
   try {
-    const value = await evalInRepl(req.code, { WebAssembly: sandboxToolchainWebAssembly() });
+    const value = await evalInRepl(req.code);
     if (value !== undefined) {
       post({ type: 'stdout', chunk: `${inspect(value)}\n` });
     }

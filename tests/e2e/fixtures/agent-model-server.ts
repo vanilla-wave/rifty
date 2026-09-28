@@ -7,6 +7,7 @@ import {
 /** Only the external model is scripted. Real Pi, project files, terminal and preview run normally. */
 export async function agentModelServer(initial: readonly ScriptedReply[]) {
   const replies = [...initial];
+  const headers: import('node:http').IncomingHttpHeaders[] = [];
   const provider = scriptedProvider(replies);
   let release: (() => void) | undefined;
   let holdText: string | undefined;
@@ -22,6 +23,7 @@ export async function agentModelServer(initial: readonly ScriptedReply[]) {
       return;
     }
     try {
+      headers.push({ ...request.headers });
       const chunks: Buffer[] = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
       const input = new Request('https://scripted.invalid/v1/chat/completions', {
@@ -64,6 +66,7 @@ export async function agentModelServer(initial: readonly ScriptedReply[]) {
   return {
     baseUrl: `http://127.0.0.1:${address.port}/v1`,
     requests: provider.requests,
+    headers,
     append: (...next: ScriptedReply[]) => replies.push(...next),
     holdFinal(text: string) {
       holdText = text;

@@ -24,7 +24,26 @@ export function restoreMessages(input: readonly AgentMessage[] = []): AgentMessa
   }
   if (!Array.isArray(input)) fail('expected a native message array');
   const pending = new Map<string, string>();
-  for (const message of input) {
+  for (const [index, message] of input.entries()) {
+    if (message?.role === 'compactionSummary') {
+      const details: unknown = 'details' in message ? message.details : undefined;
+      if (
+        index !== 0 ||
+        typeof message.summary !== 'string' ||
+        !Number.isFinite(message.timestamp) ||
+        !Number.isFinite(message.tokensBefore) ||
+        message.tokensBefore < 0 ||
+        (details !== undefined &&
+          (!record(details) ||
+            !['readFiles', 'modifiedFiles'].every(
+              (key) =>
+                Array.isArray(details[key]) &&
+                (details[key] as unknown[]).every((value) => typeof value === 'string'),
+            )))
+      )
+        fail('expected one leading native compaction summary with file-operation details');
+      continue;
+    }
     if (
       !message ||
       (message.role !== 'user' && message.role !== 'assistant' && message.role !== 'toolResult') ||

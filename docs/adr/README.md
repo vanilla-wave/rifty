@@ -99,6 +99,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0383 | No COI VM default and preboot worker selection |
 | 0385 | Keep one foreground drain across HTTP server close |
 | 0422 | Retire callbacks with completed command invocations |
+| 0470 | Preserve native WebAssembly in no-COI guests |
 
 ### runtime-wasi
 
@@ -366,6 +367,13 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0442 | Refuse pi-expandable commands inside agent session admission |
 | 0466 | Restore native agent conversation history |
 | 0469 | Browser support tiers and evidence legend |
+| 0471 | Embedder model catalog and session model selection |
+| 0472 | Measure catalog benchmarks with pinned pi event semantics |
+| 0473 | Continue agent sessions with native retry and compaction |
+| 0474 | Project native compaction history from session receipts |
+| 0475 | Feed tool outcomes and shared workflow back to the model |
+| 0478 | Compare fixed-config agent benchmark runs |
+| 0479 | Scrub declared secrets at the provider ingress |
 
 ## Superseded (removed)
 

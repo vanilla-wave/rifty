@@ -3,6 +3,7 @@ import {
   createBrowserAgentPreview,
   createWorkbenchAgentHost,
 } from '../../../packages/agent/src/index.ts';
+import { modelCatalog } from '../../integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts';
 import { scriptedProvider } from './agent-scripted-provider.ts';
 import { currentProject, currentSessionTools } from './sealed-playground-workbench.ts';
 
@@ -49,9 +50,12 @@ export async function proveSnapshotBuild() {
       companion: currentSessionTools(),
       preview: () => createBrowserAgentPreview({ url: () => ready.url, frame: () => frame }),
     }),
-    settings: { baseUrl: 'https://scripted.invalid/v1', model: 'scripted' },
+    ...modelCatalog(
+      { baseUrl: 'https://scripted.invalid/v1', model: 'scripted' },
+      provider.fetch,
+      undefined,
+    ),
     runTimeoutMs: 120_000,
-    fetch: provider.fetch,
   });
   try {
     await session.send('Fix the failed build and verify the preview.');
@@ -77,8 +81,11 @@ export async function proveSnapshotHmr() {
   ]);
   const agent = createAgentSession({
     host: createWorkbenchAgentHost({ session: project }),
-    settings: { baseUrl: 'https://scripted.invalid/v1', model: 'scripted' },
-    fetch: provider.fetch,
+    ...modelCatalog(
+      { baseUrl: 'https://scripted.invalid/v1', model: 'scripted' },
+      provider.fetch,
+      undefined,
+    ),
   });
   try {
     await agent.send('Update the live preview.');

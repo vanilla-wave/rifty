@@ -1,0 +1,126 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS @08a5878a: required defect fixed, unit/goal residuals empty; PR359 behavior ready. Driver must finish latest-head CI and PASS-binding; no merge executed or requested.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "08a5878a9e7d61d02e705e543929ff2a5d4f0446",
+  "unit_goal_source": "PR359 fresh merge review and observed counter defect, BASE be8ca87e6b38b3f2d4cb57074ff7e8f922f541df; repair evidence docs/backlog/distribution/reference/pr359-merge-review-repair.md. No invented unit contract. Raw accepted goal retrieved at136c94ade523ef1b65837cd65a4a36d6ac78e4b5, full PR BASE f112e5f35d09fb4434d718814644da55b9cfa780; ADR0471–0475/0478 and supplemental ADR0358/exact spec550538dd7. Independent reviewer same fresh Spec agent verifies accepted FIX under REV-12; Standards independently verified S1/S2 in /private/tmp/rifty-pr359-merge-standards-verify.md. Clean HEAD08a5878a diff read; fresh22 tests, failure/Stop probes,84-row replay. Full pr:check25/25 read from /private/tmp/rifty-pr359-merge-pr-check.log, not rerun by reviewer.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "I12: failed core compaction settlement must not increment successful-compaction metric",
+      "source": "acceptance",
+      "trace": "I12 + ADR-0472",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/metrics.ts:55; tools/agent-bench/src/continuation-parity.test.ts:373; /private/tmp/rifty-pr359-merge-spec-verify-probe.log",
+      "note": "Original required finding at be8ca87e6: metrics.ts:61–63 counted two success:false summary attempts as2 successful compactions, actual0; independently executed original probe. Accepted FIX, verified08a5878a: same real-session probe reported0/actualSuccessful0. Original authority I12 every column shows each lane actual events; benchmark README successful compactions. Original findings retained in docs/backlog/distribution/reference/pr359-merge-review-repair.md:10 and /private/tmp/rifty-pr359-merge-spec-review.md. No adjudication/demotion."
+    },
+    {
+      "row": "Successful core and native compactions remain counted; real differential context/outcome/tool semantics unchanged",
+      "source": "acceptance",
+      "trace": "I5 + I12 + ADR-0472",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/continuation-parity.test.ts:358; tools/agent-bench/src/catalog-metrics.test.ts:189; /private/tmp/rifty-pr359-merge-spec-verify-tests.log",
+      "note": "Fresh22/22 tests; twelve actual native Pi0.85.1 versus Rifty scenarios, threshold/overflow success retained as positive controls."
+    },
+    {
+      "row": "Failed/aborted native and core compaction ends do not masquerade as completed compactions",
+      "source": "fault-matrix",
+      "trace": "I5 + I12 + ADR-0472",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/metrics.ts:56; packages/agent/src/continuation.fault.test.ts:385; /private/tmp/rifty-pr359-merge-spec-abort.log",
+      "note": "Native CLI result predicate and shared aborted guard unchanged; native agent-session.js:1769,1812,1874 emits no result on abort/failure. Fresh real core Stop probe: aborted, success:false, no installed summary, reported0. Same observer is consumed by both browser lanes."
+    },
+    {
+      "row": "Observed baseline RED and guard-reversion discriminate the original counter defect",
+      "source": "acceptance",
+      "trace": "I12 + ADR-0472",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/continuation-parity.test.ts:376; docs/backlog/distribution/reference/pr359-merge-review-repair.md:25; /private/tmp/rifty-pr359-merge-compaction-red.log; /private/tmp/rifty-pr359-merge-compaction-revert.log",
+      "note": "Read exact RED1/11 and reverted summary-failure2≠0; strengthened existing true native/core differential carrier, no fake rifty unit/sibling or weakened assertion. Fresh fixed tests22/22 PASS."
+    },
+    {
+      "row": "Frozen baseline/rerun measurements and per-task comparison remain unchanged after measurement repair",
+      "source": "frozen-artifact",
+      "trace": "I12 + I13 + ADR-0478",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/manifest.json:1; tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/comparison.json:1; /private/tmp/rifty-pr359-merge-spec-verify-replay.log",
+      "note": "Fresh independent84/84 archive replay: all8 eventMetrics fields per row unchanged (inputTokens, outputTokens, retries, compactions, repeatedCallNotices, editFailures, malformedToolCalls, contextExceeded). turns/toolCalls were not replayed after repair; unchanged earlier comparison proof reused. Prior fresh full-PR archive/config hashes,42 identities each, original-versus-annotated outcomes and14-group independent sums/medians/deltas checked:40/42→42/42,no regression. No paid rerun."
+    },
+    {
+      "row": "Retry documentation describes actual defaults and distinguishes assistant retry from forbidden tool-action replay",
+      "source": "acceptance",
+      "trace": "I6 + ADR-0473",
+      "status": "pass",
+      "citation": "packages/agent/README.md:121; tools/agent-bench/README.md:76; packages/agent/src/continuation.ts:27; tools/agent-bench/src/lanes/local-reference.ts:107",
+      "note": "Standards S2 advisory corrected; independently verified both README statements against current code. Native retry enabled3/2000, provider0. No policy change."
+    },
+    {
+      "row": "Unchanged accepted goal I1–I13 and scenario transitions retain their acceptance proof; I12 counter gap repaired above",
+      "source": "acceptance",
+      "trace": "I1 + I2 + I3 + I4 + I5 + I6 + I7 + I8 + I9 + I10 + I11 + I12 + I13",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/ai-agent-weak-model-rerun-final-green.json:1; tests/e2e/ai-mode.spec.ts:747; tests/e2e/ai-mode.spec.ts:843; tests/e2e/ai-mode.spec.ts:915; tests/browser-unit/agent-core.spec.ts:343; /private/tmp/rifty-pr359-merge-spec-tests.log",
+      "note": "Raw goal at136c94ade, accepted scenarios/decisions and ADR0471–0475/0478 inspected against full mainf112e5f35...be8ca87e6 production diff and acceptance composition. Fresh prior114/114 tests and archival review. Reuse only unchanged carriers/obligations; no new agent/runtime/UI behavior in repair. Browser not rerun by this reviewer; prior current-be8 CI21/21 passed and reviewed earlier independent browser proof."
+    },
+    {
+      "row": "Unchanged OPFS population-accounting repair preserves raw ratio,10% budget and exact durability guards",
+      "source": "acceptance",
+      "trace": "ADR-0358 I3 + named BASE550538dd7 acceptance behavior",
+      "status": "pass",
+      "citation": "docs/backlog/perf/reference/pr359-opfs-overhead-final-green.json:1; tests/browser-unit/fixtures/opfs-drain-overhead.ts:11; tests/browser-unit/opfs-parallel-drain.spec.ts:173; tools/checks/opfs-drain-overhead.test.ts:1",
+      "note": "Independently compared original550538dd7 spec/worker to be8 full diff; correct write/mkdir populations share10% sum, no negative credit; raw2.5×1.05 and complete trees/ledgers preserved. Fresh prior7/7 regression tests; prior reviewed Linux actual acceptance3.98× unchanged."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "apps/playground/src/ai/AiChatPanel.tsx:611",
+          "summary": "Retained external P2 advisory: Continue replaces an unsent edited draft with continue when no attachment is pending; no required repair under accepted history-retention scope.",
+          "authority": "",
+          "evidence": "Code reading and original external comment; I2/I4 protect admitted history/tool results, not unsent input. No newly executed browser draft probe; historical NOTE remains report-only. Binary P1 contradicts explicit accepted scenario2 shell/project-files route and is not a required defect."
+        }
+      ]
+    }
+  ]
+}

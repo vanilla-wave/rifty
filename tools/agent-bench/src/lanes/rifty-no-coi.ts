@@ -14,8 +14,7 @@ export async function prepareNoCoi(input: Input): Promise<Prepared> {
       {
         files: input.task.files,
         settings: {
-          baseUrl: input.endpoint.baseUrl,
-          model: input.endpoint.model,
+          endpoint: input.endpoint,
           apiKey: input.key,
           ...input.config.limits,
         },
@@ -32,14 +31,14 @@ export async function prepareNoCoi(input: Input): Promise<Prepared> {
       page,
       before,
       async run() {
-        const trace = await page.evaluate(
+        const { trace, events } = await page.evaluate(
           (prompt) => (Reflect.get(globalThis, 'bench') as NoCoiPage).run(prompt),
           input.task.prompt,
         );
         after = await page.evaluate(() =>
           (Reflect.get(globalThis, 'bench') as NoCoiPage).snapshot(),
         );
-        return coreObservation(trace, requests);
+        return coreObservation(trace, requests, events);
       },
       async preview() {
         await page.evaluate(() => (Reflect.get(globalThis, 'bench') as NoCoiPage).preview());

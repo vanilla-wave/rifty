@@ -12,6 +12,8 @@ never drain-reaped (kept alive by its own ports). Backing tests:
 
 | Feature | Status | Notes |
 |---|---|---|
+| `WebAssembly.Memory` in no-COI toolchain | ✅ | Native constructor, namespace identity, descriptor evaluation and grow behavior; shared allocation may succeed without COI (ADR-0470). This does not provide threads. |
+| `worker_threads.Worker` / threaded WASM in no-COI toolchain | ❌ | Worker construction throws `NotImplementedError('worker_threads.Worker')` synchronously, including ordinary JS Workers; no same-realm fallback. Package loaders may log/wrap the gap. COI kernel Workers retain their existing implementation (ADR-0470). |
 | Exit on event-loop drain (not top-level resolve) | ✅ | Post-top-level async (timers, detached `import().then(run)`) completes before reap |
 | Keepalive counts `setTimeout`/`setInterval` | ✅ | libuv-style refcount; loop stays alive while a refed timer exists |
 | Keepalive counts `setImmediate` | ✅ | |

@@ -62,3 +62,8 @@ Publishing the package and its Pi types is irreversible. Reference evidence:
 - Existing OpenAI-compatible Playground behavior remains, including local proxy
   guidance at its UI boundary.
 - Tagged releases publish 17 names after one-time agent bootstrap/trust setup.
+
+## Corrections (active)
+
+- 2026-09-27: ADR-0471 supersedes decisions 2–3 with native pi Models catalog
+  selection and declared model metadata. Decisions 1 and 4–6 remain.

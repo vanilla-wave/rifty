@@ -6,6 +6,7 @@ import {
   createAssistantMessageEventStream,
 } from '@earendil-works/pi-ai';
 import { describe, expect, expectTypeOf, it } from 'vitest';
+import { modelCatalog } from '../../../tests/integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts';
 import { createAgentSession } from './session.ts';
 import { standardTools, wrapTool } from './tools.ts';
 import type {
@@ -13,7 +14,6 @@ import type {
   AgentCommandResult,
   AgentHost,
   AgentSessionOptions,
-  AgentSettings,
 } from './types.ts';
 
 const usage = {
@@ -71,18 +71,17 @@ async function executeStandard(capabilities: AgentCapabilities, name: string) {
 }
 
 describe('public agent transport contract', () => {
-  it('exposes exclusive default and custom transport option types', () => {
+  it('requires native catalog and selection in the public option type', () => {
     expectTypeOf<{
       host: AgentHost;
-      settings: AgentSettings;
+      models: import('@earendil-works/pi-ai').Models;
+      model: string;
     }>().toMatchTypeOf<AgentSessionOptions>();
-    expectTypeOf<{ host: AgentHost; streamFn: StreamFn }>().toMatchTypeOf<AgentSessionOptions>();
-    expectTypeOf<
-      Extract<AgentSessionOptions, { settings: AgentSettings; streamFn: StreamFn }>
-    >().toEqualTypeOf<never>();
+    expectTypeOf<Extract<AgentSessionOptions, { settings: unknown }>>().toEqualTypeOf<never>();
+    expectTypeOf<Extract<AgentSessionOptions, { streamFn: StreamFn }>>().toEqualTypeOf<never>();
   });
 
-  it('runs a native custom stream without network settings and traces actual response identity', async () => {
+  it('runs a native custom catalog provider and traces actual response identity', async () => {
     const contexts: Context[] = [];
     const signals: (AbortSignal | undefined)[] = [];
     const streamFn: StreamFn = (_model, context, options) => {
@@ -92,7 +91,7 @@ describe('public agent transport contract', () => {
     };
     const session = createAgentSession({
       host: host(),
-      streamFn,
+      ...modelCatalog(undefined, undefined, streamFn),
       maxToolCalls: 7,
       runTimeoutMs: 2_000,
       instructions: ['Consumer instruction.'],
@@ -118,8 +117,10 @@ describe('public agent transport contract', () => {
       expect(contexts[0]?.systemPrompt).toContain('Consumer instruction.');
       expect(contexts[0]?.tools?.map((tool) => tool.name)).toContain('consumer_tool');
       expect(signals[0]).toBeInstanceOf(AbortSignal);
-      expect(trace.config).toEqual({
+      expect(trace.config).toMatchObject({
         transport: 'custom',
+        model: 'scripted',
+        provider: 'rifty',
         maxToolCalls: 7,
         runTimeoutMs: 2_000,
       });
@@ -149,7 +150,7 @@ describe('public agent transport contract', () => {
     };
     const streamFn: StreamFn = () => response(assistant([]));
     expect(() => createAgentSession({ host: guarded } as unknown as AgentSessionOptions)).toThrow(
-      /exactly one agent transport/i,
+      /model catalog/i,
     );
     expect(() =>
       createAgentSession({
@@ -157,17 +158,17 @@ describe('public agent transport contract', () => {
         settings: { baseUrl: 'https://model.invalid/v1', model: 'model' },
         streamFn,
       } as unknown as AgentSessionOptions),
-    ).toThrow(/exactly one agent transport/i);
+    ).toThrow(/model catalog/i);
     expect(capabilityReads).toBe(0);
   });
 
   it('keeps generic network errors free of Playground deployment advice', async () => {
     const session = createAgentSession({
+      retry: { enabled: false },
       host: host(),
-      settings: { baseUrl: 'https://model.invalid/v1', model: 'model' },
-      fetch: async () => {
+      ...modelCatalog({ baseUrl: 'https://model.invalid/v1', model: 'model' }, async () => {
         throw new TypeError('fetch failed');
-      },
+      }),
     });
     try {
       await session.send('Fail the provider request.');
