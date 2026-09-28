@@ -26,3 +26,17 @@ Strengthened context/edit counters, unmatched index/task and distinct provenance
 13/13 RED before implementation,13/13 GREEN afterwards (actual CLI included).
 Control13/13 passes; each metrics/identity/provenance omission mutant now fails
 (`/private/tmp/rifty-pr359-rerun-strengthened-mutant-*.log`).
+
+## Executed result
+
+Clean61605476e1217b328c8989e895c4320c6b25624a:42/42 PASS vs40/42;
+all14 task/lane rows nonnegative. Gains URL/no-COI and Node/native +1/3,
+labelled within noise. Source/config/tasks/judges frozen throughout measurement.
+Artifacts: `tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun`;
+all42 full traces/before/after roundtrip,210 original hashes; no failed,
+interrupted or replacement runs. No provider/budget/context outcomes.
+Fullgate25/25 (test:run10597 pass,0 fail; no isolation),
+`/private/tmp/rifty-pr359-comparison-pr-check.log`; comparison13/13 actual CLI.
+CI61605476e all20 jobs green, including Chromium/no-COI/native parity.
+I1–I12 accepted review/e2e/differential proofs stay unchanged; final whole-goal
+review remains before CLOSE.
