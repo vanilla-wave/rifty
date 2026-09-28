@@ -342,7 +342,11 @@ export function forkExecArgv(value: unknown): readonly string[] {
   }
   // Node spreads execArgv before spawn validates it; preserve its iterable TypeError.
   const execArgv = tokens as Iterable<unknown>;
-  return compileNodeStartupOptions([...execArgv], 'child_process.fork').execArgv;
+  // String startup tokens remain the existing named ceiling.
+  return compileNodeStartupOptions(
+    typeof tokens === 'string' ? tokens : [...execArgv],
+    'child_process.fork',
+  ).execArgv;
 }
 
 export interface SpawnWorkerChildOptions {
