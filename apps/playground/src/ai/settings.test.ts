@@ -18,6 +18,9 @@ describe('sessionCatalog secrets', () => {
         api_key: 'underscore-key',
         'X-Auth-Token': 'plain-token',
         'X-Client-Secret': 'client-secret',
+        'Ocp-Apim-Subscription-Key': 'azure-subscription',
+        Cookie: 'sid=cookie-session',
+        'X-Key': 'short-key',
       }),
     );
     expect(new Set(secrets)).toEqual(
@@ -29,13 +32,21 @@ describe('sessionCatalog secrets', () => {
         'underscore-key',
         'plain-token',
         'client-secret',
+        'azure-subscription',
+        'sid=cookie-session',
+        'short-key',
       ]),
     );
   });
 
   it('ordinary headers are not secrets', () => {
     const { secrets } = sessionCatalog(
-      settings({ 'X-Title': 'rifty', 'HTTP-Referer': 'https://rifty.invalid', 'X-Edit': 'edit' }),
+      settings({
+        'X-Title': 'rifty',
+        'HTTP-Referer': 'https://rifty.invalid',
+        'Content-Type': 'application/json',
+        'X-Edit': 'edit',
+      }),
     );
     expect(secrets).toEqual([]);
   });
