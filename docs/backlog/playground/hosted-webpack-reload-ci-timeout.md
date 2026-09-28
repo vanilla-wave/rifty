@@ -21,8 +21,8 @@ not findings. No product or oracle change made.
 
 Playwright reported screenshot/trace paths under test-results; CI attempted to upload only
 playwright-report, absent with the github reporter. No failure image/trace retained.
-Artifact retention is already tracked by
-`docs/backlog/toolchain-build/e2e-hosted-prod-failure-artifacts.md`.
+Artifact retention repaired in this PR; independent proof:
+`docs/backlog/distribution/reference/pr-362-workflow-final-review.md`.
 Next diagnostic probe on recurrence: retain the reported artifacts and inspect
 actual post-reload state before proposing a repair.
 
