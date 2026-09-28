@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Catalog JSON keeps the typed text while it is the edit source; other catalog edits re-serialize it.
 - Default AI run budget600s; built-in results expose remaining budget and mutation diagnostics, native repeated-call notices appear in history.
 
 - Show retry/compaction notices and offer explicit model continuation after context overflow.

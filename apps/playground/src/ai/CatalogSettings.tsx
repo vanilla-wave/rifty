@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createSignal } from 'solid-js';
+import { For, Show, createEffect, createSignal, untrack } from 'solid-js';
 import { type ChatModel, type ChatSettings, newModel, readCatalog } from './settings.ts';
 
 export function CatalogSettings(props: {
@@ -9,9 +9,11 @@ export function CatalogSettings(props: {
 }) {
   const [catalogText, setCatalogText] = createSignal(JSON.stringify(props.value.models, null, 2));
   const [error, setError] = createSignal('');
+  // Catalog parsed from the textarea: its exact text stays; other sources re-serialize.
+  let typed: readonly ChatModel[] | undefined;
   createEffect(() => {
     const models = props.value.models;
-    if (!error()) setCatalogText(JSON.stringify(models, null, 2));
+    if (models !== typed && !untrack(error)) setCatalogText(JSON.stringify(models, null, 2));
   });
   const selected = () =>
     props.value.models.find((model) => model.id === props.value.model) ?? props.value.models[0]!;
@@ -29,6 +31,7 @@ export function CatalogSettings(props: {
     setCatalogText(text);
     try {
       const models = readCatalog(JSON.parse(text));
+      typed = models;
       setError('');
       props.onChange({
         ...props.value,
