@@ -1,11 +1,14 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { beforeAll, expect, it } from 'vitest';
 import * as reportApi from './report.ts';
-import type { Report } from './report.ts';
+import { type Report, readJson } from './report.ts';
 
 interface Summary {
   runs: number;
@@ -39,13 +42,20 @@ interface Comparison {
 }
 let original: Report;
 beforeAll(async () => {
-  original = JSON.parse(
-    await readFile(
-      new URL('../reports/summaries/2026-09-27-gpt-6-luna-baseline/report.json', import.meta.url),
-      'utf8',
-    ),
-  ) as Report;
+  original = await readJson<Report>(
+    fileURLToPath(new URL('../reports/summaries/2026-09-27-gpt-6-luna-baseline/', import.meta.url)),
+    'report.json',
+  );
 });
+const cli = resolve('tools/agent-bench/src/cli.ts');
+const run = promisify(execFile);
+const cliReport = (current: string, baseline: string) =>
+  run(process.execPath, ['--import', 'tsx', cli, 'report', current, '--compare', baseline], {
+    cwd: resolve('.'),
+  }).then(
+    () => 0,
+    (error) => error.code as number,
+  );
 const clone = () => structuredClone(original);
 function compare(before: Report, after: Report): Comparison {
   const fn = (
@@ -197,31 +207,24 @@ it('keeps valid ordinary report regeneration and emits actual comparison artifac
   const current = join(dir, 'current');
   await mkdir(baseline);
   await mkdir(current);
-  const originalJson = `${JSON.stringify(original, null, 2)}\n`;
-  await writeFile(join(baseline, 'report.json'), originalJson);
+  // Committed-summary baseline (gzip) against a fresh plain run directory.
+  const baselineGz = gzipSync(`${JSON.stringify(original, null, 2)}\n`);
+  await writeFile(join(baseline, 'report.json.gz'), baselineGz);
   const candidate = clone();
   candidate.header.sourceRevision = 'current-revision';
   candidate.header.profile = 'current-profile';
   for (const row of candidate.runs) row.profile = candidate.header.profile;
   await writeFile(join(current, 'report.json'), JSON.stringify(candidate));
-  const cli = resolve('tools/agent-bench/src/cli.ts');
-  const run = promisify(execFile);
   try {
-    const first = await run(
-      process.execPath,
-      ['--import', 'tsx', cli, 'report', current, '--compare', baseline],
-      { cwd: resolve('.') },
-    ).then(
-      () => ({ code: 0 }),
-      (error) => ({ code: error.code as number }),
-    );
-    expect(first.code).toBe(0);
+    expect(await cliReport(current, baseline)).toBe(0);
     const json = JSON.parse(await readFile(join(current, 'comparison.json'), 'utf8')) as Comparison;
     expect(json.rows).toHaveLength(14);
     expect(json.regressions).toEqual([]);
     expect(json.before).toEqual(original.header);
     expect(json.after).toEqual(candidate.header);
     expect(json.artifacts).toEqual({ baseline, current });
+    for (const name of ['comparison.json.gz', 'report.json.gz'])
+      expect(existsSync(join(current, name))).toBe(false);
     const firstMarkdown = await readFile(join(current, 'comparison.md'), 'utf8');
     for (const value of [
       original.header.sourceRevision,
@@ -235,22 +238,15 @@ it('keeps valid ordinary report regeneration and emits actual comparison artifac
     ]) {
       expect(firstMarkdown).toContain(value);
     }
-    expect(await readFile(join(baseline, 'report.json'), 'utf8')).toBe(originalJson);
+    expect((await readFile(join(baseline, 'report.json.gz'))).equals(baselineGz)).toBe(true);
+    expect((await readdir(baseline)).sort()).toEqual(['report.json.gz']);
     expect(await readFile(join(current, 'summary.md'), 'utf8')).toContain('GPT-6');
     const changed = clone();
     const lost = group(changed)[0]!;
     lost.outcome = 'fail';
     lost.judge.pass = false;
     await writeFile(join(current, 'report.json'), JSON.stringify(changed));
-    const failed = await run(
-      process.execPath,
-      ['--import', 'tsx', cli, 'report', current, '--compare', baseline],
-      { cwd: resolve('.') },
-    ).then(
-      () => ({ code: 0 }),
-      (error) => ({ code: error.code as number }),
-    );
-    expect(failed.code).toBe(1);
+    expect(await cliReport(current, baseline)).toBe(1);
     const markdown = await readFile(join(current, 'comparison.md'), 'utf8');
     expect(markdown).toMatch(/regression/i);
     expect(markdown).toMatch(/within noise/i);
@@ -262,3 +258,55 @@ it('keeps valid ordinary report regeneration and emits actual comparison artifac
     await rm(dir, { recursive: true, force: true });
   }
 }, 30000);
+
+it('regenerates a gzip summary directory in its own format, byte-identical on repeat', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'rifty-comparison-gz-'));
+  const baseline = join(dir, 'baseline');
+  const current = join(dir, 'current');
+  await mkdir(baseline);
+  await mkdir(current);
+  await writeFile(join(baseline, 'report.json'), JSON.stringify(original));
+  const candidate = clone();
+  candidate.header.sourceRevision = 'current-revision';
+  const reportGz = gzipSync(`${JSON.stringify(candidate, null, 2)}\n`);
+  await writeFile(join(current, 'report.json.gz'), reportGz);
+  try {
+    expect(await cliReport(current, baseline)).toBe(0);
+    const comparisonGz = await readFile(join(current, 'comparison.json.gz'));
+    const json = JSON.parse(gunzipSync(comparisonGz).toString('utf8')) as Comparison;
+    expect(json.rows).toHaveLength(14);
+    expect(json.after).toEqual(candidate.header);
+    expect(json.artifacts).toEqual({ baseline, current });
+    expect((await readdir(current)).sort()).toEqual([
+      'comparison.json.gz',
+      'comparison.md',
+      'report.json.gz',
+      'summary.md',
+    ]);
+    expect((await readFile(join(current, 'report.json.gz'))).equals(reportGz)).toBe(true);
+    expect(await readFile(join(current, 'summary.md'), 'utf8')).toContain('GPT-6');
+    expect(await readFile(join(current, 'comparison.md'), 'utf8')).toContain(current);
+    expect(await cliReport(current, baseline)).toBe(0);
+    expect((await readFile(join(current, 'comparison.json.gz'))).equals(comparisonGz)).toBe(true);
+    expect((await readFile(join(current, 'report.json.gz'))).equals(reportGz)).toBe(true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30000);
+
+it('[fault: corrupt-input] refuses absent or truncated summary JSON, naming both forms', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'rifty-comparison-missing-'));
+  try {
+    const missing = await readJson(dir, 'report.json').then(
+      () => undefined,
+      (error: Error) => error.message,
+    );
+    expect(missing).toContain(join(dir, 'report.json'));
+    expect(missing).toContain(join(dir, 'report.json.gz'));
+    const gz = gzipSync(JSON.stringify(original));
+    await writeFile(join(dir, 'report.json.gz'), gz.subarray(0, gz.length / 2));
+    await expect(readJson(dir, 'report.json')).rejects.toThrow();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
