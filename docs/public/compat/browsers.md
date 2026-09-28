@@ -125,7 +125,11 @@ then run the script with Node. The earlier
 [disabled-driver response](../../backlog/distribution/reference/browser-manual-safari-driver-unavailable.json)
 remains history. [Real-iOS admission](../../backlog/distribution/reference/browser-manual-ios-admission.json)
 requested `safari:useSimulator:false`; no session was created, so no iOS product
-claim is made. A usable physical device and completed report remain required.
+claim is made. Physical iOS execution was excluded from this delivery by the user
+on 2026-09-28; the row remains unmeasured. Simulator evidence, if added, is separate
+and does not certify device memory, quota or eviction. This Mac currently has
+Command Line Tools only: `xcrun simctl list devices available` fails because
+`simctl` is absent; no simulator result is claimed.
 
 Use the [one-URL protocol](../../../tools/floor-lane/README.md). One report includes
 support, boot, install, build, reload, exact persisted bytes, reopen and rebuild.

@@ -11,7 +11,7 @@ code: [apps/playground/no-coi-harness.html, packages/workbench/src/support/check
 
 ## Question
 
-Transport and protocol. One https URL reachable from a Mac and an iPhone (deployed playground vs local tunnel — open) running `checkSandboxSupport({ persistence: 'required' })`, then boot → install → build → reload → reopen on the no-COI tier, ending in a copyable result block: engine + version (UA), per-step outcome + timing, `navigator.storage.estimate()`, memory where observable (`performance.measureUserAgentSpecificMemory` needs COI — likely unavailable; fallback: OS-level observation noted by hand), ITP/eviction note after 7 days if the user re-visits. Yandex Browser: same page, or `tools/floor-lane --executable-path` (item 7). Rows → browsers.md, dated, marked as manual runs; each row states storage estimate and per-step outcomes, memory and eviction where observable, else ❓ with the reason (iOS: no page-level memory API without COI; eviction: 7-day revisit). Closure of the epic depends on the user executing the protocol once. → I8.
+Transport and protocol. One https URL reachable from a Mac and an iPhone (deployed playground vs local tunnel — open) running `checkSandboxSupport({ persistence: 'required' })`, then boot → install → build → reload → reopen on the no-COI tier, ending in a copyable result block: engine + version (UA), per-step outcome + timing, `navigator.storage.estimate()`, memory where observable (`performance.measureUserAgentSpecificMemory` needs COI — likely unavailable; fallback: OS-level observation noted by hand), ITP/eviction note after 7 days if the user re-visits. Yandex Browser: same page, or `tools/floor-lane --executable-path` (item 7). Rows → browsers.md, dated, marked as manual runs; each row states storage estimate and per-step outcomes, memory and eviction where observable, else ❓ with the reason (iOS: no page-level memory API without COI; eviction: 7-day revisit). Native macOS Safari and Yandex runs are recorded. Physical iOS execution is excluded by the user amendment; iOS remains unmeasured, simulator evidence optional. → I8.
 
 ## Challenge
 
@@ -22,6 +22,8 @@ challenge: 2026-09-28 — clear; unchanged goal FIT premise reused. Proof toolin
 Device farms / BrowserStack; Android devices beyond Yandex on desktop; COI tier on iOS (❌ by D-001).
 
 ## Decisions
+
+- re-cut: 2026-09-28 — fork: user "давай без физического прогона" removes the remaining physical-iOS execution requirement; keep unmeasured row and optional simulator distinct — trace: I8.
 
 - 2026-09-28 — native Safari26.6.2 measured after user enabled WebDriver; SDK sequence passes, support probe remains recorded failure. Native Yandex already measured. Only physical-iOS result remains required.
 
