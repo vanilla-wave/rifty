@@ -14,9 +14,6 @@ const { parse } = createRequire(
   realpathSync(new URL('../../node_modules/dependency-cruiser/package.json', import.meta.url)),
 )('acorn');
 
-export const GUARDED_BUILTINS = Object.freeze({
-  'Atomics.waitAsync': 'ADR-0469: verified local typeof guards only',
-});
 const STATIC_BUILTINS = new Set([
   'Array.fromAsync',
   'Object.groupBy',

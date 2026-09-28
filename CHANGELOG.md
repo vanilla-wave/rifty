@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Manual-only, record-only COI/non-COI browser lanes; WebKit persistent test profiles, build annotations and bounded boundary diagnostics.
 
-- Guard shipped package/playground JavaScript against post-ES2022 syntax and builtins in `pr:check` (ADR-0469).
+- Guard shipped package/playground JavaScript against post-ES2022 syntax and builtins in `pr:check` and CI (ADR-0469).
 
 - e2e: `pickStarter`/`selectPreset`/`resetSandboxThroughUi` open the launcher through one `openLauncher`, and specs touching the App shell after `goto`/`reload` wait `waitForProjectIndex`, instead of 2s/5s deadlines (hosted webpack flake on cold CI runners; closes `toolchain-build/hosted-webpack-launcher-readiness-timeout`).
 
