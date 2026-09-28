@@ -271,6 +271,43 @@ describe('provider ingress scrubbing', () => {
     }
   });
 
+  it('[fault: sibling-drift] a thrown compaction summary exception naming a key is scrubbed', async () => {
+    // Summary request throws (consumer Models); the main request still answers.
+    const { session, events, wire } = setup(
+      ['Done.'],
+      { initialMessages: compactableHistory() },
+      (models) =>
+        new Proxy(models, {
+          get(target, property) {
+            if (property === 'completeSimple')
+              return () => {
+                throw new Error(`summary backend down for ${KEY} and ${DECLARED}`);
+              };
+            const value: unknown = Reflect.get(target, property, target);
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        }),
+    );
+    try {
+      await session.send('continue');
+      expect(session.status()).toBe('done');
+      expect(wire.requests).toHaveLength(1);
+      const end = events.find((event) => event.type === 'compaction' && event.phase === 'end');
+      expect(end).toMatchObject({
+        success: false,
+        errorMessage: 'summary backend down for [redacted] and [redacted]',
+      });
+      const surfaced = events.filter((event) =>
+        ['retry', 'compaction', 'status'].includes(event.type),
+      );
+      expect(leaks(surfaced)).toEqual([]);
+      expect(leaks(session.detail() ?? '')).toEqual([]);
+      expect(leaks(await session.exportTrace())).toEqual([]);
+    } finally {
+      await session.dispose();
+    }
+  });
+
   it('[fault: sibling-drift] a retried compaction summary error echoing a secret is scrubbed', async () => {
     // Retryable: the error reaches only `retry` events, never compaction's own errorMessage.
     const { session, events, wire } = setup(
