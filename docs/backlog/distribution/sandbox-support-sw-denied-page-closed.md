@@ -32,3 +32,9 @@ Owner: sandbox-support probe lifecycle. Pickup trigger: the next reproduction.
 Before choosing a fix, capture the page `crash`/`close` event and browser
 stderr. The candidate is a renderer crash late in the long suite, but no cause
 is established.
+
+Second occurrence 2026-09-29: CI run 36491394224 (`c456b8ff9`, PR #359 head; the
+diff touches no sandbox-support or SW code), same `sw-denied` probe, same
+`page.evaluate: Target page, context or browser has been closed` at :79, as the
+last agent-unrelated spec after 274 passes in a 23.4 min single-browser run.
+Still not reproduced locally. Two of the last ~70 CI runs.

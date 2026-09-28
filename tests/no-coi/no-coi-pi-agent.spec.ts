@@ -210,6 +210,9 @@ test('sandbox project resources load by default and reload through the real proj
     const { createAgentSession, createSandboxAgentHost } = (await import(
       `/@fs${root}/packages/agent/src/index.ts`
     )) as typeof import('../../packages/agent/src/index.ts');
+    const { modelCatalog } = await import(
+      `/@fs${root}/tests/integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts`
+    );
     const { scriptedProvider } = await import(
       `/@fs${root}/tests/integration/fixtures/workbench-vite-consumer/src/agent-scripted-provider.ts`
     );
@@ -245,8 +248,10 @@ test('sandbox project resources load by default and reload through the real proj
           project: { root: '/agent-resources' },
           mode: () => 'commands',
         }),
-        settings: { baseUrl: 'https://scripted.invalid/v1', model: 'scripted' },
-        fetch: provider.fetch,
+        ...modelCatalog(
+          { baseUrl: 'https://scripted.invalid/v1', model: 'scripted' },
+          provider.fetch,
+        ),
       });
       try {
         await agent.send('deploy this');

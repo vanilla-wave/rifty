@@ -8,20 +8,48 @@ remain explicit; a delta is not automatically a runtime defect.
 pnpm agent-bench run --mock-model --runs 1 --output /tmp/agent-smoke
 pnpm agent-bench run --config /tmp/agent-endpoint.json --output /tmp/agent-live
 pnpm agent-bench report /tmp/agent-live
+pnpm agent-bench report /tmp/agent-live --compare /tmp/agent-baseline
 ```
+
+Comparison requires identical endpoint/limits/task set and complete matching run identities.
+`comparison.json`/`comparison.md` retain both headers and per-task/lane metric deltas.
+Any lost pass exits1 after writing artifacts; ±1/3 is labelled within noise, still a regression.
+
+Committed summaries (`reports/summaries/`) store every JSON artifact as gzip
+`<name>.json.gz` (test-enforced); Markdown/screenshots stay plain. Report-written JSON gets
+a normalized gzip header (mtime 0, OS byte 0x03); its deflate stream is identical for the
+same zlib build, not proven across OS. Frozen `source-artifacts.json.gz` bundles keep
+their measured bytes; manifest sizes/SHA256 are test-checked against committed files.
+`report` reads either `<name>.json` or `<name>.json.gz`; a directory holding only
+`report.json.gz` gets gzip report/comparison JSON back, fresh run directories stay plain.
 
 Config (no-auth example):
 
 ```json
 {
-  "endpoint": { "baseUrl": "http://127.0.0.1:10530/v1", "model": "gpt-5.6-sol" },
+  "endpoint": {
+    "id": "gpt-6-luna", "name": "GPT-6 Luna", "provider": "codex-proxy",
+    "api": "openai-completions", "baseUrl": "http://127.0.0.1:10539/v1",
+    "contextWindow": 1000000, "maxTokens": 8192, "reasoning": true,
+    "input": ["text"], "thinking": "medium", "compat": { "supportsReasoningEffort": true },
+    "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+  },
   "limits": { "maxToolCalls": 40, "runTimeoutMs": 600000 }
 }
 ```
 
+The endpoint uses native pi Model fields; contextWindow/maxTokens are required.
+Optional reasoning/input/thinking/compat default to false/text/off/empty. Temperature
+and samplingParams (including top_p) are optional provider defaults; absent values
+are not sent. All lanes receive the same declared entry. The checked-in
+[local Luna config](configs/gpt-6-luna.json) is used for the goal baseline/re-run.
+
 Optional `endpoint.envKey` names an existing key environment variable; the value
-never goes in config. Keyed runs omit raw Playwright traces/screenshots (these
-can contain provider errors verbatim); textual artifacts are redacted. Default
+never goes in config. Runs with keys or model headers omit raw Playwright traces/screenshots (these
+can contain provider errors verbatim); textual artifacts are redacted. JSON
+numbers, protocol tags and generated artifact/provenance fields stay intact;
+known credentials are masked in payload strings and dictionary keys. Metrics
+use live events before masking in every lane. Default
 playground port5289; override `playgroundPort` in config.
 
 `--lane all|rifty|rifty-no-coi|local-reference`, `--task <slug>`, `--runs N`.
@@ -47,8 +75,15 @@ common judge evidence across lanes. Smoke success proves execution, not repair.
 
 Each run retains transcript/events/provider requests, usage, elapsed time, tool
 count, terminal tail, actual before/after file trees (including dependency locks), file diff, judge probes, browser trace/screenshot
-when keyless. Header records source revision/dirty state and native/browser/Pi versions. JSON/Markdown distinguish budget-exceeded from ordinary failure.
-Assign `failureClass` and `note` manually in report.json, then regenerate Markdown;
+when keyless. Header records source revision/dirty state and native/browser/Pi versions. JSON/Markdown distinguish budget-exceeded and context-exceeded from ordinary
+failure, retaining the actual agent status. Input tokens include pi input plus
+cacheRead/cacheWrite; output tokens use pi output. Counts derive from emitted
+retry starts, successful compactions (including summary usage), repeated-call
+notices and errored edit/validation tool results. Counters may overlap; manual
+failure classification stays separate. Legacy reports show absent metrics as —.
+Native compaction and agent-level retries are on; provider retries remain off.
+Assign `failureClass` and `note` manually in report.json (committed summaries:
+report.json.gz), then regenerate Markdown;
 existing assignments survive. Classes: agent, rifty-runtime, rifty-tooling,
 ai-mode-ux, provider, task-bad. Unclassified remains null. Failed setup/judging
 retains its stage/error and previously completed records.

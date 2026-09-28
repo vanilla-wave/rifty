@@ -2,9 +2,10 @@ import type { Browser, BrowserContext, Page } from '@playwright/test';
 import type { Config, Endpoint } from '../config.ts';
 import type { FileTree } from '../files.ts';
 import type { JudgeContext } from '../judge/context.ts';
+import type { Metrics } from '../metrics.ts';
 import type { Task } from '../tasks.ts';
 export type Lane = 'rifty' | 'rifty-no-coi' | 'local-reference';
-export interface Observation {
+export interface Observation extends Metrics {
   agentStatus: string;
   turns: number;
   toolCalls: number;

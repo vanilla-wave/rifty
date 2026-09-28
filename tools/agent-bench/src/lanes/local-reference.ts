@@ -2,8 +2,9 @@ import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { redact } from '../config.ts';
+import { redact, secretValues } from '../config.ts';
 import { readTree, writeTree } from '../files.ts';
+import { eventMetrics } from '../metrics.ts';
 import {
   freePort,
   killProcessGroup,
@@ -16,6 +17,7 @@ import type { Input, Observation, Prepared } from './types.ts';
 
 export async function prepareLocal(input: Input): Promise<Prepared> {
   const { task, endpoint, config, dir, key } = input;
+  const secrets = secretValues(endpoint, key);
   const workspace = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-native-'));
   // Package-manager launchers can inject checkout modules into every child Node process.
   const nativeEnv = { ...process.env, NODE_PATH: undefined };
@@ -29,7 +31,7 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
   });
   await writeFile(
     join(dir, 'install.log'),
-    redact(`${installed.stdout}\n${installed.stderr}`, key),
+    redact(`${installed.stdout}\n${installed.stderr}`, secrets),
   );
   await runOrThrow('git', ['init', '-q', '-b', 'main'], { cwd: workspace, timeoutMs: 30000 });
   await runOrThrow('git', ['add', '.'], { cwd: workspace, timeoutMs: 30000 });
@@ -72,26 +74,39 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
       join(home, 'models.json'),
       JSON.stringify({
         providers: {
-          bench: {
+          [endpoint.provider]: {
             baseUrl: endpoint.baseUrl,
             api: 'openai-completions',
             apiKey: endpoint.envKey ? `$${endpoint.envKey}` : 'bench-no-auth-sentinel',
             models: [
-              {
-                id: endpoint.model,
-                name: endpoint.model,
-                reasoning: false,
-                input: ['text'],
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-                contextWindow: 128000,
-                maxTokens: 8192,
-              },
+              (() => {
+                const {
+                  envKey: _envKey,
+                  provider: _provider,
+                  thinking: _thinking,
+                  temperature,
+                  headers: _headers,
+                  ...model
+                } = endpoint;
+                return {
+                  ...model,
+                  samplingParams: {
+                    ...(temperature === undefined ? {} : { temperature }),
+                    ...model.samplingParams,
+                  },
+                };
+              })(),
             ],
           },
         },
       }),
     );
-    await writeFile(join(home, 'settings.json'), JSON.stringify({ retry: { enabled: false } }));
+    await writeFile(
+      join(home, 'settings.json'),
+      JSON.stringify({
+        retry: { enabled: true, maxRetries: 3, baseDelayMs: 2000, provider: { maxRetries: 0 } },
+      }),
+    );
     return {
       context,
       page,
@@ -106,9 +121,11 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
           [
             cli,
             '--provider',
-            'bench',
+            endpoint.provider,
             '--model',
-            endpoint.model,
+            endpoint.id,
+            '--thinking',
+            endpoint.thinking ?? 'off',
             '--mode',
             'json',
             '--no-session',
@@ -124,7 +141,13 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
           ],
           {
             cwd: workspace,
-            env: { ...nativeEnv, PI_CODING_AGENT_DIR: home, PI_OFFLINE: '1', PI_TELEMETRY: '0' },
+            env: {
+              ...nativeEnv,
+              PI_CODING_AGENT_DIR: home,
+              PI_OFFLINE: '1',
+              PI_TELEMETRY: '0',
+              RIFTY_BENCH_MODEL_HEADERS: JSON.stringify(endpoint.headers ?? {}),
+            },
             stdio: ['ignore', 'pipe', 'pipe'],
           },
         );
@@ -143,7 +166,7 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
         const events = stdout
           .split('\n')
           .filter(Boolean)
-          .map((line) => JSON.parse(redact(line, key)) as Record<string, unknown>);
+          .map((line) => JSON.parse(line) as Record<string, unknown>);
         const end = events.findLast((event) => event.type === 'agent_end') as
           | {
               messages?: {
@@ -170,8 +193,9 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
         const requests = await readFile(join(dir, 'provider-requests.jsonl'), 'utf8').catch(
           () => '',
         );
-        await writeFile(join(dir, 'native-stderr.log'), redact(stderr, key));
+        await writeFile(join(dir, 'native-stderr.log'), redact(stderr, secrets));
         return {
+          ...eventMetrics(events, endpoint.contextWindow, agentStatus),
           agentStatus,
           turns: events.filter((event) => event.type === 'turn_end').length,
           toolCalls: admission.calls,
@@ -186,7 +210,7 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
               .map((line) => JSON.parse(line)),
             admission,
             exitCode: code,
-            stderr: redact(stderr, key),
+            stderr: redact(stderr, secrets),
           },
           terminalTail: redact(
             [
@@ -203,7 +227,7 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
               .filter(Boolean)
               .join('\n')
               .slice(-16000),
-            key,
+            secrets,
           ),
         };
       },

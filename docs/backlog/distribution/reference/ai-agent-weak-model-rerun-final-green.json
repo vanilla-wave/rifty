@@ -1,0 +1,326 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS; accepted outcome I1–I13 proven, goal_complete=true. Root: preserve verdict, CLOSE bookkeeping and finish PR359 CI (current browser-unit still running); merge не запрошен.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "136c94ade523ef1b65837cd65a4a36d6ac78e4b5",
+  "unit_goal_source": "docs/backlog/distribution/ai-agent-weak-model-rerun.md; BASE 1d1a759493536f981ec25bcc6d376decf77485ce; clean HEAD 136c94ade523ef1b65837cd65a4a36d6ac78e4b5. Whole accepted goal docs/backlog/epics/agent-weak-models/goal.md I1–I13 + scenarios/transitions + ADR0471–0475/0478. Fresh independent review; raw authority/diff/PR-4 criteria, accepted reviews/ledger and executed artifacts inspected. Detailed execution record: /private/tmp/rifty-pr359-rerun-final-review.txt.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Acceptance 1: обычный report и comparison JSON/Markdown; обе provenance-шапки/пути; regression exit1 после записи, иначе0",
+      "source": "acceptance",
+      "trace": "I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/comparison.test.ts:194; tools/agent-bench/src/cli.ts:22; /private/tmp/rifty-pr359-final-review-targeted.log; /private/tmp/rifty-pr359-final-review-replay.log",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: equal config/taskSet/count, полные уникальные matching task/lane/run identities; revisions/profiles могут отличаться",
+      "source": "acceptance",
+      "trace": "I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/comparison.test.ts:60; tools/agent-bench/src/comparison.test.ts:132; tools/agent-bench/src/comparison.test.ts:160; tools/agent-bench/src/report.ts:171; /private/tmp/rifty-pr359-final-review-targeted.log",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: все before/after/delta counters, medians и sums; ±1/3 noise не отменяет negative regression",
+      "source": "acceptance",
+      "trace": "I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/comparison.test.ts:60; tools/agent-bench/src/comparison.test.ts:132; tools/agent-bench/src/report.ts:149; /private/tmp/rifty-pr359-final-review-artifacts.log; /private/tmp/rifty-pr359-final-review-replay.log",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: formal42, frozen config/tasks/count, clean source61605476e, cold lanes; original records/traces/before/after/hashes/screens retained; no selected replacements",
+      "source": "acceptance",
+      "trace": "I12 + I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/report.json:1; tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/manifest.json:1; tools/agent-bench/src/runner.ts:65; /private/tmp/rifty-pr359-luna-rerun.log; /private/tmp/rifty-pr359-final-review-artifacts.log",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: 40/42→42/42, all14 task/lane pass deltas nonnegative; no noise exemption or task/judge recut",
+      "source": "acceptance",
+      "trace": "I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/comparison.json:1; tools/agent-bench/src/comparison.test.ts:60; tools/agent-bench/src/comparison.test.ts:242; /private/tmp/rifty-pr359-final-review-artifacts.log",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: independent I1–I13 end-to-end and transition verification; final CLI/Chromium/gates/CI checked; required behavioral residuals empty",
+      "source": "acceptance",
+      "trace": "I1–I13",
+      "status": "pass",
+      "citation": "docs/backlog/epics/agent-weak-models/goal.md:92; /private/tmp/rifty-pr359-final-review-targeted.log; /private/tmp/rifty-pr359-final-review-chat-escalated.log; /private/tmp/rifty-pr359-final-review-diagnostics.log; /private/tmp/rifty-pr359-rerun-final-pr-check.log; /private/tmp/rifty-pr359-final-review-ci.json; /private/tmp/rifty-pr359-rerun-final-review.txt",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: actual CLI regenerate/compare agrees with independent counts/medians/sums; small negative visible and exit1",
+      "source": "acceptance",
+      "trace": "I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/comparison.test.ts:194; /private/tmp/rifty-pr359-final-review-artifacts.py:44; /private/tmp/rifty-pr359-final-review-replay.mts:25; /private/tmp/rifty-pr359-final-review-targeted.log; /private/tmp/rifty-pr359-final-review-replay.log",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: baseline bytes unchanged; formal rerun identical config/task implementations and initial src snapshots",
+      "source": "acceptance",
+      "trace": "I12 + I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/manifest.json:1; tools/agent-bench/src/comparison.test.ts:239; /private/tmp/rifty-pr359-final-review-artifacts.py:56; /private/tmp/rifty-pr359-final-review-artifacts.log",
+      "note": ""
+    },
+    {
+      "row": "Fault corrupt-input: missing/duplicate/unmatched identities/config rejected, without silent intersection or fabricated metrics",
+      "source": "fault-matrix",
+      "trace": "I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/comparison.test.ts:160; tools/agent-bench/src/report.ts:171; /private/tmp/rifty-pr359-final-review-targeted.log; /private/tmp/rifty-pr359-rerun-strengthened-mutant-identity.log",
+      "note": ""
+    },
+    {
+      "row": "Fault lossy-aggregate: another gain/noise cannot conceal a negative task/lane row",
+      "source": "fault-matrix",
+      "trace": "I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/comparison.test.ts:60; tools/agent-bench/src/comparison.test.ts:242; tools/agent-bench/src/report.ts:227; /private/tmp/rifty-pr359-final-review-targeted.log",
+      "note": ""
+    },
+    {
+      "row": "Fault provenance-lie: retain/classify original failed runs; current42 complete without interruption/replacement",
+      "source": "fault-matrix",
+      "trace": "I12 + I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/runner.ts:141; tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/failure-evidence.json:1; tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/original-report.json:1; /private/tmp/rifty-pr359-luna-rerun.log; /private/tmp/rifty-pr359-final-review-artifacts.log",
+      "note": ""
+    },
+    {
+      "row": "CLI report <current> --compare <baseline>: preserves report flow, writes artifacts before regression exit, baseline read-only",
+      "source": "public-api",
+      "trace": "I13 + ADR-0478",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/cli.ts:22; tools/agent-bench/src/comparison.test.ts:194; /private/tmp/rifty-pr359-final-review-targeted.log; /private/tmp/rifty-pr359-final-review-replay.log",
+      "note": ""
+    },
+    {
+      "row": "Private exported compareReports: validate before reducing; preserve both headers and every metric; list each regression",
+      "source": "public-api",
+      "trace": "I13 + ADR-0478",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/report.ts:207; tools/agent-bench/src/comparison.test.ts:60; tools/agent-bench/src/comparison.test.ts:132; tools/agent-bench/src/comparison.test.ts:160; /private/tmp/rifty-pr359-final-review-targeted.log",
+      "note": ""
+    },
+    {
+      "row": "Private exported writeComparison: validate before file writes; JSON/Markdown retain both revisions/profiles/config/locations",
+      "source": "public-api",
+      "trace": "I13 + ADR-0478",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/report.ts:238; tools/agent-bench/src/comparison.test.ts:194; /private/tmp/rifty-pr359-final-review-replay.log",
+      "note": ""
+    },
+    {
+      "row": "Frozen I12 baseline/oracle: original42, annotated40 pass/2 agent failures; no baseline edits; test inputs only cloned",
+      "source": "frozen-artifact",
+      "trace": "I12 + I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/original-report.json:1; tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/report.json:1; tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/failure-evidence.json:1; tools/agent-bench/src/comparison.test.ts:38; /private/tmp/rifty-pr359-final-review-artifacts.log",
+      "note": ""
+    },
+    {
+      "row": "Frozen current report/original/summary/comparison:42 pass, complete14 groups and exact metrics/provenance",
+      "source": "frozen-artifact",
+      "trace": "I13 + ADR-0478",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/report.json:1; tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/original-report.json:1; tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/comparison.json:1; tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/comparison.md:1; tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/summary.md:1; /private/tmp/rifty-pr359-final-review-artifacts.log; /private/tmp/rifty-pr359-final-review-replay.log",
+      "note": ""
+    },
+    {
+      "row": "Frozen manifest/archive/screens:210 original hashes,42 trace/before/after roundtrips,318 actual requests,84 judge probes; three screenshots verified",
+      "source": "frozen-artifact",
+      "trace": "I12 + I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/manifest.json:1; tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/README.md:28; /private/tmp/rifty-pr359-final-review-artifacts.log; /private/tmp/rifty-pr359-final-review-artifacts.py:8",
+      "note": ""
+    },
+    {
+      "row": "Goal I1: native Models catalog-only API, explicit limits/defaults/transports; effective trace config and credential redaction; legacy forms rejected",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:63; packages/agent/src/catalog.test.ts:169; packages/agent/src/catalog.test.ts:194; tools/agent-bench/src/redaction.test.ts:12; /private/tmp/rifty-pr359-final-review-targeted.log; docs/backlog/distribution/reference/ai-agent-model-catalog-final-green.json:1",
+      "note": ""
+    },
+    {
+      "row": "Goal I2: active setModel next request, retained tool results, selected defaults; exhausted retry then explicit switch/send",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:119; packages/agent/src/continuation.fault.test.ts:190; tests/e2e/ai-mode.spec.ts:747; /private/tmp/rifty-pr359-final-review-targeted.log; /private/tmp/rifty-pr359-final-review-chat-escalated.log",
+      "note": ""
+    },
+    {
+      "row": "Goal I3: native image bytes and empty-text image parity; text-only pre-dispatch refusal; binary NotImplementedError and explicit compat gap",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/agent/src/images.test.ts:48; packages/agent/src/images.test.ts:73; packages/agent/src/images.test.ts:85; packages/agent/README.md:154; tests/e2e/ai-mode.spec.ts:843; /private/tmp/rifty-pr359-final-review-targeted.log; /private/tmp/rifty-pr359-final-review-chat-escalated.log",
+      "note": ""
+    },
+    {
+      "row": "Goal I4: persisted catalog/picker, exact image and project binary attachments, collision preservation, error/context-exceeded continuation UI",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:175; tests/e2e/ai-mode.spec.ts:747; tests/e2e/ai-mode.spec.ts:843; tests/e2e/ai-mode.spec.ts:915; /private/tmp/rifty-pr359-tool-feedback-chat.log; /private/tmp/rifty-pr359-final-review-chat-escalated.log",
+      "note": ""
+    },
+    {
+      "row": "Goal I5: native compaction defaults/off, selected summary transport, usage including discarded/summary attempts, summary restore and bounded context-exceeded",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:266; packages/agent/src/continuation.fault.test.ts:333; packages/agent/src/continuation.fault.test.ts:365; packages/agent/src/continuation.fault.test.ts:415; packages/agent/src/continuation.fault.test.ts:467; tools/agent-bench/src/continuation-parity.test.ts:351; tests/e2e/ai-mode.spec.ts:915; /private/tmp/rifty-pr359-final-review-targeted.log; /private/tmp/rifty-pr359-final-review-chat-escalated.log",
+      "note": ""
+    },
+    {
+      "row": "Goal I6: Pi0.85.1 retry defaults3/2000, partial discard and attempts; no transport retry or tool replay; off/Stop/deadline",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:131; packages/agent/src/continuation.fault.test.ts:175; packages/agent/src/continuation.fault.test.ts:211; packages/agent/src/continuation.fault.test.ts:229; tools/agent-bench/src/continuation-parity.test.ts:351; tests/e2e/ai-mode.spec.ts:747; /private/tmp/rifty-pr359-final-review-targeted.log; /private/tmp/rifty-pr359-cli-continuation-probe.out; /private/tmp/rifty-pr359-continuation-lanes.log",
+      "note": ""
+    },
+    {
+      "row": "Goal I7: exact edit count/lines/whitespace hint with no write; patch/host effect provenance preserved",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:138; packages/agent/src/tool-feedback.fault.test.ts:601; packages/agent/src/tool-feedback.fault.test.ts:672; tests/e2e/ai-mode.spec.ts:973; /private/tmp/rifty-pr359-final-review-targeted.log; /private/tmp/rifty-pr359-final-review-chat-escalated.log",
+      "note": ""
+    },
+    {
+      "row": "Goal I8: every call executes; third equal name/args/result excludes only budget; one native steer in history/events/next wire",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:168; packages/agent/src/tool-feedback.fault.test.ts:189; packages/agent/src/tool-feedback.fault.test.ts:372; packages/agent/src/tool-feedback.fault.test.ts:535; tests/e2e/ai-mode.spec.ts:973; /private/tmp/rifty-pr359-final-review-targeted.log; /private/tmp/rifty-pr359-final-review-chat-escalated.log",
+      "note": ""
+    },
+    {
+      "row": "Goal I9:600000ms/100 defaults, every owned receipt callsLeft/msLeft, distinct budget-exceeded; no extra admitted side effect",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:72; packages/agent/src/tool-feedback.fault.test.ts:97; packages/agent/src/tool-feedback.fault.test.ts:341; packages/agent/src/tool-feedback.fault.test.ts:521; tools/agent-bench/tests/contract.spec.ts:252; /private/tmp/rifty-pr359-final-review-targeted.log; /private/tmp/rifty-pr359-tool-feedback-real-lanes.log; /private/tmp/rifty-pr359-tool-feedback-no-coi-isolated.log",
+      "note": ""
+    },
+    {
+      "row": "Goal I10: real Workbench write/edit/patch diagnostics reach next request; cap and pending/unavailable/rejected/late boundaries preserve effects",
+      "source": "acceptance",
+      "trace": "I10",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:343; tests/browser-unit/fixtures/agent-core-proof.ts:588; packages/agent/src/tool-feedback.fault.test.ts:248; packages/agent/src/tool-feedback.fault.test.ts:265; packages/agent/src/tool-feedback.fault.test.ts:443; packages/agent/src/tool-feedback.fault.test.ts:463; /private/tmp/rifty-pr359-final-review-diagnostics.log; /private/tmp/rifty-pr359-final-review-targeted.log",
+      "note": ""
+    },
+    {
+      "row": "Goal I11: shared v2 workflow recipe defaults on, false removes only recipe, trace boolean; native benchmark wire preserves shared paragraphs",
+      "source": "acceptance",
+      "trace": "I11",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:283; packages/agent/src/fixtures/default-prompt.txt:13; tools/agent-bench/src/prompt-recipe-parity.test.ts:23; tools/agent-bench/tests/contract.spec.ts:98; /private/tmp/rifty-pr359-final-review-targeted.log; /private/tmp/rifty-pr359-tool-feedback-real-lanes.log",
+      "note": ""
+    },
+    {
+      "row": "Goal I12: catalog fields/header and observed per-run counters/context outcome; real42 pre-mechanism Luna baseline with manual classes",
+      "source": "acceptance",
+      "trace": "I12",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/catalog-metrics.test.ts:34; tools/agent-bench/src/metrics-privacy.test.ts:51; tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/report.json:1; tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/failure-evidence.json:1; /private/tmp/rifty-pr359-final-review-targeted.log; /private/tmp/rifty-pr359-final-review-artifacts.log; /private/tmp/rifty-pr359-final-review-replay.log",
+      "note": ""
+    },
+    {
+      "row": "Goal I13: post-mechanism same-config/tasks/count rerun recorded; per-task comparison, no pass regression",
+      "source": "acceptance",
+      "trace": "I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/report.json:1; tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/comparison.json:1; tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/manifest.json:1; /private/tmp/rifty-pr359-final-review-artifacts.log; /private/tmp/rifty-pr359-final-review-replay.log",
+      "note": ""
+    },
+    {
+      "row": "CLOSE transition: real write → exhausted retry → switch defaults/provider → continue retained tool result, one effect",
+      "source": "acceptance",
+      "trace": "I1 + I2 + I4 + I6",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:747; tests/browser-unit/agent-core.spec.ts:50; packages/agent/src/continuation.fault.test.ts:229; /private/tmp/rifty-pr359-final-review-chat-escalated.log; /private/tmp/rifty-pr359-tool-feedback-browser-final.log",
+      "note": ""
+    },
+    {
+      "row": "CLOSE transition: retained history → compaction → overflow recovery → context-exceeded → larger model with retained summary and full usage",
+      "source": "acceptance",
+      "trace": "I2 + I4 + I5 + I6",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:915; packages/agent/src/continuation.fault.test.ts:266; packages/agent/src/continuation.fault.test.ts:467; /private/tmp/rifty-pr359-final-review-chat-escalated.log; /private/tmp/rifty-pr359-final-review-targeted.log",
+      "note": ""
+    },
+    {
+      "row": "CLOSE transition: same prompt image+PDF → native image wire + exact project bytes, duplicate filename preserves earlier bytes",
+      "source": "acceptance",
+      "trace": "I3 + I4",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:843; /private/tmp/rifty-pr359-final-review-chat-escalated.log",
+      "note": ""
+    },
+    {
+      "row": "CLOSE transitions: repeated failed exact edits → steer → real unchanged-file read; same TS file write(error)→edit(clean)→patch(error), diagnostics on next wire",
+      "source": "acceptance",
+      "trace": "I7 + I8 + I9 + I10",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:973; tests/browser-unit/agent-core.spec.ts:343; tests/browser-unit/fixtures/agent-core-proof.ts:588; /private/tmp/rifty-pr359-final-review-chat-escalated.log; /private/tmp/rifty-pr359-final-review-diagnostics.log",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

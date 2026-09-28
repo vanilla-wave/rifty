@@ -1,11 +1,14 @@
 import {
   type AgentRunLimits,
   type AgentSession,
-  type AgentSettings,
+  type AgentSessionEvent,
   createAgentSession,
+  createModels,
+  createOpenAIProvider,
   createSandboxAgentHost,
 } from '@riftydev/agent';
 import { type ToolchainSandbox, createSandbox } from '@riftydev/sdk';
+import type { Endpoint } from './config.ts';
 import type { FileTree } from './files.ts';
 let sandbox: ToolchainSandbox;
 let agent: AgentSession;
@@ -26,7 +29,7 @@ async function snapshot(): Promise<FileTree> {
   return files;
 }
 const bench = {
-  async boot(files: FileTree, options: AgentSettings & AgentRunLimits) {
+  async boot(files: FileTree, options: { endpoint: Endpoint; apiKey?: string } & AgentRunLimits) {
     if (crossOriginIsolated) throw new Error('Benchmark no-COI page unexpectedly isolated');
     sandbox = await createSandbox({
       requireCrossOriginIsolation: false,
@@ -36,18 +39,42 @@ const bench = {
     project = sandbox.project({ root: '/bench' });
     for (const [path, text] of Object.entries(files)) await project.fs.writeFile(path, text);
     await sandbox.toolchain.install({ cwd: '/bench', registryUrl: '/npm-registry' });
-    const { maxToolCalls, runTimeoutMs, ...settings } = options;
+    const { maxToolCalls, runTimeoutMs } = options;
+    const { thinking, temperature, envKey: _envKey, ...model } = options.endpoint;
+    const models = createModels();
+    models.setProvider(
+      createOpenAIProvider({ id: model.provider, apiKey: options.apiKey, models: [model] }),
+    );
     agent = createAgentSession({
       host: createSandboxAgentHost({ sandbox, project: { root: '/bench' }, mode: () => mode }),
-      settings,
+      models,
+      model: model.id,
+      modelOptions: {
+        [model.id]: {
+          ...(thinking && thinking !== 'off' ? { reasoning: thinking } : {}),
+          ...(temperature === undefined ? {} : { temperature }),
+        },
+      },
       maxToolCalls,
       runTimeoutMs,
     });
     return snapshot();
   },
   async run(prompt: string) {
-    await agent.send(prompt);
-    return agent.exportTrace();
+    const events: AgentSessionEvent[] = [];
+    const detach = agent.subscribe((event) => {
+      if (
+        (event.type === 'agent' && event.event.type === 'message_end') ||
+        ['retry', 'compaction', 'repeated-call'].includes(event.type)
+      )
+        events.push(structuredClone(event));
+    });
+    try {
+      await agent.send(prompt);
+      return { trace: await agent.exportTrace(), events };
+    } finally {
+      detach();
+    }
   },
   snapshot,
   async preview() {

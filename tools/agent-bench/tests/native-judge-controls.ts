@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { loadConfig } from '../src/config.ts';
 import { run } from '../src/runner.ts';
 import { type Task, loadTasks } from '../src/tasks.ts';
+import { catalogEndpoint } from './catalog-endpoint.ts';
 import { observedSmokeModel } from './observed-smoke-model.ts';
 
 /** Ordinary functioning Node/React programs: independent positive controls for common judges. */
@@ -67,7 +68,7 @@ app.get('/api/messages'`,
 
 const model = await observedSmokeModel();
 const config = await loadConfig();
-config.endpoint = { baseUrl: model.baseUrl, model: 'scripted' };
+config.endpoint = catalogEndpoint(model.baseUrl);
 config.runsPerTask = 1;
 const selected = (await loadTasks()).filter(
   (task) => !process.argv[2] || task.id === process.argv[2],

@@ -1,0 +1,229 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS at 7321e33e8; proceed to implementation, not delivery/merge.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "7321e33e8330e0c9de2107b6a4d8515796ff85b7",
+  "unit_goal_source": "docs/backlog/distribution/ai-agent-context-compaction.md; BASE 6d63e96b7; initial review 0d379c2fc; repaired verification 7321e33e8",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Required later goal work; this continuation preparation does not close it."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Required later goal work; this continuation preparation does not close it."
+    },
+    {
+      "clause": "I9",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Required later goal work; this continuation preparation does not close it."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Required later goal work; this continuation preparation does not close it."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Required later goal work; this continuation preparation does not close it."
+    },
+    {
+      "clause": "I13",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md",
+      "summary": "Required later goal work; this continuation preparation does not close it."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: native retry defaults, scheduling, off and trace",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:124",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: completed tool not replayed; retry uses selected defaults",
+      "source": "acceptance",
+      "trace": "I2 + I6 + ADR-0424",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:180",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: threshold summary, native defaults, retained tail, off",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:258",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: retained summary JSON restore and model selection",
+      "source": "acceptance",
+      "trace": "I1 + I2 + I5 + ADR-0466",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:258",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: request usage includes failed/summary, restored excluded/reset",
+      "source": "acceptance",
+      "trace": "I5 + ADR-0466",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:146",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: observable compaction event and estimated token source",
+      "source": "acceptance",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:296",
+      "note": "Repair verified: explicit compaction end/source/tokens assertion fails on absent event. Browser marker proof remains Final+GREEN."
+    },
+    {
+      "row": "Acceptance 7: context overflow separated and bounded",
+      "source": "acceptance",
+      "trace": "I4 + I5 + I6",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:358",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: abort summary/backoff with no later request",
+      "source": "acceptance",
+      "trace": "I5 + I6 + ADR-0424",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:377",
+      "note": "Repair verified: stop test now asserts actual summary request; original false GREEN becomes behavioral RED."
+    },
+    {
+      "row": "Parity 1: actual Pi CLI retry counts/delays/history/tool effects",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:124",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: native threshold summary and continued wire history",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:258",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: disabled retry/compaction",
+      "source": "acceptance",
+      "trace": "I5 + I6",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:167",
+      "note": ""
+    },
+    {
+      "row": "Network transient failure: bounded retry, transport zero, no replay",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:222",
+      "note": ""
+    },
+    {
+      "row": "Threshold summary failure: unchanged history, separate overflow recovery",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:338",
+      "note": "False oracle corrected: pinned actual CLI requests [summary,assistant,summary], committed RED now agrees."
+    },
+    {
+      "row": "Stop/deadline during summary/backoff",
+      "source": "fault-matrix",
+      "trace": "I5 + I6 + ADR-0424",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:204",
+      "note": ""
+    },
+    {
+      "row": "No-usage native estimate, full request accounting",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:296",
+      "note": ""
+    },
+    {
+      "row": "Overflow after summary or no native cut point",
+      "source": "fault-matrix",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:155",
+      "note": ""
+    },
+    {
+      "row": "Restore validates envelopes; valid own summary export round-trips",
+      "source": "fault-matrix",
+      "trace": "I5 + ADR-0466",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:279",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/distribution/reference/ai-agent-continuation-evidence.md:25",
+          "summary": "Carry the already-declared remaining GREEN evidence: actual CLI differential partial-stream retry, active-loop threshold, repeated compaction/file details, summary-attempt usage, malformed restore, Chromium marker and explicit continuation. Current RED establishes the core boundary but is not the completed proof of these interactions.",
+          "authority": "",
+          "evidence": "Independent execution: pnpm exec vitest run packages/agent/src/continuation.fault.test.ts => 11 failed/2 passed, all failures behavioral, log /private/tmp/rifty-pr359-continuation-review-final.log. Original run was 8 failed/3 passed (/private/tmp/rifty-pr359-continuation-review-red.log), falsely passing stop-summary; repair now fails at summary identity. Native pinned Pi 0.85.1 probes rerun: node /private/tmp/rifty-pr359-cli-continuation-probe.mjs; node /private/tmp/rifty-pr359-cli-context-priority-probe.mjs; node /private/tmp/rifty-pr359-cli-failed-summary-probe.mjs. Outputs /private/tmp/rifty-pr359-continuation-review-{cli,context,failed-summary}.log: retries3/4 requests, default summary+assistant, context5000 one request/no retry, failed threshold then overflow [summary,assistant,summary]. Contract and ADR now match separate overflow recovery; installed native agent-session.js:364,406 resets episode after user/successful assistant. PR-4: existing tests/gates/goal unchanged; new RED expectation corrected to observed native oracle, not weakened to pass product. No implementation in reviewed diff."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

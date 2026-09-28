@@ -18,6 +18,7 @@ import {
 } from '@riftydev/agent';
 import { afterEach, expect, it } from 'vitest';
 import { MemoryVfs } from '../../../packages/vfs/src/index.ts';
+import { modelCatalog } from '../../../tests/integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts';
 import { scriptedProvider } from '../../../tests/integration/fixtures/workbench-vite-consumer/src/agent-scripted-provider.ts';
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -61,8 +62,12 @@ async function fixture(
   const provider = scriptedProvider(Array.from({ length: 10 }, () => 'Arrr.'));
   const session = createAgentSession({
     host: { root, capabilities: () => ({ files }), async close() {} },
-    settings: { baseUrl: 'https://scripted.invalid/v1', model: 'scripted' },
-    fetch: provider.fetch,
+    ...modelCatalog(
+      { baseUrl: 'https://scripted.invalid/v1', model: 'scripted' },
+      provider.fetch,
+      undefined,
+    ),
+
     ...(typeof extra === 'function' ? extra(root, files) : extra),
   } as AgentSessionOptions);
   const events: AgentSessionEvent[] = [];

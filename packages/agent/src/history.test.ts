@@ -4,6 +4,7 @@ import {
   createAssistantMessageEventStream,
 } from '@earendil-works/pi-ai';
 import { describe, expect, it } from 'vitest';
+import { modelCatalog } from '../../../tests/integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts';
 import { type AgentMessage, type AgentSessionOptions, Type, createAgentSession } from './index.ts';
 
 function assistant(
@@ -70,13 +71,13 @@ function setup(initialMessages: readonly AgentMessage[] = [], replies = [assista
         },
       },
     ],
-    streamFn: (_model: unknown, context: Context) => {
+    ...modelCatalog(undefined, undefined, (_model: unknown, context: Context) => {
       contexts.push({ ...context, messages: structuredClone(context.messages) });
       const message = replies.shift() ?? assistant();
       const stream = createAssistantMessageEventStream();
       stream.push({ type: 'done', reason: message.stopReason as 'stop' | 'toolUse', message });
       return stream;
-    },
+    }),
   };
   return {
     options,

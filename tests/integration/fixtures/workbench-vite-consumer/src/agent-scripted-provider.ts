@@ -3,7 +3,14 @@ export interface ScriptedCall {
   readonly args: Record<string, unknown>;
 }
 
-export type ScriptedReply = string | readonly ScriptedCall[] | { readonly error: string };
+export type ScriptedReply =
+  | string
+  | readonly ScriptedCall[]
+  | { readonly error: string; readonly status?: number }
+  | {
+      readonly text: string;
+      readonly usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+    };
 
 export interface ProviderRequest {
   readonly authorization: string | null;
@@ -24,7 +31,7 @@ export function scriptedProvider(replies: readonly ScriptedReply[]) {
     const reply = replies[index];
     if (reply === undefined) throw new Error(`Unexpected model request ${index}`);
     if (typeof reply === 'object' && 'error' in reply) {
-      return Response.json({ error: { message: reply.error } }, { status: 503 });
+      return Response.json({ error: { message: reply.error } }, { status: reply.status ?? 503 });
     }
     const base = {
       id: `completion-${index}`,
@@ -32,11 +39,12 @@ export function scriptedProvider(replies: readonly ScriptedReply[]) {
       created: 1,
       model: 'scripted',
     };
+    const content = typeof reply === 'object' && 'text' in reply ? reply.text : reply;
     const delta =
-      typeof reply === 'string'
-        ? { content: reply }
+      typeof content === 'string'
+        ? { content }
         : {
-            tool_calls: reply.map((call, offset) => ({
+            tool_calls: content.map((call, offset) => ({
               index: offset,
               id: `call-${index}-${offset}`,
               type: 'function',
@@ -49,9 +57,16 @@ export function scriptedProvider(replies: readonly ScriptedReply[]) {
       {
         ...base,
         choices: [
-          { index: 0, delta: {}, finish_reason: typeof reply === 'string' ? 'stop' : 'tool_calls' },
+          {
+            index: 0,
+            delta: {},
+            finish_reason: typeof content === 'string' ? 'stop' : 'tool_calls',
+          },
         ],
-        usage: { prompt_tokens: 10, completion_tokens: 3, total_tokens: 13 },
+        usage:
+          typeof reply === 'object' && 'usage' in reply
+            ? reply.usage
+            : { prompt_tokens: 10, completion_tokens: 3, total_tokens: 13 },
       },
     ];
     return new Response(

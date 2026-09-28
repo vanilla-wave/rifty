@@ -9,6 +9,7 @@ import {
   createBrowserAgentPreview,
   createWorkbenchAgentHost,
 } from '../../../packages/agent/src/index.ts';
+import { modelCatalog } from '../../integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts';
 import { type ScriptedReply, scriptedProvider } from './agent-scripted-provider.ts';
 import { currentProject, currentSessionTools } from './sealed-playground-workbench.ts';
 
@@ -39,6 +40,7 @@ function setup(
   maxToolCalls = 20,
   customStream = false,
   apiKey?: string,
+  runTimeoutMs = 20_000,
 ) {
   const provider = scriptedProvider(replies);
   const events: AgentSessionEvent[] = [];
@@ -67,7 +69,7 @@ function setup(
   const common = {
     host,
     maxToolCalls,
-    runTimeoutMs: 20_000,
+    runTimeoutMs,
     instructions: ['Project instruction: preserve the existing file.'],
     tools: [
       {
@@ -115,8 +117,8 @@ function setup(
   };
   const session = createAgentSession(
     customStream
-      ? { ...common, streamFn }
-      : { ...common, settings: { ...settings, apiKey }, fetch: provider.fetch },
+      ? { ...common, ...modelCatalog(undefined, undefined, streamFn) }
+      : { ...common, ...modelCatalog({ ...settings, apiKey }, provider.fetch, undefined) },
   );
   session.subscribe((event) => events.push(event));
   return { session, provider, events };
@@ -150,12 +152,18 @@ export async function proveTools() {
 }
 
 export async function proveRecovery() {
-  const { session, provider } = setup([
-    [{ name: 'write_file', args: { path: 'once.txt', content: 'committed-once' } }],
-    { error: 'provider failed after write' },
-    [{ name: 'shell', args: { command: 'cat once.txt' } }],
-    'Continued without repeating the write.',
-  ]);
+  const { session, provider } = setup(
+    [
+      [{ name: 'write_file', args: { path: 'once.txt', content: 'committed-once' } }],
+      ...Array.from({ length: 4 }, () => ({ error: 'provider failed after write' })),
+      [{ name: 'shell', args: { command: 'cat once.txt' } }],
+      'Continued without repeating the write.',
+    ],
+    20,
+    false,
+    undefined,
+    60_000,
+  );
   try {
     await session.send('Write once.');
     const failedStatus = session.status();
@@ -306,8 +314,7 @@ export async function proveCompanion() {
   ]);
   const session = createAgentSession({
     host: createWorkbenchAgentHost({ session: project, companion }),
-    settings,
-    fetch: provider.fetch,
+    ...modelCatalog(settings, provider.fetch, undefined),
   });
   try {
     await session.send('Inspect diagnostics.');
@@ -338,7 +345,10 @@ export async function provePreview() {
     [{ name: 'preview_query', args: { selector: 'output' } }],
     'Checked.',
   ]);
-  const session = createAgentSession({ host, settings, fetch: provider.fetch });
+  const session = createAgentSession({
+    host,
+    ...modelCatalog(settings, provider.fetch, undefined),
+  });
   try {
     await session.send('Check and interact with the host preview.');
     return {
@@ -375,22 +385,25 @@ export async function proveTimeBudget() {
   let aborted = false;
   const session = createAgentSession({
     host,
-    settings,
+    ...modelCatalog(
+      settings,
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          if (!signal) {
+            reject(new Error('Provider signal absent'));
+            return;
+          }
+          const onAbort = () => {
+            aborted = true;
+            reject(new DOMException('Aborted', 'AbortError'));
+          };
+          if (signal.aborted) onAbort();
+          else signal.addEventListener('abort', onAbort, { once: true });
+        }),
+      undefined,
+    ),
     runTimeoutMs: 100,
-    fetch: (_input, init) =>
-      new Promise<Response>((_resolve, reject) => {
-        const signal = init?.signal;
-        if (!signal) {
-          reject(new Error('Provider signal absent'));
-          return;
-        }
-        const onAbort = () => {
-          aborted = true;
-          reject(new DOMException('Aborted', 'AbortError'));
-        };
-        if (signal.aborted) onAbort();
-        else signal.addEventListener('abort', onAbort, { once: true });
-      }),
   });
   try {
     await session.send('Wait for provider.');
@@ -436,11 +449,13 @@ export async function proveConcurrentEdit() {
 
 export async function proveKeyExport() {
   const key = 'synthetic-key-"quote"-\\slash';
-  const { session, provider } = setup(['Reply without the key.'], 20, false, key);
+  // The provider echoes the key; its HTTP error body reaches pi JSON-escaped.
+  const { session, provider } = setup([{ error: `Denied ${key}.`, status: 400 }], 20, false, key);
   try {
-    await session.send(`Synthetic input contains ${key}.`);
+    await session.send('Use the configured key.');
     return {
       trace: await session.exportTrace(),
+      detail: session.detail(),
       authorization: provider.requests[0]?.authorization,
       key,
     };
@@ -527,8 +542,7 @@ export async function provePartialStreamStop() {
   };
   const session = createAgentSession({
     host: createWorkbenchAgentHost({ session: currentProject() }),
-    settings,
-    fetch: transport,
+    ...modelCatalog(settings, transport, undefined),
   });
   let stopping: Promise<void> | undefined;
   session.subscribe((event) => {
@@ -568,6 +582,52 @@ export async function proveBomEdit() {
   try {
     await session.send('Replace alpha only.');
     return Array.from((await currentProject().files.readFile('/bom.txt')).bytes);
+  } finally {
+    await session.dispose();
+  }
+}
+
+export async function proveMutationDiagnostics() {
+  const project = currentProject();
+  const companion = currentSessionTools();
+  const initial = 'export const n: number = 1;\n';
+  await project.files.writeFile('/diagnostic.ts', new TextEncoder().encode(initial), {
+    expectedVersion: null,
+  });
+  await companion.typescript.open('/diagnostic.ts', initial);
+  await companion.typescript.getSemanticDiagnostics('/diagnostic.ts');
+  const provider = scriptedProvider([
+    [
+      {
+        name: 'write_file',
+        args: { path: 'diagnostic.ts', content: 'export const n: number = "wrong";\n' },
+      },
+    ],
+    [{ name: 'edit_file', args: { path: 'diagnostic.ts', old: '"wrong"', new: '2' } }],
+    [
+      {
+        name: 'apply_patch',
+        args: {
+          patch:
+            '--- a/diagnostic.ts\n+++ b/diagnostic.ts\n@@ -1 +1 @@\n-export const n: number = 2;\n+export const n: number = "again";\n',
+        },
+      },
+    ],
+    'Checked mutation feedback.',
+  ]);
+  const session = createAgentSession({
+    host: createWorkbenchAgentHost({ session: project, companion }),
+    ...modelCatalog(settings, provider.fetch),
+  });
+  try {
+    await session.send('Change, repair, and inspect diagnostics.');
+    await companion.typescript.open('/diagnostic.ts', await file('/diagnostic.ts'));
+    return {
+      status: session.status(),
+      trace: await session.exportTrace(),
+      requests: provider.requests,
+      diagnostics: await companion.typescript.getSemanticDiagnostics('/diagnostic.ts'),
+    };
   } finally {
     await session.dispose();
   }
