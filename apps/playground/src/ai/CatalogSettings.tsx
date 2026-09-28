@@ -46,7 +46,12 @@ export function CatalogSettings(props: {
   }
   function addModel() {
     let index = props.value.models.length + 1;
-    while (props.value.models.some((model) => model.id === `model-${index}`)) index++;
+    while (
+      props.value.models.some(
+        (model) => model.id === `model-${index}` || model.provider === `model-${index}`,
+      )
+    )
+      index++;
     const model = newModel(`model-${index}`, selected().baseUrl);
     setError('');
     props.onChange({ ...props.value, models: [...props.value.models, model], model: model.id });
@@ -112,6 +117,7 @@ export function CatalogSettings(props: {
           />
         </label>
         <small>
+          The key applies to provider “{selected().provider}”; Add model creates its own provider.
           Catalog and selection are saved. Keys, headers and run limits stay in this chat.
         </small>
         <details>

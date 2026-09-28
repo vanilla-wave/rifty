@@ -24,7 +24,8 @@ export function newModel(id = '', baseUrl = ''): ChatModel {
     id,
     name: id,
     api: 'openai-completions',
-    provider: 'rifty',
+    // Own provider per created model: API keys are per provider (sessionCatalog).
+    provider: id || 'rifty',
     baseUrl,
     contextWindow: 128_000,
     maxTokens: 8192,
