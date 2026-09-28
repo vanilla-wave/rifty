@@ -613,10 +613,10 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
                 disabled={running()}
                 onClick={() => {
                   pickModel(model.id);
-                  // An edited draft or attachment is the next turn; an empty or auto-restored
-                  // composer continues.
-                  if (!attachments().length && (!input().trim() || input() === restoredDraft))
-                    setInput('continue');
+                  // The auto-restored prompt is already history: drop it. An edited draft or
+                  // attachment is the next turn; otherwise continue.
+                  if (input() === restoredDraft) setInput('');
+                  if (!attachments().length && !input().trim()) setInput('continue');
                   void send();
                 }}
               >

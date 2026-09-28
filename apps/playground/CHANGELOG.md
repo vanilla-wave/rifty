@@ -4,7 +4,7 @@
 
 - Catalog JSON keeps the typed text while it is the edit source; other catalog edits re-serialize it.
 - Models created in Settings get their own provider, so each carries its own API key.
-- "Continue with …" sends an edited draft as-is; an empty composer or the auto-restored failed prompt sends `continue`, never a duplicate user turn.
+- "Continue with …" sends an edited draft as-is; the auto-restored failed prompt is dropped, never a duplicate user turn: a pending attachment goes alone, otherwise `continue`.
 - Declare credential-named catalog header values (auth/api-key/token/secret; raw and bare `Bearer` token) as chat secrets; provider error echoes are masked before they reach history, status or UI; other headers stay visible (ADR-0479).
 
 - Default AI run budget600s; built-in results expose remaining budget and mutation diagnostics, native repeated-call notices appear in history.
