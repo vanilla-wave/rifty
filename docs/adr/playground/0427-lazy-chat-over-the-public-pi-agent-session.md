@@ -59,5 +59,6 @@ file-size ratchet; no unrelated behavior change.
 
 ## Corrections (active)
 
-- 2026-09-28: ADR-0479 removes core export redaction. Playground declares catalog header
-  values as session `secrets`; provider echoes are scrubbed at ingress, before UI and export.
+- 2026-09-28: ADR-0479 removes core export redaction. Playground declares credential-named
+  catalog header values (auth/key/token/secret/cookie/session), raw and bare Bearer token, as
+  session `secrets`; provider echoes are scrubbed at ingress, before UI and export.
