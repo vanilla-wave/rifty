@@ -45,3 +45,12 @@ already recorded in PR body; no claim that its behavior changed.
 Full `pnpm pr:check`:25/25 PASS (test:run186.2s, parity58.4s), no isolated
 reruns; `/private/tmp/rifty-pr359-merge-pr-check.log`. Independent repair verify
 and latest-head CI remain before merge readiness.
+
+## Independent verification
+
+Standards PASS and Spec PASS @08a5878a9e7d61d02e705e543929ff2a5d4f0446;
+[canonical verdict](pr359-merge-preparation-final-green.json):8/8 coverage,
+zero blockers/residuals, retained P2 advisory. Both independently reran22 tests
+and original failure probe; Spec also proved Stop-in-summary emits aborted
+without a summary/count. Fresh archive replay checks8 eventMetrics fields in
+all84 rows; unchanged turns/toolCalls proof reused, not claimed rerun.
