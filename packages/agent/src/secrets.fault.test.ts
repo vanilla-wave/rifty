@@ -228,6 +228,19 @@ describe('provider ingress scrubbing', () => {
     }
   });
 
+  it('overlapping declared secrets mask longest first, leaving no suffix', async () => {
+    const { session, events } = setup([{ error: 'denied sk-key-extended', status: 400 }], {
+      secrets: ['sk-key', 'sk-key-extended'],
+    });
+    try {
+      await session.send('probe');
+      const failure = messageEnds(events).at(-1) as AssistantMessage;
+      expect(failure.errorMessage?.match(/\[redacted\]|-extended/g)).toEqual(['[redacted]']);
+    } finally {
+      await session.dispose();
+    }
+  });
+
   it('[fault: sibling-drift] built-in providers registered after creation are scrubbed too', async () => {
     const { session, events, models } = setup([]);
     const late = scriptedProvider([{ error: `denied ${LATE_KEY}`, status: 400 }]);
