@@ -86,6 +86,34 @@ const messageEnds = (events: readonly AgentSessionEvent[]) =>
 // Everything but model-visible `content`, which ingress never alters.
 const outsideContent = (value: unknown): unknown =>
   JSON.parse(JSON.stringify(value, (key, entry) => (key === 'content' ? undefined : entry)));
+// Restored history over the default compaction threshold: the next send summarizes first.
+function compactableHistory(): AgentMessage[] {
+  const answer = (text: string, input: number, timestamp: number): AgentMessage => ({
+    role: 'assistant',
+    model: 'small',
+    provider: 'local',
+    api: 'openai-completions',
+    content: [{ type: 'text', text }],
+    stopReason: 'stop',
+    timestamp,
+    usage: {
+      input,
+      output: 2,
+      totalTokens: input + 2,
+      cacheRead: 0,
+      cacheWrite: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+  });
+  return [
+    { role: 'user', content: 'first '.repeat(10000), timestamp: 0 },
+    answer('First answer', 15000, 1),
+    { role: 'user', content: 'old '.repeat(30000), timestamp: 2 },
+    answer('Old answer', 30000, 2),
+    { role: 'user', content: 'Recent question', timestamp: 3 },
+    answer('Recent answer', 20000, 4),
+  ];
+}
 
 describe('provider ingress scrubbing', () => {
   it('[fault: corrupt-input] rejects secrets that are not an array of strings', () => {
@@ -225,36 +253,9 @@ describe('provider ingress scrubbing', () => {
   });
 
   it('[fault: sibling-drift] compaction summary failure echoing a secret is scrubbed', async () => {
-    const usage = (input: number) => ({
-      input,
-      output: 2,
-      totalTokens: input + 2,
-      cacheRead: 0,
-      cacheWrite: 0,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    });
-    const answer = (text: string, input: number, timestamp: number): AgentMessage => ({
-      role: 'assistant',
-      model: 'small',
-      provider: 'local',
-      api: 'openai-completions',
-      content: [{ type: 'text', text }],
-      stopReason: 'stop',
-      timestamp,
-      usage: usage(input),
-    });
     const { session, events, wire } = setup(
       [{ error: `summary refused for ${DECLARED} ${KEY}`, status: 400 }, 'Done.'],
-      {
-        initialMessages: [
-          { role: 'user', content: 'first '.repeat(10000), timestamp: 0 },
-          answer('First answer', 15000, 1),
-          { role: 'user', content: 'old '.repeat(30000), timestamp: 2 },
-          answer('Old answer', 30000, 2),
-          { role: 'user', content: 'Recent question', timestamp: 3 },
-          answer('Recent answer', 20000, 4),
-        ],
-      },
+      { initialMessages: compactableHistory() },
     );
     try {
       await session.send('continue');
@@ -265,6 +266,36 @@ describe('provider ingress scrubbing', () => {
         'summary refused for [redacted] [redacted]',
       );
       expect(leaks(settled(events))).toEqual([]);
+    } finally {
+      await session.dispose();
+    }
+  });
+
+  it('[fault: sibling-drift] a retried compaction summary error echoing a secret is scrubbed', async () => {
+    // Retryable: the error reaches only `retry` events, never compaction's own errorMessage.
+    const { session, events, wire } = setup(
+      [
+        { error: `429 rate limit for ${KEY} and ${DECLARED}`, status: 429 },
+        'Saved context',
+        'Done.',
+      ],
+      { initialMessages: compactableHistory() },
+    );
+    try {
+      await session.send('continue');
+      expect(session.status()).toBe('done');
+      expect(wire.requests).toHaveLength(3);
+      const retries = events.filter((event) => event.type === 'retry');
+      expect(retries).toMatchObject([
+        { phase: 'start', source: 'summary' },
+        { phase: 'end', source: 'summary', success: true },
+      ]);
+      expect(JSON.stringify(retries)).toContain('429 rate limit for [redacted] and [redacted]');
+      const end = events.find((event) => event.type === 'compaction' && event.phase === 'end');
+      expect(end).toMatchObject({ success: true });
+      expect(leaks(settled(events))).toEqual([]);
+      expect(leaks(session.detail() ?? '')).toEqual([]);
+      expect(leaks(await session.exportTrace())).toEqual([]);
     } finally {
       await session.dispose();
     }
