@@ -126,6 +126,8 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
   const [resources, setResources] = createSignal<AgentResourceReport>();
   const [reloaded, setReloaded] = createSignal(false);
   const [input, setInput] = createSignal('');
+  // Prompt put back after a failed run; it is already history, so Continue must not resend it.
+  let restoredDraft: string | undefined;
   const [attachments, setAttachments] = createSignal<readonly ChatAttachment[]>([]);
   const [busy, setBusy] = createSignal(false);
   const [hasSession, setHasSession] = createSignal(false);
@@ -348,6 +350,7 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
     const text = draft.trim();
     const pendingAttachments = attachments();
     if ((!text && !pendingAttachments.length) || running()) return;
+    restoredDraft = undefined;
     const images = pendingAttachments.flatMap((attachment) =>
       attachment.image ? [attachment.image] : [],
     );
@@ -370,8 +373,10 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
         setReloaded(true);
       } else {
         await current.agent.send(prompt, images);
-        if (alive && current === active && current.agent.status() === 'error' && !input())
+        if (alive && current === active && current.agent.status() === 'error' && !input()) {
           setInput(draft);
+          restoredDraft = draft;
+        }
       }
     } catch (error) {
       if (!input()) setInput(draft);
@@ -608,8 +613,10 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
                 disabled={running()}
                 onClick={() => {
                   pickModel(model.id);
-                  // A pending draft or attachment is the next turn; only an empty composer continues.
-                  if (!input().trim() && !attachments().length) setInput('continue');
+                  // An edited draft or attachment is the next turn; an empty or auto-restored
+                  // composer continues.
+                  if (!attachments().length && (!input().trim() || input() === restoredDraft))
+                    setInput('continue');
                   void send();
                 }}
               >
