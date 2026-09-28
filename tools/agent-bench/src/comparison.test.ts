@@ -269,10 +269,12 @@ it('regenerates a gzip summary directory in its own format, byte-identical on re
   const candidate = clone();
   candidate.header.sourceRevision = 'current-revision';
   const reportGz = gzipSync(`${JSON.stringify(candidate, null, 2)}\n`);
+  reportGz[9] = 0x03; // RFC 1952 OS byte: expected output is Unix on every host.
   await writeFile(join(current, 'report.json.gz'), reportGz);
   try {
     expect(await cliReport(current, baseline)).toBe(0);
     const comparisonGz = await readFile(join(current, 'comparison.json.gz'));
+    expect(comparisonGz[9]).toBe(0x03);
     const json = JSON.parse(gunzipSync(comparisonGz).toString('utf8')) as Comparison;
     expect(json.rows).toHaveLength(14);
     expect(json.after).toEqual(candidate.header);
