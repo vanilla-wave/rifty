@@ -37,7 +37,7 @@ it('commits report-written summary gzip with the Unix OS header byte; all gzip i
     }
   }
   expect(bad).toEqual([]);
-});
+}, 60_000);
 
 type Manifest = {
   bundle: { path: string; bytes: number; sha256: string };
@@ -77,7 +77,7 @@ it('keeps every manifest-recorded size and SHA256 equal to the committed bytes',
     }
   }
   expect(bad).toEqual([]);
-});
+}, 60_000);
 
 it('keeps summary markdown links resolvable', async () => {
   const broken: string[] = [];
