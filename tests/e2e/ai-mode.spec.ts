@@ -1031,3 +1031,41 @@ test('catalog JSON keeps typed text; basic fields re-serialize it', async ({ pag
     .poll(async () => JSON.parse(await catalog.inputValue())[0].baseUrl)
     .toBe('http://127.0.0.1:8/v1');
 });
+
+test('basic UI models keep their own API keys', async ({ page }) => {
+  test.setTimeout(120_000);
+  const first = await agentModelServer(['Answered by A.']);
+  const second = await agentModelServer(['Answered by B.']);
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await openChat(page);
+    const panel = page.getByTestId('ai-panel');
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    const key = panel.getByLabel('API key (optional)', { exact: true });
+    await panel.getByLabel('Base URL', { exact: true }).fill(first.baseUrl);
+    await panel.getByLabel('Model', { exact: true }).fill('model-a');
+    await key.fill('KEY_A');
+    await panel.getByRole('button', { name: 'Add model', exact: true }).click();
+    await panel.getByLabel('Base URL', { exact: true }).fill(second.baseUrl);
+    await panel.getByLabel('Model', { exact: true }).fill('model-b');
+    await key.fill('KEY_B');
+    await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
+    await panel.getByLabel('Chat model', { exact: true }).selectOption('model-a');
+    await send(page, 'Ask model A.');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await panel.getByLabel('Chat model', { exact: true }).selectOption('model-b');
+    await send(page, 'Ask model B.');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await expect(panel).toContainText('Answered by B.');
+    expect(first.requests[0]?.authorization).toBe('Bearer KEY_A');
+    expect(second.requests[0]?.authorization).toBe('Bearer KEY_B');
+    const stored = await page.evaluate(() => localStorage.getItem('rf.ai.v2') ?? '');
+    expect(stored).toContain('model-b');
+    expect(stored).not.toContain('KEY_A');
+    expect(stored).not.toContain('KEY_B');
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
