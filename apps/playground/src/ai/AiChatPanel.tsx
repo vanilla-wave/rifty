@@ -608,7 +608,8 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
                 disabled={running()}
                 onClick={() => {
                   pickModel(model.id);
-                  if (!attachments().length) setInput('continue');
+                  // A pending draft or attachment is the next turn; only an empty composer continues.
+                  if (!input().trim() && !attachments().length) setInput('continue');
                   void send();
                 }}
               >
