@@ -1070,9 +1070,7 @@ test('basic UI models keep their own API keys', async ({ page }) => {
   }
 });
 
-test('Continue with another model sends the edited draft instead of continue', async ({
-  page,
-}) => {
+test('Continue with another model sends the edited draft instead of continue', async ({ page }) => {
   test.setTimeout(120_000);
   const first = await agentModelServer([{ error: 'first model rejected', status: 400 }]);
   const second = await agentModelServer(['Answered the edited draft.']);
