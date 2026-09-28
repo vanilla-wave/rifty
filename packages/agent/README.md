@@ -227,11 +227,15 @@ send another prompt to continue. No automatic fallback.
 ### Tool feedback
 
 Built-in final results begin with a complete JSON budget receipt (`callsLeft`,
-`msLeft`); body plus receipt stays within16KiB. Consumer plain text stays theirs;
-existing shell/preview envelopes with matching details also receive counters.
+`msLeft`); body plus receipt stays within16KiB. Successful consumer plain text is
+untouched (only capped). Consumer tool errors and pi's argument-validation /
+unknown-tool errors carry the `{"status":"failed",…}` budget receipt; recognized
+shell/preview envelopes with matching details get counters merged.
 Exact failed edits report counts/lines or a whitespace-insensitive hint; hints
-never change matching. Third consecutive equal call/result queues native steering;
-no deduplication. Sequence spans sends, reset clears it.
+never change matching. Third consecutive identical call queues native steering;
+no deduplication. Identical = same tool, canonical args, error flag and capped
+outcome text excluding mutation host diagnostics (their timing varies; the model
+still sees them). Sequence spans sends, reset clears it.
 
 Successful writes/edits/patches append host diagnostics (up to10 entries). The
 1000ms wait covers all changed files; delayed diagnostics are pending, missing or

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Repeated-call detection ignores mutation host-diagnostics timing (pending vs settled); README/ADR-0475 note state exactly which consumer results get budget receipts.
+
 - Clarify native assistant retries versus the prohibition on tool-action replay.
 
 - Default600s and model-facing budget receipts; exact-edit hints, third-repeat native steering, bounded post-mutation diagnostics and shared recipe v2 with opt-out.

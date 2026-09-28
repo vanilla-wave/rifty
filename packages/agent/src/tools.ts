@@ -11,6 +11,7 @@ import { hostError } from './workbench-host.ts';
 type Tool = AgentTool<TSchema, unknown>;
 const excluded = new Set(['node_modules', '.git', 'dist']);
 const failure = Symbol('agent tool failure');
+const outcome = Symbol('agent mutation outcome without host diagnostics');
 
 function result(text: string, details: unknown = {}): AgentToolResult<unknown> {
   return { content: [{ type: 'text', text }], details };
@@ -18,6 +19,23 @@ function result(text: string, details: unknown = {}): AgentToolResult<unknown> {
 
 function failedResult(text: string, details: Record<string, unknown>): AgentToolResult<unknown> {
   return result(text, { ...details, [failure]: true });
+}
+
+function mutationResult(
+  text: string,
+  diagnostics: string,
+  details: Record<string, unknown> = {},
+): AgentToolResult<unknown> {
+  return result(`${text}\n${diagnostics}`, { ...details, [outcome]: text });
+}
+
+/** Mutation text minus host diagnostics, whose timing varies between equal calls. */
+export function outcomeWithoutDiagnostics(value: AgentToolResult<unknown>): string | undefined {
+  const text =
+    value.details !== null && typeof value.details === 'object'
+      ? Reflect.get(value.details, outcome)
+      : undefined;
+  return typeof text === 'string' ? text : undefined;
 }
 
 function modelResultText(metadata: Record<string, unknown>, body: string): string {
@@ -154,8 +172,9 @@ export function standardTools(
         Type.Object({ path: Type.String(), content: Type.String() }),
         async (args, signal) => {
           await files.change(path(args.path), () => args.content);
-          return result(
-            `wrote ${new TextEncoder().encode(args.content).length} bytes to ${args.path}\n${await mutationDiagnostics(capabilities, [{ path: path(args.path) }], signal)}`,
+          return mutationResult(
+            `wrote ${new TextEncoder().encode(args.content).length} bytes to ${args.path}`,
+            await mutationDiagnostics(capabilities, [{ path: path(args.path) }], signal),
           );
         },
       ),
@@ -172,8 +191,9 @@ export function standardTools(
             if (failure) throw new Error(failure);
             return current.slice(0, at) + args.new + current.slice(at + args.old.length);
           });
-          return result(
-            `edited ${args.path}\n${await mutationDiagnostics(capabilities, [{ path: path(args.path) }], signal)}`,
+          return mutationResult(
+            `edited ${args.path}`,
+            await mutationDiagnostics(capabilities, [{ path: path(args.path) }], signal),
           );
         },
       ),
@@ -212,15 +232,16 @@ export function standardTools(
               { status: 'failed', applied, error: hostError(error) },
             );
           }
-          return result(
-            `patched ${applied.join(', ')}\n${await mutationDiagnostics(
+          return mutationResult(
+            `patched ${applied.join(', ')}`,
+            await mutationDiagnostics(
               capabilities,
               changes.map((change) => ({
                 path: path(change.path),
                 deleted: change.action === 'delete',
               })),
               signal,
-            )}`,
+            ),
             { applied },
           );
         },

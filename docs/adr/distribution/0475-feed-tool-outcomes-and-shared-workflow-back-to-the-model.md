@@ -41,3 +41,7 @@ One native settlement seam handles all result paths; real Workbench tests own
 positive diagnostics proof. No public envelope marker/classifier API. Native hooks
 alone are insufficient; a replacement dispatcher is unnecessary. I13 measures the
 net effect using unchanged tasks/judges/config.
+
+## Corrections (active)
+
+- 2026-09-28 — "Consumer plain text stays untouched" covers successful consumer text only; consumer tool errors and pi validation/unknown-tool errors carry the failed budget receipt. Repeat comparison's capped result excludes mutation host diagnostics (timing-dependent); diagnostics still reach the model. Other clauses stand.

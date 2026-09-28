@@ -1,5 +1,6 @@
 import type { AgentToolResult } from '@earendil-works/pi-agent-core';
 import { TOOL_RESULT_CAP_BYTES, capToolText } from './text.ts';
+import { outcomeWithoutDiagnostics } from './tools.ts';
 import { hostError } from './workbench-host.ts';
 
 const encoder = new TextEncoder();
@@ -86,7 +87,10 @@ function effectsSummary(value: Record<string, unknown>): Record<string, unknown>
   return summary;
 }
 
-/** One final text boundary: intact JSON, stable body capacity, actual remaining counters. */
+/**
+ * One final text boundary: intact JSON, stable body capacity, actual remaining counters.
+ * Returns budget-free repeat material; mutation host diagnostics excluded.
+ */
 export function toolReceipt(
   result: AgentToolResult<unknown>,
   name: string,
@@ -153,10 +157,9 @@ export function toolReceipt(
       metadata: capToolText(raw, Math.floor((projectionBudget - bytes(header(shell))) / 2)),
     };
   }
-  const body = capToolText(
-    existing?.body ?? text,
-    TOOL_RESULT_CAP_BYTES - bytes(header(metadata)) - 1,
-  );
+  const capacity = TOOL_RESULT_CAP_BYTES - bytes(header(metadata)) - 1;
+  const body = capToolText(existing?.body ?? text, capacity);
   result.content = [{ type: 'text', text: `${header(metadata, remaining)}\n${body}` }];
-  return `${canonical(metadata)}\n${body}`;
+  const outcome = outcomeWithoutDiagnostics(result);
+  return `${canonical(metadata)}\n${outcome === undefined ? body : capToolText(outcome, capacity)}`;
 }
