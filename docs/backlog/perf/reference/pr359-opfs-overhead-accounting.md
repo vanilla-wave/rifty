@@ -64,3 +64,12 @@ serial88252ms/product22170ms,3.98061×; all26,811 files/2,314 dirs byte-exact,
 clean ledgers. Original2.5×1.05/10% bounds retained. Docker Playwright1.60.0
 jammy arm64, read-only checkout; actual test runner, not a copied predicate.
 `/private/tmp/rifty-pr359-opfs-linux-green.log`. No concurrent build or test load.
+
+## Independent Final+GREEN
+
+PASS @963195c917d7b796d2612c607b591fe112f00f8b,
+[verdict](pr359-opfs-overhead-final-green.json):7/7 coverage, zero findings.
+Fresh7 regression tests, six rejected mutants,1,296 weighted-sum checks and
+5,184 old-predicate equivalence checks. PR-4 accepts the population correction;
+RDY-6 factual draft check passes. Prior I1–I13 proof remains valid. Fullgate25/25
+passed; only documentation/binding/CI finalization follows.
