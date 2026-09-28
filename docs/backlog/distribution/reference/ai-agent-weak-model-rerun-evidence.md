@@ -20,3 +20,9 @@ hashes, actual42-run Luna rerun, compressed full trace/before/after snapshots an
 manual failure classification, same-config comparison, independent goal closure
 covering unchanged I1–I12 proof and transitions. Any regression remains open.
 Proxy10539 models endpoint confirms gpt-6-luna; no credentials/env inspected.
+
+Contract+RED accepted at55c572818:0 blockers,3 advisory weak carriers.
+Strengthened context/edit counters, unmatched index/task and distinct provenance;
+13/13 RED before implementation,13/13 GREEN afterwards (actual CLI included).
+Control13/13 passes; each metrics/identity/provenance omission mutant now fails
+(`/private/tmp/rifty-pr359-rerun-strengthened-mutant-*.log`).

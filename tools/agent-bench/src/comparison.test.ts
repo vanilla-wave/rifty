@@ -23,6 +23,9 @@ interface Summary {
   malformedToolCalls: number;
 }
 interface Comparison {
+  before: Report['header'];
+  after: Report['header'];
+  artifacts?: { baseline: string; current: string };
   rows: {
     task: string;
     lane: string;
@@ -125,6 +128,35 @@ it('compares recorded identities and exact metrics; one negative pass remains a 
   expect(result.regressions).toContainEqual({ task: 'fix-date-sort', lane: 'rifty' });
 });
 
+it('preserves nonzero context/edit counters and both provenance headers', () => {
+  const before = clone();
+  const after = clone();
+  after.header.sourceRevision = 'new-revision';
+  after.header.profile = 'new-profile';
+  for (const row of after.runs) row.profile = after.header.profile;
+  group(before)[0]!.editFailures = 2;
+  group(after)[0]!.editFailures = 7;
+  for (const report of [before, after]) {
+    const row = group(report)[0]!;
+    row.outcome = 'context-exceeded';
+    row.contextExceeded = true;
+    row.agentStatus = 'error';
+    row.judge.pass = false;
+  }
+  const second = group(after)[1]!;
+  second.outcome = 'context-exceeded';
+  second.contextExceeded = true;
+  second.agentStatus = 'error';
+  second.judge.pass = false;
+  const result = compare(before, after);
+  const row = result.rows.find((row) => row.task === 'fix-date-sort' && row.lane === 'rifty')!;
+  expect(row.before).toMatchObject({ contextExceeded: 1, editFailures: 2 });
+  expect(row.after).toMatchObject({ contextExceeded: 2, editFailures: 7 });
+  expect(row.delta).toMatchObject({ contextExceeded: 1, editFailures: 5 });
+  expect(result.before).toEqual(before.header);
+  expect(result.after).toEqual(after.header);
+});
+
 it.each([
   'endpoint',
   'limits',
@@ -132,6 +164,8 @@ it.each([
   'runsPerTask',
   'missing',
   'duplicate',
+  'unmatched-index',
+  'unmatched-task',
   'incomplete-both',
   'invalid-metric',
 ] as const)('[fault: corrupt-input] refuses incompatible comparison: %s', (kind) => {
@@ -141,6 +175,10 @@ it.each([
   if (kind === 'limits') after.header.limits = { ...after.header.limits, maxToolCalls: 1 };
   if (kind === 'taskSet') after.header.taskSet = 'changed-tasks';
   if (kind === 'runsPerTask') after.header.runsPerTask = 2;
+  if (kind === 'unmatched-index') after.runs[0]!.runIndex = 4;
+  if (kind === 'unmatched-task') {
+    for (const row of group(after)) row.task = 'different-task';
+  }
   if (kind === 'missing') after.runs.pop();
   if (kind === 'duplicate') after.runs[1] = structuredClone(after.runs[0]!);
   if (kind === 'incomplete-both') {
@@ -161,7 +199,11 @@ it('keeps valid ordinary report regeneration and emits actual comparison artifac
   await mkdir(current);
   const originalJson = `${JSON.stringify(original, null, 2)}\n`;
   await writeFile(join(baseline, 'report.json'), originalJson);
-  await writeFile(join(current, 'report.json'), originalJson);
+  const candidate = clone();
+  candidate.header.sourceRevision = 'current-revision';
+  candidate.header.profile = 'current-profile';
+  for (const row of candidate.runs) row.profile = candidate.header.profile;
+  await writeFile(join(current, 'report.json'), JSON.stringify(candidate));
   const cli = resolve('tools/agent-bench/src/cli.ts');
   const run = promisify(execFile);
   try {
@@ -177,6 +219,22 @@ it('keeps valid ordinary report regeneration and emits actual comparison artifac
     const json = JSON.parse(await readFile(join(current, 'comparison.json'), 'utf8')) as Comparison;
     expect(json.rows).toHaveLength(14);
     expect(json.regressions).toEqual([]);
+    expect(json.before).toEqual(original.header);
+    expect(json.after).toEqual(candidate.header);
+    expect(json.artifacts).toEqual({ baseline, current });
+    const firstMarkdown = await readFile(join(current, 'comparison.md'), 'utf8');
+    for (const value of [
+      original.header.sourceRevision,
+      original.header.profile,
+      candidate.header.sourceRevision,
+      candidate.header.profile,
+      baseline,
+      current,
+      JSON.stringify(original.header.endpoint),
+      JSON.stringify(original.header.limits),
+    ]) {
+      expect(firstMarkdown).toContain(value);
+    }
     expect(await readFile(join(baseline, 'report.json'), 'utf8')).toBe(originalJson);
     expect(await readFile(join(current, 'summary.md'), 'utf8')).toContain('GPT-6');
     const changed = clone();

@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util';
 import { observedSmokeModel } from '../tests/observed-smoke-model.ts';
 import { loadConfig, positive } from './config.ts';
 import type { Lane } from './lanes/types.ts';
-import { regenerate } from './report.ts';
+import { regenerate, writeComparison } from './report.ts';
 import { run } from './runner.ts';
 import { loadTasks } from './tasks.ts';
 const parsed = parseArgs({
@@ -14,13 +14,19 @@ const parsed = parseArgs({
     runs: { type: 'string' },
     config: { type: 'string' },
     output: { type: 'string' },
+    compare: { type: 'string' },
     'mock-model': { type: 'boolean' },
   },
 });
 const command = parsed.positionals[0] ?? 'run';
 if (command === 'report') {
   if (!parsed.positionals[1]) throw new Error('Usage: agent-bench report <directory>');
-  await regenerate(resolve(parsed.positionals[1]));
+  const directory = resolve(parsed.positionals[1]);
+  const comparison = parsed.values.compare
+    ? await writeComparison(directory, resolve(parsed.values.compare))
+    : undefined;
+  await regenerate(directory);
+  if (comparison?.regressions.length) process.exitCode = 1;
 } else if (command === 'run') {
   const config = await loadConfig(parsed.values.config);
   if (parsed.values.runs) config.runsPerTask = positive(Number(parsed.values.runs), 'runs');

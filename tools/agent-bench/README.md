@@ -8,7 +8,12 @@ remain explicit; a delta is not automatically a runtime defect.
 pnpm agent-bench run --mock-model --runs 1 --output /tmp/agent-smoke
 pnpm agent-bench run --config /tmp/agent-endpoint.json --output /tmp/agent-live
 pnpm agent-bench report /tmp/agent-live
+pnpm agent-bench report /tmp/agent-live --compare /tmp/agent-baseline
 ```
+
+Comparison requires identical endpoint/limits/task set and complete matching run identities.
+`comparison.json`/`comparison.md` retain both headers and per-task/lane metric deltas.
+Any lost pass exits1 after writing artifacts; ±1/3 is labelled within noise, still a regression.
 
 Config (no-auth example):
 

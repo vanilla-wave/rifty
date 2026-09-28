@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { type Config, type Endpoint, redact, redactJson } from './config.ts';
 import type { diffTrees } from './files.ts';
 import type { JudgeVerdict } from './judge/context.ts';
@@ -128,4 +129,145 @@ export async function writeReport(dir: string, report: Report) {
 }
 export async function regenerate(dir: string) {
   await writeReport(dir, JSON.parse(await readFile(join(dir, 'report.json'), 'utf8')) as Report);
+}
+
+const metricKeys = [
+  'inputTokens',
+  'outputTokens',
+  'retries',
+  'compactions',
+  'repeatedCallNotices',
+  'editFailures',
+  'malformedToolCalls',
+] as const;
+type Summary = Record<
+  | (typeof metricKeys)[number]
+  | 'runs'
+  | 'passes'
+  | 'budgetExceeded'
+  | 'contextExceeded'
+  | 'medianSeconds'
+  | 'medianTools',
+  number
+>;
+function summarize(runs: Run[]): Summary {
+  const median = (values: number[]) => {
+    values.sort((a, b) => a - b);
+    const middle = Math.floor(values.length / 2);
+    return values.length % 2 ? values[middle]! : (values[middle - 1]! + values[middle]!) / 2;
+  };
+  return {
+    runs: runs.length,
+    passes: runs.filter((run) => run.outcome === 'pass').length,
+    budgetExceeded: runs.filter((run) => run.outcome === 'budget-exceeded').length,
+    contextExceeded: runs.filter((run) => run.outcome === 'context-exceeded').length,
+    medianSeconds: median(runs.map((run) => run.elapsedMs / 1000)),
+    medianTools: median(runs.map((run) => run.toolCalls)),
+    ...(Object.fromEntries(
+      metricKeys.map((key) => [key, runs.reduce((sum, run) => sum + run[key], 0)]),
+    ) as Record<(typeof metricKeys)[number], number>),
+  };
+}
+function comparisonGroups(report: Report) {
+  if (
+    !Number.isInteger(report.header.runsPerTask) ||
+    report.header.runsPerTask < 1 ||
+    !report.runs.length
+  )
+    throw new Error('Invalid comparison run count');
+  const identities = new Set<string>();
+  const groups = new Map<string, Run[]>();
+  for (const run of report.runs) {
+    if (
+      !run.task ||
+      !['rifty', 'rifty-no-coi', 'local-reference'].includes(run.lane) ||
+      !Number.isInteger(run.runIndex) ||
+      run.runIndex < 1 ||
+      run.runIndex > report.header.runsPerTask
+    )
+      throw new Error('Invalid comparison identity');
+    const identity = JSON.stringify([run.task, run.lane, run.runIndex]);
+    if (identities.has(identity)) throw new Error(`Duplicate comparison identity: ${identity}`);
+    identities.add(identity);
+    for (const key of [...metricKeys, 'elapsedMs', 'toolCalls'] as const)
+      if (!Number.isFinite(run[key]) || run[key] < 0)
+        throw new Error(`Invalid metric ${key}: ${identity}`);
+    if (!['pass', 'fail', 'budget-exceeded', 'context-exceeded'].includes(run.outcome))
+      throw new Error(`Invalid outcome: ${identity}`);
+    const key = JSON.stringify([run.task, run.lane]);
+    const group = groups.get(key) ?? [];
+    group.push(run);
+    groups.set(key, group);
+  }
+  for (const [key, rows] of groups)
+    if (rows.length !== report.header.runsPerTask)
+      throw new Error(`Incomplete comparison group: ${key}`);
+  return { groups, identities };
+}
+export function compareReports(before: Report, after: Report) {
+  for (const key of ['endpoint', 'limits', 'taskSet', 'runsPerTask'] as const)
+    if (!isDeepStrictEqual(before.header[key], after.header[key]))
+      throw new Error(`Incompatible comparison configuration: ${key}`);
+  const previous = comparisonGroups(before);
+  const current = comparisonGroups(after);
+  if (!isDeepStrictEqual(previous.identities, current.identities))
+    throw new Error('Incompatible comparison identities');
+  const rows = [...previous.groups].map(([key, runs]) => {
+    const old = summarize(runs);
+    const next = summarize(current.groups.get(key)!);
+    const delta = Object.fromEntries(
+      (Object.keys(old) as (keyof Summary)[]).map((key) => [key, next[key] - old[key]]),
+    ) as Summary;
+    return {
+      task: runs[0]!.task,
+      lane: runs[0]!.lane,
+      before: old,
+      after: next,
+      delta,
+      noise: old.runs === 3 && Math.abs(delta.passes) === 1,
+      regression: delta.passes < 0,
+    };
+  });
+  return {
+    before: before.header,
+    after: after.header,
+    rows,
+    regressions: rows.filter((row) => row.regression).map(({ task, lane }) => ({ task, lane })),
+  };
+}
+export async function writeComparison(current: string, baseline: string) {
+  const read = async (dir: string) =>
+    JSON.parse(await readFile(join(dir, 'report.json'), 'utf8')) as Report;
+  const comparison = {
+    ...compareReports(await read(baseline), await read(current)),
+    artifacts: { baseline, current },
+  };
+  const lines = [
+    '# Agent benchmark comparison',
+    '',
+    `Baseline artifacts: ${baseline}`,
+    `Current artifacts: ${current}`,
+    '',
+    `Before: ${JSON.stringify(comparison.before)}`,
+    `After: ${JSON.stringify(comparison.after)}`,
+    '',
+    'Delta = after − before. ±1 pass on 3 runs is within noise; negative remains a regression.',
+    '',
+  ];
+  for (const row of comparison.rows) {
+    lines.push(
+      `## ${row.task} / ${row.lane}`,
+      '',
+      `${row.regression ? 'REGRESSION' : 'No regression'}${row.noise ? ' (within noise)' : ''}.`,
+      '',
+      '| Metric | Before | After | Delta |',
+      '|---|---:|---:|---:|',
+    );
+    for (const key of Object.keys(row.before) as (keyof Summary)[])
+      lines.push(`| ${key} | ${row.before[key]} | ${row.after[key]} | ${row.delta[key]} |`);
+    lines.push('');
+  }
+  await writeFile(join(current, 'comparison.json'), `${JSON.stringify(comparison, null, 2)}\n`);
+  await writeFile(join(current, 'comparison.md'), `${lines.join('\n')}\n`);
+  return comparison;
 }

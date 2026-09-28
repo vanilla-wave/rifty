@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Compare fixed-config recorded runs with exact identities, per-task/lane metric deltas, preserved provenance and visible regressions.
+
 - Preserve JSON numbers and native protocol tags during credential redaction; derive every lane's metrics from live events before masking payload strings.
 - Keep generated report addresses/revisions valid while masking credential-bearing payload keys, including filenames.
 
