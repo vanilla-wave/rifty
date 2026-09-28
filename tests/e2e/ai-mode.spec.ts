@@ -1012,3 +1012,22 @@ test('repeated failed exact edits stay visible, retain the file and steer before
     await model.close();
   }
 });
+
+test('catalog JSON keeps typed text; basic fields re-serialize it', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/');
+  await pickStarter(page);
+  await openChat(page);
+  const panel = page.getByTestId('ai-panel');
+  await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+  await panel.getByText('Advanced catalog', { exact: true }).click();
+  const catalog = panel.getByLabel('Model catalog (JSON)', { exact: true });
+  const typed = JSON.stringify([entry('typed', 'http://127.0.0.1:9/v1')]);
+  await catalog.fill('');
+  await catalog.pressSequentially(typed);
+  expect(await catalog.inputValue()).toBe(typed);
+  await panel.getByLabel('Base URL', { exact: true }).fill('http://127.0.0.1:8/v1');
+  await expect
+    .poll(async () => JSON.parse(await catalog.inputValue())[0].baseUrl)
+    .toBe('http://127.0.0.1:8/v1');
+});
