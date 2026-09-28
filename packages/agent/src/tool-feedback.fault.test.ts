@@ -186,6 +186,46 @@ describe('honest tool feedback', () => {
       await f.session.dispose();
     }
   });
+  it.each([
+    ['same', 1],
+    ['other', 0],
+  ] as const)(
+    'repeat detection ignores diagnostics timing (third write %s → %i notices)',
+    async (third, notices) => {
+      const write = (content: string) => call('write_file', { path: 'one.txt', content });
+      let answers = 0;
+      const f = await fixture(
+        [[write('same'), write('same'), write(third), write('same')], 'Done'],
+        {},
+        // First answer stays pending past the bounded wait; later ones resolve.
+        () => (answers++ ? Promise.resolve([]) : new Promise(() => {})),
+      );
+      try {
+        await f.session.send('write');
+        expect(f.writes()).toBe(4);
+        const trace = await f.session.exportTrace();
+        const results = trace.transcript.filter((message) => message.role === 'toolResult');
+        expect(results.map(text)).toEqual([
+          expect.stringContaining('\nwrote 4 bytes to one.txt\ndiagnostics: pending'),
+          expect.stringContaining('\n/one.txt: diagnostics: 0 diagnostic(s)'),
+          expect.stringContaining('\n/one.txt: diagnostics: 0 diagnostic(s)'),
+          expect.stringContaining('\n/one.txt: diagnostics: 0 diagnostic(s)'),
+        ]);
+        expect(repeated(trace.events)).toHaveLength(notices);
+        if (notices) {
+          const at = trace.events.findIndex(({ event }) => event.type === 'repeated-call');
+          const started = trace.events
+            .slice(0, at)
+            .filter(
+              ({ event }) => event.type === 'agent' && event.event.type === 'tool_execution_start',
+            );
+          expect(started).toHaveLength(3);
+        }
+      } finally {
+        await f.session.dispose();
+      }
+    },
+  );
   it('preserves consecutive-call state across sends and clears it on reset', async () => {
     const same = call('read_file', { path: 'one.txt' });
     const f = await fixture([[same, same], 'One', [same], 'Two', [same, same], 'Three']);
