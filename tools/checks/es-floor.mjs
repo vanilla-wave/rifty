@@ -15,7 +15,7 @@ const { parse } = createRequire(
 )('acorn');
 
 export const GUARDED_BUILTINS = Object.freeze({
-  'Atomics.waitAsync': 'ADR-0469: verified local typeof guards or failure-recording probes only',
+  'Atomics.waitAsync': 'ADR-0469: verified local typeof guards only',
 });
 const STATIC_BUILTINS = new Set([
   'Array.fromAsync',
@@ -140,6 +140,7 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
   const parents = new WeakMap();
   const bindings = new WeakMap();
   const assignments = new WeakMap();
+  const immutableBindings = new WeakSet();
   const isFunction = (node) =>
     ['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(node?.type);
   function scopeAt(node, functionScope = false) {
@@ -157,6 +158,7 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
     const scope = scopeAt(node, node?.type === 'VariableDeclaration' && node.kind === 'var');
     if (!bindings.has(scope)) bindings.set(scope, new Map());
     bindings.get(scope).set(name, value);
+    if (node?.type === 'VariableDeclaration' && node.kind === 'const') immutableBindings.add(value);
   }
   function declarePattern(pattern, receiver, owner) {
     for (const property of pattern.properties) {
@@ -174,6 +176,16 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
         declarePattern(property.value, member, owner);
     }
   }
+  function declareUnknown(pattern, owner) {
+    if (!pattern) return;
+    if (pattern.type === 'Identifier') declare(pattern.name, { init: null }, owner);
+    else if (pattern.type === 'ObjectPattern') {
+      for (const property of pattern.properties)
+        declareUnknown(property.value ?? property.argument, owner);
+    } else if (pattern.type === 'ArrayPattern') {
+      for (const element of pattern.elements) declareUnknown(element, owner);
+    } else declareUnknown(pattern.left ?? pattern.argument, owner);
+  }
   walk(tree, (node, parent) => {
     parents.set(node, parent);
     if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier')
@@ -181,11 +193,8 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
     if (node.type === 'VariableDeclarator' && node.id.type === 'ObjectPattern')
       declarePattern(node.id, node.init, parent);
     if (node.type === 'FunctionDeclaration' && node.id) declare(node.id.name, node, parent);
-    if (isFunction(node)) {
-      for (const param of node.params) {
-        if (param.type === 'Identifier') declare(param.name, { init: null }, node);
-      }
-    }
+    if (isFunction(node)) for (const param of node.params) declareUnknown(param, node);
+    if (node.type === 'CatchClause') declareUnknown(node.param, node.body);
   });
   function binding(identifier) {
     for (let current = identifier; current; current = parents.get(current)) {
@@ -201,22 +210,24 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
     if (!assignments.has(declaration)) assignments.set(declaration, []);
     assignments.get(declaration).push(node.right);
   });
-  function nativeName(node, seen = new Set()) {
+  function nativeName(node, seen = new Set(), requireImmutable = false) {
     if (!node) return null;
     if (node.type === 'Identifier') {
       const declaration = binding(node);
       if (!declaration) return node.name;
       if (seen.has(declaration)) return null;
+      if (requireImmutable && (!immutableBindings.has(declaration) || assignments.has(declaration)))
+        return null;
       seen.add(declaration);
       const names = [declaration.init, ...(assignments.get(declaration) ?? [])]
-        .map((value) => nativeName(value, new Set(seen)))
+        .map((value) => nativeName(value, new Set(seen), requireImmutable))
         .filter(Boolean);
       return (
         names.find((name) => name === 'Atomics' || name === 'Atomics.waitAsync') ?? names[0] ?? null
       );
     }
     if (node.type !== 'MemberExpression') return null;
-    const object = nativeName(node.object, seen);
+    const object = nativeName(node.object, seen, requireImmutable);
     return object ? `${object}.${propertyName(node)}`.replace(/^globalThis\./, '') : null;
   }
   function guarantees(test, truth) {
@@ -234,7 +245,7 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
     return (
       probe.type === 'UnaryExpression' &&
       probe.operator === 'typeof' &&
-      nativeName(probe.argument) === 'Atomics.waitAsync' &&
+      nativeName(probe.argument, new Set(), true) === 'Atomics.waitAsync' &&
       expected.type === 'Literal' &&
       expected.value === 'function' &&
       ((truth && ['===', '=='].includes(test.operator)) ||
@@ -306,112 +317,8 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
     });
     return valid;
   }
-  function functionFor(expression) {
-    const declaration = expression?.type === 'Identifier' ? binding(expression) : null;
-    return isFunction(declaration)
-      ? declaration
-      : isFunction(declaration?.init)
-        ? declaration.init
-        : null;
-  }
-  function field(object, name) {
-    return object?.type === 'ObjectExpression'
-      ? object.properties.find(
-          (property) =>
-            property.type === 'Property' && (property.key.name ?? property.key.value) === name,
-        )?.value
-      : null;
-  }
-  function failureObject(object) {
-    return (
-      field(object, 'status')?.value === 'failed' &&
-      Boolean(field(object, 'reason') || field(object, 'error'))
-    );
-  }
-  function failureValue(expression) {
-    if (failureObject(expression) || failureObject(field(expression, 'check'))) return true;
-    if (expression?.type !== 'CallExpression') return false;
-    const fn = functionFor(expression.callee);
-    return (
-      fn?.body.type === 'BlockStatement' &&
-      fn.body.body.some(
-        (statement) => statement.type === 'ReturnStatement' && failureObject(statement.argument),
-      )
-    );
-  }
-  function recordingCall(call, payload) {
-    if (call.callee.type !== 'MemberExpression') return false;
-    if (propertyName(call.callee) === 'postMessage') {
-      return nativeName(call.callee.object) === 'globalThis' && call.arguments[0] === payload;
-    }
-    if (propertyName(call.callee) !== 'set' || call.arguments[1] !== payload) return false;
-    const declaration =
-      call.callee.object.type === 'Identifier' ? binding(call.callee.object) : null;
-    return (
-      declaration?.init?.type === 'NewExpression' && memberName(declaration.init.callee) === 'Map'
-    );
-  }
-  function recordsFailure(statement) {
-    const call = statement.type === 'ExpressionStatement' ? statement.expression : null;
-    if (call?.type !== 'CallExpression') return false;
-    const payload = call.arguments.find(failureValue);
-    if (!payload) return false;
-    if (recordingCall(call, payload)) return true;
-    const recorder = functionFor(call.callee);
-    const param = recorder?.params[call.arguments.indexOf(payload)];
-    if (param?.type !== 'Identifier') return false;
-    let recorded = false;
-    walk(recorder.body, (operation) => {
-      if (operation.type !== 'CallExpression') return;
-      for (const argument of operation.arguments) {
-        if (
-          argument.type === 'Identifier' &&
-          argument.name === param.name &&
-          recordingCall(operation, argument)
-        )
-          recorded = true;
-      }
-    });
-    return recorded;
-  }
-  function caughtProbe(node) {
-    let callback = node;
-    while (callback && !isFunction(callback)) callback = parents.get(callback);
-    const call = parents.get(callback);
-    if (call?.type !== 'CallExpression') return false;
-    const runner = functionFor(call.callee);
-    const param = runner?.params[call.arguments.indexOf(callback)];
-    if (param?.type !== 'Identifier' || runner.body.type !== 'BlockStatement') return false;
-    let uses = 0;
-    walk(runner.body, (reference, parent) => {
-      if (
-        reference.type === 'Identifier' &&
-        reference.name === param.name &&
-        !(parent?.type === 'MemberExpression' && parent.property === reference && !parent.computed)
-      )
-        uses++;
-    });
-    if (uses !== 1) return false;
-    return runner.body.body.some(
-      (statement) =>
-        statement.type === 'TryStatement' &&
-        statement.handler &&
-        statement.handler.body.body.some(recordsFailure) &&
-        statement.block.body.some((action) => {
-          if (action.type !== 'ExpressionStatement') return false;
-          const awaited = action.expression.type === 'AwaitExpression';
-          const invocation = awaited ? action.expression.argument : action.expression;
-          return (
-            invocation.type === 'CallExpression' &&
-            invocation.callee.type === 'Identifier' &&
-            invocation.callee.name === param.name &&
-            (!callback.async || awaited)
-          );
-        }),
-    );
-  }
   function waitAsyncAllowed(node) {
-    return locallyGuarded(node) || guardedExtraction(node) || caughtProbe(node);
+    return locallyGuarded(node) || guardedExtraction(node);
   }
   const errors = [];
   function report(node, name) {

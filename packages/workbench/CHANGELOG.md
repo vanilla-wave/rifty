@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Feature-check `Atomics.waitAsync` inside both support probes; retain TypeError failure reporting when unavailable.
+
 - Keep no-COI filesystem descriptor sorting compatible with Chrome 108 (ES2022).
 
 - Remove `checkSandboxSupport` scratch storage even when the probe deadline expires while the Worker still holds its OPFS sync access handle; the lock is waited out inside the cleanup deadline, and a lock that outlives it reports `cleanup: incomplete` naming the native error instead of a failure the caller cannot act on (ADR-0439).

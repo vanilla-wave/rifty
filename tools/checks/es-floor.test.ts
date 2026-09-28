@@ -230,41 +230,40 @@ describe('shipped ES2022 floor', () => {
     expect(violations(unguarded).join('\n')).toContain('Atomics.waitAsync');
   });
 
-  it('allows probes only while invocation and failure reporting stay bound to try/catch', () => {
+  it('requires a local capability check even inside a failure-reporting probe', () => {
     const source = `function probe(id, operation) {
       try { operation(); }
       catch (error) { globalThis.postMessage({ status: 'failed', error }); }
     }
     probe('shared-memory', () => Atomics.waitAsync(words, 0, 0));`;
-    expect(violations(source)).toEqual([]);
-    expect(violations(source.replace("status: 'failed'", "status: 'passed'")).join('\n')).toContain(
-      'Atomics.waitAsync',
-    );
-    expect(
-      violations(source.replace('try { operation(); }', 'operation(); try {}')).join('\n'),
-    ).toContain('Atomics.waitAsync');
-    expect(
-      violations(source.replace('operation();', 'if (false) operation();')).join('\n'),
-    ).toContain('Atomics.waitAsync');
-    expect(violations(`${source} Atomics.waitAsync(words, 0, 0);`).join('\n')).toContain(
-      'Atomics.waitAsync',
-    );
+    expect(violations(source).join('\n')).toContain('Atomics.waitAsync');
   });
 
-  it('requires awaiting an async probe to catch native rejection', () => {
-    const source = `async function probe(id, operation) {
-      try { await operation(); }
-      catch (error) { globalThis.postMessage({ status: 'failed', error }); }
-    }
-    probe('shared-memory', async () => Atomics.waitAsync(words, 0, 0));`;
+  it('accepts a guarded callback without inferring anything about its runner', () => {
+    const source = `run(() => {
+      const native = Atomics;
+      if (typeof native.waitAsync !== 'function') throw new TypeError('missing');
+      return native.waitAsync(words, 0, 0);
+    });`;
     expect(violations(source)).toEqual([]);
-    expect(violations(source.replace('await operation()', 'operation()')).join('\n')).toContain(
-      'Atomics.waitAsync',
-    );
+  });
+
+  it.each([
+    `let wait = () => ({ value: 'fallback' });
+      if (typeof Atomics.waitAsync === 'function') wait = Atomics.waitAsync;
+      if (typeof wait === 'function') Atomics.waitAsync(words, 0, 0);`,
+    `const native = Atomics;
+      try { throw { waitAsync: () => 1 }; }
+      catch (native) { if (typeof native.waitAsync === 'function') Atomics.waitAsync(words, 0, 0); }`,
+    `function run({ Atomics }) {
+      if (typeof Atomics.waitAsync === 'function') globalThis.Atomics.waitAsync(words, 0, 0);
+    } run({ Atomics: { waitAsync: () => 1 } });`,
+  ])('does not grant native availability from an ambiguous or shadowed alias: %s', (source) => {
+    expect(violations(source).join('\n')).toContain('Atomics.waitAsync');
   });
 
   it.each(['support-worker.ts', 'check-sandbox-support.ts'])(
-    'binds the real emitted %s callback to its failure recorder',
+    'requires the local native guard in real emitted %s',
     (entry) => {
       const emitted = buildSync({
         entryPoints: [`packages/workbench/src/support/${entry}`],
@@ -275,9 +274,12 @@ describe('shipped ES2022 floor', () => {
         target: 'es2022',
       }).outputFiles[0].text;
       expect(violations(emitted)).toEqual([]);
-      const withoutFailureRecord = emitted.replaceAll('status: "failed"', 'status: "passed"');
-      expect(withoutFailureRecord).not.toBe(emitted);
-      expect(violations(withoutFailureRecord).join('\n')).toContain('Atomics.waitAsync');
+      const withoutLocalGuard = emitted.replace(
+        /if \(typeof atomics\.waitAsync !== "function"\) \{\s*throw new TypeError\("Atomics\.waitAsync is not a function"\);\s*\}/,
+        '',
+      );
+      expect(withoutLocalGuard).not.toBe(emitted);
+      expect(violations(withoutLocalGuard).join('\n')).toContain('Atomics.waitAsync');
     },
   );
 
