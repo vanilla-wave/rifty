@@ -774,6 +774,8 @@ test('catalog controls switch providers after error without losing tool history'
     await panel.getByLabel('Message', { exact: true }).fill('Write the proof, then continue.');
     await panel.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(panel).toHaveAttribute('data-status', 'error', { timeout: 25000 });
+    await expect(panel).not.toContainText('CATALOG_HEADER_SECRET');
+    await expect(panel).not.toContainText('CATALOG_UI_SECRET');
     await expect(panel.getByTestId('ai-continuation')).toHaveCount(3);
     expect(first.requests).toHaveLength(5);
     await panel.getByRole('button', { name: 'Continue with second', exact: true }).click();
