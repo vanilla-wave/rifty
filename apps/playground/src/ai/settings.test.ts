@@ -20,6 +20,7 @@ describe('sessionCatalog secrets', () => {
         'X-Client-Secret': 'client-secret',
         'Ocp-Apim-Subscription-Key': 'azure-subscription',
         Cookie: 'sid=cookie-session',
+        'X-Session-Id': 'session-identifier',
         'X-Key': 'short-key',
       }),
     );
@@ -34,9 +35,22 @@ describe('sessionCatalog secrets', () => {
         'client-secret',
         'azure-subscription',
         'sid=cookie-session',
+        'session-identifier',
         'short-key',
       ]),
     );
+  });
+
+  it('values under 8 characters are not declared: masking `5` would corrupt `500: …`', () => {
+    const { secrets } = sessionCatalog(
+      settings({
+        'X-Session-Pool': '5',
+        'X-Key': 'short',
+        'X-Session-Token': 'abcdefgh',
+        Authorization: 'Bearer abc',
+      }),
+    );
+    expect(new Set(secrets)).toEqual(new Set(['abcdefgh', 'Bearer abc']));
   });
 
   it('ordinary headers are not secrets', () => {
