@@ -92,7 +92,7 @@ const VIEW_CONSTRUCTORS = new Map<object, ViewConstructor>(
 const DETACHED_TEXT = 'An ArrayBuffer is detached and could not be cloned.';
 
 function unsupported(
-  kind: 'host-object' | 'detached-array-buffer' | 'accessor-with-view',
+  kind: 'host-object' | 'detached-array-buffer' | 'accessor-with-view' | 'constructor-accessor',
   hint: string,
 ): NotImplementedError {
   return new NotImplementedError(`child_process.serialization.advanced.${kind}`, hint);
@@ -235,9 +235,25 @@ function entriesOf(node: object, isMap: boolean): unknown[] {
   return out;
 }
 
+/** A constructor getter would run after its bytes were already cloned (ADR-0480). */
+function viewConstructor(view: object): unknown {
+  // TODO(backlog: runtime-js/advanced-ipc-proxy-prototype): descriptor traps can still mutate bytes.
+  for (let owner: object | null = view; owner !== null; owner = getPrototypeOf(owner)) {
+    const descriptor = getOwnPropertyDescriptor(owner, 'constructor');
+    if (descriptor === undefined) continue;
+    if (!('value' in descriptor)) {
+      throw unsupported(
+        'constructor-accessor',
+        'a view constructor accessor cannot run in Node serialization order',
+      );
+    }
+    return descriptor.value;
+  }
+  return undefined;
+}
+
 /**
- * The clone views whose original `constructor` is `Buffer`, read once as
- * Node's `_writeHostObject` does, by walking the message beside its clone
+ * The clone views whose original `constructor` is `Buffer`, resolved without invoking accessors (ADR-0480), by walking the message beside its clone
  * along what V8 traversed. An own accessor or a diverged graph makes the brand
  * unknowable.
  */
@@ -261,7 +277,7 @@ function bufferViews(message: unknown, clone: unknown): Set<ArrayBufferView> {
     const proto = getPrototypeOf(copy);
     if (VIEW_CONSTRUCTORS.has(proto)) {
       if (!isView(original)) throw brandUnknowable();
-      if (isBufferClass((original as { constructor?: unknown }).constructor)) {
+      if (isBufferClass(viewConstructor(original))) {
         branded.add(copy as ArrayBufferView);
       }
     } else if (proto === ObjectPrototype || proto === ArrayPrototype) {

@@ -340,7 +340,9 @@ export function forkExecArgv(value: unknown): readonly string[] {
     const index = tokens.lastIndexOf(launch.source);
     if (index > 0) tokens = [...tokens.slice(0, index - 1), ...tokens.slice(index + 1)];
   }
-  return compileNodeStartupOptions(tokens, 'child_process.fork').execArgv;
+  // Node spreads execArgv before spawn validates it; preserve its iterable TypeError.
+  const execArgv = tokens as Iterable<unknown>;
+  return compileNodeStartupOptions([...execArgv], 'child_process.fork').execArgv;
 }
 
 export interface SpawnWorkerChildOptions {

@@ -47,8 +47,14 @@ export class WorkerStdio {
     owner: { readonly stdout?: unknown; readonly stderr?: unknown } | undefined,
     capture: { readonly stdout: boolean; readonly stderr: boolean },
   ) {
-    if (!capture.stdout) pipeWithoutWarning(this.stdout, owner?.stdout, 'stdout');
-    if (!capture.stderr) pipeWithoutWarning(this.stderr, owner?.stderr, 'stderr');
+    try {
+      if (!capture.stdout) pipeWithoutWarning(this.stdout, owner?.stdout, 'stdout');
+      if (!capture.stderr) pipeWithoutWarning(this.stderr, owner?.stderr, 'stderr');
+    } catch (error) {
+      this.stdout.unpipe();
+      this.stderr.unpipe();
+      throw error;
+    }
   }
 
   /** Feed from the kernel worker's output; the kernel drains it before its 'exit'. */

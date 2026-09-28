@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
+import { constructorCase } from '../../../tools/node-parity-runner/cases/child_process/public-ipc-advanced-constructor-program.ts';
 import advancedFault from '../../../tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts';
 import advancedOptions from '../../../tools/node-parity-runner/cases/child_process/public-ipc-advanced-options.case.ts';
 import advancedSameRealm from '../../../tools/node-parity-runner/cases/child_process/public-ipc-advanced-same-realm.case.ts';
@@ -28,6 +29,8 @@ function fromParityCase(name: string, parityCase: ParityCase): AdvancedIpcProgra
   }
   return { name, main: parityCase.code, files };
 }
+
+export const constructorProgram = fromParityCase('constructor', constructorCase);
 
 export const parityPrograms: readonly AdvancedIpcProgram[] = [
   fromParityCase('values', advancedValues),

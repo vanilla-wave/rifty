@@ -96,6 +96,46 @@ describe('advanced fork IPC ceilings (ADR-0448)', () => {
     expect(await refuseThenSend(value)).toEqual(refusedByName('detached-array-buffer'));
   });
 
+  it('retains graph getter order before refusing a message with a view', async () => {
+    const calls: string[] = [];
+    const value = () => ({
+      get first() {
+        calls.push('first');
+        return 1;
+      },
+      view: new Uint8Array([1]),
+      get last() {
+        calls.push('last');
+        return 2;
+      },
+    });
+    expect(await refuseThenSend(value)).toEqual(refusedByName('accessor-with-view'));
+    expect(calls).toEqual(['first', 'last']);
+  });
+
+  it.each(['own', 'inherited'])(
+    '%s constructor accessor is refused on the same-realm route',
+    async (kind) => {
+      let calls = 0;
+      expect(
+        await refuseThenSend(() => {
+          const view = new Uint8Array([1]);
+          const owner = kind === 'own' ? view : Object.create(Uint8Array.prototype);
+          Object.defineProperty(owner, 'constructor', {
+            get() {
+              calls++;
+              view[0] = 2;
+              return Uint8Array;
+            },
+          });
+          if (kind === 'inherited') Object.setPrototypeOf(view, owner);
+          return view;
+        }),
+      ).toEqual(refusedByName('constructor-accessor'));
+      expect(calls).toBe(0);
+    },
+  );
+
   it.each([
     [
       'an own getter beside a Buffer',

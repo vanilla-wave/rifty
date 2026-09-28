@@ -44,7 +44,7 @@ import { WorkerStdio } from './worker_threads-stdio.ts';
 
 interface WorkerOptions {
   workerData?: unknown;
-  env?: Record<string, string | undefined>;
+  env?: Record<string, string | undefined> | null;
   eval?: boolean;
   execArgv?: readonly string[] | null;
   stdin?: boolean;
@@ -123,20 +123,18 @@ export class Worker extends EventEmitter {
     this.ownerBootstrap = readActiveNodeProcessBootstrap();
     const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
     this.launch = resolveWorkerLaunch(opts);
-    // Node pipes into its bootstrap process's streams, not a reassigned global.
-    this.stdio = this.launch.kernelBacked
-      ? new WorkerStdio(publicNodeProcess() as { stdout?: unknown }, this.launch.capture)
-      : null;
     const processContext = snapshotNodeProcessContext();
     const env =
-      opts.env === undefined
-        ? { ...(processContext?.env ?? {}) }
-        : snapshotWorkerEnvironment(opts.env);
-    this.threadId = nextThreadId++;
+      opts.env == null ? { ...(processContext?.env ?? {}) } : snapshotWorkerEnvironment(opts.env);
     this.entry = entry;
     this.workerData = opts.workerData;
     this.processContext = processContext;
     this.env = env;
+    // Node pipes into its bootstrap process's streams, not a reassigned global.
+    this.stdio = this.launch.kernelBacked
+      ? new WorkerStdio(publicNodeProcess() as { stdout?: unknown }, this.launch.capture)
+      : null;
+    this.threadId = nextThreadId++;
     // ADR-0446: held from here (after every synchronous validation) to the end.
     this.references = attachWorkerReferences(this);
     // TODO(backlog: runtime-js/worker-threads-prompt-start-atomics-wait):

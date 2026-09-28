@@ -108,6 +108,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0450 | Project vm script offsets through one owned stack hook |
 | 0458 | Read the realm-bound `node:process` registry entry uncached in io |
 | 0464 | Named-loud members for charted unclaimed-mode ceilings |
+| 0480 | Refuse advanced IPC view constructor accessors |
 
 ### runtime-wasi
 

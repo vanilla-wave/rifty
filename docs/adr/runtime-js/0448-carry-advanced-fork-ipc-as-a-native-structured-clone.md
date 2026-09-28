@@ -161,3 +161,8 @@ the message could tell.
 ## Corrections (active)
 
 2026-09-25 — ADR-0449: Node entry now uses v6 (program and worker-thread launches carry `execArgv`); advanced IPC unchanged.
+
+2026-09-29 — ADR-0480 partially supersedes Decision 3's constructor read and the
+“error paths only” residual classification. A constructor accessor can change
+successful-send bytes; own/inherited accessors now throw before dispatch.
+Proxy-prototype effects remain a separate successful-send gap, not error precedence.

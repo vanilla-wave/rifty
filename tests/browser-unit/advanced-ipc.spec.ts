@@ -5,6 +5,7 @@ import {
   ceilingNodeRows,
   ceilingProgram,
   ceilingRows,
+  constructorProgram,
   parityPrograms,
   programRows,
   runNodeProgram,
@@ -82,6 +83,27 @@ test('Chromium ceiling values in an advanced message fail by name, posting nothi
     const run = await runInRifty(page, ceilingProgram);
     expect(run.timedOut, run.out).toBe(false);
     expect(programRows(run.out, isRow), run.out).toEqual(ceilingRows);
+    expect(run.exit, run.out).toBe(0);
+  });
+});
+
+test('view constructor accessors are a named refusal in Chromium, with no dispatch', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const { constructorNodeRows, constructorRiftyRows } = await import(
+    '../../tools/node-parity-runner/cases/child_process/public-ipc-advanced-constructor-program.ts'
+  );
+  const oracle = await runNodeProgram(constructorProgram);
+  expect(oracle.code, oracle.stderr).toBe(0);
+  expect(programRows(oracle.stdout, () => true)).toEqual(constructorNodeRows);
+  await withOwner(page, constructorProgram.name, async () => {
+    const run = await runInRifty(page, constructorProgram);
+    expect(run.timedOut, run.out).toBe(false);
+    const labels = new Set(['own', 'inherited', 'data', 'subclass', 'buffer', 'received']);
+    expect(programRows(run.out, (line) => labels.has(line.split(' ', 1)[0] ?? ''))).toEqual(
+      constructorRiftyRows,
+    );
     expect(run.exit, run.out).toBe(0);
   });
 });

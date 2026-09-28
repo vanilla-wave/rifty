@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Advanced IPC refuses own/inherited view constructor accessors before dispatch instead of sending stale bytes; data constructors and Buffer branding remain (ADR-0480).
+- Rejected Worker construction leaves owner stdio listeners untouched: snapshot options before piping, undo pipes when stdio setup fails. `env: null` inherits the parent environment, as in Node.
+- `fork` spreads `execArgv` before compiling startup options, preserving Node's TypeError for non-iterables.
+
 - `awaitDrain` settles with the active process's first exit terminal (`exit()`, a fatal rejection, a throwing `uncaughtException` listener), not only a recorded rejection (ADR-0445 note 2026-09-25): an in-process host without a control port (no-COI command, runBin) now sees exit 7 / an in-handler `exit(n)` instead of draining on to a natural exit 0, and no later task of that process runs. `activeRefs` is on `./internal`.
 - A runtime fatal exit (no-listener unhandled rejection, throwing `uncaughtException` listener) keeps the error it ended the process for as the exit signal's `cause` (ADR-0445), so an in-process host still names a declared gap behind it.
 - `vm.constants` is Node's frozen null-prototype pair of symbols (`USE_MAIN_CONTEXT_DEFAULT_LOADER`, `DONT_CONTEXTIFY`), also a named ESM export; `createContext` / `runInNewContext` / `Script#runInNewContext` with `DONT_CONTEXTIFY` throw `NotImplementedError('vm.createContext.DONT_CONTEXTIFY')` after Node's option validation, so jsdom under vitest `environment: 'jsdom'` fails named instead of a bare `TypeError` (ADR-0464).

@@ -7,6 +7,7 @@
  * report are substituted; the real kernel ProcessManager allocates, wires and
  * retires, and the production realm error trap dispatches.
  */
+import { Worker as NativeWorker } from 'node:worker_threads';
 import {
   KERNEL_PROCESS_SPEC_KEY,
   publishKernelEntryBootstrap,
@@ -236,6 +237,57 @@ describe('worker_threads Worker keepalive holds (ADR-0446)', () => {
       restoreWorker();
     }
   });
+
+  it.each(['env getter', 'env coercion', 'workerData getter'] as const)(
+    '%s rejection leaves owner streams and keepalive unchanged, as in Node',
+    async (fault) => {
+      const options = () => {
+        if (fault === 'env coercion')
+          return {
+            env: {
+              BAD: {
+                toString() {
+                  throw new Error('coercion');
+                },
+              },
+            },
+          };
+        if (fault === 'workerData getter')
+          return {
+            get workerData() {
+              throw new Error('workerData');
+            },
+          };
+        return {
+          env: {
+            get BAD() {
+              throw new Error('env');
+            },
+          },
+        };
+      };
+      const counts = (owner: { stdout: unknown; stderr: unknown }) =>
+        [owner.stdout, owner.stderr].map((stream) =>
+          ['drain', 'error', 'close'].map((event) => (stream as EventEmitter).listenerCount(event)),
+        );
+      const nativeBefore = counts(process);
+      // Node itself attaches stdio before reading workerData; env failures precede it.
+      for (let attempt = 0; fault !== 'workerData getter' && attempt < 2; attempt++) {
+        expect(() => new NativeWorker('/missing.cjs', options() as never)).toThrow();
+        expect(counts(process)).toEqual(nativeBefore);
+      }
+      enableKernelWorkers();
+      await withParentProcess(async () => {
+        const baseline = activeRefs();
+        const before = counts(process);
+        for (let attempt = 0; attempt < 2; attempt++) {
+          expect(() => new Worker('/missing.cjs', options() as never)).toThrow();
+          expect(counts(process)).toEqual(before);
+          expect(activeRefs()).toBe(baseline);
+        }
+      });
+    },
+  );
 
   // Node v24.16.0 (evidence §Final+GREEN reception, r2): 'error' first; unhandled, it
   // is the owner's uncaught exception. Node's 'exit' 1 placement races it; these
