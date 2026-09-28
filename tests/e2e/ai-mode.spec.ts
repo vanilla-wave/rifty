@@ -1069,3 +1069,36 @@ test('basic UI models keep their own API keys', async ({ page }) => {
     await second.close();
   }
 });
+
+test('Continue with another model sends the edited draft instead of continue', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const first = await agentModelServer([{ error: 'first model rejected', status: 400 }]);
+  const second = await agentModelServer(['Answered the edited draft.']);
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await openChat(page);
+    const panel = page.getByTestId('ai-panel');
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    await panel.getByText('Advanced catalog', { exact: true }).click();
+    await panel
+      .getByLabel('Model catalog (JSON)', { exact: true })
+      .fill(JSON.stringify([entry('first', first.baseUrl), entry('second', second.baseUrl)]));
+    await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
+    await send(page, 'original draft');
+    await expect(panel).toHaveAttribute('data-status', 'error', { timeout: 25000 });
+    const message = panel.getByLabel('Message', { exact: true });
+    await expect(message).toHaveValue('original draft');
+    await message.fill('use the edited draft');
+    await panel.getByRole('button', { name: 'Continue with second', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    const users = second.requests[0]?.body.messages.filter((entry) => entry.role === 'user');
+    expect(JSON.stringify(users?.at(-1))).toContain('use the edited draft');
+    expect(JSON.stringify(users)).not.toMatch(/"(?:content|text)":"continue"/);
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
