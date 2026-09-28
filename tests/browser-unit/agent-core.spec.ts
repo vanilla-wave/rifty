@@ -246,7 +246,7 @@ test('Workbench host retains the read CAS version when an editor saves concurren
   expect(result).toEqual({ file: 'editor-change', error: 'FileConflictError' });
 });
 
-test('supplied API key reaches only the transport and is removed from exported values', async ({
+test('supplied API key reaches only the transport; provider echoes are scrubbed at ingress', async ({
   page,
 }) => {
   const result = await page.evaluate(
@@ -255,8 +255,11 @@ test('supplied API key reaches only the transport and is removed from exported v
   );
   expect(result.authorization).toBe(`Bearer ${result.key}`);
   expect(result.trace.config).not.toHaveProperty('apiKey');
-  expect(JSON.stringify(result.trace)).not.toContain(JSON.stringify(result.key).slice(1, -1));
-  expect(JSON.stringify(result.trace)).toContain('[redacted]');
+  expect(result.detail).toContain('Denied [redacted].');
+  const serialized = JSON.stringify(result.trace);
+  for (const form of [result.key, JSON.stringify(result.key).slice(1, -1)])
+    expect(serialized).not.toContain(JSON.stringify(form).slice(1, -1));
+  expect(serialized).toContain('[redacted]');
 });
 
 test('agent shell stdout, stderr and owner exit match the real user terminal', async ({ page }) => {

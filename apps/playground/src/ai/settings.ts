@@ -187,7 +187,9 @@ export function sessionCatalog(settings: ChatSettings) {
   }
   for (const [id, entries] of providers)
     models.setProvider(createOpenAIProvider({ id, models: entries, apiKey: settings.apiKeys[id] }));
-  return { models, model: settings.model, modelOptions };
+  // Playground policy: headers may carry credentials. apiKeys are masked by the provider.
+  const secrets = settings.models.flatMap((model) => Object.values(model.headers ?? {}));
+  return { models, model: settings.model, modelOptions, secrets };
 }
 
 export function saveSettings(settings: ChatSettings): boolean {

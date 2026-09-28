@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Repeated-call detection ignores mutation host-diagnostics timing (pending vs settled); README/ADR-0475 note state exactly which consumer results get budget receipts.
+- Breaking: scrub built-in keys and declared `secrets` once at provider ingress (history, status, retry/compaction, trace); headers are no longer implicit secrets; export-time redaction removed (ADR-0479).
 
 - Clarify native assistant retries versus the prohibition on tool-action replay.
 

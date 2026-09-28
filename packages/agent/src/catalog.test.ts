@@ -191,7 +191,7 @@ describe('embedder model catalog', () => {
     expect(reads).toBe(0);
   });
 
-  it('redacts provider credentials echoed in errors and retains effective model metadata', async () => {
+  it('scrubs the built-in key and declared secrets echoed in errors; retains effective model metadata', async () => {
     const f = fixture([{ error: 'failed catalog-secret header-secret' }]);
     const factory = (
       publicApi as unknown as {
@@ -217,6 +217,8 @@ describe('embedder model catalog', () => {
       host,
       models: f.models,
       model: 'small',
+      // Headers are not implicit secrets; the embedder declares private ones.
+      secrets: ['header-secret'],
     } as unknown as AgentSessionOptions);
     try {
       await session.send('fail');

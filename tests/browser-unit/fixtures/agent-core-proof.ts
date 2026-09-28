@@ -449,11 +449,13 @@ export async function proveConcurrentEdit() {
 
 export async function proveKeyExport() {
   const key = 'synthetic-key-"quote"-\\slash';
-  const { session, provider } = setup(['Reply without the key.'], 20, false, key);
+  // The provider echoes the key; its HTTP error body reaches pi JSON-escaped.
+  const { session, provider } = setup([{ error: `Denied ${key}.`, status: 400 }], 20, false, key);
   try {
-    await session.send(`Synthetic input contains ${key}.`);
+    await session.send('Use the configured key.');
     return {
       trace: await session.exportTrace(),
+      detail: session.detail(),
       authorization: provider.requests[0]?.authorization,
       key,
     };

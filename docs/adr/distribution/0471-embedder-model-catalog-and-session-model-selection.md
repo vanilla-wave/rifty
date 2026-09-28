@@ -53,3 +53,9 @@ Independent DEC-2 decision: `catalog_decision`, pi 0.85.1 executable probes in
 - Breaking 0.x API migration for all consumers; no npm publication in this PR.
 - Explicit catalog parameters replace implicit 128k/8192 defaults in sessions.
 - Providers own credential resolution and wire semantics; no fallback guessing.
+
+## Corrections (active)
+
+- 2026-09-28: ADR-0479 supersedes decision 4's redaction clause. Declared secrets and built-in
+  keys are scrubbed at provider ingress; export no longer redacts; headers are not implicit
+  secrets. Trace config still omits headers.

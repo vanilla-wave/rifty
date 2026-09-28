@@ -13,7 +13,7 @@ import {
   isContextOverflow,
 } from '@earendil-works/pi-ai';
 import { NotImplementedError } from '@riftydev/io';
-import { catalogSecrets, isOpenAIProvider, selectModel } from './catalog.ts';
+import { isOpenAIProvider, selectModel } from './catalog.ts';
 import { unsupportedChatCommand } from './chat-command.ts';
 import { createContinuation } from './continuation.ts';
 import { restoreMessages } from './history.ts';
@@ -22,7 +22,6 @@ import { loadResources } from './resources.ts';
 import { capToolText } from './text.ts';
 import { canonical, toolReceipt } from './tool-feedback.ts';
 import { isToolFailure, standardTools, wrapTool } from './tools.ts';
-import { redactTrace } from './trace.ts';
 import type {
   AgentResourceReport,
   AgentSession,
@@ -46,7 +45,6 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     );
   let model = selectModel(options.models, options.model);
   const requestDefaults = () => options.modelOptions?.[model.id] ?? {};
-  const secrets = new Set(catalogSecrets(options.models));
   const maxToolCalls = positiveInteger(options.maxToolCalls ?? 100, 'maxToolCalls');
   const runTimeoutMs = positiveInteger(options.runTimeoutMs ?? 600_000, 'runTimeoutMs');
   const initialMessages = restoreMessages(options.initialMessages);
@@ -483,7 +481,6 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       model = selected;
       agent.state.model = model;
       agent.state.thinkingLevel = requestDefaults().reasoning ?? 'off';
-      for (const secret of catalogSecrets(options.models)) secrets.add(secret);
       emit({ type: 'model', model: model.id, provider: model.provider });
     },
     status: () => status,
@@ -585,7 +582,8 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
         usage,
         finalDiff,
       };
-      return redactTrace(trace, secrets);
+      // Detached JSON snapshot; provider text was already scrubbed at ingress.
+      return JSON.parse(JSON.stringify(trace)) as AgentTrace;
     },
     async dispose() {
       if (disposed) return;

@@ -141,6 +141,11 @@ export interface AgentSessionOptions extends AgentSessionCommonOptions {
   readonly modelOptions?: Readonly<
     Record<string, Pick<SimpleStreamOptions, 'reasoning' | 'temperature' | 'samplingParams'>>
   >;
+  /**
+   * Exact strings masked as `[redacted]` in provider text at ingress, besides built-in
+   * provider apiKeys. Catalog headers are not implicit secrets. Copied at creation.
+   */
+  readonly secrets?: readonly string[];
 }
 
 export type AgentStatus =

@@ -95,14 +95,7 @@ export function selectModel(
   return { ...selected, reasoning: selected.reasoning ?? false, input: selected.input ?? ['text'] };
 }
 
-export function catalogSecrets(models: Models): string[] {
-  const headers = [
-    ...models.getModels().flatMap((model) => Object.values(model.headers ?? {})),
-    ...models.getProviders().flatMap((provider) => Object.values(provider.headers ?? {})),
-  ].filter((value): value is string => typeof value === 'string' && value.length > 0);
-  return [
-    ...models.getProviders().flatMap((provider) => providerKeys.get(provider) ?? []),
-    ...headers,
-    ...headers.map((value) => value.replace(/^Bearer\s+/i, '')),
-  ].filter(Boolean);
+/** apiKeys of built-in providers currently registered; headers are not implicit secrets. */
+export function builtInApiKeys(models: Models): string[] {
+  return models.getProviders().flatMap((provider) => providerKeys.get(provider) ?? []);
 }

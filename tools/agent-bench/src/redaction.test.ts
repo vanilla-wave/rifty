@@ -10,21 +10,16 @@ import { catalogEndpoint } from '../tests/catalog-endpoint.ts';
 import { redactJson, secretValues } from './config.ts';
 
 it.each([true, false])(
-  'keeps consumer payload private without masking ordinary headers (credential: %s)',
+  'keeps consumer payload private at the artifact boundary without masking ordinary headers (credential: %s)',
   async (credential) => {
     const wire = scriptedProvider([[{ name: 'header_info', args: {} }], 'Done.']);
+    const endpoint = catalogEndpoint(
+      'https://bench.invalid/v1',
+      credential ? { headers: { 'X-Key': 'assistant' } } : {},
+    );
     const models = createModels();
     models.setProvider(
-      createOpenAIProvider({
-        id: 'bench',
-        models: [
-          catalogEndpoint(
-            'https://bench.invalid/v1',
-            credential ? { headers: { 'X-Key': 'assistant' } } : {},
-          ),
-        ],
-        fetch: wire.fetch,
-      }),
+      createOpenAIProvider({ id: 'bench', models: [endpoint], fetch: wire.fetch }),
     );
     const session = createAgentSession({
       models,
@@ -54,17 +49,23 @@ it.each([true, false])(
       await session.send('Inspect headers');
       const trace = await session.exportTrace();
       expect(trace.status).toBe('done');
-      expect(trace.transcript.find((message) => message.role === 'toolResult')).toMatchObject({
+      const payload = (masked: boolean) => ({
         role: 'toolResult',
         details: {
           headers: {
-            role: credential ? '[redacted]' : 'assistant',
-            type: credential ? '[redacted]' : 'assistant',
+            role: masked ? '[REDACTED]' : 'assistant',
+            type: masked ? '[REDACTED]' : 'assistant',
             'Content-Type': 'text/plain',
           },
-          data: { [credential ? '[redacted].txt' : 'assistant.txt']: 'body' },
+          data: { [masked ? '[REDACTED].txt' : 'assistant.txt']: 'body' },
         },
       });
+      const toolResult = (value: typeof trace) =>
+        value.transcript.find((message) => message.role === 'toolResult');
+      // The agent scrubs provider text only; the bench artifact masks payload.
+      expect(toolResult(trace)).toMatchObject(payload(false));
+      const artifact = JSON.parse(redactJson(trace, secretValues(endpoint))) as typeof trace;
+      expect(toolResult(artifact)).toMatchObject(payload(credential));
     } finally {
       await session.dispose();
     }
@@ -119,6 +120,8 @@ it.each(['error', 'assistant', 'agent_end', 'status'])(
     const session = createAgentSession({
       models,
       model: 'scripted',
+      // Headers are not implicit agent secrets; a private one is declared.
+      secrets: [secret],
       host: {
         root: '/',
         capabilities: () => ({}),

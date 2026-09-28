@@ -1,7 +1,7 @@
 # Agent
 
 Framework-free Pi coding agent over public rifty hosts. Runtime packages do not
-depend on it. ADR-0424/0436/0471.
+depend on it. ADR-0424/0436/0471/0479.
 
 ```ts
 import { createAgentSession, createWorkbenchAgentHost, createModels, createOpenAIProvider } from '@riftydev/agent';
@@ -82,8 +82,8 @@ Pi owns provider conversion. Storage, JSON decoding and migrations stay with the
 `reset()` clears restored and new messages. Also clear the host's stored history on
 conversation/project reset. `exportTrace().restoredMessageCount` counts originally admitted messages
 until reset, independent of compaction; events, timings, aggregate usage and per-run limits describe
-only new runs. Reset clears that count. Trace export redacts built-in keys and catalog headers;
-persist native messages rather than the diagnostic trace when exact history matters.
+only new runs. Reset clears that count. Persist native messages rather than the diagnostic
+trace when exact history matters.
 
 The session owns its host handle. The Workbench adapter opens/closes one
 dedicated terminal unless the caller supplies a terminal (caller-owned).
@@ -131,10 +131,17 @@ omitting `frame` offers fetch only. Inaccessible documents fail loudly.
 
 The built-in provider uses OpenAI-compatible chat completions. `apiKey` is
 optional and memory-only; absent means no Authorization header. Trace config
-records the effective selected model, limits and request defaults; built-in keys
-and catalog headers are redacted throughout export. Custom providers remain
-responsible for private credentials they put in their returned messages.
+records the effective selected model, limits and request defaults (never headers).
 Actual assistant model/provider/API metadata stays in the transcript.
+
+Secrets are scrubbed once at provider ingress (ADR-0479), not at export: built-in
+provider apiKeys plus `secrets: string[]` (exact strings, also JSON-escaped; empty
+ignored) become `[redacted]` in each final assistant `errorMessage`/text/thinking
+and in retry/compaction errors, before history, `status`/`detail`, events or trace.
+Headers are not implicit secrets: declare private header values and custom-provider
+credentials in `secrets`. Streamed `message_update` deltas stay raw; `message_end`
+replaces them and provider errors never stream. Tool-call arguments, tool results,
+user text and provider diagnostics are not scrubbed.
 
 Rifty-owned shell results begin with JSON status/exit/error/worker/effects;
 preview fetch begins with HTTP status. The envelope is included inside the same

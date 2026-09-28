@@ -14,7 +14,8 @@ import {
 
 const KEY = 'sk-ingress-key-7f3a';
 const DECLARED = 'declared-private-token';
-const LATE_KEY = 'sk-late-provider-key';
+// pi formats HTTP error bodies as `<status>: <JSON>`: this key arrives JSON-escaped.
+const LATE_KEY = 'sk-late-"quoted"-\\key';
 const host = { root: '/', capabilities: () => ({}), async close() {} };
 
 function entry(id: string, provider: string, headers?: Record<string, string>): OpenAIModel {
@@ -70,8 +71,9 @@ function setup(
   return { session, events, models, wire };
 }
 
+// Raw occurrences of each secret, found through their serialized form.
 const leaks = (value: unknown, secrets: readonly string[] = [KEY, DECLARED]) =>
-  secrets.filter((secret) => JSON.stringify(value).includes(secret));
+  secrets.filter((secret) => JSON.stringify(value).includes(JSON.stringify(secret).slice(1, -1)));
 // Streamed deltas are documented as unscrubbed; the final message_end replaces them.
 const settled = (events: readonly AgentSessionEvent[]) =>
   events.filter((event) => !(event.type === 'agent' && event.event.type === 'message_update'));
@@ -81,7 +83,14 @@ const messageEnds = (events: readonly AgentSessionEvent[]) =>
   );
 
 describe('provider ingress scrubbing', () => {
-  it('[fault: secret-leak] keys and declared secrets never reach history, status, retry or trace', async () => {
+  it('[fault: corrupt-input] rejects secrets that are not an array of strings', () => {
+    for (const secrets of [[1], 'key', [null]])
+      expect(() => setup([], { secrets } as unknown as Partial<AgentSessionOptions>)).toThrow(
+        'secrets must be an array of strings',
+      );
+  });
+
+  it('[fault: sibling-drift] keys and declared secrets never reach history, status, retry or trace', async () => {
     const { session, events } = setup([
       { error: `rate limit reached for ${KEY} and ${DECLARED}`, status: 429 },
       `Recovered. Key ${KEY}, token ${DECLARED}.`,
@@ -116,7 +125,7 @@ describe('provider ingress scrubbing', () => {
     }
   });
 
-  it('[fault: secret-leak] undeclared header values stay verbatim, including tool names', async () => {
+  it('undeclared header values stay verbatim, including tool names', async () => {
     const { session, events } = setup([[{ name: 'edit_file', args: {} }], 'Used edit_file.']);
     try {
       await session.send('edit');
@@ -141,7 +150,7 @@ describe('provider ingress scrubbing', () => {
     }
   });
 
-  it('[fault: secret-leak] built-in providers registered after creation are scrubbed too', async () => {
+  it('[fault: sibling-drift] built-in providers registered after creation are scrubbed too', async () => {
     const { session, events, models } = setup([]);
     const late = scriptedProvider([{ error: `denied ${LATE_KEY}`, status: 400 }]);
     models.setProvider(
@@ -158,13 +167,14 @@ describe('provider ingress scrubbing', () => {
       expect(late.requests[0]?.authorization).toBe(`Bearer ${LATE_KEY}`);
       expect(session.status()).toBe('error');
       expect(session.detail()).toContain('denied [redacted]');
-      expect(leaks(settled(events), [LATE_KEY])).toEqual([]);
+      const escaped = JSON.stringify(LATE_KEY).slice(1, -1);
+      expect(leaks(settled(events), [LATE_KEY, escaped])).toEqual([]);
     } finally {
       await session.dispose();
     }
   });
 
-  it('[fault: secret-leak] compaction summary failure echoing a secret is scrubbed', async () => {
+  it('[fault: sibling-drift] compaction summary failure echoing a secret is scrubbed', async () => {
     const usage = (input: number) => ({
       input,
       output: 2,
