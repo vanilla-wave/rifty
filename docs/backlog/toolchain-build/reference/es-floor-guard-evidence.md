@@ -81,3 +81,15 @@ Independent I2 probes exposed the same alias-proof class three ways: (1) a mutab
 Durable raw proof: `es-floor-waitasync-alias-probes.json` contains all three unchanged reviewer inputs, old results, current diagnostics and a fresh native-absent execution in real Node VM realms. Reviewer separately reran the same inputs and accepted both fixes (`/tmp/pr362-review-false-guards-fixed.json`). Focused checker/wiring: 97/97 PASS; current checker 497 lines versus 590 before this correction. Builds, actual bundle scan and browser rerun follow below.
 
 Final correction proof: workbench + playground builds PASS; actual `check:es-floor` 329 bundles PASS; both browser support checks 2/2 PASS (5493); scoped Biome and `git diff --check` PASS. Compiler worker remains byte-identical at SHA256 `6eb0c238139fb6413a84fe4f235a4fb019c9fa5e406ab73ee46b199199df1fa1`; no pin change. Source and evidence frozen for the driver's committed full gate.
+
+## Independent review correction — typeof operand
+
+The `typeof` exception incorrectly climbed through arbitrary ancestors, so `typeof Atomics.waitAsync(...)` hid a real invocation. Six executed REDs covered direct, call/bind, method dereference and alias forms; the review's additional member/sequence siblings are also retained. Fix: the UnaryExpression's argument must be the exact inspected reference/identifier, never a containing invocation/member/sequence. Existing direct `typeof Atomics.waitAsync` feature detection stays accepted.
+
+`es-floor-typeof-call-probe.json` preserves the unchanged independent repro, old checker result, current diagnostic and fresh native-absent Node VM TypeError. Checker/wiring 105/105 PASS; actual bundle scan 329 PASS; scoped Biome PASS. Checker-only correction; product builds and compiler pin unchanged.
+
+## Independent review correction — repeated declarations
+
+The final binding-loss batch exposed `var native=Atomics; native.waitAsync(...); var native={};`: declaration indexing overwrote the first initializer, so both real ES2022 build modes passed the old checker. Same-symbol declarations now preserve earlier initializers in conservative usage detection; none can grant immutable availability proof. Default/rest/array variable patterns reuse the existing unknown-shadow registration, preventing raw-source checks from borrowing an outer alias (both emitted modes already renamed those shadowing examples).
+
+Three tests were RED before the small correction. `es-floor-binding-loss-probes.json` retains the exact independent inputs, prior raw/emitted diagnostics, current raw and both real emitted results, and fresh native-absent Node VM failures. Final checker/wiring 108/108 PASS; actual 329-bundle scan and scoped Biome PASS. The independent reviewer rechecked the complete known batch: 17 negative source/emitted cases rejected and three positive controls passed (`/tmp/pr362-review-all-known-fixed.json`); source inspection concluded, all findings fixed. Checker-only; no rebuild or compiler-pin change.

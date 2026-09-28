@@ -1,0 +1,10 @@
+{
+  "node": "v24.16.0",
+  "source": "const resultType = typeof Atomics.waitAsync(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 0);",
+  "reviewBaselineGuard": [],
+  "currentGuard": ["worker.js:1:27: post-ES2022 builtin Atomics.waitAsync"],
+  "missingNativeRuntime": {
+    "name": "TypeError",
+    "message": "Atomics.waitAsync is not a function"
+  }
+}

@@ -157,12 +157,22 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
   function declare(name, value, node) {
     const scope = scopeAt(node, node?.type === 'VariableDeclaration' && node.kind === 'var');
     if (!bindings.has(scope)) bindings.set(scope, new Map());
+    const previous = bindings.get(scope).get(name);
+    if (previous) {
+      if (!assignments.has(previous)) assignments.set(previous, []);
+      assignments.get(previous).push(value.init);
+      immutableBindings.delete(previous);
+      return;
+    }
     bindings.get(scope).set(name, value);
     if (node?.type === 'VariableDeclaration' && node.kind === 'const') immutableBindings.add(value);
   }
   function declarePattern(pattern, receiver, owner) {
     for (const property of pattern.properties) {
-      if (property.type !== 'Property') continue;
+      if (property.type !== 'Property') {
+        declareUnknown(property.argument, owner);
+        continue;
+      }
       const member = {
         type: 'MemberExpression',
         object: receiver,
@@ -174,6 +184,7 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
         declare(property.value.name, { init: member }, owner);
       else if (property.value.type === 'ObjectPattern')
         declarePattern(property.value, member, owner);
+      else declareUnknown(property.value, owner);
     }
   }
   function declareUnknown(pattern, owner) {
@@ -192,6 +203,8 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
       declare(node.id.name, node, parent);
     if (node.type === 'VariableDeclarator' && node.id.type === 'ObjectPattern')
       declarePattern(node.id, node.init, parent);
+    if (node.type === 'VariableDeclarator' && node.id.type === 'ArrayPattern')
+      declareUnknown(node.id, parent);
     if (node.type === 'FunctionDeclaration' && node.id) declare(node.id.name, node, parent);
     if (isFunction(node)) for (const param of node.params) declareUnknown(param, node);
     if (node.type === 'CatchClause') declareUnknown(node.param, node.body);
@@ -263,7 +276,12 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
       child = parent, parent = parents.get(parent)
     ) {
       if (isFunction(parent)) return false;
-      if (parent.type === 'UnaryExpression' && parent.operator === 'typeof') return true;
+      if (
+        parent.type === 'UnaryExpression' &&
+        parent.operator === 'typeof' &&
+        parent.argument === node
+      )
+        return true;
       if (['IfStatement', 'ConditionalExpression'].includes(parent.type)) {
         if (child === parent.consequent && guarantees(parent.test, true)) return true;
         if (child === parent.alternate && guarantees(parent.test, false)) return true;

@@ -26,3 +26,5 @@ Output: `1 passed (1.3m)`, exit0. Log: `/tmp/pr362-hosted-isolated.log`.
 No tracked edits. Not reproduced; no speculative fix. A request to repeat the
 completed CI job was refused while its enclosing workflow was still running;
 no repeat executed by that request. The next CI gate will run on the diagnostic-upload repair, so recurrence retains its real failure state; no redundant retry of the obsolete head.
+
+Repeat: hosted job109014196672 in [run36447657710](https://github.com/vanilla-wave/rifty/actions/runs/36447657710/job/109014196672), source0abea5edf, completed success. First actual subsequent CI gate; runtime cause remains unknown. No retry loop or oracle change.

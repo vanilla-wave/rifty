@@ -27,6 +27,6 @@ Next diagnostic probe on recurrence: retain the reported artifacts and inspect
 actual post-reload state before proposing a repair.
 
 Owner: Workbench restoration / hosted-test maintainer. Trigger: recurrence or
-hosted-lane diagnostics work. Current PR still requires its next CI gate on the repaired diagnostic upload to pass;
-this draft does not waive a red gate. Dedup: no matching reload-timeout finding;
+hosted-lane diagnostics work. Hosted lane passed on the next CI run36447657710 at source0abea5edf;
+this draft records the non-reproduced failure and does not waive any red gate. Dedup: no matching reload-timeout finding;
 existing webpack starter work covers the scenario, not this observed failure.

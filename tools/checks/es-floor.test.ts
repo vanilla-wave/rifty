@@ -197,6 +197,19 @@ describe('shipped ES2022 floor', () => {
     expect(violations(source).join('\n')).toContain('Atomics.waitAsync');
   });
 
+  it.each([
+    'typeof Atomics.waitAsync(words, 0, 0)',
+    'typeof Atomics.waitAsync.call(Atomics, words, 0, 0)',
+    'typeof Atomics.waitAsync.bind(Atomics)',
+    'typeof Atomics.waitAsync.call',
+    'typeof Atomics.waitAsync.name',
+    'typeof (0, Atomics.waitAsync(words, 0, 0))',
+    'const wait = Atomics.waitAsync; typeof wait(words, 0, 0)',
+    'const native = Atomics; typeof native.waitAsync(words, 0, 0)',
+  ])('does not mistake typeof an invocation for feature detection: %s', (source) => {
+    expect(violations(source).join('\n')).toContain('Atomics.waitAsync');
+  });
+
   it('binds a local waitAsync exception to its own positive feature check', () => {
     const source = 'if (typeof Atomics.waitAsync === "function") Atomics.waitAsync(words, 0, 0);';
     expect(violations(source)).toEqual([]);
@@ -260,6 +273,26 @@ describe('shipped ES2022 floor', () => {
     } run({ Atomics: { waitAsync: () => 1 } });`,
   ])('does not grant native availability from an ambiguous or shadowed alias: %s', (source) => {
     expect(violations(source).join('\n')).toContain('Atomics.waitAsync');
+  });
+
+  it.each([
+    `var native = Atomics;
+      native.waitAsync(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 0);
+      var native = {};`,
+    `const native = Atomics; {
+      const { native = { waitAsync: () => 1 } } = {};
+      if (typeof native.waitAsync === 'function') Atomics.waitAsync(words, 0, 0);
+    }`,
+    `const native = Atomics; {
+      const [native] = [{ waitAsync: () => 1 }];
+      if (typeof native.waitAsync === 'function') Atomics.waitAsync(words, 0, 0);
+    }`,
+  ])('retains possible native bindings without borrowing outer shadow guarantees: %s', (source) => {
+    expect(violations(source).join('\n')).toContain('Atomics.waitAsync');
+    for (const minify of [false, true]) {
+      const emitted = transformSync(source, { target: 'es2022', minify }).code;
+      expect(violations(emitted).join('\n')).toContain('Atomics.waitAsync');
+    }
   });
 
   it.each(['support-worker.ts', 'check-sandbox-support.ts'])(
