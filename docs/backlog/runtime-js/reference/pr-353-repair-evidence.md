@@ -206,3 +206,9 @@ Whole owning browser spec: 6/6 PASS (`/tmp/pr353-agent-sdk-final.log`). No produ
 code change. Retired-marker sweep: remaining SDK `toolchain.threaded-wasm` is
 capability metadata pointing at Worker; process-exit unit uses an arbitrary
 NotImplementedError identity. Neither expects Memory allocation to throw.
+
+CI-stimulus correction verified at `3fa05776215ced754ee6da0f799309b04abfa656`:
+`pnpm pr:check --all` 25/25 PASS (unit 193.2 s first attempt; parity 118.0 s).
+Independent verification rebinds the same verdict: 16/16 coverage, zero blockers,
+same one advisory NOTE. Previous CI run completed with every other job green;
+only the now-replaced no-COI stimulus failed. Updated run follows the final push.

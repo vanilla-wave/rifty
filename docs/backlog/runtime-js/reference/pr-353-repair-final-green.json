@@ -2,8 +2,8 @@
   "overall_verdict": "concern",
   "merge_call": "Repair unit mergeable with one advisory NOTE; merge still requires the user's explicit OK.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "33e77389e30a55e320c9fe4cf003dbe83072f966",
-  "unit_goal_source": "PR #353 post-review repairs authorized by /tmp/handoff-pr353-mergeable.md (F1, F2, review nits); BASE e97ad98c4896400c213ffb4936d1171f65d2ac1f; integration of main 5f4e109b8 reviewed at affected dependencies and conflict resolutions under REV-1.",
+  "reviewed_sha": "3fa05776215ced754ee6da0f799309b04abfa656",
+  "unit_goal_source": "PR #353 post-review repairs authorized by /tmp/handoff-pr353-mergeable.md (F1, F2, review nits); BASE e97ad98c4896400c213ffb4936d1171f65d2ac1f; integration of main 5f4e109b8 reviewed at affected dependencies and conflict resolutions under REV-1. Follow-up: PR-4 correction of the no-COI declared-gap fixture after CI exposed the retired Memory-allocation stimulus; previous reviewed slice 33e77389e30a55e320c9fe4cf003dbe83072f966.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -126,6 +126,14 @@
       "trace": "PR #353 accepted vitest-run-in-browser scenario at BASE e97ad98c4896400c213ffb4936d1171f65d2ac1f",
       "status": "pass",
       "citation": "tests/e2e/vitest-run.spec.ts:173; tests/e2e/vitest-run.spec.ts:214",
+      "note": ""
+    },
+    {
+      "row": "A real declared-gap cause survives a no-COI project command's fatal rejection as failed/NotImplementedError with the original outer stderr; the stimulus uses current Worker refusal, not retired shared-allocation refusal.",
+      "source": "acceptance",
+      "trace": "ADR-0445 fatal-exit cause preservation + ADR-0470 Decisions 1/2/4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:153",
       "note": ""
     }
   ],
