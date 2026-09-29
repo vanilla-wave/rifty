@@ -20,9 +20,12 @@ natives are rare.)
 - **Optional** native dep (`optionalDependencies`) → **skipped with a warning**,
   matching npm's non-fatal-optional contract. This is why esbuild's `@esbuild/*`
   platform binaries (optional) are skipped and Vite still installs.
-- A package with a **shadow-registry substitution** (user `overrides` or the
-  builtin recipe table, D-005) is materialized from its exact synthetic or
-  registry-backed recipe *before* the check, so it never trips. Baked
+- A package with a **shadow-registry substitution** (a user `overrides` value
+  naming a package, or the builtin recipe table, D-005) is materialized from
+  its exact synthetic or registry-backed recipe *before* the check, so it
+  never trips. A user override npm reads as a version/range (`"pkg": "1.2.3"`,
+  `"pkg": "^1"`, `latest`) is the dependency's spec, not a substitution: the
+  check and the builtin recipes apply as for a declared `pkg@1.2.3` (ADR-0451). Baked
   substitutions are **never silent**: the install output names the shadow
   registry for every materialization
   (ADR-0188). An installed version outside a shim's proven range fails loudly
@@ -51,5 +54,6 @@ entry in `@riftydev/shadow-registry`):
 { "overrides": { "better-sqlite3": "sql.js" } }
 ```
 
-A self-map (`"pkg": "pkg"`) bypasses the check if you're certain a `cpu`-pinned
-package is actually pure-JS (rare). See `docs/adr/npm-client/0051-native-dependency-install-policy.md`.
+A self-map (`"pkg": "pkg"`, or rifty's `"pkg": "pkg@1.2.3"`) bypasses the check
+if you're certain a `cpu`-pinned package is actually pure-JS (rare); npm's own
+version spelling (`"pkg": "1.2.3"`) does not. See `docs/adr/npm-client/0051-native-dependency-install-policy.md`.

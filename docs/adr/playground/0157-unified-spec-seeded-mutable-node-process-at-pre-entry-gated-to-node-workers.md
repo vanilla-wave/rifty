@@ -25,6 +25,8 @@ ADR-0155 §5 already fixed observable behavior loudly (stdin guard) but on the o
 - spec absent (REPL fallback) → pid=1/ppid=0, argv=`['rifty','repl']`, stdout/stderr→`console.*`, stdin = host-bridge reader (`writeProcessStdin` pushes to it), no fork-IPC.
 - ALWAYS mutable: `chdir` (VFS-validated), `cwd()`, `hrtime`+`bigint`, `uptime`, `nextTick`, `exitCode`, `exit()` (sets exitCode then throws `RIFTY_PROCESS_EXIT`). `instanceof EventEmitter` holds (same `@riftydev/io` base).
 
+> **Corrected (2026-09-25, ADR-0445):** `exitCode` is `undefined` until assigned (`null`/`undefined` reset it; type `number | undefined`). `exit()` assigns only when given an argument. The first call emits `'exit'` once with `exitCode ?? 0`, requests the kernel exit `uint8(exitCode ?? 0)` read after the listeners, then throws `RIFTY_PROCESS_EXIT`. Natural exit calls `exit()` with no argument. The single seeded mutable process stands.
+
 `cwd()` reads a **realm-local module cell** (`currentCwd`), seeded from `spec.cwd` at construction, written by `chdir`/`setProcessCwd`, read by `getProcessCwd()` — so `fs`/`path`/conformance keep their one source of truth. `builtins/process` keeps its public exports (`riftyProcess` no-spec singleton, `installProcessGlobals`, `setProcessCwd`, `getProcessCwd`, `writeProcessStdin`) as thin delegates → console/util/index/fs/path importers unchanged.
 
 > **Corrected (2026-07-27, ADR-0332):** the spec no longer carries four stdio

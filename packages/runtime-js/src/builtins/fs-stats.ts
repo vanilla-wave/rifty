@@ -42,3 +42,7 @@ export class Stats {
     return new Date(this.mtimeMs);
   }
 }
+
+export interface StatOptions {
+  bigint?: boolean;
+}

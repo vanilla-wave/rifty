@@ -1,0 +1,164 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "PASS Final+GREEN, verify pass 2. The r1 registry-cache poisoning blocker is fixed on the changed tree: pipe() reads node:process uncached (readBuiltinUncached), the new RED carrier passes at HEAD and fails when the cached read is restored, and every I4 carrier and mutant still discriminates. Only advisory concerns and nits remain. The slice may land after the driver adds reviewed_sha.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "7bcc26f62fac86115066a28fe7272ce959cea5ea",
+  "unit_goal_source": "docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md (status: ready; ready-verdict Contract+RED @ f47817a285428608fb28d9c9a6df1cfe6a1ae890; re-cut adds the Fault matrix poisoned-cache row → ADR-0458). Reviewed at HEAD 7bcc26f62fac86115066a28fe7272ce959cea5ea (branch vg/u6) against BASE 325ae797c0406453aed61b3a4e5d16f9c219d5ea. Goal: docs/backlog/epics/vitest-run-in-browser/goal.md I4, map.md item 6. Prior verdict /tmp/vgoal/u6/final-green-r1.json @ bf44b7b36 had 1 blocker (Regressions, poisoned-cache), re-checked here on the fix commits 1ef3fb00b and 7bcc26f62. Reviewer: a fresh independent Claude subagent, read-only on vg-u6; it did not read the implementer's notes or logs. All runs are in the detached scratch /tmp/vgoal/u6/scratch-fg-2 @ HEAD (removed afterwards); log /tmp/vgoal/u6/fg2-run.log, script /tmp/vgoal/u6/fg2-run.sh, probe sources /tmp/vgoal/u6/fg2-probe-cases. GREEN: same-realm-child-pipe-parent-process ✓; test:parity 'pipe' 13/13 ✓ (includes one reviewer probe); reviewer probes zz-fg2r 4/4 ✓; test:parity stream/ 'all cases match'; test:parity child_process/ 15/15 ✓; vitest io streams, stream/fs-streams conformance, runtime-js process-globals and child_process identity/exec-file: 28 files, 670/670 ✓; io typecheck exit 0. Gates: backlog:check, check:arch, check:file-size, check:contract-drift, check:compat-drift, check:dir-owner, check:parity-coverage all OK. After build:libs, check:esbuild-legacy-retirement passes: typescript-worker.js is 10022694 bytes, sha256 449a05a9… = pin, and it is byte-identical to the r1 bf44 build once chunk-*/module-loader-* hash names are normalized.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4 (end-to-end vitest run, map item 12) and the goal's other invariants I1-I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:9",
+      "summary": "Map items 1-5, 7-11 and 13, plus the e2e acceptance item 12, remain open on this branch. This slice removes one I4 wall (pipe into process stdio); the goal is not complete."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Readable.pipe(process.stdout|stderr), with no options or {end:true}, never calls end(); the stream stays writable after the source ends; a node -e program exits 0 with Node's stdout/stderr",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio-end-calls.case.ts:15",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: vitest forks-pool shape — fork(entry, [], {stdio:'pipe'}) with child.stdout/stderr.pipe(process.stdout/stderr) — leaves both parent streams writable after the child closes; the parent's later lines print",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/fork-stdout-pipe-process-stdio.case.ts:22",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: stream/pipe-process-stdio.case (seeded) — 'a' / stdout still writable with listener deltas 0 / stderr {end:true} not ended / fd-1 lookalike finished / Writable behind a reassigned globalThis.process finished",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio.case.ts:14",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: stream/pipe-process-stdio-end-calls — Readable.pipe(process.stdout|stderr) end calls 0; pipeline(src, process.stdout|stderr) end calls 1",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio-end-calls.case.ts:13",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: stream/pipe-process-stdio-exit (node-cli-eval, kernel Worker) — stdout/stderr 'piped to X\\nX still writable\\n', code 0 per launch",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio-exit.case.ts:18",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: child_process/fork-stdout-pipe-process-stdio (child-worker) — 'child stdout line' / 'child closed 0; parent stdout still writable'",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/fork-stdout-pipe-process-stdio.case.ts:22",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: poisoned-cache × pipe() inside a same-realm child — the parent's later require('node:process') is still its own process (=== process, pid, exitCode writes) and its pipe(process.stdout) stays exempt; carrier same-realm-child-pipe-parent-process (seeded)",
+      "source": "fault-matrix",
+      "trace": "ADR-0458",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/same-realm-child-pipe-parent-process.case.ts:44",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/child_process/fork-stdout-pipe-process-stdio.case.ts:28",
+          "evidence": "Mutant M5 (exempt stdout only) at HEAD 7bcc26f62 (/tmp/vgoal/u6/fg2-run.log): the fork case fails with 'error: TypeError: dest.end is not a function'; end-calls fails on '+ Readable.pipe(process.stderr) end calls: 1'; the exit case fails on the stderr frame.",
+          "summary": "Carried from Contract+RED and r1, unchanged. child-worker mode compares stdout only, so the stderr half of Acceptance 2 ('parent stderr still writable') is never observed directly. It is proven indirectly: the M5 crash and the end-calls spy both kill the mutant. The row stays pass.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-contract-red.json:1",
+          "evidence": "node tools/review/blockers.mjs docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-contract-red.json @ HEAD -> 'invalid verdict: coverage has 6 rows for 7 traced obligations in docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md (REV-4)', exit 2.",
+          "summary": "The committed Contract+RED record no longer validates through the CLI against the current contract. The Fault matrix re-cut added a 7th traced row. check:pass-binding reads only *-final-green.json, so this does not affect landing. The fix's RDY-8 preparation (observed defect: baseline plus RED) exists: the case records its bf44b7b36 failure, and mutant MF1 reproduces that failure at HEAD.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "tools/checks/file-size.mjs:69",
+          "evidence": "wc -l tools/compat-matrix-generator/cli.js -> 1150; the pin is still max 1269.",
+          "summary": "Carried from r1. The cli.js ratchet pin could drop to 1150 now that streams-inventory.js is split out, so the headroom cannot regrow. readBuiltinUncached itself is the minimal change: a 4-line function in the registry, not exported from @riftydev/io. The first-call memo alternative (MF3) is wrong.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Scope",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md:70-82",
+          "evidence": "grep -rln \"writableEnded|fs-streams.ts:503|'unpipe' event\" docs/backlog @ HEAD -> only this contract, its evidence file and its contract-red record.",
+          "summary": "Carried from r1, unchanged. Three pre-existing gaps are still marked 'Not tracked yet; reported for backlog routing': process.stdout|stderr lack end/writableEnded/destroy; fs ReadStream.pipe always ends and ignores options; there are no 'pipe'/'unpipe' destination events. The compat ⚠️ row now names the first and third explicitly. None has a backlog item, so the notes vanish when this contract is deleted on done. Route them via rifty-to-backlog (REV-12).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/io/src/streams/readable.ts:748",
+          "evidence": "Reviewer probe zz-fg2r/fg2-parent-pipe-in-child-data (the parent pipes into process.stdout from a same-realm child's first 'data' event): ✓ at HEAD; ✗ 'TypeError: dest.end is not a function' with bf44 io and with BASE io (/tmp/vgoal/u6/fg2-run.log).",
+          "summary": "The r1 Bugs concern is resolved. The exemption now follows the active bootstrap at pipe() time instead of whichever context primed the registry cache first. A parent pipe issued while a same-realm child is alive stays exempt, as in Node.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/io/src/builtin-registry.ts:54",
+          "evidence": "/tmp/vgoal/u6/fg2-run.log. HEAD: fg1-same-realm-prime ✓, fg1-same-realm-prime-exitcode ✓, fg1-same-realm-preloaded ✓, same-realm-child-pipe-parent-process ✓. With readable.ts/pipeline.ts at bf44b7b36: prime ✗ '+ ... === process false; pid match false', exitcode ✗ '+ ...: 0', carrier ✗ 'TypeError: dest.end is not a function'. MF1 (cached loadBuiltin) and MF3 (module-scope memo) ✗ with TypeError. MF2 (uncached read that writes the cache) ✗ '+ ... require(node:process) === process false; pid match false; exitCode via require 0'. child_process/ parity 15/15 ✓.",
+          "summary": "The r1 Regressions blocker (poisoned-cache) is fixed and verified on the changed tree. pipe() no longer writes the name-keyed registry cache, so the parent's require('node:process') keeps its identity, pid and exitCode, as it did at BASE and does in Node. The committed carrier discriminates both halves: the identity half via MF2 and the exemption half via MF1/MF3.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

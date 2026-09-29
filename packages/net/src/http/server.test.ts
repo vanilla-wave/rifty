@@ -18,8 +18,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { dispatchToPort, listPorts, unregisterPort } from '../registry.ts';
 import { BridgedWebSocket } from '../ws/bridge.ts';
 import { portChannelNameForPort } from '../ws/channel.ts';
+import httpDefault from './index.ts';
 import type { ServerResponse } from './response.ts';
-import httpDefault, { createServer } from './server.ts';
+import { createServer } from './server.ts';
 
 const requireFromHere = createRequire(import.meta.url);
 

@@ -11,7 +11,12 @@
 import { NotImplementedError } from '@riftydev/io';
 import { type InternalsShim, internalsShims } from '@riftydev/shadow-registry';
 import { type Vfs, joinPath } from '@riftydev/vfs';
-import { type OverrideMap, type ResolvedOverrideTarget, resolveOverride } from './overrides.ts';
+import {
+  type OverrideMap,
+  type ResolvedOverrideTarget,
+  resolveOverride,
+  userOverrideSpec,
+} from './overrides.ts';
 import { matchesRange } from './semver.ts';
 
 /** Minimal pinned-package view the applier needs. */
@@ -37,6 +42,9 @@ export interface EffectivePackageRequest {
  * One override/request authority for live resolve and replay.
  * Baked aliases preserve the caller's semver contract; explicit user overrides
  * intentionally replace it and therefore own the effective target range.
+ * A user version/range override is the edge's spec, not a substitution
+ * (ADR-0451, npm `edge.spec`): the request continues as a plain `name@spec`
+ * edge, so baked redirects and the ADR-0051 native gate still apply.
  */
 export function resolveEffectivePackageRequest(
   name: string,
@@ -44,9 +52,10 @@ export function resolveEffectivePackageRequest(
   parent: string | undefined,
   userOverrides: OverrideMap | undefined,
 ): EffectivePackageRequest {
-  const override = resolveOverride(name, parent, userOverrides);
+  const spec = userOverrideSpec(name, parent, userOverrides);
+  const override = resolveOverride(name, parent, spec === null ? userOverrides : undefined);
   const effectiveName = override?.name ?? name;
-  const effectiveRange = override?.range ?? range;
+  const effectiveRange = override?.range ?? spec ?? range;
   return { override, effectiveName, effectiveRange };
 }
 

@@ -1,0 +1,227 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED PASS (no blocker): oracle facts reproduce on Node v24.16.0, all 6 REDs fail now for the named ceiling; proceed to IMPLEMENT, NOTE concerns (ADR-0444 §1 sites without a Function-key carrier first).",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "fb441a51459a6555cc03791ad4c1e3198d55f58b",
+  "unit_goal_source": "docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md @ fb441a51459a6555cc03791ad4c1e3198d55f58b (status: ready) + ADR-0444 + goal docs/backlog/epics/vitest-run-in-browser/goal.md (I6); BASE 325ae797c0406453aed61b3a4e5d16f9c219d5ea",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I6 (guard walls)",
+      "location": "docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md:40",
+      "summary": "This unit's implementation + Final+GREEN still owed; REDs only at this checkpoint."
+    },
+    {
+      "clause": "I6 (other walls)",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:14-21,43-45",
+      "summary": "path/posix, process named imports, loud members, vm offsets children open."
+    },
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:11",
+      "summary": "overrides bare-version spelling open."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:33",
+      "summary": "Worker handle keepalive open."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:30",
+      "summary": "process lifecycle events/exitCode open."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:28,41,52,56",
+      "summary": "pipe-stdio, advanced IPC, port keepalive, acceptance e2e open."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:45,56",
+      "summary": "worker stdio/execArgv + threads-pool acceptance open."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:56",
+      "summary": "vitest.md compat page open."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: vitest 4.1.11 shapes (timers Symbol-const assign, expect 3x Symbol.for defineProperty, imported-Symbol define, stubGlobal/unstubAllGlobals param keys incl. Reflect.deleteProperty + descriptor restore, setup-common for-in) load and run as in Node",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/global-computed-key-writes-esm.case.ts:13-89,121-147",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: undici 8.10.2 lib/global.js + lib/web/fetch/global.js Symbol.for-const defines/reads and for-in/parameter keys through `global` load and run as in Node",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/global-computed-key-writes-cjs.case.ts:12-92,110-132",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: non-'Function' object key coerced with Node's count/order vs RHS/descriptor for assign, compound, ++, defineProperty, Reflect.set, delete, toPrimitive->Symbol",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/global-computed-key-writes-esm.case.ts:91-112; global-computed-key-writes-cjs.case.ts:95-107",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: runtime key that IS 'Function' (string or coercing object) throws the named ceiling at the operation on the 11 listed sites, module loads, host Function intact (ESM+CJS)",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "tests/conformance/modules/global-computed-key-guard.test.ts:33-117,119-124,166-171",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: top-level runtime 'Function' key throws at the write after earlier statements/for-in keys took effect; import/require fails with the named ceiling",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "tests/conformance/modules/global-computed-key-guard.test.ts:126-142,173-191",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: load-time ceilings stay for keys folding to 'Function' (resolver.test.ts tables) and runtime-key reads used as a constructor, rejecting before any statement runs",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "tests/conformance/modules/resolver.test.ts:1556-1790,3150-3250; tests/conformance/modules/global-computed-key-guard.test.ts:144-163,193-207",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: ESM case Node v24.16.0 output safeTimers..unstubbed, clean; rifty today throws esm ceiling at /work/utils-timers.mjs",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/global-computed-key-writes-esm.case.ts:1-151",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: CJS case Node output dispatcher..dynamic, clean; rifty today throws cjs ceiling at /work/undici-global.js",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/global-computed-key-writes-cjs.case.ts:1-136",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: object-key coercion rows ESM objectKey/toPrimitiveKey, CJS objectKey",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/global-computed-key-writes-esm.case.ts:91-112; global-computed-key-writes-cjs.case.ts:95-107",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/runtime-js/0444-check-runtime-global-write-keys-at-node-key-coercion.md:28-33 vs docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md:43",
+          "evidence": "Scratch probe (vitest --project conformance, BASE code @ fb441a514): P3 ESM /alias.mjs (`const g = globalThis; g[k] = v`), /logical.mjs (`globalThis[k] ??= v`), /forin.mjs (`for (globalThis[k] in o)`), /objdestr.mjs (`({a: globalThis[k]} = …)`), /setter.mjs (`globalThis.__defineSetter__(k, v)`) -> all THROW module-loader.esm-global-function-assignment at load today.",
+          "summary": "ADR-0444 §1 moves logical assignment, for-in and object-destructuring targets, `__defineSetter__`, prefix/`--` updates and tracked-alias runtime keys from load-time to runtime, but Acceptance 4 and the conformance file carry no 'Function'-key case for them; an impl that drops the load-time flag there without wrapping would silently let a runtime 'Function' key replace the host constructor. Add these sites to Acceptance 4 / writeSites, or keep them load-time.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tests/conformance/modules/resolver.test.ts:1556-1790,3150-3250",
+          "evidence": "",
+          "summary": "Acceptance 6 says folded 'Function' keys reject 'before any statement runs', but the cited resolver tables put the Function write as each module's first statement and assert only the thrown feature; an impl that routes literal computed 'Function' keys through the runtime helper would still pass. Add an observable earlier statement to one ESM and one CJS folded-key row.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/modules/global-computed-key-writes-cjs.case.ts:95-107",
+          "evidence": "",
+          "summary": "CJS Parity 3 checks coercion order only for assignment, compound and defineProperty. `++`, Reflect.set, delete and toPrimitive->Symbol are ESM-only, though cjs.ts has its own rewrite path.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/modules/global-computed-key-writes-esm.case.ts:138-142",
+          "evidence": "",
+          "summary": "Acceptance 1 claims descriptors equal Node's, including restore of an existing global's descriptor. The case prints only the restored value and the fresh stub's `enumerable`, so a changed writable/configurable/enumerable after restore goes unseen.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/module-loader/esm.ts:1 (1564 lines, cap 1568), packages/runtime-js/src/module-loader/cjs.ts:1 (2040 lines, cap 2052); tools/checks/file-size.mjs:58,64",
+          "evidence": "wc -l esm.ts cjs.ts -> 1564, 2040; file-size.mjs caps 1568/2052",
+          "summary": "The file-size ratchet leaves 4 lines free in esm.ts and 12 in cjs.ts, so the helper and site wrapping must live in a new module (with a dir-owner check if needed). This is an implementation-planning note only.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/adr/runtime-js/0444-check-runtime-global-write-keys-at-node-key-coercion.md:8-9,50-52; docs/backlog/epics/vitest-run-in-browser/goal.md:180-185",
+          "evidence": "",
+          "summary": "ADR-0444 says 'nothing overturned' but replaces goal.md's agent carrier decision ('a computed key bound to a Symbol value is provably never Function'). It names that decision only under Alternatives. goal.md is correctly left unchanged, and the ledger re-chart (ledger.md:10) records the widening. The overturn could be stated explicitly (DEC-2, advisory).",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md:29-31",
+          "evidence": "Premise re-checked in this pass (RDY-2.3, REV-6): /tmp/vgoal/u5/vt/node_modules vitest 4.1.11 setup-common.DYx3LtFI.js:32 `for (const key in config.defines) globalThis[key] = …`, test.DNmyFkvJ.js:3619-3640 parameter `name` keys, workers/forks.js:8,15 + threads.js:8,15 import both chunks.",
+          "summary": "The promise was widened, but the Challenge line reuses the 2026-09-15 epic check. I re-checked the premise in this pass and it holds: a static Symbol proof cannot admit the claimed path's parameter and for-in keys. The line could record that it was re-checked at Contract+RED.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/runtime-js/reference/symbol-key-global-write-guard-precision-evidence.md:4-5,143-175",
+          "evidence": "",
+          "summary": "The O4 and O5 probe scripts (order2.mjs, wrapper-sim.mjs, eager-sim.mjs) are not committed, so the O5 spike cannot be re-run. I reproduced O1-O4 independently; O5 is a mechanism claim that Parity 3 will settle at Final+GREEN.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

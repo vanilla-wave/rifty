@@ -1,0 +1,150 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "PASS Contract+RED — proceed to IMPLEMENT; 5 REDs fail now for the stated reason, Node oracle re-verified, no blocker class met; concerns advisory (NOTE).",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "f47817a285428608fb28d9c9a6df1cfe6a1ae890",
+  "unit_goal_source": "docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md (status: ready) @ f47817a285428608fb28d9c9a6df1cfe6a1ae890 (branch vg/u6); goal docs/backlog/epics/vitest-run-in-browser/goal.md (I4) + map.md item 6; evidence docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md; BASE 325ae797c0406453aed61b3a4e5d16f9c219d5ea. Fresh independent reviewer (Claude subagent, read-only, no implementer verdict read). Oracle host Node v24.16.0: readable.js 927-935 + 1056-1058 and pipeline.js 417-445 source re-read; forged globalThis.process (pipe-time and kept-through-end) still finishes; P10 direct stdout.end then write -> ERR_STREAM_WRITE_AFTER_END exit 1; P11 pipeline(src, stdout) end calls 1, cb err undefined, ended=false after. Node side of all 5 cases re-run via runInNode: output === expected (true x4; exit case Node frames match contract). RED @ HEAD (scratch /tmp/vgoal/u6/scratch-cr-1, removed): /tmp/vgoal/u6/cr1-red.log — 5/5 fail for the stated reason. Spike+mutants (scratch only, reverted): /tmp/vgoal/u6/cr1-mutants.log, /tmp/vgoal/u6/cr1-forged.log. vitest 4.1.11 premise re-read from npm tarball cli-api.CnMVyzaz.js :1883, :3154 stdio 'pipe', :3159/:3163, :3183/:3187, :3236/:3238 — bare global process, no node:process import. backlog:check OK. Diff = contract + evidence + 5 new parity cases; no implementation, no existing test/gate changed (PR-4).",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4 (this unit, map item 6)",
+      "location": "docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md:34",
+      "summary": "Contract+RED only: implementation (readable.ts exemption + unpipe, pipeline.ts end-own-last-stage), compat row, CHANGELOG and independent Final+GREEN remain."
+    },
+    {
+      "clause": "I1-I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:9",
+      "summary": "Remaining map items (1-5, 7-13) and end-to-end acceptance (item 12) open; goal not complete."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Readable.pipe(process.stdout|stderr), no options or {end:true}, never calls end(); stream stays writable; node -e exits 0 with Node's stdout/stderr",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio-end-calls.case.ts:15",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: vitest forks-pool shape fork(entry, [], {stdio:'pipe'}) + child.stdout/stderr.pipe(process.stdout/stderr) leaves both parent streams writable after child close",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/fork-stdout-pipe-process-stdio.case.ts:22",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: stream/pipe-process-stdio.case (seeded) — Node: a / stdout still writable; deltas 0 / stderr {end:true} not ended / fd-1 lookalike finished / reassigned-global Writable finished",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio.case.ts:13",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: stream/pipe-process-stdio-end-calls — pipe end calls 0, pipeline end calls 1",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio-end-calls.case.ts:13",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: stream/pipe-process-stdio-exit (node-cli-eval, kernel Worker) — stdout/stderr 'piped to X\\nX still writable\\n', code 0 per launch",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio-exit.case.ts:25",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: fork-stdout-pipe-process-stdio (child-worker) — 'child stdout line' / 'child closed 0; parent stdout still writable'",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/fork-stdout-pipe-process-stdio.case.ts:22",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/stream/pipe-process-stdio.case.ts:56-63",
+          "evidence": "Scratch mutant M4-global-lazy (identity read from globalThis.process inside onEnd, + unpipe + pipeline fix): /tmp/vgoal/u6/cr1-mutants.log -> all 5 cases ✓ (fork, end-calls, exit, pipe-process-stdio, end-false-unpipe). Node v24.16.0 /tmp/vgoal/u6/cr1-probes/forged.cjs with globalThis.process kept forged until after source end: 'forged-kept finished' / 'w2 ended true'. Strengthened case (restore globalThis.process in w's 'finish' handler instead of right after pipe()): /tmp/vgoal/u6/cr1-forged.log -> V0-candidate ✓, M4-global-lazy ✗ '- Writable behind a reassigned globalThis.process finished'.",
+          "summary": "Acceptance 3's reassigned-global row restores globalThis.process synchronously after pipe(), so the rejected globalThis.process route read lazily at source end passes all five cases while violating 'a Writable behind a reassigned globalThis.process emits finish'; keeping the reassignment until 'finish' kills it and still greens the candidate. Advisory: Acceptance 3 traces only to REV-2 (carrier note, RDY-3).",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md:38-40,59",
+          "evidence": "node -e \"import('./tools/review/contract.mjs').then(m=>console.log(m.tracedRowCount(fs.readFileSync(contract))))\" -> 6 (Acceptance 1-2, Parity 1-4); blockers.mjs RULE_ID_TRACE_RE drops '→ REV-2' rows.",
+          "summary": "Acceptance 3 (identity-only exemption), 4 (unpipe half incl. {end:false}), 5 (pipeline still ends last stage) and Parity 5 trace '→ REV-2', a rule id: per RDY-3 they are carrier notes, raise no coverage row and cannot block at Final+GREEN, although Decisions line 83 says the widening exists to avoid a never-settling pipeline. Retrace to a stating I#/scenario/ADR or accept them as notes knowingly (Fidelity still binds a silent unsettled pipeline at Final+GREEN).",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/child_process/fork-stdout-pipe-process-stdio.case.ts:31",
+          "evidence": "Mutant M8-stdout-only (exempt stdout, not stderr): /tmp/vgoal/u6/cr1-mutants.log -> fork case ✗ 'error: TypeError: dest.end is not a function' (crash, not a stderr diff). child-worker/seeded modes compare stdout only (runInNode output of fork case = 'child stdout line\\nchild closed 0; parent stdout still writable').",
+          "summary": "Acceptance 2's stderr half ('parent's later lines print') is not asserted: 'parent stderr still writable' and 'child stderr line' are unobserved in child-worker mode; the stderr exemption is proven only by absence of today's TypeError. Pass stands (M8 dies); hardening would echo a stderr marker to stdout.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md:5-7,39-69",
+          "evidence": "Independently re-probed on v24.16.0: source lines 927-935/1056-1058 (readable) and 417-445 (pipeline) match; P6, P10, P11 reproduce (/tmp/vgoal/u6/cr1-probes/{forged,p10,p11}.cjs).",
+          "summary": "P1-P11 probe bodies live in an uncommitted scratch dir and are only summarized; claims hold on re-probe and in-scope rows are re-executed by committed cases.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md:63-75",
+          "evidence": "grep -rln 'process.stdout.end|stdout.end is not|writableEnded' / 'ReadStream.*pipe|fs-streams.ts:503' / \"'unpipe'|'pipe' event\" docs/backlog -> only this contract and its evidence files.",
+          "summary": "Three pre-existing gaps marked 'Not tracked yet; reported for backlog routing' (process.stdout|stderr lack end/writableEnded/destroy — bare TypeError, not a named NotImplementedError; fs ReadStream.pipe always ends and ignores options; no 'pipe'/'unpipe' dest events) have no backlog item yet; route via rifty-to-backlog before landing (REV-12, AGENTS.md no silent backlog).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

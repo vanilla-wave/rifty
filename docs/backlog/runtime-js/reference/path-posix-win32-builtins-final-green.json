@@ -1,0 +1,168 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN PASS (no blocker): one ADR-0035 registry line delivers Acceptance 1-2 with Node-literal identity, both parity carriers kill identity/absence mutants, pr:check + full parity + packed Chromium consumer green at HEAD; concerns are NOTE, continue RECHART.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/runtime-js/path-posix-win32-builtins.md @ 14517ac745553d3299105c01b2454e5074fbbddd (BASE 325ae797c0406453aed61b3a4e5d16f9c219d5ea; Contract+RED @ 26fff2916c5de06b3b4cb8298db14bc45dc7f7a5); goal docs/backlog/epics/vitest-run-in-browser/goal.md I6; evidence docs/backlog/runtime-js/reference/path-posix-win32-builtins-evidence.md; oracle Node v24.16.0",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:16-28",
+      "summary": "Only the node:path/posix wall is closed; remaining I6 walls (builtin static names from prototype methods, loud absent members, Symbol-key guard precision) stay open in map items 3-5."
+    },
+    {
+      "clause": "I1-I5, I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:10-68",
+      "summary": "Other invariants open in map items 1, 6-13; goal closes only after item 12 end-to-end vitest run acceptance on both pools + compat vitest.md."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: ESM `import { join } from 'node:path/posix'` links and join('a','b') is a/b; default, namespace default and dynamic import('node:path/posix') are the path.posix object",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/posix-subpath-import.case.ts:12-24",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: CJS require('node:path/posix') and bare require('path/posix') return require('node:path').posix itself; isBuiltin both spellings; builtinModules includes path/posix",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/posix-subpath-require.case.ts:20-32",
+      "note": ""
+    },
+    {
+      "row": "Parity case 1 path/posix-subpath-import (esm): `join a/b /y/z.js`, `default true`, `namespace true true`, `dynamic true true` (Node v24.16.0)",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/posix-subpath-import.case.ts:22-24",
+      "note": ""
+    },
+    {
+      "row": "Parity case 2 path/posix-subpath-require (cjs, isolated probes): `node:path/posix true`, `path/posix true`, `join a/b`, `isBuiltin true true`, `builtinModules true` (Node v24.16.0)",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/posix-subpath-require.case.ts:26-32",
+      "note": ""
+    },
+    {
+      "row": "Public builtin entry `node:path/posix` / bare `path/posix` registered as pathModule.posix (ADR-0035 registry)",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/index.ts:76",
+      "note": ""
+    },
+    {
+      "row": "Exact typescript-worker.js compiler-output pin (bytes 10_022_694 + sha256) re-pinned; pin update needs review + actual browser proof",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:101-104",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/path-posix-win32-builtins.md:67-68",
+          "evidence": "ls docs/backlog/runtime-js/ | grep -E 'path-win32' -> no output at HEAD 14517ac74.",
+          "summary": "Owed REV-12 capture `runtime-js/path-win32-namespace` (real path.win32, node:path/win32, posix/win32 cross-refs, _makeLong, path===path.posix identity) is still only a Decisions line routed to 'the goal's land step'; the gap itself is explicit (compat modules.md:23 ❌, traps.md:35), but the contract doc is delete-on-done, so file the backlog item at RECHART before the doc is removed.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/epics/vitest-run-in-browser/map.md:14-15",
+          "evidence": "",
+          "summary": "goal.md and ledger.md untouched in BASE..HEAD; RDY-8 met (Contract+RED JSON committed with reviewed_sha 26fff2916, ancestor of HEAD; Acceptance/Parity text unchanged since, only Out of scope/Decisions refined). Map item 2 still reads 'node:path/posix and node:path/win32 registered' although the ready contract narrowed to path/posix (no user-traced row existed) — update at RECHART.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "tools/checks/esbuild-legacy-retirement.mjs:103",
+          "evidence": "PR-4 old vs new: BASE pins typescript-worker.js bytes 10_022_694 sha 018ea49b…; HEAD keeps bytes 10_022_694, sha 0d7af7c2…, same exact-match logic (:246-251). Scratch @ 14517ac74: `pnpm build:libs` -> BUILD-EXIT 0; `shasum -a 256 packages/workbench/dist/assets/typescript-worker.js` -> 0d7af7c2c9bd5d6631df2bed6d3f6ea30168e61de1e1ed458006eaa4fd3c45a5 (10022694 bytes); `node tools/checks/esbuild-legacy-retirement.mjs` -> 'exact emitted inventory verified' exit 0. ADR-0391 browser proof: `pnpm test:packed-consumer` -> '✓ installs only tarballs and proves Vite preview plus HMR in fresh Chromium' 1 passed (170s).",
+          "summary": "Fingerprint re-pin is a legitimate, non-weakening criterion change (hash-named chunk import rename, ADR-0391 Consequences / traps.md copied-asset-fingerprints); pin matches an independent HEAD build and the packed Chromium consumer passes. Browser proof was not recorded in the unit evidence — record it with the pin next time.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/runtime-js/src/builtins/index.ts:76",
+          "evidence": "Scratch @ 14517ac74: `pnpm -s test:parity posix-subpath` -> both ✓ 'all cases match'; conformance path.test.ts 9/9. Mutants (index.ts:76, restored after each): M0 line removed -> import ✗ 'Built-in node:path/posix is not implemented', require ✗ threw MODULE_NOT_FOUND x3, isBuiltin false false, builtinModules false; M1 `() => pathModule` -> ✗ both (default/namespace/dynamic false; require identity false); M2 `() => ({ ...pathModule.posix })` -> ✗ both (same identity lines); M3 + `registerBuiltin('path/win32', () => pathModule.win32)` -> parity ✓, conformance ceiling × 'AssertionError: expected function to throw an error, but it didn't'.",
+          "summary": "Carriers discriminate absence, wrong object and copy mutants; win32 ceiling pin kills an alias registration.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/runtime-js/src/builtins/index.ts:76",
+          "evidence": "Scratch @ 14517ac74: `pnpm pr:check` -> 25/25 ✓ incl. lint, typecheck, build:libs, check:arch, check:esbuild-legacy-retirement, test:run (250.7s), test:parity (69.1s); '✓ pr:check passed'. Full `pnpm -s test:parity` separately -> 'all cases match'. `pnpm test:packed-consumer` (fresh Chromium) -> 1 passed.",
+          "summary": "No regression observed across unit, parity, gates and packed browser consumer.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/public/compat/modules.md:22",
+          "evidence": "Scratch probe case (parity runner, deleted) @ 14517ac74: `Object.keys(require('path/posix'))` Node '_makeLong,basename,…,matchesGlob,…,posix,…,win32' vs rifty without _makeLong/matchesGlob/posix/win32.",
+          "summary": "Newly exposed node:path/posix object reads `.posix`/`.win32`/`._makeLong`/`.matchesGlob` as undefined (Node object/object/function/function); off the claimed path (vitest imports only `join`) and now explicitly listed ⚠️ in compat + Out of scope, matchesGlob owned by fs-glob-matchesglob-minimatch; _makeLong/cross-refs owner only via the unfiled path-win32-namespace capture.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/index.ts:76",
+          "evidence": "Scratch probe cases @ 14517ac74 (`pnpm -s test:parity zzprobe`, deleted): `require.resolve('path/posix')` Node 'path/posix' / rifty 'node:path/posix'; `import * as ns from 'node:path/posix'; Object.keys(ns)` Node sorted 'basename,default,…' / rifty 'default,sep,delimiter,join,…'. Sibling at same HEAD: `require.resolve('fs/promises')` Node 'fs/promises' / rifty 'node:fs/promises'; `node:fs/promises` ns keys Node 'access,appendFile,chmod,chown' / rifty 'default,readFile,writeFile,appendFile'. `git grep -i 'namespace.*sort\\|OwnPropertyKeys' docs` -> none.",
+          "summary": "Pre-existing, class-wide loader divergences surfaced on the new builtin (outside I6 and this contract): require.resolve of a bare builtin returns the `node:`-prefixed id, and builtin ESM namespace keys are not spec-sorted; neither appears tracked — REV-12 discovery for rifty-to-backlog capture, not this unit's obligation.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "14517ac745553d3299105c01b2454e5074fbbddd"
+}

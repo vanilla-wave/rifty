@@ -1,0 +1,408 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Mergeable as a slice: r2 blocker fixed and proven (RED at r2 product, mutants killed, Node host + Chromium green, pr:check 25/25); remaining findings advisory (int32-ceiling wrap, unlisted ownSourceURL guard, carried concerns).",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/runtime-js/vm-run-in-this-context-offsets.md @ 6bb60606253edec3b206fce0aa94483e4c632a43 (status: ready; ready-verdict Contract+RED @ 75ea85bce3969246d1f3b31bc61f2d95863d937c; re-cuts r1/r2 2026-09-23 A8, P12-P13, six fault rows; ADR-0450; evidence docs/backlog/runtime-js/reference/vm-run-in-this-context-offsets-evidence.md); goal docs/backlog/epics/vitest-run-in-browser/goal.md I4, I6 (unchanged in BASE..HEAD); BASE 325ae797c0406453aed61b3a4e5d16f9c219d5ea; prior verdicts /tmp/vgoal/u10/final-green-r1.json, /tmp/vgoal/u10/final-green-r2.json; oracle Node v24.16.0; Chromium via browser-unit lane",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/npm-client/overrides-bare-version-spec.md",
+      "summary": "npm-spelled overrides pin not landed on this branch"
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/runtime-js/worker-threads-handle-keepalive.md",
+      "summary": "Worker keepalive handle open"
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md",
+      "summary": "process lifecycle events / exitCode open on this branch"
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/runtime-js/vitest-run-acceptance.md",
+      "summary": "vitest run end-to-end (forks) unproven; readable-pipe, advanced-ipc, message-port-ref-keepalive, worker-stdio children open"
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/runtime-js/worker-threads-stdio-streams-empty-exec-argv.md",
+      "summary": "threads pool parity open"
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md",
+      "summary": "remaining module-load walls (path subpaths, static names, loud members, guard precision) open on this branch; this slice removes the vm offsets wall only"
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/runtime-js/vitest-run-acceptance.md",
+      "summary": "vitest.md compat page not written"
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "A1 runInThisContext / Script#runInThisContext accept any int32 offsets, execute unchanged (completion, var global, this===globalThis), never throw offset gaps; vitest evaluator shape returns its function",
+      "source": "acceptance",
+      "trace": "I4+I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:66; tools/node-parity-runner/cases/vm/run-in-this-context-offsets-callsites.case.ts:35-42; packages/runtime-js/src/builtins/vm/script-offsets.test.ts:39,139",
+      "note": ""
+    },
+    {
+      "row": "A2 every offset-script frame (top level, deferred, captureStackTrace, async) renders as Node: line+lineOffset every line, column+columnOffset physical line 1, unclamped, zero omitted; other scripts unchanged",
+      "source": "acceptance",
+      "trace": "I6+ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:32-60,107-108; tools/node-parity-runner/cases/vm/run-in-this-context-offsets-async.case.ts:23-32; tests/browser-unit/vm-script-offsets.spec.ts:38",
+      "note": ""
+    },
+    {
+      "row": "A3 offsets belong to the script; Script keeps constructor offsets, run options carry none; omitted filename renders evalmachine.<anonymous> with offsets",
+      "source": "acceptance",
+      "trace": "I6+ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:46-63",
+      "note": ""
+    },
+    {
+      "row": "A4 guest Error.prepareStackTrace (before/after evaluation, cloned CallSites) gets offset line/column/enclosing getters (null <=0), real filename, Node toString; save/restore + re-assigning original hook keep offsets",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets-callsites.case.ts:54-88; tests/browser-unit/vm-script-offsets.spec.ts:38",
+      "note": ""
+    },
+    {
+      "row": "A5 int32 validation, exact messages, Node order (lineOffset first; compileFunction columnOffset first) on runInThisContext, Script, runInContext, runInNewContext, compileFunction, before any loud gap",
+      "source": "acceptance",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:68-98; packages/runtime-js/src/builtins/vm/script-offsets.test.ts:67-124",
+      "note": ""
+    },
+    {
+      "row": "A6 one owner of Error.prepareStackTrace: ADR-0136 windows keep both remaps, restore what they read, never remove the owner; bypass never shows unshifted file:line:col; next offset script re-projects; also from Chromium's unset hook",
+      "source": "acceptance",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:116-183,252-320",
+      "note": ""
+    },
+    {
+      "row": "A7 compat node:vm row + ❌ rows for Out of scope gaps and ADR-0450 divergences; runtime-js CHANGELOG; ADR-0450 indexed",
+      "source": "acceptance",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "docs/public/compat/modules.md:20,172-189; packages/runtime-js/CHANGELOG.md:5-9; docs/adr/README.md:101",
+      "note": ""
+    },
+    {
+      "row": "A8 a script naming itself (last valid //# or //@ sourceURL as V8 parses it) renders and hands out CallSites as in Node with or without offsets, also when evaluated while V8 formats another stack (guest hook, ADR-0450 owner, ADR-0136 dispatcher); unnamed code keeps vm filename+offsets; probe never runs guest code (Error.prototype name/message accessors included), restores stackTraceLimit/prepareStackTrace; frozen Error = NotImplementedError('vm.runInThisContext.frozenError')",
+      "source": "acceptance",
+      "trace": "I6+ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-own-source-url.case.ts:23-67; tools/node-parity-runner/cases/vm/run-in-this-context-own-source-url-in-hook.case.ts:61-66; tests/browser-unit/vm-script-offsets.spec.ts:33-34; packages/runtime-js/src/builtins/vm/own-source-url.fault.test.ts:61-200; packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:221,270",
+      "note": ""
+    },
+    {
+      "row": "P1 line1-negative-column /virtual/mod.js:1:-13",
+      "source": "acceptance",
+      "trace": "I6+ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:32",
+      "note": ""
+    },
+    {
+      "row": "P2 offsets split by physical line (b/c/d/e/i/j rows)",
+      "source": "acceptance",
+      "trace": "I6+ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:33-38",
+      "note": ""
+    },
+    {
+      "row": "P3 non-positive shifted positions (negative-line, zero-line, zero-column, boundary getters)",
+      "source": "acceptance",
+      "trace": "I6+ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:41-43; tools/node-parity-runner/cases/vm/run-in-this-context-offsets-callsites.case.ts:77-88",
+      "note": ""
+    },
+    {
+      "row": "P4 vm.Script rows (line2, line1, run-options-ignored, reused)",
+      "source": "acceptance",
+      "trace": "I6+ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:46-50",
+      "note": ""
+    },
+    {
+      "row": "P5 per-script + default-filename",
+      "source": "acceptance",
+      "trace": "I6+ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:52-56,63",
+      "note": ""
+    },
+    {
+      "row": "P6 deferred-line2/line1 + captureStackTrace",
+      "source": "acceptance",
+      "trace": "I6+ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:58-60,107-108",
+      "note": ""
+    },
+    {
+      "row": "P7 exec 42 7",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:66",
+      "note": ""
+    },
+    {
+      "row": "P8 validation 15 option sets x {runInThisContext, Script}",
+      "source": "acceptance",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:68-98",
+      "note": ""
+    },
+    {
+      "row": "P9 vitest/vite hook shape rows (vite-hook, callsites-pattern, late-hook, restored)",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets-callsites.case.ts:35-74",
+      "note": ""
+    },
+    {
+      "row": "P10 cases 1-9 and 11-13 same stdout in a fresh Chromium module worker (hook initially undefined) as runInNode",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/vm-script-offsets.spec.ts:29-71",
+      "note": ""
+    },
+    {
+      "row": "P11 async frames: async-default, async-line1, async-hook",
+      "source": "acceptance",
+      "trace": "I4+ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets-async.case.ts:18-34",
+      "note": ""
+    },
+    {
+      "row": "P12 own sourceURL rows (own offsets line2, own last invalid, own zero offsets, own identity-shaped, not own template, hook own line1, own exec 10 5)",
+      "source": "acceptance",
+      "trace": "I6+ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-own-source-url.case.ts:23-67",
+      "note": ""
+    },
+    {
+      "row": "P13 own sourceURL while a stack is formatted (in guest hook before/after owner, in owner default message getter): own, plain, plain0, anonymous0, Script rows",
+      "source": "acceptance",
+      "trace": "I6+ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-own-source-url-in-hook.case.ts:21-66; tests/browser-unit/vm-script-offsets.spec.ts:34",
+      "note": ""
+    },
+    {
+      "row": "F sibling-drift x guest assigns hook before/after an offset script: projected CallSites; read back delegates; re-assigning restores",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets-callsites.case.ts:54-74; tests/browser-unit/vm-script-offsets.spec.ts:38",
+      "note": ""
+    },
+    {
+      "row": "F concurrent-same-key x ADR-0136 window opened after an offset script, twice: both remaps, restore reads back pre-window value, no self-recursion",
+      "source": "fault-matrix",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:116",
+      "note": ""
+    },
+    {
+      "row": "F concurrent-same-key x first offset script inside an ADR-0136 window: restore keeps owner, frames still project",
+      "source": "fault-matrix",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:134",
+      "note": ""
+    },
+    {
+      "row": "F concurrent-same-key x rows 1-2 from Chromium's unset hook: restore clears through the owner, never deletes it; read-back after re-assigning identical",
+      "source": "fault-matrix",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:252,304",
+      "note": ""
+    },
+    {
+      "row": "F provenance-lie x formatter bypassing the owner (delete, format inside a hook): encoded identity, never unshifted file:line:col; next offset script re-installs",
+      "source": "fault-matrix",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:148,166",
+      "note": ""
+    },
+    {
+      "row": "F provenance-lie x zero-offset filename shaped like an identity: rendered as that filename, never decoded",
+      "source": "fault-matrix",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:185",
+      "note": ""
+    },
+    {
+      "row": "F provenance-lie x guest hook chaining to the hook it read (identity-shaped filename): projected once, never decoded",
+      "source": "fault-matrix",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:197",
+      "note": ""
+    },
+    {
+      "row": "F sibling-drift x guest re-assigns the hook it read after an offset script: same value read back, offsets still project",
+      "source": "fault-matrix",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:213",
+      "note": ""
+    },
+    {
+      "row": "F sibling-drift x own-sourceURL probe vs guest accessors on stackTraceLimit/prepareStackTrace, or stackTraceLimit=0: accessors never invoked, descriptors restored, name still read",
+      "source": "fault-matrix",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/vm/own-source-url.fault.test.ts:61,88",
+      "note": ""
+    },
+    {
+      "row": "F concurrent-same-key x own-sourceURL probe with the owner installed or inside an ADR-0136 window: owner descriptor unchanged, window restore and both remaps intact",
+      "source": "fault-matrix",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/vm/own-source-url.fault.test.ts:107; packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:221",
+      "note": ""
+    },
+    {
+      "row": "F provenance-lie x own-sourceURL probe while V8 formats another stack (guest hook, ADR-0450 wrapper/default, ADR-0136 dispatcher): name is V8's own rendering, never text the hook did not return; unnamed code keeps vm filename+offsets; guest Error.prototype name/message accessors never run",
+      "source": "fault-matrix",
+      "trace": "I6+ADR-0450",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-own-source-url-in-hook.case.ts:61-66; tests/browser-unit/vm-script-offsets.spec.ts:34; packages/runtime-js/src/builtins/vm/own-source-url.fault.test.ts:124; packages/runtime-js/src/builtins/vm/script-offsets-stack-hook.fault.test.ts:270",
+      "note": ""
+    },
+    {
+      "row": "F sibling-drift x frozen Error: NotImplementedError('vm.runInThisContext.frozenError') where the slots are needed; plain code runs",
+      "source": "fault-matrix",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/vm/own-source-url.fault.test.ts:181",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/vm/own-source-url.ts:76-85; docs/public/compat/modules.md:172-189",
+          "evidence": "",
+          "summary": "New loud guard `NotImplementedError('vm.runInThisContext.ownSourceURL')` (probe rendering of an unexpected shape, reachable only when V8 skips the hook under overflow) is recorded in ADR-0450 Decision 2 and contract Decisions but has no compat ❌ row, unlike the sibling frozenError gap; loud, so advisory.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/runtime-js/reference/vm-run-in-this-context-offsets-contract-red.json",
+          "evidence": "`node tools/review/blockers.mjs …contract-red.json` against HEAD contract -> exit 2 `coverage has 21 rows for 33 traced obligations`; against the contract at its reviewed_sha 75ea85bc (temp tree) -> exit 0. goal.md unchanged BASE..HEAD. r2 re-cut (A8 clause, parity 13, one fault row, `trace: none`) adds rows only; its observed-defect RED executed here (Bugs axis nit evidence).",
+          "summary": "Contract+RED record validates only at its reviewed revision; the r1/r2 re-cut rows rest on observed-defect RED (RDY-8), executed and confirmed in this pass.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/vm/script-offsets.ts:204-237",
+          "evidence": "/tmp/vgoal/u10/fg3/probes/extremes.cjs. Node v24.16.0 `node node-run.cjs ./extremes.cjs`: runInThisContext('\\nthrow new Error(\"x\")',{filename:'/v/a.js',lineOffset:2147483647}) -> `/v/a.js:-2147483647:7`; columnOffset 2147483647 on line 1 -> `/v/b.js:1:-2147483642`; hook getters `,7,/v/e.js:-2147483647:7` (getLineNumber null) and `1,,/v/f.js:1:-2147483642` (getColumnNumber null). Rifty HEAD, Node host (`tsx rifty-run.mts extremes.cjs`): `/v/a.js:2147483649:7`, `/v/b.js:1:2147483654`, hook `2147483649,7,…`, `1,2147483654,…`. Minimum values (-2147483648) match Node (no wrap below).",
+          "summary": "At the int32 ceiling V8 computes line+lineOffset / column+columnOffset in int32 and wraps (Node prints -2147483647, getters null); rifty adds in doubles and prints 2147483649. Contract A2/Context state the arithmetic as 'line + lineOffset, unclamped' and never state wrap-around, so exactness beyond the clause (REV-3) - advisory; a `| 0` in shiftLine/shiftColumn/projectedToString plus one parity row would match Node, or record it.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "packages/runtime-js/src/builtins/vm/own-source-url.ts:6-8,24-26",
+          "evidence": "Scratch /tmp/vgoal/u10/scratch-fg-3 @ 6bb60606: own-source-url.ts replaced by its 46920ac36 version -> `npx vitest run packages/runtime-js/src/builtins/vm packages/runtime-js/src/module-loader`: 2 failed (own-source-url.fault `inside a stack hook` `expected [ 'name', 'name', 'name' ] to deeply equal []`; stack-hook fault `source-map dispatcher` `expected [ '/virtual/own.js:3:8', undefined ]`), `tsx tools/node-parity-runner/src/cli.ts run-in-this-context` -> ✗ own-source-url-in-hook; restored HEAD -> 260 passed, 6/6 parity match. Mutants (each killed): hook-ran flag ignored, eval origin read as a name, `undefined` when bypassed, gap instead of rendering -> 2 fault rows + parity case 13 fail; own-data name/message dropped -> own-source-url.fault `inside a stack hook` fails (/tmp/vgoal/u10/fg3/red-mutants.log). Chromium (RIFTY_PLAYGROUND_PORT=5460): vm-script-offsets.spec.ts 5/5 incl. own-source-url-in-hook; scratch probe spec inside a guest hook, Node v24.16.0 vs Chromium worker SAME=true for Error.prototype name/message accessors (calls [] both), //@, quoted, `a)b`, `x.js:3:8`, CRLF, hashbang, use strict, trailing-invalid, empty, URL, unicode, identity-shaped, <anonymous> names with and without offsets, and in-hook getters `/virtual/gown.js,2,10,5,5` (/tmp/vgoal/u10/fg3/browser.log). `node nested.cjs` (v24.16.0): nested JS hook `{\"called\":false}` - Node skips it too, so r2's 'Node has no guard' reading was wrong and Node-host lanes carry the row. `pnpm pr:check` on HEAD 25/25 passed incl. build:libs + check:esbuild-legacy-retirement pin, check:contract-drift, test:run, test:parity (/tmp/vgoal/u10/fg3/prcheck.log).",
+          "summary": "r2 blocker (probe adopting V8's default-formatted stack as the own name inside a stack hook) is fixed: hook-ran flag + parse of V8's own `at eval (<name>:3:8)` rendering, unnamed eval origin rejected by its spaces, probe error name/message own data; RED at 46920ac36 product and every named mutant fail, HEAD green in Node host and Chromium.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/vm/own-source-url.ts:51-56",
+          "evidence": "carried from r2 (/tmp/vgoal/u10/fg2r-probes/frozen.cjs): Object.freeze(Error) + zero-offset code spelling `sourceURL` without an own comment -> Node and BASE: runs; HEAD: NotImplementedError vm.runInThisContext.frozenError. Code unchanged since r2.",
+          "summary": "Frozen-Error zero-offset code that merely spells `sourceURL` regresses from running (BASE) to the recorded named gap; loud and recorded (ADR-0450 Consequences, compat ❌, Out of scope), advisory.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets-callsites.case.ts:35-42",
+          "evidence": "`grep -n sourceMappingURL tools/node-parity-runner/cases/vm/*.ts` -> no case; r2 executed probe showed rifty = Node for the vitest evaluator shape carrying `//# sourceURL=` + `//# sourceMappingURL=` in both realms.",
+          "summary": "The real vitest/vite module shape carries its own sourceURL (own-name path), yet P9 pins only the comment-less shape; matches today, unpinned (carried from r2).",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/public/compat/modules.md:187-189",
+          "evidence": "",
+          "summary": "Pre-existing Known-limitations bullets (in-Worker VFS, TS via require, TS-on-import) sit under the new `####` offsets heading (carried).",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "6bb60606253edec3b206fce0aa94483e4c632a43"
+}

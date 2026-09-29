@@ -1115,7 +1115,7 @@ function corruptNodeCliEvalEntry(
     ...candidate,
     execArgv: [...(candidate.execArgv as readonly string[])],
   };
-  let protocol = 'rifty.node-entry/v4';
+  let protocol = 'rifty.node-entry/v6';
   switch (fault) {
     case 'wrong-protocol':
       protocol = 'rifty.node-entry/v2';
@@ -1335,7 +1335,9 @@ async function installExecSyncMode(): Promise<() => void> {
   const { createModuleLoader } = await import(
     '../../../packages/runtime-js/src/module-loader/loader.ts'
   );
-  const { riftyProcess } = await import('../../../packages/runtime-js/src/builtins/process.ts');
+  const { resetNodeProcessExit, riftyProcess } = await import(
+    '../../../packages/runtime-js/src/builtins/process.ts'
+  );
   const { isAbsolute, joinPath, normalizePath } = await import('@riftydev/vfs');
 
   // Capability stubs so runtime-js `execSync` takes the SAB branch. SAB +
@@ -1411,7 +1413,7 @@ async function installExecSyncMode(): Promise<() => void> {
       const prevEnv = riftyProcess.env;
       const prevCwd = getProcessCwd();
       (riftyProcess as { stdout: unknown }).stdout = capture;
-      riftyProcess.exitCode = 0;
+      resetNodeProcessExit(riftyProcess);
       riftyProcess.env = { ...env };
       setProcessCwd(cwd);
       procHost.process = riftyProcess;
@@ -1425,12 +1427,13 @@ async function installExecSyncMode(): Promise<() => void> {
           isAbsolute(scriptPath) ? scriptPath : joinPath(cwd, scriptPath),
         );
         loader.require(entryAbs, entryAbs);
-        exitCode = riftyProcess.exitCode;
+        exitCode = riftyProcess.exitCode ?? 0;
       } catch {
         exitCode = riftyProcess.exitCode || 1;
       } finally {
         procHost.process = prevGlobalProcess;
         (riftyProcess as { stdout: unknown }).stdout = prevStdout;
+        resetNodeProcessExit(riftyProcess);
         riftyProcess.exitCode = prevExitCode;
         riftyProcess.env = prevEnv;
         setProcessCwd(prevCwd);
@@ -1744,6 +1747,13 @@ export async function runInRiftyInCurrentRealm(
         }
       }
       installRuntimeJsFsHandlers(dispatcher, () => fsMirror);
+    }
+
+    if (testCase.kind === 'worker-env') {
+      // Worker threads read the owner's store over sync-RPC (remoteFs), as in production.
+      const { getKernelDispatcher } = await import('../../../packages/kernel/src/index.ts');
+      const { installRuntimeJsFsHandlers } = await import('@riftydev/runtime-js');
+      installRuntimeJsFsHandlers(getKernelDispatcher(), () => fsMirror);
     }
 
     // ADR-0267: only a physical kernel child can prove that typed host

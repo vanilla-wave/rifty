@@ -23,6 +23,7 @@
  */
 
 import { Buffer } from '../buffer.ts';
+import { readBuiltinUncached } from '../builtin-registry.ts';
 import { EventEmitter } from '../event-emitter.ts';
 import {
   type CallableStreamConstructor,
@@ -720,7 +721,8 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
    * Symmetric wiring (improves on the pre-fix shape that left dangling
    * listeners on either side after an error):
    *   - source `'data'` → `dest.write()` (pause on backpressure);
-   *   - source `'end'`  → `dest.end()` (unless `opts.end === false`);
+   *   - source `'end'`  → `dest.end()`; unpipe instead when `opts.end === false` or
+   *     dest is the realm's `process.stdout|stderr` (Node's `doEnd`);
    *   - source `'error'`→ propagate to dest then cleanup the wiring;
    *   - dest   `'drain'`→ resume source;
    *   - dest   `'error'`→ cleanup the wiring on both ends;
@@ -741,7 +743,10 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
     const existing = this.pipeCleanups.get(dest);
     if (existing) existing();
 
-    const endOnFinish = opts.end ?? true;
+    // Node compares its bootstrap process: ours = `require('node:process')`, not `globalThis.process`.
+    // Uncached: a same-realm child's pipe must not pin its process in the registry (ADR-0458).
+    const proc = readBuiltinUncached('process');
+    const endOnFinish = opts.end !== false && dest !== proc?.stdout && dest !== proc?.stderr;
     const onData = (chunk: unknown): void => {
       const writeResult = dest.write(chunk);
       if (writeResult === false) {
@@ -766,6 +771,7 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
     };
     const onEnd = (): void => {
       if (endOnFinish) dest.end();
+      else cleanup();
     };
     const onSourceError = (err: unknown): void => {
       dest.emit('error', err);

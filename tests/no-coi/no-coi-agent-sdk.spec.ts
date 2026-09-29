@@ -148,6 +148,45 @@ test('project mutation and command report a native OPFS write failure', async ({
   });
 });
 
+// ADR-0470: the unavailable Worker gap wrapped as `cause` (binding-loader shape)
+// of an unhandled rejection. The fatal exit (ADR-0445) must not hide the gap.
+test('project command names a declared gap behind a fatal rejection', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/no-coi-harness.html');
+  const result = await page.evaluate(
+    async ({ root }) => {
+      const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
+      const sandbox = await createSandbox({
+        requireCrossOriginIsolation: false,
+        skipServiceWorker: true,
+        toolchain: {
+          workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
+        },
+      });
+      try {
+        await sandbox.fs.writeFile(
+          '/gap/binding.cjs',
+          [
+            'let gap;',
+            "try { new (require('node:worker_threads').Worker)('./worker.cjs'); }",
+            'catch (error) { gap = error; }',
+            "Promise.reject(new Error('WASI binding not found', { cause: gap }));",
+          ].join('\n'),
+        );
+        return await sandbox.project({ root: '/gap' }).run('node binding.cjs').completion;
+      } finally {
+        sandbox.dispose();
+      }
+    },
+    { root },
+  );
+  expect(result).toMatchObject({
+    status: 'failed',
+    error: { name: 'NotImplementedError', feature: 'worker_threads.Worker' },
+  });
+  expect(result.stderr).toContain('Error: WASI binding not found');
+});
+
 for (const scenario of [
   'agentFilesScenario',
   'agentCommandsScenario',

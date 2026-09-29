@@ -1,0 +1,167 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED PASS (advisory concerns only): oracle re-probed on host Node v24.16.0, all 3 REDs fail at HEAD for the stated reason, scratch spike turns them green and a singleton-only mutant dies; run the owed DEC-2 decision review before IMPLEMENT; merge still needs GREEN + independent Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md @ e727857522dd2faa97c839a25ea134aa830cf6ac (branch vg/u4), BASE c2ab221de27d8051bb3a14fbbb541c0fdb97c891; goal docs/backlog/epics/vitest-run-in-browser/goal.md I6 (line 119); ADR-0443; evidence docs/backlog/runtime-js/reference/absent-builtin-members-loud-throws-evidence.md; oracle host Node v24.16.0 darwin arm64",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:119",
+      "summary": "This unit's GREEN (loud members on fs/child_process/NodeProcess + compat rows) and Final+GREEN pending; remaining I6 walls owned by map items 5 and 10."
+    },
+    {
+      "clause": "I1, I2, I3, I4, I5, I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:11-53",
+      "summary": "Open via map items 1, 6-9, 11-13; end-to-end proof at item 12."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: named imports statfsSync (node:fs), spawnSync (node:child_process), memoryUsage (node:process) link and process.memoryUsage.bind(process) yields a function; RED at BASE with link SyntaxError on statfsSync",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/builtin-loud-members-link.case.ts:14-33",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: each member an own data property with Node's descriptor (function, writable, enumerable, configurable, in Object.keys); named import and namespace entry are that same function; memoryUsage.rss own function with same descriptor",
+      "source": "acceptance",
+      "trace": "ADR-0443",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/builtin-loud-members-link.case.ts:20-33",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: forked ESM child (forks-pool worker shape) links the three named imports, binds process.memoryUsage at load, exits 0 with Node's stdout; RED at BASE exit 1 + child link SyntaxError",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/pool-worker-loud-members.case.ts:16-41",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: fs.statfsSync(path), child_process.spawnSync(cmd,args), process.memoryUsage() (direct, .bind(process), fresh NodeProcess) throw NotImplementedError with feature ids; memoryUsage.rss() throws feature process.memoryUsage.rss; no call returns a value",
+      "source": "acceptance",
+      "trace": "I6+ADR-0443",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/loud-members.test.ts:43-70",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: compat fs.md (generator inventory), process.md and modules.md node: row list the three members as ❌ named NotImplementedError members under ADR-0443; runtime-js CHANGELOG records them",
+      "source": "acceptance",
+      "trace": "ADR-0443",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md:42",
+      "note": ""
+    },
+    {
+      "row": "Parity case 1 frozen Node v24.16.0 output of modules/builtin-loud-members-link (three [function,[function,true,true,true,true],true,true] entries, rss shape, bound function)",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0443",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md:52",
+      "note": ""
+    },
+    {
+      "row": "Parity case 2 frozen Node output of child_process/pool-worker-loud-members ({code:0, signal:null, stdout:[function x4,true], stderr:false})",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md:53",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md:42",
+          "evidence": "",
+          "summary": "Acceptance 5 (compat ❌ rows + CHANGELOG) has no pre-implementation carrier by nature; Final+GREEN must confirm the fs row lands through the generator inventory (check:compat-drift), process.md/modules.md rows exist, and the modules.md sentence 'an unimplemented Node method remains a link-time miss' (docs/public/compat/modules.md:20) gains the ADR-0443 exception (ADR-0443 Consequences).",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md:47",
+          "evidence": "Scratch /tmp/vgoal/u4/scratch-cr-1 @ e7278575 (removed). Spike A (statfsSync/spawnSync on module objects, memoryUsage+rss own field in NodeProcess constructor): `pnpm test:parity loud-members` -> '✓ child_process/pool-worker-loud-members.case.ts ✓ modules/builtin-loud-members-link.case.ts all cases match'; `npx vitest run packages/runtime-js/src/builtins/loud-members.test.ts` -> 'Tests 5 passed (5)'. Mutant B (memoryUsage only on riftyProcess singleton): parity -> '✗ child_process/pool-worker-loud-members.case.ts ... + {\"code\":1,\"signal\":null,\"stdout\":\"\",\"stderr\":true}', '✓ modules/builtin-loud-members-link.case.ts'; unit -> '× ... a kernel-seeded NodeProcess carries the same loud member', 'Tests 1 failed | 4 passed (5)'.",
+          "summary": "Scenario 4 threads-pool realm has no direct link/bind carrier; it rests on Acceptance 4's `new NodeProcess()` row plus the reference-contract fact that kernel realms (incl. worker_threads spawnWorkerThread via node-entry) install `new NodeProcess(spec)` (install-process.ts:73). An instance-level member is forced (singleton-only mutant dies), so this is advisory; item 12 e2e closes the threads path.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md:65",
+          "evidence": "",
+          "summary": "ADR-0443 is committed as 'Status: Accepted' with the ADR-0348 correction note and README §Corrections row, while the contract's own Decision line records that the DEC-2 fresh decision review of this partial supersession is still owed; the driver must run it before IMPLEMENT and re-cut contract/ADR if it does not hold.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/epics/vitest-run-in-browser/map.md:14-16",
+          "evidence": "",
+          "summary": "Map item 4 still says 'real or named-loud' and map.md:84 still lists '--changed (git via spawnSync): loud', which evidence V1 contradicts (--changed runs git via tinyexec async x -> spawn); Decision :67 defers the fix to land - keep it on the land checklist.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "tools/node-parity-runner/cases/modules/builtin-loud-members-link.case.ts:11",
+          "evidence": "HEAD e727857522dd2faa97c839a25ea134aa830cf6ac in scratch: `pnpm test:parity modules/builtin-loud-members-link` -> '✗ ... error: SyntaxError: The requested module 'node:fs' does not provide an export named 'statfsSync' (imported by /work/main.mjs)'; `pnpm test:parity child_process/pool-worker-loud-members` -> '- {\"code\":0,...,\"stderr\":false} + {\"code\":1,\"signal\":null,\"stdout\":\"\",\"stderr\":true}'; scratch-only copy printing child stderr text -> 'SyntaxError: The requested module 'node:fs' does not provide an export named 'statfsSync' (imported by /project/pool-worker.mjs) at linkedExportSyntaxError (.../esm-job-linker.ts:152:10)'; `npx vitest run packages/runtime-js/src/builtins/loud-members.test.ts` -> 5x 'expected <member> to be a function, got undefined', 'Tests 5 failed (5)'. `tsc --noEmit` runtime-js and node-parity-runner exit 0; biome check on the 3 new files clean. Oracle: `node --version` v24.16.0; case code extracted verbatim and run -> link '{\"statfsSync\":[\"function\",[\"function\",true,true,true,true],true,true],\"spawnSync\":[...same],\"memoryUsage\":[...same],\"rss\":[\"function\",true,true,true,true],\"bound\":\"function\"}', pool '{\"code\":0,\"signal\":null,\"stdout\":\"[\\\"function\\\",\\\"function\\\",\\\"function\\\",\\\"function\\\",true]\",\"stderr\":false}' - identical to contract :52-53; descriptors data w/e/c true for statfsSync/spawnSync/memoryUsage/rss (O1).",
+          "summary": "The two new parity cases and the unit test are red on this commit by design (full test:parity/test:run red until IMPLEMENT); each fails for the stated missing-member reason, not import/typecheck. No existing test, gate or oracle changed (PR-4).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/runtime-js/0443-named-loud-builtin-members-for-linked-unsuppliable-edges.md:22-28",
+          "evidence": "`node -e` on v24.16.0: 'statfsSync(1) throws ERR_INVALID_ARG_TYPE', 'spawnSync(1) throws ERR_INVALID_ARG_TYPE', 'memoryUsage(1) returns object'.",
+          "summary": "A feature-detecting consumer (`typeof process.memoryUsage === 'function'`, `if (fs.statfsSync)`) now takes the call path and gets NotImplementedError where it previously fell back, and invalid-argument calls diverge from Node (declared out of scope :58); accepted trade-off of ADR-0443 §1-2 with O5 showing no claimed-path call - compat ❌ rows should say 'present, every call throws' so detection-based users see it.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "e727857522dd2faa97c839a25ea134aa830cf6ac"
+}

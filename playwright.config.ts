@@ -28,6 +28,10 @@ const HEAVY_SPECS = [
   '**/ai-mode.spec.ts',
   '**/preset-deep-link.spec.ts',
   '**/webpack-dev-server.spec.ts',
+  // Two cold-registry installs of the vitest 4.1.11 + vite 8.0.16 tree (48 packages).
+  '**/npm-override-bare-version.spec.ts',
+  // Cold vitest+vite 8 install (rolldown WASI) and 19 real vitest runs.
+  '**/vitest-run.spec.ts',
 ];
 
 export default defineConfig({

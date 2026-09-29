@@ -1,4 +1,5 @@
 import { parse as acornParse } from 'acorn';
+import { nodeStartupOptions } from '../internal/node-startup-options.ts';
 
 export interface FileDirResolutionOrder {
   readonly extensions: readonly string[];
@@ -55,12 +56,21 @@ export function resolutionOrder(esm: boolean): FileDirResolutionOrder {
   return esm ? IMPORT_RESOLUTION : REQUIRE_RESOLUTION;
 }
 
-export type ResolutionCondition = 'node' | 'default' | 'import' | 'require' | 'module-sync';
+const ESM_CONDITIONS: readonly string[] = ['node', 'import', 'module-sync', 'default'];
+const CJS_CONDITIONS: readonly string[] = ['node', 'require', 'module-sync', 'default'];
+let userConditionsFor: readonly string[] = [];
+let userEsmConditions = ESM_CONDITIONS;
+let userCjsConditions = CJS_CONDITIONS;
 
-export function activeConditions(esm: boolean): readonly ResolutionCondition[] {
-  return esm
-    ? (['node', 'import', 'module-sync', 'default'] as const)
-    : (['node', 'require', 'module-sync', 'default'] as const);
+/** Node's defaults plus the realm's `--conditions` (ADR-0449), for every resolution. */
+export function activeConditions(esm: boolean): readonly string[] {
+  const user = nodeStartupOptions().conditions;
+  if (user !== userConditionsFor) {
+    userConditionsFor = user;
+    userEsmConditions = [...ESM_CONDITIONS, ...user];
+    userCjsConditions = [...CJS_CONDITIONS, ...user];
+  }
+  return esm ? userEsmConditions : userCjsConditions;
 }
 
 /** Node's ambiguous `.js` syntax detection after package-scope classification. */

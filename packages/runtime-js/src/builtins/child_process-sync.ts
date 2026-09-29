@@ -44,7 +44,12 @@ export function resolveExecSyncOptions(
  * child. Replaced by a loud throw per CLAUDE.md "no silent stubs" + 2026-05-27
  * review item #2 (`docs/follow-ups-architecture-review-2026-05-27.md`).
  */
-export function execSync(cmd: string, opts?: ExecSyncOptions): Uint8Array {
+export function execSync(
+  cmd: string,
+  opts?: ExecSyncOptions & { readonly encoding?: 'buffer' },
+): Uint8Array;
+export function execSync(cmd: string, opts?: ExecSyncOptions): Uint8Array | string;
+export function execSync(cmd: string, opts?: ExecSyncOptions): Uint8Array | string {
   const api = readKernelSyncApi();
   if (api !== null && isSabIpcSupported() && getKernelWorkerUrl() !== null) {
     const parent = requireNodeProcessContext('execSync');
@@ -60,7 +65,10 @@ export function execSync(cmd: string, opts?: ExecSyncOptions): Uint8Array {
         `execSync: kernel returned non-bytes stdout (${typeof stdout}); the v2 binary frame should always produce a Uint8Array`,
       );
     }
-    return Buffer.from(stdout);
+    // Node's spawnSync: any `encoding` but `'buffer'` decodes stdout.
+    const out = Buffer.from(stdout);
+    const encoding = opts?.encoding;
+    return encoding && encoding !== 'buffer' ? out.toString(encoding as BufferEncoding) : out;
   }
   throw new NotImplementedError(
     'child_process.execSync',

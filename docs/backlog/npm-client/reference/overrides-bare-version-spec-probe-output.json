@@ -1,0 +1,1412 @@
+{
+  "node": "v24.16.0",
+  "npm": "11.17.0",
+  "registry": "https://registry.npmjs.org/",
+  "libraries": {
+    "npm-package-arg": "13.0.2",
+    "@npmcli/arborist": "9.8.0",
+    "semver": "7.8.4"
+  },
+  "sources": {
+    "arborist/lib/edge.js": "a547398f1ac1dc19a57bc6bc3f4477baf7b2af34337518e15223aa7f35e34e81",
+    "arborist/lib/override-set.js": "ad1f5a508110fada532a9d8d262fa568d1ab041199f33850f565075897237991",
+    "npm-package-arg/lib/npa.js": "41cd09e778c4a7588df362588dbe9146a024d5cfcdf449702feb294e6acde761"
+  },
+  "classify": [
+    {
+      "value": "8.0.16",
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "8.0.16"
+      }
+    },
+    {
+      "value": " 8.0.16 ",
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "8.0.16"
+      }
+    },
+    {
+      "value": "v8.0.16",
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "v8.0.16"
+      }
+    },
+    {
+      "value": "=8.0.16",
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "=8.0.16"
+      }
+    },
+    {
+      "value": "8.0.16-beta.1",
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "8.0.16-beta.1"
+      }
+    },
+    {
+      "value": "^8.0.0",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "^8.0.0"
+      }
+    },
+    {
+      "value": "~8.0.16",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "~8.0.16"
+      }
+    },
+    {
+      "value": "~>8.0",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "~>8.0"
+      }
+    },
+    {
+      "value": "8.0.x",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8.0.x"
+      }
+    },
+    {
+      "value": "8.x",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8.x"
+      }
+    },
+    {
+      "value": "8",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8"
+      }
+    },
+    {
+      "value": "x",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "x"
+      }
+    },
+    {
+      "value": "*",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "*"
+      }
+    },
+    {
+      "value": ">=8.0.0 <8.1.0",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": ">=8.0.0 <8.1.0"
+      }
+    },
+    {
+      "value": "8.0.0 - 8.0.16",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8.0.0 - 8.0.16"
+      }
+    },
+    {
+      "value": "^7.0.0 || ^8.0.0",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "^7.0.0 || ^8.0.0"
+      }
+    },
+    {
+      "value": "latest",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "latest"
+      }
+    },
+    {
+      "value": "beta",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "beta"
+      }
+    },
+    {
+      "value": "bcryptjs",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "bcryptjs"
+      }
+    },
+    {
+      "value": "sql.js",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "sql.js"
+      }
+    },
+    {
+      "value": "7zip-bin",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "7zip-bin"
+      }
+    },
+    {
+      "value": "@scope/pkg",
+      "npa": {
+        "type": "directory",
+        "name": "vite"
+      }
+    },
+    {
+      "value": "npm:vite@8.0.16",
+      "npa": {
+        "type": "alias",
+        "name": "vite",
+        "subType": "version",
+        "fetchSpec": "8.0.16"
+      }
+    },
+    {
+      "value": "npm:bcryptjs@2.4.3",
+      "npa": {
+        "type": "alias",
+        "name": "bcryptjs",
+        "subType": "version",
+        "fetchSpec": "2.4.3"
+      }
+    },
+    {
+      "value": "npm:bcryptjs",
+      "npa": {
+        "type": "alias",
+        "name": "bcryptjs",
+        "subType": "range",
+        "fetchSpec": "*"
+      }
+    },
+    {
+      "value": "npm:v8.0.1",
+      "npa": {
+        "type": "alias",
+        "name": "v8.0.1",
+        "subType": "range",
+        "fetchSpec": "*"
+      }
+    },
+    {
+      "value": "npm:8.0.16",
+      "npa": {
+        "type": "alias",
+        "name": "8.0.16",
+        "subType": "range",
+        "fetchSpec": "*"
+      }
+    },
+    {
+      "value": "npm:2",
+      "npa": {
+        "type": "alias",
+        "name": "2",
+        "subType": "range",
+        "fetchSpec": "*"
+      }
+    },
+    {
+      "value": "vite@8.0.16",
+      "npa": {
+        "error": "EINVALIDTAGNAME"
+      }
+    },
+    {
+      "value": "$vite",
+      "npa": {
+        "error": "EINVALIDTAGNAME"
+      }
+    },
+    {
+      "value": " * ",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "*"
+      }
+    },
+    {
+      "value": " ",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": ""
+      }
+    },
+    {
+      "value": ">= 8.0.0",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": ">= 8.0.0"
+      }
+    },
+    {
+      "value": ">=8.0.0  <8.1.0",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": ">=8.0.0  <8.1.0"
+      }
+    },
+    {
+      "value": "~ 8.0.1",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "~ 8.0.1"
+      }
+    },
+    {
+      "value": "^ 8",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "^ 8"
+      }
+    },
+    {
+      "value": "~> 8.0",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "~> 8.0"
+      }
+    },
+    {
+      "value": "~8",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "~8"
+      }
+    },
+    {
+      "value": "8.x.x",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8.x.x"
+      }
+    },
+    {
+      "value": "8.X",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8.X"
+      }
+    },
+    {
+      "value": "8.*",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8.*"
+      }
+    },
+    {
+      "value": "x.x.x",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "x.x.x"
+      }
+    },
+    {
+      "value": "^0.0.x",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "^0.0.x"
+      }
+    },
+    {
+      "value": "8.0.0 - 9",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8.0.0 - 9"
+      }
+    },
+    {
+      "value": "8 - 9 || ^10",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8 - 9 || ^10"
+      }
+    },
+    {
+      "value": "<8.0.0-rc.1",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "<8.0.0-rc.1"
+      }
+    },
+    {
+      "value": "8.0.x-beta",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8.0.x-beta"
+      }
+    },
+    {
+      "value": "8.0.16+build.5",
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "8.0.16+build.5"
+      }
+    },
+    {
+      "value": "8.0.16beta",
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "8.0.16beta"
+      }
+    },
+    {
+      "value": "8.0.016",
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "8.0.016"
+      }
+    },
+    {
+      "value": "v8",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "v8"
+      }
+    },
+    {
+      "value": "=v8.0.16",
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "=v8.0.16"
+      }
+    },
+    {
+      "value": "v 8.0.16",
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "v 8.0.16"
+      }
+    },
+    {
+      "value": ">8 <=9",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": ">8 <=9"
+      }
+    },
+    {
+      "value": "<=8",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "<=8"
+      }
+    },
+    {
+      "value": "<x",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "<x"
+      }
+    },
+    {
+      "value": "^8.0.0 ||",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "^8.0.0 ||"
+      }
+    },
+    {
+      "value": "||",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "||"
+      }
+    },
+    {
+      "value": "1.2.3 foo",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "1.2.3 foo"
+      }
+    },
+    {
+      "value": "foo || 8",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "foo || 8"
+      }
+    },
+    {
+      "value": "foo *",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "foo *"
+      }
+    },
+    {
+      "value": "foo * bar",
+      "npa": {
+        "error": "EINVALIDTAGNAME"
+      }
+    },
+    {
+      "value": "+1",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "+1"
+      }
+    },
+    {
+      "value": "1.2.3*",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "1.2.3*"
+      }
+    },
+    {
+      "value": " latest ",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "latest"
+      }
+    },
+    {
+      "value": "next",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "next"
+      }
+    },
+    {
+      "value": "x.1",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "x.1"
+      }
+    },
+    {
+      "value": "1.2.3.4",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "1.2.3.4"
+      }
+    },
+    {
+      "value": "2fa",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "2fa"
+      }
+    },
+    {
+      "value": "v",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "v"
+      }
+    }
+  ],
+  "installs": [
+    {
+      "id": "baseline",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        }
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.1.2"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "exact",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "2.0.0"
+        }
+      },
+      "npa": {
+        "type": "version",
+        "name": "ms",
+        "fetchSpec": "2.0.0"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.0.0"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "v-prefixed",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "v2.0.0"
+        }
+      },
+      "npa": {
+        "type": "version",
+        "name": "ms",
+        "fetchSpec": "v2.0.0"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.0.0"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "eq-prefixed",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "=2.0.0"
+        }
+      },
+      "npa": {
+        "type": "version",
+        "name": "ms",
+        "fetchSpec": "=2.0.0"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.0.0"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "caret",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "^2.0.0"
+        }
+      },
+      "npa": {
+        "type": "range",
+        "name": "ms",
+        "fetchSpec": "^2.0.0"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.1.3"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "tilde",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "~2.0.0"
+        }
+      },
+      "npa": {
+        "type": "range",
+        "name": "ms",
+        "fetchSpec": "~2.0.0"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.0.0"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "x-range-patch",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "2.0.x"
+        }
+      },
+      "npa": {
+        "type": "range",
+        "name": "ms",
+        "fetchSpec": "2.0.x"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.0.0"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "partial-major",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "2"
+        }
+      },
+      "npa": {
+        "type": "range",
+        "name": "ms",
+        "fetchSpec": "2"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.1.3"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "x-any",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "x"
+        }
+      },
+      "npa": {
+        "type": "range",
+        "name": "ms",
+        "fetchSpec": "x"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.1.3"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "star",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "*"
+        }
+      },
+      "npa": {
+        "type": "range",
+        "name": "ms",
+        "fetchSpec": "*"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.1.2"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "empty",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": ""
+        }
+      },
+      "npa": {
+        "type": "range",
+        "name": "ms",
+        "fetchSpec": ""
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.1.2"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "star-padded",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": " * "
+        }
+      },
+      "npa": {
+        "type": "range",
+        "name": "ms",
+        "fetchSpec": "*"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.1.3"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "whitespace-only",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": " "
+        }
+      },
+      "npa": {
+        "type": "range",
+        "name": "ms",
+        "fetchSpec": ""
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.1.3"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "comparator-set",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": ">=2.0.0 <2.1.0"
+        }
+      },
+      "npa": {
+        "type": "range",
+        "name": "ms",
+        "fetchSpec": ">=2.0.0 <2.1.0"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.0.0"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "hyphen",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "2.0.0 - 2.1.1"
+        }
+      },
+      "npa": {
+        "type": "range",
+        "name": "ms",
+        "fetchSpec": "2.0.0 - 2.1.1"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.1.1"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "union",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "^0.7.0 || 2.0.0"
+        }
+      },
+      "npa": {
+        "type": "range",
+        "name": "ms",
+        "fetchSpec": "^0.7.0 || 2.0.0"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.0.0"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "tag-latest",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "latest"
+        }
+      },
+      "npa": {
+        "type": "tag",
+        "name": "ms",
+        "fetchSpec": "latest"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.1.3"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "tag-beta",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "beta"
+        }
+      },
+      "npa": {
+        "type": "tag",
+        "name": "ms",
+        "fetchSpec": "beta"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "3.0.0-beta.2"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "bare-word",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "bcryptjs"
+        }
+      },
+      "npa": {
+        "type": "tag",
+        "name": "ms",
+        "fetchSpec": "bcryptjs"
+      },
+      "exit": 1,
+      "error": {
+        "code": "ETARGET",
+        "message": "npm error notarget No matching version found for ms@bcryptjs."
+      }
+    },
+    {
+      "id": "digit-leading-word",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "7zip-bin"
+        }
+      },
+      "npa": {
+        "type": "tag",
+        "name": "ms",
+        "fetchSpec": "7zip-bin"
+      },
+      "exit": 1,
+      "error": {
+        "code": "ETARGET",
+        "message": "npm error notarget No matching version found for ms@7zip-bin."
+      }
+    },
+    {
+      "id": "alias-name-range",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "npm:bcryptjs@2.4.3"
+        }
+      },
+      "npa": {
+        "type": "alias",
+        "name": "bcryptjs",
+        "subType": "version",
+        "fetchSpec": "2.4.3"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "name": "bcryptjs",
+          "version": "2.4.3"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "alias-digit-name",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "npm:2"
+        }
+      },
+      "npa": {
+        "type": "alias",
+        "name": "2",
+        "subType": "range",
+        "fetchSpec": "*"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "name": "2",
+          "version": "3.0.0"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "alias-v-name",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "npm:v8"
+        }
+      },
+      "npa": {
+        "type": "alias",
+        "name": "v8",
+        "subType": "range",
+        "fetchSpec": "*"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "name": "v8",
+          "version": "0.1.0"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "rifty-name-at-range",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "ms@2.0.0"
+        }
+      },
+      "npa": {
+        "error": "EINVALIDTAGNAME"
+      },
+      "exit": 1,
+      "error": {
+        "code": "EINVALIDTAGNAME",
+        "message": "npm error Invalid tag name \"ms@2.0.0\" of package \"ms@ms@2.0.0\": Tags may not have any characters that encodeURIComponent encodes."
+      }
+    },
+    {
+      "id": "reference",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4",
+          "ms": "2.0.0"
+        },
+        "overrides": {
+          "ms": "$ms"
+        }
+      },
+      "npa": {
+        "error": "EINVALIDTAGNAME"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.0.0"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "direct-dep-conflict",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4",
+          "ms": "^2.1.0"
+        },
+        "overrides": {
+          "ms": "2.0.0"
+        }
+      },
+      "npa": {
+        "type": "version",
+        "name": "ms",
+        "fetchSpec": "2.0.0"
+      },
+      "exit": 1,
+      "error": {
+        "code": "EOVERRIDE",
+        "message": "npm error Override for ms@^2.1.0 conflicts with direct dependency"
+      }
+    },
+    {
+      "id": "existing-lock-then-override",
+      "before": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        }
+      },
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": "2.0.0"
+        }
+      },
+      "npa": {
+        "type": "version",
+        "name": "ms",
+        "fetchSpec": "2.0.0"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/debug/node_modules/ms": {
+          "version": "2.0.0"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "scenario-vitest-vite",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "devDependencies": {
+          "vitest": "4.1.11"
+        },
+        "overrides": {
+          "vite": "8.0.16"
+        }
+      },
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "8.0.16"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/vite": {
+          "version": "8.0.16"
+        }
+      },
+      "edges": {
+        "node_modules/vitest": "^6.0.0 || ^7.0.0 || ^8.0.0"
+      }
+    }
+  ],
+  "registryFacts": {
+    "ms": {
+      "versions": [
+        "0.1.0",
+        "0.2.0",
+        "0.3.0",
+        "0.4.0",
+        "0.5.0",
+        "0.5.1",
+        "0.6.0",
+        "0.6.1",
+        "0.6.2",
+        "0.7.0",
+        "0.7.1",
+        "0.7.2",
+        "0.7.3",
+        "1.0.0",
+        "2.0.0",
+        "2.1.0",
+        "2.1.1",
+        "2.1.2",
+        "2.1.3",
+        "3.0.0-beta.0",
+        "3.0.0-beta.1",
+        "3.0.0-beta.2",
+        "3.0.0-canary.0",
+        "3.0.0-canary.1",
+        "3.0.0-canary.202508252028",
+        "3.0.0-canary.202508252038",
+        "3.0.0-canary.202508261539",
+        "3.0.0-canary.202508261745",
+        "3.0.0-canary.202508261828",
+        "4.0.0-nightly.202508270145",
+        "4.0.0-nightly.202508271358",
+        "4.0.0-nightly.202508271359"
+      ],
+      "distTags": {
+        "latest": "2.1.3",
+        "beta": "3.0.0-beta.2",
+        "canary": "3.0.0-canary.202508261828",
+        "nightly": "4.0.0-nightly.202508271359"
+      }
+    },
+    "debug@4.3.4": {
+      "dependencies": {
+        "ms": "2.1.2"
+      }
+    },
+    "decoys": {
+      "2": "3.0.0",
+      "x": "0.1.2",
+      "latest": "0.2.0",
+      "beta": "0.0.1"
+    },
+    "vitest@4.1.11": {
+      "vite": "^6.0.0 || ^7.0.0 || ^8.0.0"
+    },
+    "vite": {
+      "has8016": true,
+      "latest": "8.3.0"
+    }
+  }
+}

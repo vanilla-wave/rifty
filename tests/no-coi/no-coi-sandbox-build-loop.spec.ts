@@ -2525,7 +2525,14 @@ test('threaded-WASM: Vite 8 Rolldown fails at the unavailable Worker boundary', 
             );
           }),
         ]).finally(() => clearTimeout(timer));
-        return { threw: false, result, output: output.join(''), provenance };
+        let dist: string;
+        try {
+          await sandbox.fs.readFile(`${root}/dist/index.html`, 'utf8');
+          dist = 'present';
+        } catch {
+          dist = 'absent';
+        }
+        return { threw: false, result, dist, output: output.join(''), provenance };
       } catch (error) {
         const inspected = error as Error & { cause?: unknown; feature?: string };
         if (inspected.message.startsWith('Vite8 run did not settle')) throw inspected;
@@ -2557,14 +2564,16 @@ test('threaded-WASM: Vite 8 Rolldown fails at the unavailable Worker boundary', 
         off();
       }
     });
-    if (!failure.threw)
-      throw new Error(`Vite 8 boundary did not throw: ${JSON.stringify(failure)}`);
+    // ADR-0445: an unhandled dependency rejection ends runBin with status 1.
+    // ADR-0470: preserve its original diagnostic and the earlier named Worker gap.
     expect(failure).toMatchObject({
-      threw: true,
-      name: 'Error',
-      message: 'WASI binding not found and NAPI_RS_FORCE_WASI is set to error',
+      threw: false,
+      result: { exitCode: 1 },
       dist: 'absent',
     });
+    expect(failure.output).toContain(
+      'Error: WASI binding not found and NAPI_RS_FORCE_WASI is set to error',
+    );
     expect(failure.output).toContain('NotImplementedError: Not implemented: worker_threads.Worker');
     expect(failure.output).toContain('cross-origin isolation');
     expect(failure.provenance.manifest).toMatchObject({

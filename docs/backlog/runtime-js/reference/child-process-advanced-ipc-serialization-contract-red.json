@@ -1,0 +1,313 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED verify pass 2: PASS, no blockers. The r1 blocker is fixed: Parity case 11 (public-ipc-json-refusal-text{,-same-realm}) now fails on exactly the missing JSON-path `Received ...` suffix, parent and child, on both routes, while public-ipc-json stays green. The r1 concerns about Acceptance 6 carriers, the runtime-js v4 pin, spawn validation, DOMException wording and DEC-2 are fixed too. Every RED fails now because the feature is unimplemented, and the new oracle facts reproduce on Node v24.16.0. Remaining notes are advisory. Proceed to IMPLEMENT. This is not a merge approval.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/child-process-advanced-ipc-serialization.md (status: ready) at HEAD c378b464f8c20e5b75d57d4b9f2c22c4fe28051a (branch vg/u9), BASE 92215e3b4f94bd20801f5d57b5e109e83f809d48. Goal: docs/backlog/epics/vitest-run-in-browser/goal.md I4 (goal/map/ledger unchanged BASE..HEAD). Also ADR-0448 (new in this branch, amended by the fix commit), the ADR-0326/ADR-0416 correction notes, ADR-0267. Verify pass 2 over r1 (/tmp/vgoal/u9/contract-red-r1.json) and fix commit 71eaaa29a..c378b464f. Fresh independent reviewer, read-only on vg-u9. Probes ran in detached scratch /tmp/vgoal/u9/scratch-cr-2 @ HEAD (since removed) and /tmp/vgoal/u9/cr2-oracle. Executed: (1) pnpm vitest run install-process-advanced-ipc.test.ts child_process-advanced-ipc-ceiling.test.ts node-entry-runtime-config.test.ts -> 16 failed / 62 passed. Failures: 9 ceiling rows (fork throws NotImplementedError child_process.serialization.advanced at child_process.ts:326); v5 pin :64; eval-launch v5 pin :123 (newly moved); retired v2/v3/v4; advanced program launch; advanced keepalive ('launch.ipc must be none or json'). The json keepalive, launch-less Worker and reject-ipc rows pass as regression guards. Log: /tmp/vgoal/u9/cr2-unit-parity.log, /tmp/vgoal/u9/cr2-unit.json. (2) pnpm test:parity public-ipc-json -> public-ipc-json.case.ts pass. public-ipc-json-refusal-text.case.ts (child-worker, Worker-count assertion satisfied) and -same-realm.case.ts both fail only on the 8 function/symbol/bigint rows (parent+child), Node '... boolean. Received function ' / 'Received function namedFn' / 'Received type symbol (Symbol(parent))' / 'Received type bigint (1n)' vs rifty '... boolean'. The undefined and exit rows match. (3) pnpm test:parity public-ipc-advanced -> 4/4 fail for the unimplemented feature. The options diff now includes 'spawn-option:bogus' Node ERR_INVALID_ARG_VALUE vs rifty \"spawned\". (4) RIFTY_PLAYGROUND_PORT=5459 pnpm test:browser-unit tests/browser-unit/advanced-ipc.spec.ts -> 5/5 fail with NotImplementedError child_process.serialization.advanced (log /tmp/vgoal/u9/cr2-bu.log). In the ceiling test the live-Node oracle assertion (spec :79) passes and the failure is at :84, rifty rows [] vs the 13 expected rows. (5) Node v24.16.0: ceilingProgram run 3x via runNodeProgram -> code 0, rows === ceilingNodeRows each time (8 platform objects sent, detached pair Error/TypeError texts, getter-beside-buffer sent, received list without refused labels). Disconnect-listener-only child held alive 300 ms, then child-disconnect and exit 0 (matches evidence §Keepalive). (6) Echo-harness viability probe (scratch-only test, JSON serialization, Node-host unit env): an accepted send gives received ['refused','after']; a top-level refused send gives TypeError and received ['after']. So the ceiling test's 'posts nothing' assertion discriminates (log /tmp/vgoal/u9/cr2-echo-probe.log). (7) tsc runtime-js + node-parity-runner exit 0; root tsc has no errors in changed files; biome clean on the 13 changed .ts files; parity-coverage ok; backlog:check OK; file-size ratchet holds. refs:check reports 1 dangling reference in goal.md, which also exists at BASE (goal.md unchanged). PR-4: among existing tests only node-entry-runtime-config.test.ts changed (v4->v5 pins at :64 and :123, retired list +v4, new advanced/reject rows), with no weakening. No product source in the diff.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4 (this unit, map item 9)",
+      "location": "docs/backlog/runtime-js/child-process-advanced-ipc-serialization.md:53",
+      "summary": "Contract+RED only. Still open: codec, spawn/fork option validation, JSON top-level Received text, node-entry v5 (workbench fixtures and parity harness default at IMPLEMENT), keepalive, compat row, CHANGELOG, and independent Final+GREEN."
+    },
+    {
+      "clause": "I2, I3, I4, I5, I6, I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:10",
+      "summary": "Map items 7, 8, 10 and 11 and the end-to-end acceptance item 12 were open at BASE. The goal is not complete."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: fork advanced no longer throws and carries vitest 4.1.11 forks-pool frames (Parity 6) both ways with undefined members/arguments and circular task graphs, on the Worker route in the parity runner and in a Chromium child realm vs live Node",
+      "source": "acceptance",
+      "trace": "I4+ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:136-152,201-210; tests/browser-unit/advanced-ipc.spec.ts:51-69",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: Parity 1-5, 7 and 8 on the Worker route (parity runner) and verbatim in a Chromium child realm, incl. Chromium refusal errors and SharedArrayBuffer",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:86-247; tests/browser-unit/fixtures/advanced-ipc-cases.ts:32-37; tests/browser-unit/advanced-ipc.spec.ts:51-69",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: the fork child's IPC lane holds its realm while it has a 'message' listener in both serializations and releases it on listener removal or disconnect; a launch-less URL Worker stays unheld",
+      "source": "acceptance",
+      "trace": "I4+ADR-0448",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/install-process-advanced-ipc.test.ts:54-84; tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:243-247",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: the same codec on the same-realm fallback route; Parity 10 matches live Node; browser-unit runs that program too",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-same-realm.case.ts:36-72; tests/browser-unit/fixtures/advanced-ipc-cases.ts:36",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: serialization validated and ignored without IPC as in Node (Parity 9, options case and browser-unit options)",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-options.case.ts:29-65; tests/browser-unit/fixtures/advanced-ipc-cases.ts:35",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: named throws at send() (host-object in the Node host and Chromium, detached-array-buffer, accessor-with-view) leave nothing posted (the echo child receives only the next message) and keep the channel usable; the detached pair and a getter beside a Buffer also run in Chromium",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/child_process-advanced-ipc-ceiling.test.ts:27-128; tests/browser-unit/fixtures/advanced-ipc-cases.ts:47-140; tests/browser-unit/advanced-ipc.spec.ts:72-86",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: node-entry v5; a program launch carries ipc 'advanced'; other ipc values are rejected; v2-v4 are neither read nor used as a fallback",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts:63-65,120-123,472-503",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8a: the default JSON path keeps its behavior (public-ipc-json.case.ts stays green)",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-json.case.ts:57-133",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8b: the JSON path's top-level refusal text gains Node's `Received ...` suffix, shared with advanced; Parity case 11 matches live Node on the Worker route and the same-realm route",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/json-ipc-refusal-program.ts:10-61; tools/node-parity-runner/cases/child_process/public-ipc-json-refusal-text.case.ts:8-14; tools/node-parity-runner/cases/child_process/public-ipc-json-refusal-text-same-realm.case.ts:8-13",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 9: docs/public/compat/process.md marks advanced serialization done and lists each ADR-0448 named throw, each residual and the unclaimed view layout",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/child-process-advanced-ipc-serialization.md:61; docs/public/compat/process.md:83 (baseline row; docs deliverable at IMPLEMENT, no RED)",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: intrinsic values round-trip parent->child->parent with Node's types",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:87-109",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: class instances and null-prototype objects arrive as plain Object; non-enumerable and symbol keys are gone; an own getter runs exactly once",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:105-108,212-215",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: Errors keep class, message, stack and cause; a subclass, a custom name and AggregateError arrive as Error; an own name 'TypeError' arrives as TypeError",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:110-117",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: views keep type and exactly their bytes; own props drop; a subclass becomes Uint8Array; views arrive independent; the same view twice stays one object; a view as a Map key round-trips; a SAB view arrives as an unshared copy",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:118-135; tools/node-parity-runner/cases/child_process/advanced-ipc-program.ts:90-101",
+      "note": ""
+    },
+    {
+      "row": "Parity 5: Buffer.from/alloc, a nested Buffer and an own-constructor Buffer arrive as Buffer both ways, with child-originated Map/Set/Date, RangeError+cause, a SAB view, two views and a circular task",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:131-134,236-241; tools/node-parity-runner/cases/child_process/advanced-ipc-program.ts:125-142",
+      "note": ""
+    },
+    {
+      "row": "Parity 6: vitest 4.1.11 forks-pool frames (start, fetch request, reply r: undefined, onCollected circular + null-proto meta, testfileFinished)",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:64-85,136-152",
+      "note": ""
+    },
+    {
+      "row": "Parity 7: refusals on the parent and child side (ERR_MISSING_ARGS, ERR_INVALID_ARG_TYPE with Received text, plain Error '<x> could not be cloned.' without code, getter order, throwing getter, channel usable)",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:156-234; tools/node-parity-runner/cases/child_process/advanced-ipc-program.ts:102-146",
+      "note": ""
+    },
+    {
+      "row": "Parity 8: an echo child held only by process.on('message') is alive and connected after 300 ms idle and exits 0 after the parent disconnects",
+      "source": "acceptance",
+      "trace": "I4+ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:243-247",
+      "note": ""
+    },
+    {
+      "row": "Parity 9: serialization 'bogus'/'JSON'/1/null -> TypeError ERR_INVALID_ARG_VALUE with Node's message in fork and ('bogus') in a plain spawn; spawn advanced without IPC runs normally",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-options.case.ts:29-65",
+      "note": ""
+    },
+    {
+      "row": "Parity 10: same-realm route: the copy is fixed at send(); types round-trip; a nested function is refused with a plain Error; a child Buffer arrives as Buffer; child disconnect -> 'disconnect' and exit 0",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-same-realm.case.ts:16-72",
+      "note": ""
+    },
+    {
+      "row": "Parity 11: default JSON, parent and child side, Worker and same-realm routes: top-level undefined -> ERR_MISSING_ARGS; anonymous and named function, symbol and bigint -> ERR_INVALID_ARG_TYPE with Node's Received text; the child exits 0",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/json-ipc-refusal-program.ts:10-61; tools/node-parity-runner/cases/child_process/public-ipc-json-refusal-text.case.ts:8-14; tools/node-parity-runner/cases/child_process/public-ipc-json-refusal-text-same-realm.case.ts:8-13",
+      "note": ""
+    },
+    {
+      "row": "Fault peer death: messages posted before a natural end or a timer crash are delivered in order, then 'disconnect', then 'exit' 0/1; send() after exit returns false; nothing replayed",
+      "source": "fault-matrix",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:18-31,42-55,96-97",
+      "note": ""
+    },
+    {
+      "row": "Fault concurrent-same-key: writes after send() to the object, a SAB view and a Buffer are invisible to the peer",
+      "source": "fault-matrix",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:67-79",
+      "note": ""
+    },
+    {
+      "row": "Fault observable-order: a refused send between two accepted sends throws synchronously, posts nothing, and the next messages arrive in order; named throws: the ceiling test and the browser-unit ceiling 'received' row",
+      "source": "fault-matrix",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:81-91; packages/runtime-js/src/builtins/child_process-advanced-ipc-ceiling.test.ts:46-64; tests/browser-unit/fixtures/advanced-ipc-cases.ts:106-140",
+      "note": ""
+    },
+    {
+      "row": "Fault sibling-drift: one codec gives identical rows at the parent Worker, child Worker and same-realm sites and in Chromium; the JSON sites share the top-level text",
+      "source": "fault-matrix",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:201-241; tools/node-parity-runner/cases/child_process/public-ipc-advanced-same-realm.case.ts:36-72; tests/browser-unit/advanced-ipc.spec.ts:51-69; tools/node-parity-runner/cases/child_process/public-ipc-json-refusal-text.case.ts:8-14; tools/node-parity-runner/cases/child_process/public-ipc-json-refusal-text-same-realm.case.ts:8-13",
+      "note": ""
+    },
+    {
+      "row": "Fault corrupt-input: a child bundle older than the launch is refused before user entry by protocol mismatch; never a JSON child on an advanced parent",
+      "source": "fault-matrix",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts:472-483",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/child_process-advanced-ipc-ceiling.test.ts:27-58",
+          "evidence": "Scratch-only probe with the same refuseThenSend shape on default JSON in the Node-host unit env: accepted send -> {sent:true, received:['refused','after']}; top-level function -> TypeError, {sent:true, received:['after']} (/tmp/vgoal/u9/cr2-echo-probe.log).",
+          "summary": "r1 blocker verified fixed: Parity case 11 fails now on exactly the missing suffix (8 rows per route, parent+child) while public-ipc-json stays green. The r1 Acceptance 6 concern is also fixed: an echo child asserts 'nothing posted' and a usable channel for every named throw, the Chromium ceiling program gains the detached pair and getter-beside-buffer, and the probe shows the echo harness discriminates. Residual note: a send that posts the refused frame but whose receiver silently drops it would also show received ['after'] (edge case, advisory).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/epics/vitest-run-in-browser/map.md:21-22",
+          "evidence": "",
+          "summary": "Carried from r1: map item 9 ('round-trips structured-clone values') and the goal.md agent carrier line ('structured-clone passthrough') still describe the raw passthrough that ADR-0448 rejects. goal.md is correctly untouched (the goal and map are unchanged BASE..HEAD). Align the map wording at re-chart. The DEC-2 decision review is now recorded in the contract Decisions (:127), with no change.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/workbench-project-runtime.test.ts:1342",
+          "evidence": "grep -rn \"node-entry/v4\" packages tools tests (scratch @ HEAD) -> 8 expect().toMatchObject protocol pins in workbench-project-runtime.test.ts (:1342,1481,1565,1610,1657,1832,1908,1927) plus tools/node-parity-runner/src/run-in-rifty.ts:1118 and types.ts:102.",
+          "summary": "r1 runtime-js pin concern fixed (:123 now v5 and fails at RED). The contract Decisions (:125) defer the workbench fixtures and the parity harness default to IMPLEMENT, so the IMPLEMENT diff will edit 8 existing workbench assertions. These are mechanical protocol pins mandated by ADR-0448/ADR-0267, not a weakening. Final+GREEN should check them under PR-4 as protocol-only edits.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/runtime-js/0448-carry-advanced-fork-ipc-as-a-native-structured-clone.md:96-97",
+          "evidence": "Node v24.16.0, child with only process.on('disconnect') (default JSON), parent disconnects at 300 ms: 'alive-after-300ms true true / child-disconnect / exit 0 null' (/tmp/vgoal/u9/cr2-oracle/disc).",
+          "summary": "r1 discovery now recorded: the ADR-0448 Decision 5 note plus contract Decisions :128 and evidence §Keepalive, with the oracle reproduced. The ADR says 'a discovery routed to backlog', but no backlog item exists at HEAD; the contract says 'route at land'. Create the backlog item (with owner/trigger) before landing so the ADR text is true and the gap is not silent.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/advanced-ipc.spec.ts:59-66",
+          "evidence": "",
+          "summary": "Carried from r1, unchanged: the Chromium parity carrier keeps only rifty lines whose label appears in Node's rows, so an extra rifty row (e.g. the values program's 'unexpected' row) is silently dropped. The boundary model excludes duplication and the parity runner compares full stdout on the Worker route, so this stays advisory. The r1 spawn-validation and DOMException-wording concerns are fixed (ADR-0448 :46-48, :110-112; options case :42-54; contract :101-103).",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "c378b464f8c20e5b75d57d4b9f2c22c4fe28051a"
+}

@@ -19,7 +19,7 @@ export {
 } from '../worker-fs-rpc.ts';
 export { spawnToolchainRuntime } from '../host.ts';
 export { captureRuntimeStartupOptions } from './worker-startup-options.ts';
-export { takeUnhandledRejection } from './event-loop-keepalive.ts';
+export { activeRefs, takeUnhandledRejection } from './event-loop-keepalive.ts';
 export { createModuleLoaderWithBuiltinOverrides } from '../module-loader/loader.ts';
 export {
   claimSandboxToolchainResidentTransition,

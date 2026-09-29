@@ -1,5 +1,7 @@
 # Evidence — vitest-run-in-browser (refine probes, 2026-09-15)
 
+Goal closed 2026-09-25 — see §Goal record (end of file).
+
 Method: scratch Playwright specs (not committed) over `tests/e2e/helpers/playground.ts`
 (`bootShell`/`bootProjectFiles`, `runTerminalLineSettled`, exit code from the
 terminal history UI), Chromium, dev server on `RIFTY_PLAYGROUND_PORT=5391`,
@@ -237,3 +239,65 @@ No `beforeExit` listener in the tree.
 Note on line numbers: stack frames quoted from rifty runs (e.g. `readable.ts:545`,
 `node-program-lifecycle.ts:91`) are Vite dev-server bundle offsets; the goal cites
 the current source lines (`readable.ts:768`, `node-program-lifecycle.ts:155`).
+
+## Goal record (CLOSE 2026-09-25)
+
+Goal closed: I1–I7 and every scenario line proven end to end at `57f6117de`
+(PR #353, BASE `2c9bbd301`). Final verdict (independent CLOSE review, goal
+complete, 0 residuals):
+`docs/backlog/runtime-js/reference/vitest-run-in-browser-final-green.json`.
+Claim: `docs/public/compat/vitest.md`; acceptance: `tests/e2e/vitest-run.spec.ts`.
+Accepted goal/map/ledger and the child contracts are preserved at `57f6117de`
+(`docs/backlog/epics/vitest-run-in-browser/`, `docs/backlog/<area>/<slug>.md`).
+
+Invariants: I1 npm-spelled `overrides {"vite": "8.0.16"}` installs one vite
+8.0.16 · I2 a live Worker holds its parent · I3 `uncaughtException` /
+`unhandledRejection` / `'exit'` / `exit()` → `exitCode` · I4 `vitest run`
+(forks) with `vitest.config.ts` + `.ts` tests, Node's lines/counts/exit 1→0,
+`npm test`, verbose · I5 threads = forks · I6 the claimed 4.1.11 tree loads;
+unclaimed members named-loud · I7 the compat page.
+
+User decisions: 2026-09-15 — overrides pin + npm bare-version spelling
+(ADR-0451), lock replay the second path, no resolver/hoisting work (honest npm
+is its own goal); both pools; jsdom → epic `jsdom-environment-in-browser`;
+claim = exactly vitest 4.1.11 + vite 8.0.16. 2026-09-16 — `vitest.config.ts` +
+`.ts` tests in the claim. Amend 2026-09-23, I7 option A ("A: поправить I7
+(Recommended)"): watch mode and other versions ⚠️ unclaimed with the observed
+boundary, no mode/version ban (`vitest.md` rows). Fork 2026-09-24, late
+rejection option B ("B: сузить + backlog (Recommended)"): item 7 claims only
+rejections Chromium already delivered; an already-queued callback's win →
+`runtime-js/late-unhandled-rejection-drain` + compat `process.md` ⚠️.
+
+Rejected routes: chase latest vite (lightningcss recipe + vite patch re-cut per
+release); Arborist-style dedupe to the hoisted version; any vitest/package
+patch for the silent exit — walls close as generic Node contracts (handle
+classes in `event-loop-keepalive`, ADR-0446/0447).
+
+Children (map item: unit, ADR). Each keeps `<slug>-contract-red.json`,
+`<slug>-final-green.json`, `<slug>-evidence.md` under its area's `reference/`:
+1 `npm-client/overrides-bare-version-spec` (0451) · 2
+`runtime-js/path-posix-win32-builtins` · 3
+`runtime-js/builtin-static-names-prototype-methods` · 4
+`runtime-js/absent-builtin-members-loud-throws` (0443) · 5
+`runtime-js/symbol-key-global-write-guard-precision` (0444) · 6
+`runtime-js/readable-pipe-never-ends-process-stdio` (0458) · 7
+`runtime-js/process-lifecycle-events-exit-code` (0445) · 8
+`runtime-js/worker-threads-handle-keepalive` (0446) · 9
+`runtime-js/child-process-advanced-ipc-serialization` (0448) · 10
+`runtime-js/vm-run-in-this-context-offsets` (0450) · 11
+`runtime-js/worker-threads-stdio-streams-empty-exec-argv` (0449) · 12
+`runtime-js/vitest-run-acceptance` (0464) · 13
+`runtime-js/message-port-ref-keepalive` (0447).
+
+Ledger facts kept: post-land rifty-fix repairs, reviewed by the final verdict —
+Workbench close race `70fae62c3`, no-COI declared gap behind a fatal exit
+`94588bd17`, no-COI first-terminal status `cadf94625` and its CLOSE-r1 residual
+(runBin ends its process at every terminal) `79bdb164d`. Browser-unit CI Node
+is pinned to 24.16.0: the frozen live-Node rows are patch-specific. DEC-2
+reviews of ADR-0443/0445/0446/0447/0448/0449/0450/0464 done 2026-09-25. Open,
+owned elsewhere: runBin live non-timer handle
+(`distribution/no-coi-command-unhandled-rejection-exit`), re-pin over an
+installed vite (`npm-client/stale-package-dir-on-version-change`), npm
+`> test` banner (`npm-client/npm-run-script-banner`), vm-pools teardown lines
+(`runtime-js/vitest-pool-start-ceiling-teardown-timeout`), `beforeExit`
+(`runtime-js/process-before-exit-event`).

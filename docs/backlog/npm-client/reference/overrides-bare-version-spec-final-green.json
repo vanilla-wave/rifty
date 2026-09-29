@@ -1,0 +1,232 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN accepted (0 blockers, 13/13 coverage pass): land the unit and re-chart; the concerns are notes only (open a backlog item for the rifty semver matcher gaps that npm version/range override values now reach).",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "6054e54bb879bc846d07f69deae463638abffeae",
+  "unit_goal_source": "docs/backlog/npm-client/overrides-bare-version-spec.md (status: ready; ready-verdict Contract+RED @ 43beed245648f0657143cc0c4705b54dc49627a1; re-cut 2026-09-23 +Acceptance 7, widened Acceptance 3/4 + Parity 1/2) reviewed at HEAD 6054e54bb879bc846d07f69deae463638abffeae of branch vg/u1 against BASE 325ae797c0406453aed61b3a4e5d16f9c219d5ea — goal docs/backlog/epics/vitest-run-in-browser/goal.md I1; ADR-0451, ADR-0051; oracle npm 11.17.0 / Node v24.16.0 golden docs/backlog/npm-client/reference/overrides-bare-version-spec-probe-output.json (SHA-256 20afeaed…, reproduced byte-identically by this review)",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2 — Worker keepalive",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:100",
+      "summary": "Open; map item 8 (after 7)."
+    },
+    {
+      "clause": "I3 — process uncaught/unhandled handlers, exit event, exit() honours exitCode",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:104",
+      "summary": "Open; map item 7."
+    },
+    {
+      "clause": "I4 — vitest run forks pool: config.ts, .ts tests, reporter, exit codes",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:108",
+      "summary": "Open; map items 6, 9, 10, 11, 13, 12."
+    },
+    {
+      "clause": "I5 — threads pool parity with forks",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:115",
+      "summary": "Open; map items 11, 12."
+    },
+    {
+      "clause": "I6 — every module of the vitest 4.1.11 tree loads on the claimed path",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "Open; map items 2, 3, 4, 5."
+    },
+    {
+      "clause": "I7 — docs/public/compat/vitest.md page",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:122",
+      "summary": "Open; map item 12."
+    },
+    {
+      "clause": "User scenario 2 — rolldown wasm32 binding + lightningcss shadow line on the scenario npm install",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:36",
+      "summary": "Outside I1/this unit (its e2e asserts vite lock entries + exit 0 only); carried by map item 12 acceptance e2e."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: browser shell, clean project, real registry — scenario manifest (vitest 4.1.11 + overrides {vite: \"8.0.16\"}) npm install exits 0 and locks exactly npm 11.17.0's vite entries (one node_modules/vite@8.0.16)",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/npm-override-bare-version.spec.ts:41-80; packages/npm-client/src/installer-override-npm-value.contract.test.ts:174-200 (row scenario-vitest-vite)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: rifty spelling vite@8.0.16 installs the same vite lock entries in the e2e and, in install(), the version npm locks for the bare spelling (debug + scenario manifests)",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/npm-override-bare-version.spec.ts:79; packages/npm-client/src/installer-override-npm-value.contract.test.ts:202-218",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: install() over the probe manifests (exact, v/= prefixed, caret, tilde, x-range, 2, x, comparator set, union, latest, ''/*, padded ' * '/' ', override over existing lock) — dependent resolves npm's locked version, no packument named after the value, no other package, npm placement on fresh installs",
+      "source": "acceptance",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-override-npm-value.contract.test.ts:158-200",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: classification of every probe version/range value (incl. loose-grammar sweep) → overridden package at npm fetchSpec, also for parent>child key; latest unconstrained; * no override; npm: first; ETARGET words and every other npm tag reading keep the rifty name; baked bcrypt unchanged",
+      "source": "acceptance",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides-npm-value.contract.test.ts:66-166",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: $name override throws NotImplementedError('npm-client.dependency-spec.override-reference') before any registry read",
+      "source": "acceptance",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-override-npm-value.contract.test.ts:220-236",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: package-tooling.md carries package.json#overrides value rows — npm version/range/latest ✅, rifty name@range + bare names as extensions, $name ❌, ADR-0451 divergences",
+      "source": "acceptance",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "docs/public/compat/package-tooling.md:18-20",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: install() with overrides {N: V} ends exactly as the dependent declaring N@V — native gate (required abort, optional skip, lock replay), recipe admission (admitted, NotImplementedError), baked redirect; self-map and name@range stay gate-exempt",
+      "source": "acceptance",
+      "trace": "ADR-0451+ADR-0051",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-override-npm-value-policy.contract.test.ts:135-233",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: npm-package-arg reading of the 70-value classify corpus",
+      "source": "acceptance",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides-npm-value.contract.test.ts:66-158",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: npm locks for debug 4.3.4's ms edge under each claimed override value",
+      "source": "acceptance",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-override-npm-value.contract.test.ts:174-200",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: npm lock for the goal scenario — one node_modules/vite@8.0.16; install contract + browser e2e",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-override-npm-value.contract.test.ts:174-200; tests/e2e/npm-override-bare-version.spec.ts:80",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: npm resolves $ms (reference → ms 2.0.0); rifty is the named loud gap",
+      "source": "acceptance",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-override-npm-value.contract.test.ts:220-236",
+      "note": ""
+    },
+    {
+      "row": "Frozen oracle golden overrides-bare-version-spec-probe-output.json (npm 11.17.0 / Node v24.16.0), cmp-reproducible; certified rows unchanged",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0451",
+      "status": "pass",
+      "citation": "docs/backlog/npm-client/reference/overrides-bare-version-spec-probe-output.json:1",
+      "note": ""
+    },
+    {
+      "row": "Public resolveOverride (index.ts:60) reads npm version/range/latest values as {name: N, range: V.trim(), source: 'user'}",
+      "source": "public-api",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.ts:34-76; packages/npm-client/src/overrides-npm-value.contract.test.ts:66-121",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/npm-client/overrides-bare-version-spec.md:68",
+          "evidence": "git show --stat 903610fe2: installer-override-npm-value-policy.contract.test.ts (+234) lands in the same commit as overrides.ts/shadow-shims.ts/admission.ts/semver-loose-range.ts; git diff 43beed245..HEAD on the contract adds Acceptance 7 and widens Acceptance 3/4 + Parity 1/2. Independent discrimination (scratch mutants at HEAD): user version/range override kept as a substitution (shadow-shims.ts:56 → resolveOverride(name, parent, userOverrides)) → policy test 7 failed | 2 passed; admission.ts:32 requested = range → 2 failed | 7 passed (recipe admitted / not admitted).",
+          "summary": "The re-cut promise (Acceptance 7, widened Acceptance 3/4, Parity 1/2) had no independent pre-implementation check: its RED was committed with the implementation, with only the implementer's BASE and spike runs as proof. Mitigating: the Contract+RED merge_call asked for exactly this RED before Final+GREEN, the golden's certified rows are unchanged, and this review's mutants show the RED discriminates.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/npm-client/src/overrides.ts:40",
+          "evidence": "npx tsx at HEAD: resolveOverride('bcrypt', undefined, {bcrypt: '2.4.3'}) → {\"name\":\"bcrypt\",\"range\":\"2.4.3\",\"source\":\"user\"}; resolveEffectivePackageRequest('bcrypt','^5.0.0',undefined,{bcrypt:'2.4.3'}) → {\"override\":{\"name\":\"bcryptjs\",\"range\":null,\"source\":\"baked\"},\"effectiveName\":\"bcryptjs\",\"effectiveRange\":\"2.4.3\"}",
+          "summary": "The public resolveOverride (index.ts:60) now disagrees with what install() does for a baked-redirect name: it reports a user override of bcrypt@2.4.3, but install applies the baked bcrypt → bcryptjs redirect. This matches ADR-0451 decision 5 literally, but the TSDoc does not say that the public helper is only the value reading and not the effective request.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "packages/npm-client/src/semver-loose-range.ts:74",
+          "evidence": "Differential fuzz at HEAD (400k strings, 2 seeds) isLooseSemverRange vs npm 11.17.0 semver.validRange(s,true): 0 mismatches; 300k version-shaped strings: 0 mismatches. Sampled npa.resolve('vite', s): ~50 mismatches, all `.`-prefixed multi-token strings (e.g. \".. 00.1\") that npa reads as `directory` and rifty reads as a range.",
+          "summary": "Values that npa reads as file/directory before its registry reading (`.`-prefixed or slash-bearing text that loose semver also accepts) are read as ranges. These are unclaimed, implausible inputs, and ADR-0451 §Divergences lists only `@scope/pkg`/`*.tgz`.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/npm-client/overrides-bare-version-spec.md:72; packages/npm-client/src/semver.ts:121; docs/public/compat/package-tooling.md:18",
+          "evidence": "npx tsx at HEAD, matchesRange vs npm's semver.satisfies(v, r, {loose:true}) over [7.9.9, 8.0.0, 8.0.16, 8.3.0, 9.0.0]: '<=8' rifty [7.9.9, 8.0.0] vs npm [.., 8.0.16, 8.3.0]; '8.0.0 - 8.0.16' rifty [] vs npm [8.0.0, 8.0.16]; '~>8.0' rifty [] vs npm [8.0.0, 8.0.16]; '||' rifty [] vs npm all. resolveEffectivePackageRequest('vite','^8.0.0',undefined,{vite:'<=8'}) → effectiveRange '<=8' (was a 404 on packument '<=8' at BASE). git grep over docs/backlog for a matcher/semver-subset item: none outside this unit's own files.",
+          "summary": "npm version/range override values now reach rifty's pre-existing semver matcher gaps. Where BASE failed loudly with a 404, `\"vite\": \"<=8\"` now silently locks vite 8.0.0 while npm resolves 8.3.x, and hyphen, `~>` and `||` ranges give a plain `No matching version`. These gaps appear only in ADR-0451 §Divergences and in the prose of a ✅ compat row. The Decisions line says they were 'routed outside the unit (REV-12)', but no backlog item or owner exists. File one (rifty-to-backlog or rifty-fix for semver.ts), and consider ⚠️ for that compat row.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/adr/npm-client/0451-user-override-values-follow-npm-version-and-range-reading.md:87",
+          "evidence": "npx tsx at HEAD: resolveEffectivePackageRequest('ms','*',undefined,{ms:'beta'}) → {\"override\":{\"name\":\"beta\",\"range\":null,\"source\":\"user\"},\"effectiveName\":\"beta\",\"effectiveRange\":\"*\"}; golden registryFacts: package `beta` 0.0.1 exists; npm tag-beta row locks ms 3.0.0-beta.2.",
+          "summary": "Carried from Contract+RED (NOTE): dist-tags other than `latest` are still rifty replacement names. On a `*` edge, rifty installs the unrelated registry package `beta` where npm installs the tagged version. This is recorded (ADR-0451 decision 6, compat ⚠️ row) but does not fail loudly.",
+          "authority": ""
+        }
+      ]
+    }
+  ]
+}

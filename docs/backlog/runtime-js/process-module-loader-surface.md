@@ -23,9 +23,11 @@ Self-contained process/module/loader methods absent. Each = pure-JS over existin
 | `module.stripTypeScriptTypes` v22.13 (L) | sync pure-JS eraser (existing strip is ASYNC WASI esbuild); throw on enum/namespace unless transform | — |
 | `data:` URL ESM import v12.10 | parse mediatype, `;base64`→atob else %-decode+TextDecoder, route executeEsm; no network | resolver.ts:129 |
 
+`emitWarning` still absent at 2026-09-25 (item 11 discovery); vitest 4.1.11 `test.DNmyFkvJ.js:272` guards the call, so not on its path.
+
 REGRESSION TRAP — `getBuiltinModule`: `net/src/sqlite/engine.ts:48` + `engine-shimmed-process.test.ts` use its ABSENCE as the "not a real Node realm" signal; adding it breaks sqlite init. MUST refactor detection (e.g. `versions.rifty` marker) + update the pin FIRST, regression test first.
 
-EXCLUDE `import.meta.resolve` — silent-wrong stub owned by runtime-js/silent-node-divergences (cross-link). `file://` import is shipped and covered in `tests/conformance/modules/resolver.test.ts`.
+EXCLUDE `import.meta.resolve` — owned by `runtime-js/import-meta-resolve-node-results` (Node's absent-file URL, non-`file:` parent errors) and ADR-0449 (parent argument). `file://` import is shipped and covered in `tests/conformance/modules/resolver.test.ts`.
 
 ## Options or Next
 

@@ -50,7 +50,7 @@ const c: ParityCase = {
         });
         worker.once('error', reject);
         worker.once('messageerror', reject);
-        worker.once('stderr', (chunk) => reject(new Error('worker stderr: ' + String(chunk))));
+        worker.stderr.once('data', (chunk) => reject(new Error('worker stderr: ' + String(chunk))));
         worker.once('exit', (code) => {
           if (!received) reject(new Error('worker exited before env message: ' + code));
         });
@@ -60,11 +60,13 @@ const c: ParityCase = {
     const keepalive = setInterval(() => {}, 10);
     (async () => {
       const inherited = await run();
+      const nullInherited = await run(null);
       const replaced = await run({
         EXPLICIT_ONLY: 'explicit',
         RIFTY_PARITY_HOST_BOOTSTRAP: 'guest-visible',
       });
       console.log('inherited ' + JSON.stringify(inherited));
+      console.log('null-inherited ' + JSON.stringify(nullInherited));
       console.log('replaced ' + JSON.stringify(replaced));
     })().finally(() => {
       clearInterval(keepalive);
@@ -76,9 +78,10 @@ const c: ParityCase = {
   `,
   expected:
     'inherited {"parent":"parent","explicit":null,"replaced":"parent","hostOwn":false,"hostValue":null}\n' +
+    'null-inherited {"parent":"parent","explicit":null,"replaced":"parent","hostOwn":false,"hostValue":null}\n' +
     'replaced {"parent":null,"explicit":"explicit","replaced":null,"hostOwn":true,"hostValue":"guest-visible"}\n',
   kind: 'worker-env',
-  expectedPhysicalWorkers: 2,
+  expectedPhysicalWorkers: 3,
 };
 
 export default c;

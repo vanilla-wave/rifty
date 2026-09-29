@@ -197,6 +197,27 @@ describe('no-COI invocation command', () => {
     });
   });
 
+  // ADR-0445 sibling: the in-process invocation owner resets exit state per run.
+  // Sources = browser-unit `natural-exit` / `exit-no-arg`; Node v24.16.0 rows:
+  // docs/backlog/runtime-js/reference/process-lifecycle-events-exit-code-evidence.md §O3.
+  it('gives each invocation an unset exitCode and one Node exit event', async () => {
+    const exitRow = "process.on('exit', (c) => console.log('L|exit', c, process.exitCode));";
+    const { run } = fixture({
+      '/project/natural-exit.cjs': `${exitRow}\nconsole.log('L|body', typeof process.exitCode);`,
+      '/project/exit-no-arg.cjs': `${exitRow}\nprocess.exitCode = 3;\nprocess.exit();`,
+    });
+    for (let round = 0; round < 2; round++) {
+      expect(await run('node natural-exit.cjs')).toMatchObject({
+        exitCode: 0,
+        stdout: 'L|body undefined\nL|exit 0 undefined\n',
+      });
+      expect(await run('node exit-no-arg.cjs')).toMatchObject({
+        exitCode: 3,
+        stdout: 'L|exit 3 3\n',
+      });
+    }
+  });
+
   it('runs real Node entries through pipe/redirect contexts and restores invocation state', async () => {
     const { fs, run } = fixture({
       '/project/sub/output.cjs': `

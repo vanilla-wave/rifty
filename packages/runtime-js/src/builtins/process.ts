@@ -19,7 +19,6 @@
 import {
   type IpcFrame,
   type KernelProcessSpec,
-  type KernelStdioOutputWriter,
   decodeIpcFrame,
   globalProcessManager,
 } from '@riftydev/kernel';
@@ -30,10 +29,15 @@ import {
   unref as unrefEventLoop,
 } from '../internal/event-loop-keepalive.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
-import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import {
+  type NodeIpcSerialization,
+  decodeNodeIpcMessage,
+  encodeNodeIpcMessage,
+} from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { memoryUsage } from './loud-members.ts';
 import {
   type NodeEntryLaunch,
   type NodeEntryTerminalBootstrap,
@@ -51,6 +55,14 @@ import {
   type NodeProcessRelease,
   createNodeProcessRelease,
 } from './process-identity.ts';
+import {
+  NodeProcessExit,
+  attachNodeProcessExit,
+  dispatchUncaughtException,
+  rethrowUndispatched,
+} from './process-lifecycle-events.ts';
+import { INHERIT_STDIN, type InheritStdin, type StdinInheritor } from './process-stdin-inherit.ts';
+import { type NodeStdioWriter, applyTtyShape, makeStdioWriter } from './process-stdio-writer.ts';
 
 const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
   'rifty.runtime-js.process-terminal-bootstrap.v1',
@@ -119,7 +131,15 @@ function drainNextTicks(): void {
       // to): the seeded NodeProcess in a kernel child, else the REPL singleton.
       const active = (globalThis as { process?: unknown }).process;
       const target = active instanceof NodeProcess ? active : riftyProcess;
-      (target as unknown as EventEmitter).emit('uncaughtException', err);
+      const outcome = dispatchUncaughtException(err, 'uncaughtException', target);
+      if (outcome.kind === 'handled') continue;
+      // ADR-0445: the process is terminating — later ticks never run. An exit()
+      // already sent its request; a fatal error goes to the realm terminal path
+      // without a second dispatch.
+      nextTickQueue.length = 0;
+      drainHead = 0;
+      if (outcome.kind !== 'exited') rethrowUndispatched(err);
+      return;
     }
   }
   // Fully drained: clear the array + cursor so the next nextTick sees length
@@ -137,6 +157,54 @@ function ensureDrainScheduled(): void {
 function nextTick(fn: (...args: unknown[]) => void, ...args: unknown[]): void {
   nextTickQueue.push({ fn, args });
   ensureDrainScheduled();
+}
+
+// `this`-free Node-own members: own fields of every NodeProcess (like nextTick),
+// so `import { cwd } from 'node:process'` links and works unbound (Node shape).
+function cwd(): string {
+  return currentCwd;
+}
+
+function chdir(dir: string): void {
+  if (typeof dir !== 'string') {
+    throw Object.assign(new TypeError('chdir: path must be a string'), {
+      code: 'ERR_INVALID_ARG_TYPE',
+    });
+  }
+  const target = normalizePath(isAbsolute(dir) ? dir : joinPath(currentCwd, dir));
+  let stat: { isDirectory: boolean };
+  try {
+    stat = syncMirror().statSync(target);
+  } catch (err) {
+    throw Object.assign(new Error(`ENOENT: no such file or directory, chdir '${dir}'`), {
+      code: 'ENOENT',
+      syscall: 'chdir',
+      path: target,
+      cause: err,
+    });
+  }
+  if (!stat.isDirectory) {
+    throw Object.assign(new Error(`ENOTDIR: not a directory, chdir '${dir}'`), {
+      code: 'ENOTDIR',
+      syscall: 'chdir',
+      path: target,
+    });
+  }
+  currentCwd = target;
+}
+
+function hrtime(time?: [number, number]): [number, number] {
+  const ms = performance.now();
+  const secs = Math.floor(ms / 1000);
+  const ns = Math.floor((ms - secs * 1000) * 1e6);
+  if (!time) return [secs, ns];
+  const [s0, n0] = time;
+  return [secs - s0, ns - n0];
+}
+hrtime.bigint = (): bigint => BigInt(Math.floor(performance.now() * 1e6));
+
+function uptime(): number {
+  return performance.now() / 1000;
 }
 
 /** Patch `Promise.prototype.then` so nextTick beats `.then` (Node ordering). */
@@ -161,107 +229,6 @@ export function patchPromiseForNextTick(): void {
         : onR;
     return origThen.call(this, wrapF as never, wrapR as never);
   } as typeof Promise.prototype.then;
-}
-
-// --- stdio plumbing (shared by spec + no-spec processes) ---
-
-const STDIO_ENCODER = new TextEncoder();
-
-function encodeChunk(chunk: string | Uint8Array): Uint8Array {
-  return typeof chunk === 'string' ? STDIO_ENCODER.encode(chunk) : chunk;
-}
-
-type StdioCallback = () => void;
-
-interface NodeStdioWriter extends EventEmitter {
-  write(chunk: string | Uint8Array): boolean;
-  isTTY: boolean;
-  fd: number;
-  columns?: number;
-  rows?: number;
-  getWindowSize?(): [number, number];
-  clearLine?(dir?: number, cb?: StdioCallback): boolean;
-  cursorTo?(x: number, yOrCb?: number | StdioCallback, cb?: StdioCallback): boolean;
-  moveCursor?(dx: number, dy: number, cb?: StdioCallback): boolean;
-  clearScreenDown?(cb?: StdioCallback): boolean;
-}
-
-function writeControl(stream: NodeStdioWriter, sequence: string, cb?: StdioCallback): boolean {
-  const ok = stream.write(sequence);
-  if (cb) queueMicrotask(cb);
-  return ok;
-}
-
-function attachTtyControls(
-  stream: NodeStdioWriter,
-  size: { readonly cols: number; readonly rows: number },
-): NodeStdioWriter {
-  stream.columns = size.cols;
-  stream.rows = size.rows;
-  stream.getWindowSize = () => [stream.columns ?? 0, stream.rows ?? 0];
-  stream.clearLine = (dir, cb): boolean => {
-    const direction = dir ?? 0;
-    const mode = direction < 0 ? 1 : direction > 0 ? 0 : 2;
-    return writeControl(stream, `\x1b[${mode}K`, cb);
-  };
-  stream.cursorTo = (x, yOrCb, cb): boolean => {
-    const y = typeof yOrCb === 'number' ? yOrCb : undefined;
-    const callback = typeof yOrCb === 'function' ? yOrCb : cb;
-    const sequence = y === undefined ? `\x1b[${Math.max(0, x) + 1}G` : `\x1b[${y + 1};${x + 1}H`;
-    return writeControl(stream, sequence, callback);
-  };
-  stream.moveCursor = (dx, dy, cb): boolean => {
-    let sequence = '';
-    if (dx < 0) sequence += `\x1b[${-dx}D`;
-    else if (dx > 0) sequence += `\x1b[${dx}C`;
-    if (dy < 0) sequence += `\x1b[${-dy}A`;
-    else if (dy > 0) sequence += `\x1b[${dy}B`;
-    return writeControl(stream, sequence, cb);
-  };
-  stream.clearScreenDown = (cb): boolean => writeControl(stream, '\x1b[0J', cb);
-  return stream;
-}
-
-function detachTtyControls(stream: NodeStdioWriter): NodeStdioWriter {
-  Reflect.deleteProperty(stream, 'columns');
-  Reflect.deleteProperty(stream, 'rows');
-  Reflect.deleteProperty(stream, 'getWindowSize');
-  Reflect.deleteProperty(stream, 'clearLine');
-  Reflect.deleteProperty(stream, 'cursorTo');
-  Reflect.deleteProperty(stream, 'moveCursor');
-  Reflect.deleteProperty(stream, 'clearScreenDown');
-  return stream;
-}
-
-function applyTtyShape(
-  stream: NodeStdioWriter,
-  isTTY: boolean,
-  size: { readonly cols: number; readonly rows: number },
-): void {
-  stream.isTTY = isTTY;
-  if (isTTY) attachTtyControls(stream, size);
-  else detachTtyControls(stream);
-}
-
-/** Spec stdout/stderr writer: postMessage bytes to the child's stdio port. */
-function makeStdioWriter(
-  port: KernelStdioOutputWriter,
-  fd: number,
-  isTTY: boolean,
-  size: { readonly cols: number; readonly rows: number },
-): NodeStdioWriter {
-  const stream = Object.assign(new EventEmitter(), {
-    isTTY,
-    fd,
-    write(chunk: string | Uint8Array) {
-      const bytes = encodeChunk(chunk);
-      // A passed-in view may share storage with its caller; the semantic writer
-      // owns transport, while this adapter preserves Node's non-detaching write.
-      port.write(typeof chunk === 'string' ? bytes : new Uint8Array(bytes));
-      return true;
-    },
-  }) as NodeStdioWriter;
-  return isTTY ? attachTtyControls(stream, size) : stream;
 }
 
 export interface NodeStdin extends EventEmitter {
@@ -349,6 +316,8 @@ function makeStdinReader(
   let eofReceived = false;
   let endEmitted = false;
   let keepaliveHeld = false;
+  // Worker children reading this stdin as an inherited fd (never holds the realm).
+  const inheritors = new Set<StdinInheritor>();
   const syncKeepalive = (): void => {
     const shouldHold = port !== undefined && flowing && !eofReceived;
     if (shouldHold === keepaliveHeld) return;
@@ -372,11 +341,17 @@ function makeStdinReader(
     return data;
   };
   function flush(): void {
-    while (flowing && pending.length > 0) {
+    while ((flowing || inheritors.size > 0) && pending.length > 0) {
       const data = pending.shift();
       if (data === undefined) continue;
+      for (const inheritor of inheritors) inheritor.data(data);
+      if (!flowing) continue;
       const chunk = normalize(data);
       if (chunk !== null) stdin.emit('data', chunk);
+    }
+    if (eofReceived && pending.length === 0) {
+      for (const inheritor of inheritors) inheritor.end();
+      inheritors.clear();
     }
     if (!flowing || pending.length > 0 || !eofReceived || endEmitted) return;
     if (encoding && /^utf-?8$/iu.test(encoding)) {
@@ -425,6 +400,12 @@ function makeStdinReader(
       return stdin;
     },
   });
+  const inherit: InheritStdin = (inheritor) => {
+    inheritors.add(inheritor);
+    queueMicrotask(flush);
+    return () => inheritors.delete(inheritor);
+  };
+  Object.defineProperty(stdin, INHERIT_STDIN, { value: inherit });
   if (port) {
     port.onmessage = (ev: MessageEvent): void => {
       const data = ev.data;
@@ -474,10 +455,7 @@ function processTerminalBootstrap(launch: NodeEntryLaunch | undefined): ProcessT
   };
 }
 
-/** Wrap an exit code to Node's unsigned 8-bit range (e.g. 257 → 1, -1 → 255). */
-export function toUint8ExitCode(n: number): number {
-  return ((Math.trunc(n) % 256) + 256) % 256;
-}
+export { resetNodeProcessExit, toUint8ExitCode } from './process-lifecycle-events.ts';
 
 /**
  * Node's `process.exitCode`/`process.exit(code)` coercion contract: a numeric
@@ -531,18 +509,38 @@ export class NodeProcess extends EventEmitter {
   readonly title = NODE_PROCESS_IDENTITY.title;
   env: Record<string, string | undefined>;
   // Node-faithful: assigning an invalid exit code throws at the SETTER (loud),
-  // a numeric string coerces; reads return the validated integer.
-  #exitCode = 0;
-  get exitCode(): number {
-    return this.#exitCode;
-  }
-  set exitCode(v: unknown) {
-    this.#exitCode = coerceExitCode(v);
-  }
+  // a numeric string coerces; reads return the validated integer, `undefined`
+  // until assigned or after `null`/`undefined` (ADR-0445). Own accessor
+  // (enumerable, non-configurable, as Node's) defined in the constructor.
+  #exitCode: number | undefined;
+  declare exitCode: number | undefined;
+  readonly #exit = new NodeProcessExit({
+    process: this,
+    readExitCode: () => this.#exitCode,
+    writeExitCode: (v) => {
+      this.#exitCode = v === undefined || v === null ? undefined : coerceExitCode(v);
+    },
+    writeStderr: (text) => {
+      this.stderr.write(text);
+    },
+    requestExit: (signal) => {
+      const evalLifecycleOwned = beginNodeEvalExplicitExit(signal, () => {
+        this.#requestSelfExit(signal.exitCode);
+        return signal;
+      });
+      if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(signal.exitCode);
+    },
+  });
   stdout: NodeStdioWriter;
   stderr: NodeStdioWriter;
   stdin: NodeStdin;
   nextTick = nextTick;
+  cwd = cwd;
+  chdir = chdir;
+  hrtime = hrtime;
+  uptime = uptime;
+  // Named-loud (ADR-0443): vitest pool workers bind it at load; every call throws.
+  memoryUsage = memoryUsage;
 
   /** Fork-IPC (ADR-0045) — present only when seeded with a spec ipc port. */
   send?: (message: unknown, ...unsupported: unknown[]) => boolean;
@@ -554,8 +552,10 @@ export class NodeProcess extends EventEmitter {
   #ipcPort: MessagePort | null = null;
   #ipcDisconnected = false;
   #controlClosed = false;
+  #selfExitRequested = false;
   #publicIpc = false;
-  #jsonIpc = false;
+  /** A fork program's `serialization`; `null` for a launch-less URL Worker's raw port. */
+  #ipcSerialization: NodeIpcSerialization | null = null;
   #ipcKeepaliveHeld = false;
   readonly #workerMessageListeners = new Set<(message: unknown) => void>();
   readonly #workerIpcBacklog: unknown[] = [];
@@ -567,6 +567,15 @@ export class NodeProcess extends EventEmitter {
 
   constructor(spec?: KernelProcessSpec) {
     super();
+    Object.defineProperty(this, 'exitCode', {
+      get: (): number | undefined => this.#exitCode,
+      set: (v: unknown): void => {
+        this.#exitCode = v === undefined || v === null ? undefined : coerceExitCode(v);
+      },
+      enumerable: true,
+      configurable: false,
+    });
+    attachNodeProcessExit(this, this.#exit);
     Object.defineProperty(this, 'release', {
       value: createNodeProcessRelease(),
       writable: false,
@@ -625,7 +634,7 @@ export class NodeProcess extends EventEmitter {
       this.ppid = spec.ppid;
       this.argv = [...spec.argv];
       const launch = readNodeEntryBootstrapIfPresent()?.launch;
-      this.execArgv = launch?.kind === 'eval' ? [...launch.execArgv] : [];
+      this.execArgv = [...(launch?.execArgv ?? [])];
       // Copy so per-process env mutation does not leak into the published
       // Readonly spec (the kernel threads spec.env by reference).
       this.env = { ...spec.env };
@@ -646,7 +655,8 @@ export class NodeProcess extends EventEmitter {
         this.#wireWorkerIpc(spec.stdio.ipc);
       } else {
         this.#publicIpc = true;
-        this.#jsonIpc = launch?.kind === 'program';
+        const ipc = launch?.kind === 'program' ? launch.ipc : undefined;
+        this.#ipcSerialization = ipc === 'json' || ipc === 'advanced' ? ipc : null;
         this.connected = true;
         this.channel = nodeIpcChannel('process');
         this.#wireIpc(spec.stdio.ipc);
@@ -702,68 +712,14 @@ export class NodeProcess extends EventEmitter {
     return result;
   }
 
-  cwd(): string {
-    return currentCwd;
-  }
+  // Own instance-bound fields, not prototype methods: Node's detached
+  // `const { exit } = process; exit(3)` / `import { kill }` still hit this process.
+  // Node `exit()` (ADR-0445): an argument assigns `exitCode`, `'exit'` fires once,
+  // the uint8 status is read after the listeners; throws the exit signal.
+  exit: (code?: unknown) => never = (...args: unknown[]): never =>
+    this.#exit.exit(args.length !== 0, args[0]);
 
-  chdir(dir: string): void {
-    if (typeof dir !== 'string') {
-      throw Object.assign(new TypeError('chdir: path must be a string'), {
-        code: 'ERR_INVALID_ARG_TYPE',
-      });
-    }
-    const target = normalizePath(isAbsolute(dir) ? dir : joinPath(currentCwd, dir));
-    let stat: { isDirectory: boolean };
-    try {
-      stat = syncMirror().statSync(target);
-    } catch (err) {
-      throw Object.assign(new Error(`ENOENT: no such file or directory, chdir '${dir}'`), {
-        code: 'ENOENT',
-        syscall: 'chdir',
-        path: target,
-        cause: err,
-      });
-    }
-    if (!stat.isDirectory) {
-      throw Object.assign(new Error(`ENOTDIR: not a directory, chdir '${dir}'`), {
-        code: 'ENOTDIR',
-        syscall: 'chdir',
-        path: target,
-      });
-    }
-    currentCwd = target;
-  }
-
-  hrtime(time?: [number, number]): [number, number] {
-    const ms = performance.now();
-    const secs = Math.floor(ms / 1000);
-    const ns = Math.floor((ms - secs * 1000) * 1e6);
-    if (!time) return [secs, ns];
-    const [s0, n0] = time;
-    return [secs - s0, ns - n0];
-  }
-
-  uptime(): number {
-    return performance.now() / 1000;
-  }
-
-  exit(code: unknown = 0): never {
-    const c = coerceExitCode(code); // coerce string / throw on invalid (Node parity)
-    this.#exitCode = c;
-    const exitCode = toUint8ExitCode(c);
-    const exitError = Object.assign(new Error(`process.exit(${c})`), {
-      code: RIFTY_PROCESS_EXIT,
-      exitCode, // OS-style uint8 wrap (process.exit(257) → 1)
-    });
-    const evalLifecycleOwned = beginNodeEvalExplicitExit(exitError, () => {
-      this.#requestSelfExit(exitCode);
-      return exitError;
-    });
-    if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(exitCode);
-    throw exitError;
-  }
-
-  kill(pid: number, signal = 'SIGTERM'): boolean {
+  kill = (pid: number, signal = 'SIGTERM'): boolean => {
     if (pid !== this.pid || signal !== 'SIGUSR2') {
       throw new NotImplementedError(
         'process.kill',
@@ -771,7 +727,7 @@ export class NodeProcess extends EventEmitter {
       );
     }
     return this.#requestSelfSignal(signal);
-  }
+  };
 
   /** Host bridge: deliver terminal/process stdin into this realm's process. */
   pushStdin(data: string | Uint8Array): void {
@@ -787,7 +743,11 @@ export class NodeProcess extends EventEmitter {
       if (frame === null) return;
       if (frame.kind === 'ipc:message') {
         if (this.#ipcDisconnected) return;
-        const payload = this.#jsonIpc ? serializeNodeIpcMessage(frame.payload) : frame.payload;
+        const serialization = this.#ipcSerialization;
+        const payload =
+          serialization === null
+            ? frame.payload
+            : decodeNodeIpcMessage(frame.payload, serialization);
         if (this.listenerCount('message') === 0) {
           this.#ipcBacklog.push(payload);
         } else {
@@ -827,7 +787,9 @@ export class NodeProcess extends EventEmitter {
     this.send = (message: unknown, ...unsupported: unknown[]): boolean => {
       if (unsupported.length > 0) throw new NotImplementedError('process.send.arguments');
       if (this.#ipcDisconnected) return false;
-      const payload = this.#jsonIpc ? serializeNodeIpcMessage(message) : message;
+      const serialization = this.#ipcSerialization;
+      const payload =
+        serialization === null ? message : encodeNodeIpcMessage(message, serialization);
       try {
         const frame: IpcFrame = { kind: 'ipc:message', payload };
         port.postMessage(frame);
@@ -930,8 +892,11 @@ export class NodeProcess extends EventEmitter {
     if (this.#controlClosed || this.#ipcPort === null) {
       throw new Error('process exit requires an active control port');
     }
+    // ADR-0445: the first delivered request is the status; a later exit() adds none.
+    if (this.#selfExitRequested) return;
     try {
       this.#ipcPort.postMessage({ kind: 'control:self-exit', code } satisfies IpcFrame);
+      this.#selfExitRequested = true;
     } catch (error) {
       this.#closeControl();
       throw error;
@@ -1047,7 +1012,10 @@ export class NodeProcess extends EventEmitter {
   }
 
   #syncIpcKeepalive(): void {
-    const shouldHold = this.#jsonIpc && !this.#ipcDisconnected && this.listenerCount('message') > 0;
+    const shouldHold =
+      this.#ipcSerialization !== null &&
+      !this.#ipcDisconnected &&
+      this.listenerCount('message') > 0;
     if (shouldHold === this.#ipcKeepaliveHeld) return;
     this.#ipcKeepaliveHeld = shouldHold;
     if (shouldHold) refEventLoop();
@@ -1171,9 +1139,6 @@ export function nodeProcessWorkerIpc(process: unknown): NodeProcessWorkerIpc {
   }
   return (receiver as () => NodeProcessWorkerIpc)();
 }
-
-(NodeProcess.prototype as unknown as { hrtime: { bigint: () => bigint } }).hrtime.bigint = () =>
-  BigInt(Math.floor(performance.now() * 1e6));
 
 /** REPL/default singleton (no spec). Kernel children get their own seeded one. */
 export const riftyProcess = new NodeProcess();

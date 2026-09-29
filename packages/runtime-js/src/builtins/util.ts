@@ -4,6 +4,7 @@
  */
 import { type InspectOptions, inspect as inspectImpl } from '../repl/inspect.ts';
 import { deepStrictEqual } from './assert.ts';
+import { runNodeCallback } from './process-lifecycle-events.ts';
 import { NodeProcess, riftyProcess } from './process.ts';
 import { types as utilTypes } from './util-types.ts';
 
@@ -566,8 +567,8 @@ export function callbackify<T extends (...a: unknown[]) => Promise<unknown>>(
   return (...args: unknown[]) => {
     const cb = args.pop() as (err: unknown, value?: unknown) => void;
     fn(...args).then(
-      (v) => cb(null, v),
-      (e) => cb(e),
+      (v) => runNodeCallback(cb, null, v),
+      (e) => runNodeCallback(cb, e),
     );
   };
 }

@@ -24,6 +24,7 @@
  */
 import { NotImplementedError, Transform } from '@riftydev/io';
 import { Buffer } from './buffer.ts';
+import { runNodeCallback } from './process-lifecycle-events.ts';
 import { ZLIB_CODES, ZLIB_CONSTANTS } from './zlib-constants.ts';
 
 type ZlibInput = string | ArrayBuffer | ArrayBufferView;
@@ -207,8 +208,9 @@ function makeAsync(
     const stream =
       mode === 'compress' ? new CompressionStream(format) : new DecompressionStream(format);
     runStream(stream, bytes, options?.maxOutputLength).then(
-      (result) => cb(null, result),
-      (error: unknown) => cb(error instanceof Error ? error : new Error(String(error))),
+      (result) => runNodeCallback(cb, null, result),
+      (error: unknown) =>
+        runNodeCallback(cb, error instanceof Error ? error : new Error(String(error))),
     );
   };
 }

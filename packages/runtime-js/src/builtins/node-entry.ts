@@ -20,6 +20,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import type { FsSync } from '@riftydev/vfs';
 import { registerNodeEvalDrainLifecycle } from '../internal/event-loop-keepalive.ts';
+import { nodeStartupOptions } from '../internal/node-startup-options.ts';
 import { ModuleLoadError } from '../module-loader/errors.ts';
 import {
   type ModuleLoader,
@@ -29,6 +30,7 @@ import {
   projectNodeEvalError,
 } from '../module-loader/loader.ts';
 import { formatNodeEvalPrintValue } from '../repl/inspect.ts';
+import { type UncaughtOrigin, dispatchUncaughtException } from './process-lifecycle-events.ts';
 
 const utf8 = new TextDecoder();
 const reflectApplyPrimordial = Reflect.apply;
@@ -200,6 +202,7 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
     const preparation = prepareNodeEvalCompiler(opts.source);
     const compiler = preparation === undefined ? undefined : await preparation;
     let completion: unknown;
+    let printCompletion = opts.print;
     try {
       completion = createNodeEvalScriptRunner({
         vfs: opts.vfs,
@@ -208,11 +211,16 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
         compiler,
       }).run(opts.source);
     } catch (error) {
-      throw projectNodeEvalError(error, opts.source, 'sync', compiler);
+      // ADR-0445: a listener-handled eval throw continues with no `-p` result.
+      const outcome = dispatchUncaughtException(error, 'uncaughtException');
+      if (outcome.kind === 'exited') throw outcome.signal;
+      if (outcome.kind !== 'handled')
+        throw projectNodeEvalError(error, opts.source, 'sync', compiler);
+      printCompletion = false;
     }
     registerNodeEvalDrainLifecycle({
       beforeExit: async () => {
-        if (!opts.print) return;
+        if (!printCompletion) return;
         const output = await formatNodeEvalPrintValue(completion);
         terminalProcess.writeStdout(`${output}\n`);
       },
@@ -241,7 +249,14 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
     return;
   }
   const loader = (opts.createLoader ?? createModuleLoader)(opts.vfs, { cwd: opts.cwd });
+  let entrySpecifier = opts.entryPath;
+  let preloading = true;
   try {
+    // ADR-0449 §5: `--require` preloads, in order, from the cwd, before the entry.
+    for (const preload of nodeStartupOptions().preloads) {
+      requirePreload(loader, preload, opts.cwd);
+    }
+    preloading = false;
     if (opts.bin) {
       const shim = utf8.decode(opts.vfs.readFileBytesSync(opts.entryPath));
       const target = parseBinLauncherTarget(shim);
@@ -252,6 +267,7 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
           `unrecognized node_modules/.bin launcher shim: ${opts.entryPath}`,
         );
       }
+      entrySpecifier = target;
       // Resolve the launcher target against the shim's own path, then run it.
       const ns = await loader.import(target, opts.entryPath);
       const pending = exportedPromise(ns);
@@ -265,6 +281,48 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
     // on the child stderr instead of rifty's ModuleLoadError name + frames
     // (backlog/runtime-js/node-entry-miss-node-shape). All other throws are
     // re-raised unchanged.
-    throw asNodePrintedError(err);
+    const printed = asNodePrintedError(err);
+    // ADR-0445: Node delivers an entry throw to `uncaughtException`; a handled
+    // one leaves the loop running.
+    const origin = preloading
+      ? 'uncaughtException'
+      : entryOrigin(loader, entrySpecifier, opts.entryPath);
+    const outcome = dispatchUncaughtException(printed, origin);
+    if (outcome.kind === 'handled') return;
+    if (outcome.kind === 'exited') throw outcome.signal;
+    throw printed;
+  }
+}
+
+/** Node's `Module._preloadModules`: a miss names the synthetic `internal/preload` parent. */
+function requirePreload(loader: ModuleLoader, preload: string, cwd: string): void {
+  try {
+    loader.require(preload, cwd);
+  } catch (err) {
+    if (
+      !(err instanceof ModuleLoadError) ||
+      err.code !== 'MODULE_NOT_FOUND' ||
+      err.specifier !== preload ||
+      err.importer !== cwd
+    ) {
+      throw err;
+    }
+    throw new ModuleLoadError(
+      'MODULE_NOT_FOUND',
+      preload,
+      `Cannot find module '${preload}'\nRequire stack:\n- internal/preload`,
+      'internal/preload',
+      ['internal/preload'],
+    );
+  }
+}
+
+/** Node reports an ES module entry's evaluation error with origin `unhandledRejection`. */
+function entryOrigin(loader: ModuleLoader, specifier: string, from: string): UncaughtOrigin {
+  try {
+    const kind = loader.resolver.resolve(specifier, { fromFile: from, esm: true }).kind;
+    return kind === 'esm' ? 'unhandledRejection' : 'uncaughtException';
+  } catch {
+    return 'uncaughtException';
   }
 }

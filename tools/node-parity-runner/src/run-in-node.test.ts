@@ -7,6 +7,24 @@ import {
 import { runInNode } from './run-in-node.ts';
 
 describe('runInNode', () => {
+  it('runs the oracle without a caller-forced colour (Playwright workers set FORCE_COLOR=1)', async () => {
+    const previous = process.env.FORCE_COLOR;
+    process.env.FORCE_COLOR = '1';
+    try {
+      await expect(runInNode({ code: "console.log(42, 'x')" })).resolves.toBe('42 x\n');
+      const evalOutput = await runInNode({
+        kind: 'node-cli-eval',
+        code: '',
+        expectedPhysicalWorkers: 1,
+        nodeCliEval: { sequential: [{ label: 'print', nodeArgv: ['-p', '42'] }] },
+      });
+      expect((JSON.parse(evalOutput) as { readonly stdout: string }[])[0]?.stdout).toBe('42\n');
+    } finally {
+      if (previous === undefined) Reflect.deleteProperty(process.env, 'FORCE_COLOR');
+      else process.env.FORCE_COLOR = previous;
+    }
+  });
+
   it('runs node-cli-eval with exact native argv and returns canonical process output', async () => {
     const source = `
       console.log(JSON.stringify({

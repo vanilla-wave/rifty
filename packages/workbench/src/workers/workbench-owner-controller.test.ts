@@ -894,4 +894,41 @@ describe('Workbench owner controller', () => {
     ]);
     expect(h.sent.some((message) => message.type === 'workbench:project-closed')).toBe(false);
   });
+
+  // Fault class: observable-order at page↔owner MessagePort. A session
+  // beforeClose hook lets page shutdown overtake its close-project; the reply
+  // must be the token's close outcome, not the owner's internal close timing.
+  it('answers a close-project that arrives after shutdown closed its project with that close', async () => {
+    const h = harness();
+    const materializerCloseGate = deferred<void>();
+    h.materializerClose.mockImplementationOnce(() => materializerCloseGate.promise);
+    await h.controller.handle({
+      type: 'workbench:open-project',
+      opId: 'open-1',
+      definition: definitionWire(),
+    });
+    const token = h.opened().projectToken;
+
+    const shutdown = h.controller.handle({ type: 'workbench:shutdown' });
+    await waitUntil(() => h.materializerClose.mock.calls.length === 1);
+    await h.controller.handle({
+      type: 'workbench:close-project',
+      opId: 'close-during-shutdown',
+      projectToken: token,
+    });
+    materializerCloseGate.resolve();
+    await shutdown;
+    await h.controller.lifetime;
+    await h.controller.handle({
+      type: 'workbench:close-project',
+      opId: 'close-after-shutdown',
+      projectToken: token,
+    });
+
+    expect(h.runtime().runtime.close).toHaveBeenCalledTimes(1);
+    expect(h.sent.filter((message) => 'opId' in message && message.opId !== 'open-1')).toEqual([
+      { type: 'workbench:project-closed', opId: 'close-during-shutdown', projectToken: token },
+      { type: 'workbench:project-closed', opId: 'close-after-shutdown', projectToken: token },
+    ]);
+  });
 });

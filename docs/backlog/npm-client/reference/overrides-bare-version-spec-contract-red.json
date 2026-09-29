@@ -1,0 +1,232 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted (no REV-5 blocker): proceed to IMPLEMENT; settle the ADR-0051 native-gate interaction (concern 1) in contract/ADR before Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "43beed245648f0657143cc0c4705b54dc49627a1",
+  "unit_goal_source": "docs/backlog/npm-client/overrides-bare-version-spec.md (status: ready @ 43beed245648f0657143cc0c4705b54dc49627a1) — goal docs/backlog/epics/vitest-run-in-browser/goal.md I1; BASE 325ae797c0406453aed61b3a4e5d16f9c219d5ea; oracle npm 11.17.0 / Node v24.16.0 golden docs/backlog/npm-client/reference/overrides-bare-version-spec-probe-output.json",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2 — Worker keepalive",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:100",
+      "summary": "Open; map item 8 (after 7)."
+    },
+    {
+      "clause": "I3 — process uncaught/unhandled handlers, exit event, exit() honours exitCode",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:104",
+      "summary": "Open; map item 7."
+    },
+    {
+      "clause": "I4 — vitest run forks pool: config.ts, .ts tests, reporter, exit codes",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:108",
+      "summary": "Open; map items 6, 9, 10, 11, 13, 12."
+    },
+    {
+      "clause": "I5 — threads pool parity with forks",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:115",
+      "summary": "Open; map items 11, 12."
+    },
+    {
+      "clause": "I6 — every module of the vitest 4.1.11 tree loads on the claimed path",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "Open; map items 2, 3, 4, 5."
+    },
+    {
+      "clause": "I7 — docs/public/compat/vitest.md page",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:122",
+      "summary": "Open; map item 12."
+    },
+    {
+      "clause": "User scenario 2 — rolldown wasm32 binding + lightningcss shadow line on the scenario npm install",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:36",
+      "summary": "Outside I1/this unit (its e2e asserts vite lock entries + exit 0 only); carried by map item 12 acceptance e2e."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: browser shell, clean project, real registry — scenario manifest with overrides {vite: \"8.0.16\"} npm install exits 0 and locks exactly npm 11.17.0's vite entries (one node_modules/vite@8.0.16)",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/npm-override-bare-version.spec.ts:80; packages/npm-client/src/installer-override-npm-value.contract.test.ts:174 (row scenario-vitest-vite)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: rifty spelling vite@8.0.16 installs the same vite lock entries in the e2e and, in install(), the version npm locks for the bare spelling (debug + scenario manifests)",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/npm-override-bare-version.spec.ts:79; packages/npm-client/src/installer-override-npm-value.contract.test.ts:202",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: install() over probe manifests (exact, v/= prefixed, caret, tilde, x-range, 2, x, comparator set, union, latest, ''/*, override over existing lock) — dependent resolves npm's locked version, no packument named after the value, no other package, npm placement on fresh installs",
+      "source": "acceptance",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-override-npm-value.contract.test.ts:157-200",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: classification of every probe version/range value → overridden package at npm fetchSpec (incl. parent>child key); latest unconstrained; * no override; npm: first; ETARGET words keep rifty name; baked bcrypt unchanged",
+      "source": "acceptance",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides-npm-value.contract.test.ts:66-153",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: $name override throws NotImplementedError('npm-client.dependency-spec.override-reference') before any registry read",
+      "source": "acceptance",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-override-npm-value.contract.test.ts:220-236",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: docs/public/compat/package-tooling.md package.json#overrides values row (npm version/range/latest ✅, rifty extensions, $name ❌, ADR-0451 divergences)",
+      "source": "acceptance",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "docs/backlog/npm-client/overrides-bare-version-spec.md:43",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: npm-package-arg reading of the probe corpus; RED overrides-npm-value.contract.test.ts (18 failing)",
+      "source": "acceptance",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides-npm-value.contract.test.ts:66-121",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: npm locks for debug 4.3.4's ms edge under each claimed override value",
+      "source": "acceptance",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-override-npm-value.contract.test.ts:157-200",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: npm lock for the goal scenario — one node_modules/vite@8.0.16; RED install contract + browser e2e",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-override-npm-value.contract.test.ts:174; tests/e2e/npm-override-bare-version.spec.ts:80",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: npm resolves $ms (reference → ms 2.0.0); rifty named loud gap; RED install contract",
+      "source": "acceptance",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-override-npm-value.contract.test.ts:220-236",
+      "note": ""
+    },
+    {
+      "row": "Frozen oracle golden overrides-bare-version-spec-probe-output.json (npm 11.17.0 / Node v24.16.0), cmp-reproducible",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0451",
+      "status": "pass",
+      "citation": "docs/backlog/npm-client/reference/overrides-bare-version-spec-probe-output.json:1",
+      "note": ""
+    },
+    {
+      "row": "Public resolveOverride (index.ts:60) behavior for user values changes per ADR-0451 decision",
+      "source": "public-api",
+      "trace": "ADR-0451",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides-npm-value.contract.test.ts:66-153",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/npm-client/overrides-bare-version-spec.md:43",
+          "evidence": "",
+          "summary": "Acceptance 6 (compat row) has no executable carrier: package-tooling.md is hand-maintained (check:compat-drift does not generate it), so the row content (✅/extension/❌/divergences) is proven only by reading at Final+GREEN.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/npm-client/0451-user-override-values-follow-npm-version-and-range-reading.md:38",
+          "evidence": "docs/adr/npm-client/0006-shadow-registry.md:14: 'User package.json overrides — standard npm/yarn/pnpm format; no rifty-specific dialect.'",
+          "summary": "ADR-0451 decisions 4 and 6 keep rifty-only spellings (name@range, bare replacement names) while active ADR-0006:14 says user overrides have no rifty dialect; ADR-0451 cites ADR-0006 but adds no dated correction note there (DEC-2 advisory).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/npm-client/0451-user-override-values-follow-npm-version-and-range-reading.md:41; packages/npm-client/src/installer-sources.ts:448",
+          "evidence": "Scratch probe /tmp/vgoal/u1/scratch-cr-1 (throwaway vitest file, removed): root dep app-tool@1.0.0 -> native-bin ^1.0.0; native-bin 1.0.0/1.1.0 with cpu:[\"x64\"]. HEAD code: no override -> 'THROW ENATIVEUNSUPPORTED'; rifty 'native-bin@1.0.0' -> 'OK node_modules/native-bin 1.0.0' (pre-existing ADR-0051 'overrides exempt'); npm '1.0.0' -> 'Failed to fetch packument 1.0.0: 404'. With a minimal ADR-0451 decision-5 parse spike (overrides.ts + $ admission; all 48 RED tests green): npm '1.0.0' -> 'OK node_modules/native-bin 1.0.0', '^1.0.0' -> 'OK node_modules/native-bin 1.1.0' — no ENATIVEUNSUPPORTED. Gate: installer-sources.ts:214 and :448 `if (!override) assertNativeSupported(...)`.",
+          "summary": "ADR-0451's {name: N, range: V} user override is non-null, so ADR-0051's `!override` native gate (installer-sources.ts:214 replay, :448 live) is skipped: every npm-authored version/range pin of a cpu-pinned native package will install the binary silently instead of loud ENATIVEUNSUPPORTED. Contract Decisions ('parse-only … no mechanism changes') and ADR-0451 §Divergences neither record nor decide this; decide (keep the gate for same-name overrides, or record + compat) with a RED before Final+GREEN.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/npm-client/reference/overrides-bare-version-spec-probe.mjs:36",
+          "evidence": "",
+          "summary": "Decision 5's grammar is handwritten (semver rejected) and pinned only by the 30-value classify corpus; npm-valid spellings outside it (spaced operators `>= 8.0.0`, `1.x.x`, `~1`, `^0.0.x`, `8.0.0 - 9`, `<8.0.0-rc.1`, build metadata) are unproven, so a predicate that misreads them as names passes every RED. Cheap to widen: the probe is deterministic.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/npm-client/0451-user-override-values-follow-npm-version-and-range-reading.md:66",
+          "evidence": "Golden registryFacts (reproduced byte-identical): decoys {\"2\":\"3.0.0\",\"x\":\"0.1.2\",\"latest\":\"0.2.0\",\"beta\":\"0.0.1\"}; ms dist-tags latest/beta/canary/nightly; npm 'tag-beta' row locks ms 3.0.0-beta.2.",
+          "summary": "Dist-tag words other than `latest` (`beta`, `next`, `canary`) stay rifty replacement names: where the dependent's edge admits the look-alike package's version (e.g. `*`/`latest` edges), rifty installs an unrelated registry package where npm installs the tagged version. Recorded as a divergence, not loud; a dist-tag check against the overridden packument or a named throw would close it.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/npm-client/src/semver.ts:121",
+          "evidence": "npx tsx over semver.ts: matchesRange('2.1.1','2.0.0 - 2.1.1') false; matchesRange('2.1.1','~>2.0') false. grep -rln -i hyphen docs/backlog → only this unit's contract/evidence/probe files.",
+          "summary": "Hyphen/`~>` ranges (npm-valid, classified as ranges by ADR-0451) hit a pre-existing matcher gap that throws a plain 'No matching version' (installer-sources.ts:427), not a named NotImplementedError, and no backlog item tracks it (only ADR-0451 §Divergences + future compat row); route per REV-12 (backlog).",
+          "authority": ""
+        }
+      ]
+    }
+  ]
+}

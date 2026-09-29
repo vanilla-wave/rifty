@@ -14,19 +14,6 @@ function exitCodeOf(err: unknown): number | null {
   return c && c.code === 'RIFTY_PROCESS_EXIT' && typeof c.exitCode === 'number' ? c.exitCode : null;
 }
 
-/**
- * Uint8-wrap a (validated) exit code to Node's 0–255 range; a non-number defaults
- * to 0 defensively. So a clean `return` after `process.exitCode = 7` exits 7
- * (ADR-0157 review D4), not the old hardcoded 0. NOTE: Node's string-coercion +
- * loud validation of an invalid exit code lives in the `process.exitCode` SETTER
- * (builtins/process.ts `coerceExitCode`); by the time a value reaches here it is
- * already a validated integer — this is only the final uint8 wrap.
- */
-export function normalizeExitCode(v: unknown): number {
-  if (typeof v !== 'number' || !Number.isFinite(v)) return 0;
-  return ((Math.trunc(v) % 256) + 256) % 256;
-}
-
 export interface NodeLifecycleDeps {
   /** Import + run the entry through the loader (runNodeEntry, bin:false). */
   readonly runEntry: () => Promise<void>;
@@ -40,10 +27,12 @@ export interface NodeLifecycleDeps {
   readonly servePreview: (port: number) => () => void;
   /** Report the CURRENT listened port set to the owner (rifty:node-listening). */
   readonly postListening: (ports: number[]) => void;
-  /** Raw `process.exitCode` at natural exit (honoured per Node — ADR-0157 D4). */
-  readonly readExitCode: () => unknown;
-  /** Exit the worker with a code (process.exit). */
-  readonly exit: (code: number) => void;
+  /**
+   * The process's own `exit`, captured before user code (ADR-0446 §6), never
+   * a reassigned `process.exit`. Natural exit passes no argument: Node's `exit()` emits
+   * `'exit'` and reads `process.exitCode` itself (ADR-0445 rule 6).
+   */
+  readonly exit: (...code: [] | [number]) => void;
 }
 
 type EntryOutcome =
@@ -149,10 +138,9 @@ export async function runNodeProgramLifecycle(deps: NodeLifecycleDeps): Promise<
       startDrain();
       if (ports.length === 0 && currentDrainOutcome().kind === 'resolved') {
         cleanup();
-        // Natural exit honours process.exitCode (Node parity, D4): a clean
-        // return after `process.exitCode = N` exits N, not 0. A tail THROW still
-        // maps to exit 1 above (uncaught wins, Node-faithful).
-        deps.exit(normalizeExitCode(deps.readExitCode()));
+        // Natural exit = Node's `exit()`: `'exit'` once, then `exitCode ?? 0`
+        // (ADR-0445 rule 6; ADR-0157 D4). A tail THROW maps to exit 1 above.
+        deps.exit();
         return;
       }
     }

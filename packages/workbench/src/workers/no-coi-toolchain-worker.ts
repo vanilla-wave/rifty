@@ -13,7 +13,11 @@ import {
   trackKeepalivePromise,
 } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
-import { riftyProcess, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
+import {
+  resetNodeProcessExit,
+  riftyProcess,
+  setProcessCwd,
+} from '@riftydev/runtime-js/builtins/process';
 import {
   SANDBOX_TOOLCHAIN_PROTOCOL,
   type ToolchainActivationState,
@@ -37,6 +41,7 @@ import { INSTALL_STAMP_BASENAME, readInstallStamp } from '../glue/install-stamp.
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { declaredGapCause } from './declared-gap-cause.ts';
 import { createNoCoiInstallContext } from './no-coi-install-context.ts';
+import { openNoCoiInvocationScope } from './no-coi-invocation-scope.ts';
 import { startResidentNodeEntry } from './resident-node-entry.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -50,6 +55,9 @@ Object.defineProperty(globalThis, TOOLCHAIN_REALM, {
 });
 installEventLoopKeepalive();
 registerNetBuiltins();
+// ADR-0445 rule 6: natural exit is Node's own `exit()`, captured before any guest
+// can reassign `process.exit`.
+const nodeExit = riftyProcess.exit;
 const closeToolchainWorker = installToolchainCloseSignal();
 Reflect.set(globalThis, '__riftyTrackCliPromise', trackKeepalivePromise);
 
@@ -183,10 +191,11 @@ async function runInstalledBin(
 ): Promise<{ readonly exitCode: number }> {
   const { prepareSavedToolchain } = await import('./no-coi-toolchain-install.ts');
   await prepareSavedToolchain(input.cwd);
-  const process = riftyProcess as unknown as { argv: string[]; exitCode?: number };
-  process.argv = ['node', input.binPath, ...input.args];
-  process.exitCode = undefined;
+  riftyProcess.argv = ['node', input.binPath, ...input.args];
+  // ADR-0445: a reused in-process process starts unset and not exiting.
+  resetNodeProcessExit(riftyProcess);
   setProcessCwd(input.cwd);
+  const invocation = openNoCoiInvocationScope();
   let exitCode = 0;
   try {
     await runNodeEntry({
@@ -196,13 +205,20 @@ async function runInstalledBin(
       bin: true,
     });
     await awaitDrain({ capMs: 600_000 });
-    if (typeof process.exitCode === 'number') exitCode = process.exitCode;
+    // Natural exit = Node's `exit()`: `'exit'` once, then `exitCode ?? 0`; it throws its signal.
+    nodeExit();
   } catch (error) {
     const pendingRejection = takeUnhandledRejection();
     const failure = pendingRejection === null ? error : pendingRejection.reason;
+    // A runtime fatal exit keeps its error as `cause` (ADR-0445): a declared gap
+    // stays the named throw; a guest-owned exit carries none.
+    const gap = declaredGapCause(failure);
+    if (gap !== null) throw gap;
     const signalled = processExitCode(failure);
-    if (signalled !== null) exitCode = signalled;
-    else throw declaredGapCause(failure) ?? failure;
+    if (signalled === null) throw failure;
+    exitCode = signalled;
+  } finally {
+    invocation.end();
   }
   await flushMirror();
   return { exitCode };

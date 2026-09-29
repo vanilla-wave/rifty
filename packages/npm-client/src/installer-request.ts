@@ -207,6 +207,8 @@ function isGithubShorthand(spec: string): boolean {
 }
 
 function unsupportedOverrideTargetSpec(target: string): string | null {
+  // npm resolves `$name` against the root manifest's dependencies (ADR-0451).
+  if (target.startsWith('$')) return 'override-reference';
   const raw = target.trim();
   const withoutAlias = raw.startsWith('npm:') ? raw.slice(4) : raw;
   const direct = unsupportedDependencySpec(withoutAlias);

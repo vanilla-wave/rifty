@@ -66,7 +66,6 @@ export const BASELINE = [
   { file: 'packages/ts-language-service/src/service.ts', max: 1377 },
   { file: 'packages/workbench/src/workers/package-acquisition-authority.ts', max: 1374 },
   { file: 'apps/playground/src/components/editor-host-core.ts', max: 1270 },
-  { file: 'tools/compat-matrix-generator/cli.js', max: 1269 },
   { file: 'packages/runtime-js/src/builtins/process.ts', max: 1226 },
   {
     file: 'packages/workbench/src/workbench/internal/playground-session-tools-transport.ts',
@@ -79,6 +78,7 @@ export const BASELINE = [
   { file: 'packages/git/src/git.ts', max: 1118 },
   { file: 'packages/workbench/src/workbench/internal/typescript-relay-client.ts', max: 1083 },
   { file: 'packages/net/src/cross-realm/preview-port.ts', max: 1067 },
+  { file: 'tools/compat-matrix-generator/cli.js', max: 1050 },
   { file: 'apps/playground/src/components/FileExplorer.tsx', max: 1043 },
   { file: 'packages/workbench/src/glue/npm-shell-command.ts', max: 1042 },
   { file: 'packages/runtime-js/src/builtins/vm/rewrite-engine.ts', max: 1021 },

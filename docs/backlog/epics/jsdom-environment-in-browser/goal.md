@@ -15,7 +15,8 @@ open. To be refined on its own before FIT.
 
 ## User scenario
 
-Project from `vitest-run-in-browser` plus `jsdom@30.0.1` and a test with
+Project from the closed `vitest-run-in-browser` scenario (`docs/public/compat/vitest.md`,
+`tests/e2e/vitest-run.spec.ts`) plus `jsdom@30.0.1` and a test with
 `// @vitest-environment jsdom` that appends an element and asserts
 `document.body.innerHTML`; `vitest run` passes with the same output as Node.
 
@@ -24,7 +25,8 @@ Project from `vitest-run-in-browser` plus `jsdom@30.0.1` and a test with
 - Install: 85 packages, canvas optional peer skipped.
 - `import('jsdom')` → `module-loader.cjs-global-function-assignment` on
   `undici/lib/global.js` (owned by
-  `runtime-js/symbol-key-global-write-guard-precision`).
+  `runtime-js/reference/symbol-key-global-write-guard-precision-evidence.md`; landed,
+  ADR-0444).
 - Guards bypassed: `new JSDOM('<p>hi</p>')` parses and queries; with
   `runScripts: 'dangerously'` (vitest's forced default) → jsdom 30
   `Window.js:58` `vm.createContext(vm.constants.DONT_CONTEXTIFY)` →

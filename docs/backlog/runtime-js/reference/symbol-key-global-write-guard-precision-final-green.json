@@ -1,0 +1,193 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN PASS (no blocker, no missing row): land the slice. All 6 Acceptance and 3 Parity clauses have discriminating carriers; pr:check is fully green at HEAD. NOTE the concerns: pre-existing global-object bypass shapes, identical at BASE, belong to the owner draft.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "2ff2623709872dbfffbdad553a3dd3abb5912625",
+  "unit_goal_source": "docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md @ 2ff2623709872dbfffbdad553a3dd3abb5912625 (status: ready; ready-verdict Contract+RED @ fb441a51459a6555cc03791ad4c1e3198d55f58b; Acceptance/Parity unchanged since then) + ADR-0444 + goal docs/backlog/epics/vitest-run-in-browser/goal.md (I6); BASE 325ae797c0406453aed61b3a4e5d16f9c219d5ea",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I6 (other walls + whole-tree proof)",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:14-21,43-45,56-58",
+      "summary": "This slice clears the guard walls only. The path/posix, process named-import, loud-member and vm-offset children are still open on this branch. The end-to-end load of the real vitest tree in the browser (item 12) is also still owed."
+    },
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:11-13",
+      "summary": "The overrides bare-version spelling child is still open."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:33-40",
+      "summary": "The Worker handle keepalive child is still open."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:30-32",
+      "summary": "The process lifecycle events/exitCode child is still open."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:28-29,41-42,52-58",
+      "summary": "The pipe-stdio, advanced IPC, port keepalive and acceptance e2e children are still open."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:45-51,56-58",
+      "summary": "The worker stdio/execArgv child and threads-pool acceptance are still open."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:56-58",
+      "summary": "The vitest.md compat page is still open."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: the vitest 4.1.11 shapes load and run under the real loader as in Node, with no esm ceiling and values/descriptors equal to Node's (Parity 1). Shapes: timers Symbol-const assign; expect's 3x Symbol.for defineProperty; imported-Symbol define; stubGlobal/unstubAllGlobals parameter keys incl. Reflect.deleteProperty and descriptor restore; setup-common for-in.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/global-computed-key-writes-esm.case.ts:13-89,121-147; tools/node-parity-runner/cases/modules/global-computed-key-sites-esm.case.ts:31-42,104-110",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: the undici 8.10.2 lib/global.js and fetch/global.js shapes load and run as in Node: Symbol.for-const defineProperty, globalThis[sym] reads, and for-in/parameter keys through `global` (Parity 2).",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/global-computed-key-writes-cjs.case.ts:12-92,110-132",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: a non-'Function' object key is coerced with Node's count and order relative to RHS and descriptor. Operations: assign, compound, ++, defineProperty, Reflect.set, delete, and Symbol.toPrimitive yielding a Symbol.",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/global-computed-key-writes-esm.case.ts:91-111; tools/node-parity-runner/cases/modules/global-computed-key-writes-cjs.case.ts:95-106; tools/node-parity-runner/cases/modules/global-computed-key-sites-cjs.case.ts:26-48",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: a runtime key that IS 'Function' (string, or object coercing to it) throws the named ESM/CJS ceiling at the operation on all 11 listed sites. The module itself loads and host Function stays intact.",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "tests/conformance/modules/global-computed-key-guard.test.ts:33-117,119-124,166-171; tests/conformance/modules/global-computed-key-guard-sites.test.ts:35-85,110-118",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: a top-level runtime 'Function' key throws at the write. Earlier statements and earlier for-in keys have already taken effect, and import/require fails with the named ceiling.",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "tests/conformance/modules/global-computed-key-guard.test.ts:126-142,173-191",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: load-time ceilings stay for keys folding to 'Function' and for runtime-key reads used as a constructor, and they reject before any statement runs.",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "tests/conformance/modules/resolver.test.ts:1556-1790; tests/conformance/modules/global-computed-key-guard-sites.test.ts:87-107,120-137; tests/conformance/modules/global-computed-key-guard.test.ts:144-163,193-207",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: the ESM case matches Node v24.16.0 output safeTimers..unstubbed, clean.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/global-computed-key-writes-esm.case.ts:1-151",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: the CJS case matches Node output dispatcher..dynamic, clean.",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/global-computed-key-writes-cjs.case.ts:1-136",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: the object-key coercion rows match Node: ESM objectKey/toPrimitiveKey and CJS objectKey.",
+      "source": "acceptance",
+      "trace": "ADR-0444",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/global-computed-key-writes-esm.case.ts:91-111; tools/node-parity-runner/cases/modules/global-computed-key-writes-cjs.case.ts:95-106",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "tests/conformance/modules/global-computed-key-guard.test.ts:193-207",
+          "evidence": "",
+          "summary": "For Acceptance 6's constructor-read ceiling, CJS carries only `Reflect.get(globalThis, key)` then called. ESM also has `new globalThis[key](…)`. That path is unchanged in this diff and the clause names no format, so this is a symmetry nit only.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/runtime-js/reference/symbol-key-global-write-guard-precision-evidence.md:4-5,270-284",
+          "evidence": "",
+          "summary": "The probe scripts behind the post-fix tree scan and the key-wrap syntax scan (scan.mts, edit-syntax-scan.mts, node-side.mts) are not committed. I reproduced the claimed-path result independently (Ecosystem UX evidence).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/module-loader/esm.ts:1274-1281; packages/runtime-js/src/module-loader/cjs.ts:1646-1653",
+          "evidence": "Scratch probe via vitest --project conformance, same file at HEAD 2ff262370 and BASE 325ae797c, calling each export with k='Function'. Rows identical at both: `(0, globalThis)[k] = 1` loaded hostIntact=false; `(true ? globalThis : {})[k] = 1` hostIntact=false; `globalThis.globalThis[k] = 1` hostIntact=false; `Object.defineProperty.call(Object, globalThis, k, …)` hostIntact=false; `(0, Reflect.set)(globalThis, k, 1)` hostIntact=false; `delete (0, globalThis)[k]` hostIntact=false; CJS `eval('global[k] = 1')`, `(function(){return this})()[k] = 1`, `(0, global)[k] = 1` hostIntact=false. The only BASE->HEAD difference among the 40 rows: `delete globalThis?.[k]` BASE hostIntact=false, HEAD throws the ceiling with host intact.",
+          "summary": "Some global writes still replace the host `Function` constructor without any ceiling: a global object reached through a non-identifier expression (sequence, conditional, `globalThis.globalThis`), `.call`/aliased Object/Reflect mutators, and direct-eval text. This is not a regression: every shape behaves the same at BASE, and none is in this contract. The owner draft `runtime-js/function-constructor-exhaustive-metaprogramming-ceiling` records these only generically. Route (REV-12): refine that draft with these concrete shapes. No automatic scope for this slice.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/public/compat/modules.md:91-96",
+          "evidence": "Real vitest 4.1.11 tree (/tmp/vgoal/u5/vt, §S1 install) mounted into MemoryFsSync and loaded with createModuleLoader. HEAD: @vitest/utils/dist/timers.js loaded (setSafeTimers ok); @vitest/expect/dist/index.js loaded (matchers/expect Symbol.for globals present); setup-common.DYx3LtFI.js loaded; test.DNmyFkvJ.js loaded, vi.stubGlobal('__fgStub',1)->1, unstubAllGlobals->removed, vi.stubGlobal('Function',1) -> module-loader.esm-global-function-assignment, hostIntact true; undici fetch/global.js loaded + setGlobalOrigin ok. BASE: all six throw module-loader.{esm,cjs}-global-function-assignment at load.",
+          "summary": "Real vitest modules now behave as in Node. `fn.toString()` and stack columns on wrapped lines show `__riftyGlobalKey(…)`. This is disclosed in modules.md and ADR-0444 (the ADR-0009/0171 rewrite class). No action.",
+          "authority": ""
+        }
+      ]
+    }
+  ]
+}

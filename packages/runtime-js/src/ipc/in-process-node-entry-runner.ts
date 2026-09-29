@@ -22,7 +22,7 @@ import {
   readActiveNodeProcessBootstrap,
   setActiveNodeProcessBootstrap,
 } from '../builtins/process-bootstrap-identity.ts';
-import { riftyProcess } from '../builtins/process.ts';
+import { resetNodeProcessExit, riftyProcess } from '../builtins/process.ts';
 import { type NodeEntryRunner, concatChunks } from './recursive-runner.ts';
 
 /**
@@ -42,8 +42,9 @@ import { type NodeEntryRunner, concatChunks } from './recursive-runner.ts';
  * a `process.exit(N)` shape carries its own code.
  *
  * `riftyProcess.stdout` is a plain settable instance property (process.ts:361),
- * so the stdout swap restores cleanly. A brand-new child starts at exit 0, so
- * the singleton's `exitCode` is reset around the run.
+ * so the stdout swap restores cleanly. A brand-new child starts with an unset
+ * `exitCode` and not exiting (ADR-0445), so the singleton's exit state is reset
+ * around the run.
  */
 export function makeInProcessNodeEntryRunner(): NodeEntryRunner {
   return async (spec) => {
@@ -64,7 +65,7 @@ export function makeInProcessNodeEntryRunner(): NodeEntryRunner {
     const prevStdout = riftyProcess.stdout;
     const prevExitCode = riftyProcess.exitCode;
     (riftyProcess as { stdout: unknown }).stdout = capture;
-    riftyProcess.exitCode = 0;
+    resetNodeProcessExit(riftyProcess);
     // Make the loader-run child read `riftyProcess` as the ambient `process`
     // (its stdout/exitCode now route to our capture), the same realm shape the
     // kernel pre-entry hook gives a Worker child — scoped to this run.
@@ -78,7 +79,7 @@ export function makeInProcessNodeEntryRunner(): NodeEntryRunner {
         cwd: spec.cwd,
         bin: false,
       });
-      exitCode = riftyProcess.exitCode;
+      exitCode = riftyProcess.exitCode ?? 0;
     } catch (err) {
       exitCode = exitCodeFromThrow(err);
     } finally {
@@ -88,6 +89,7 @@ export function makeInProcessNodeEntryRunner(): NodeEntryRunner {
         prevActiveProcess?.federated ?? false,
       );
       (riftyProcess as { stdout: unknown }).stdout = prevStdout;
+      resetNodeProcessExit(riftyProcess);
       riftyProcess.exitCode = prevExitCode;
     }
     return { stdout: concatChunks(chunks), exitCode };
