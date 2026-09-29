@@ -148,7 +148,7 @@ test('project mutation and command report a native OPFS write failure', async ({
   });
 });
 
-// rolldown's napi binding loader shape: the threaded-WASM gap wrapped as `cause`
+// ADR-0470: the unavailable Worker gap wrapped as `cause` (binding-loader shape)
 // of an unhandled rejection. The fatal exit (ADR-0445) must not hide the gap.
 test('project command names a declared gap behind a fatal rejection', async ({ page }) => {
   test.setTimeout(120_000);
@@ -168,7 +168,7 @@ test('project command names a declared gap behind a fatal rejection', async ({ p
           '/gap/binding.cjs',
           [
             'let gap;',
-            'try { new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true }); }',
+            "try { new (require('node:worker_threads').Worker)('./worker.cjs'); }",
             'catch (error) { gap = error; }',
             "Promise.reject(new Error('WASI binding not found', { cause: gap }));",
           ].join('\n'),
@@ -182,7 +182,7 @@ test('project command names a declared gap behind a fatal rejection', async ({ p
   );
   expect(result).toMatchObject({
     status: 'failed',
-    error: { name: 'NotImplementedError', feature: 'toolchain.threaded-wasm' },
+    error: { name: 'NotImplementedError', feature: 'worker_threads.Worker' },
   });
   expect(result.stderr).toContain('Error: WASI binding not found');
 });

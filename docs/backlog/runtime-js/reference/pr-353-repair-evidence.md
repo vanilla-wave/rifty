@@ -189,3 +189,20 @@ At `33e77389e30a55e320c9fe4cf003dbe83072f966`:
 
 PR branch pushed; no PR merge performed. CI binding is restored by this final
 review artifact, not by changing the gate or suppressing its earlier failure.
+
+### CI-only stale fault stimulus after main integration
+
+CI run `36503121263`, no-coi job `109198470366`: 121 PASS, one failure in
+`no-coi-agent-sdk.spec.ts` “project command names a declared gap behind a fatal
+rejection”. Reproduced once isolated: `/tmp/pr353-agent-gap-red.log`.
+The fixture tried to capture `toolchain.threaded-wasm` by allocating shared
+WebAssembly.Memory; ADR-0470 now makes that allocation native, so no gap existed.
+
+Keep the same obligation: a retained real declared-gap cause survives fatal
+rejection. Replace only the retired stimulus with actual no-COI Worker
+construction and its canonical `worker_threads.Worker` feature. The existing
+`status: failed`, NotImplementedError and original outer stderr assertions stay.
+Whole owning browser spec: 6/6 PASS (`/tmp/pr353-agent-sdk-final.log`). No product
+code change. Retired-marker sweep: remaining SDK `toolchain.threaded-wasm` is
+capability metadata pointing at Worker; process-exit unit uses an arbitrary
+NotImplementedError identity. Neither expects Memory allocation to throw.
