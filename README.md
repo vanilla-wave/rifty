@@ -2,7 +2,7 @@
 
 Browser-based, Node-compatible runtime + WASI runner — a WebContainers-like system built from scratch. Run `Express`, `npm install`, a dev server, even WASI binaries, **inside a browser tab**. Pet project; goal is deep understanding of how these systems work, plus a practical "Express + npm install in the browser".
 
-> **Status:** active milestone M11 (Consumer Ready). APIs are `0.x` and may move. See [`docs/ROADMAP.md`](./docs/ROADMAP.md), [`docs/adr/`](./docs/adr/), [`docs/public/compat/`](./docs/public/compat/).
+> **Status:** active milestone M11 (Consumer Ready). APIs are `0.x` and may move. See [`docs/ROADMAP.md`](./docs/ROADMAP.md), [`docs/adr/`](./docs/adr/), [`docs/public/compat/`](./docs/public/compat/) (browser support matrix: [`browsers.md`](./docs/public/compat/browsers.md)).
 
 > **Position:** open, self-hostable, browser-local runtime infrastructure. See [`docs/public/open-runtime-position.md`](./docs/public/open-runtime-position.md) and the [`trust model`](./docs/public/trust-model.md); compatibility claims live in [`docs/public/compat/`](./docs/public/compat/).
 
@@ -61,7 +61,7 @@ More runnable examples in [`examples/standalone-usage`](./examples/standalone-us
 
 ## Consuming rifty in your own app — read this first
 
-The leaf packages (`@riftydev/io`, `@riftydev/vfs`, `@riftydev/npm-client`, `@riftydev/shell`, `@riftydev/shadow-registry`) are plain isomorphic JS and need nothing special. The **runtime** (`runtime-js`, `runtime-wasi`, `kernel`, `service-worker`) has hard browser prerequisites — without them it will not boot:
+The leaf packages (`@riftydev/io`, `@riftydev/vfs`, `@riftydev/npm-client`, `@riftydev/shell`, `@riftydev/shadow-registry`) are plain isomorphic JS and need nothing special. The **runtime** (`runtime-js`, `runtime-wasi`, `kernel`, `service-worker`) has hard browser prerequisites (versions per mode: [browser support matrix](./docs/public/compat/browsers.md)) — without them it will not boot:
 
 1. **Cross-origin isolation is mandatory** (for `SharedArrayBuffer` + `Atomics.wait`, used by synchronous IPC and sync fs). Serve with:
 
@@ -122,7 +122,7 @@ For active checks before COI Workbench or non-COI toolchain opening, use
 [`checkSandboxSupport`](./docs/public/sandbox-support.md) from `@riftydev/workbench`.
 It probes real browser operations and reports each composition separately.
 
-Target `es2022`; **Chrome-first** (cross-browser e2e infra exists, see [`docs/public/compat/`](./docs/public/compat/)).
+**Browser support** (ADR-0469): target `es2022`; Chromium supported (gating CI); Firefox verified and WebKit capability-verified, both record-only (manual dispatch, non-gating). Versions, modes, persistence and traffic share: [`docs/public/compat/browsers.md`](./docs/public/compat/browsers.md).
 
 ## Develop (monorepo)
 

@@ -1,6 +1,6 @@
-import { type Page, expect, test } from '@playwright/test';
 import type { AgentTrace } from '../../packages/agent/src/index.ts';
 import type * as Proof from '../integration/fixtures/workbench-vite-consumer/src/sandbox-agent-proof.ts';
+import { type Page, expect, test } from './fixtures/test.ts';
 
 const root = process.cwd().replaceAll('\\', '/');
 const fixture = `/@fs${root}/tests/integration/fixtures/workbench-vite-consumer/src/sandbox-agent-proof.ts`;

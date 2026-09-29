@@ -37,6 +37,9 @@ RIFTY_PLAYGROUND_PORT=5314 pnpm exec playwright test --config playwright.browser
 
 ## Corrections (active)
 
+- 2026-09-28 — ADR-0476 partially supersedes decisions 1 and 3: paired OPFS
+  admission also requires callable `createWritable`; other decisions remain.
+
 - 2026-09-04 — the landed exact no-COI reload carrier moved intact to
   `tests/no-coi/no-coi-opfs-reload.spec.ts`, so the required no-COI CI lane
   executes I5. The decision and Worker fixture are unchanged.

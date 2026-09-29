@@ -25,7 +25,7 @@ premise is partly resolved; startup/e2e logging itself was not checked.
 The delivered public pre-opening API is documented in
 [Workbench sandbox support](../../public/sandbox-support.md).
 Generated per-engine reporting remains with the
-[cross-browser matrix](../service-worker/cross-browser-compat-matrix.md).
+[cross-browser matrix](../../public/compat/browsers.md).
 
 ## Decisions
 

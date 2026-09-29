@@ -1,0 +1,17 @@
+{
+  "node": "v24.16.0",
+  "directory": "/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/pr362-review-floor-mutant-BYrbFX",
+  "source": "const files=[{path:\"/b\"},{path:\"/a\"}]; globalThis.result=Array.prototype.toSorted.call(files, (a,b)=>a.path.localeCompare(b.path));",
+  "emitted": "const l=[{path:\"/b\"},{path:\"/a\"}];globalThis.result=Array.prototype.toSorted.call(l,(a,t)=>a.path.localeCompare(t.path));\n",
+  "guard": {
+    "files": 1,
+    "errors": []
+  },
+  "browser": {
+    "build": "108.0.5359.29",
+    "result": {
+      "name": "TypeError",
+      "message": "Cannot read properties of undefined (reading 'call')"
+    }
+  }
+}

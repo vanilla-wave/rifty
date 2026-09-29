@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Add manual browser proof page: support, real Vite install/build, durable reload and reopen, copyable device report.
+
+- Select the latest new preview port without ES2023 `findLast`.
 - Catalog JSON keeps the typed text while it is the edit source; other catalog edits re-serialize it.
 - Models created in Settings get their own provider, so each carries its own API key.
 - "Continue with …" sends an edited draft as-is; the auto-restored failed prompt is dropped, never a duplicate user turn: a pending attachment goes alone, otherwise `continue`.

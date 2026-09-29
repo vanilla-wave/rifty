@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
 import { nativeReplicaProbeSource } from './fixtures/native-replica-page.ts';
+import { expect, test } from './fixtures/test.ts';
 
 const root = process.cwd().replaceAll('\\', '/');
 

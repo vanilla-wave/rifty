@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
 import { accessNativeReplica, encoded } from '../browser-unit/fixtures/opfs-storage-namespace.ts';
+import { expect, test } from './fixtures/test.ts';
 
 const root = process.cwd().replaceAll('\\', '/');
 for (const state of ['missing', 'pending', 'legacy', 'corrupt-lock', 'missing-lock'] as const) {

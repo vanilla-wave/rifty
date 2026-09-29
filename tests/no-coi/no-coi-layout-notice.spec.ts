@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures/test.ts';
 const root = process.cwd().replaceAll('\\', '/');
 for (const kind of ['legacy', 'corrupt', 'clean'])
   test(`SDK logger receives ${kind} layout truth before startup can publish HEAD`, async ({

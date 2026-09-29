@@ -28,6 +28,8 @@ import { isDocumentationOnlyPath } from './ci-change-scope.mjs';
 export const SOURCE_LANES = new Set([
   'typecheck',
   'build:libs',
+  'build:playground',
+  'check:es-floor',
   'check:arch',
   'test:run',
   'test:parity',
@@ -138,6 +140,8 @@ export const TASKS = [
   'lint',
   'typecheck',
   'build:libs',
+  'build:playground',
+  'check:es-floor',
   'check:arch',
   'check:parity-coverage',
   'check:e2e-coverage',

@@ -6,6 +6,9 @@ operations before a sandbox opens and reports two existing compositions:
 - `modes.coi`: `openWorkbench`, with COI and its normal QuickJS runtime.
 - `modes.nonCoi`: the SDK's shared-memory-free Workbench toolchain, default rewrite VM.
 
+Browser-version companion: [browser support matrix](compat/browsers.md) (computed
+floors + executed runs); this probe stays the verdict for the actual host.
+
 ```ts
 import { checkSandboxSupport } from '@riftydev/workbench';
 

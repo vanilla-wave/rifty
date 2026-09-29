@@ -3,10 +3,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { type BrowserContext, type Page, expect, test } from '@playwright/test';
 import { accessNativeReplica, encoded } from '../browser-unit/fixtures/opfs-storage-namespace.ts';
 import type { bakeApplicationPackage } from '../browser-unit/fixtures/snapshot-application-package.ts';
 import { nativeReplicaTree } from './fixtures/native-replica-page.ts';
+import { type BrowserContext, type Page, expect, test } from './fixtures/test.ts';
 
 const root = process.cwd().replaceAll('\\', '/');
 const fixture = `/@fs${root}/tests/no-coi/fixtures/no-coi-snapshot-page.ts`;

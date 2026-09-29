@@ -53,6 +53,19 @@ describe('createSabRing', () => {
   });
 });
 
+it('keeps TypeError when native waitAsync is unavailable for either async entry', async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(Atomics, 'waitAsync')!;
+  const { ring } = createSabRing({ payloadCapacity: 32 });
+  Object.defineProperty(Atomics, 'waitAsync', { ...descriptor, value: undefined });
+  try {
+    expect(() => ring.armRequest(0)).toThrow(TypeError);
+    ring.writeRequest(new Uint8Array([1]));
+    await expect(ring.waitReplyAsync(100)).rejects.toBeInstanceOf(TypeError);
+  } finally {
+    Object.defineProperty(Atomics, 'waitAsync', descriptor);
+  }
+});
+
 describe('SabRing — request/reply round-trip', () => {
   it('caller writeRequest → responder readRequest → responder writeReply → caller waitReplyAsync', async () => {
     const { sab, ring: caller } = createSabRing({ payloadCapacity: 256 });

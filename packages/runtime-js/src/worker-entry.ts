@@ -34,12 +34,12 @@ import {
 import { publishRuntimeGlobal } from './internal/worker-globals.ts';
 import { runtimeWorkerOptionsFromName } from './internal/worker-startup-options.ts';
 import { createModuleLoader } from './module-loader/index.ts';
-import type { EvalRequest, EvalResult, HostMessage, WorkerMessage } from './protocol.ts';
+import type { EvalRequest, EvalResult, HostMessage, ToolchainWorkerMessage } from './protocol.ts';
 import { installConsole } from './repl/console.ts';
 import { evalInRepl } from './repl/eval.ts';
 import { inspect } from './repl/inspect.ts';
 import { captureNotImplemented, snapshotTelemetry } from './telemetry/divergence-sink.ts';
-import { handleWorkerFsRequest } from './worker-fs-rpc.ts';
+import { handleWorkerFsRequest, serializeRuntimeError } from './worker-fs-rpc.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -52,7 +52,7 @@ installTimerGlobals();
 installWebGlobals();
 (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
 
-function post(msg: WorkerMessage): void {
+function post(msg: ToolchainWorkerMessage): void {
   self.postMessage(msg);
 }
 
@@ -287,6 +287,10 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
 void boot.then(
   () => post({ type: 'ready' }),
   (error: unknown) => {
+    if (isSandboxToolchainRealm()) {
+      post({ type: 'toolchain-terminal', reason: 'closed', error: serializeRuntimeError(error) });
+      return;
+    }
     // The host's existing Worker error owner rejects handshake and pending calls.
     setTimeout(() => {
       throw error;

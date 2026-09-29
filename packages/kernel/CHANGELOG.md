@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Check native `Atomics.waitAsync` at the ring wrapper; preserve TypeError when unavailable and bind the ES2022 guard to the actual call.
+
 ### Added
 
 - **SyncRpc v5 binary requests (ADR-0366).** One claimed ring now carries

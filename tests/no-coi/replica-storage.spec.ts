@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures/test.ts';
 
 const moduleUrl = `/@fs${process.cwd()}/tests/browser-unit/fixtures/replica-persistence-worker.ts?worker&url`;
 

@@ -23,3 +23,8 @@ Decision D-006: Chromium is the primary target; Firefox/WebKit are best-effort. 
 - Block PRs on cross-browser failures.
 - Add Chrome-specific feature checks (`if (isFirefox)`) — always use feature detection.
 - Hand-tune the UI for pixel-perfect cross-browser parity (out of scope for a pet project).
+
+## Corrections
+
+- 2026-09-27 — D-006 refined by ADR-0469: support tiers are defined by evidence (Chromium supported/gating, Firefox verified/non-gating, WebKit capability-verified); the public matrix `docs/public/compat/browsers.md` carries the legend. "Block PRs on cross-browser failures" stays declined. The weekly cron of `ci-cross-browser.yml` (§Infrastructure) is decided removed and lands with item `playground/coi-lane-cross-engine-record` (it keeps firing red until then): cross-engine lanes run by manual dispatch only, no schedule, no release gate (user 2026-09-27; epic `browser-support-floor` item `playground/coi-lane-cross-engine-record`).
+- 2026-09-29 — the cron removal landed with PR #362 (`ci-cross-browser.yml` schedule removed, manual dispatch only); item `playground/coi-lane-cross-engine-record` completed there, its file removed. Epic `browser-support-floor` closed; closure record `docs/backlog/distribution/reference/browser-support-floor-closure.md`.

@@ -56,7 +56,7 @@ export function applyRecoveryFsOperation(
   }
   return Object.freeze({
     ...state,
-    files: Object.freeze(files.toSorted((a, b) => a.path.localeCompare(b.path))),
-    directories: Object.freeze(directories.toSorted()),
+    files: Object.freeze([...files].sort((a, b) => a.path.localeCompare(b.path))),
+    directories: Object.freeze([...directories].sort()),
   });
 }

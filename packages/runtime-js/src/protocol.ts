@@ -71,6 +71,7 @@ export interface SerializedRuntimeError {
   readonly code?: string;
   readonly path?: string;
   readonly feature?: string;
+  readonly cause?: { readonly name: string; readonly message: string };
   readonly effects?: RuntimeEffects;
 }
 
