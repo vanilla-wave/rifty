@@ -22,12 +22,15 @@ Default `preferred` uses OPFS when available, otherwise memory with the reason i
 |---|---|---|---|---|---|---|---|---|
 | Non-COI / ephemeral | 98 · clone · ❌108 sdk-import | 98 · clone | 114 · modules | 16.4 · decompress | 98 · clone | 16.4 · decompress | 18 · clone | ❓ exact build needed |
 | Non-COI / persistent | 108 · sync OPFS · ❌108 sdk-import | 108 · sync OPFS | 114 · modules | 26 · writable | 109 · OPFS | 26 · writable | 21 · OPFS | ❓ exact build needed |
-| COI / ephemeral | 98 · clone · ❌108 sdk-import | 98 · clone | 145 · waitAsync | ❌ credentialless | 98 · clone | ❌ credentialless | 18 · clone | ❓ exact build needed |
-| COI / persistent | 108 · sync OPFS · ❌108 sdk-import | 108 · sync OPFS | 145 · waitAsync | ❌ credentialless | 109 · OPFS | ❌ credentialless | 21 · OPFS | ❓ exact build needed |
+| COI / ephemeral | 98 · clone · ❌108 sdk-import (inferred) | 98 · clone | 145 · waitAsync | ❌ credentialless | 98 · clone | ❌ credentialless | 18 · clone | ❓ exact build needed |
+| COI / persistent | 108 · sync OPFS · ❌108 sdk-import (inferred) | 108 · sync OPFS | 145 · waitAsync | ❌ credentialless | 109 · OPFS | ❌ credentialless | 21 · OPFS | ❓ exact build needed |
 
-`❌108 sdk-import`: Playwright Chromium 108.0.5359.29, headerless protocol page, fails
-the SDK import itself (main-thread sync WASM >4KB refused), before mode or storage
-choice; real SDK-import floor is above 108 and unmeasured, outside the bindings below;
+`❌108 sdk-import`: executed on Playwright Chromium 108.0.5359.29, headerless (non-COI)
+protocol page; `@riftydev/sdk` import itself throws (main-thread sync WASM >4KB
+refused): bundled cjs-module-lexer `initSync` runs at import, before mode or storage
+choice. `(inferred)`: COI marks follow from that SDK import graph; no COI run.
+COI `openWorkbench` host on 108: uncharacterized (`@riftydev/workbench` entry does
+not import the lexer). Only 108 itself failed; affected version range unmeasured;
 [finding](../../backlog/runtime-js/chromium108-sdk-sync-wasm-import.md). Edge shares
 that Chromium base, but no Edge build was run: no mark.
 
