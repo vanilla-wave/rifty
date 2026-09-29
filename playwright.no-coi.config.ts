@@ -10,7 +10,11 @@ export default defineConfig({
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: 0,
-  reporter: [['list'], ['html', { outputFolder: 'playwright-report/no-coi', open: 'never' }]],
+  reporter: [
+    ['list'],
+    ['html', { outputFolder: 'playwright-report/no-coi', open: 'never' }],
+    ['json', { outputFile: 'playwright-report/no-coi/results.json' }],
+  ],
   timeout: 900_000,
   use: {
     ...devices['Desktop Chrome'],
@@ -18,7 +22,11 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+  ],
   webServer: [
     {
       command: 'pnpm dev:no-coi',

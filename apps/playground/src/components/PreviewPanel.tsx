@@ -74,7 +74,7 @@ export function reconcileSelectedPort(
   if (!last) return current;
   if (manualPort != null && entries.some((e) => e.port === manualPort)) return manualPort;
   const latestNew = knownPorts
-    ? entries.findLast((entry) => !knownPorts.has(entry.port))
+    ? [...entries].reverse().find((entry) => !knownPorts.has(entry.port))
     : undefined;
   if (latestNew) return latestNew.port;
   if (entries.some((e) => e.port === current)) return current;

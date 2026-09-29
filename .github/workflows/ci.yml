@@ -54,6 +54,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build:libs # publish build must stay green (ADR-0070)
+      - run: pnpm build:playground # es-floor input; no env needed (e2e prod lane builds it bare)
+      - run: pnpm check:es-floor # shipped bundles stay ES2022 syntax + builtins (ADR-0469)
       - run: pnpm check:arch # layer direction + cycles + foreign-internal + solid (D-002)
       - run: pnpm check:parity-coverage
       - run: pnpm check:e2e-coverage
@@ -236,7 +238,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ matrix.lane }}${{ matrix.shardTotal && format('-{0}', matrix.shard) || '' }}
-          path: playwright-report
+          path: |
+            playwright-report
+            test-results
 
   browser-unit-chromium:
     needs: change-scope

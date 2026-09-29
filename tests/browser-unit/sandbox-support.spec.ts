@@ -257,6 +257,15 @@ test('[fault: false-fallback] SW registration denial differs from presence and n
   expect(report.modes.nonCoi.limitations).toEqual(['service-worker-module-registration']);
 });
 
+test('missing createWritable is an unmet required OPFS capability', async ({ page }) => {
+  const probeBaseUrl = await open(page, 'missing-create-writable', false);
+  const report = await check(page, { probeBaseUrl, persistence: 'required' });
+  expect(row(report, 'opfs').status).toBe('failed');
+  expect(row(report, 'opfs').reason).toContain('createWritable');
+  expect(report.modes.nonCoi.unmet).toContain('opfs');
+  expect(report.modes.nonCoi.conclusion).toBe('unsupported');
+});
+
 for (const variant of ['storage-denied', 'quota']) {
   test(`[fault: quota-perm-fail] ${variant}: required, preferred, ephemeral`, async ({ page }) => {
     const probeBaseUrl = await open(page, variant, false);

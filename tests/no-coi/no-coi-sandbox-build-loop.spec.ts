@@ -1,4 +1,3 @@
-import { type Page, type Route, expect, test } from '@playwright/test';
 import { childFsScenario } from '../../tools/perf/child-fs/scenario.mjs';
 import {
   bootOwner,
@@ -8,6 +7,7 @@ import {
   sealedWorkbenchFixtureUrl,
   writeOwnerFile,
 } from '../browser-unit/fixtures.ts';
+import { type Page, type Route, expect, test, waitForBoundary } from './fixtures/test.ts';
 
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const sdkModuleUrl = `/@fs${workspacePath}/packages/rifty/src/index.ts`;
@@ -2165,7 +2165,9 @@ throw decorateOuter(wrap(boundary, selected.depth), mode);
         objectTail: await run('object-tail'),
       };
     });
-    console.log(`[bounded-cause] Chrome/${browser.version()} ${JSON.stringify(outcomes)}`);
+    console.log(
+      `[bounded-cause] ${browser.browserType().name()}/${browser.version()} ${JSON.stringify(outcomes)}`,
+    );
     const packageGap = {
       resolved: false,
       name: 'NotImplementedError',
@@ -2739,7 +2741,10 @@ test('host stays interactive while admitted install and run wait at network boun
       });
       holder.__riftyPendingToolchain.catch(() => {});
     });
-    const heldInstall = await installRoute;
+    const heldInstall = await waitForBoundary(
+      installRoute,
+      'install registry route was not requested',
+    );
     const installAdmission = await host.evaluate(async () => {
       const sandbox = (
         globalThis as typeof globalThis & {
@@ -2811,7 +2816,7 @@ test('host stays interactive while admitted install and run wait at network boun
         .finally(off);
       holder.__riftyPendingToolchain.catch(() => {});
     });
-    const heldRun = await runRoute;
+    const heldRun = await waitForBoundary(runRoute, 'run fetch route was not requested');
     const runAdmission = await host.evaluate(async () => {
       const sandbox = (
         globalThis as typeof globalThis & {

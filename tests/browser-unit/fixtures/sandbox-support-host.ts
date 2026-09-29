@@ -5,6 +5,8 @@ import { transform } from 'esbuild';
 
 /** Browser-boundary faults prepended to the probe Worker, keyed by URL variant. */
 const workerFaults: Record<string, string> = {
+  'missing-create-writable':
+    'Reflect.deleteProperty(FileSystemFileHandle.prototype, "createWritable");',
   'storage-denied':
     'navigator.storage.getDirectory = () => Promise.reject(new DOMException("test denial", "NotAllowedError"));',
   quota:

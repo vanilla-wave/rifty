@@ -1,0 +1,156 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Follow-up Final+GREEN PASS; commit this verdict, verify pass binding and normal CI before merge. Required physical-iOS I8 report remains; goal not closed.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "9491c8d5138ade60b6825d7fc9b9ee12b6f09cc5",
+  "unit_goal_source": "Independent /root/merge_spec, read-only tracked tree, no children. PR362 follow-up BASE 0228d6e5d44494e68b6c102c1dea936809bb4d30..9491c8d5138ade60b6825d7fc9b9ee12b6f09cc5. Authority: unchanged docs/backlog/epics/browser-support-floor/goal.md I2, named existing waitAsync TypeError/support failure baseline, ADR-0391 compiler payload boundary, docs/backlog/toolchain-build/e2e-hosted-prod-failure-artifacts.md Acceptance1 → scenario. Previous full 38-row review inherited under REV-1/RDY-8 from docs/backlog/distribution/reference/pr-362-merge-final-green.json @10b1a14bf; unchanged obligations not reopened. Read actual source, tests, executed RED/GREEN evidence and three durable raw probe artifacts. Accepted REV-7 repaired: independently bundled both real support graphs with explicit local checks and 104 fewer checker lines; final source removes functionFor/failure-recorder/caughtProbe machinery. Accepted I2 repairs independently verified: mutable/shadowed aliases no longer prove native availability, enclosing typeof cannot hide invocation, repeated var preserves previous native initializers. Raw REDs executed by this reviewer returned no guard error and real missing-native TypeError; final unchanged batch: 17 negative source/emitted cases rejected, 3 positive controls passed (/tmp/pr362-review-all-known-fixed.json). Default/array shadow examples were advisory raw-source siblings: esbuild already renamed them, faithfully retained in evidence. Final committed proof: 108 checker/wiring PASS,329 real emitted bundles PASS,2 published support browser checks PASS; existing ring 37/capability/stdio checks and compiler negative proof retained. Compiler worker refresh changes only 5 import-name lines, same 10,022,694 bytes; copied compiler body and negative payload criteria unchanged. Final full pnpm pr:check confirmed exit 0 at exact reviewed SHA:27/27 PASS, unit 177.6s, parity 57.9s, no retries, clean tree; /tmp/pr362-review-final-check.log. Independent workflow report /tmp/pr362-workflow-final-review.md read in full: 0 findings, executed PyYAML verifies both retained artifact paths, failure condition, manual-only floor, permissions/pins; official 4 action tag resolutions /tmp/pr362-action-pins.json match. Actual failed-remote artifact upload/download not exercised and not claimed. Hosted timeout remains an honest unisolated finding; next actual CI hosted job 109014196672 / run 36447657710 on product-identical 0abe passed, no runtime/timeout/retry/oracle repair invented. Latest remote CI pass-binding currently refers to old reviewed source; this new canonical verdict supplies fresh source binding after its documentation commit. Current slice has no residual; physical iOS remains goal-owned.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I8; User scenario 6; manual-protocol Acceptance 1",
+      "location": "docs/backlog/epics/browser-support-floor/goal.md:44",
+      "summary": "Physical iOS Safari completed hardware report still required: dated storage estimate and per-step outcomes, memory/eviction or explicit reasons. Native macOS Safari and Yandex measured; physical-iOS WebDriver admission refused before session creation. Failure proves no iOS product behavior. Obligation retained at map.md:3,7 and docs/backlog/distribution/real-browser-manual-protocol.md:38; no user amendment and no goal CLOSE."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "I2: direct/global/aliased/extracted/destructured unguarded waitAsync uses rejected with builtin and file",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/checks/es-floor.test.ts:183; tools/checks/es-floor.mjs:213; docs/backlog/toolchain-build/reference/es-floor-guard-evidence.md:63",
+      "note": ""
+    },
+    {
+      "row": "I2: exception requires own positive typeof, early absence termination or guarded immutable capture; callback catch alone grants nothing",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/checks/es-floor.test.ts:213; tools/checks/es-floor.test.ts:246; tools/checks/es-floor.mjs:272",
+      "note": ""
+    },
+    {
+      "row": "I2: mutable fallback and shadowed bindings cannot certify the global native API",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/checks/es-floor.test.ts:264; docs/backlog/toolchain-build/reference/es-floor-waitasync-alias-probes.json:1",
+      "note": ""
+    },
+    {
+      "row": "I2: typeof of an executed call/member/sequence is not a feature guard",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/checks/es-floor.test.ts:200; docs/backlog/toolchain-build/reference/es-floor-typeof-call-probe.json:1",
+      "note": ""
+    },
+    {
+      "row": "I2: repeated var declarations cannot erase earlier native use; real minified and unminified output discriminates",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/checks/es-floor.test.ts:278; docs/backlog/toolchain-build/reference/es-floor-binding-loss-probes.json:1",
+      "note": ""
+    },
+    {
+      "row": "I2: actual support source graphs carry local guards; guard-removal mutants rejected, shipped 329-bundle scan passes",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/checks/es-floor.test.ts:298; packages/workbench/src/support/check-sandbox-support.ts:251; packages/workbench/src/support/support-worker.ts:117; docs/backlog/toolchain-build/reference/es-floor-guard-evidence.md:77",
+      "note": ""
+    },
+    {
+      "row": "Existing async ring entries retain missing-native TypeError and available native behavior while exposing local guard",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/kernel/src/ipc/sab-ring.test.ts:56; packages/kernel/src/ipc/sab-ring.ts:44; tools/checks/es-floor.test.ts:237",
+      "note": ""
+    },
+    {
+      "row": "Frozen compiler carrier refresh: same payload bytes apart from 5 shared import names; size and negative payload rejection preserved",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:101; docs/backlog/toolchain-build/reference/es-floor-guard-evidence.md:73; tools/checks/esbuild-legacy-retirement.test.ts:1",
+      "note": ""
+    },
+    {
+      "row": "Failure-artifact Acceptance1: matrix upload includes test-results, retaining HTML and original verdicts",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": ".github/workflows/ci.yml:235; docs/backlog/toolchain-build/e2e-hosted-prod-failure-artifacts.md:39; playwright.hosted.config.ts:1; playwright.prod.config.ts:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen alias proof: 3 unchanged independent inputs, old falsePASS, current rejection, real missing-native TypeError",
+      "source": "frozen-artifact",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "docs/backlog/toolchain-build/reference/es-floor-waitasync-alias-probes.json:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen typeof-call proof: unchanged direct invocation under typeof, old falsePASS and current rejection",
+      "source": "frozen-artifact",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "docs/backlog/toolchain-build/reference/es-floor-typeof-call-probe.json:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen binding-loss proof: repeatedvar fails old checker in both real emitted modes; shadow siblings distinguished",
+      "source": "frozen-artifact",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "docs/backlog/toolchain-build/reference/es-floor-binding-loss-probes.json:1",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

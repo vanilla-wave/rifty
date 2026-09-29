@@ -14,7 +14,7 @@ const port = Number(process.env.RIFTY_PLAYGROUND_PORT ?? 5273);
 // never overlapping), `chromium-light` runs the rest in parallel. CI runs the
 // two lanes as separate steps so a heavy cold-boot never contends with the light
 // lane (no shared state, no overlap → fidelity preserved). firefox/webkit keep
-// the full spec set for the weekly cross-browser run.
+// the full spec set for the manual cross-browser run.
 const HEAVY_SPECS = [
   '**/ts-language-service.spec.ts',
   '**/project-management.spec.ts',
@@ -46,7 +46,9 @@ export default defineConfig({
   // cold-boot cycle. Tolerates a handful of retried flakes without finishing the
   // whole suite when something is fundamentally broken.
   maxFailures: process.env.CI ? 12 : undefined,
-  reporter: process.env.CI ? [['html'], ['github']] : 'list',
+  reporter: process.env.CI
+    ? [['html'], ['github'], ['json', { outputFile: 'playwright-report/coi-results.json' }]]
+    : 'list',
   use: {
     baseURL: `http://localhost:${port}`,
     trace: 'on-first-retry',

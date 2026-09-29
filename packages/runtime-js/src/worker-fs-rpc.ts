@@ -184,6 +184,9 @@ export function serializeRuntimeError(
     ...(typeof extra.code === 'string' ? { code: extra.code } : {}),
     ...(typeof extra.path === 'string' ? { path: extra.path } : {}),
     ...(typeof extra.feature === 'string' ? { feature: extra.feature } : {}),
+    ...(failure.cause instanceof Error
+      ? { cause: { name: failure.cause.name, message: failure.cause.message } }
+      : {}),
     ...(applied === undefined ? {} : { effects: applied }),
   };
 }

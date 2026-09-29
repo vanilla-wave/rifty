@@ -60,7 +60,7 @@ Trust/release follow-ups:
 
 - `distribution/dependency-license-audit` — generated transitive license audit
   or release gate.
-- `service-worker/cross-browser-compat-matrix` — per-browser capability matrix
+- `docs/public/compat/browsers.md` — per-browser capability matrix delivered
   after the first cross-browser sweep.
 
 Open M11 tech debt (still M11-tagged, NOT part of this cutline — listed so the

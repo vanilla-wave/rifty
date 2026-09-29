@@ -1,0 +1,97 @@
+{
+  "date": "2026-09-28",
+  "caniuse": "1.0.30001810",
+  "bcd": "8.1.1",
+  "floors": {
+    "persistent": {
+      "chrome": 108,
+      "edge": 108,
+      "firefox": 114,
+      "safari": 26,
+      "ios_saf": 26,
+      "and_chr": 109,
+      "and_ff": 114,
+      "samsung": 21,
+      "opera": 94,
+      "op_mob": 74
+    },
+    "ephemeral": {
+      "chrome": 98,
+      "edge": 98,
+      "firefox": 114,
+      "safari": 16.4,
+      "ios_saf": 16.4,
+      "and_chr": 98,
+      "and_ff": 114,
+      "samsung": 18,
+      "opera": 84,
+      "op_mob": 68
+    }
+  },
+  "rows": [
+    {
+      "area": "global",
+      "persistence": "persistent",
+      "coi": false,
+      "eligible": 89.84128132000001,
+      "tracked": 96.68782355400003,
+      "percentOfTracked": 92.91891989876446
+    },
+    {
+      "area": "global",
+      "persistence": "persistent",
+      "coi": true,
+      "eligible": 76.65365231999999,
+      "tracked": 96.68782355400003,
+      "percentOfTracked": 79.27953024735221
+    },
+    {
+      "area": "global",
+      "persistence": "ephemeral",
+      "coi": false,
+      "eligible": 94.16571170000003,
+      "tracked": 96.68782355400003,
+      "percentOfTracked": 97.39148968164393
+    },
+    {
+      "area": "global",
+      "persistence": "ephemeral",
+      "coi": true,
+      "eligible": 77.20469231999999,
+      "tracked": 96.68782355400003,
+      "percentOfTracked": 79.84944689222554
+    },
+    {
+      "area": "RU",
+      "persistence": "persistent",
+      "coi": false,
+      "eligible": 40.55762000000004,
+      "tracked": 66.65750000000013,
+      "percentOfTracked": 60.84479615947188
+    },
+    {
+      "area": "RU",
+      "persistence": "persistent",
+      "coi": true,
+      "eligible": 34.476070000000036,
+      "tracked": 66.65750000000013,
+      "percentOfTracked": 51.7212166672917
+    },
+    {
+      "area": "RU",
+      "persistence": "ephemeral",
+      "coi": false,
+      "eligible": 43.687960000000075,
+      "tracked": 66.65750000000013,
+      "percentOfTracked": 65.54095188088361
+    },
+    {
+      "area": "RU",
+      "persistence": "ephemeral",
+      "coi": true,
+      "eligible": 36.01637000000004,
+      "tracked": 66.65750000000013,
+      "percentOfTracked": 54.03198439785466
+    }
+  ]
+}

@@ -248,6 +248,9 @@ export async function checkSandboxSupport(
             timeout: number,
           ): { value: string | Promise<string> };
         };
+        if (typeof atomics.waitAsync !== 'function') {
+          throw new TypeError('Atomics.waitAsync is not a function');
+        }
         if (atomics.waitAsync(new Int32Array(memory), 0, 0, 0).value !== 'timed-out')
           throw new Error('Window Atomics.waitAsync failed');
       });

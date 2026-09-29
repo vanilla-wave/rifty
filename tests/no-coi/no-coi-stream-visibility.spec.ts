@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { expect, test } from '@playwright/test';
 import { nativeReplicaProbeSource } from './fixtures/native-replica-page.ts';
+import { expect, test } from './fixtures/test.ts';
 
 const root = process.cwd().replaceAll('\\', '/');
 const payload = [0, 255, 17, 128, 65, 0, 234, 42, 99];
@@ -121,6 +121,6 @@ test('toolchain createReadStream sees sync-written bytes while native OPFS persi
   expect(result.streams.window).toEqual({ bytes: payload.slice(2, 7), error: null });
   expect(result.persisted).toEqual(payload);
   console.log(
-    `[stream-visibility] Node/${oracle.version} Chrome/${browser.version()} ${JSON.stringify(result)}`,
+    `[stream-visibility] Node/${oracle.version} ${browser.browserType().name()}/${browser.version()} ${JSON.stringify(result)}`,
   );
 });

@@ -651,7 +651,7 @@ function decodeToolchainReady(value: unknown): 'opfs' | 'memory' | null {
     return null;
   }
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  const keys = Object.keys(descriptors).toSorted();
+  const keys = Object.keys(descriptors).sort();
   if (
     (keys.length !== 3 && keys.length !== 4) ||
     keys[0] !== 'protocol' ||

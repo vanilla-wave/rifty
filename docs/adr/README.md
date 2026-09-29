@@ -26,6 +26,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0425 | Persist Workbench trees as validated OPFS segments |
 | 0428 | Wait for native replica ownership before replay |
 | 0429 | Preserve subtree failure scope and native reader lifetimes |
+| 0476 | OPFS admission and structured storage startup failures |
 
 ### kernel
 
@@ -256,6 +257,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0323 | Gate heavy PR tests on code-affecting changes |
 | 0338 | TTY parity composes exact one-axis native resize traces |
 | 0421 | Bind reusable package adapters to Node invocations |
+| 0477 | Pinned browser floor proof runners |
 
 ### protocol
 
@@ -364,6 +366,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0440 | Load pi project resources through rooted agent hosts |
 | 0442 | Refuse pi-expandable commands inside agent session admission |
 | 0466 | Restore native agent conversation history |
+| 0469 | Browser support tiers and evidence legend |
 | 0471 | Embedder model catalog and session model selection |
 | 0472 | Measure catalog benchmarks with pinned pi event semantics |
 | 0473 | Continue agent sessions with native retry and compaction |
@@ -422,6 +425,10 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0007 D-006 best-effort tiers / §Infrastructure weekly cron | 0469 / note 2026-09-27 | evidence tiers: Chromium supported/gating, Firefox verified, WebKit capability-verified; cross-engine lanes manual dispatch only, no schedule/release gate; PR blocking stays declined |
+| 0007 cron-removal landing status | 0007 note 2026-09-29 | `ci-cross-browser.yml` schedule removed in PR #362; epic `browser-support-floor` closed |
+| 0372 decisions 1 and 3 sync-capability-only OPFS admission | 0476 / note 2026-09-28 | paired OPFS admission also requires callable `createWritable`; other decisions remain |
+| 0372 no-COI reload carrier location | 0372 note 2026-09-04 | carrier moved intact to `tests/no-coi/no-coi-opfs-reload.spec.ts`; required no-COI CI lane executes I5; decision unchanged |
 | 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
 | 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |
@@ -562,7 +569,7 @@ Promoted `OPEN_QUESTIONS` ids → ADRs.
 | D-003 | 0004 |
 | D-004 | 0005 |
 | D-005 | 0006 |
-| D-006 | 0007 |
+| D-006 | 0007, 0469 (tiers + legend) |
 
 D-007..D-009 (stop-on-irreversible → record-and-continue, inflections) were process decisions; process is no longer recorded in ADRs — see `AGENTS.md` + `docs/process/decision-workflow.md`.
 

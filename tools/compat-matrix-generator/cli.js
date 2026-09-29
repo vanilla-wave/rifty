@@ -1248,7 +1248,7 @@ from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-tes
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (\`@riftydev/runtime-wasi\`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)
 - (sqlite.md — coming with the \`node:sqlite\` \`DatabaseSync\` shim, ADR-0065)
-- (browsers.md — coming with first cross-browser CI run)
+- [Browser versions, modes, persistence and executed evidence](browsers.md)
 
 ${legend}
 `;

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Sort copied recovery/toolchain snapshots with ES2022 builtins; preserve input order and deterministic output.
+
+- Reject failed toolchain storage boot through structured terminal errors; preserve native cause without misreporting a Worker crash (ADR-0476).
 - Preserve native WebAssembly identity in no-COI guests; remove lexical Memory guards and reject unsupported toolchain Worker construction synchronously (ADR-0470).
 
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.

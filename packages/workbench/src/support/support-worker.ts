@@ -114,6 +114,9 @@ scope.onmessage = (event: MessageEvent<SupportWorkerRequest>) => {
                 timeout: number,
               ): { value: string | Promise<string> };
             };
+            if (typeof atomics.waitAsync !== 'function') {
+              throw new TypeError('Atomics.waitAsync is not a function');
+            }
             if ((await atomics.waitAsync(view, 0, 42, 0).value) !== 'timed-out')
               throw new Error('Unexpected Atomics.waitAsync result');
           }),
