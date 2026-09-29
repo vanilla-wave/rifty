@@ -212,3 +212,51 @@ CI-stimulus correction verified at `3fa05776215ced754ee6da0f799309b04abfa656`:
 Independent verification rebinds the same verdict: 16/16 coverage, zero blockers,
 same one advisory NOTE. Previous CI run completed with every other job green;
 only the now-replaced no-COI stimulus failed. Updated run follows the final push.
+
+### Concurrent main advance — browser support floor
+
+While waiting on CI, main advanced to `e3a6620a9` (PR #362), making the next
+head conflicting. Merge `17724d25a` preserves both ADR correction tables and
+the extracted compat README generator; the browser matrix link moves into
+`readme.js` beside the existing vitest link. No duplicate renderer.
+Existing no-COI runBin and declared-gap fixtures survive the automatic merge.
+Independent inspection confirms both links render once and match the README.
+
+Upstream ES-floor/OPFS boot changes remain; the full gate now has 27 checks
+including build:playground and check:es-floor. Compiler repin `c4a8742fe`:
+10,022,694 bytes, SHA-256
+`b0ff9c1aed9e7017b52286b09417d6e8eb0be7346c96db242b59d786e027adbe`;
+still import-name-only drift under the earlier normalization. Exact retirement
+gate passes. Reverification follows on this merged product tree.
+
+### ES-floor integration repair (ADR-0481)
+
+First 27-lane gate: 26 PASS, only check:es-floor RED. Runtime IPC's optional
+Float16Array lookup/filter is absence-safe (independent real codec import after
+removing the host intrinsic still round-trips Uint8Array). The new gate rejected
+that lookup and even a typeof availability probe; bare identifier extraction
+also escaped it. Root: named-feature/guard classification, not missing runtime
+serialization. Boundary: owned graph projection; frozen-assumption/sibling-drift.
+
+| Fault row / trace | Operation | Carrier |
+|---|---|---|
+| F3 → ADR-0469 + ADR-0481 | Optional constructor acquisition/direct invocation in source and emitted JS | es-floor-float16.test.ts: positive availability/read-table forms; absent/wrong/shadowed/deferred guards and bare extraction refused; callable guard required for direct invocation, including final sequence operands; real codec guard-removal mutant |
+
+Reuse the existing guard analyzer with exact feature identity. Add only
+Float16Array; keep all original 101 negative/positive cases. Runtime table gets
+an explicit callable guard. No source/bundle waiver or polyfill. Rebuilt output
+also exposed get-intrinsic's safe readonly typeof-undefined table and minified
+`>"u"` equivalent; support reads separately from constructor invocation.
+
+RED logs: `/tmp/pr353-float16-red.log` (7 new failures),
+`/tmp/pr353-float16-isolated.log` (minifier discards an unused typeof probe),
+`/tmp/pr353-float16-vendor-red.log` (actual emitted intrinsic-table shape),
+`/tmp/pr353-float16-sequence-red.log` (transparent final callee operand).
+GREEN: 129/129 checker tests; all 329 rebuilt shipped bundles pass ES floor.
+Revert/mutants: original checker, invocation/read-role conflation, unsafe bare
+extraction, wrong typeof threshold all RED. The threshold mutant first survived;
+added the discriminating `>"z"` lookup case, then it failed. Existing tests never
+weakened. Independent probes confirm the real absence path, guard-removal RED,
+false guards refused, and function-guarded sequence calls allowed.
+Logs: `/tmp/pr353-floor-mutant-*.log`, `/tmp/pr353-float16-green-final.log`,
+`/tmp/pr353-es-floor-green.log`.

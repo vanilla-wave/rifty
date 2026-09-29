@@ -15,6 +15,9 @@ export type AdvancedIpcPayload = readonly [value: unknown, buffers: readonly Uin
 
 type ViewConstructor = new (buffer: ArrayBuffer) => ArrayBufferView;
 
+// Optional post-ES2022 intrinsic; captured only when present (ADR-0481).
+declare const Float16Array: ViewConstructor | undefined;
+
 // Intrinsics captured before guest code runs: the codec must not observe a
 // guest's patched globals or prototypes (V8's serializer does not either).
 const nativeStructuredClone = globalThis.structuredClone;
@@ -78,7 +81,7 @@ const VIEW_CONSTRUCTORS = new Map<object, ViewConstructor>(
     Uint16Array,
     Int32Array,
     Uint32Array,
-    (globalThis as unknown as { Float16Array?: ViewConstructor }).Float16Array,
+    typeof Float16Array === 'function' ? Float16Array : undefined,
     Float32Array,
     Float64Array,
     BigInt64Array,

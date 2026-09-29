@@ -14,6 +14,9 @@ const { parse } = createRequire(
   realpathSync(new URL('../../node_modules/dependency-cruiser/package.json', import.meta.url)),
 )('acorn');
 
+// ADR-0481: each allowed post-floor feature still needs its own positive guard.
+const FEATURE_DETECTED = new Set(['Atomics.waitAsync', 'Float16Array']);
+
 const STATIC_BUILTINS = new Set([
   'Array.fromAsync',
   'Object.groupBy',
@@ -240,33 +243,64 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
     const object = nativeName(node.object, seen, requireImmutable);
     return object ? `${object}.${propertyName(node)}`.replace(/^globalThis\./, '') : null;
   }
-  function guarantees(test, truth) {
+  function guarantees(test, truth, feature, allowDefined) {
     if (test.type === 'UnaryExpression' && test.operator === '!')
-      return guarantees(test.argument, !truth);
+      return guarantees(test.argument, !truth, feature, allowDefined);
     if (test.type === 'LogicalExpression') {
       if ((test.operator === '&&' && truth) || (test.operator === '||' && !truth)) {
-        return guarantees(test.left, truth) || guarantees(test.right, truth);
+        return (
+          guarantees(test.left, truth, feature, allowDefined) ||
+          guarantees(test.right, truth, feature, allowDefined)
+        );
       }
       return false;
     }
     if (test.type !== 'BinaryExpression') return false;
     const [probe, expected] =
       test.left.type === 'UnaryExpression' ? [test.left, test.right] : [test.right, test.left];
-    return (
-      probe.type === 'UnaryExpression' &&
-      probe.operator === 'typeof' &&
-      nativeName(probe.argument, new Set(), true) === 'Atomics.waitAsync' &&
-      expected.type === 'Literal' &&
-      expected.value === 'function' &&
-      ((truth && ['===', '=='].includes(test.operator)) ||
-        (!truth && ['!==', '!='].includes(test.operator)))
-    );
+    if (
+      probe.type !== 'UnaryExpression' ||
+      probe.operator !== 'typeof' ||
+      nativeName(probe.argument, new Set(), true) !== feature ||
+      expected.type !== 'Literal'
+    )
+      return false;
+    if (expected.value === 'function') {
+      return (
+        (truth && ['===', '=='].includes(test.operator)) ||
+        (!truth && ['!==', '!='].includes(test.operator))
+      );
+    }
+    // get-intrinsic captures optional constructors; esbuild shortens undefined tests to >"u".
+    if (feature !== 'Float16Array' || !allowDefined) return false;
+    if (expected.value === 'undefined') {
+      return (
+        (truth && ['!==', '!='].includes(test.operator)) ||
+        (!truth && ['===', '=='].includes(test.operator))
+      );
+    }
+    const operator = probe === test.left ? test.operator : { '<': '>', '>': '<' }[test.operator];
+    return expected.value === 'u' && ((truth && operator === '<') || (!truth && operator === '>'));
   }
   function terminates(statement) {
     if (statement?.type === 'BlockStatement') return terminates(statement.body.at(-1));
     return statement?.type === 'ThrowStatement' || statement?.type === 'ReturnStatement';
   }
-  function locallyGuarded(node) {
+  function locallyGuarded(node, feature) {
+    let operand = node;
+    let directParent = parents.get(operand);
+    while (
+      directParent?.type === 'SequenceExpression' &&
+      directParent.expressions.at(-1) === operand
+    ) {
+      operand = directParent;
+      directParent = parents.get(operand);
+    }
+    const isInvocation =
+      ['CallExpression', 'NewExpression'].includes(node.type) ||
+      (['CallExpression', 'NewExpression'].includes(directParent?.type) &&
+        directParent.callee === operand);
+    const allowDefined = !isInvocation;
     for (
       let child = node, parent = parents.get(child);
       parent;
@@ -276,16 +310,21 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
       if (
         parent.type === 'UnaryExpression' &&
         parent.operator === 'typeof' &&
-        parent.argument === node
+        parent.argument === node &&
+        !isInvocation
       )
         return true;
       if (['IfStatement', 'ConditionalExpression'].includes(parent.type)) {
-        if (child === parent.consequent && guarantees(parent.test, true)) return true;
-        if (child === parent.alternate && guarantees(parent.test, false)) return true;
+        if (child === parent.consequent && guarantees(parent.test, true, feature, allowDefined))
+          return true;
+        if (child === parent.alternate && guarantees(parent.test, false, feature, allowDefined))
+          return true;
       }
       if (parent.type === 'LogicalExpression' && child === parent.right) {
-        if (parent.operator === '&&' && guarantees(parent.left, true)) return true;
-        if (parent.operator === '||' && guarantees(parent.left, false)) return true;
+        if (parent.operator === '&&' && guarantees(parent.left, true, feature, allowDefined))
+          return true;
+        if (parent.operator === '||' && guarantees(parent.left, false, feature, allowDefined))
+          return true;
       }
       if (parent.type === 'BlockStatement') {
         const preceding = parent.body.slice(0, parent.body.indexOf(child));
@@ -293,7 +332,7 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
           preceding.some(
             (statement) =>
               statement.type === 'IfStatement' &&
-              guarantees(statement.test, false) &&
+              guarantees(statement.test, false, feature, allowDefined) &&
               terminates(statement.consequent),
           )
         )
@@ -302,7 +341,7 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
     }
     return false;
   }
-  function guardedExtraction(node) {
+  function guardedExtraction(node, feature) {
     const declaration = parents.get(node);
     if (
       declaration?.type !== 'VariableDeclarator' ||
@@ -328,12 +367,21 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
         !parent.shorthand
       )
         return;
-      if (!locallyGuarded(reference)) valid = false;
+      if (!locallyGuarded(reference, feature)) valid = false;
     });
     return valid;
   }
-  function waitAsyncAllowed(node) {
-    return locallyGuarded(node) || guardedExtraction(node);
+  function featureAllowed(node, feature) {
+    // Minification can erase an unused typeof probe, leaving only its safe property read.
+    const discardedConstructorLookup =
+      feature === 'Float16Array' &&
+      node.type === 'MemberExpression' &&
+      parents.get(node)?.type === 'ExpressionStatement';
+    return (
+      discardedConstructorLookup ||
+      locallyGuarded(node, feature) ||
+      guardedExtraction(node, feature)
+    );
   }
   const errors = [];
   function report(node, name) {
@@ -400,20 +448,36 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
         start: property.start,
       };
       parents.set(member, pattern);
-      if (nativeName(member) === 'Atomics.waitAsync' && !waitAsyncAllowed(member))
-        report(property, 'Atomics.waitAsync');
+      const feature = nativeName(member);
+      if (FEATURE_DETECTED.has(feature) && !featureAllowed(member, feature))
+        report(property, feature);
       const intrinsic = intrinsicName(member);
-      if (intrinsic) report(property, intrinsic);
+      if (intrinsic && !FEATURE_DETECTED.has(intrinsic)) report(property, intrinsic);
       inspectMethod(member, null);
       if (property.value.type === 'ObjectPattern') inspectPattern(property.value, member);
     }
   }
   walk(tree, (node, parent, grandparent) => {
+    // Constructor extraction without `globalThis.` must carry the same guard.
+    if (
+      node.type === 'Identifier' &&
+      node.name === 'Float16Array' &&
+      !binding(node) &&
+      !(parent?.type === 'MemberExpression' && parent.property === node && !parent.computed) &&
+      !(
+        parent?.type === 'Property' &&
+        parent.key === node &&
+        !parent.computed &&
+        !parent.shorthand
+      ) &&
+      !locallyGuarded(node, 'Float16Array')
+    )
+      report(node, 'Float16Array');
     if (node.type === 'MemberExpression') {
-      if (nativeName(node) === 'Atomics.waitAsync' && !waitAsyncAllowed(node))
-        report(node, 'Atomics.waitAsync');
+      const feature = nativeName(node);
+      if (FEATURE_DETECTED.has(feature) && !featureAllowed(node, feature)) report(node, feature);
       const intrinsic = intrinsicName(node);
-      if (intrinsic) report(node, intrinsic);
+      if (intrinsic && !FEATURE_DETECTED.has(intrinsic)) report(node, intrinsic);
       // esbuild's import attributes are data; Monaco URI predicates only inspect availability.
       const fields =
         grandparent?.type === 'ObjectExpression'
@@ -445,7 +509,7 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
     if (node.type !== 'CallExpression' && node.type !== 'NewExpression') return;
     const name = memberName(node.callee)?.replace(/^globalThis\./, '');
     if (CONSTRUCTORS.has(name)) {
-      report(node, name);
+      if (!FEATURE_DETECTED.has(name) || !featureAllowed(node, name)) report(node, name);
       return;
     }
     if (

@@ -270,6 +270,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0338 | TTY parity composes exact one-axis native resize traces |
 | 0421 | Bind reusable package adapters to Node invocations |
 | 0477 | Pinned browser floor proof runners |
+| 0481 | Allow explicitly guarded Float16Array at the ES2022 floor |
 
 ### protocol
 

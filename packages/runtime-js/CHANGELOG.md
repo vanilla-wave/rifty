@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Advanced IPC captures optional Float16Array behind an explicit availability guard, preserving its value table on capable hosts and ES2022 startup without it (ADR-0481).
+
 - Advanced IPC refuses own/inherited view constructor accessors before dispatch instead of sending stale bytes; data constructors and Buffer branding remain (ADR-0480).
 - Rejected Worker construction leaves owner stdio listeners untouched: snapshot options before piping, undo pipes when stdio setup fails. `env: null` inherits the parent environment, as in Node.
 - `fork` spreads `execArgv` before compiling startup options, preserving Node's TypeError for non-iterables.
