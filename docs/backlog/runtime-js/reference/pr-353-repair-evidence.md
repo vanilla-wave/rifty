@@ -169,3 +169,23 @@ No-COI reconciliation GREEN: the same 9 browser cases pass, including real
 Vite 7 COI/no-COI byte equality and Vite 8's exit 1 + diagnostics + absent dist.
 Log: `/tmp/pr353-no-coi-final.log`. Independent reviewer inspected the changed
 criterion under PR-4 and found no weakened accepted obligation.
+
+### Final committed proof
+
+At `33e77389e30a55e320c9fe4cf003dbe83072f966`:
+
+- `pnpm pr:check --all`: 25/25 PASS; test:run 195.4 s (first attempt),
+  parity 126.6 s. `/tmp/pr353-pr-check-final.log`.
+- Chromium IPC/Worker stdio/startup/keepalive: 8/8 PASS.
+- no-COI native WebAssembly / actual Vite build boundaries: 9/9 PASS.
+- `RIFTY_PLAYGROUND_PORT=5398 pnpm test:e2e:heavy tests/e2e/vitest-run.spec.ts`:
+  2/2 PASS (2.3 min), both pools fail→1/fix→0, reporter and named ceilings.
+- Independent Final+GREEN: 15/15 coverage, no blockers or required residuals;
+  `docs/backlog/runtime-js/reference/pr-353-repair-final-green.json`.
+  One advisory NOTE: a throwing guest newListener hook can retain partial pipe
+  effects; native Worker also retains effects for that fault. Extra hook
+  transactional hardening is not the observed env-admission parity repair.
+  No product change made for this advisory.
+
+PR branch pushed; no PR merge performed. CI binding is restored by this final
+review artifact, not by changing the gate or suppressing its earlier failure.

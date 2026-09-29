@@ -1,0 +1,182 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Repair unit mergeable with one advisory NOTE; merge still requires the user's explicit OK.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "33e77389e30a55e320c9fe4cf003dbe83072f966",
+  "unit_goal_source": "PR #353 post-review repairs authorized by /tmp/handoff-pr353-mergeable.md (F1, F2, review nits); BASE e97ad98c4896400c213ffb4936d1171f65d2ac1f; integration of main 5f4e109b8 reviewed at affected dependencies and conflict resolutions under REV-1.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "F1: own/inherited view constructor accessors refuse without invoking the accessor or dispatching; next ordinary send succeeds.",
+      "source": "fault-matrix",
+      "trace": "ADR-0480 + observed Node constructor-before-byte-copy baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-constructor.fault.test.ts:10",
+      "note": ""
+    },
+    {
+      "row": "F2a: rejected env getters/coercions and workerData getters leave owner listeners and keepalive unchanged.",
+      "source": "fault-matrix",
+      "trace": "ADR-0446 Decision 1 + observed Worker env-rejection baseline",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/worker_threads-keepalive.fault.test.ts:241",
+      "note": ""
+    },
+    {
+      "row": "F2b: missing/throwing stderr setup unpipes the already-attached stdout.",
+      "source": "fault-matrix",
+      "trace": "ADR-0446 construction obligation + PR #353 handoff F2 sibling admission failures",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/worker_threads-stdio.fault.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "F2c: env:null inherits the parent environment like omitted env.",
+      "source": "fault-matrix",
+      "trace": "Observed Node v24.16.0 null-environment baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/env-semantics.case.ts:63",
+      "note": ""
+    },
+    {
+      "row": "N1: truthy non-iterable fork execArgv produces Node's plain TypeError.",
+      "source": "fault-matrix",
+      "trace": "Observed Node v24.16.0 fork baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/fork-exec-argv-invalid.case.ts:6",
+      "note": ""
+    },
+    {
+      "row": "The new constructor-accessor named ceiling holds on same-realm and physical browser IPC routes.",
+      "source": "public-api",
+      "trace": "ADR-0480 Decision: shared parent/child Worker/same-realm codec",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/child_process-advanced-ipc-ceiling.test.ts:115; tests/browser-unit/advanced-ipc.spec.ts:90",
+      "note": ""
+    },
+    {
+      "row": "Frozen Node rows: constructor runs once and sends mutated byte 2; data-constructor Buffer branding and ordinary subclasses remain.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0480 Context and Decision; real Node v24.16.0 reference",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-constructor-program.ts:46; tools/node-parity-runner/cases/child_process/public-ipc-advanced-constructor.fault.test.ts:11",
+      "note": ""
+    },
+    {
+      "row": "Frozen rifty rows: accessor sends are absent; ordinary data/subclass/Buffer messages and the following message arrive in order.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0480 Decision: named refusal/no dispatch/next send and existing branding",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-constructor-program.ts:54; tools/node-parity-runner/cases/child_process/public-ipc-advanced-constructor.fault.test.ts:12",
+      "note": ""
+    },
+    {
+      "row": "Native clone remains first; existing graph getters retain their clone order.",
+      "source": "acceptance",
+      "trace": "ADR-0480 Decision: preserve other graph getter clone order",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/child_process-advanced-ipc-ceiling.test.ts:99",
+      "note": ""
+    },
+    {
+      "row": "Existing string fork startup-options ceiling remains named and allocates no child.",
+      "source": "acceptance",
+      "trace": "ADR-0449 Decision 2 + BASE startup-options-ceiling baseline",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/startup-options-ceiling.test.ts:220",
+      "note": ""
+    },
+    {
+      "row": "Merged CJS/ESM factories retain the computed-key Function guard while removing lexical WebAssembly substitution.",
+      "source": "acceptance",
+      "trace": "ADR-0444 + ADR-0470 Decision 1",
+      "status": "pass",
+      "citation": "tests/conformance/modules/global-computed-key-guard.test.ts:34; tools/node-parity-runner/cases/modules/global-computed-key-writes-cjs.case.ts:8; tools/node-parity-runner/cases/modules/global-computed-key-writes-esm.case.ts:8",
+      "note": ""
+    },
+    {
+      "row": "Native WebAssembly identity and descriptor behavior survive merged REPL/CJS/ESM/bin paths.",
+      "source": "acceptance",
+      "trace": "ADR-0470 Decision 1",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/sandbox-toolchain-realm.test.ts:62; tests/no-coi/no-coi-memory-descriptor.spec.ts:209",
+      "note": ""
+    },
+    {
+      "row": "Selected no-COI toolchain Worker construction refuses synchronously before child effects; COI Worker stdio/startup/keepalive still work.",
+      "source": "acceptance",
+      "trace": "ADR-0470 Decision 2 + ADR-0446 + ADR-0449",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/worker-threads-toolchain-ceiling.test.ts:16; tests/browser-unit/worker-handle-keepalive.spec.ts:39; tests/browser-unit/worker-stdio-exec-argv.spec.ts:37",
+      "note": ""
+    },
+    {
+      "row": "Real no-COI Vite 8 ends within the bound with exit 1, original loader error and Worker diagnostic, no dist, unchanged package provenance.",
+      "source": "acceptance",
+      "trace": "ADR-0445 Decisions 3/5 + ADR-0470 Decision 4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2420",
+      "note": ""
+    },
+    {
+      "row": "Preserve accepted vitest install/config/TypeScript/report/count/exit behavior on both pools and named ceilings for unclaimed modes.",
+      "source": "acceptance",
+      "trace": "PR #353 accepted vitest-run-in-browser scenario at BASE e97ad98c4896400c213ffb4936d1171f65d2ac1f",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:173; tests/e2e/vitest-run.spec.ts:214",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/worker_threads-stdio.ts:50",
+          "authority": "",
+          "summary": "NOTE: a guest newListener hook throwing midway through pipe attachment leaves a partial stderr listener and maxListeners=Infinity. The handoff's quoted Astra criterion ('each potentially throwing operation after the first external effect + rollback') usefully identifies this boundary, but F2's established Node baseline is rejected env admission, and traced F2b covers missing/throwing stderr access. Native Worker itself also retains listener/cap effects for this hook fault. Full transactional rollback of arbitrary guest hooks is therefore additional hardening, not a declared Node-baseline violation or missing carrier; the accepted env/option snapshot and stderr-access rows pass.",
+          "evidence": "Node v24.16.0. Executed `node --import tsx /tmp/pr353-review-stdio.mts`: real io Writable stdout/stderr, stderr.on('newListener', name => { if (name === 'error') throw Error('error listener refused') }), then new WorkerStdio(owner,{stdout:false,stderr:false}); before both [drain,error,close]=[0,0,0], caps 10/10; after throw stdout=[0,0,0], stderr=[1,0,0], caps 10/Infinity (/tmp/pr353-review-stdio.log). Executed `node --import tsx /tmp/pr353-review-native-stdio.mts`: same hook on native process.stderr, new node:worker_threads.Worker('',{eval:true,execArgv:[]}); native stdout listener delta [0,1,1], stderr delta [0,0,0], stderr cap 10→Infinity (/tmp/pr353-review-native-stdio.log). Readable.pipe records its cleanup after dest.on calls (packages/io/src/streams/readable.ts:797); constructor unpipe cannot remove the incomplete registration, and cap restoration is after pipe returns."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
