@@ -106,3 +106,37 @@ This is not ordinary subclass/accessor parity and is not called repaired.
   fork-invalid and env-null differential parity pass on Node v24.16.0.
 - Chromium `RIFTY_PLAYGROUND_PORT=5397 pnpm test:browser-unit tests/browser-unit/advanced-ipc.spec.ts`: 6/6 pass, including live Node constructor oracle, no refused dispatch, ordinary Buffer/subclass sends.
 - Revert checks / full gate / final review: results appended below.
+
+### Revert checks and integration
+
+- Reverted each production owner to `e97ad98c4` independently, restored in
+  `finally`: IPC 3 REDs (physical + own/inherited same-realm); Worker 3 REDs;
+  stdio rollback 2 REDs; fork-invalid parity RED. Original tests unchanged.
+- First full gate: parity passes; 3/25 lanes red. Compat check ran before the
+  edited compat document was committed; exact worker fingerprint needs repin.
+  `test:run` reran 3 failed files once in isolation: the two Workbench timeout
+  files pass (one test timeout, one hook timeout); startup-options ceiling
+  still fails on string `'--require'` being split into `'-'`. Retained the
+  existing string named ceiling in production; did not weaken its test.
+- GitHub reported CONFLICTING against main `5f4e109b8`. Merge `c34cbc67c`
+  combines ADR-0470 native WebAssembly removal and no-COI Worker refusal with
+  ADR-0444 runtime global-key checks and ADR-0449 launch options. Conflicts
+  resolved in an isolated tree while the first gate ran; merged tree then
+  fast-forwarded into the original PR worktree. No merge of PR #353 performed.
+
+Independent RDY-6 draft check (2026-09-29): no blockers/concerns; Proxy finding
+reproduced on Node v24.16.0, dedup/owner/trigger accurate. Deferral matches
+handoff F1(b)'s accessor-ceiling scope; not a claim of full Proxy parity.
+
+Merged build fingerprint: `typescript-worker.js` 10,022,694 bytes,
+SHA-256 `ae8fe6379a4574959d064b563cf3c4d907747b7ab4ee2cf34bd3269eef299950`.
+Compared pre-/post-main-merge generated assets: identical after normalizing
+`(chunk|module-loader)-[A-Z0-9]{8}.js` names. Normalized SHA-256
+`97b7e399d4b04d72d2c0601034fb7fb39e3c270ea7fa795e28761875556a2703`.
+Exact retirement gate passes; its negative tests and byte ceiling unchanged.
+
+### Merged full gate
+
+`pnpm pr:check --all` @ `50b889df1`: **25/25 PASS**. Unit/integration
+`test:run` 224.4 s, first attempt; parity 116.8 s. Log in this session:
+`/tmp/pr353-pr-check-merged.log`. Browser integration rerun follows separately.
