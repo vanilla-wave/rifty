@@ -1,0 +1,125 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "No blockers; merge-ready once (1) the driver stores this verdict with reviewed_sha b8f22d78b so check:pass-binding (currently the only red step of CI run 36500605741) turns green, and (2) browser-unit-chromium, still in progress in that run, completes green. Concerns are advisory; refreshing the stale PR body is recommended. This review grants no merge authorization.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "b8f22d78b0c7afcb7c83ca671a0e6887b09478a4",
+  "unit_goal_source": "Fresh independent reviewer (authored none of this work), read-only on tracked files; probes/mutants only in scratch trees under /tmp/pr362-review-followup2. UNIT = PR #362 at HEAD b8f22d78b0c7afcb7c83ca671a0e6887b09478a4 (remote head identical). BASE = last bound verdict reviewed_sha 1c928612afe9e1103d107bd94e2867ce3917691a (docs/backlog/distribution/reference/pr-362-ios-scope-final-green.json). Boundary (REV-1, git log --first-parent 1c928612a..HEAD): dd2839360 goal closure docs; cf506cfe1 CI es-floor gate + dead GUARDED_BUILTINS export removal + CHANGELOG; 8f7e21b82 matrix sdk-import marks, README/npm README/sandbox-support links, ADR-0007 dated note, backlog pointers; 2588de594 ci-change-scope.test.ts pin + packages/rifty CHANGELOG; b8f22d78b merge of origin/main 5f4e109b8 (conflict resolutions: ADR index, CHANGELOGs, typescript-worker.js sha256). Authority: accepted goal browser-support-floor (I1-I9, scenarios 1-6, decisions incl. the 2026-09-28 iOS amendment), deleted at closure and read via git show 1c928612a: of epics/browser-support-floor goal/map/ledger; ADR-0469, ADR-0391, ADR-0007; PR-4 for the changed CI criterion. UNCHANGED obligations reuse the bound verdicts docs/backlog/distribution/reference/pr-362-merge-final-green.json (@10b1a14bf, 38 rows), docs/backlog/distribution/reference/pr-362-review-followup-final-green.json (@9491c8d51, 12 rows), docs/backlog/toolchain-build/reference/pr-362-final-green.json (@09c8f3515, 36 rows) and docs/backlog/distribution/reference/pr-362-ios-scope-final-green.json (@1c928612a, goal_complete=true); all reviewed SHAs are ancestors of HEAD. Reuse justified by executed evidence: over packages/apps/services/tests/tools/.github, git diff 5f4e109b8 b8f22d78b equals git diff 99fdf6c91(merge-base) 2588de594 line-for-line except three CHANGELOG blank separators and the refreshed fingerprint, so the merge preserved the PR product delta exactly and main's intents (WebAssembly override removal, worker_threads.Worker throwing) coexist with the PR's toolchain-terminal boot-failure post (packages/runtime-js/src/worker-entry.ts:289-293). Coverage rows only for obligations changed in this boundary: I2 CI gate, ADR-0391 fingerprint, I1 matrix marks, I9 tier/ADR prose. Playwright lanes not run locally; merged-head e2e taken from CI run 36500605741.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "I2 shipped-bundle ES2022 guard now also runs in CI: lint-and-typecheck builds libs + playground, then pnpm check:es-floor scans every shipped bundle and fails naming file + builtin; pinned by the CI shape test",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": ".github/workflows/ci.yml:57-58; tools/checks/ci-change-scope.test.ts:131; tools/checks/es-floor.mjs:479-481",
+      "note": "PR-4: old criterion @1c928612a = pr:check only (tools/checks/pr-check.mjs:31-32,143-144), no CI step, carrier unpinned; new = additive CI step, pr:check lanes unchanged: strengthening, nothing weakened. Deleting the ci.yml step fails ci-change-scope.test.ts:131 (mutant killed); dropping build:playground fails loudly (es-floor exit 1, Missing build). Commented-out step survives the substring assertion (concern, beyond I2 which names pr:check). CI 36500605741 @b8f22d78b: build:playground and check:es-floor success."
+    },
+    {
+      "row": "Frozen compiler output typescript-worker.js pin (10,022,694 B, sha256 e95e692a...) equals the merged tree's emitted build; payload identical to main's browser-proven artifact apart from hash-named imports; 2 MB ceiling and payload checks retained",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:94-104; tools/checks/esbuild-legacy-retirement.mjs:251-256; tools/checks/esbuild-legacy-retirement.test.ts:1",
+      "note": "Local build:libs gives sha e95e692ae073f54aef91bf0c9b685720f48544c73d76aa80d67a76f4c634fbc7 and 10022694 B. check:esbuild-legacy-retirement passes locally and in CI (Linux). A scratch build of main 5f4e109b8 reproduces main's pin b99d3575..., so the build is deterministic. Replacing the 8-char chunk-/module-loader- names makes both artifacts hash to e42622fd... (54 differing chars, 7 names). A wrong pin exceeds the 2 MB ceiling check."
+    },
+    {
+      "row": "I1 matrix: Chrome column, all four mode x persistence cells, keep computed N + binding and add executed mark ❌108 sdk-import with reason, run build and finding link; Edge explicitly unmarked (no Edge run)",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "docs/public/compat/browsers.md:23-32; docs/backlog/runtime-js/reference/chromium108-sdk-wasm-import-canonical.json:1",
+      "note": "Mark backed by the executed artifact (108.0.5359.29, sdk-import RangeError, no steps reached); legend kept (no ✅/⚠ added). Wording of range and COI inference: Ecosystem UX concern."
+    },
+    {
+      "row": "I9 tiers/legend stay consistent: ADR-0469 decision text unchanged (Consequences pointer only), ADR-0007 dated note matches manual-dispatch-only ci-cross-browser.yml, README tier sentence restates ADR-0469, AGENTS.md mission clause survives the merge",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "docs/adr/distribution/0469-browser-support-tiers-and-evidence-legend.md:41; docs/adr/playground/0007-browser-support.md:30; .github/workflows/ci-cross-browser.yml:3-4; README.md:125; AGENTS.md:7",
+      "note": "git show HEAD:AGENTS.md keeps 'non-Chromium browsers beyond the measured tiers (ADR-0469)' (main still had the old text); refs:check OK."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": ".github/workflows/ci.yml:57-58",
+          "evidence": "gh api repos/vanilla-wave/rifty/actions/jobs/109190272907: build:playground 00:00:17-00:01:29Z (72 s), check:es-floor 00:01:29-00:01:46Z (17 s); lint-and-typecheck job 23:56:42-00:02:25Z.",
+          "summary": "The CI gate adds ~89 s (a second playground build + scan) to the unconditional lint-and-typecheck job, so docs-only PRs pay it too, on their critical path. Acceptable for 'floor cannot drift silently'. Optional: skip it for docs-only changes via the change-scope output.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Scope",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "PR #362 body (gh pr view 362)",
+          "evidence": "gh pr view 362 --json headRefOid,body: head b8f22d78b; body contains 'Runtime/tests/workflows unchanged' and has no mention of a CI es-floor step.",
+          "summary": "PR body is stale for HEAD. It still says runtime/tests/workflows are unchanged, but .github/workflows/ci.yml and tools/checks/ci-change-scope.test.ts changed and main was merged. It omits the CI es-floor gate, README/npm README matrix links, the ❌108 sdk-import marks and the fingerprint refresh. PR-3 asks to keep the body aligned.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/adr/distribution/0469-browser-support-tiers-and-evidence-legend.md:41; docs/adr/README.md:3,578; docs/adr/README.md:421",
+          "evidence": "",
+          "summary": "dd2839360 rewrote ADR-0469's Consequences pointer in place. docs/adr/README.md asks to keep in-ADR references and tombstone or redirect removed paths instead. Tolerable because ADR-0469 is introduced by this unmerged PR. ADR-0007's dated §Corrections notes, like the earlier 09-27 one, are not listed in the Corrections (active) table.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "CI run 36500605741 @ b8f22d78b",
+          "evidence": "gh run view 36500605741 --json jobs: lint-and-typecheck failure only at 'Run pnpm check:pass-binding' (lint, typecheck, build:libs, build:playground, check:es-floor, esbuild-legacy-retirement, contract-drift success); e2e-chromium light 1-8, heavy 1-2, prod, hosted, no-coi-chromium, unit-and-conformance run+parity success; browser-unit-chromium in progress. Local pnpm check:pass-binding exit 1: all four prior verdicts have non-documentation paths changed after reviewed_sha.",
+          "summary": "Merged-head proof was incomplete at review time. pass-binding is red until this verdict binds at b8f22d78b, and browser-unit-chromium, which consumes the Workbench host assets, was still running. ADR-0391's browser proof for the refreshed pin therefore rests on the normalized payload identity with main's artifact plus the green e2e/no-coi lanes. Confirm browser-unit is green before merge.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/public/compat/browsers.md:25-30",
+          "evidence": "node /tmp/pr362-review-followup2/graph.mjs (esbuild metafile, bundle of each entry): packages/rifty/src/index.ts 224 inputs incl. cjs-module-lexer/dist/lexer.mjs + packages/runtime-js/src/module-loader/cjs-static-exports.ts (top-level initSync); packages/workbench/src/index.ts 357 inputs, lexer: []. Artifact chromium108-sdk-wasm-import-canonical.json: only build 108.0.5359.29, headerless browser-support.html, step sdk-import.",
+          "summary": "The ❌108 prose goes slightly beyond what was executed. 'Real SDK-import floor is above 108' asserts the whole ≤108 range, but the source finding says the affected version range is unproven. The COI-row marks come from a headerless (non-COI) run. For the @riftydev/rifty entry that inference is sound: the lexer's initSync runs at import, before mode choice. But the Workbench entry does not statically import the lexer, so a COI openWorkbench host on 108 is not characterized. Suggest marking the range and COI rows as inferred, not executed. No legend violation: no ✅/⚠ added, Edge correctly unmarked.",
+          "authority": ""
+        }
+      ]
+    }
+  ]
+}
