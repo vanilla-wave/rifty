@@ -2,8 +2,8 @@
   "overall_verdict": "concern",
   "merge_call": "Repair unit mergeable with one advisory NOTE; merge still requires the user's explicit OK.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "3fa05776215ced754ee6da0f799309b04abfa656",
-  "unit_goal_source": "PR #353 post-review repairs authorized by /tmp/handoff-pr353-mergeable.md (F1, F2, review nits); BASE e97ad98c4896400c213ffb4936d1171f65d2ac1f; integration of main 5f4e109b8 reviewed at affected dependencies and conflict resolutions under REV-1. Follow-up: PR-4 correction of the no-COI declared-gap fixture after CI exposed the retired Memory-allocation stimulus; previous reviewed slice 33e77389e30a55e320c9fe4cf003dbe83072f966.",
+  "reviewed_sha": "f83509f7c12f7c060491e8549360aa3cd4795a21",
+  "unit_goal_source": "PR #353 post-review repairs authorized by /tmp/handoff-pr353-mergeable.md; original BASE e97ad98c4896400c213ffb4936d1171f65d2ac1f. Accepted interim verification 3fa05776215ced754ee6da0f799309b04abfa656 reused. Current follow-up: integrate accepted main e3a6620a9 at merge seams/affected dependencies (REV-1), retain no-COI fixture corrections, and repair the resulting ES-floor/Float16Array collision under ADR-0481. REV-12 reopened the 9a09140c8 verification on executed successful workerData/getter allocation-order drift; current result restores Node ordering with owned-pipe rollback.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -134,6 +134,70 @@
       "trace": "ADR-0445 fatal-exit cause preservation + ADR-0470 Decisions 1/2/4",
       "status": "pass",
       "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:153",
+      "note": ""
+    },
+    {
+      "row": "F3: only named Float16Array feature detection is added; source/emitted guards, readonly intrinsic-table captures, invocation roles and unsafe extraction are discriminated without bundle/file waivers.",
+      "source": "fault-matrix",
+      "trace": "ADR-0469 + ADR-0481",
+      "status": "pass",
+      "citation": "tools/checks/es-floor-float16.test.ts:8; tools/checks/es-floor.test.ts:193",
+      "note": ""
+    },
+    {
+      "row": "Optional Float16Array remains supported on capable hosts; codec initialization and ordinary views remain safe when the intrinsic is absent.",
+      "source": "acceptance",
+      "trace": "ADR-0481 Decision + ADR-0448 existing Node value table",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:122; tests/browser-unit/advanced-ipc.spec.ts:53; tools/checks/es-floor-float16.test.ts:47",
+      "note": ""
+    },
+    {
+      "row": "The actual emitted codec passes the scanner, but removing its availability guard must fail.",
+      "source": "acceptance",
+      "trace": "ADR-0481 Proof: actual emitted codec guard-removal mutant must fail",
+      "status": "pass",
+      "citation": "tools/checks/es-floor-float16.test.ts:47",
+      "note": ""
+    },
+    {
+      "row": "Merged no-COI boot retains required-storage error identity/native cause and preferred/default fallback while preserving command lifecycle behavior.",
+      "source": "acceptance",
+      "trace": "ADR-0476 + ADR-0445",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-storage-capability.spec.ts:5; tests/no-coi/no-coi-agent-sdk.spec.ts:153",
+      "note": ""
+    },
+    {
+      "row": "The merged generated compatibility index retains both vitest and browser evidence links through the extracted renderer.",
+      "source": "acceptance",
+      "trace": "PR #353 accepted compatibility-index baseline + ADR-0469 browser evidence surface",
+      "status": "pass",
+      "citation": "tools/compat-matrix-generator/readme.js:26; package.json:72",
+      "note": ""
+    },
+    {
+      "row": "The repinned TypeScript worker remains exactly 10,022,694 bytes; only generated import names differ after normalization, with exact inventory enforcement retained.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391 exact existing compiler/runtime asset inventory",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:100",
+      "note": ""
+    },
+    {
+      "row": "F2d: workerData getter observes installed stdio and a reserved outer thread id; a getter throw retires only the rejected Worker's pipes without acquiring its keepalive holds.",
+      "source": "fault-matrix",
+      "trace": "Observed Node Worker construction baseline + ADR-0446 + ADR-0449",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/worker-data-construction-order.case.ts:24; packages/runtime-js/src/builtins/worker_threads-keepalive.fault.test.ts:241; tests/browser-unit/fixtures/worker-stdio-exec-argv-cases.ts:32",
+      "note": ""
+    },
+    {
+      "row": "Frozen workerData oracle: synchronous outer-before-inner id relation is true; child receives [[1,1],[1,1]] error/close listener deltas and the nested child sends its own value.",
+      "source": "frozen-artifact",
+      "trace": "Observed Node v24.16.0 Worker constructor baseline; F2d successful-value/order regression",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/worker-data-construction-order.case.ts:44",
       "note": ""
     }
   ],

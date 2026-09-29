@@ -290,3 +290,27 @@ this corrected result.
 | Fault row / trace | Operation | Carrier |
 |---|---|---|
 | F2d → observed Node Worker constructor baseline | workerData getter observes installed stdio and reserved id; failure retires pipes | worker-data-construction-order parity/browser program + unchanged keepalive workerData fault |
+
+### Final ordering-repair proof
+
+Final reviewed product/test SHA `f83509f7c12f7c060491e8549360aa3cd4795a21`:
+
+- Full gate 27/27 PASS, including ES2022 floor over rebuilt artifacts;
+  unit 189.7 s first attempt, parity 115.7 s
+  (`/tmp/pr353-pr-check-construction-final.log`).
+- Chromium 8/8 PASS, including the shared workerData/stdio-observation and
+  synchronous id-order carrier (`/tmp/pr353-browser-construction-final.log`).
+- vitest acceptance 2/2 PASS, both pools fail→1/fix→0 and named ceilings
+  (`/tmp/pr353-vitest-construction-final.log`).
+- Production Worker stdio/startup and keepalive 2/2 PASS
+  (`/tmp/pr353-prod-construction-final.log`).
+- Latest-main no-COI memory/SDK/storage-boot 16/16 and Vite boundaries 7/7,
+  production owner-boot/Buffer identity 2/2 already PASS on unchanged paths.
+  Selected no-COI Worker refuses before the changed workerData branch.
+- Independent Final+GREEN rebound: 24/24 coverage; no blockers/required
+  residuals; original arbitrary-newListener advisory retained.
+
+Last worker fingerprint: 10,022,694 bytes,
+`8e175378ea88ad76f74ed3c01503ed16a94c0d53191066a972039117f3c13ba8`,
+import-name-only change under the recorded normalization. Main verified still
+`e3a6620a9` immediately before final browser completion. No PR merge performed.
