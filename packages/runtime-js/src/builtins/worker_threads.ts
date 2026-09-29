@@ -134,7 +134,6 @@ export class Worker extends EventEmitter {
     const env =
       opts.env == null ? { ...(processContext?.env ?? {}) } : snapshotWorkerEnvironment(opts.env);
     this.entry = entry;
-    this.workerData = opts.workerData;
     this.processContext = processContext;
     this.env = env;
     // Node pipes into its bootstrap process's streams, not a reassigned global.
@@ -142,6 +141,14 @@ export class Worker extends EventEmitter {
       ? new WorkerStdio(publicNodeProcess() as { stdout?: unknown }, this.launch.capture)
       : null;
     this.threadId = nextThreadId++;
+    try {
+      // Node's workerData getter observes installed stdio and an allocated thread id.
+      this.workerData = opts.workerData;
+    } catch (error) {
+      this.stdio?.stdout.unpipe();
+      this.stdio?.stderr.unpipe();
+      throw error;
+    }
     // ADR-0446: held from here (after every synchronous validation) to the end.
     this.references = attachWorkerReferences(this);
     // TODO(backlog: runtime-js/worker-threads-prompt-start-atomics-wait):

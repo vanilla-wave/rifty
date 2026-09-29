@@ -38,7 +38,7 @@ listener counts. Env getter/coercion compare both native streams directly.
 | Row / trace | Boundary and fault | Honest outcome / carrier |
 |---|---|---|
 | F1 → ADR-0480; observed Node bytes | Owned in-process graph projection, observable-order/provenance-lie | One shared advanced codec refuses own/inherited constructor accessors; no invocation/dispatch; next send succeeds. Constructor fault test + Chromium advanced-ipc + same-realm ceiling test |
-| F2a → ADR-0446 construction takes no holds; observed env throw | Worker admission, torn-state/observable-order | Read options/env before piping; no listeners/holds on rejected env/coercion/workerData. worker_threads-keepalive.fault.test.ts |
+| F2a → ADR-0446 construction takes no holds; observed env throw | Worker admission, torn-state/observable-order | Read env before piping; read workerData after stdio/id and unpipe on throw; no listeners/holds after rejection. worker_threads-keepalive.fault.test.ts |
 | F2b → same construction obligation, sibling stdio setup | WorkerStdio admission, torn-state | stderr validation/getter failure unpipes stdout; worker_threads-stdio.fault.test.ts |
 | F2c → Node null environment baseline | Worker admission, corrupt-input | null inherits like omitted env; env-semantics parity |
 | N1 → Node fork baseline | Owned startup projection, corrupt-input/sibling-drift | Spread tokens before compile; non-iterables carry Node TypeError; fork-exec-argv-invalid parity |
@@ -260,3 +260,33 @@ weakened. Independent probes confirm the real absence path, guard-removal RED,
 false guards refused, and function-guarded sequence calls allowed.
 Logs: `/tmp/pr353-floor-mutant-*.log`, `/tmp/pr353-float16-green-final.log`,
 `/tmp/pr353-es-floor-green.log`.
+
+
+### F2 ordering correction — 2026-09-29
+
+New executed evidence reopens the earlier PASS: reading workerData before stdio
+changed its successfully returned value. Native getter sees error/close listener
+deltas `[[1,1],[1,1]]`, first F2 repair returned `[[0,0],[0,0]]`. Nested Worker
+creation also consumed the outer id too late. Preserve Node order: env before
+effects; stdio + thread id before workerData; catch a workerData getter throw
+and unpipe both streams before propagating. Existing no-hold/no-listener fault
+assertions stay unchanged. Thread id is consumed at Node's point.
+
+Carrier: `worker_threads/worker-data-construction-order.case.ts`, real Node and
+two physical rifty Workers; same program added to Chromium startup programs.
+It captures the id relation synchronously after construction: an initial draft
+compared it after messages, when Node may already expose threadId -1, so that
+measurement was corrected rather than accepting its racy result.
+Stable reverted-tree RED (`9a09140c8`): Node outerBeforeInner=true/deltas1;
+rifty false/deltas0. Restored code GREEN. Removing just catch/unpipe makes the
+unchanged workerData-getter fault RED. Logs:
+`/tmp/pr353-worker-data-order-red-stable.log`,
+`/tmp/pr353-worker-data-order-green-stable.log`,
+`/tmp/pr353-worker-data-rollback-red.log`.
+Independent reviewer reproduced the regression and then verified the stable
+Node/rifty GREEN. Earlier PASS records remain historical; new verdict will bind
+this corrected result.
+
+| Fault row / trace | Operation | Carrier |
+|---|---|---|
+| F2d → observed Node Worker constructor baseline | workerData getter observes installed stdio and reserved id; failure retires pipes | worker-data-construction-order parity/browser program + unchanged keepalive workerData fault |

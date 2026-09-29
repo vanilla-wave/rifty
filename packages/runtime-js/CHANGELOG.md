@@ -5,7 +5,7 @@
 - Advanced IPC captures optional Float16Array behind an explicit availability guard, preserving its value table on capable hosts and ES2022 startup without it (ADR-0481).
 
 - Advanced IPC refuses own/inherited view constructor accessors before dispatch instead of sending stale bytes; data constructors and Buffer branding remain (ADR-0480).
-- Rejected Worker construction leaves owner stdio listeners untouched: snapshot options before piping, undo pipes when stdio setup fails. `env: null` inherits the parent environment, as in Node.
+- Rejected Worker construction leaves owner stdio listeners untouched: snapshot env before piping; keep workerData after stdio/id allocation, undo pipes when its getter or stdio setup fails. `env: null` inherits the parent environment, as in Node.
 - `fork` spreads `execArgv` before compiling startup options, preserving Node's TypeError for non-iterables.
 
 - `awaitDrain` settles with the active process's first exit terminal (`exit()`, a fatal rejection, a throwing `uncaughtException` listener), not only a recorded rejection (ADR-0445 note 2026-09-25): an in-process host without a control port (no-COI command, runBin) now sees exit 7 / an in-handler `exit(n)` instead of draining on to a natural exit 0, and no later task of that process runs. `activeRefs` is on `./internal`.

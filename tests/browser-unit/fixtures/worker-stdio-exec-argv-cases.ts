@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import forkVitestShape from '../../../tools/node-parity-runner/cases/child_process/vitest-pool-shape.case.ts';
 import { STARTUP_FILES } from '../../../tools/node-parity-runner/cases/process/startup-options-program.ts';
 import threadVitestShape from '../../../tools/node-parity-runner/cases/worker_threads/vitest-pool-shape.case.ts';
+import workerDataOrder from '../../../tools/node-parity-runner/cases/worker_threads/worker-data-construction-order.case.ts';
 
 /**
  * ADR-0449 programs for a real Chromium child realm, each also run verbatim in
@@ -28,6 +29,13 @@ const EVAL_FORK =
   ".on('exit', () => fork('./fprint.cjs', ['explicit'], { execArgv: process.execArgv }))";
 
 export const startupPrograms: readonly StartupProgram[] = [
+  {
+    name: 'worker-data-construction-order',
+    files: {
+      'data.cjs': workerDataOrder.setup.files['project/data.cjs'],
+      'main.cjs': workerDataOrder.code,
+    },
+  },
   {
     name: 'worker-default-stdout',
     files: {
