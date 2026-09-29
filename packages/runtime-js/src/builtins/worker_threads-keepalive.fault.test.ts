@@ -239,7 +239,7 @@ describe('worker_threads Worker keepalive holds (ADR-0446)', () => {
   });
 
   it.each(['env getter', 'env coercion', 'workerData getter'] as const)(
-    '%s rejection leaves owner streams and keepalive unchanged, as in Node',
+    '%s rejection leaves owner streams and keepalive unchanged',
     async (fault) => {
       const options = () => {
         if (fault === 'env coercion')

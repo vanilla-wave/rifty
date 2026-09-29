@@ -140,3 +140,32 @@ Exact retirement gate passes; its negative tests and byte ceiling unchanged.
 `pnpm pr:check --all` @ `50b889df1`: **25/25 PASS**. Unit/integration
 `test:run` 224.4 s, first attempt; parity 116.8 s. Log in this session:
 `/tmp/pr353-pr-check-merged.log`. Browser integration rerun follows separately.
+
+
+### Main test reconciliation — ADR-0445 + ADR-0470
+
+Merged browser-unit: 8/8 PASS (advanced IPC, Worker stdio/startup, keepalive).
+No-COI native-WebAssembly lane: 8 pass; Vite 8 failure repeats in isolation.
+The main-origin test expected host Promise rejection; merged runBin instead
+returns `{exitCode:1}`, printing the exact original WASI-loader Error and the
+preceding named Worker diagnostic. No timeout or silent success.
+
+Raw authority: ADR-0445 Decision 5's corrected first-terminal settlement;
+`no-coi-toolchain-worker.ts` runInstalledBin maps process exit signals to
+exitCode but still throws a retained declared-gap cause. Rolldown prints the
+Worker gap then replaces it with its own loader Error (ADR-0470 Decision 4).
+The original error is preserved on stderr; no fabricated cause is attached.
+Independent final reviewer inspected both authorities and the executed output:
+stale host-rejection criterion, not a missing Worker refusal.
+
+Update only that integration assertion to require exit 1, exact loader-error
+text, the named Worker diagnostic, absent dist, bounded settlement and unchanged
+package provenance. This reconciles already accepted lifecycle behavior; it does
+not loosen either error-preservation or no-silent-success obligation. No product
+code change. Logs: `/tmp/pr353-no-coi-merged.log`, `/tmp/pr353-no-coi-isolated.log`.
+
+
+No-COI reconciliation GREEN: the same 9 browser cases pass, including real
+Vite 7 COI/no-COI byte equality and Vite 8's exit 1 + diagnostics + absent dist.
+Log: `/tmp/pr353-no-coi-final.log`. Independent reviewer inspected the changed
+criterion under PR-4 and found no weakened accepted obligation.
