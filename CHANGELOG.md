@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Codex sees the `rifty-review` skill in its catalog (`allow_implicit_invocation: true`), matching Claude; verified by a fresh read-only `codex exec` listing.
+
 - ES2022 gate: recognize explicitly feature-detected Float16Array through the existing local-guard analysis (ADR-0481); unguarded constructor use/extraction stays red.
 
 - Close goal vitest-run-in-browser (I1–I7, PR #353): `vitest run` for vitest 4.1.11 on Vite 8.0.16 in the browser shell, both pools (`docs/public/compat/vitest.md`). Goal docs and the 13 completed child contracts removed; record `docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md` §Goal record + final verdict `vitest-run-in-browser-final-green.json`; child verdicts/evidence stay under `reference/`.
