@@ -1,7 +1,9 @@
+import * as sdk from '../../../packages/rifty/src/index.ts';
 import { type ToolchainSandbox, createSandbox } from '../../../packages/rifty/src/index.ts';
 
 let sandbox: ToolchainSandbox;
 let output = '';
+const progress: unknown[] = [];
 let held = false;
 let application: Promise<string> | undefined;
 let applicationState = 'idle';
@@ -29,6 +31,7 @@ export async function boot(workerUrl: string, namespace = 'sdk-snapshot') {
     globalThis.Worker = NativeWorker;
   }
   sandbox.runtime.on((event) => {
+    if (event.type === ('progress' as string)) progress.push(event);
     if (event.type === 'stdout' || event.type === 'stderr') output += event.chunk;
   });
   return {
@@ -95,4 +98,27 @@ export async function startLocalServer() {
   );
   await sandbox.fs.writeFile(binPath, "#!/usr/bin/env node\nimport('../local-server/cli.js');\n");
   return sandbox.toolchain.startBin({ cwd: '/project', binPath, args: [], port: 5188 });
+}
+
+export function takeProgress() {
+  return progress.splice(0);
+}
+export async function applyOutcome(snapshot: Parameters<typeof apply>[0], force = false) {
+  return apply(snapshot, force).then(
+    () => ({ kind: 'success' }),
+    (error: Error) => ({
+      kind: Reflect.get(sdk, 'sandboxErrorKind')?.(error),
+      name: error.name,
+      message: error.message,
+    }),
+  );
+}
+export async function nativePayloadEntries() {
+  const { nativeReplicaEntries } = await import(
+    '../../browser-unit/fixtures/native-replica-observer.ts'
+  );
+  const root = await (await navigator.storage.getDirectory()).getDirectoryHandle('sdk-snapshot');
+  return [...(await nativeReplicaEntries(root)).values()]
+    .filter((entry) => entry.path.startsWith('/project/'))
+    .map((entry) => entry.path);
 }
