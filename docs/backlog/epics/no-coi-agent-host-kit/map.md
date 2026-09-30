@@ -30,10 +30,6 @@ order is text, not `blocked_by` (checker scope = one tree).
 5. removed 2026-09-27 (user «1 - a») — model selection and switching are
    `distribution/ai-agent-model-catalog` (agent-weak-models item 1, PR #359:
    catalog + `setModel`); I5 re-pointed there; no `settings`-form mechanism.
-6. `distribution/agent-text-only-content-transport` — **text-content** — I6;
-   opt-in per-entry string-content flag on the agent-weak-models catalog
-   entry; short ADR citing ADR-0436 and the catalog ADR. After
-   agent-weak-models item 1 (PR #359).
 7. `distribution/no-coi-agent-reference-host` — **reference-host** — I8 and
    scenario 1–9; the packed lane's Vite consumer refactored into a
    connections-only `host.ts` (registry connected / none), SDK README links
@@ -46,6 +42,8 @@ order is text, not `blocked_by` (checker scope = one tree).
    outcome; truthful prompt text. After 1.
 
 ## Open questions
+
+- Reference-host proof checks text-only assistant tool_calls id/name/arguments and matching tool_call_id explicitly (text-content final review advisory; owner: agent).
 
 - Agent install carrier: how the shell's `npm install` reaches the installer
   behind `toolchain.install` (same Worker, `installManifest`), how `<pkg>`

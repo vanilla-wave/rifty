@@ -11,3 +11,5 @@
 - 2026-09-27 — user: «очень сложная последовательность» → simplified: goals run whole and in sequence (agent-weak-models → this goal → quality goal); the reducer-first clause of «6 - ок» dropped (map item 3).
 
 - 2026-09-30 — re-chart after output-order (final-green PASS @ e999915ff190248c29fe48a58f540c6597ab8c07): I10 complete; real Chromium RED→GREEN (4 tests), pr:check27/27. Next independent slice: text-content. Verdict: `../../distribution/reference/agent-shell-tool-output-order-final-green.json`.
+
+- 2026-09-30 — re-chart after text-content (final-green PASS @ 34198608833979f1ef390fa8179f9a55e7e4b244): I6 complete;18 targeted tests, native payload-order mutant killed, pr:check27/27; advisory wire tool-call metadata assertions remain for reference-host proof. Verdict: `../../distribution/reference/agent-text-only-content-transport-final-green.json`. Next: policy.

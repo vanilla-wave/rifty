@@ -21,3 +21,5 @@ caller-content override proof for Contract+RED advisory. Executed mutant moving
 shaping before caller `onPayload`: test `string shaping follows` fails with array
 instead of string, exit1; original source restored. Raw artifact:
 `/tmp/rifty-pr357-text-content-order-mutant.log`.
+
+Full `pnpm pr:check`:27/27 (unit247.3s, parity133.8s), no isolated reruns. Independent final record beside this evidence.
