@@ -42,7 +42,7 @@ const EXPECTED_REQUIRED_VERSIONS = Object.freeze({
   chokidar: '5.0.0',
   immutable: '5.1.9',
   readdirp: '5.1.1',
-  'source-map-js': '1.2.1',
+  'source-map-js': '1.2.2',
 });
 
 type Scope = 'root' | 'nested';
@@ -916,10 +916,10 @@ describe('sass-embedded official installer fixture authority', () => {
       'chokidar@5.0.0',
       'readdirp@5.1.1',
       'immutable@5.1.9',
-      'source-map-js@1.2.1',
+      'source-map-js@1.2.2',
     ]);
     expect(entries.map(({ tarball }) => tarball.byteLength)).toEqual([
-      927_111, 23_399, 9_058, 148_909, 35_340,
+      927_111, 23_399, 9_058, 148_909, 36_349,
     ]);
     for (const entry of entries) {
       expect(await computeIntegrity(entry.tarball)).toBe(entry.manifest.dist.integrity);
