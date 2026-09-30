@@ -1,0 +1,209 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: SDK lifecycle slice принят; продолжать I9/I8, весь goal и PR ещё не закрыты.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/distribution/sdk-sandbox-lifecycle.md @ 8f5516e070d7fd918309f0a9de5379c51351b462; goal docs/backlog/epics/no-coi-agent-host-kit/goal.md I1–I3; BASE c4830dc642cefcef3ab1f60495b841126a14b75c (accepted I7)",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I9",
+      "location": "docs/backlog/distribution/no-coi-agent-npm-install.md:1",
+      "summary": "Agent shell npm install with connected registry, loud typed missing-registry outcome and truthful instructions."
+    },
+    {
+      "clause": "I8 + scenario 1–9",
+      "location": "docs/backlog/distribution/no-coi-agent-reference-host.md:1",
+      "summary": "Connections-only packed host in both registry configurations, shared benchmark composition and whole-goal end-to-end proof."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: root SandboxOpening/discriminator; readiness, async rejection, subscription lifetime",
+      "source": "acceptance",
+      "trace": "I2/I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:6; tests/no-coi/sdk-lifecycle.spec.ts:355",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: worker-spawned → storage-admitted → toolchain-ready; native contention before resolution",
+      "source": "acceptance",
+      "trace": "I1/I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:38; tests/no-coi/sdk-lifecycle.spec.ts:108",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: both deadlines occupied with native cause; guard identity/no fallback; release/retry and negative controls",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:50; tests/no-coi/sdk-lifecycle.spec.ts:233",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: actual busy/resident/restart/conflict/mismatch/persistence outcomes; unknown controls; retry conditions",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:148; tests/no-coi/sdk-lifecycle.spec.ts:311; tests/no-coi/sdk-snapshot-progress.spec.ts:142; packages/rifty/README.md:198",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: scoped actual fetch/entry/native flush counts; absent unknown totals; no failed completion or stale replay",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-snapshot-progress.spec.ts:80; tests/no-coi/sdk-snapshot-progress.spec.ts:129; tests/no-coi/sdk-snapshot-progress.spec.ts:208; tests/no-coi/sdk-snapshot-progress.spec.ts:224; packages/runtime-js/src/host.ts:330",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: same bytes allowed; force changes targets and retains unrelated files",
+      "source": "acceptance",
+      "trace": "I2/ADR-0420",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-snapshot-progress.spec.ts:129; tests/no-coi/no-coi-snapshot-application.spec.ts:118",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × boot deadline: occupied only after contention and before admission",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:50; tests/no-coi/sdk-lifecycle.spec.ts:233",
+      "note": ""
+    },
+    {
+      "row": "lossy-aggregate × Worker error: discriminator and native cause retained",
+      "source": "fault-matrix",
+      "trace": "I1/I2",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:115; tests/no-coi/sdk-lifecycle.spec.ts:311",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × live/restarted subscription: one hub and detach",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:6",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × snapshot counts: real byte/write/flush domains and absent unknown totals",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-snapshot-progress.spec.ts:80; tests/no-coi/fixtures/sdk-snapshot-observer-worker.ts:4",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × Worker replacement: abandoned operation cannot update replacement; same-peer transport reorder physically excluded",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-snapshot-progress.spec.ts:224; packages/runtime-js/src/host.ts:330; docs/process/rules/fault-classes.md:31",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × failed persistence: failed writes never counted persisted",
+      "source": "fault-matrix",
+      "trace": "I2/I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-snapshot-progress.spec.ts:208; tests/no-coi/sdk-lifecycle.spec.ts:311",
+      "note": ""
+    },
+    {
+      "row": "createSandbox/SandboxOpening: additive Promise runtime.on before await",
+      "source": "public-api",
+      "trace": "ADR-0486 D1 + I3",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox.ts:257; tests/no-coi/sdk-lifecycle.spec.ts:6; tests/no-coi/sdk-lifecycle.spec.ts:355",
+      "note": ""
+    },
+    {
+      "row": "sandboxErrorKind/SandboxErrorKind from SDK root",
+      "source": "public-api",
+      "trace": "ADR-0486 D3 + I2",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox-errors.ts:1; tests/no-coi/sdk-lifecycle.spec.ts:148; tests/no-coi/sdk-snapshot-progress.spec.ts:142",
+      "note": ""
+    },
+    {
+      "row": "RuntimeEvent/RuntimeProgressEvent boot progress union",
+      "source": "public-api",
+      "trace": "ADR-0486 D2 + I1/I3",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/protocol.ts:227; tests/no-coi/sdk-lifecycle.spec.ts:38",
+      "note": ""
+    },
+    {
+      "row": "SnapshotProgress/RuntimeProgressEvent snapshot union",
+      "source": "public-api",
+      "trace": "ADR-0486 D4 + I3",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/protocol.ts:217; tests/no-coi/sdk-snapshot-progress.spec.ts:80",
+      "note": ""
+    },
+    {
+      "row": "initializeBackend/installOpfsFs admission hook carries native event without new owner",
+      "source": "public-api",
+      "trace": "ADR-0486 D2 + I1/I3",
+      "status": "pass",
+      "citation": "packages/vfs/src/boot.ts:72; packages/vfs/src/sync-mirror.ts:150; tests/no-coi/sdk-lifecycle.spec.ts:50",
+      "note": ""
+    },
+    {
+      "row": "Exact rebuilt TypeScript compiler output pin; ceiling and retired carrier rules retained",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:101; tests/integration/workbench-packed-consumer.mjs:1235; docs/backlog/distribution/reference/sdk-sandbox-lifecycle-evidence.md:61",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "8f5516e070d7fd918309f0a9de5379c51351b462"
+}

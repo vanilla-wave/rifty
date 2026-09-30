@@ -1,22 +1,19 @@
 # Map — no-coi-agent-host-kit
 
-Remaining path: SDK lifecycle (items 1–2 together: I1 needs both native
-contention and pre-ready progress), then agent install, then shared reference
-host and whole-goal proof. PR #359 is merged. I4/I6/I7/I10 accepted; ledger
-links the evidence. Quality measurement remains the following goal (PR #341).
+Remaining path: agent install, then shared reference host and whole-goal proof.
+I1–I7/I10 accepted (I5 in merged PR #359); ledger links evidence. Quality
+measurement remains the following goal (PR #341).
 
 ## Items
 
-1. `distribution/sdk-sandbox-lifecycle` — I1–I3; combined typed failures and
-   boot/snapshot progress (former items 1–2). ADR-0486 fixes the carrier.
 7. `distribution/no-coi-agent-reference-host` — **reference-host** — I8 and
    scenario 1–9; the packed lane's Vite consumer refactored into a
    connections-only `host.ts` (registry connected / none), SDK README links
    it, packed-consumer lane runs it, and `tools/agent-bench`'s no-COI lane
-   boots the same module (user: measure what we ship). After 1–2 and 8; closes the goal.
+   boots the same module (user: measure what we ship). After 8; closes the goal.
 8. `distribution/no-coi-agent-npm-install` — **agent-install** — I9; the
    agent's shell `npm install` over the existing installer; loud no-registry
-   outcome; truthful prompt text. After 1.
+   outcome; truthful prompt text.
 
 ## Open questions
 
@@ -27,7 +24,7 @@ links the evidence. Quality measurement remains the following goal (PR #341).
   arguments update `package.json`/lockfile before resolution, and how the
   operation joins the busy slot without a queue — owner: agent — item 8
   pickup; ADR citing ADR-0418 D4 there.
-- No-registry outcome shape (typed identifier from item 1; message names the
+- No-registry outcome shape (extend the SDK root classifier; message names the
   missing connection) and the conditional prompt text — owner: agent — item 8
   pickup.
 - Registry connection location for I9 (sandbox-level option vs per-call

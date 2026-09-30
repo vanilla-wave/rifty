@@ -5,7 +5,6 @@ title: Let the agent's shell run npm install through the existing no-COI install
 created: 2026-09-27
 why: the no-COI agent has no way to add a dependency — `npm install` throws NotImplementedError, `npx` points at it, and the prompt tells the model dependencies belong to the host — although the installer already runs in the same Worker
 epic: no-coi-agent-host-kit
-blocked_by: [distribution/sdk-sandbox-lifecycle]
 sources: [ADR-0375, ADR-0376, ADR-0418, ADR-0424, docs/backlog/distribution/reference/no-coi-agent-host-kit-evidence.md]
 code: [packages/workbench/src/glue/npm-shell-command.ts, packages/workbench/src/workers/no-coi-project-command.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts, packages/runtime-js/src/protocol.ts, packages/agent/src/prompt.ts, packages/agent/src/sandbox-host.ts]
 ---
