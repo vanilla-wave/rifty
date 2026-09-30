@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: Agent reads a persistent filesystem archive across sessions and projects
 created: 2026-09-30
 value: A new browser agent session can recover earlier decisions from any project, including a deleted project, by reading the original conversations.
@@ -68,7 +68,10 @@ challenge: 2026-09-30 — clear
 
 Fresh read-only critic `/root/history_premise`; complete verdict and original
 answers: `docs/backlog/distribution/reference/agent-session-archive-refine.md`.
-Final written-result check pending; no product implementation claimed.
+final-check: 2026-09-30 — PASS — fresh read-only `/root/archive_final_review`
+at `7790a94de6174aeb03ff79ff1e25c94de495d11a`; record:
+`docs/backlog/distribution/reference/agent-session-archive-final-green.json`.
+No product implementation claimed.
 
 ## Decisions
 

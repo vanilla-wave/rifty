@@ -67,6 +67,18 @@ Executed earlier in this refine conversation:
 This proves the existing native restore seam only, not archive behavior.
 A later interrupted repeat had no collected result; it is not additional proof.
 
+## Final verification
+
+- Fresh `/root/archive_final_review` checked the actual six-file final set at
+  `7790a94de6174aeb03ff79ff1e25c94de495d11a`: Final+GREEN PASS; no unresolved
+  user fork. Record: `agent-session-archive-final-green.json` in this directory.
+- `pnpm pr:check`: docs-only 20/20 PASS. First sandbox run failed four tsx
+  launchers at local IPC `listen EPERM`; repeat outside sandbox passed all 20.
+  Skipped source lanes: typecheck, build:libs, build:playground, check:es-floor,
+  check:arch, test:run, test:parity. No product behavior proof claimed.
+- Post-review edits only flip the goal to ready and record review/check evidence;
+  the implementation item stays draft. All four product invariants remain open.
+
 ## Scope attribution
 
 | Source | Observable consequence | Authority |
