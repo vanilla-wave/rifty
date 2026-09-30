@@ -961,7 +961,7 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
     resolverPin: () => undefined,
   });
   let stageSequence = 0;
-  const store = createWorkbenchProjectStore(authority, {
+  const store = createWorkbenchProjectStore(authority, installStampClaims, {
     createStageId: () => `stage-${String(++stageSequence)}`,
   });
   const materializer = createProjectMaterializer({

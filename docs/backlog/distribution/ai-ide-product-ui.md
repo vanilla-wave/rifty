@@ -18,6 +18,9 @@ generic kit is reusable; the agent UI lives in the consumer.
 
 ## Options or Next
 
+- Shared filesystem history/agent recall ships in the public agent (ADR-0482);
+  this item retains future history browsing/resume UI. Reuse the archive owner.
+
 - Chat + streamed tool-call (`onUpdate`) rendering; diff + per-edit approve-gate; history.
 - Build over the IDE-kit atoms (depends-on EPIC C/D); reuse the existing playground editor/terminal/preview.
 - Lives in the agent product (an `apps/` consumer or a separate repo), never in rifty packages.

@@ -1,14 +1,16 @@
 /// <reference lib="webworker" />
 import { installOpfsFs } from '../../../packages/vfs/src/internal/index.ts';
-import { createOwnerVfsAuthority } from '../../../packages/workbench/src/workers/owner-vfs-authority.ts';
+import { createOwnerVfsAuthorityComposition } from '../../../packages/workbench/src/workers/owner-vfs-authority.ts';
 import { createWorkbenchProjectStore } from '../../../packages/workbench/src/workers/workbench-project-store.ts';
 self.onmessage = async ({ data }: { data: { namespace: string } }) => {
   try {
     const root = await (await navigator.storage.getDirectory()).getDirectoryHandle(data.namespace);
     const { fsSync } = await installOpfsFs(root, { layout: 'replica' });
     try {
-      const authority = createOwnerVfsAuthority(fsSync, { initialRoots: ['/'] });
-      const store = createWorkbenchProjectStore(authority);
+      const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(fsSync, {
+        initialRoots: ['/'],
+      });
+      const store = createWorkbenchProjectStore(authority, installStampClaims);
       const { stageId } = await store.beginStage('valid');
       await store.writeStageFile(
         stageId,

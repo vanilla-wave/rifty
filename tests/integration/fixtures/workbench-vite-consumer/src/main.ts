@@ -1,6 +1,7 @@
 import { createSandbox } from '@riftydev/sdk';
 import { type PreviewHandle, openWorkbench, projects } from '@riftydev/workbench';
 import { openPlaygroundWorkbench } from '@riftydev/workbench/playground';
+import type { archiveProjectLifecycle, archiveProof } from './archive-proof';
 import { type SnapshotProof, runSnapshotProof as proveSnapshot } from './snapshot-proof';
 
 import { proveCopiedToolchain } from './copied-worker-proof';
@@ -44,6 +45,10 @@ interface PackedWorkbenchDiagnostics {
 
 declare global {
   interface Window {
+    __RIFTY_PACKED_ARCHIVE__: Promise<{
+      run: ReturnType<typeof archiveProof>;
+      lifecycle: () => ReturnType<typeof archiveProjectLifecycle>;
+    }>;
     __RIFTY_PACKED_WORKBENCH__: Promise<PackedWorkbenchAcceptance>;
     __RIFTY_PACKED_SNAPSHOT_ONLY__: Promise<SnapshotOnlyAcceptance>;
     __RIFTY_PACKED_WORKBENCH_DIAGNOSTICS__: PackedWorkbenchDiagnostics;
@@ -216,7 +221,14 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
   });
 }
 
-if (new URL(location.href).searchParams.has('snapshot-only')) {
+if (new URL(location.href).searchParams.has('archive-proof')) {
+  window.__RIFTY_PACKED_ARCHIVE__ = import('./archive-proof').then(
+    ({ archiveProof, archiveProjectLifecycle }) => ({
+      run: archiveProof(workbenchOptions()),
+      lifecycle: () => archiveProjectLifecycle(workbenchOptions()),
+    }),
+  );
+} else if (new URL(location.href).searchParams.has('snapshot-only')) {
   const options = workbenchOptions();
   const { wasm: _wasm, ...deployment } = options.deployment;
   const strict = openSnapshotOnlyAcceptance({ ...options, deployment })
