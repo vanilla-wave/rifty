@@ -63,3 +63,28 @@ RED: `pnpm exec vitest run --project unit packages/workbench/src/workers/workben
 GREEN: project-store, store-layout, first-materialization suites → 33/33 PASS,
 /tmp/rifty-project-delete-green.log. Guard and orphan-stage follow-up recorded below.
 - Claim-policy/store suites: 28/28 PASS. Reverting both cleanup calls to raw rmSync kills deletion and orphan-stage regressions (2 failed / 5 passed); code restored in finally. Workbench typecheck PASS. Logs: /tmp/rifty-project-delete-guards.log, /tmp/rifty-project-delete-mutant.log.
+
+## Installed public acceptance GREEN
+
+`node tests/integration/workbench-packed-consumer.mjs --keep --archive-model-config tools/agent-bench/configs/gpt-6-luna.json`
+→ PASS: 16 first-party + 177 external tarballs; installed TypeScript/build;
+fresh Chromium 148.0.7778.96. Full existing packed journey remains green.
+Log: /tmp/rifty-archive-packed-3.log. Production source at 17c758e5c;
+0844f9a53 only updates the separate legacy browser fixture's capability argument.
+
+Both SDK and core public Workbench: save original messages/tool write, remove source
+project, reload host, new blog discovers/reads source archive. Existing public
+catalog rename + project export/import + delete preserve exact archive file bytes.
+The default mandatory packed CI lane always executes these deterministic proofs;
+only the external model endpoint is optional in routine CI.
+
+Live gpt-6-luna, user-provided codex-proxy.mjs on configured port10539: both hosts
+recalled a fresh unpredictable auth phrase after reload, with archive_search then
+archive_read; no transcript/filename/phrase in recall input. Exact native traces:
+agent-session-archive-live-sdk.json.gz, agent-session-archive-live-workbench.json.gz.
+Each ended done with two successful archive tool results. The fake model was used
+only for deterministic setup/tool orchestration, never storage or rifty packages.
+
+Current archive + legacy-layout browser suites: 29/29 PASS (20.2 s),
+/tmp/rifty-archive-browser-final.log. Generated compiler fingerprint gate PASS.
+- `RIFTY_PLAYGROUND_PORT=5415 pnpm test:e2e:prod tests/e2e-prod/owner-boots-on-prod-build.spec.ts`: 1/1 PASS (32.7 s); production owner reaches live preview, no boot errors. /tmp/rifty-archive-prod.log.
