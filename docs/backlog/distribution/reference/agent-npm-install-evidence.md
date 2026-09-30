@@ -109,3 +109,16 @@ Baseline criterion corrections (PR-4):
   lifecycle carrier now snapshots genuine ms, installs genuine semver with its
   real bin, preserves an extraneous marker and churned .vite-temp files through
   install/run/install/A→B→A. No manufactured lock result or fake bin closes it.
+
+Save/stamp/FIFO and emitted-pin negative suite221/221, lint and Workbench
+typecheck GREEN. Packed toolchain surface PASS15 first-party+73 external,
+including actual compiler loading. Old-source esbuild overlay at SDK8f5516e07
+reproduced exact prior TypeScript-worker SHA00545…; current ffeebf… differs
+only in shared/dynamic import filenames and side-effect import order, same
+10022664 bytes. `/tmp/rifty-pr357-install-compiler-pin-diff.log`.
+
+Source-dev Chromium exposed missing explicit CJS prebundles for new semver
+subpaths (module has no default export); packed build already passed. Add all
+three imports to both Playground and no-COI optimizeDeps lists. Initial browser
+command accidentally included Firefox/WebKit; interrupted, no GREEN claim.
+Required tier reruns Chromium explicitly.
