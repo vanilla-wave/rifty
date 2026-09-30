@@ -1,51 +1,23 @@
 # Map — no-coi-agent-host-kit
 
-Remaining path: agent install, then shared reference host and whole-goal proof.
-I1–I7/I10 accepted (I5 in merged PR #359); ledger links evidence. Quality
-measurement remains the following goal (PR #341).
+Remaining path: shared reference host and whole-goal proof. I1–I7/I9/I10
+accepted (I5 in merged PR #359); ledger links evidence. Quality measurement
+remains the following goal (PR #341).
 
 ## Items
 
 7. `distribution/no-coi-agent-reference-host` — **reference-host** — I8 and
-   scenario 1–9; the packed lane's Vite consumer refactored into a
-   connections-only `host.ts` (registry connected / none), SDK README links
-   it, packed-consumer lane runs it, and `tools/agent-bench`'s no-COI lane
-   boots the same module (user: measure what we ship). After 8; closes the goal.
-8. `distribution/no-coi-agent-npm-install` — **agent-install** — I9; the
-   agent's shell `npm install` over the existing installer; loud no-registry
-   outcome; truthful prompt text.
+   scenario1–9; connections-only host in the packed Vite consumer, benchmark
+   boots the same module, both registry configurations, whole-goal proof.
 
 ## Open questions
 
-- Reference-host proof checks text-only assistant tool_calls id/name/arguments and matching tool_call_id explicitly (text-content final review advisory; owner: agent).
-
-- Agent install carrier: how the shell's `npm install` reaches the installer
-  behind `toolchain.install` (same Worker, `installManifest`), how `<pkg>`
-  arguments update `package.json`/lockfile before resolution, and how the
-  operation joins the busy slot without a queue — owner: agent — item 8
-  pickup; ADR citing ADR-0418 D4 there.
-- No-registry outcome shape (extend the SDK root classifier; message names the
-  missing connection) and the conditional prompt text — owner: agent — item 8
-  pickup.
-- Registry connection location for I9 (sandbox-level option vs per-call
-  `install({ registryUrl })`, `protocol.ts:90-98`; user words «к песочнице не
-  подключен» point at sandbox level) — owner: agent — item 8's ADR; public API.
-- Reference recipe after a new `snapshotId` when the agent added dependencies
-  (scenario 4 × 6): `force` replaces `package.json`/lock/`node_modules`; the
-  host reconciles (re-run install after apply vs manifest diff) — owner: agent
-  — item 7 pickup; host policy under ADR-0417, never an SDK merge.
-- Bench boots the host module (I8): today's lane differs in limits (40 calls /
-  600 s, `tools/agent-bench/src/config.ts:60-61`) and provisioning
-  (`toolchain.install` from `/npm-registry`, `no-coi-page.ts:37`) vs the kit's
-  session defaults (100 calls / 600 s once agent-weak-models I9 lands; only
-  `maxToolCalls` differs) and snapshot → `open`; which knobs become bench
-  variables vs adopted host defaults — owner: agent — item 7 pickup; the cap
-  question `distribution/agent-tool-text-cap-and-run-budgets-measure` stays
-  separate.
-- Bench import route: whether `tools/agent-bench` may import the reference
-  host module from `tests/integration/fixtures/workbench-vite-consumer` under
-  the arch/vitest wiring, or the module moves to a shared private location —
-  owner: agent — item 7 pickup.
+- I8 pickup owns the private applied-ID/desired-manifest recipe and its narrow
+  Contract+RED; SDK state/merge remains excluded. Existing force preserves
+  untargeted files but replaces manifest/lock targets; proof must check both.
+- I8 packed proof explicitly checks text-only assistant tool-call id/name/args
+  and matching tool receipt id (I6 advisory), and executes the benchmark module
+  from installed tarballs with default100 calls/600s.
 
 ## Out of scope
 

@@ -122,3 +122,8 @@ subpaths (module has no default export); packed build already passed. Add all
 three imports to both Playground and no-COI optimizeDeps lists. Initial browser
 command accidentally included Firefox/WebKit; interrupted, no GREEN claim.
 Required tier reruns Chromium explicitly.
+
+Final committed becdaddfb: Chromium21/21; full pr:check27/27, no isolated reruns
+(test:run197.2s, parity119.5s). Independent Final+GREEN PASS19/19; source save
+reprobe independently GREEN. Logs `/tmp/rifty-pr357-install-ranges-chromium.log`
+and `/tmp/rifty-pr357-install-pr-check-final.log`. I9 closed; I8 remains.
