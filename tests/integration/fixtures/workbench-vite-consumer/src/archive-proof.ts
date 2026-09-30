@@ -96,10 +96,13 @@ export function archiveProof(options: WorkbenchOptions) {
         storage: { persistence: 'required', namespace: 'archive-workbench-projects' },
       });
       const project = await workbench.openProject(
-        projects.nodeCli({
+        projects.vite({
           id,
-          entryPath: '/main.cjs',
-          files: { '/main.cjs': 'console.log("archive host")' },
+          viteVersion: '7.3.6',
+          files: {
+            '/index.html': '<script type="module" src="/main.js"></script>',
+            '/main.js': 'document.body.textContent = "archive host"',
+          },
         }),
       );
       host = createWorkbenchAgentHost({ session: project });
