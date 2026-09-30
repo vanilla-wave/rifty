@@ -152,3 +152,4 @@ Independent Final+GREEN (canonical runner, strict schema copy) at 6115e61dd:
 `agent-session-archive-repair-final-green.json` — concern, no blockers, coverage 6/6
 pass, residuals empty, goal complete; one advisory hardening note (serialized size of
 long corrupt names beyond the declared count bound) recorded, no product change.
+- `pnpm pr:check` at 6115e61dd: 26/27 — `lint` red only on the unformatted codex verdict JSON (formatted in the docs-only follow-up; full `pnpm lint` clean, `check:pass-binding` OK bound to 6115e61dd); `test:run` had one non-timeout failure in `no-coi-project-command-exit.test.ts` under load 43 (codex review concurrent) that passed its single isolated rerun — same contention file as the original PR record; parity 123.5 s PASS. /tmp/rifty-archive-f1f2-pr-check.log.
