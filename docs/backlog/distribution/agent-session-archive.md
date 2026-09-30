@@ -11,21 +11,37 @@ code: [packages/agent/src/session.ts, packages/agent/src/workbench-host.ts, pack
 
 ## Context
 
-Archive capability: ❌. Both current agent adapters expose project-scoped files;
-neither supplies automatic shared history. The public initialMessages option
-restores a host-provided context; it does not store or discover earlier sessions.
-Source evidence and exact user decisions are in the linked refine evidence.
+Ready goal I1–I4; original scope in goal and refine evidence. ADR-0482 selects
+one OPFS archive independent of project ownership. Implementation awaits RED review.
 
-## Question
+## Challenge
 
-What minimal public storage/access boundary lets the real SDK and Workbench
-hosts share durable conversation files independently of project lifetime?
-PICKUP resolves the goal map's agent-owned questions, records the public API ADR
-and mechanism inventory, and runs discriminating REDs before implementation.
-No archive path, file format, mount, index or new state owner is selected here.
+challenge: 2026-09-30 — clear
 
-The first proof saves one conversation and reads it after reopen. Extend the
-same owner to all sessions, compaction/reset, cross-project recall, source-project
-deletion and both installed consumers. Compile I1–I4 acceptance and production
-fault rows together; never use a fake filesystem or direct transcript injection
-to prove discovery. Goal readiness does not make this item ready (`RDY-1`).
+Reuse goal premise and final scope check; unchanged accepted outcome.
+
+## Acceptance
+
+1. Archive-enabled send automatically retains original messages, tool calls/results, images and source identity; reset/new session/compaction never erase originals. Browser archive suite + native session receipts. → I1
+2. New project agent discovers and paginates original conversations on request without supplied filename or transcript. Real MemoryVfs host and OPFS browser suite. → I2
+3. Durable receipts follow native write close; reload/interruption retains last acknowledged bytes and identifies incomplete state. Storage errors are visible, corrupt records never reported complete. Browser fault suite. → I3
+
+## Fault matrix
+
+| Axis × operation | Honest outcome | Carrier |
+|---|---|---|
+| torn-state × close/reload | last acknowledged snapshot intact; interrupted run incomplete | native write interruption browser test → I3 |
+| quota-perm-fail × snapshot write | archive error event and error run status; no durable success receipt | native permission/quota browser tests → I3 |
+| corrupt-input × discovery/read | explicit corrupt filename; never complete | corrupt archive browser test → I3 |
+| concurrent-same-key × cross-tab save | distinct session IDs/files; no lost acknowledged messages | two-tab browser test → I1, I3 |
+| lossy-aggregate × compact/read | original content outside context/output window readable by pagination | reset/compaction/long-history browser tests → I1, I2 |
+
+## Out of scope
+
+Goal map exclusions unchanged; no Playground integration, cloud synchronization,
+historical replay, or recovery of never-acknowledged bytes. Archive-disabled
+sessions keep the existing host-owned history contract.
+
+## Decisions
+
+- 2026-09-30 — ADR-0482: shared OpfsVfs, UUID-owned atomic snapshots and bounded read tools; reference/agent-session-archive-evidence.md.

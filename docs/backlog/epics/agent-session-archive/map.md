@@ -2,11 +2,11 @@
 
 ## Items
 
-1. `distribution/agent-session-archive` — **shared archive** — establish the
-   public storage/access boundary and prove one saved conversation after reopen,
-   then cross-session/project discovery on both public hosts; owns I1–I4.
-   Keep capture, durability and read access together until evidence justifies
-   a split: no independent competing archive owner.
+1. `distribution/agent-session-archive` — shared archive — capture, durable snapshots,
+   reset/compaction preservation, paginated discovery/read; owns I1–I3 implementation.
+2. `distribution/agent-session-archive-public-proof` — installed public host proof —
+   SDK + Workbench, source lifecycle, reload, real-model recall; closes I2/I4.
+   Existing archive behavior is its baseline; no competing storage owner.
 
 ## Open questions
 

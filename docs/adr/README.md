@@ -387,6 +387,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0475 | Feed tool outcomes and shared workflow back to the model |
 | 0478 | Compare fixed-config agent benchmark runs |
 | 0479 | Scrub declared secrets at the provider ingress |
+| 0482 | Shared durable agent conversation archive |
 
 ## Superseded (removed)
 
