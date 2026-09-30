@@ -57,3 +57,22 @@ parity119.3s GREEN, no isolated reruns. Reviewed emitted import graph; updated
 only typescript-worker.js size10022664/SHA00545aee8a0a8a792277e38e752c1e05e5b6d00c546b86d5363722399a28f45b.
 2MB ceiling and negative payload tests unchanged. Isolated retirement gate and
 its10 adversarial tests GREEN; full gate repeated after exact-pin repair.
+
+Full gate27/27 GREEN on product-identical ee5102411 (unit209.7s, parity118.6s),
+no reruns: `/tmp/rifty-pr357-sdk-pr-check-final.log`. Actual packed toolchain
+surface GREEN:15 first-party+72 external tarballs, strict TS, browser compiler
+loading and real generic/toolchain/agent/build proofs. Log
+`/tmp/rifty-pr357-sdk-packed.log`; satisfies ADR-0391 browser proof for exact pin.
+
+Final hardening (tests only): delay genuinely emitted entries frames at native
+postMessage boundary, deliver actual result first, release unchanged frames then
+same-Worker eval roundtrip. GREEN; removal of pending-request guard gives RED
+(nonempty obsolete progress), source restored. Logs
+`/tmp/rifty-pr357-sdk-delayed-green.log`, `-late-mutant.log`.
+Earlier attempted native-timeout carrier correctly produced no late count:
+OpfsDrainScheduler.notifyProgress excludes timedOut operations (ADR-0359). Removed
+that invalid fixture expectation; retained this actual transport-delay carrier.
+No product semantics were changed to manufacture late progress.
+Final restored-source snapshot suite15/15 GREEN (10s), refs/backlog GREEN:
+`/tmp/rifty-pr357-sdk-snapshot-final.log`. Only test/evidence hardening followed
+the full27/27 run; production files and compiler pin are byte-identical to it.
