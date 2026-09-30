@@ -32,3 +32,18 @@ RED2026-09-30:
 
 Raw logs: `/tmp/rifty-pr357-transcript-red.log`,
 `/tmp/rifty-pr357-transcript-ui-red.log`. Real UI screenshots retained by Playwright.
+
+GREEN: native-event reducer7/7; agent and Playground typechecks pass. Stable ids
+asserted through tool and assistant updates. Added real HTTP body failure after a
+streamed text chunk: Pi retries without a second message_start. Initial projection
+lost the recovered assistant (0 vs1 rows); update/end now creates the resumed row.
+The failed attempt remains in the retry notice; recovered text/id stays stable.
+
+Actual Playground GREEN22/22 (2.1min), including all existing edit/build/preview,
+errors/Stop/reset, catalog/images/retry/compaction cases and both new transcript
+scenarios. Raw `/tmp/rifty-pr357-transcript-ui-full.log`; screenshots
+`test-results/ai-mode-headless-transcrip-3f1b3-ols-after-budget-exhaustion-chromium-heavy/transcript-budget.png`
+and `test-results/ai-mode-headless-transcrip-73d0b-nd-explicit-cancelled-state-chromium-heavy/transcript-cancelled.png`
+visually inspected: retained done/cancelled rows, budget receipt, actual output;
+chat stays bounded/scrollable. Native reverse lookup uses an ES2022 loop per
+ADR-0469/0481; post-change reducer7/7 and typechecks pass.

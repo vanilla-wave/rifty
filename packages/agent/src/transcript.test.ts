@@ -150,6 +150,14 @@ describe('headless transcript over actual agent events', () => {
         ['call-0-1', 'success'],
       ]);
       expect(new Set(state.items.map((item) => item.id)).size).toBe(state.items.length);
+      for (const callId of ['call-0-0', 'call-0-1']) {
+        const ids = snapshots.flatMap(({ state }) =>
+          tools(state)
+            .filter((item) => item.callId === callId)
+            .map((item) => item.id),
+        );
+        expect(new Set(ids).size).toBe(1);
+      }
       expect(await f.vfs.readFileText('/one.txt')).toBe('one');
       const live = snapshots
         .filter(({ event }) => event.type === 'agent' && event.event.type === 'message_update')
@@ -358,5 +366,90 @@ it('renders context-exceeded and retains native user image content', async () =>
     );
   } finally {
     await vision.session.dispose();
+  }
+});
+
+it('retires a genuinely streamed failed attempt and keeps stable IDs through updates', async () => {
+  const wire = scriptedProvider(['Recovered.']);
+  let requests = 0;
+  const encoder = new TextEncoder();
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    if (requests++ > 0) return wire.fetch(input, init);
+    const deltas = [{ role: 'assistant' }, { content: 'Discard this.' }];
+    return new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          const delta = deltas.shift();
+          if (!delta) {
+            controller.error(new Error('fetch failed'));
+            return;
+          }
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ id: 'partial', object: 'chat.completion.chunk', created: 1, model: 'partial', choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`,
+            ),
+          );
+        },
+      }),
+      { headers: { 'content-type': 'text/event-stream' } },
+    );
+  };
+  const models = api.createModels();
+  models.setProvider(
+    api.createOpenAIProvider({
+      id: 'partial',
+      fetch,
+      models: [
+        {
+          id: 'partial',
+          name: 'partial',
+          provider: 'partial',
+          api: 'openai-completions',
+          baseUrl: 'https://transcript.invalid/v1',
+          contextWindow: 32768,
+          maxTokens: 512,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        },
+      ],
+    }),
+  );
+  const f = await fixture([], {
+    models,
+    model: 'partial',
+    retry: { baseDelayMs: 1, maxRetries: 1 },
+  });
+  try {
+    await f.session.send('Retry streamed failure');
+    const trace = await f.session.exportTrace();
+    expect(trace.status).toBe('done');
+    expect(requests).toBe(2);
+    const { state, snapshots } = replay(trace.events);
+    expect(
+      snapshots.some(({ state }) =>
+        state.items.some(
+          (item) => item.kind === 'message' && item.streamingText === 'Discard this.',
+        ),
+      ),
+    ).toBe(true);
+    const assistants = state.items.filter(
+      (item) => item.kind === 'message' && item.role === 'assistant',
+    );
+    expect(assistants).toHaveLength(1);
+    expect(assistants[0]).toMatchObject({ text: 'Recovered.' });
+    expect(JSON.stringify(state.items.filter((item) => item.kind === 'notice'))).toContain(
+      'Discard this.',
+    );
+    const ids = snapshots.flatMap(({ state }) =>
+      state.items
+        .filter(
+          (item) =>
+            item.kind === 'message' &&
+            (item.streamingText === 'Recovered.' || item.text === 'Recovered.'),
+        )
+        .map((item) => item.id),
+    );
+    expect(new Set(ids).size).toBe(1);
+  } finally {
+    await f.session.dispose();
   }
 });

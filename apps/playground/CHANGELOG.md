@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Chat renders the agent transcript model: retain tools at budget exit, show live shell output/cancelled state and native continuation/capability notices.
+
 - Add manual browser proof page: support, real Vite install/build, durable reload and reopen, copyable device report.
 
 - Select the latest new preview port without ES2023 `findLast`.

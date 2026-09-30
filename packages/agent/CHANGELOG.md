@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Export a pure native-event transcript reducer with stable rows, streaming/final messages, cancelled tools, output and continuation notices; budget terminals preserve prior history (ADR-0485).
+
 - Sandbox agent hosts accept distinct files/shell policies over one root, enforced by SDK project handles; reference README defaults unrestricted (ADR-0484).
 
 - Built-in OpenAI catalog entries support `textOnlyContent`; native transport sends strings and refuses image prompts/history before network (ADR-0483).

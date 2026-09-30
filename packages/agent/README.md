@@ -3,6 +3,28 @@
 Framework-free Pi coding agent over public rifty hosts. Runtime packages do not
 depend on it. ADR-0424/0436/0471/0479.
 
+Headless chat state comes from the exported pure reducer (ADR-0485):
+
+```ts
+import { createAgentTranscript, reduceAgentTranscript } from '@riftydev/agent';
+
+let transcript = createAgentTranscript();
+const detach = agent.subscribe(event => {
+  transcript = reduceAgentTranscript(transcript, event);
+  render(transcript);
+});
+```
+
+Pass the whole state back; read `items`, `status`, `detail`, `capabilities`.
+Message items separate `streamingText` from final `text`/native `message`.
+Tool items keep `callId`, `args`, raw `result`, ordered `output` chunks and
+`state`: pending/running/success/error/cancelled. Cancellation does not mean
+no effects; inspect the result. Notice items retain model/retry/compaction,
+steering, changed capabilities and terminal budget/context events. IDs stay
+stable through updates; native reset clears the projection. Keep state across
+sends/model switches; create fresh state for a new session. Only supplied live
+events are projected; cross-session history storage is caller-owned.
+
 ```ts
 import { createAgentSession, createWorkbenchAgentHost, createModels, createOpenAIProvider } from '@riftydev/agent';
 

@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Export a framework-free transcript reducer over AgentSessionEvent
 created: 2026-09-27
 why: every renderer re-implements the same reduction of the low-level event stream into ordered user/assistant/tool items, and the two existing copies disagree on cancelled tools and drop two event kinds
@@ -56,5 +56,7 @@ kills the old full-tail replacement; pure projection avoids another state owner.
 - Cross-session transcript storage; native initialMessages remains caller-owned.
 
 ## Decisions
+
+ready-verdict: 2026-09-30 — Contract+RED @ f87e09e7b78075da98f44d6b7d133a36a9d1d08d
 
 - 2026-09-30 — ADR-0485: pure incremental projection; source AgentSession tools are sequential, no new output correlation mechanism.
