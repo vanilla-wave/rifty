@@ -44,8 +44,6 @@ order is text, not `blocked_by` (checker scope = one tree).
 8. `distribution/no-coi-agent-npm-install` — **agent-install** — I9; the
    agent's shell `npm install` over the existing installer; loud no-registry
    outcome; truthful prompt text. After 1.
-9. `distribution/agent-shell-tool-output-order` — **output-order** — I10;
-   shell tool text in terminal order after the status line.
 
 ## Open questions
 

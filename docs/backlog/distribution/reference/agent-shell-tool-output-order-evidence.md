@@ -16,3 +16,5 @@ The test checks exit 0/1, status heading, transcript and next provider request.
 Carrier: collect the already-observed output chunks in `standardTools`.
 Custom hosts that emit no chunks retain their existing outcome-only fallback;
 all rifty host adapters emit chunks. No public API or coordination change.
+
+GREEN: same Chromium command expanded to `-g 'shell model text|Stop|preserves project policy'`: 4/4 passed. Full gate initially26/27 (missing Challenge); corrected document, standalone backlog pass, repeated full `pnpm pr:check`:27/27, unit292.3s, parity123.7s, no isolated retries. Independent final record beside this evidence.

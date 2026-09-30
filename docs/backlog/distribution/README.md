@@ -37,7 +37,6 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `agent-text-only-content-transport.md` | draft | no-coi-agent-host-kit | opt-in per-entry string-content flag on the model catalog entry (after PR #359 item 1) |
 | `no-coi-agent-reference-host.md` | draft | no-coi-agent-host-kit | packed lane's Vite consumer → connections-only reference host in CI; closes the goal |
 | `no-coi-agent-npm-install.md` | draft | no-coi-agent-host-kit | agent shell `npm install` over the existing installer; loud without a registry |
-| `agent-shell-tool-output-order.md` | draft | no-coi-agent-host-kit | shell tool text in terminal order |
 | `agent-tool-text-cap-and-run-budgets-measure.md` | draft | — | measure the 16 KiB cap before changing ADR-0424 D7; run budgets settled by agent-weak-models I9 |
 | `no-coi-command-env-and-npm-lifecycle-vars.md` | draft | — | real env + npm lifecycle vars for no-COI commands |
 | `no-coi-node-print-and-input-type-flags.md` | draft | — | `node -p` / `--input-type` / `-r` on the no-COI path |
