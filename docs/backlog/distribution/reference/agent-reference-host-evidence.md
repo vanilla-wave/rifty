@@ -38,7 +38,7 @@ tool dispatch already sequences its work. Only the scenario9-authorized host
 promise chain sequences that host's explicit prepare/call actions. It does not
 queue agent calls, hold a namespace lease, or replace SDK busy enforcement.
 
-## Implementation evidence (in progress)
+## Implementation evidence
 
 Source host recipe GREEN2: original manifest/lock/execution assertions now bind
 to the real host; same-ID reopen retains source/manifest and makes no second
@@ -62,7 +62,7 @@ Packed host journey passed both registry configurations on retained real
 tarballs (`/tmp/rifty-pr357-reference-only7.log`): genuine Vite/agent edit,
 install/no-registry, model switch, exact wire tool-call metadata, ordered build
 output, busy retry, transcript/trace download, reopen/deploy/occupied retry.
-Fresh full packed lane and final gates still required.
+Final fresh full packed lane and gates passed below.
 
 Carrier corrections: the controlled build HTTP response must be fully consumed
 (`.text()`), per the existing fetch-keepalive body lifetime; an unread Response
@@ -83,4 +83,31 @@ preview plus default/policy/text-only cases (1.2min);
 `/tmp/rifty-pr357-reference-bench-preview-green.log`. Shared registry fixture
 extracted unchanged from the existing packed driver, with original byte/integrity
 checks intact. This smoke is now invoked by the default full packed-consumer CI
-lane, not only its diagnostic command. Same full CLI baseline rerun follows.
+lane, not only its diagnostic command. Same full CLI baseline rerun passed below.
+
+## Final acceptance — 2026-09-30
+
+Reviewed implementation: `2534d1e97ef838c07c0c4caa6c464877347dc7a4`.
+Independent Final+GREEN and whole-goal CLOSE:13/13 traced rows, all axes PASS,
+no required unit/goal residuals; `agent-reference-host-final-green.json`.
+
+- `pnpm pr:check`:27/27 GREEN, no isolated reruns; test:run201.8s,
+  parity121.9s. `/tmp/rifty-pr357-reference-pr-check.log`.
+- `node tests/integration/workbench-packed-consumer.mjs --keep`: GREEN;
+  16 first-party +178 genuine external tarballs, strict consumer TS/build,
+  fresh Chromium148, both reference-host registry configurations, retained
+  SDK/agent/preview/HMR/sqlite/scoped-preview proofs and mandatory packed
+  benchmark smoke. `/tmp/rifty-pr357-reference-packed-final.log`.
+- Actual CLI baseline: `node --import tsx tools/agent-bench/src/cli.ts run
+  --mock-model --lane rifty-no-coi --task fix-date-sort --runs 1 --output
+  /tmp/rifty-pr357-bench-preview-green`: agent done, no stage/error, judge
+  executed, screenshot captured, default100 calls/600s. `report.json` records
+  the reviewed SHA. Quality outcome `fail` is expected: the scripted read-only
+  model leaves the seeded date-sort defect; no quality improvement claimed.
+- Source Chromium recipe2/2, config/comparison/structural guards18/18;
+  packed benchmark smoke executes genuine Vite preview in both variants.
+
+Same-program packed journey proves the transitions between accepted SDK,
+agent and host capabilities; earlier accepted library evidence remains linked
+by the final verdict. The I6 wire-metadata advisory is covered. I7 repeated-ID
+continuation coverage remains advisory in its original accepted record.

@@ -1,23 +1,15 @@
 # Map — no-coi-agent-host-kit
 
-Remaining path: shared reference host and whole-goal proof. I1–I7/I9/I10
-accepted (I5 in merged PR #359); ledger links evidence. Quality measurement
-remains the following goal (PR #341).
+All I1–I10 accepted; I5 in merged PR #359. Independent whole-goal CLOSE
+PASS at2534d1e97ef838c07c0c4caa6c464877347dc7a4. Ledger links proof.
 
 ## Items
 
-7. `distribution/no-coi-agent-reference-host` — **reference-host** — I8 and
-   scenario1–9; connections-only host in the packed Vite consumer, benchmark
-   boots the same module, both registry configurations, whole-goal proof.
+None.
 
 ## Open questions
 
-- I8 pickup owns the private applied-ID/desired-manifest recipe and its narrow
-  Contract+RED; SDK state/merge remains excluded. Existing force preserves
-  untargeted files but replaces manifest/lock targets; proof must check both.
-- I8 packed proof explicitly checks text-only assistant tool-call id/name/args
-  and matching tool receipt id (I6 advisory), and executes the benchmark module
-  from installed tarballs with default100 calls/600s.
+None.
 
 ## Out of scope
 
