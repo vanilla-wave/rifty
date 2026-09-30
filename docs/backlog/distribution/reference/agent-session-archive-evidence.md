@@ -88,3 +88,4 @@ only for deterministic setup/tool orchestration, never storage or rifty packages
 Current archive + legacy-layout browser suites: 29/29 PASS (20.2 s),
 /tmp/rifty-archive-browser-final.log. Generated compiler fingerprint gate PASS.
 - `RIFTY_PLAYGROUND_PORT=5415 pnpm test:e2e:prod tests/e2e-prod/owner-boots-on-prod-build.spec.ts`: 1/1 PASS (32.7 s); production owner reaches live preview, no boot errors. /tmp/rifty-archive-prod.log.
+- Final current-tree `pnpm pr:check`: 27/27 PASS, no isolated rerun needed (`test:run`195.5 s, parity118.0 s); /tmp/rifty-archive-pr-check-final.log. Earlier contention failures remain recorded above.
