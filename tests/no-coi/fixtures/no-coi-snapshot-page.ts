@@ -5,8 +5,6 @@ let sandbox: ToolchainSandbox;
 let output = '';
 const progress: unknown[] = [];
 const nativeFlushes: unknown[] = [];
-let observedWorker: Worker;
-let releasedProgress = 0;
 let held = false;
 let application: Promise<string> | undefined;
 let applicationState = 'idle';
@@ -16,12 +14,9 @@ export async function boot(workerUrl: string, namespace = 'sdk-snapshot') {
   globalThis.Worker = new Proxy(NativeWorker, {
     construct(target, args: ConstructorParameters<typeof Worker>) {
       const worker = Reflect.construct(target, args) as Worker;
-      observedWorker = worker;
       worker.addEventListener('message', (event) => {
         if (event.data.type === 'snapshot-native-held') held = true;
         if (event.data.type === 'native-flush-receipt') nativeFlushes.push(event.data);
-        if (event.data.type === 'fixture-late-progress-released')
-          releasedProgress = event.data.count;
       });
       return worker;
     },
@@ -135,11 +130,4 @@ export function takeNativeFlushes() {
 }
 export function restart() {
   return sandbox.restart({ preview: { src: '' } });
-}
-
-export function releaseLateProgress() {
-  observedWorker.postMessage({ type: 'fixture-release-late-progress' });
-}
-export function releasedProgressCount() {
-  return releasedProgress;
 }

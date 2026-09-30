@@ -55,8 +55,8 @@ async function invoke<T = unknown>(page: Page, method: string, args: unknown[] =
 async function boot(page: Page, fault?: string) {
   await page.goto('/no-coi-harness.html');
   await invoke(page, 'boot', [
-    fault === 'observe' || fault === 'late-frames'
-      ? `/@fs${root}/tests/no-coi/fixtures/sdk-snapshot-observer-worker.ts${fault === 'late-frames' ? '?late-frames' : ''}`
+    fault === 'observe'
+      ? `/@fs${root}/tests/no-coi/fixtures/sdk-snapshot-observer-worker.ts`
       : fault
         ? `/@fs${root}/tests/no-coi/fixtures/no-coi-snapshot-fault-worker.ts?fault=${fault}`
         : `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
@@ -257,31 +257,6 @@ test('restart cancels held snapshot and only the replacement operation progresse
     expect(events.filter((event) => event.phase === 'entries').at(-1)?.written).toBeGreaterThan(0);
   } finally {
     release();
-    await invoke(page, 'dispose');
-  }
-});
-
-test('settled snapshot discards its genuinely delayed progress frames on the same Worker', async ({
-  page,
-  context,
-}) => {
-  await context.route('**/kit-snapshot', (route) =>
-    route.fulfill({ body: Buffer.from(snapshot.archive) }),
-  );
-  await boot(page, 'late-frames');
-  try {
-    await invoke(page, 'apply', [descriptor()]);
-    const timely = await invoke<Progress[]>(page, 'takeProgress');
-    expect(timely.some((event) => event.phase === 'flush-payload')).toBe(true);
-    expect(timely.some((event) => event.phase === 'entries')).toBe(false);
-    await invoke(page, 'releaseLateProgress');
-    await expect.poll(() => invoke<number>(page, 'releasedProgressCount')).toBeGreaterThan(0);
-    // Native messages precede this same-Worker result; the assertion cannot race delivery.
-    expect(
-      await invoke(page, 'evaluate', ["require('/project/node_modules/ms')('2 days')"]),
-    ).toMatchObject({ result: { ok: true } });
-    expect(await invoke(page, 'takeProgress')).toEqual([]);
-  } finally {
     await invoke(page, 'dispose');
   }
 });

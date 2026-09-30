@@ -64,15 +64,11 @@ surface GREEN:15 first-party+72 external tarballs, strict TS, browser compiler
 loading and real generic/toolchain/agent/build proofs. Log
 `/tmp/rifty-pr357-sdk-packed.log`; satisfies ADR-0391 browser proof for exact pin.
 
-Final hardening (tests only): delay genuinely emitted entries frames at native
-postMessage boundary, deliver actual result first, release unchanged frames then
-same-Worker eval roundtrip. GREEN; removal of pending-request guard gives RED
-(nonempty obsolete progress), source restored. Logs
-`/tmp/rifty-pr357-sdk-delayed-green.log`, `-late-mutant.log`.
-Earlier attempted native-timeout carrier correctly produced no late count:
-OpfsDrainScheduler.notifyProgress excludes timedOut operations (ADR-0359). Removed
-that invalid fixture expectation; retained this actual transport-delay carrier.
-No product semantics were changed to manufacture late progress.
-Final restored-source snapshot suite15/15 GREEN (10s), refs/backlog GREEN:
-`/tmp/rifty-pr357-sdk-snapshot-final.log`. Only test/evidence hardening followed
-the full27/27 run; production files and compiler pin are byte-identical to it.
+Fault-model correction: an attempted native-timeout carrier correctly produced
+no late counts (OpfsDrainScheduler excludes timedOut operations, ADR-0359).
+A follow-up fixture reordered actual postMessage calls and killed a guard-removal
+mutant, but this is physically excluded by rules/fault-classes.md's Worker row.
+Independent reviewer corrected its own suggestion/acceptance. Removed that
+artificial carrier; no product change. I3 retains actual peer-replacement proof
+(held HTTP fetch/restart), operation-id separation and existing request guards.
+No claim that an impossible transport fault proves shipped behavior.

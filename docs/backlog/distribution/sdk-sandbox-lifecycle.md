@@ -52,7 +52,7 @@ retry against the actual OPFS store.
 | lossy-aggregate × Worker error | retain discriminator/native cause across boundary | actual browser failures → I1/I2 |
 | sibling-drift × live/restarted subscription | one event hub, detach respected | early subscribe/restart → I3 |
 | provenance-lie × snapshot counts | real byte/write/flush domains, absent unknown totals | real producer, HTTP declared/chunked/encoded, native replica → I3 |
-| stale-result × snapshot operation | settled/replaced-worker frames ignored by existing owner | peer/request guard proof → I3 |
+| sibling-drift × Worker replacement | abandoned operation cannot update replacement | native held fetch/restart; same-peer transport reorder physically excluded → I3 |
 | provenance-lie × failed persistence | never report failed native writes persisted | native quota fixture → I2/I3 |
 
 ## Challenge
@@ -73,3 +73,5 @@ reuse runtime peer and request maps (ADR-0486).
 ready-verdict: 2026-09-30 — Contract+RED @ 1024adea2133a39684462bdf571e1234870dfb69
 
 - 2026-09-30 — ADR-0486; former map items 1–2 combined, destination unchanged.
+
+- 2026-09-30 — fault model corrected against rules/fault-classes.md Worker row: native transport reorder is physically excluded. I3/Acceptance5 unchanged; real held-fetch/restart is the failure carrier.
