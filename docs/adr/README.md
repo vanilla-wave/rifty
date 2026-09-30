@@ -391,6 +391,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0484 | Separate agent file and shell project policies |
 | 0485 | Project agent events into a headless transcript |
 | 0486 | Observable sandbox startup and snapshot lifecycle |
+| 0487 | Connect agent npm installation to the sandbox registry |
 
 ## Superseded (removed)
 
