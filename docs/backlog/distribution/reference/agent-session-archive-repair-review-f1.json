@@ -1,0 +1,107 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "Не сливать: восстановить чтение корректных v1-архивов BASE; затем повторный Final+GREEN.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "a6b0255a906b0e152edde1c9e64b1bc7e5d21e3a",
+  "unit_goal_source": "PR #364, review-repair commits 312344012c8be92797217438db14bb5bf0c7032c и a6b0255a906b0e152edde1c9e64b1bc7e5d21e3a; BASE 538d11e2310e86e7633e48546ab85fbfd6b24f1e. Authority: ADR-0482; packages/agent/README.md:254; docs/backlog/distribution/reference/agent-session-archive-evidence.md:93,113. Проверены raw diff, PR body, прежний ADR и заменённый corrupt-тест из BASE. Замена критерия честная: healthy discovery + явный corrupt + сохранённый archive_read error; причина записана. Четыре поведенческих RED подтверждены исходными /tmp/rifty-archive-{restore,search}-red.log. В этой сессии: RIFTY_PLAYGROUND_PORT=5419 pnpm test:browser-unit tests/browser-unit/agent-archive.spec.ts → 14/14 PASS; pnpm exec vitest run --project unit packages/agent/src → 118/118 PASS; pnpm --filter @riftydev/agent typecheck → PASS. Дополнительные реальные Chromium/OPFS probes подтвердили F1/F2. Tracked files не изменены; git status чист.",
+  "unit_residuals": [
+    {
+      "clause": "Named BASE behavior: archive_search/archive_read читают корректные version:1 файлы, записанные 538d11e23.",
+      "location": "packages/agent/src/archive.ts:136",
+      "summary": "F1: сохранить совместимость reader с BASE writer и добавить committed BASE-write→HEAD-search/read regression."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I2: новая сессия обнаруживает и читает ранее сохранённый разговор.",
+      "location": "docs/adr/distribution/0482-shared-durable-agent-conversation-archive.md:33",
+      "summary": "F1 вновь нарушает доступность прежней истории: здоровые архивы BASE ошибочно объявляются corrupt."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "createAgentSession({initialMessages, archive}): новый файл хранит собственные сообщения и restoredMessageCount, без копирования восстановленной истории.",
+      "source": "public-api",
+      "trace": "ADR-0482",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-archive.spec.ts:38",
+      "note": ""
+    },
+    {
+      "row": "archive_search: newest first, исходный текст без image.data, restoredMessageCount, отдельный corrupt без потери здоровых разговоров.",
+      "source": "public-api",
+      "trace": "ADR-0482",
+      "status": "weak",
+      "citation": "tests/browser-unit/agent-archive.spec.ts:103; tests/browser-unit/agent-archive.spec.ts:135; tests/browser-unit/agent-archive.spec.ts:156",
+      "note": "F1: текущая обязательность нового поля проходит committed suite, но исключает корректные v1-файлы BASE; differential probe подтверждает пробел."
+    },
+    {
+      "row": "archive_read: пагинированный исходный JSON здорового архива; повреждённый архив даёт явную ошибку.",
+      "source": "public-api",
+      "trace": "ADR-0482",
+      "status": "weak",
+      "citation": "tests/browser-unit/agent-archive.spec.ts:66; tests/browser-unit/agent-archive.spec.ts:124",
+      "note": "F1: carrier проверяет свежие HEAD-файлы; ошибочное отклонение здорового BASE-файла не обнаруживается."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/agent/src/archive.ts:206",
+          "evidence": "RIFTY_PLAYGROUND_PORT=5419 pnpm test:browser-unit tests/browser-unit/archive-review-probe.spec.ts → overflow probe RED. 200 реальных повреждённых OPFS-файлов + здоровый разговор: isError=false, receiptBytes=16344, '[truncated 16335 bytes]', JSON.parse → SyntaxError position 8143. /tmp/rifty-archive-review-probes/run.log:20; probe source и trace сохранены рядом.",
+          "summary": "F2: corrupt[] не ограничен размером ответа; общий tool cap разрезает JSON и теряет часть диагностик. Healthy match и nextOffset остаются видимы: их сокрытие не доказано. Advisory для расширенного fault population.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "packages/agent/src/archive.ts:136",
+          "evidence": "RIFTY_PLAYGROUND_PORT=5419 pnpm test:browser-unit tests/browser-unit/archive-review-probe.spec.ts → compatibility probe RED. Fixture — точный git show 538d11e23:packages/agent/src/archive.ts, совпадение проверено git diff --no-index. Реальный BASE writer создал OPFS-файл; отдельный BASE reader: search matches=1, baseReadOK=true. HEAD на тех же байтах: matches=[], corrupt содержит тот же UUID, archive_read isError=true. /tmp/rifty-archive-review-probes/run.log:14; исходники и base-compat.trace.zip сохранены рядом.",
+          "summary": "F1: обязательный restoredMessageCount при неизменном version:1 делает все здоровые файлы BASE нечитаемыми. BASE writer этого поля не писал. Класс corrupt-input: ошибочная классификация схемы. Нет committed BASE-write→HEAD-read RED; sibling sweep: search и read используют общий read(), ломаются оба. Сохранить чтение прежнего v1.",
+          "authority": "Named baseline behavior @538d11e2310e86e7633e48546ab85fbfd6b24f1e: собственные корректные version:1 архивы доступны через archive_search/archive_read; ADR-0482:30–34 сохраняет доступность здоровых разговоров."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

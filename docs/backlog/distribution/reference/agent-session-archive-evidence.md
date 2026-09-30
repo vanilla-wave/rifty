@@ -128,3 +128,23 @@ RED: `RIFTY_PLAYGROUND_PORT=5417 pnpm test:browser-unit tests/browser-unit/agent
 → 3 failed (search receipt failed on the corrupt file; order `[1000, 3000, 2000]`; image bytes matched). /tmp/rifty-archive-search-red.log.
 GREEN: full suite → 14/14 PASS (9.4 s), /tmp/rifty-archive-search-green.log.
 `pnpm --filter @riftydev/agent typecheck` PASS; agent unit 118/118; `biome check` clean.
+- `pnpm pr:check` at a6b0255a9: 27/27 PASS; `test:run` had one vitest time-out in `packages/workbench/src/glue/dep-snapshot.test.ts` under load 36 (codex review + browser suite running concurrently), passed on its single isolated rerun; /tmp/rifty-archive-search-pr-check.log.
+
+## Final+GREEN reception: F1 reader compatibility, F2 corrupt bound
+
+Independent Final+GREEN (canonical runner, `agent-session-archive-repair-review-f1.json`,
+reviewed a6b0255a9) returned BLOCKER F1: requiring `restoredMessageCount` at unchanged
+`version: 1` rejected every healthy file written by the 538d11e23 writer as corrupt
+(`corrupt-input`: schema misclassification; `read()` is shared, so search and read both
+broke). Accepted: that writer copied restored history into the file, so a missing field
+reads as 0 exactly. F2 (concern, also raised by a second fresh reviewer): `corrupt[]`
+was unbounded when no healthy match existed; the outer 16 KiB receipt cap cut the JSON.
+Fix: `corrupt` lists at most 10 entries plus `corruptCount`.
+The first canonical run failed as a harness error: OpenAI strict output schema rejects
+`tools/review/review-schema.json` (`required` must list every property); retried once
+with a `/tmp` copy whose `required` arrays are complete (same model, `blockers.mjs`
+unchanged). Recorded in `docs/process/traps.md`.
+
+RED: `RIFTY_PLAYGROUND_PORT=5417 pnpm test:browser-unit tests/browser-unit/agent-archive.spec.ts -g 'before restoredMessageCount|bounds the corrupt list'`
+→ 2 failed (legacy file listed as corrupt, 0 matches; corrupt list 12, no total). /tmp/rifty-archive-f1f2-red.log.
+GREEN: full suite → 16/16 PASS (9.2 s), /tmp/rifty-archive-f1f2-green.log.

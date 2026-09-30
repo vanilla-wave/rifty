@@ -23,12 +23,14 @@ contract; ADR-0474 compaction remains a context projection.
   Reset selects a fresh UUID; no archive writes share session IDs across tabs.
   Host-restored `initialMessages` stay the host's record (ADR-0466): the envelope
   carries `restoredMessageCount`, never their copy — one conversation, one file.
+  A version-1 file without the field (pre-field writer copied restored history)
+  reads as 0; no version bump for a field whose absence has one exact meaning.
 - Native writable close is the durability boundary. Emit `archive` receipt only
   afterwards; `send` settles all admitted writes before final status. Begin each
   run with an incomplete snapshot; finish marks complete only after settlement.
   Browser death leaves the last acknowledged snapshot and explicit incompleteness.
   A corrupt file fails `archive_read` loudly; `archive_search` lists it under
-  `corrupt` and keeps healthy conversations discoverable. Historical tools are
+  `corrupt` (bounded, with `corruptCount`) and keeps healthy conversations discoverable. Historical tools are
   never replayed.
 - `archive_search` scans project identity and original text (never image bytes),
   returns paginated matches newest first; `archive_read` returns paginated original JSON. Both read-only, available

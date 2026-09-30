@@ -15,6 +15,7 @@ function searchResult(trace: { transcript: { role: string; toolName?: string }[]
   return JSON.parse(text.slice(text.indexOf('\n') + 1)) as {
     matches: { sessionId: string; createdAt: number; restoredMessageCount: number }[];
     corrupt: { entry: string; message: string }[];
+    corruptCount: number;
     nextOffset: number | null;
   };
 }
@@ -166,6 +167,53 @@ test('discovery matches original text but never image bytes', async ({ page }) =
     fixture,
   );
   expect(searchResult(text).matches).toHaveLength(1);
+});
+test('files written before restoredMessageCount stay readable as fully archived', async ({
+  page,
+}) => {
+  await gotoHarness(page);
+  const id = '00000000-0000-4000-8000-000000000004';
+  await page.evaluate(
+    async ({ url, id }) =>
+      (await import(/* @vite-ignore */ url)).seed([
+        { sessionId: id, createdAt: 4000, text: 'legacy envelope', legacy: true },
+      ]),
+    { url: fixture, id },
+  );
+  const trace = await page.evaluate(
+    async (url) => (await import(/* @vite-ignore */ url)).search('legacy envelope'),
+    fixture,
+  );
+  const { matches, corrupt } = searchResult(trace);
+  expect(corrupt).toEqual([]);
+  expect(
+    matches.map((match: { sessionId: string; restoredMessageCount: number }) => [
+      match.sessionId,
+      match.restoredMessageCount,
+    ]),
+  ).toEqual([[id, 0]]);
+  const read = await page.evaluate(
+    async ({ url, id }) => (await import(/* @vite-ignore */ url)).read(id),
+    { url: fixture, id },
+  );
+  const result = read.transcript.find(
+    (message: { role: string; toolName?: string }) =>
+      message.role === 'toolResult' && message.toolName === 'archive_read',
+  );
+  expect(result?.isError).toBe(false);
+  expect(JSON.stringify(result)).toContain('legacy envelope');
+});
+test('discovery bounds the corrupt list and reports the total', async ({ page }) => {
+  await gotoHarness(page);
+  await page.evaluate(async (url) => (await import(/* @vite-ignore */ url)).corrupt(12), fixture);
+  const trace = await page.evaluate(
+    async (url) => (await import(/* @vite-ignore */ url)).search(''),
+    fixture,
+  );
+  const { matches, corrupt, corruptCount } = searchResult(trace);
+  expect(matches).toEqual([]);
+  expect(corrupt).toHaveLength(10);
+  expect(corruptCount).toBe(12);
 });
 
 test('compaction retains original messages outside the projected context', async ({ page }) => {

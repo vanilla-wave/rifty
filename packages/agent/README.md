@@ -278,7 +278,8 @@ a fresh conversation after repairing storage. No memory fallback. Do not report
 streamed text as saved before its archive receipt. `dispose` settles the active run.
 
 Files contain a versioned JSON payload plus SHA-256. A malformed/checksum-invalid
-record fails `archive_read` loudly and is listed under `corrupt` by `archive_search`,
-which never hides healthy conversations. Browser eviction/site-data deletion and bytes
+record fails `archive_read` loudly and is listed under `corrupt` (at most 10 entries,
+`corruptCount` total) by `archive_search`, which never hides healthy conversations.
+A version-1 file written before `restoredMessageCount` existed reads as 0 restored. Browser eviction/site-data deletion and bytes
 never acknowledged are outside durability. Project export/import/deletion do not
 move or remove this archive. Storage is local; no cloud or device synchronization.
