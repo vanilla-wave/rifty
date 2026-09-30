@@ -18,6 +18,10 @@ generic kit is reusable; the agent UI lives in the consumer.
 
 ## Options or Next
 
+- Shared filesystem history/agent recall is owned by
+  `docs/backlog/epics/agent-session-archive/goal.md`; this item retains only
+  any future history browsing/resume UI. Do not duplicate archive storage here.
+
 - Chat + streamed tool-call (`onUpdate`) rendering; diff + per-edit approve-gate; history.
 - Build over the IDE-kit atoms (depends-on EPIC C/D); reuse the existing playground editor/terminal/preview.
 - Lives in the agent product (an `apps/` consumer or a separate repo), never in rifty packages.
