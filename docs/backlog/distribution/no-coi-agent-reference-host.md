@@ -64,3 +64,6 @@ ready-verdict: 2026-09-30 — Contract+RED @ 2287ff4f0d031aa01f68c89bfe0f86acd99
 - 2026-09-30 — Source inputs are app-owned: first-open sources after apply; reopen omits stale initial files; deploy receives persisted real post-agent manifest. No automatic manifest diff/merge.
 - 2026-09-30 — Benchmark imports fixture host directly; packing copies both files with their relative paths intact, resolving library imports in consumer/node_modules. No duplicate composition or new package.
 - 2026-09-30 — Existing preview packed proof stays; new commands-only reference journey and benchmark smoke extend default CI acceptance.
+
+- 2026-09-30 — Optional no-COI benchmark policies enter existing report/comparison identity; differing-policy comparison RED→GREEN preserves ADR-0478 honesty.
+- 2026-09-30 — Existing benchmark preview registers its SW on demand outside the commands host; real preview RED and packed Vite GREEN preserve baseline.

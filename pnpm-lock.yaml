@@ -470,6 +470,9 @@ importers:
       '@riftydev/runtime-wasi':
         specifier: workspace:*
         version: link:../packages/runtime-wasi
+      '@riftydev/sdk':
+        specifier: workspace:*
+        version: link:../packages/rifty
       '@riftydev/shadow-registry':
         specifier: workspace:*
         version: link:../tools/shadow-registry
@@ -479,6 +482,9 @@ importers:
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../packages/vfs
+      '@riftydev/workbench':
+        specifier: workspace:*
+        version: link:../packages/workbench
 
   tools/agent-bench:
     dependencies:

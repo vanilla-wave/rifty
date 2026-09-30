@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Link the shared no-COI agent reference host and explicit app-owned snapshot/manifest deployment recipe (ADR-0489).
+
 - Add captured toolchain.registryUrl and readonly registryConnected; project/agent npm install reports registry-missing without a connection. Toolchain protocol v6 requires matching copied assets (ADR-0487).
 
 - Add early SandboxOpening.runtime.on, structural sandboxErrorKind and real boot/snapshot progress; preserve awaited readiness and restart subscriptions (ADR-0486).

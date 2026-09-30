@@ -1,5 +1,10 @@
 import { readFile } from 'node:fs/promises';
-import { type OpenAIModel, type SimpleStreamOptions, createOpenAIProvider } from '@riftydev/agent';
+import {
+  type OpenAIModel,
+  type SandboxAgentHostOptions,
+  type SimpleStreamOptions,
+  createOpenAIProvider,
+} from '@riftydev/agent';
 
 export type Endpoint = OpenAIModel & {
   thinking: SimpleStreamOptions['reasoning'] | 'off';
@@ -12,6 +17,7 @@ export interface Limits {
 }
 export interface Config {
   endpoint?: Endpoint;
+  noCoiPolicies?: SandboxAgentHostOptions['policies'];
   limits: Limits;
   runsPerTask: number;
   playgroundPort: number;
@@ -38,7 +44,7 @@ function text(value: unknown, name: string): string {
 }
 export async function loadConfig(path?: string): Promise<Config> {
   const raw = record(path ? JSON.parse(await readFile(path, 'utf8')) : {}, 'config');
-  keys(raw, ['endpoint', 'limits', 'runsPerTask', 'playgroundPort']);
+  keys(raw, ['endpoint', 'noCoiPolicies', 'limits', 'runsPerTask', 'playgroundPort']);
   const limits = raw.limits === undefined ? {} : record(raw.limits, 'limits');
   keys(limits, ['maxToolCalls', 'runTimeoutMs']);
   let endpoint: Endpoint | undefined;
@@ -62,6 +68,7 @@ export async function loadConfig(path?: string): Promise<Config> {
       'thinking',
       'temperature',
       'envKey',
+      'textOnlyContent',
     ]);
     const baseUrl = text(value.baseUrl, 'endpoint.baseUrl');
     const url = new URL(baseUrl);
@@ -118,8 +125,11 @@ export async function loadConfig(path?: string): Promise<Config> {
   }
   return {
     endpoint,
+    ...(raw.noCoiPolicies === undefined
+      ? {}
+      : { noCoiPolicies: raw.noCoiPolicies as SandboxAgentHostOptions['policies'] }),
     limits: {
-      maxToolCalls: positive(limits.maxToolCalls ?? 40, 'maxToolCalls'),
+      maxToolCalls: positive(limits.maxToolCalls ?? 100, 'maxToolCalls'),
       runTimeoutMs: positive(limits.runTimeoutMs ?? 600000, 'runTimeoutMs'),
     },
     runsPerTask: positive(raw.runsPerTask ?? 3, 'runsPerTask'),

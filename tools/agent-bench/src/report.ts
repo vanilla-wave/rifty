@@ -42,6 +42,7 @@ export interface Report {
     taskSet: string;
     endpoint: Endpoint;
     limits: Config['limits'];
+    noCoiPolicies?: Config['noCoiPolicies'];
     runsPerTask: number;
     toolContextCaveat: string;
     unsupported: string[];
@@ -56,6 +57,13 @@ export function privateReport(report: Report, secrets: readonly string[]): Repor
       ...report.header,
       model: text(report.header.model),
       endpoint: JSON.parse(redactJson(report.header.endpoint, secrets)) as Endpoint,
+      ...(report.header.noCoiPolicies === undefined
+        ? {}
+        : {
+            noCoiPolicies: JSON.parse(
+              redactJson(report.header.noCoiPolicies, secrets),
+            ) as Config['noCoiPolicies'],
+          }),
     },
     runs: report.runs.map((run) => ({
       ...run,
@@ -109,6 +117,7 @@ export async function writeReport(dir: string, report: Report) {
     '',
     `Profile: ${report.header.profile}; task set: ${report.header.taskSet}; runs/task: ${report.header.runsPerTask}.`,
     `Limits: ${JSON.stringify(report.header.limits)}.`,
+    `no-COI policies: ${JSON.stringify(report.header.noCoiPolicies ?? {})}.`,
     `Catalog entry: ${JSON.stringify(report.header.endpoint)}.`,
     `Source: ${report.header.sourceRevision}${report.header.sourceDirty ? ' (working tree modified)' : ''}; versions: ${JSON.stringify(report.header.versions)}.`,
     '',
@@ -228,7 +237,7 @@ function comparisonGroups(report: Report) {
   return { groups, identities };
 }
 export function compareReports(before: Report, after: Report) {
-  for (const key of ['endpoint', 'limits', 'taskSet', 'runsPerTask'] as const)
+  for (const key of ['endpoint', 'limits', 'noCoiPolicies', 'taskSet', 'runsPerTask'] as const)
     if (!isDeepStrictEqual(before.header[key], after.header[key]))
       throw new Error(`Incompatible comparison configuration: ${key}`);
   const previous = comparisonGroups(before);
