@@ -30,3 +30,12 @@ No import/typecheck failure. Full transient log: /tmp/rifty-archive-red.log.
 - `pnpm --filter @riftydev/agent typecheck`: PASS.
 - Pi 0.85.1 dist/agent.js:139–145,417–418 awaits event listener promises. Session drains its archive chain there; synchronous retry receipt ingress shares the same chain. No tool-dispatch coordinator added.
 - `pnpm pr:check`: 27/27 PASS. `test:run` initially failed two timer-effect assertions in `packages/workbench/src/workers/no-coi-project-command-exit.test.ts:64,80`, zero Vitest timeouts, host load 15.9/22.3/13.9. Its single automatic isolated rerun passed. Non-isolated failure remains unexplained; no reproducing defect or speculative source repair claimed. Full log: /tmp/rifty-archive-pr-check.log; initial report: /private/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-pr-check-ZJGedp/test-run.json.
+
+## Final review repair
+
+Fresh reviewer archive_core_final found F1: archive_search searched serialized JSON,
+so original quotes/newlines/backslashes could not match. Independent native Chromium
+probe: /tmp/rifty-archive-final-probe.log. Accepted FIX; no scope change.
+Main suite RED: `RIFTY_PLAYGROUND_PORT=5413 pnpm test:browser-unit tests/browser-unit/agent-archive.spec.ts -g 'discovery searches original'` → 1 failed, missing shop result.
+Search now visits decoded strings at one boundary. Same full suite → 11/11 PASS
+(8.7 s), including the unchanged RED assertion. No source test weakened.

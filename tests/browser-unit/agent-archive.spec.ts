@@ -175,3 +175,25 @@ test('quota failure emits an archive error and no durable success', async ({ pag
   );
   expect(result.events.some((event: { type: string }) => event.type === 'archive')).toBe(false);
 });
+
+test('discovery searches original quoted, multiline and backslash text', async ({ page }) => {
+  await gotoHarness(page);
+  for (const query of ['"cookie-saffron"', 'first\nsecond', 'path\\cookie']) {
+    const receipt = await page.evaluate(
+      async ({ url, query }) => {
+        const f = await import(/* @vite-ignore */ url);
+        const agent = f.session(['Saved.']);
+        await agent.send(`Authentication decision: ${query}`);
+        await agent.dispose();
+        const trace = await f.search(query);
+        return trace.transcript.find(
+          (message: { role: string; toolName?: string }) =>
+            message.role === 'toolResult' && message.toolName === 'archive_search',
+        );
+      },
+      { url: fixture, query },
+    );
+    expect(receipt?.isError).toBe(false);
+    expect(JSON.stringify(receipt)).toContain('shop');
+  }
+});

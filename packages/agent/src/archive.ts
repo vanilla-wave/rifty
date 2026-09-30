@@ -28,6 +28,14 @@ function offset(value: number | undefined): number {
   return value;
 }
 
+function containsText(value: unknown, query: string): boolean {
+  if (typeof value === 'string') return value.toLowerCase().includes(query);
+  if (Array.isArray(value)) return value.some((item) => containsText(item, query));
+  if (value !== null && typeof value === 'object')
+    return Object.values(value).some((item) => containsText(item, query));
+  return false;
+}
+
 /** One writer per random conversation file; native close is the commit authority. */
 export function createArchive(
   options: AgentArchiveOptions,
@@ -156,8 +164,8 @@ export function createArchive(
         if (entry.name === `${conversation.sessionId}.json`) continue;
         if (!entry.isFile || !entry.name.endsWith('.json'))
           throw new Error(`corrupt archive entry: ${entry.name}`);
-        const { data, payload } = await read(entry.name.slice(0, -5));
-        if (!payload.toLowerCase().includes(args.query.toLowerCase())) continue;
+        const { data } = await read(entry.name.slice(0, -5));
+        if (!containsText(data, args.query.toLowerCase())) continue;
         if (seen++ < start) continue;
         if (matches.length === 5) {
           more = true;
