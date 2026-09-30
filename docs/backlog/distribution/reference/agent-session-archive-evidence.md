@@ -39,3 +39,4 @@ probe: /tmp/rifty-archive-final-probe.log. Accepted FIX; no scope change.
 Main suite RED: `RIFTY_PLAYGROUND_PORT=5413 pnpm test:browser-unit tests/browser-unit/agent-archive.spec.ts -g 'discovery searches original'` → 1 failed, missing shop result.
 Search now visits decoded strings at one boundary. Same full suite → 11/11 PASS
 (8.7 s), including the unchanged RED assertion. No source test weakened.
+- Post-F1 `pnpm pr:check`: 27/27 PASS. Initial `test:run` had 3 failures / 2 Vitest timeouts in installer-shadow-recipe-v2-acquisition-replay-authority.contract.test.ts and dep-snapshot.test.ts; both passed the single automatic isolated rerun (host load 41.4/45.4/34.6). No isolated reproduction or speculative repair. Log: /tmp/rifty-archive-pr-check-2.log.
