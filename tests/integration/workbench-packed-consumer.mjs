@@ -1177,7 +1177,7 @@ async function main() {
         consumerRoot,
         await readJson(resolve(consumerRoot, 'measure/report.json')),
       );
-      const agentRegistry = await startBrowserRegistry(await browserRegistryPackages());
+      const agentRegistry = await startBrowserRegistry(await browserRegistryPackages(repoRoot));
       try {
         await provePackedAgent(consumerRoot, agentRegistry.origin);
         assert(

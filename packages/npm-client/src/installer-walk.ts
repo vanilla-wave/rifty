@@ -367,6 +367,9 @@ export async function walkAndPin(
         return acquisition;
       });
     }
+    // Own rejection now; traversal may await metadata before allSettled observes it.
+    // Retain the original promise so required failures still abort publication.
+    void pending.catch(() => {});
     inFlight.set(key, pending);
     return pending;
   }
