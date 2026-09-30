@@ -130,3 +130,48 @@ test('reload during a native write preserves acknowledged messages and flags inc
   expect(records[0].text).toContain('incomplete');
   expect(records[0].text).not.toContain('unacknowledged-tail');
 });
+
+test('images and project provenance remain exact; provider credentials are absent', async ({
+  page,
+}) => {
+  await gotoHarness(page);
+  const image = await page.evaluate(
+    async (url) => (await import(/* @vite-ignore */ url)).saveImage(),
+    fixture,
+  );
+  await page.reload();
+  const records = await saved(page);
+  expect(records).toHaveLength(1);
+  const conversation = JSON.parse(JSON.parse(records[0].text).payload);
+  expect(conversation.project).toEqual({ id: 'shop', name: 'shop' });
+  expect(conversation.messages[0].content).toContainEqual(image);
+  expect(records[0].text).not.toContain('provider-secret-must-not-be-archived');
+});
+test('durable receipt is emitted only after native close settles', async ({ page }) => {
+  await gotoHarness(page);
+  const result = await page.evaluate(
+    async (url) => (await import(/* @vite-ignore */ url)).acknowledgement(),
+    fixture,
+  );
+  expect(result.before).toBe(0);
+  expect(
+    result.events.filter((event: { type: string }) => event.type === 'archive').length,
+  ).toBeGreaterThan(0);
+});
+test('quota failure emits an archive error and no durable success', async ({ page }) => {
+  await gotoHarness(page);
+  await page.evaluate(() => {
+    FileSystemFileHandle.prototype.createWritable = async () => {
+      throw new DOMException('archive full', 'QuotaExceededError');
+    };
+  });
+  const result = await page.evaluate(
+    async (url) => (await import(/* @vite-ignore */ url)).save(),
+    fixture,
+  );
+  expect(result.firstStatus).toBe('error');
+  expect(result.events.some((event: { type: string }) => event.type === 'archive-error')).toBe(
+    true,
+  );
+  expect(result.events.some((event: { type: string }) => event.type === 'archive')).toBe(false);
+});

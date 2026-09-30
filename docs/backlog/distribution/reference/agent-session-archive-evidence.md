@@ -22,3 +22,10 @@ no archive receipt/files; missing archive_search; permission failure incorrectly
 yields done; corruption not read; compaction leaves no original archive;
 cross-tab saves produce zero files; no native archive write to interrupt.
 No import/typecheck failure. Full transient log: /tmp/rifty-archive-red.log.
+
+## Core GREEN
+
+- `RIFTY_PLAYGROUND_PORT=5413 pnpm test:browser-unit tests/browser-unit/agent-archive.spec.ts`: 10/10 PASS (7.5 s), including images/provenance, credentials exclusion, quota and native-close receipt order.
+- `pnpm exec vitest run --project unit packages/agent/src`: 118/118 PASS, 11 files.
+- `pnpm --filter @riftydev/agent typecheck`: PASS.
+- Pi 0.85.1 dist/agent.js:139–145,417–418 awaits event listener promises. Session drains its archive chain there; synchronous retry receipt ingress shares the same chain. No tool-dispatch coordinator added.

@@ -119,9 +119,16 @@ export interface AgentResourceReport {
   readonly unsupported: readonly { readonly kind: string; readonly path: string }[];
 }
 
+/** Local OPFS archive, independent of project lifetime. Same namespace shares history. */
+export interface AgentArchiveOptions {
+  readonly namespace: string;
+  readonly project: { readonly id: string; readonly name: string };
+}
+
 export interface AgentSessionCommonOptions extends AgentRunLimits {
   /** Native history, copied at creation. Incomplete tool pairs throw TypeError. */
   readonly initialMessages?: readonly AgentMessage[];
+  readonly archive?: AgentArchiveOptions;
   readonly host: AgentHost;
   readonly tools?: readonly AgentTool[];
   readonly instructions?: readonly string[];
@@ -159,6 +166,15 @@ export type AgentStatus =
   | 'context-exceeded';
 
 export type AgentSessionEvent =
+  | {
+      readonly type: 'archive';
+      readonly sessionId: string;
+      readonly path: string;
+      readonly revision: number;
+      readonly messageCount: number;
+      readonly state: 'complete' | 'incomplete';
+    }
+  | { readonly type: 'archive-error'; readonly sessionId: string; readonly message: string }
   | {
       readonly type: 'repeated-call';
       readonly toolName: string;

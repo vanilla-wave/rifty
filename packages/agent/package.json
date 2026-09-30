@@ -46,6 +46,7 @@
     "@riftydev/sdk": "workspace:*",
     "@riftydev/workbench": "workspace:*",
     "ignore": "7.0.5",
-    "yaml": "2.9.0"
+    "yaml": "2.9.0",
+    "@riftydev/vfs": "workspace:*"
   }
 }

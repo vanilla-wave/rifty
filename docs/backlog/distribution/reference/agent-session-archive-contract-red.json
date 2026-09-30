@@ -1,0 +1,144 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED допускает IMPLEMENT; 7/7 behavioral RED повторены независимо. Два NOTE; продукт и goal ещё не завершены.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/agent-session-archive.md @ 7bc66f2aa9c22e96f1b4eb6c41bb2c0ec32a993a; BASE 25266b71a; goal docs/backlog/epics/agent-session-archive/goal.md; ADR-0482. Installed-host acceptance остаётся следующим mapped unit.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1–I3",
+      "location": "docs/backlog/distribution/agent-session-archive.md:23",
+      "summary": "Core archive имеет RED, ещё требует реализации, GREEN и независимого Final+GREEN."
+    },
+    {
+      "clause": "I2 + I4; User scenario 2–4",
+      "location": "docs/backlog/distribution/agent-session-archive-public-proof.md:14",
+      "summary": "Следующий mapped unit: installed SDK/Workbench consumers, source rename/delete, export/import isolation, reload и real-model recall."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: original messages/tool payloads and provenance survive reset/new session/compaction",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-archive.spec.ts:7",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: another project discovers and reads paginated original history",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-archive.spec.ts:24",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: durable close, interruption, visible storage errors and corrupt records",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-archive.spec.ts:118",
+      "note": ""
+    },
+    {
+      "row": "torn-state × close/reload: acknowledged snapshot survives; run remains incomplete",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-archive.spec.ts:118",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail × snapshot write: visible storage failure, no successful run",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-archive.spec.ts:48",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × discovery/read: corruption reported, never complete",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-archive.spec.ts:61",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key × cross-tab save: distinct files retain conversations",
+      "source": "fault-matrix",
+      "trace": "I1 + I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-archive.spec.ts:103",
+      "note": ""
+    },
+    {
+      "row": "lossy-aggregate × compact/read: originals remain readable outside context/output window",
+      "source": "fault-matrix",
+      "trace": "I1 + I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-archive.spec.ts:24",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/agent-archive.spec.ts:7",
+          "summary": "Carrier сохраняет text/toolResult, но прямо не проверяет images, source identity и полное содержимое tool calls/results. Добавить точные assertions до Final+GREEN. Без исполненного mutant это NOTE по REV-5, coverage остаётся pass.",
+          "authority": "",
+          "evidence": "Чтение tests/browser-unit/agent-archive.spec.ts:7–46 и fixtures/agent-archive.ts:51–68; mutant не выполнялся."
+        },
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/agent-archive.spec.ts:48",
+          "summary": "Fault carriers проверяют permission status и native interruption; quota, archive-error event и отсутствие receipt до close прямо не утверждаются. Полезны прямые carriers до Final+GREEN; без исполненного mutant это NOTE по REV-5.",
+          "authority": "",
+          "evidence": "Независимый запуск RIFTY_PLAYGROUND_PORT=5414 pnpm test:browser-unit tests/browser-unit/agent-archive.spec.ts: 7 failed/7 по отсутствующим archive behavior; /tmp/rifty-archive-review-red.log. Это не mutant-proof отдельных assertions."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "7bc66f2aa9c22e96f1b4eb6c41bb2c0ec32a993a"
+}

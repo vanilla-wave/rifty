@@ -56,9 +56,7 @@ export async function save(reset = false) {
   ]);
   const events: unknown[] = [];
   agent.subscribe((event) => events.push(event));
-  await agent.send(
-    'Shop authentication decision ' + 'old-context '.repeat(2500) + 'cookie-saffron',
-  );
+  await agent.send(`Shop authentication decision ${'old-context '.repeat(2500)}cookie-saffron`);
   const firstStatus = agent.status();
   if (reset) {
     agent.reset();
@@ -79,7 +77,7 @@ export async function saved() {
 }
 export async function search(query: string, offset = 0) {
   const agent = session([[{ name: 'archive_search', args: { query, offset } }], 'Found.'], 'blog');
-  await agent.send('Find earlier conversations about ' + query);
+  await agent.send(`Find earlier conversations about ${query}`);
   const trace = await agent.exportTrace();
   await agent.dispose();
   return trace;
@@ -133,4 +131,76 @@ export async function interrupt() {
     return writer;
   };
   void agent.send('unacknowledged-tail');
+}
+
+export async function saveImage() {
+  const { createModels, createOpenAIProvider } = await import('@riftydev/agent');
+  const provider = scriptedProvider(['Image recorded']);
+  const models = createModels();
+  models.setProvider(
+    createOpenAIProvider({
+      id: 'vision',
+      apiKey: 'provider-secret-must-not-be-archived',
+      fetch: provider.fetch,
+      models: [
+        {
+          id: 'vision',
+          name: 'vision',
+          provider: 'vision',
+          api: 'openai-completions',
+          baseUrl: new URL('/model', location.href).href,
+          input: ['text', 'image'],
+          contextWindow: 128000,
+          maxTokens: 8192,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        },
+      ],
+    }),
+  );
+  const image = {
+    type: 'image' as const,
+    mimeType: 'image/png',
+    data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+  };
+  const agent = session([], 'shop', { models, model: 'vision' });
+  await agent.send('Keep this original image', [image]);
+  await agent.dispose();
+  return image;
+}
+
+export async function acknowledgement() {
+  const agent = session(['Saved']);
+  const events: { type: string }[] = [];
+  agent.subscribe((event) => events.push(event));
+  const original = FileSystemFileHandle.prototype.createWritable;
+  let enter = () => {};
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  let release = () => {};
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let first = true;
+  FileSystemFileHandle.prototype.createWritable = async function (options) {
+    const writer = await original.call(this, options);
+    const close = writer.close.bind(writer);
+    writer.close = async () => {
+      if (first) {
+        first = false;
+        enter();
+        await released;
+      }
+      await close();
+    };
+    return writer;
+  };
+  const run = agent.send('Confirm after close');
+  await entered;
+  const before = events.filter((event) => event.type === 'archive').length;
+  release();
+  await run;
+  FileSystemFileHandle.prototype.createWritable = original;
+  await agent.dispose();
+  return { before, events };
 }

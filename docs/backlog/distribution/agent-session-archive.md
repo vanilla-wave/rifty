@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Persist agent conversations as a shared filesystem archive on SDK and Workbench hosts
 created: 2026-09-30
 why: Host-owned initialMessages cannot automatically preserve and discover all conversations across projects.
@@ -43,5 +43,7 @@ historical replay, or recovery of never-acknowledged bytes. Archive-disabled
 sessions keep the existing host-owned history contract.
 
 ## Decisions
+
+ready-verdict: 2026-09-30 — Contract+RED @ 7bc66f2aa9c22e96f1b4eb6c41bb2c0ec32a993a
 
 - 2026-09-30 — ADR-0482: shared OpfsVfs, UUID-owned atomic snapshots and bounded read tools; reference/agent-session-archive-evidence.md.
