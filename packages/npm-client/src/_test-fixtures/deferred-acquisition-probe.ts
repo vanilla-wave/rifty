@@ -10,15 +10,21 @@ for (const hook of [false, true]) {
   const unhandled: unknown[] = [];
   const observe = (error: unknown) => unhandled.push(error);
   process.on('unhandledRejection', observe);
-  const heldMetadata = Promise.withResolvers<void>();
-  const rejectedTarball = Promise.withResolvers<void>();
+  let releaseMetadata!: () => void;
+  const heldMetadata = new Promise<void>((resolve) => {
+    releaseMetadata = resolve;
+  });
+  let notifyRejection!: () => void;
+  const rejectedTarball = new Promise<void>((resolve) => {
+    notifyRejection = resolve;
+  });
   const fault = new TypeError('controlled Sass tarball delivery failure');
   const registry = new RegistryClient({
     baseUrl: 'https://registry.fixture',
     maxRetries: 0,
     fetch: async (url) => {
       if (url === entries[0]?.manifest.dist.tarball) {
-        rejectedTarball.resolve();
+        notifyRejection();
         throw fault;
       }
       const archive = entries.find((entry) => entry.manifest.dist.tarball === url);
@@ -27,7 +33,7 @@ for (const hook of [false, true]) {
         (entry) => url === `https://registry.fixture/${entry.manifest.name}`,
       );
       if (!entry) return new Response('optional dependency absent', { status: 404 });
-      if (entry.manifest.name === 'chokidar') await heldMetadata.promise;
+      if (entry.manifest.name === 'chokidar') await heldMetadata;
       return new Response(
         JSON.stringify({
           name: entry.manifest.name,
@@ -52,11 +58,11 @@ for (const hook of [false, true]) {
     () => ({ sameFailure: false }),
     (error: unknown) => ({ sameFailure: error === fault }),
   );
-  await rejectedTarball.promise;
+  await rejectedTarball;
   // Allow the host's unhandled-rejection turn while descendant metadata is held.
   await setImmediate();
   await setImmediate();
-  heldMetadata.resolve();
+  releaseMetadata();
   const result = await outcome;
   await setImmediate();
   process.removeListener('unhandledRejection', observe);

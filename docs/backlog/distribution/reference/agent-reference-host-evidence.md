@@ -105,7 +105,8 @@ no required unit/goal residuals; `agent-reference-host-final-green.json`.
   the reviewed SHA. Quality outcome `fail` is expected: the scripted read-only
   model leaves the seeded date-sort defect; no quality improvement claimed.
 - Source Chromium recipe2/2, config/comparison/structural guards18/18;
-  packed benchmark smoke executes genuine Vite preview in both variants.
+  packed benchmark smoke executes both agent configurations and genuine Vite
+  preview in the unrestricted configuration.
 
 Same-program packed journey proves the transitions between accepted SDK,
 agent and host capabilities; earlier accepted library evidence remains linked

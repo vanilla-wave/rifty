@@ -42,3 +42,8 @@ it remains required because the retained Sass fault surfaced it during this run.
   assertion: `/tmp/rifty-pr357-ci-cowsay-red.log`.
 - The documentation-close tree530c177e7 also ran full pr:check27/27; this is
   not substituted for gates on the new implementation below.
+
+The first repair gate stopped at a fixture-only TS target mismatch
+(Promise.withResolvers is newer than the package lib). Replaced with ordinary
+Promise resolver capture; no target change. Stopped that owned gate after diagnosis;
+no whole-gate PASS claimed from it.
