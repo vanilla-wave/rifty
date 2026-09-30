@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Shell results preserve streamed stdout/stderr order after the status header.
+
 - Repeated-call detection ignores mutation host-diagnostics timing (pending vs settled); README/ADR-0475 note state exactly which consumer results get budget receipts.
 - Breaking: scrub built-in keys and declared `secrets` once at provider ingress in provider error text only (`errorMessage`, retry/compaction errors, thrown request errors; assistant text/thinking stay raw); headers are no longer implicit secrets; export-time redaction removed (ADR-0479).
 

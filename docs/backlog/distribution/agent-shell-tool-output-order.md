@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Present a command's stdout and stderr to the model in the order they were produced
 created: 2026-09-27
 why: the shell tool's text concatenates all stdout then all stderr, so build errors lose their position relative to the progress lines around them while the streaming events keep the real order
@@ -27,7 +27,22 @@ production order, as the events and a terminal do.
 - The 16 KiB head/tail cap (`agent-tool-text-cap-and-run-budgets-measure`).
 - Terminal rendering; `RiftyTerminal` is unaffected.
 
+## User scenario
+
+Run a shell command writing stderr/stdout/stderr/stdout; the next model request
+and transcript preserve the same order as the emitted terminal events.
+
+## Challenge
+
+challenge: 2026-09-30 — clear; reuse goal fidelity audit I10 and accepted
+terminal-order obligation; observed defect repair adds no new premise.
+
+## Acceptance
+
+1. Successful and nonzero commands keep terminal order in model text after the
+   unchanged status heading; structured per-stream outcomes remain. → I10
+
 ## Decisions
 
-- carrier (rebuild from the ordered `output` events already observed by the
-  tool vs an ordered capture on `SandboxCommandOutcome`) at pickup.
+- 2026-09-30 — observed baseline defect; RDY-8 repair route. Executed RED and sibling sweep: `reference/agent-shell-tool-output-order-evidence.md`.
+- 2026-09-30 — capture existing output events at their shared tool shaping point; no new outcome API.
