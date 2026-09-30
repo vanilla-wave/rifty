@@ -71,7 +71,7 @@ export interface ToolchainCreateSandboxOptions extends CreateSandboxCommonOption
   /** Explicit admission for the shared-memory-free tier. */
   readonly requireCrossOriginIsolation: false;
   /** Bundler-resolved `@riftydev/workbench/no-coi-toolchain-worker` URL. */
-  readonly toolchain: { readonly workerUrl: string | URL };
+  readonly toolchain: { readonly workerUrl: string | URL; readonly registryUrl?: string };
 }
 
 export type SandboxOpening<T extends Sandbox> = Promise<T> & {
@@ -116,6 +116,8 @@ export type SandboxSnapshotSource = ToolchainSnapshotSource;
 export type SandboxApplySnapshotInput = ToolchainApplySnapshotRequest;
 
 export interface SandboxToolchain {
+  /** Configured endpoint, not network reachability; per-call install overrides do not connect it. */
+  readonly registryConnected: boolean;
   install(input: ToolchainInstallRequest): Promise<void>;
   /** Open saved files without installation admission or acquisition. */
   open(input: ToolchainOpenRequest): Promise<void>;
@@ -314,11 +316,20 @@ async function bootSandbox(
       startupTimeoutMs: options.startupTimeoutMs,
     });
     const workerUrl = String(options.toolchain.workerUrl);
+    const registryUrl = options.toolchain.registryUrl;
+    if (
+      registryUrl !== undefined &&
+      (typeof registryUrl !== 'string' ||
+        registryUrl.trim().length === 0 ||
+        registryUrl.includes('\0'))
+    )
+      throw new TypeError('toolchain.registryUrl must be a non-empty string without NUL');
     const { swError } = await bootServiceWorker(options, deps, logger);
     return bootToolchainSandbox(
       {
         ...startup,
         workerUrl,
+        ...(registryUrl === undefined ? {} : { registryUrl }),
         vmEngine: startup.vmEngine ?? 'rewrite',
         capabilities,
         ...(swError === undefined ? {} : { swError }),
@@ -399,6 +410,7 @@ function logToolchainStartup(
 async function bootToolchainSandbox(
   options: ToolchainRuntimeOptions & {
     readonly workerUrl: string;
+    readonly registryUrl?: string;
     readonly vmEngine: NonNullable<RuntimeOptions['vmEngine']>;
     readonly capabilities: CapabilityCheck;
     readonly swError?: string;
@@ -516,6 +528,9 @@ async function bootToolchainSandbox(
   };
 
   const toolchain: SandboxToolchain = {
+    get registryConnected() {
+      return options.registryUrl !== undefined;
+    },
     async applySnapshot(input) {
       assertOperable();
       await current.toolchain.applySnapshot(input);
@@ -635,6 +650,7 @@ async function bootToolchainSandbox(
     project(projectOptions) {
       assertOperable();
       return createSandboxProject(projectOptions, {
+        registryUrl: options.registryUrl,
         current() {
           assertOperable();
           return current;

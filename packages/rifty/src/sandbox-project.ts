@@ -49,6 +49,7 @@ export interface SandboxProject {
 }
 
 interface ProjectOwner {
+  readonly registryUrl?: string;
   current(): ToolchainRuntimeController;
   mutate<T>(operation: () => Promise<T>): Promise<T>;
   replace(target: ToolchainRuntimeController): Promise<'replaced' | 'terminated'>;
@@ -116,7 +117,13 @@ export function createSandboxProject(
       let call: RuntimeCommandCall;
       try {
         call = target.command(
-          { project, command, cwd: options.cwd ?? project.root, env: options.env ?? {} },
+          {
+            project,
+            command,
+            cwd: options.cwd ?? project.root,
+            env: options.env ?? {},
+            ...(owner.registryUrl === undefined ? {} : { registryUrl: owner.registryUrl }),
+          },
           {
             started() {
               admitted = true;

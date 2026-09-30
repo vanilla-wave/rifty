@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Describe connected/unconnected SDK registry accurately in prompt notes; remove the host-only dependency instruction. Ordinary shell npm install uses SDK admission and policy (ADR-0487).
+
 - Export a pure native-event transcript reducer with stable rows, streaming/final messages, cancelled tools, output and continuation notices; budget terminals preserve prior history (ADR-0485).
 
 - Sandbox agent hosts accept distinct files/shell policies over one root, enforced by SDK project handles; reference README defaults unrestricted (ADR-0484).

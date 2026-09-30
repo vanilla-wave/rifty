@@ -54,3 +54,57 @@ for (const [index, scenario] of saveCases.entries()) {
     }
   });
 }
+
+test('resolved save never overwrites a real package.json edit during registry acquisition', async () => {
+  const vfs = new MemoryVfs();
+  await vfs.mkdir('/project', { recursive: true });
+  await vfs.writeFile('/project/package.json', JSON.stringify(initialManifest));
+  let entered!: () => void;
+  const entrance = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  registry.hold(async (path) => {
+    if (path === '/ms') {
+      entered();
+      await held;
+    }
+  });
+  const deps = { vfs, registry: new RegistryClient({ baseUrl: registry.origin }) };
+  const shell = new Shell({ cwd: '/project' });
+  shell.registerCommand(
+    'npm',
+    createNpmShellCommand({
+      ...deps,
+      packageAcquisitionAuthority: createTestNpmPackageAcquisitionAuthority(deps),
+    }),
+  );
+  const output: string[] = [];
+  const running = shell.run('npm install ms', { onChunk: (chunk) => output.push(chunk) });
+  try {
+    await Promise.race([
+      entrance,
+      running.then(() => {
+        throw new Error('Install never reached registry');
+      }),
+    ]);
+    const edit = JSON.stringify({
+      ...initialManifest,
+      description: 'edited during real fetch',
+      dependencies: { ms: '2.0.0' },
+    });
+    await vfs.writeFile('/project/package.json', edit);
+    release();
+    expect((await running).exitCode).toBe(0);
+    expect(await vfs.readFileText('/project/package.json')).toBe(edit);
+    await expect.poll(() => output.join('')).toContain('package.json changed');
+  } finally {
+    release();
+    registry.hold();
+    await running;
+    await shell.dispose();
+  }
+});

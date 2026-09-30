@@ -4,9 +4,7 @@
   "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
   "cases": [
     {
-      "args": [
-        "ms"
-      ],
+      "args": ["ms"],
       "dependencies": {
         "ms": "^2.1.3"
       },
@@ -20,9 +18,7 @@
       "installedVersion": "2.1.3"
     },
     {
-      "args": [
-        "ms@2.1.3"
-      ],
+      "args": ["ms@2.1.3"],
       "dependencies": {
         "ms": "^2.1.3"
       },
@@ -36,9 +32,7 @@
       "installedVersion": "2.1.3"
     },
     {
-      "args": [
-        "ms@^2.0.0"
-      ],
+      "args": ["ms@^2.0.0"],
       "dependencies": {
         "ms": "^2.1.3"
       },
@@ -52,10 +46,7 @@
       "installedVersion": "2.1.3"
     },
     {
-      "args": [
-        "ms",
-        "--save-exact"
-      ],
+      "args": ["ms", "--save-exact"],
       "dependencies": {
         "ms": "2.1.3"
       },
@@ -69,10 +60,7 @@
       "installedVersion": "2.1.3"
     },
     {
-      "args": [
-        "ms",
-        "--save-dev"
-      ],
+      "args": ["ms", "--save-dev"],
       "devDependencies": {
         "ms": "^2.1.3"
       },
@@ -86,9 +74,7 @@
       "installedVersion": "2.1.3"
     },
     {
-      "args": [
-        "ms@~2.0.0"
-      ],
+      "args": ["ms@~2.0.0"],
       "dependencies": {
         "ms": "~2.0.0"
       },
@@ -102,9 +88,7 @@
       "installedVersion": "2.0.0"
     },
     {
-      "args": [
-        "ms@>=2.0.0 <3"
-      ],
+      "args": ["ms@>=2.0.0 <3"],
       "dependencies": {
         "ms": "^2.1.3"
       },
@@ -118,9 +102,7 @@
       "installedVersion": "2.1.3"
     },
     {
-      "args": [
-        "ms@2"
-      ],
+      "args": ["ms@2"],
       "dependencies": {
         "ms": "^2.1.3"
       },
@@ -134,9 +116,7 @@
       "installedVersion": "2.1.3"
     },
     {
-      "args": [
-        "ms@latest"
-      ],
+      "args": ["ms@latest"],
       "dependencies": {
         "ms": "^2.1.3"
       },

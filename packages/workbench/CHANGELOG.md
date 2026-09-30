@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Run no-COI shell npm install through the existing installer/claim owner with Stop and readonly policy. Shared npm save logic matches resolved ranges/sections and preserves concurrent manifest edits; successful acquisition tests use real tarballs/Eddy (ADR-0487).
+
 - No-COI snapshot apply reports fetched bytes, changed entries and native flush counts; discriminate snapshot mismatches and persistence failures (ADR-0486).
 
 - No-COI runBin ends its process like a project command (ADR-0445): after any terminal, natural exit included, none of the invocation's timers (an `'exit'` listener's, an unref'd one) runs and its process/stdio listeners are retired (was: an extra `L|timer-in-exit`, an unref'd interval kept ticking, and the next runBin ran the prior one's `'exit'`/`uncaughtException` listeners — status 5 for Node's 1). Both hosts share `openNoCoiInvocationScope`.

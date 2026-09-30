@@ -1,4 +1,6 @@
+import type { CommandContext } from '@riftydev/shell';
 import { setSyncMirror } from '@riftydev/vfs/internal';
+import type { ParsedNpmInstallRequest } from '../glue/npm-shell-command.ts';
 import { createNoCoiProjectFs } from './no-coi-project-fs.ts';
 /// <reference lib="webworker" />
 
@@ -122,7 +124,10 @@ function activationSnapshot(
   return Object.freeze({ cwd, bindings, vfsBackend: runtimeBackend, ...snapshotFiles() });
 }
 
-async function installManifest(input: Extract<ToolchainRequest, { op: 'install' }>['input']) {
+async function installManifest(
+  input: Extract<ToolchainRequest, { op: 'install' }>['input'],
+  npm?: { readonly request: ParsedNpmInstallRequest; readonly context: CommandContext },
+) {
   const { installToolchainPackages } = await import('./no-coi-toolchain-install.ts');
   const identity = {
     root: input.cwd,
@@ -132,11 +137,18 @@ async function installManifest(input: Extract<ToolchainRequest, { op: 'install' 
     ),
   };
   const flush = () => installContext.fs.flush();
-  // ADR-0307: nested installation is an installer event in each ancestor tree.
+  // Policy precedes privileged claim writes; actual installer IO uses the same owner.
   const parts = input.cwd.split('/');
-  for (let index = 1; index < parts.length; index++) {
-    if (parts[index] !== 'node_modules') continue;
-    const root = parts.slice(0, index).join('/') || '/';
+  const ancestors = parts.flatMap((part, index) =>
+    index > 0 && part === 'node_modules' ? [parts.slice(0, index).join('/') || '/'] : [],
+  );
+  for (const root of [...ancestors, input.cwd])
+    projectContext.assertWritable(`${root}/node_modules/${INSTALL_STAMP_BASENAME}`);
+  projectContext.assertWritable(`${input.cwd}/package-lock.json`);
+  if (npm && npm.request.packageSpecs.length > 0)
+    projectContext.assertWritable(`${input.cwd}/package.json`);
+  // ADR-0307: nested installation is an installer event in each ancestor tree.
+  for (const root of ancestors) {
     const prior = await readInstallStamp(new SyncMirrorVfs(), root);
     if (prior === null) continue;
     const ancestorClaim = await installContext.stamps.demote({ root, slug: prior.slug }, { flush });
@@ -144,7 +156,8 @@ async function installManifest(input: Extract<ToolchainRequest, { op: 'install' 
   }
   const claim = await installContext.stamps.demote(identity, { flush });
   await installContext.stamps.prepareTreeMutation(claim);
-  const result = await installToolchainPackages(input, installContext.installerVfs);
+  const result = await installToolchainPackages(input, installContext.installerVfs, npm);
+  if (result.packageJsonText !== undefined) identity.packageJsonText = result.packageJsonText;
   await flushMirror();
   const promotion = await installContext.stamps.promote(identity, {
     epoch: claim.epoch,
@@ -356,6 +369,27 @@ async function dispatch(request: ToolchainRequest): Promise<ToolchainResultValue
         },
         flush: () => checkedRuntimeFsFlush(() => installContext.fs.flush()),
         effects: projectContext.effects,
+        async install(args, context) {
+          const { parseNpmInstallRequest } = await import('../glue/npm-shell-command.ts');
+          const parsed = parseNpmInstallRequest(args);
+          if (parsed.status === 'rejected') {
+            context.stderr.write(parsed.message);
+            return 1;
+          }
+          if (input.registryUrl === undefined)
+            throw Object.assign(
+              new Error(
+                'No registry is connected to this sandbox; configure toolchain.registryUrl to run npm install',
+              ),
+              { name: 'SandboxRegistryMissingError' },
+            );
+          context.signal?.throwIfAborted();
+          await installManifest(
+            { cwd: context.cwd, registryUrl: input.registryUrl },
+            { request: parsed.request, context },
+          );
+          return 0;
+        },
       });
       if (command.requiresTermination) {
         unsettled = true;

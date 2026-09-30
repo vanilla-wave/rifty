@@ -5,7 +5,8 @@ export type SandboxErrorKind =
   | 'snapshot-conflict'
   | 'snapshot-mismatch'
   | 'restart-busy'
-  | 'persistence';
+  | 'persistence'
+  | 'registry-missing';
 
 /** Structural receipts survive Worker serialization and duplicate SDK packages. */
 export function sandboxErrorKind(error: unknown): SandboxErrorKind | undefined {
@@ -13,6 +14,8 @@ export function sandboxErrorKind(error: unknown): SandboxErrorKind | undefined {
   const value = error as { name?: unknown; code?: unknown; feature?: unknown };
   if (value.code === 'ERR_STORAGE_OCCUPIED') return 'occupied';
   switch (value.name) {
+    case 'SandboxRegistryMissingError':
+      return 'registry-missing';
     case 'SandboxToolchainBusyError':
       return 'busy';
     case 'SandboxResidentToolBusyError':

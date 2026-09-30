@@ -36,3 +36,48 @@ script-only install never runs), `/tmp/rifty-pr357-install-persistence-red.log`.
 Contract+RED accepted8121fb14e,11/11 coverage, no blockers. Broader metadata
 observations captured in `../../npm-client/npm-project-metadata.md`; real same-HTTP
 probe confirms them, public compat row marks ❌. No I9 dependency-state exemption.
+
+
+IMPLEMENT proofs:
+- Shared native save10/10; a real held-HTTP/concurrent-editor regression was
+  RED (new post-install save overwrote the edit), then GREEN11/11. Save now checks
+  staged bytes and attests intended serialized bytes, never a later readback.
+  Failure rollback only restores bytes this operation owned.
+- Legacy success doubles returned empty lock graphs. No product fallback added.
+  Successful save/stamp cases now run actual installer/MemoryVfs/vendored inputs;
+  real debug replaces fictitious lodash+ms pair, scoped @types/estree tarball
+  replaces fake scope package. A cached progress line uses a real warm cache.
+  FIFO/demotion/slug-at-start/guard assertions retained. Three fake pin assertions
+  moved into two stronger actual-Eddy cases (merged request key × absent/prior
+  CAS baseline). All157 integration tests GREEN. Suite moved to tests/integration
+  because it now imports real cross-package registry fixtures, not package-local
+  unit doubles. No compiler rootDir exemption.
+- Browser I9 all15 GREEN (within combined baseline run), incl. registryConnected
+  true/false+readonly, actual network count, cooperative Stop/busy and quota/retry.
+  Quota expectation corrected from pending-only to absent: existing
+  install-stamp-authority.prepareTreeMutation removes the marker before writes;
+  Acceptance6 forbids trust, not absence. Actual retry succeeds.
+Logs: `/tmp/rifty-pr357-install-{editor-red,shared-green2,integration-final,browser-green2}.log`.
+
+## Required SDK regression discovered during baseline verification
+
+The unchanged bounded-cause runBin scenario hung after accepted SDK235586e27
+reused serializeRuntimeError in Workbench: reading a genuine gap's own cause
+getter threw while constructing the error reply. Root owner worker-fs-rpc.ts;
+corrupt-input/provenance-lie at owned in-process error projection. Native Worker
+loss/duplication/reorder physically excluded; failure born before postMessage.
+Sibling sweep: Worker FS and terminal errors already use this serializer; SDK
+project and Workbench owner serializers do not project cause. Command declared-gap
+selection is independently bounded and preserves its existing behavior.
+
+Isolated real Chromium RED at30s; unit3 accessor RED+1 native-description control.
+Fix: data descriptors only, native DOMException intrinsics; metadata lookup bounded
+against proxy prototype cycles (additional real JS RED). Original error receipt
+survives an unreadable optional cause. Unit5/5; actual Chromium bounded-cause and
+both occupied deadlines3/3 GREEN. Accessor/bound removal mutants both RED,
+restored source5/5. No new promise/contract; existing baseline per RDY-8.
+Logs `/tmp/rifty-pr357-cause-{red,browser-red,prototype-red,browser-green,accessor-mutant,bound-mutant,restored-green}.log`.
+The combined baseline was interrupted at its reproduced hang; full baseline rerun
+follows the repair, no passing claim from the interrupted run.
+
+Final baseline no-coi-sandbox-build-loop21/21 GREEN (1.5min), including live COI/no-COI build parity; `/tmp/rifty-pr357-install-baseline-final.log`. SDK/workbench/agent typechecks and lint pass; source cause controls restored5/5.

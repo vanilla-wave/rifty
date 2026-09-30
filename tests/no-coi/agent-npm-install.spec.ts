@@ -53,7 +53,10 @@ for (const [index, scenario] of saveCases.entries()) {
           await sandbox.restart({ preview: { src: '' } });
           const reopened = await sandbox.project({ root: '/project' }).run('node use.cjs')
             .completion;
+          const readonly = !Reflect.set(sandbox.toolchain, 'registryConnected', false);
           return {
+            connected: sandbox.toolchain.registryConnected,
+            readonly,
             outcome,
             state: {
               pkg,
@@ -71,6 +74,8 @@ for (const [index, scenario] of saveCases.entries()) {
       { root, registryUrl: registry.origin, scenario, initialManifest },
     );
     expect(observed.outcome).toMatchObject({ status: 'exited', exitCode: 0, worker: 'retained' });
+    expect(observed.connected).toBe(true);
+    expect(observed.readonly).toBe(true);
     expect(observed.state).toEqual(reference);
     expect(observed.used).toMatchObject({ exitCode: 0, stdout: '172800000\n' });
     expect(observed.reopened).toMatchObject({ exitCode: 0, stdout: '172800000\n' });
@@ -143,6 +148,7 @@ test('real Pi shell installs and executes a dependency with truthful configured 
 test('no registry is a valid connection state; per-call host install does not silently connect shell', async ({
   page,
 }) => {
+  const beforeRequests = registry.requests.length;
   await page.goto('/no-coi-harness.html');
   const value = await page.evaluate(
     async ({ root, registryUrl }) => {
@@ -195,6 +201,7 @@ test('no registry is a valid connection state; per-call host install does not si
   expect(value.before.pkg).toBe(value.manifest);
   expect(value.before.files.map((entry: { name: string }) => entry.name)).toEqual(['package.json']);
   expect(value.connected).toBe(false);
+  expect(registry.requests.slice(beforeRequests)).toEqual(['/ms', '/ms/-/ms-2.0.0.tgz']);
   expect(value.recovered).toMatchObject({ status: 'exited', exitCode: 0, stdout: 'recovered\n' });
   expect(value.notes.join('\n')).toMatch(/no registry.*connected/i);
 });
@@ -343,7 +350,7 @@ test('readonly install refuses before mutation or fetch; network failure restore
   }
 });
 
-test('native install persistence failure stays pending and explicit retry recovers', async ({
+test('native install persistence failure stays untrusted and explicit retry recovers', async ({
   page,
 }) => {
   await page.goto('/no-coi-harness.html');
@@ -382,7 +389,8 @@ observeNativeReplicaWrites(records => { if (records.some(record => record.kind =
   );
   expect(value.kind).toBe('persistence');
   expect(value.failure.effects).toMatchObject({ persistence: 'failed' });
-  expect(value.stamp).toMatchObject({ durability: 'pending' });
+  // prepareTreeMutation removes the pending marker before the first package write.
+  expect(value.stamp).toBeNull();
   expect(value.source).toBe('keep');
   expect(value.recovered).toMatchObject({ status: 'exited', exitCode: 0 });
 });

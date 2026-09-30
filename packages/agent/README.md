@@ -139,6 +139,12 @@ const host = createSandboxAgentHost({
 ```
 
 Host owns `startBin` and `await sandbox.stopResident()` plus its preview element.
+The adapter reports the sandbox's configured registry truthfully. With
+`createSandbox({ toolchain: { workerUrl, registryUrl }, … })`, the ordinary shell
+tool can run npm install; there is no separate install tool. Without a connection,
+it reports registry-missing before install effects. The endpoint URL is not put
+in prompt notes. File/shell policies still apply; defaults remain unrestricted.
+
 Set preview mode after start; return to commands mode after exit. Preview mode
 omits file/shell tools. No raw FS fallback, automatic mode switch or sandbox
 disposal occurs in this adapter. SDK readonly/command policy stays authoritative;

@@ -165,6 +165,47 @@ export async function checkedRuntimeFsFlush(flush?: RuntimeFsFlush): Promise<'me
   throw error;
 }
 
+// Native descriptors retain DOMException details without invoking guest accessors.
+const nativeDomName =
+  typeof DOMException === 'undefined'
+    ? undefined
+    : Object.getOwnPropertyDescriptor(DOMException.prototype, 'name')?.get;
+const nativeDomMessage =
+  typeof DOMException === 'undefined'
+    ? undefined
+    : Object.getOwnPropertyDescriptor(DOMException.prototype, 'message')?.get;
+
+function dataField(value: unknown, key: string): unknown {
+  try {
+    // Proxies can invent cyclic prototype chains; optional metadata stays bounded.
+    let current = value;
+    for (let depth = 0; depth < 8 && current !== null && typeof current === 'object'; depth++) {
+      const descriptor = Object.getOwnPropertyDescriptor(current, key);
+      if (descriptor !== undefined) {
+        if ('value' in descriptor) return descriptor.value;
+        if (
+          typeof descriptor.get === 'function' &&
+          ((key === 'name' && descriptor.get === nativeDomName) ||
+            (key === 'message' && descriptor.get === nativeDomMessage))
+        )
+          return descriptor.get.call(value);
+        return undefined;
+      }
+      current = Object.getPrototypeOf(current);
+    }
+  } catch {
+    /* An opaque cause must not replace the operation's actual error. */
+  }
+  return undefined;
+}
+
+function causeDescription(error: Error): SerializedRuntimeError['cause'] {
+  const cause = dataField(error, 'cause');
+  const name = dataField(cause, 'name');
+  const message = dataField(cause, 'message');
+  return typeof name === 'string' && typeof message === 'string' ? { name, message } : undefined;
+}
+
 export function serializeRuntimeError(
   error: unknown,
   effects?: RuntimeEffects,
@@ -177,7 +218,7 @@ export function serializeRuntimeError(
     effects?: RuntimeEffects;
   };
   const applied = effects ?? extra.effects;
-  const cause = failure.cause as { name?: unknown; message?: unknown } | null | undefined;
+  const cause = causeDescription(failure);
   return {
     name: failure.name,
     message: failure.message,
@@ -185,9 +226,7 @@ export function serializeRuntimeError(
     ...(typeof extra.code === 'string' ? { code: extra.code } : {}),
     ...(typeof extra.path === 'string' ? { path: extra.path } : {}),
     ...(typeof extra.feature === 'string' ? { feature: extra.feature } : {}),
-    ...(typeof cause?.name === 'string' && typeof cause.message === 'string'
-      ? { cause: { name: cause.name, message: cause.message } }
-      : {}),
+    ...(cause === undefined ? {} : { cause }),
     ...(applied === undefined ? {} : { effects: applied }),
   };
 }

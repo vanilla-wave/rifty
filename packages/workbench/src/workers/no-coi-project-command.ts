@@ -28,6 +28,7 @@ interface CommandHooks {
   onOutput(chunk: string, stream: 'stdout' | 'stderr'): void;
   flush(): Promise<'memory' | 'flushed'>;
   effects(): 'no' | 'yes' | 'unknown';
+  install?(args: readonly string[], context: CommandContext): Promise<number>;
 }
 
 function processExitCode(error: unknown): number | null {
@@ -75,6 +76,8 @@ export async function runNoCoiProjectCommand(
   let requiresTermination = false;
   let failed = false;
   let failure: unknown;
+  let registryFailure: unknown;
+  const install = hooks.install;
   const allowed =
     input.project.allowedCommands === undefined
       ? undefined
@@ -209,11 +212,24 @@ export async function runNoCoiProjectCommand(
     });
     shell.registerCommand(
       'npm',
-      createNpmScriptShellCommand({
-        vfs: new SyncMirrorVfs(),
-        runScript: (_name, command, ctx) =>
-          runNestedShellCommand(makeShell(ctx.cwd, ctx.env), command, ctx),
-      }),
+      createNpmScriptShellCommand(
+        {
+          vfs: new SyncMirrorVfs(),
+          runScript: (_name, command, ctx) =>
+            runNestedShellCommand(makeShell(ctx.cwd, ctx.env), command, ctx),
+        },
+        install === undefined
+          ? undefined
+          : async (args, context) => {
+              try {
+                return await install(args, context);
+              } catch (error) {
+                if ((error as { name?: unknown } | null)?.name === 'SandboxRegistryMissingError')
+                  registryFailure = error;
+                throw error;
+              }
+            },
+      ),
     );
     shell.registerCommand('node', async (args, ctx) => {
       const invocation = classifyNodeInvocation(args);
@@ -284,6 +300,10 @@ export async function runNoCoiProjectCommand(
       awaitAbortSettlement: true,
     });
     exitCode = result.exitCode;
+    if (exitCode !== 0 && registryFailure !== undefined) {
+      failed = true;
+      failure = registryFailure;
+    }
   } catch (error) {
     failed = true;
     failure ??= error;

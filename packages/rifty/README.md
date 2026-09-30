@@ -189,7 +189,7 @@ Only valid lock facts grant adapters; missing/corrupt dependencies or adapter
 bytes fail at actual use. Explicit install/apply is optional recovery after
 interruption, never an admission requirement or automatic retry.
 
-Update SDK and copied Worker together (protocol v5). Older Workers reject during
+Update SDK and copied Worker together (protocol v6). Older Workers reject during
 handshake. Errors retain ordinary Error receipts; `sandboxErrorKind(error)` from
 the SDK root discriminates known outcomes across Worker/package boundaries.
 Unknown failures return undefined; preserve their original name/message/cause.
@@ -202,6 +202,7 @@ Unknown failures return undefined; preserve their original name/message/cause.
 | snapshot-conflict | Host resolves conflicting payload targets or explicitly chooses force; same bytes and unrelated files are allowed. |
 | snapshot-mismatch | Correct snapshot bytes/id/template/runtime compatibility before retry. |
 | restart-busy | Active restart has settled. |
+| registry-missing | Configure toolchain.registryUrl when creating the sandbox; a per-call host override does not connect shell installs. |
 | persistence | Clear native storage fault and inspect effects/live data before recovery; a failed receipt can already have applied writes. |
 
 Unreadable OPFS preload rejects: clear the native fault and recreate the sandbox.
@@ -237,6 +238,23 @@ Missing, content-encoded or CORS-hidden-encoding byte totals stay absent. No pen
 means no flush-count event; failures never synthesize completion. These are separate
 operation counts, not a percentage of the whole opening. Dispose/restart cancels
 old requests; their late frames cannot update the replacement operation.
+
+### Registry connection for shell installs
+
+Set `toolchain: { workerUrl, registryUrl }` when creating the sandbox to allow
+project/agent `npm install [<pkg>…]`. The captured endpoint survives restart;
+`toolchain.registryConnected` is a readonly configuration fact, not a probe.
+The command uses the same installer/claims/activation as host toolchain.install.
+It needs the opened project's package.json; registry semver/tag specs and
+`-D`/`--save-dev`, `-E`/`--save-exact`, `-S`/`--save`, `--prefer-online` are supported.
+Manifest/lock dependency maps save resolved npm ranges; failed acquisition restores
+our manifest edit. Concurrent edits remain intact and cannot certify an install.
+
+Omitting the connection is valid: shell install fails before install writes/fetch
+with `sandboxErrorKind(outcome.error) === 'registry-missing'`. Existing dependencies
+remain usable. Per-call host `install({ registryUrl })` does not connect later shell
+calls. Install shares command busy/Stop and project readonly policy; no queue.
+Unsupported specs, flags and lifecycle scripts retain their existing loud errors.
 
 ### Agent files and commands without COI
 

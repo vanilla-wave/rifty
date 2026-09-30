@@ -110,6 +110,9 @@ export function createSandboxAgentHost(options: SandboxAgentHostOptions): AgentH
         shell,
         notes: [
           'no-COI commands mode: each invocation starts at the project root with a fresh environment. Files use ordinary read/transform/write, without CAS or rollback. The host owns build/preview mode changes.',
+          options.sandbox.toolchain.registryConnected
+            ? 'npm install uses the configured registry, subject to project policy; unsupported dependency specs and lifecycle scripts fail loudly.'
+            : 'No registry is connected: npm install fails with registry-missing. Existing installed dependencies remain usable.',
           `Project policy: ${policy}. Root bounds file tools; SDK command policy is not a hostile-code filesystem jail.`,
         ],
       };

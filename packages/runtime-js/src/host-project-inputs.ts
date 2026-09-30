@@ -62,8 +62,15 @@ export function validateProjectOptions(input: ToolchainProjectOptions): Toolchai
 }
 
 export function validateCommandInput(input: ToolchainCommandInput): ToolchainCommandInput {
-  const value = record(input, ['project', 'command', 'cwd', 'env'], 'command');
+  const value = record(input, ['project', 'command', 'cwd', 'env', 'registryUrl'], 'command');
   const project = validateProjectOptions(value.project as ToolchainProjectOptions);
+  if (
+    value.registryUrl !== undefined &&
+    (typeof value.registryUrl !== 'string' ||
+      value.registryUrl.trim().length === 0 ||
+      value.registryUrl.includes('\0'))
+  )
+    throw new TypeError('command registryUrl must be a non-empty string without NUL');
   if (typeof value.command !== 'string' || value.command.includes('\0'))
     throw new TypeError('command must be a string without NUL');
   const cwd = projectPath(value.cwd, project.root);
@@ -83,6 +90,7 @@ export function validateCommandInput(input: ToolchainCommandInput): ToolchainCom
   return Object.freeze({
     project,
     command: value.command,
+    ...(value.registryUrl === undefined ? {} : { registryUrl: value.registryUrl as string }),
     cwd,
     env: Object.freeze({ ...env }) as Readonly<Record<string, string>>,
   });

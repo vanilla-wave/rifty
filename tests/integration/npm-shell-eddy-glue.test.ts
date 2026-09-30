@@ -661,3 +661,54 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
     }
   });
 });
+
+// Migrated from installer-double unit cases; actual resolver response and actual tree.
+for (const baseline of [null, 'sha256-prior'] as const) {
+  it(`named install pin uses the actual merged request and start baseline ${baseline}`, async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    const merged = { ...DEPS, kleur: '4.1.5' };
+    const bundle = await resolveBundle(
+      { dependencies: merged },
+      { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch: makeLocalFetcher().fetch },
+    );
+    if (bundle.kind !== 'bundle') throw new Error('Expected actual Eddy bundle');
+    const hash = unpackEddyBundle(bundle.bytes).manifest.asOf.closureHash;
+    const sets: { key: string; hash: string; expectedCurrent: string | null | undefined }[] = [];
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createIntegrationNpmShellCommand({
+        vfs,
+        registry: makeRegistry(),
+        resolverUrl: eddyUrl,
+        learnedPins: {
+          get: async () => (baseline === null ? undefined : { closureHash: baseline, stale: true }),
+          set: async (key, hash, expectedCurrent) => {
+            sets.push({ key, hash, expectedCurrent });
+          },
+          revalidate: async () => {},
+        },
+      }),
+    );
+    try {
+      const result = await runShell(shell, 'npm install kleur@4.1.5');
+      expect(result.exitCode).toBe(0);
+      expect(result.out).toContain('via eddy (fast)');
+      await vi.waitFor(() =>
+        expect(sets).toEqual([
+          {
+            key: canonicalEddyRequestKey({ dependencies: merged, optionalDependencies: {} }),
+            hash,
+            expectedCurrent: baseline,
+          },
+        ]),
+      );
+      const saved = JSON.parse(await vfs.readFileText('/proj/package.json'));
+      expect(saved.dependencies).toEqual({ ...DEPS, kleur: '^4.1.5' });
+      expect(await vfs.exists('/proj/node_modules/kleur/index.js')).toBe(true);
+    } finally {
+      await shell.dispose();
+    }
+  });
+}

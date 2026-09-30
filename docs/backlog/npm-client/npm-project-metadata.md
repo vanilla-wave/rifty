@@ -6,7 +6,7 @@ created: 2026-09-30
 why: existing npm glue invents metadata in an empty project and omits native descriptive lock fields
 user_story: As a developer consuming npm project files, I want npm-compatible metadata, but rifty creates different defaults and lock descriptions.
 sources: [docs/backlog/npm-client/reference/npm-project-metadata-output.json, docs/backlog/npm-client/reference/native-save-output.json, docs/backlog/npm-client/reference/native-empty-output.json]
-code: [packages/npm-client/src/linker.ts, packages/workbench/src/glue/npm-shell-command.ts]
+code: [packages/npm-client/src/linker.ts, packages/workbench/src/glue/npm-shell-command.ts, packages/workbench/src/glue/npm-package-json.ts]
 ---
 
 ## Context
@@ -35,3 +35,5 @@ and initialization semantics from the recorded native reference.
 Dedup2026-09-30: area titles/code, goal maps, traps and declined index have no
 same metadata/empty-project item. Boundary: owned projection, not transport;
 no new coordination proposed. Factual capture; no premise direction or user fork.
+
+Final check2026-09-30: independent PASS at e631e4444; native probes rerun, frozen rifty source/output verified; no findings.

@@ -1,46 +1,29 @@
-/**
- * Unit tests for `createNpmShellCommand`. These cover the parts the glue
- * file actually owns:
- *
- *   - argv parsing (subcommand selection, spec `name@range` including the
- *     scoped-name corner case),
- *   - the package.json read / merge / write round-trip,
- *   - the bare-`npm install` no-rewrite contract,
- *   - error mapping for the EVERSIONCONFLICT / EINTEGRITY / EBROKENLOCK
- *     codes the operator is most likely to hit.
- *
- * The real `install` flow is exercised by `@riftydev/npm-client`'s own suite;
- * we inject a stub via the `install` DI seam so this file does not depend on
- * tarball fixtures from another package's private `_test-fixtures/` (would
- * violate CLAUDE.md "no internal imports across packages"). The seam is the
- * command's REAL contract (`deps.install ?? realInstall` — the compiler pins
- * `InstallFn` to the real signature), not a convenience mock; what a stub
- * can't vouch for — real result shape, learned-pin write-back with the
- * eddy-computed hash, stamp over a real tree — is covered without any stub by
- * `tests/integration/npm-shell-eddy-glue.test.ts` (real npm-client + real eddy
- * server over the fixture registry).
- */
+import { readFileSync } from 'node:fs';
+/** Shared shell parsing and acquisition lifecycle; successful save/stamp carriers
+ * use real installs. Real Eddy provenance/CAS carriers live in the integration suite. */
 import type { InstallOptions, InstallResult } from '@riftydev/npm-client';
 import {
   RegistryClient,
   canonicalEddyRequestKey,
   eddyRequestFromPackageJson,
+  install as realInstall,
 } from '@riftydev/npm-client';
 import { planShadowSubstitutionsFromLockfile } from '@riftydev/npm-client/internal';
 import { type CommandContext, type ProcessExit, Shell } from '@riftydev/shell';
 import { MemoryVfs, type Vfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
-import { createPackageAcquisitionAuthority } from '../workers/package-acquisition-authority.ts';
-import { installArtifactIdentity } from './install-artifact-identity.ts';
-import { createInstallStampAuthority } from './install-stamp-authority.ts';
-import { createInstallStamp } from './install-stamp.ts';
-import { createTestNpmPackageAcquisitionAuthority } from './npm-shell-command.test-fixture.ts';
+import { installArtifactIdentity } from '../../packages/workbench/src/glue/install-artifact-identity.ts';
+import { createInstallStampAuthority } from '../../packages/workbench/src/glue/install-stamp-authority.ts';
+import { createInstallStamp } from '../../packages/workbench/src/glue/install-stamp.ts';
+import { createTestNpmPackageAcquisitionAuthority } from '../../packages/workbench/src/glue/npm-shell-command.test-fixture.ts';
 import {
   type InstallFn,
   type NpmShellCommandDeps,
   createNpmShellCommand as createNpmShellCommandWithAuthority,
   formatInstallDuration,
-} from './npm-shell-command.ts';
+} from '../../packages/workbench/src/glue/npm-shell-command.ts';
+import { createPackageAcquisitionAuthority } from '../../packages/workbench/src/workers/package-acquisition-authority.ts';
+import { LOCAL_REGISTRY_BASE_URL, makeLocalFetcher } from './fixtures/local-registry.ts';
 
 const EMPTY_SHADOW_PLAN = planShadowSubstitutionsFromLockfile({
   lockfileVersion: 3,
@@ -60,39 +43,21 @@ function createNpmShellCommand(deps: TestNpmShellCommandDeps) {
   });
 }
 
-/**
- * Build a successful install stub that records the call and returns the
- * provided package list. The stub never touches the VFS beyond writing the
- * lockfile (so callers that depend on `node_modules/<x>/package.json` would
- * not see the file). That is fine for these tests — they assert on the
- * shell command's own behaviour, not on the linker output.
- */
-function makeStubInstall(responder: (deps: Record<string, string>) => InstallResult): {
+async function installActual(options: string | InstallOptions): Promise<InstallResult> {
+  if (typeof options === 'string') throw new Error('Expected options install');
+  return await realInstall(options);
+}
+
+function makeRealInstall(): {
   install: InstallFn;
   calls: Array<{ root: string; deps: Record<string, string>; cwd: string }>;
 } {
   const calls: Array<{ root: string; deps: Record<string, string>; cwd: string }> = [];
-  const install: InstallFn = async (arg1, _rootVersion, dependenciesOrOpts, opts) => {
-    let rootName: string;
-    let dependencies: Record<string, string>;
-    let installOpts: InstallOptions;
-    if (typeof arg1 === 'string') {
-      rootName = arg1;
-      dependencies = dependenciesOrOpts as Record<string, string>;
-      installOpts = opts as InstallOptions;
-    } else {
-      installOpts = arg1;
-      const raw = JSON.parse(
-        await installOpts.vfs.readFileText(`${installOpts.cwd}/package.json`),
-      ) as {
-        name?: string;
-        dependencies?: Record<string, string>;
-      };
-      rootName = raw.name ?? 'root';
-      dependencies = raw.dependencies ?? {};
-    }
-    calls.push({ root: rootName, deps: { ...dependencies }, cwd: installOpts.cwd });
-    return responder(dependencies);
+  const install: InstallFn = async (options) => {
+    if (typeof options === 'string') throw new Error('Expected options install');
+    const pkg = JSON.parse(await options.vfs.readFileText(`${options.cwd}/package.json`));
+    calls.push({ root: pkg.name ?? 'root', deps: { ...pkg.dependencies }, cwd: options.cwd });
+    return await realInstall(options);
   };
   return { install, calls };
 }
@@ -130,9 +95,9 @@ function singletonResult(name: string, version: string): InstallResult {
   };
 }
 
-const fakeRegistry = new RegistryClient({
-  baseUrl: '/unused',
-  fetch: async () => new Response('', { status: 599 }),
+const fixtureRegistry = new RegistryClient({
+  baseUrl: LOCAL_REGISTRY_BASE_URL,
+  fetch: makeLocalFetcher().fetch,
 });
 
 interface Recorded {
@@ -170,7 +135,7 @@ describe('npm-shell-command — happy path', () => {
         });
       });
     };
-    const command = createNpmShellCommand({ vfs, registry: fakeRegistry, install });
+    const command = createNpmShellCommand({ vfs, registry: fixtureRegistry, install });
     const controller = new AbortController();
     const output: string[] = [];
     const running = command(['install'], {
@@ -196,9 +161,12 @@ describe('npm-shell-command — happy path', () => {
       '/proj/package.json',
       `${JSON.stringify({ name: 'root', dependencies: { kleur: '4.1.5' } })}\n`,
     );
-    const { install, calls } = makeStubInstall(() => singletonResult('kleur', '4.1.5'));
+    const { install, calls } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj/src/nested' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const result = await runShell(shell, 'npm install');
 
@@ -218,9 +186,12 @@ describe('npm-shell-command — happy path', () => {
       '/proj/packages/app/package.json',
       `${JSON.stringify({ name: 'app', dependencies: { kleur: '4.1.5' } })}\n`,
     );
-    const { install, calls } = makeStubInstall(() => singletonResult('kleur', '4.1.5'));
+    const { install, calls } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj/packages/app' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const result = await runShell(shell, 'npm install');
 
@@ -237,9 +208,12 @@ describe('npm-shell-command — happy path', () => {
       '/proj/package.json',
       `${JSON.stringify({ name: 'root', dependencies: { kleur: '4.1.5' } })}\n`,
     );
-    const { install, calls } = makeStubInstall(() => singletonResult('kleur', '4.1.5'));
+    const { install, calls } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj/near/src' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const result = await runShell(shell, 'npm install');
 
@@ -260,9 +234,12 @@ describe('npm-shell-command — happy path', () => {
       '/proj/package.json',
       `${JSON.stringify({ name: 'root', dependencies: { kleur: '4.1.5' } })}\n`,
     );
-    const { install, calls } = makeStubInstall(() => singletonResult('kleur', '4.1.5'));
+    const { install, calls } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj/near/src' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const result = await runShell(shell, 'npm install');
 
@@ -285,9 +262,12 @@ describe('npm-shell-command — happy path', () => {
     const memberPackageJson = '{"name":"app"}\n';
     await vfs.writeFile('/proj/package.json', rootPackageJson);
     await vfs.writeFile('/proj/packages/app/package.json', memberPackageJson);
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj/packages/app/src' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const result = await runShell(shell, 'npm install kleur@4.1.5');
 
@@ -307,9 +287,12 @@ describe('npm-shell-command — happy path', () => {
     await vfs.mkdir('/outside');
     const packageJson = '{"name":"root","workspaces":[]}\n';
     await vfs.writeFile('/proj/package.json', packageJson);
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
     const shell = new Shell({ cwd });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const result = await runShell(shell, line);
 
@@ -329,7 +312,10 @@ describe('npm-shell-command — happy path', () => {
     );
     const runScript = vi.fn(async () => 0);
     const shell = new Shell({ cwd: '/proj/packages/app/src' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, runScript }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, runScript }),
+    );
 
     const result = await runShell(shell, 'npm run dev');
 
@@ -343,9 +329,12 @@ describe('npm-shell-command — happy path', () => {
     await vfs.mkdir('/proj/packages/app/src', { recursive: true });
     await vfs.mkdir('/proj/packages/app/node_modules');
     await vfs.writeFile('/proj/package.json', '{"name":"root","workspaces":["packages/app"]}\n');
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj/packages/app/src' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const result = await runShell(shell, 'npm install kleur@4.1.5');
 
@@ -363,9 +352,12 @@ describe('npm-shell-command — happy path', () => {
     await vfs.mkdir('/proj/packages/app/src', { recursive: true });
     await vfs.writeFile('/proj/package.json', `${JSON.stringify({ name: 'root', workspaces })}\n`);
     await vfs.writeFile('/proj/packages/app/package.json', '{"name":"app"}\n');
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj/packages/app/src' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const result = await runShell(shell, 'npm install');
 
@@ -379,9 +371,12 @@ describe('npm-shell-command — happy path', () => {
   it('uses an orphan cwd exactly when no ancestor package.json exists', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/orphan/nested', { recursive: true });
-    const { install, calls } = makeStubInstall(() => singletonResult('kleur', '4.1.5'));
+    const { install, calls } = makeRealInstall();
     const shell = new Shell({ cwd: '/orphan/nested' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const result = await runShell(shell, 'npm install kleur@4.1.5');
 
@@ -405,7 +400,7 @@ describe('npm-shell-command — happy path', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         runScript: async (name, command, ctx) => {
           calls.push({ name, command, cwd: ctx.cwd });
           return 0;
@@ -423,16 +418,19 @@ describe('npm-shell-command — happy path', () => {
   it('installs at an explicit relative --prefix without changing shell cwd', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/src', { recursive: true });
-    const { install, calls } = makeStubInstall(() => singletonResult('kleur', '4.1.5'));
+    const { install, calls } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj/src' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const result = await runShell(shell, 'npm --prefix .. install kleur@^4.1.0');
 
     expect(result).toMatchObject({ exitCode: 0 });
     expect(calls[0]?.cwd).toBe('/proj');
     expect(shell.cwd).toBe('/proj/src');
-    await expect(vfs.readFileText('/proj/package.json')).resolves.toContain('"kleur": "^4.1.0"');
+    await expect(vfs.readFileText('/proj/package.json')).resolves.toContain('"kleur": "^4.1.5"');
   });
 
   it('runs package scripts through the injected script runner', async () => {
@@ -456,7 +454,7 @@ describe('npm-shell-command — happy path', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         runScript: async (name, command, ctx) => {
           calls.push({ name, command, cwd: ctx.cwd });
           ctx.stdout.write(`script:${command}\n`);
@@ -493,7 +491,7 @@ describe('npm-shell-command — happy path', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         runScript: async (name, command, ctx) => {
           calls.push({ name, command, cwd: ctx.cwd });
           return 0;
@@ -530,7 +528,7 @@ describe('npm-shell-command — happy path', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         runScript: async (name, command, ctx) => {
           calls.push({ name, command, cwd: ctx.cwd });
           return 0;
@@ -565,7 +563,7 @@ describe('npm-shell-command — happy path', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         runScript: async (name, command, ctx) => {
           calls.push({ name, command, cwd: ctx.cwd });
           return 0;
@@ -601,7 +599,7 @@ describe('npm-shell-command — happy path', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         runScript: async (name, command, ctx) => {
           calls.push({ name, command, cwd: ctx.cwd });
           return 0;
@@ -640,7 +638,7 @@ describe('npm-shell-command — happy path', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         runScript: async (name, command, ctx) => {
           calls.push({ name, command, cwd: ctx.cwd });
           return 0;
@@ -673,7 +671,7 @@ describe('npm-shell-command — happy path', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         runScript: async (name): Promise<ProcessExit> => {
           calls.push(name);
           return { code: 0, signal: null };
@@ -706,7 +704,7 @@ describe('npm-shell-command — happy path', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         runScript: async (name): Promise<ProcessExit> => {
           calls.push(name);
           return name === terminatedAt
@@ -753,7 +751,7 @@ describe('npm-shell-command — happy path', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         runScript: async (name, command) => {
           calls.push({ name, command });
           return name === 'prelint' || name === 'format' ? 7 : 0;
@@ -776,21 +774,24 @@ describe('npm-shell-command — happy path', () => {
   it('installs a single package and writes it into package.json', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const { install } = makeStubInstall(() => singletonResult('lodash', '4.17.21'));
+    const { install } = makeRealInstall();
 
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
-    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode, rec } = await runShell(shell, 'npm install debug@^4.4.1');
     expect(exitCode).toBe(0);
     const stdout = rec.stdout.join('');
-    expect(stdout).toContain('installing lodash@^4.17.0');
-    expect(stdout).toContain('installed 1 package');
+    expect(stdout).toContain('installing debug@^4.4.1');
+    expect(stdout).toContain('installed 2 package');
 
     const pkg = JSON.parse(await vfs.readFileText('/proj/package.json')) as {
       dependencies?: Record<string, string>;
     };
-    expect(pkg.dependencies).toEqual({ lodash: '^4.17.0' });
+    expect(pkg.dependencies).toEqual({ debug: '^4.4.1' });
   });
 
   it('merges new deps into existing package.json without clobbering existing deps', async () => {
@@ -799,24 +800,27 @@ describe('npm-shell-command — happy path', () => {
     await vfs.writeFile(
       '/proj/package.json',
       `${JSON.stringify(
-        { name: 'demo', version: '0.0.0', dependencies: { a: '1.0.0' } },
+        { name: 'demo', version: '0.0.0', dependencies: { picocolors: '1.0.0' } },
         null,
         2,
       )}\n`,
     );
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
 
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
-    const { exitCode } = await runShell(shell, 'npm i b@2.0.0');
+    const { exitCode } = await runShell(shell, 'npm i ms@2.0.0');
     expect(exitCode).toBe(0);
-    expect(calls[0]?.deps).toEqual({ a: '1.0.0', b: '2.0.0' });
+    expect(calls[0]?.deps).toEqual({ picocolors: '1.0.0', ms: '2.0.0' });
 
     const pkg = JSON.parse(await vfs.readFileText('/proj/package.json')) as {
       dependencies?: Record<string, string>;
     };
-    expect(pkg.dependencies).toEqual({ a: '1.0.0', b: '2.0.0' });
+    expect(pkg.dependencies).toEqual({ picocolors: '1.0.0', ms: '^2.0.0' });
   });
 
   it('preserves unrelated package.json fields when adding dependencies', async () => {
@@ -831,19 +835,22 @@ describe('npm-shell-command — happy path', () => {
           type: 'module',
           private: true,
           scripts: { dev: 'vite' },
-          devDependencies: { vite: '^5.4.0' },
-          dependencies: { a: '1.0.0' },
+          devDependencies: { kleur: '^4.1.5' },
+          dependencies: { picocolors: '1.0.0' },
         },
         null,
         2,
       )}\n`,
     );
-    const { install } = makeStubInstall(() => emptyResult());
+    const { install } = makeRealInstall();
 
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
-    const { exitCode } = await runShell(shell, 'npm install b@2.0.0');
+    const { exitCode } = await runShell(shell, 'npm install ms@2.0.0');
     expect(exitCode).toBe(0);
 
     const pkg = JSON.parse(await vfs.readFileText('/proj/package.json')) as {
@@ -854,30 +861,64 @@ describe('npm-shell-command — happy path', () => {
     };
     expect(pkg.type).toBe('module');
     expect(pkg.scripts).toEqual({ dev: 'vite' });
-    expect(pkg.devDependencies).toEqual({ vite: '^5.4.0' });
-    expect(pkg.dependencies).toEqual({ a: '1.0.0', b: '2.0.0' });
+    expect(pkg.devDependencies).toEqual({ kleur: '^4.1.5' });
+    expect(pkg.dependencies).toEqual({ picocolors: '1.0.0', ms: '^2.0.0' });
   });
 
   it('parses scoped specs (`@scope/name@range`) without splitting at the leading @', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
 
+    const metadata = JSON.parse(
+      readFileSync(
+        new URL(
+          './fixtures/registry/rollup-companions/packages/types-estree-1.0.7.json',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    );
+    const tarball = readFileSync(
+      new URL(
+        './fixtures/registry/rollup-companions/packages/types-estree-1.0.7.tgz',
+        import.meta.url,
+      ),
+    );
+    const scopedRegistry = new RegistryClient({
+      baseUrl: LOCAL_REGISTRY_BASE_URL,
+      fetch: async (url) => {
+        if (url === metadata.dist.tarball) return new Response(tarball);
+        if (decodeURIComponent(url).endsWith('/@types/estree'))
+          return new Response(
+            JSON.stringify({
+              name: metadata.name,
+              'dist-tags': { latest: metadata.version },
+              versions: { [metadata.version]: metadata },
+            }),
+          );
+        return new Response('', { status: 404 });
+      },
+    });
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: scopedRegistry, install }));
 
-    const { exitCode } = await runShell(shell, 'npm add @scope/pkg@^1.2.0');
+    const { exitCode } = await runShell(shell, 'npm add @types/estree@^1.0.0');
     expect(exitCode).toBe(0);
-    expect(calls[0]?.deps).toEqual({ '@scope/pkg': '^1.2.0' });
+    expect(calls[0]?.deps).toEqual({ '@types/estree': '^1.0.0' });
+    expect(await vfs.exists('/proj/node_modules/@types/estree/index.d.ts')).toBe(true);
   });
 
   it('defaults a spec without `@range` to "latest"', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
 
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     await runShell(shell, 'npm install express');
     expect(calls[0]?.deps).toEqual({ express: 'latest' });
@@ -886,10 +927,13 @@ describe('npm-shell-command — happy path', () => {
   it('rejects non-registry CLI specs before they reach the registry installer', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
 
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const { exitCode, rec } = await runShell(shell, 'npm install file:../local');
 
@@ -902,10 +946,13 @@ describe('npm-shell-command — happy path', () => {
   it('rejects bare local-directory CLI specs before they reach the registry installer', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
 
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const { exitCode, rec } = await runShell(shell, 'npm install .');
 
@@ -918,10 +965,13 @@ describe('npm-shell-command — happy path', () => {
   it('rejects GitHub shorthand CLI specs before writing package.json', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
 
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const { exitCode, rec } = await runShell(shell, 'npm install expressjs/express');
 
@@ -937,20 +987,23 @@ describe('npm-shell-command — happy path', () => {
     await vfs.writeFile(
       '/proj/package.json',
       `${JSON.stringify(
-        { name: 'demo', version: '0.0.0', dependencies: { a: '1.0.0' } },
+        { name: 'demo', version: '0.0.0', dependencies: { picocolors: '1.0.0' } },
         null,
         2,
       )}\n`,
     );
     const before = await vfs.readFile('/proj/package.json');
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
 
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const { exitCode } = await runShell(shell, 'npm install');
     expect(exitCode).toBe(0);
-    expect(calls[0]?.deps).toEqual({ a: '1.0.0' });
+    expect(calls[0]?.deps).toEqual({ picocolors: '1.0.0' });
     const after = await vfs.readFile('/proj/package.json');
     expect(after).toEqual(before);
   });
@@ -968,10 +1021,13 @@ describe('npm-shell-command — happy path', () => {
       2,
     )}\n`;
     await vfs.writeFile('/proj/package.json', before);
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
 
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const { exitCode, rec } = await runShell(shell, 'npm install');
 
@@ -985,10 +1041,13 @@ describe('npm-shell-command — happy path', () => {
   it('refuses an empty install (no args, no package.json deps)', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
 
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const { exitCode, rec } = await runShell(shell, 'npm install');
     expect(exitCode).toBe(0);
@@ -1030,7 +1089,7 @@ describe('npm-shell-command — happy path', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         prepareEmptyInstall: async () => {
           await vfs.rm('/proj/node_modules', { recursive: true, force: true });
@@ -1067,7 +1126,7 @@ describe('npm-shell-command — happy path', () => {
     );
 
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry }));
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fixtureRegistry }));
 
     const { exitCode, rec } = await runShell(shell, 'npm install');
 
@@ -1095,7 +1154,10 @@ describe('npm-shell-command — error mapping', () => {
       throw Object.assign(new Error('boom'), { code, ...extra });
     };
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
     return { shell };
   }
 
@@ -1178,10 +1240,10 @@ describe('npm-shell-command — package.json rollback on failed named install', 
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
-      createNpmShellCommand({ vfs, registry: fakeRegistry, install: throwingInstall }),
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install: throwingInstall }),
     );
 
-    const { exitCode } = await runShell(shell, 'npm install lodash');
+    const { exitCode } = await runShell(shell, 'npm install debug');
 
     expect(exitCode).toBe(1);
     expect(await vfs.readFileText('/proj/package.json')).toBe(before);
@@ -1193,10 +1255,10 @@ describe('npm-shell-command — package.json rollback on failed named install', 
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
-      createNpmShellCommand({ vfs, registry: fakeRegistry, install: throwingInstall }),
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install: throwingInstall }),
     );
 
-    const { exitCode } = await runShell(shell, 'npm install lodash');
+    const { exitCode } = await runShell(shell, 'npm install debug');
 
     expect(exitCode).toBe(1);
     expect(await vfs.exists('/proj/package.json')).toBe(false);
@@ -1214,7 +1276,7 @@ describe('npm-shell-command — package.json rollback on failed named install', 
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
-      createNpmShellCommand({ vfs, registry: fakeRegistry, install: throwingInstall }),
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install: throwingInstall }),
     );
 
     const { exitCode } = await runShell(shell, 'npm install');
@@ -1228,7 +1290,7 @@ describe('npm-shell-command — argv', () => {
   it('rejects unknown subcommands without exit 127', async () => {
     const vfs = new MemoryVfs();
     const shell = new Shell({ cwd: '/' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry }));
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fixtureRegistry }));
 
     const { exitCode, rec } = await runShell(shell, 'npm publish');
     expect(exitCode).toBe(1);
@@ -1238,11 +1300,14 @@ describe('npm-shell-command — argv', () => {
   it('refuses an UNKNOWN install flag instead of silently dropping it', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
-    const { exitCode, rec } = await runShell(shell, 'npm install --frozen-lockfile lodash');
+    const { exitCode, rec } = await runShell(shell, 'npm install --frozen-lockfile debug');
     expect(exitCode).toBe(1);
     expect(rec.stderr.join('')).toContain("flag '--frozen-lockfile' not supported");
     expect(calls).toEqual([]);
@@ -1252,9 +1317,12 @@ describe('npm-shell-command — argv', () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     await vfs.writeFile('/proj/package.json', '{"name":"root"}\n');
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const { exitCode, rec } = await runShell(shell, 'npm install --workspaces=false');
 
@@ -1266,7 +1334,7 @@ describe('npm-shell-command — argv', () => {
   it('points an unknown subcommand at `npm help`', async () => {
     const vfs = new MemoryVfs();
     const shell = new Shell({ cwd: '/' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry }));
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fixtureRegistry }));
 
     const { rec } = await runShell(shell, 'npm publish');
     expect(rec.stderr.join('')).toContain('npm help');
@@ -1277,7 +1345,7 @@ describe('npm-shell-command — help', () => {
   async function help(line: string): Promise<{ exitCode: number; out: string; err: string }> {
     const vfs = new MemoryVfs();
     const shell = new Shell({ cwd: '/' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry }));
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fixtureRegistry }));
     const { exitCode, rec } = await runShell(shell, line);
     return { exitCode, out: rec.stdout.join(''), err: rec.stderr.join('') };
   }
@@ -1352,10 +1420,12 @@ describe('npm-shell-command — save flags + lifecycle aliases', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install: async (arg1) => {
+          const actualInstallResult = await installActual(arg1);
+
           seenPrefer = (arg1 as InstallOptions).prefer;
-          return emptyResult();
+          return actualInstallResult;
         },
       }),
     );
@@ -1376,47 +1446,59 @@ describe('npm-shell-command — save flags + lifecycle aliases', () => {
   it('npm i -D <pkg> records it under devDependencies, NOT dependencies', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const { install } = makeStubInstall(() => emptyResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
-    expect((await runShell(shell, 'npm i -D vitest@^2.0.0')).exitCode).toBe(0);
+    expect((await runShell(shell, 'npm i -D ms@^2.0.0')).exitCode).toBe(0);
     const pkg = await readPkg(vfs);
-    expect(pkg.devDependencies).toEqual({ vitest: '^2.0.0' });
+    expect(pkg.devDependencies).toEqual({ ms: '^2.1.3' });
     expect(pkg.dependencies ?? {}).toEqual({});
   });
 
   it('--save-dev is the long alias of -D', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const { install } = makeStubInstall(() => emptyResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
-    expect((await runShell(shell, 'npm install --save-dev lodash')).exitCode).toBe(0);
-    expect((await readPkg(vfs)).devDependencies).toEqual({ lodash: 'latest' });
+    expect((await runShell(shell, 'npm install --save-dev debug')).exitCode).toBe(0);
+    expect((await readPkg(vfs)).devDependencies).toEqual({ debug: '^4.4.1' });
   });
 
   it('--save / -E / bare all record under dependencies (save is the default)', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const { install } = makeStubInstall(() => emptyResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
-    expect((await runShell(shell, 'npm i --save a@1.0.0')).exitCode).toBe(0);
-    expect((await runShell(shell, 'npm i -E b@2.0.0')).exitCode).toBe(0);
+    expect((await runShell(shell, 'npm i --save picocolors@1.0.0')).exitCode).toBe(0);
+    expect((await runShell(shell, 'npm i -E ms@2.0.0')).exitCode).toBe(0);
     const pkg = await readPkg(vfs);
-    expect(pkg.dependencies).toEqual({ a: '1.0.0', b: '2.0.0' });
+    expect(pkg.dependencies).toEqual({ picocolors: '^1.0.0', ms: '2.0.0' });
     expect(pkg.devDependencies ?? {}).toEqual({});
   });
 
   it('npm i -g <pkg> → directed browser-sandbox message, exit 1, no install', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const { install, calls } = makeStubInstall(() => emptyResult());
+    const { install, calls } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
     const { exitCode, rec } = await runShell(shell, 'npm i -g typescript');
     expect(exitCode).toBe(1);
@@ -1447,7 +1529,7 @@ describe('npm-shell-command — save flags + lifecycle aliases', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         runScript: async (name, command) => {
           ran.push({ name, command });
           return 0;
@@ -1476,7 +1558,7 @@ describe('npm-shell-command — save flags + lifecycle aliases', () => {
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
-      createNpmShellCommand({ vfs, registry: fakeRegistry, runScript: async () => 0 }),
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, runScript: async () => 0 }),
     );
 
     const { exitCode, rec } = await runShell(shell, 'npm test');
@@ -1487,7 +1569,7 @@ describe('npm-shell-command — save flags + lifecycle aliases', () => {
   it('advertises the lifecycle commands via `npm help`, one per line', async () => {
     const vfs = new MemoryVfs();
     const shell = new Shell({ cwd: '/' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry }));
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fixtureRegistry }));
     const { rec } = await runShell(shell, 'npm help');
     const lines = rec.stdout.join('').split('\n');
     for (const name of ['test', 'start', 'stop', 'restart']) {
@@ -1497,49 +1579,27 @@ describe('npm-shell-command — save flags + lifecycle aliases', () => {
 });
 
 describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0135)', () => {
-  function twoPackageResult(): InstallResult {
-    return {
-      packages: [
-        { name: 'lodash', version: '4.17.21', dependencies: {}, files: {} },
-        { name: 'ms', version: '2.1.3', dependencies: {}, files: {} },
-      ],
-      lockfile: {
-        name: 'root',
-        version: '0.0.0',
-        lockfileVersion: 3,
-        requires: true,
-        packages: {},
-      },
-      conflicts: [],
-      provenance: {
-        resolution: 'metadata',
-        packages: [
-          { name: 'lodash', version: '4.17.21', transport: 'registry' },
-          { name: 'ms', version: '2.1.3', transport: 'registry' },
-        ],
-      },
-    };
-  }
-
   it('streams a `npm: + name@version` line per package as the installer reports progress', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const install: InstallFn = async (arg1) => {
-      const opts = arg1 as InstallOptions;
-      opts.onPackage?.({ name: 'lodash', version: '4.17.21', cacheHit: false });
-      opts.onPackage?.({ name: 'ms', version: '2.1.3', cacheHit: true });
-      return twoPackageResult();
-    };
+    await vfs.mkdir('/warm', { recursive: true });
+    await vfs.writeFile('/warm/package.json', '{"name":"warm","dependencies":{"ms":"2.1.3"}}');
+    await realInstall({ vfs, cwd: '/warm', registry: fixtureRegistry });
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
-    const { exitCode, rec } = await runShell(shell, 'npm install lodash');
+    const { exitCode, rec } = await runShell(shell, 'npm install debug');
 
     expect(exitCode).toBe(0);
     const stdout = rec.stdout.join('');
-    expect(stdout).toContain('npm: + lodash@4.17.21\n');
+    expect(stdout.split('\n').filter((line) => line.startsWith('npm: + '))).toHaveLength(2);
+    expect(stdout).toContain('npm: + debug@4.4.1\n');
     expect(stdout).toContain('npm: + ms@2.1.3 (cached)\n');
-    expect(stdout.indexOf('npm: + lodash@4.17.21')).toBeLessThan(
+    expect(stdout.indexOf('npm: + debug@4.4.1')).toBeLessThan(
       stdout.indexOf('installed 2 package'),
     );
   });
@@ -1550,14 +1610,14 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     // final commit marker, with no second drain.
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     const events: string[] = [];
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => {
           const pending = JSON.parse(
@@ -1571,7 +1631,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
       }),
     );
 
-    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode } = await runShell(shell, 'npm install debug@^4.4.1');
 
     expect(exitCode).toBe(0);
     await vi.waitFor(() => {
@@ -1581,7 +1641,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
       await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json'),
     ) as { version: number; deps: Record<string, string>; packages: number };
     expect(stamp.version).toBe(4);
-    expect(stamp.deps).toEqual({ lodash: '^4.17.0' });
+    expect(stamp.deps).toEqual({ debug: '^4.4.1' });
     expect(stamp.packages).toBe(2);
   });
 
@@ -1592,18 +1652,18 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     // instead of trusting a tree OPFS failed to hold), stderr says so.
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => ({
           failures: [
             {
-              path: '/proj/node_modules/lodash/package.json',
+              path: '/proj/node_modules/debug/package.json',
               op: 'write' as const,
               message: 'QuotaExceededError',
             },
@@ -1613,7 +1673,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
       }),
     );
 
-    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode, rec } = await runShell(shell, 'npm install debug@^4.4.1');
 
     expect(exitCode).toBe(0); // the live tree works — durability, not the install, failed
     await vi.waitFor(() => {
@@ -1630,13 +1690,13 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
   it('a claim-file failure in the proof blocks trusted publication and stays pending', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => ({
           failures: [
@@ -1651,7 +1711,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
       }),
     );
 
-    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode, rec } = await runShell(shell, 'npm install debug@^4.4.1');
 
     expect(exitCode).toBe(0);
     await vi.waitFor(() => {
@@ -1665,13 +1725,13 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
   it('a stamp write failure beyond the sampled failures still warns — the FULL ledger, not the sample', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => ({
           failures: [
@@ -1689,7 +1749,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
       }),
     );
 
-    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode, rec } = await runShell(shell, 'npm install debug@^4.4.1');
 
     expect(exitCode).toBe(0);
     await vi.waitFor(() => {
@@ -1705,13 +1765,13 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     // node_modules torn — it must NOT skip a good stamp (over-broad revoke bug).
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => ({
           failures: [
@@ -1726,7 +1786,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
       }),
     );
 
-    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode, rec } = await runShell(shell, 'npm install debug@^4.4.1');
 
     expect(exitCode).toBe(0);
     await vi.waitFor(async () => {
@@ -1741,13 +1801,13 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     // `failures` alone would stamp a torn tree.
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => ({
           failures: [
@@ -1755,13 +1815,12 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
           ],
           total: 21,
           anyFailure: (pred: (p: string) => boolean) =>
-            pred('/.rifty/eddy-learned-pins.json') ||
-            pred('/proj/node_modules/lodash/package.json'),
+            pred('/.rifty/eddy-learned-pins.json') || pred('/proj/node_modules/debug/package.json'),
         }),
       }),
     );
 
-    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode, rec } = await runShell(shell, 'npm install debug@^4.4.1');
 
     expect(exitCode).toBe(0); // live tree works
     await vi.waitFor(() => {
@@ -1775,13 +1834,13 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
   it('a THROWING flush skips the stamp and warns — a drain that cannot even report is not durable', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => {
           throw new Error('rpc torn');
@@ -1789,7 +1848,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
       }),
     );
 
-    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode, rec } = await runShell(shell, 'npm install debug@^4.4.1');
 
     expect(exitCode).toBe(0);
     await vi.waitFor(() => {
@@ -1822,13 +1881,13 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
       },
     }) as unknown as MemoryVfs;
     let flushed = false;
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => {
           flushed = true;
@@ -1837,7 +1896,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
       }),
     );
 
-    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode, rec } = await runShell(shell, 'npm install debug@^4.4.1');
 
     expect(exitCode).toBe(0); // install still succeeds
     await vi.waitFor(() => {
@@ -1854,19 +1913,19 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
   it('keys the install stamp on the owner project slug so a reload reuses the tree', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         projectSlug: () => 'real-vite',
       }),
     );
 
-    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode } = await runShell(shell, 'npm install debug@^4.4.1');
 
     expect(exitCode).toBe(0);
     await vi.waitFor(async () => {
@@ -1889,9 +1948,12 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
       throw new Error('network down');
     };
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
-    const { exitCode } = await runShell(shell, 'npm install lodash');
+    const { exitCode } = await runShell(shell, 'npm install debug');
 
     expect(exitCode).toBe(1);
     expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
@@ -1900,10 +1962,13 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
   it('a failed install leaves no trusted claim after the mutation window opens', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
-    await runShell(shell, 'npm install lodash@^4.17.0');
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
+    await runShell(shell, 'npm install debug@^4.4.1');
     await vi.waitFor(async () => {
       const stamp = JSON.parse(
         await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json'),
@@ -1917,7 +1982,7 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     const shell2 = new Shell({ cwd: '/proj' });
     shell2.registerCommand(
       'npm',
-      createNpmShellCommand({ vfs, registry: fakeRegistry, install: failing }),
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install: failing }),
     );
     const { exitCode } = await runShell(shell2, 'npm install ms');
 
@@ -1930,29 +1995,6 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
 });
 
 describe('npm-shell-command — background durability with authority-held FIFO', () => {
-  function twoPackageResult(): InstallResult {
-    return {
-      packages: [
-        { name: 'lodash', version: '4.17.21', dependencies: {}, files: {} },
-        { name: 'ms', version: '2.1.3', dependencies: {}, files: {} },
-      ],
-      lockfile: {
-        name: 'root',
-        version: '0.0.0',
-        lockfileVersion: 3,
-        requires: true,
-        packages: {},
-      },
-      conflicts: [],
-      provenance: {
-        resolution: 'metadata',
-        packages: [
-          { name: 'lodash', version: '4.17.21', transport: 'registry' },
-          { name: 'ms', version: '2.1.3', transport: 'registry' },
-        ],
-      },
-    };
-  }
   const STAMP = '/proj/node_modules/.rifty-install-stamp.json';
   /** The stamp iff present AND trusted (not pending); null otherwise. */
   async function trustedStamp(
@@ -1984,7 +2026,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
   it('returns the install and its && continuation before the clean drain publishes trust', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     let releaseFlush!: () => void;
     const flushGate = new Promise<void>((r) => {
       releaseFlush = r;
@@ -1995,7 +2037,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => {
           flushCalls++;
@@ -2005,7 +2047,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       }),
     );
 
-    const running = runShell(shell, 'npm install lodash@^4.17.0 && echo NEXT');
+    const running = runShell(shell, 'npm install debug@^4.4.1 && echo NEXT');
     await vi.waitFor(() => expect(flushCalls).toBe(1));
     const { exitCode, rec } = await running;
     expect(exitCode).toBe(0);
@@ -2020,7 +2062,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
   it('returns before a DIRTY drain warns loudly and skips trust', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     let releaseFlush!: () => void;
     const flushGate = new Promise<void>((r) => {
       releaseFlush = r;
@@ -2032,7 +2074,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => {
           flushStarted = true;
@@ -2040,7 +2082,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
           return {
             failures: [
               {
-                path: '/proj/node_modules/lodash/package.json',
+                path: '/proj/node_modules/debug/package.json',
                 op: 'write' as const,
                 message: 'QuotaExceededError',
               },
@@ -2051,7 +2093,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       }),
     );
 
-    const running = shell.run('npm install lodash@^4.17.0', {
+    const running = shell.run('npm install debug@^4.4.1', {
       onChunk: (chunk, stream) => {
         rec[stream].push(chunk);
       },
@@ -2069,19 +2111,19 @@ describe('npm-shell-command — background durability with authority-held FIFO',
   it('a drain that never completes leaves the root internally reserved without blocking the prompt', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: () => new Promise(() => {}), // the drain never settles
       }),
     );
 
-    const running = runShell(shell, 'npm install lodash@^4.17.0');
+    const running = runShell(shell, 'npm install debug@^4.4.1');
     await vi.waitFor(async () => expect(await vfs.exists(STAMP)).toBe(true));
     await expect(running).resolves.toMatchObject({ exitCode: 0 });
     expect(await trustedStamp(vfs)).toBeNull();
@@ -2095,13 +2137,13 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       releaseFlush = r;
     });
     let flushCalls = 0;
-    const { install, calls } = makeStubInstall(() => twoPackageResult());
+    const { install, calls } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => {
           flushCalls++;
@@ -2111,7 +2153,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       }),
     );
 
-    const first = runShell(shell, 'npm install lodash@^4.17.0');
+    const first = runShell(shell, 'npm install debug@^4.4.1');
     await vi.waitFor(() => expect(flushCalls).toBe(1));
     const second = runShell(shell, 'npm install ms@^2.1.3');
     await expect(first).resolves.toMatchObject({ exitCode: 0 });
@@ -2122,7 +2164,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     await expect(second).resolves.toMatchObject({ exitCode: 0 });
     expect(calls).toHaveLength(2);
     await vi.waitFor(async () => {
-      expect((await trustedStamp(vfs))?.deps).toEqual({ lodash: '^4.17.0', ms: '^2.1.3' });
+      expect((await trustedStamp(vfs))?.deps).toEqual({ debug: '^4.4.1', ms: '^2.1.3' });
     });
   });
 
@@ -2134,10 +2176,10 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       releaseFlush = r;
     });
     let flushCalls = 0;
-    const { install, calls } = makeStubInstall(() => twoPackageResult());
+    const { install, calls } = makeRealInstall();
     const deps = {
       vfs,
-      registry: fakeRegistry,
+      registry: fixtureRegistry,
       install,
       flush: async () => {
         flushCalls += 1;
@@ -2151,7 +2193,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     const shellB = new Shell({ cwd: '/proj' });
     shellB.registerCommand('npm', createNpmShellCommand({ ...deps, packageAcquisitionAuthority }));
 
-    const a = runShell(shellA, 'npm install lodash@^4.17.0');
+    const a = runShell(shellA, 'npm install debug@^4.4.1');
     await vi.waitFor(() => expect(flushCalls).toBe(1));
     const b = runShell(shellB, 'npm install ms@^2.1.3');
     await expect(a).resolves.toMatchObject({ exitCode: 0 });
@@ -2161,7 +2203,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     await expect(b).resolves.toMatchObject({ exitCode: 0 });
     expect(calls).toHaveLength(2);
     await vi.waitFor(async () => {
-      expect((await trustedStamp(vfs))?.deps).toEqual({ lodash: '^4.17.0', ms: '^2.1.3' });
+      expect((await trustedStamp(vfs))?.deps).toEqual({ debug: '^4.4.1', ms: '^2.1.3' });
     });
   });
 
@@ -2173,27 +2215,29 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     // still untrusted on restart.
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install: firstInstall } = makeStubInstall(() => twoPackageResult());
+    const { install: firstInstall } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
-      createNpmShellCommand({ vfs, registry: fakeRegistry, install: firstInstall }),
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install: firstInstall }),
     );
-    await runShell(shell, 'npm install lodash@^4.17.0');
+    await runShell(shell, 'npm install debug@^4.4.1');
     await vi.waitFor(async () => {
       const stamp = JSON.parse(await vfs.readFileText(STAMP)) as { durability?: string };
       expect(stamp.durability).toBeUndefined(); // trusted stamp #1 down
     });
 
     let stampExistsDuringInstall = true;
-    const secondInstall: InstallFn = async () => {
+    const secondInstall: InstallFn = async (actualOptions: string | InstallOptions) => {
+      const actualInstallResult = await installActual(actualOptions);
+
       stampExistsDuringInstall = await vfs.exists(STAMP);
-      return twoPackageResult();
+      return actualInstallResult;
     };
     const shell2 = new Shell({ cwd: '/proj' });
     shell2.registerCommand(
       'npm',
-      createNpmShellCommand({ vfs, registry: fakeRegistry, install: secondInstall }),
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install: secondInstall }),
     );
     const { exitCode } = await runShell(shell2, 'npm install ms@^2.1.3');
 
@@ -2209,7 +2253,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     // → no trusted stamp, loud skip, the next boot re-installs.
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     let releaseFlush!: () => void;
     const flushGate = new Promise<void>((r) => {
       releaseFlush = r;
@@ -2220,7 +2264,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => {
           flushStarted = true;
@@ -2230,13 +2274,13 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       }),
     );
 
-    const running = runShell(shell, 'npm install lodash@^4.17.0');
+    const running = runShell(shell, 'npm install debug@^4.4.1');
     await vi.waitFor(() => expect(flushStarted).toBe(true));
     const { exitCode, rec } = await running;
 
     await vfs.writeFile(
       '/proj/package.json',
-      `${JSON.stringify({ name: 'demo', dependencies: { lodash: '^4.17.0', evil: '9.9.9' } }, null, 2)}\n`,
+      `${JSON.stringify({ name: 'demo', dependencies: { debug: '^4.4.1', evil: '9.9.9' } }, null, 2)}\n`,
     );
     releaseFlush();
     expect(exitCode).toBe(0);
@@ -2249,7 +2293,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
   it('the promoted stamp carries the install-time slug when selection changes during the background drain', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     let releaseFlush!: () => void;
     const flushGate = new Promise<void>((r) => {
       releaseFlush = r;
@@ -2261,7 +2305,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         projectSlug: () => slug,
         flush: async () => {
@@ -2272,7 +2316,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       }),
     );
 
-    const running = runShell(shell, 'npm install lodash@^4.17.0');
+    const running = runShell(shell, 'npm install debug@^4.4.1');
     await vi.waitFor(() => expect(flushStarted).toBe(true));
     await expect(running).resolves.toMatchObject({ exitCode: 0 });
     slug = 'preset-b';
@@ -2297,23 +2341,25 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     let slug = 'preset-a';
-    const install: InstallFn = async () => {
+    const install: InstallFn = async (actualOptions: string | InstallOptions) => {
+      const actualInstallResult = await installActual(actualOptions);
+
       slug = 'preset-b'; // the active preset changes while the install runs
-      return twoPackageResult();
+      return actualInstallResult;
     };
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         projectSlug: () => slug,
         flush: async () => ({ failures: [], total: 0 }),
       }),
     );
 
-    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode } = await runShell(shell, 'npm install debug@^4.4.1');
     expect(exitCode).toBe(0);
 
     await vi.waitFor(async () => {
@@ -2334,18 +2380,23 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     // outcome: no trusted stamp, loud skip, next boot re-installs.
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const install: InstallFn = async () => {
+    const install: InstallFn = async (actualOptions: string | InstallOptions) => {
+      const actualInstallResult = await installActual(actualOptions);
+
       // The user edits package.json while the install is running.
       await vfs.writeFile(
         '/proj/package.json',
-        `${JSON.stringify({ name: 'demo', dependencies: { lodash: '^4.17.0', evil: '9.9.9' } }, null, 2)}\n`,
+        `${JSON.stringify({ name: 'demo', dependencies: { debug: '^4.4.1', evil: '9.9.9' } }, null, 2)}\n`,
       );
-      return twoPackageResult();
+      return actualInstallResult;
     };
     const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fixtureRegistry, install }),
+    );
 
-    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode, rec } = await runShell(shell, 'npm install debug@^4.4.1');
     expect(exitCode).toBe(0);
 
     await vi.waitFor(() => {
@@ -2362,7 +2413,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     // resolved under different inputs.
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     let releaseFlush!: () => void;
     const flushGate = new Promise<void>((r) => {
       releaseFlush = r;
@@ -2373,7 +2424,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => {
           flushStarted = true;
@@ -2383,11 +2434,11 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       }),
     );
 
-    const running = runShell(shell, 'npm install lodash@^4.17.0');
+    const running = runShell(shell, 'npm install debug@^4.4.1');
     await vi.waitFor(() => expect(flushStarted).toBe(true));
     const { exitCode, rec } = await running;
 
-    // Same flat map — lodash just moves to devDependencies.
+    // Same flat map — debug just moves to devDependencies.
     await vfs.writeFile(
       '/proj/package.json',
       `${JSON.stringify(
@@ -2395,7 +2446,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
           name: 'rifty-project',
           version: '0.0.0',
           private: true,
-          devDependencies: { lodash: '^4.17.0' },
+          devDependencies: { debug: '^4.4.1' },
         },
         null,
         2,
@@ -2412,7 +2463,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
   it('a tree deleted during the authority-held drain is never resurrected by promotion', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     let releaseFlush!: () => void;
     const flushGate = new Promise<void>((r) => {
       releaseFlush = r;
@@ -2423,7 +2474,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => {
           flushStarted = true;
@@ -2433,7 +2484,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       }),
     );
 
-    const running = runShell(shell, 'npm install lodash@^4.17.0');
+    const running = runShell(shell, 'npm install debug@^4.4.1');
     await vi.waitFor(() => expect(flushStarted).toBe(true));
     await expect(running).resolves.toMatchObject({ exitCode: 0 });
     await vfs.rm('/proj/node_modules', { recursive: true, force: true });
@@ -2472,16 +2523,18 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       },
     }) as unknown as Vfs;
     let installCalls = 0;
-    const install: InstallFn = async () => {
+    const install: InstallFn = async (actualOptions: string | InstallOptions) => {
+      const actualInstallResult = await installActual(actualOptions);
+
       installCalls += 1;
-      return twoPackageResult();
+      return actualInstallResult;
     };
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => {
           gateArmed = true;
@@ -2490,9 +2543,9 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       }),
     );
 
-    const firstRun = runShell(shell, 'npm install lodash@^4.17.0');
+    const firstRun = runShell(shell, 'npm install debug@^4.4.1');
     await parked;
-    const secondRun = runShell(shell, 'npm install lodash@^4.17.0');
+    const secondRun = runShell(shell, 'npm install debug@^4.4.1');
     await expect(firstRun).resolves.toMatchObject({ exitCode: 0 });
     await expectPending(secondRun);
     expect(installCalls).toBe(1);
@@ -2502,7 +2555,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     await expect(secondRun).resolves.toMatchObject({ exitCode: 0 });
     expect(installCalls).toBe(2);
     await vi.waitFor(async () => {
-      expect((await trustedStamp(inner))?.deps).toEqual({ lodash: '^4.17.0' });
+      expect((await trustedStamp(inner))?.deps).toEqual({ debug: '^4.4.1' });
     });
   });
 
@@ -2527,19 +2580,19 @@ describe('npm-shell-command — background durability with authority-held FIFO',
         return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
       },
     }) as unknown as Vfs;
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => ({ failures: [], total: 0 }),
       }),
     );
 
-    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode, rec } = await runShell(shell, 'npm install debug@^4.4.1');
     expect(exitCode).toBe(0);
     await new Promise((r) => setTimeout(r, 20));
 
@@ -2550,7 +2603,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
   });
 
   const TRUSTED_PACKAGE_JSON = `${JSON.stringify(
-    { name: 'demo', version: '0.0.0', dependencies: { lodash: '^4.17.0' } },
+    { name: 'demo', version: '0.0.0', dependencies: { debug: '^4.4.1' } },
     null,
     2,
   )}\n`;
@@ -2575,16 +2628,18 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     const vfs = new MemoryVfs();
     await seedTrustedProject(vfs);
     let installCalled = false;
-    const install: InstallFn = async () => {
+    const install: InstallFn = async (actualOptions: string | InstallOptions) => {
+      const actualInstallResult = await installActual(actualOptions);
+
       installCalled = true;
-      return twoPackageResult();
+      return actualInstallResult;
     };
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => ({
           failures: [{ path: STAMP, op: 'write' as const, message: 'QuotaExceededError' }],
@@ -2593,7 +2648,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       }),
     );
 
-    const { exitCode, rec } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode, rec } = await runShell(shell, 'npm install debug@^4.4.1');
 
     expect(exitCode).toBe(1);
     expect(installCalled).toBe(false); // aborted BEFORE any tree mutation
@@ -2602,7 +2657,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     const pkg = JSON.parse(await vfs.readFileText('/proj/package.json')) as {
       dependencies: Record<string, string>;
     };
-    expect(pkg.dependencies).toEqual({ lodash: '^4.17.0' });
+    expect(pkg.dependencies).toEqual({ debug: '^4.4.1' });
   });
 
   it('an ABORTED install restores the trusted stamp in the mirror — a retry must re-run the durability proof', async () => {
@@ -2612,16 +2667,18 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     const vfs = new MemoryVfs();
     await seedTrustedProject(vfs);
     let installCalls = 0;
-    const install: InstallFn = async () => {
+    const install: InstallFn = async (actualOptions: string | InstallOptions) => {
+      const actualInstallResult = await installActual(actualOptions);
+
       installCalls += 1;
-      return twoPackageResult();
+      return actualInstallResult;
     };
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => ({
           failures: [{ path: STAMP, op: 'write' as const, message: 'QuotaExceededError' }],
@@ -2630,7 +2687,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       }),
     );
 
-    const first = await runShell(shell, 'npm install lodash@^4.17.0');
+    const first = await runShell(shell, 'npm install debug@^4.4.1');
     expect(first.exitCode).toBe(1);
     // The mirror mirrors OPFS again: the trusted stamp is back in memory.
     const restored = JSON.parse(await vfs.readFileText(STAMP)) as { durability?: string };
@@ -2638,7 +2695,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
 
     // The retry re-reads a TRUSTED prior stamp → re-runs the proof → aborts
     // again (persist still failing) BEFORE any mutation.
-    const second = await runShell(shell, 'npm install lodash@^4.17.0');
+    const second = await runShell(shell, 'npm install debug@^4.4.1');
     expect(second.exitCode).toBe(1);
     expect(installCalls).toBe(0);
   });
@@ -2647,13 +2704,13 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     const vfs = new MemoryVfs();
     await seedTrustedProject(vfs);
     let flushCalls = 0;
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => {
           flushCalls += 1;
@@ -2670,12 +2727,12 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       }),
     );
 
-    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode } = await runShell(shell, 'npm install debug@^4.4.1');
 
     expect(exitCode).toBe(0);
     // The background sequence still lands the trusted stamp for THIS install.
     await vi.waitFor(async () => {
-      expect((await trustedStamp(vfs))?.deps).toEqual({ lodash: '^4.17.0' });
+      expect((await trustedStamp(vfs))?.deps).toEqual({ debug: '^4.4.1' });
     });
   });
 
@@ -2688,22 +2745,24 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     await vfs.writeFile(STAMP, TRUSTED_SEED); // trusted stamp, NO package.json
     let stampExistsDuringInstall = true;
-    const install: InstallFn = async () => {
+    const install: InstallFn = async (actualOptions: string | InstallOptions) => {
+      const actualInstallResult = await installActual(actualOptions);
+
       stampExistsDuringInstall = await vfs.exists(STAMP);
-      return twoPackageResult();
+      return actualInstallResult;
     };
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => ({ failures: [], total: 0 }),
       }),
     );
 
-    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode } = await runShell(shell, 'npm install debug@^4.4.1');
 
     expect(exitCode).toBe(0);
     expect(stampExistsDuringInstall).toBe(false);
@@ -2718,16 +2777,18 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     let flushCallsBeforeInstall = 0;
     let flushCalls = 0;
-    const install: InstallFn = async () => {
+    const install: InstallFn = async (actualOptions: string | InstallOptions) => {
+      const actualInstallResult = await installActual(actualOptions);
+
       flushCallsBeforeInstall = flushCalls;
-      return twoPackageResult();
+      return actualInstallResult;
     };
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         flush: async () => {
           flushCalls += 1;
@@ -2736,7 +2797,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       }),
     );
 
-    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode } = await runShell(shell, 'npm install debug@^4.4.1');
 
     expect(exitCode).toBe(0);
     expect(flushCallsBeforeInstall).toBe(0); // no foreground drain on the fast path
@@ -2756,11 +2817,13 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     let installCalls = 0;
     const npm = createNpmShellCommand({
       vfs,
-      registry: fakeRegistry,
+      registry: fixtureRegistry,
       prepareInstall: async (_ctx, info) => {
         if (info.fullInstall) events.push('prepareB'); // the would-be clear/reseed
       },
-      install: async () => {
+      install: async (actualOptions: string | InstallOptions) => {
+        const actualInstallResult = await installActual(actualOptions);
+
         installCalls += 1;
         if (installCalls === 1) {
           events.push('installA:start');
@@ -2769,7 +2832,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
         } else {
           events.push('installB');
         }
-        return twoPackageResult();
+        return actualInstallResult;
       },
     });
     const shellA = new Shell({ cwd: '/proj' });
@@ -2777,7 +2840,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     const shellB = new Shell({ cwd: '/proj' });
     shellB.registerCommand('npm', npm);
 
-    const a = runShell(shellA, 'npm install lodash@^4.17.0');
+    const a = runShell(shellA, 'npm install debug@^4.4.1');
     const b = runShell(shellB, 'npm install');
     await new Promise((r) => setTimeout(r, 20));
     expect(events).toEqual(['installA:start']); // B's PREPARE waits for A's phase too
@@ -2800,13 +2863,13 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     let stampExistsAtPrepare = true;
     let flushCalls = 0;
     let flushCallsAtPrepare = 0;
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         prepareInstall: async () => {
           flushCallsAtPrepare = flushCalls;
@@ -2819,7 +2882,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       }),
     );
 
-    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+    const { exitCode } = await runShell(shell, 'npm install debug@^4.4.1');
 
     expect(exitCode).toBe(0);
     expect(flushCallsAtPrepare).toBe(1); // pending demote proven before mutation opens
@@ -2835,13 +2898,13 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });
     const flags: boolean[] = [];
-    const { install } = makeStubInstall(() => twoPackageResult());
+    const { install } = makeRealInstall();
     const shell = new Shell({ cwd: '/proj' });
     shell.registerCommand(
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install,
         prepareInstall: async (_ctx, info) => {
           flags.push(info.sessionInstallActivity);
@@ -2850,7 +2913,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
       }),
     );
 
-    await runShell(shell, 'npm install lodash@^4.17.0');
+    await runShell(shell, 'npm install debug@^4.4.1');
     await runShell(shell, 'npm install ms@^2.1.3');
 
     expect(flags).toEqual([false, true]);
@@ -2869,8 +2932,10 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     let installCalls = 0;
     const deps = {
       vfs,
-      registry: fakeRegistry,
-      install: async () => {
+      registry: fixtureRegistry,
+      install: async (actualOptions: string | InstallOptions) => {
+        const actualInstallResult = await installActual(actualOptions);
+
         installCalls += 1;
         if (installCalls === 1) {
           events.push('installA:start');
@@ -2879,7 +2944,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
         } else {
           events.push('installB');
         }
-        return twoPackageResult();
+        return actualInstallResult;
       },
     };
     const packageAcquisitionAuthority = createTestNpmPackageAcquisitionAuthority(deps);
@@ -2888,7 +2953,7 @@ describe('npm-shell-command — background durability with authority-held FIFO',
     const shellB = new Shell({ cwd: '/proj' });
     shellB.registerCommand('npm', createNpmShellCommand({ ...deps, packageAcquisitionAuthority }));
 
-    const a = runShell(shellA, 'npm install lodash@^4.17.0');
+    const a = runShell(shellA, 'npm install debug@^4.4.1');
     const b = runShell(shellB, 'npm install ms@^2.1.3');
     await new Promise((r) => setTimeout(r, 20));
     expect(events).toEqual(['installA:start']); // B's install phase WAITS for A's
@@ -2985,7 +3050,7 @@ describe('npm-shell-command — cwd package identity', () => {
     const context: CommandContext = { cwd: root, env: {}, stdout: sink, stderr: sink };
     const npm = createNpmShellCommand({
       vfs,
-      registry: fakeRegistry,
+      registry: fixtureRegistry,
       packageAcquisitionAuthority: packages,
       projectSlug: (candidateRoot) =>
         candidateRoot === activeProject.root ? activeProject.slug : `root:${candidateRoot}`,
@@ -3054,7 +3119,7 @@ describe('npm-shell-command — cwd package identity', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         packageAcquisitionAuthority: packages,
         projectSlug: (root) => (root === outerRoot ? 'active' : `root:${root}`),
       }),
@@ -3097,7 +3162,7 @@ describe('npm-shell-command — eddy fast-install seam (ADR-0182)', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverUrl: 'http://eddy.test',
         install: async (arg1) => {
           seenResolverUrl = (arg1 as InstallOptions).resolverUrl;
@@ -3122,7 +3187,7 @@ describe('npm-shell-command — eddy fast-install seam (ADR-0182)', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverUrl: 'http://eddy.test',
         resolverClosureHash: () => 'sha256-pin',
         resolverPrefetch: () => prefetchHandle,
@@ -3156,7 +3221,7 @@ describe('npm-shell-command — eddy fast-install seam (ADR-0182)', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverUrl: 'http://eddy.test',
         // No env pin, no learned pin: the pin the handle was primed against
         // is GONE — the prefetch must not ride in anyway.
@@ -3183,7 +3248,7 @@ describe('npm-shell-command — eddy fast-install seam (ADR-0182)', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverUrl: 'http://eddy.test',
         resolverClosureHash: () => 'sha256-pin',
         resolverPrefetch: () => handle,
@@ -3210,7 +3275,7 @@ describe('npm-shell-command — eddy fast-install seam (ADR-0182)', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverClosureHash: () => {
           throw new Error('must not run without resolverUrl');
         },
@@ -3242,7 +3307,7 @@ describe('npm-shell-command — eddy fast-install seam (ADR-0182)', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         install: async (arg1) => {
           seenResolverUrl = (arg1 as InstallOptions).resolverUrl;
           return { ...singletonResult('debug', '4.4.1'), source: 'standard' };
@@ -3319,7 +3384,7 @@ describe('npm-shell-command — stale learned pin (SWR: as-of line + background 
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverUrl: 'http://eddy.test',
         learnedPins: seams.learnedPins,
         install: async () => eddyResult(STALE_HASH),
@@ -3358,7 +3423,7 @@ describe('npm-shell-command — stale learned pin (SWR: as-of line + background 
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverUrl: 'http://eddy.test',
         learnedPins: seams.learnedPins,
         install: async () => eddyResult(STALE_HASH, 'get'),
@@ -3385,7 +3450,7 @@ describe('npm-shell-command — stale learned pin (SWR: as-of line + background 
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverUrl: 'http://eddy.test',
         learnedPins: seams.learnedPins,
         install: async () => eddyResult(STALE_HASH, 'post'),
@@ -3414,7 +3479,7 @@ describe('npm-shell-command — stale learned pin (SWR: as-of line + background 
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverUrl: 'http://eddy.test',
         learnedPins: seams.learnedPins,
         install: async () => eddyResult('sha256-fresh/post=', 'post'),
@@ -3439,7 +3504,7 @@ describe('npm-shell-command — stale learned pin (SWR: as-of line + background 
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverUrl: 'http://eddy.test',
         learnedPins: seams.learnedPins,
         install: async () => ({ ...singletonResult('debug', '4.4.1'), source: 'standard' }),
@@ -3465,7 +3530,7 @@ describe('npm-shell-command — stale learned pin (SWR: as-of line + background 
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverUrl: 'http://eddy.test',
         learnedPins: seams.learnedPins,
         install: async () => eddyResult(STALE_HASH),
@@ -3516,7 +3581,7 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverUrl: 'http://eddy.test',
         learnedPins: {
           get: async (key) => {
@@ -3549,7 +3614,7 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverUrl: 'http://eddy.test',
         resolverClosureHash: () => 'sha256-env',
         learnedPins: {
@@ -3583,7 +3648,7 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverUrl: 'http://eddy.test',
         resolverClosureHash: () => 'sha256-env',
         learnedPins: {
@@ -3603,119 +3668,6 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
     expect(seenPin).toBe('sha256-env');
   });
 
-  it('an eddy install writes the pin back under the MERGED package.json request key', async () => {
-    const vfs = await projVfs({ debug: '^4.4.1' });
-    const sets: Array<{ key: string; hash: string }> = [];
-    const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand(
-      'npm',
-      createNpmShellCommand({
-        vfs,
-        registry: fakeRegistry,
-        resolverUrl: 'http://eddy.test',
-        learnedPins: {
-          get: async () => undefined,
-          set: async (key, hash) => {
-            sets.push({ key, hash });
-          },
-          revalidate: async () => {},
-        },
-        install: async () => ({
-          ...singletonResult('kleur', '4.1.5'),
-          source: 'eddy',
-          closureHash: 'sha256-new',
-          resolvedVia: 'post',
-        }),
-      }),
-    );
-
-    // A named install MERGES into package.json first — the learned key must be
-    // the post-merge request (debug + kleur), not the pre-install file.
-    const { exitCode } = await runShell(shell, 'npm install kleur@4.1.5');
-    await flush();
-
-    expect(exitCode).toBe(0);
-    expect(sets).toEqual([
-      { key: keyFor({ debug: '^4.4.1', kleur: '4.1.5' }), hash: 'sha256-new' },
-    ]);
-  });
-
-  it('the pin write-back carries the install-START baseline for compare-and-set — a late older POST cannot roll back a newer pin', async () => {
-    // Review round 4 (the revalidate-CAS sibling the round-3 sweep missed):
-    // two overlapping installs of one dep set — the slower one adopted an
-    // OLDER cached resolution; its unconditional write-back rolled the pin
-    // back and reset the stale window to the old closure.
-    const vfs = await projVfs({ debug: '^4.4.1' });
-    const sets: Array<{ key: string; hash: string; expectedCurrent: string | null | undefined }> =
-      [];
-    const learnedPins = {
-      get: async () => ({ closureHash: 'sha256-old', stale: true }),
-      set: async (key: string, hash: string, expectedCurrent?: string | null) => {
-        sets.push({ key, hash, expectedCurrent });
-      },
-      revalidate: async () => {},
-    };
-    const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand(
-      'npm',
-      createNpmShellCommand({
-        vfs,
-        registry: fakeRegistry,
-        resolverUrl: 'http://eddy.test',
-        learnedPins,
-        install: async () => ({
-          ...singletonResult('kleur', '4.1.5'),
-          source: 'eddy',
-          closureHash: 'sha256-new',
-          resolvedVia: 'post',
-        }),
-      }),
-    );
-
-    const { exitCode } = await runShell(shell, 'npm install kleur@4.1.5');
-    await flush();
-
-    expect(exitCode).toBe(0);
-    // The baseline = the pin READ at install start; the store skips the write
-    // when the entry moved meanwhile (a newer install already re-learned).
-    expect(sets).toEqual([
-      { key: expect.any(String), hash: 'sha256-new', expectedCurrent: 'sha256-old' },
-    ]);
-  });
-
-  it('a first-install write-back expects an ABSENT entry — two racers cannot both land', async () => {
-    const vfs = await projVfs({ debug: '^4.4.1' });
-    const sets: Array<{ expectedCurrent: string | null | undefined }> = [];
-    const learnedPins = {
-      get: async () => undefined, // no pin at install start
-      set: async (_key: string, _hash: string, expectedCurrent?: string | null) => {
-        sets.push({ expectedCurrent });
-      },
-      revalidate: async () => {},
-    };
-    const shell = new Shell({ cwd: '/proj' });
-    shell.registerCommand(
-      'npm',
-      createNpmShellCommand({
-        vfs,
-        registry: fakeRegistry,
-        resolverUrl: 'http://eddy.test',
-        learnedPins,
-        install: async () => ({
-          ...singletonResult('kleur', '4.1.5'),
-          source: 'eddy',
-          closureHash: 'sha256-new',
-          resolvedVia: 'post',
-        }),
-      }),
-    );
-
-    await runShell(shell, 'npm install kleur@4.1.5');
-    await flush();
-
-    expect(sets).toEqual([{ expectedCurrent: null }]); // null = require-absent
-  });
-
   it('a standard-source install never writes a pin', async () => {
     const vfs = await projVfs();
     let sets = 0;
@@ -3724,7 +3676,7 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverUrl: 'http://eddy.test',
         learnedPins: {
           get: async () => undefined,
@@ -3754,7 +3706,7 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         resolverUrl: 'http://eddy.test',
         learnedPins: {
           get: async () => undefined,
@@ -3788,7 +3740,7 @@ describe('npm-shell-command — learned pins seam (ADR-0194)', () => {
       'npm',
       createNpmShellCommand({
         vfs,
-        registry: fakeRegistry,
+        registry: fixtureRegistry,
         learnedPins: {
           get: async () => {
             gets++;
