@@ -1,7 +1,8 @@
 import type { PersistFailureReport } from '@riftydev/vfs';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
-import { createOwnerVfsAuthority } from './owner-vfs-authority.ts';
+import { createInstallStamp } from '../glue/install-stamp.ts';
+import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import { createWorkbenchProjectStore } from './workbench-project-store.ts';
 
 const encoder = new TextEncoder();
@@ -9,8 +10,10 @@ const decoder = new TextDecoder();
 
 function harness() {
   const { fsSync } = createMemoryFs();
-  const authority = createOwnerVfsAuthority(fsSync, { ownerEpoch: 'project-store-test-owner' });
-  const store = createWorkbenchProjectStore(authority, {
+  const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(fsSync, {
+    ownerEpoch: 'project-store-test-owner',
+  });
+  const store = createWorkbenchProjectStore(authority, installStampClaims, {
     createStageId: () => 'stage-1',
   });
   return { authority, store };
@@ -124,4 +127,52 @@ describe('Workbench project store', () => {
     ).rejects.toThrow(/project-rooted path/i);
     await expect(h.store.beginStage('../escape')).rejects.toThrow(/project key/i);
   });
+});
+
+it('deletes managed install claims with the project while preserving other projects', async () => {
+  const { fsSync } = createMemoryFs();
+  const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(fsSync, {
+    ownerEpoch: 'managed-delete',
+  });
+  const store = createWorkbenchProjectStore(authority, installStampClaims);
+  for (const key of ['delete-me', 'keep-me']) {
+    const stage = await store.beginStage(key);
+    await store.writeStageFile(stage.stageId, '/package.json', encoder.encode('{}'));
+    const { projectRoot } = await store.promoteStage({
+      stageId: stage.stageId,
+      projectKey: key,
+      definitionIdentity: key,
+    });
+    for (const root of [projectRoot, `${projectRoot}/node_modules/nested`]) {
+      const stamp = createInstallStamp(root, '{}', { slug: key, packages: 0 });
+      if (!stamp) throw new Error('Expected valid install stamp');
+      installStampClaims.write(root, encoder.encode(JSON.stringify(stamp)), { mkdirTree: true });
+    }
+  }
+  expect(() =>
+    authority.rmSync('/.rifty/workbench/v2/projects/delete-me', { recursive: true }),
+  ).toThrow(/reserved install-stamp/);
+  const deleted = await store.deleteProject('delete-me');
+  await store.waitForDurability(deleted.revision);
+  expect(await store.readProject('delete-me')).toBeNull();
+  expect(authority.existsSync('/.rifty/workbench/v2/projects/delete-me')).toBe(false);
+  const retained = await store.readProject('keep-me');
+  expect(retained).not.toBeNull();
+  expect(installStampClaims.read(retained!.projectRoot)).not.toBeNull();
+  expect(installStampClaims.read(`${retained!.projectRoot}/node_modules/nested`)).not.toBeNull();
+});
+
+it('discards a managed orphan stage through the same claim-aware boundary', async () => {
+  const { fsSync } = createMemoryFs();
+  const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(fsSync, {
+    ownerEpoch: 'stage-cleanup',
+  });
+  const store = createWorkbenchProjectStore(authority, installStampClaims, {
+    createStageId: () => 'orphan',
+  });
+  await store.beginStage('alpha');
+  const root = '/.rifty/workbench/v2/stages/alpha/orphan/tree';
+  installStampClaims.write(root, encoder.encode('{'), { mkdirTree: true });
+  await store.discardStage('alpha');
+  expect(authority.existsSync('/.rifty/workbench/v2/stages/alpha')).toBe(false);
 });

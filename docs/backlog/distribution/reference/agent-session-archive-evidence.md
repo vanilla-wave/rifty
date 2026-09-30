@@ -40,3 +40,26 @@ Main suite RED: `RIFTY_PLAYGROUND_PORT=5413 pnpm test:browser-unit tests/browser
 Search now visits decoded strings at one boundary. Same full suite → 11/11 PASS
 (8.7 s), including the unchanged RED assertion. No source test weakened.
 - Post-F1 `pnpm pr:check`: 27/27 PASS. Initial `test:run` had 3 failures / 2 Vitest timeouts in installer-shadow-recipe-v2-acquisition-replay-authority.contract.test.ts and dep-snapshot.test.ts; both passed the single automatic isolated rerun (host load 41.4/45.4/34.6). No isolated reproduction or speculative repair. Log: /tmp/rifty-archive-pr-check-2.log.
+
+## Installed-host discovery: managed project deletion
+
+Packed run 2: SDK scripted + real gpt-6-luna recall PASS after delete/reload.
+Workbench failed EPERM on its installed node_modules/.rifty-install-stamp.json.
+Unit reproduction confirms workbench-project-store.deleteProject directly called
+guarded authority.rmSync without the existing composition-only claim capability.
+Baseline: public deleteProject, goal scenario3; no new product promise.
+
+Class: sibling-drift / observable-order at owned in-process policy boundary.
+Sweep: Playground catalog already uses removeManagedTree; package acquisition
+clears claims before reset via its guard transitions; core deleteProject and
+sibling discardStage used raw removal. Both now reuse that existing helper;
+composition supplies its existing InstallStampClaimIo. Read-only project probing
+needs no mutation capability and shares only the record reader. No lock or owner added.
+Transport loss/duplication/reorder are excluded at this synchronous policy boundary;
+quota/permission errors retain existing loud mutation/durability failure semantics.
+
+RED: `pnpm exec vitest run --project unit packages/workbench/src/workers/workbench-project-store.test.ts`
+→ new deletion case failed EPERM (5 existing passed), /tmp/rifty-project-delete-red.log.
+GREEN: project-store, store-layout, first-materialization suites → 33/33 PASS,
+/tmp/rifty-project-delete-green.log. Guard and orphan-stage follow-up recorded below.
+- Claim-policy/store suites: 28/28 PASS. Reverting both cleanup calls to raw rmSync kills deletion and orphan-stage regressions (2 failed / 5 passed); code restored in finally. Workbench typecheck PASS. Logs: /tmp/rifty-project-delete-guards.log, /tmp/rifty-project-delete-mutant.log.

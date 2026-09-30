@@ -1,9 +1,11 @@
 import { dirname } from '@riftydev/vfs';
+import type { InstallStampClaimIo } from '../glue/install-stamp-authority.ts';
 import type {
   ProjectMaterializationOwner,
   ProjectMaterializationRecord,
 } from '../workbench/project-materialization.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
+import { removeManagedTree } from './playground-catalog-tree.ts';
 
 const ROOT = '/.rifty/workbench/v2';
 const PROJECTS_ROOT = `${ROOT}/projects`;
@@ -114,9 +116,47 @@ function persistFailureMessage(total: number, failures: readonly { readonly mess
   return `${String(total)} unhealed persistence failure(s)${sample ? `: ${sample}` : ''}`;
 }
 
+async function readProject(
+  authority: OwnerVfsAuthority,
+  projectKey: string,
+): Promise<ProjectMaterializationRecord | null> {
+  const key = assertProjectKey(projectKey);
+  const container = projectContainer(key);
+  const stat = authority.statSyncOrNull(container);
+  if (stat === null) return null;
+  if (!stat.isDirectory) {
+    throw new TypeError(`Workbench project ${key} container is not a directory`);
+  }
+  const metadataFile = metadataPath(container);
+  if (authority.statSyncOrNull(metadataFile)?.isFile !== true) {
+    throw new TypeError(`Workbench project ${key} metadata is missing`);
+  }
+  const tree = projectRoot(key);
+  if (authority.statSyncOrNull(tree)?.isDirectory !== true) {
+    throw new TypeError(`Workbench project ${key} tree is missing`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(decoder.decode(authority.readFileBytesSync(metadataFile)));
+  } catch (error) {
+    throw new TypeError(
+      `Workbench project ${key} metadata is unreadable: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  const metadata = exactMetadata(parsed, key);
+  return Object.freeze({
+    definitionIdentity: metadata.definitionIdentity,
+    projectRoot: tree,
+    revision: authority.treeRevision,
+  });
+}
+
 /** Owner-realm durable project tree; raw VFS authority never crosses this seam. */
 export function createWorkbenchProjectStore(
   authority: OwnerVfsAuthority,
+  installStampClaims: InstallStampClaimIo,
   options: WorkbenchProjectStoreOptions = {},
 ): ProjectMaterializationOwner {
   const createStageId = options.createStageId ?? defaultStageId;
@@ -124,46 +164,14 @@ export function createWorkbenchProjectStore(
 
   const discardStage = async (projectKey: string): Promise<void> => {
     const root = stageProjectRoot(projectKey);
-    authority.rmSync(root, { recursive: true, force: true });
+    removeManagedTree(authority, installStampClaims, root);
     for (const [stageId, stage] of stages) {
       if (stage.projectKey === projectKey) stages.delete(stageId);
     }
   };
 
   return Object.freeze({
-    async readProject(projectKey: string): Promise<ProjectMaterializationRecord | null> {
-      const key = assertProjectKey(projectKey);
-      const container = projectContainer(key);
-      const stat = authority.statSyncOrNull(container);
-      if (stat === null) return null;
-      if (!stat.isDirectory) {
-        throw new TypeError(`Workbench project ${key} container is not a directory`);
-      }
-      const metadataFile = metadataPath(container);
-      if (authority.statSyncOrNull(metadataFile)?.isFile !== true) {
-        throw new TypeError(`Workbench project ${key} metadata is missing`);
-      }
-      const tree = projectRoot(key);
-      if (authority.statSyncOrNull(tree)?.isDirectory !== true) {
-        throw new TypeError(`Workbench project ${key} tree is missing`);
-      }
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(decoder.decode(authority.readFileBytesSync(metadataFile)));
-      } catch (error) {
-        throw new TypeError(
-          `Workbench project ${key} metadata is unreadable: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-      const metadata = exactMetadata(parsed, key);
-      return Object.freeze({
-        definitionIdentity: metadata.definitionIdentity,
-        projectRoot: tree,
-        revision: authority.treeRevision,
-      });
-    },
+    readProject: (projectKey: string) => readProject(authority, projectKey),
 
     discardStage,
 
@@ -222,7 +230,7 @@ export function createWorkbenchProjectStore(
     async deleteProject(projectKey: string): Promise<{ readonly revision: number }> {
       const key = assertProjectKey(projectKey);
       await discardStage(key);
-      authority.rmSync(projectContainer(key), { recursive: true, force: true });
+      removeManagedTree(authority, installStampClaims, projectContainer(key));
       return Object.freeze({ revision: authority.treeRevision });
     },
 
@@ -254,10 +262,9 @@ export async function hasStoredWorkbenchProject(
       .readdirSync(PROJECTS_ROOT)
       .filter((entry) => entry.isDirectory)
       .map((entry) => entry.name);
-  const store = createWorkbenchProjectStore(authority);
   for (const key of candidates) {
     try {
-      if (await store.readProject(key)) return true;
+      if (await readProject(authority, key)) return true;
     } catch (error) {
       if (!(error instanceof TypeError)) throw error;
     }
