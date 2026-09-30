@@ -148,3 +148,7 @@ unchanged). Recorded in `docs/process/traps.md`.
 RED: `RIFTY_PLAYGROUND_PORT=5417 pnpm test:browser-unit tests/browser-unit/agent-archive.spec.ts -g 'before restoredMessageCount|bounds the corrupt list'`
 → 2 failed (legacy file listed as corrupt, 0 matches; corrupt list 12, no total). /tmp/rifty-archive-f1f2-red.log.
 GREEN: full suite → 16/16 PASS (9.2 s), /tmp/rifty-archive-f1f2-green.log.
+Independent Final+GREEN (canonical runner, strict schema copy) at 6115e61dd:
+`agent-session-archive-repair-final-green.json` — concern, no blockers, coverage 6/6
+pass, residuals empty, goal complete; one advisory hardening note (serialized size of
+long corrupt names beyond the declared count bound) recorded, no product change.
