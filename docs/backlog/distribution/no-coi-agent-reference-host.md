@@ -58,6 +58,8 @@ consumer orchestration lacks reconciliation. No nonexistent-host import.
 
 ## Decisions
 
+ready-verdict: 2026-09-30 — Contract+RED @ 2287ff4f0d031aa01f68c89bfe0f86acd99341ac
+
 - 2026-09-30 — Host stores applied ID immediately after successful apply; later supplied files/install always execute, including a reconciliation retry with the same ID. Marker certifies apply only; no transaction/rollback claim.
 - 2026-09-30 — Source inputs are app-owned: first-open sources after apply; reopen omits stale initial files; deploy receives persisted real post-agent manifest. No automatic manifest diff/merge.
 - 2026-09-30 — Benchmark imports fixture host directly; packing copies both files with their relative paths intact, resolving library imports in consumer/node_modules. No duplicate composition or new package.
