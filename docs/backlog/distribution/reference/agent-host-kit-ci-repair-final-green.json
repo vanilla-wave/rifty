@@ -1,0 +1,102 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: all four post-CLOSE repairs and renewed whole-goal proof accepted at 181dfe0a06d2ef39817f1ffe006a36aa50e8c1f3; update evidence and push PR357. No merge performed or claimed.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR357 observed CI/baseline repair; BASE2534d1e97ef838c07c0c4caa6c464877347dc7a4 (previous accepted implementation), reviewed181dfe0a06d2ef39817f1ffe006a36aa50e8c1f3, exact HEAD clean. Authority: retained surface/budget lane behavior, owner install/switch/reload persistence baseline, ADR-0487 D3/ADR-0488 native save semantics, ADR-0344 exact Sass/Chromium acceptance, and accepted kit I1–I10/scenario1–9 preserved by docs/backlog/distribution/reference/no-coi-agent-host-kit-close.md and agent-reference-host-final-green.json. This is the same independent reviewer's verification of accepted repairs after new executed evidence reopened the earlier PASS; original review/evidence remains history, not immunity. Read complete BASE diff including CLOSE documentation, observed CI failures, repair code, unchanged baseline criteria, source/fault carriers and raw logs. No product scope amendment. Four causes independently established: surface-only caller omitted the newly explicit repoRoot (OS-independent, direct local repro); stale latest oracle contradicted already-accepted native saves; live registry input drifted from the frozen genuine Sass closure; deferred required tarball rejection was unobserved until descendant traversal completed and killed the Worker. Independently executed actual installer/VFS/RegistryClient probe /tmp/rifty-pr357-sass-rejection-real-probe.mts with genuine archives: both onPackage branches produced one unhandled rejection before the same owned error, without a lock. installer-walk bytes matched pre-I9 baseline; retained Sass abort makes repair required now. Canonical promise now gets an immediate observer after the optional callback branch; original rejection remains for final allSettled, with no false success or early publication. Sibling packument/RegistryClient observers inspected. Committed child-process carrier RED/revert unhandled1 per branch→GREEN0 with original error/no lock/no failed-package callback; logs /tmp/rifty-pr357-deferred-acquisition-{red,green,revert,final-green}.log and compatible-green.log. Fixture TS-only fix replaces Promise.withResolvers with ordinary resolver capture; target unchanged. PR4: surface budgets/agent checks unchanged; cowsay checks native ^installed-version before teardown then exact same range at switch/reload/fast-reload while retaining executable/file assertions; Sass HTTP boundary serves independently hash-checked original archives and manifests, without changing any frozen golden, resolver, abort/retry, exact lock/provenance/build/HMR/offline assertion. Original Sass Chromium1/1 GREEN /tmp/rifty-pr357-ci-sass-green2.log; owner snapshot1/1 GREEN including trusted fast-reload /tmp/rifty-pr357-ci-cowsay-green.log. Earlier import/typecheck failures are explicitly recorded, never counted as GREEN. Fresh same-SHA surface --surface-only --check-budgets PASS15 first-party+73 external tarballs, all budgets and genuine agent installed-build; /tmp/rifty-pr357-ci-repair-surface.log. Fresh same-SHA full default packed PASS16+178, both actual registry journeys and retained SDK/preview/HMR/sqlite/scoped-preview baselines plus mandatory real shared-host benchmark smoke; /tmp/rifty-pr357-ci-repair-packed.log. Final same-SHA pr:check27/27 GREEN, test:run196.1s/parity124.9s, no isolated reruns; /tmp/rifty-pr357-ci-repair-pr-check-final.log, driver exit0 and final log independently checked. Whole-goal review reuses unchanged accepted I1–I7/I9/I10 evidence and previously inspected real benchmark CLI baseline, while renewed packed proof recomposes support→boot/snapshot→health edit/model switch→ms install or honest missing registry→Vite build/output order/busy retry→saved reopen/deploy reconciliation→second-tab occupied/retry on the same project. I5 remains predecessor PR359; no model-selection scope added. Historical I7 repeated-ID coverage advisory remains in its original accepted record, not a required residual. No accepted invariant or required repair remains open; closure documentation/push is the driver's remaining bookkeeping.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Retain packed surface-only/budget lane after registry helper extraction, including genuine packed agent build",
+      "source": "acceptance",
+      "trace": "I8 + ADR-0391 + baseline packed surface/budget behavior",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:1180; tests/integration/browser-registry-fixture.mjs:26; /tmp/rifty-pr357-ci-repair-surface.log",
+      "note": ""
+    },
+    {
+      "row": "Bare install saves native ^resolved version; preserve exact post-install dependency intent and executable/user-file capability through switch, reload and fast reload",
+      "source": "acceptance",
+      "trace": "ADR-0487 D3 + ADR-0488 + I9 + baseline owner snapshot persistence",
+      "status": "pass",
+      "citation": "tests/e2e/owner-snapshot-restore-exec.spec.ts:101; tests/e2e/owner-snapshot-restore-exec.spec.ts:134; tests/e2e/owner-snapshot-restore-exec.spec.ts:155; tests/e2e/owner-snapshot-restore-exec.spec.ts:172; tests/integration/npm-shell-save-parity.test.ts:21; /tmp/rifty-pr357-ci-cowsay-green.log",
+      "note": ""
+    },
+    {
+      "row": "Frozen Sass closure remains exact genuine bytes/metadata while retaining native differential, real Vite SCSS dev/HMR/build and offline reopen",
+      "source": "frozen-artifact",
+      "trace": "ADR-0344 + baseline Sass exact Chromium acceptance",
+      "status": "pass",
+      "citation": "tests/browser-unit/sass-registry-fixture.ts:11; tests/browser-unit/sass-registry-fixture.ts:20; tests/browser-unit/sass-vite-contract.spec.ts:437; tests/browser-unit/sass-vite-contract.spec.ts:602; tools/shadow-registry/src/fixtures/sass-1.100.0-closure.json:1; /tmp/rifty-pr357-ci-sass-green2.log",
+      "note": ""
+    },
+    {
+      "row": "Original Sass tarball abort fails installation without killing owner or publishing facade/lock, then retry and subsequent real scenario succeed",
+      "source": "acceptance",
+      "trace": "ADR-0344 + baseline Sass abort/retry behavior",
+      "status": "pass",
+      "citation": "tests/browser-unit/sass-vite-contract.spec.ts:640; tests/browser-unit/sass-vite-contract.spec.ts:651; tests/browser-unit/sass-vite-contract.spec.ts:668; /tmp/rifty-pr357-ci-sass-red.log; /tmp/rifty-pr357-ci-sass-green2.log",
+      "note": ""
+    },
+    {
+      "row": "Deferred acquisition rejection remains owned while descendant metadata is pending, with/without onPackage; original failure remains observable and no lock or failed-package success callback is published",
+      "source": "acceptance",
+      "trace": "I9 + ADR-0344 + baseline installer failure ownership",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-walk.ts:370; packages/npm-client/src/installer-walk.ts:614; packages/npm-client/src/installer-deferred-acquisition.fault.test.ts:6; packages/npm-client/src/_test-fixtures/deferred-acquisition-probe.ts:52; packages/npm-client/src/_test-fixtures/deferred-acquisition-probe.ts:61; /tmp/rifty-pr357-deferred-acquisition-revert.log; /tmp/rifty-pr357-deferred-acquisition-compatible-green.log",
+      "note": ""
+    },
+    {
+      "row": "Renewed whole-goal composition: both registry configurations on same real project, shared packed host/benchmark defaults and toggles, all required state transitions and preserved baseline capabilities",
+      "source": "acceptance",
+      "trace": "I1–I10 + scenario1–9",
+      "status": "pass",
+      "citation": "tests/integration/reference-host-browser-proof.mjs:140; tests/integration/reference-host-browser-proof.mjs:188; tests/integration/reference-host-browser-proof.mjs:223; tests/integration/reference-host-browser-proof.mjs:254; tests/integration/reference-host-browser-proof.mjs:306; tests/integration/reference-host-browser-proof.mjs:329; tools/agent-bench/tests/reference-host.spec.ts:13; docs/backlog/distribution/reference/agent-reference-host-final-green.json:1; /tmp/rifty-pr357-ci-repair-packed.log",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "181dfe0a06d2ef39817f1ffe006a36aa50e8c1f3"
+}

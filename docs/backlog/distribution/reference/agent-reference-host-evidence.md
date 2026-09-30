@@ -112,3 +112,10 @@ Same-program packed journey proves the transitions between accepted SDK,
 agent and host capabilities; earlier accepted library evidence remains linked
 by the final verdict. The I6 wire-metadata advisory is covered. I7 repeated-ID
 continuation coverage remains advisory in its original accepted record.
+
+## Post-CLOSE CI verification
+
+Later CI revealed required repairs after the initial whole-goal PASS. Their
+causes, RED/revert/GREEN and renewed packed/full gates are recorded in
+`agent-host-kit-ci-repair-evidence.md`; latest independent whole-goal verdict:
+`agent-host-kit-ci-repair-final-green.json` at181dfe0a06d2ef39817f1ffe006a36aa50e8c1f3.

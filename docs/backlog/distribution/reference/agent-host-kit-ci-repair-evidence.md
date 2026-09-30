@@ -47,3 +47,24 @@ The first repair gate stopped at a fixture-only TS target mismatch
 (Promise.withResolvers is newer than the package lib). Replaced with ordinary
 Promise resolver capture; no target change. Stopped that owned gate after diagnosis;
 no whole-gate PASS claimed from it.
+
+## Final acceptance — 2026-09-30
+
+Reviewed implementation181dfe0a06d2ef39817f1ffe006a36aa50e8c1f3; independent
+Final+GREEN6/6 and renewed whole-goal CLOSE PASS, no required residuals.
+Verdict: `agent-host-kit-ci-repair-final-green.json`.
+
+- `node tests/integration/workbench-packed-consumer.mjs --surface-only --check-budgets`:
+  GREEN15 first-party +73 external tarballs, all client budgets and actual agent
+  installed build. `/tmp/rifty-pr357-ci-repair-surface.log`.
+- `node tests/integration/workbench-packed-consumer.mjs`: GREEN16+178, both
+  reference registry configurations, retained baseline journeys and mandatory
+  shared-host benchmark smoke. `/tmp/rifty-pr357-ci-repair-packed.log`.
+- `pnpm pr:check`:27/27 GREEN, test:run196.1s/parity124.9s, no isolated reruns.
+  `/tmp/rifty-pr357-ci-repair-pr-check-final.log`.
+- TS-compatible subprocess fixture retained GREEN:
+  `/tmp/rifty-pr357-deferred-acquisition-compatible-green.log`.
+
+All required CI discoveries repaired; earlier goal proofs reused only for
+unchanged obligations. Product work complete; final documentation/binding/push
+follows this verdict.
