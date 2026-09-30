@@ -1,0 +1,89 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS for the docs-only corpus amendment; reviewer /root/corpus_amendment_final. Raw user answers and final goal/map/children/evidence checked together. pnpm pr:check: docs-only 20/20 PASS (/tmp/rifty-agent-eval-corpus-pr-check.log); git diff --check PASS. Product behavior and goal completion are not certified.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "User corpus discussion accepted on 2026-09-15; docs/backlog/distribution/reference/agent-code-quality-refine-evidence.md, goal scenario 1/I6/I7 and Decisions amendment; six changed documents against BASE a8fb8d4702946f3737355a0c95321090c96508b3, with unchanged agent-eval-codex-reference.md and prior goal baseline read. Reviewed working-tree SHA256 manifest: docs/backlog/distribution/reference/agent-code-quality-refine-evidence.md (Corpus amendment review). Bind reviewed_sha only after the driver commits these exact substantive contents.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:57",
+      "summary": "Build and validate the finite real-project and different-starter corpus."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:62",
+      "summary": "Execute the suite through both Rifty paths, native Pi and native Codex with recorded configuration."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:66",
+      "summary": "Prove honest own-environment functional/regression results and visible failure accounting for the expanded suite."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:70",
+      "summary": "Deliver repeatable versioned reports, retained attempts, per-workload comparisons and justified uncertainty."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:75",
+      "summary": "Execute the real four-environment reference campaign and regenerate its report without new model calls."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:80",
+      "summary": "Produce pinned case cards, discriminating judges and all-environment reference-solution evidence."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:87",
+      "summary": "Review the pilot, separate related task families, freeze the evaluation corpus and separately report smoke, task groups and repeated trials."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "ec3ba65a60d131b741d445a4f6bfe2d6b0831e2d"
+}

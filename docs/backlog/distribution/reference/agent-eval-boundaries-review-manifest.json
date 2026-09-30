@@ -1,0 +1,61 @@
+{
+  "reviewer": "/root/boundaries_refine_final",
+  "date": "2026-09-27",
+  "base": "0e4dd0e31b8cf7530c0490b208026fadbf29e683",
+  "reviewed_state": "Uncommitted final document set; no reviewed_sha until driver commits and matches hashes.",
+  "files": {
+    "docs/backlog/epics/agent-code-quality-evaluation/goal.md": "1628476eca58064db0f1908c4554c228659cefb812ddc5254d2c26be80b8d8fb",
+    "docs/backlog/epics/agent-code-quality-evaluation/map.md": "6121fd02286a5b9718b53e585f999af6fd0e303974956e0531fd9322a0a6595d",
+    "docs/backlog/epics/agent-code-quality-evaluation/ledger.md": "826822ec7709544473a18aeaa7debb509aea96ac3b198b39f18e48ece6e395bb",
+    "docs/backlog/distribution/agent-eval-local-runner.md": "8e7935b27712cc7fea2a6192febaddc85ad61aeb3c29db8d7bd28c2cb90fc330",
+    "docs/backlog/distribution/agent-eval-codex-reference.md": "1b81bbcc36fecfd66bb7a2eb2462dcf0d1a0e64c3296f973dc9fb52c7daeea2c",
+    "docs/backlog/distribution/agent-eval-project-corpus.md": "546a47b68d2969e95bfc0d75c29f2b9f568fefcf02d7214913d4c2d83d8613e6",
+    "docs/backlog/distribution/agent-eval-comparison-report.md": "9236e9d2b8bb0ae1a342139c53b36cb25cbb66a8091278e754951e2fc4ac21ac",
+    "docs/backlog/distribution/agent-eval-boundary-diagnostics.md": "d4c6c9a7491925ea0d0fd2d1fa1d7c0fca1c66874b29c4a1a72cf7c848774b3b",
+    "docs/backlog/distribution/reference/agent-eval-boundaries-refine-evidence.md": "ef8ee827d3bc57532126364298e02b50adfd62e1c1f78a716851bf037762f3d1",
+    "docs/backlog/distribution/reference/agent-eval-capability-probe.json": "a9baa8c75b09b8f1a748d9bd871dad815583066b8ec503c495b68107a0c41a33",
+    "docs/backlog/distribution/reference/agent-code-quality-refine-evidence.md": "95e3681134a011a4c24f34e69e65089d7c142d6c1f36e39057d6f58226fba480",
+    "docs/adr/distribution/0434-run-a-three-lane-pi-benchmark-with-shared-profile-and-native-judges.md": "094fdef3eb3e9581fb9be20a2ae6f437b82bfbe33224099069a79b6d4fefcc7e"
+  },
+  "scope_check": {
+    "original_request": "Ок. Но еще хотелось бы две вещи - найти странности/отличия. Например сходу кажется что агенты могут звать python, которого у нас нет. Хочется найти список таких мест - найти ceil для rifty. Не хочется взять 10 простых сценариев и убедиться что и там и там все ок",
+    "result": "No omitted or silently decided material user fork found. Same-model Pi, Codex reference, both browser hosts, own-environment success, I7 frozen comparison, I8 script ownership and I9 new-series interruption remain preserved.",
+    "alternatives_checked": [
+      "All pilot tasks pass: I5 may close, but I11 explicitly requires substantive multi-family escalation; whole goal cannot close.",
+      "Escalated search finds only all-pass cases: records justified tested lower bounds, never a discovered absolute/runtime ceiling; supported by prior uncertainty outcome and cannot waive escalation.",
+      "Native passes and Rifty fails: candidate boundary requires fresh frozen repetitions/reference controls and causal evidence before runtime attribution.",
+      "Both fail or agent recovers from missing Python: shared/unknown limits stay distinct; a recovered successful task still passes and retains obstacle evidence.",
+      "Adaptive selection changes later diagnostic cases: separate campaign/view preserves selection provenance; representative comparison remains frozen and fresh confirmations use the existing script-owned series."
+    ],
+    "no_new_field_counts": "No invented exact field/task/repeat quota; exact finite levels/controls/stopping bounds remain agent-owned PICKUP work.",
+    "early_critic": "Read only as evidence; this verdict independently reviewed the actual final set."
+  },
+  "checks": [
+    {
+      "command": "node --import tsx /tmp/rifty-eval-capability-probe.mjs",
+      "result": "Independently rerun exit 0, Node v24.16.0; python3/python/sed/curl/jq each exit 127. Standalone Shell + real MemoryFsSync only, no browser acceptance."
+    },
+    {
+      "command": "Independent node assertion over /tmp/rifty-eval-capability-probe.json and committed candidate JSON; gunzip original source-artifacts",
+      "result": "Exit 0: exact stored probe fields, all candidate counts and three selected call/results match rerun extraction; 42 archive rows, native sed18/curl6, zero Python candidates. Heuristic extraction limitations retained."
+    },
+    {
+      "command": "Read original-report.json header",
+      "result": "Node v24.16.0, Pi 0.85.1, Chromium 148.0.7778.96, gpt-5.6-sol match evidence."
+    },
+    {
+      "command": "pnpm pr:check (driver execution, complete log read)",
+      "log": "/tmp/rifty-eval-boundaries-pr-check-final.log",
+      "result": "PASS docs-only 20/20; source lanes typecheck/build:libs/check:arch/test:run/test:parity skipped. Prior JSON formatting lint failure corrected without data change."
+    },
+    {
+      "command": "git diff --check",
+      "result": "Independently run exit 0."
+    }
+  ],
+  "external_source_check": [
+    "https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents",
+    "https://www.anthropic.com/engineering/infrastructure-noise"
+  ],
+  "limitations": "Docs-only review; no live provider run or browser-host acceptance executed. All I1-I11 implementation/live evidence remain goal residuals."
+}
