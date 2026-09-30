@@ -21,6 +21,8 @@ contract; ADR-0474 compaction remains a context projection.
   payload. Include original native messages, source identity, revision and
   `incomplete`/`complete` settlement. Compaction never replaces archive messages.
   Reset selects a fresh UUID; no archive writes share session IDs across tabs.
+  Host-restored `initialMessages` stay the host's record (ADR-0466): the envelope
+  carries `restoredMessageCount`, never their copy — one conversation, one file.
 - Native writable close is the durability boundary. Emit `archive` receipt only
   afterwards; `send` settles all admitted writes before final status. Begin each
   run with an incomplete snapshot; finish marks complete only after settlement.

@@ -259,6 +259,9 @@ namespace share history across projects. Archive files live in rifty OpfsVfs at
 `/.rifty-agent-archives/<namespace>/<sessionId>.json`, outside project storage.
 Namespace: 1–100 ASCII letters/digits/underscores/hyphens. Project id/name: nonempty,
 at most 1000 characters. Values are copied at creation; each reset gets a new session ID.
+Host-restored `initialMessages` (ADR-0466) are never re-archived: the file records
+`restoredMessageCount` and stores only this session's messages, so a restored
+conversation is not duplicated across files.
 
 Recording is automatic for archive-enabled sessions. Native original messages,
 images and tool payloads survive context compaction/reset; configuration and keys

@@ -54,7 +54,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
   const events: { at: number; event: AgentSessionEvent }[] = [];
   const timings: { startedAt: number; endedAt: number }[] = [];
   const archive = options.archive
-    ? createArchive(options.archive, initialMessages, emit)
+    ? createArchive(options.archive, initialMessages.length, emit)
     : undefined;
   let resources: AgentResourceReport | undefined;
   // Latest admitted read: send and dispose settle on it; reload chains after it.

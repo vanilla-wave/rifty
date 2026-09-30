@@ -21,6 +21,39 @@ test('automatically preserves original messages and tools across reset and reloa
   expect(JSON.stringify(records)).toContain('toolResult');
   expect(JSON.stringify(records)).toContain('old-context '.repeat(2500));
 });
+test('a session restored from host history archives only its own messages', async ({ page }) => {
+  await gotoHarness(page);
+  await page.evaluate(async (url) => (await import(/* @vite-ignore */ url)).save(), fixture);
+  await page.reload();
+  const resumed = await page.evaluate(
+    async (url) => (await import(/* @vite-ignore */ url)).resume(),
+    fixture,
+  );
+  expect(resumed.status).toBe('done');
+  expect(resumed.restored).toBeGreaterThan(0);
+  await page.reload();
+  const records = await saved(page);
+  expect(records).toHaveLength(2);
+  const originals = records.filter((row: { text: string }) => row.text.includes('cookie-saffron'));
+  expect(originals).toHaveLength(1);
+  const continued = records.find((row: { text: string }) => !row.text.includes('cookie-saffron'));
+  const conversation = JSON.parse(JSON.parse(continued.text).payload);
+  expect(conversation.restoredMessageCount).toBe(resumed.restored);
+  expect(conversation.messages[0].role).toBe('user');
+  expect(JSON.stringify(conversation.messages)).toContain('Continue with the same auth');
+  const trace = await page.evaluate(
+    async (url) => (await import(/* @vite-ignore */ url)).search('cookie-saffron'),
+    fixture,
+  );
+  const result = trace.transcript.find(
+    (message: { role: string; toolName?: string }) =>
+      message.role === 'toolResult' && message.toolName === 'archive_search',
+  );
+  const text: string = result.content[0].text;
+  const { matches } = JSON.parse(text.slice(text.indexOf('\n') + 1));
+  expect(matches).toHaveLength(1);
+  expect(matches[0].restoredMessageCount).toBe(0);
+});
 test('another project discovers and reads older content beyond the tool output window', async ({
   page,
 }) => {

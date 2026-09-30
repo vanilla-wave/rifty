@@ -89,3 +89,19 @@ Current archive + legacy-layout browser suites: 29/29 PASS (20.2 s),
 /tmp/rifty-archive-browser-final.log. Generated compiler fingerprint gate PASS.
 - `RIFTY_PLAYGROUND_PORT=5415 pnpm test:e2e:prod tests/e2e-prod/owner-boots-on-prod-build.spec.ts`: 1/1 PASS (32.7 s); production owner reaches live preview, no boot errors. /tmp/rifty-archive-prod.log.
 - Final current-tree `pnpm pr:check`: 27/27 PASS, no isolated rerun needed (`test:run`195.5 s, parity118.0 s); /tmp/rifty-archive-pr-check-final.log. Earlier contention failures remain recorded above.
+
+## Review repair: restored history duplication
+
+Inline review of PR #364 at 538d11e23 found `archive.ts` seeding host-restored
+`initialMessages` (ADR-0466) into a fresh UUID file: every restore re-archived the
+same conversation, so `archive_search` returned one match per restore. Shipped
+consumers pass no `initialMessages`; any embedder combining restore + archive hit it.
+Class: `corrupt-input` (duplicate) at the owned in-process host→archive projection;
+sibling `exportTrace.restoredMessageCount` already marks the same boundary, reused.
+Fix: the envelope records `restoredMessageCount` and stores only this session's
+messages; `archive_search` matches carry the count; reset returns to 0.
+
+RED: `RIFTY_PLAYGROUND_PORT=5417 pnpm test:browser-unit tests/browser-unit/agent-archive.spec.ts -g 'restored from host history'`
+→ 1 failed: two archive files contained the original text (expected 1). /tmp/rifty-archive-restore-red.log.
+GREEN: same suite in full → 12/12 PASS (8.8 s), /tmp/rifty-archive-restore-green.log.
+`pnpm --filter @riftydev/agent typecheck` PASS; `pnpm exec vitest run --project unit packages/agent/src` 118/118.

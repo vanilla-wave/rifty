@@ -75,6 +75,17 @@ export async function saved() {
     })),
   );
 }
+/** Host restore (ADR-0466) of the single archived conversation, then one more turn. */
+export async function resume() {
+  const [record, ...rest] = await saved();
+  if (!record || rest.length) throw new Error('Expected exactly one archived conversation');
+  const initialMessages = JSON.parse(JSON.parse(record.text).payload).messages;
+  const agent = session(['Continued.'], 'shop', { initialMessages });
+  await agent.send('Continue with the same auth');
+  const status = agent.status();
+  await agent.dispose();
+  return { status, restored: initialMessages.length as number };
+}
 export async function search(query: string, offset = 0) {
   const agent = session([[{ name: 'archive_search', args: { query, offset } }], 'Found.'], 'blog');
   await agent.send(`Find earlier conversations about ${query}`);
