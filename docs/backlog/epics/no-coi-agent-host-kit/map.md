@@ -23,10 +23,6 @@ order is text, not `blocked_by` (checker scope = one tree).
    reducer; playground chat consumes it (dogfood). Covers the chat events
    agent-weak-models (PR #359, lands before this goal) adds: model switch,
    compaction marker, retry attempts, steering message, `context-exceeded`.
-4. `distribution/agent-per-capability-project-policy` — **policy** — I4; one
-   host, distinct files/shell policy values over the SDK project policy; the
-   README example that prohibits nested `npm run` stages is repaired and
-   tested (audit row 3).
 5. removed 2026-09-27 (user «1 - a») — model selection and switching are
    `distribution/ai-agent-model-catalog` (agent-weak-models item 1, PR #359:
    catalog + `setModel`); I5 re-pointed there; no `settings`-form mechanism.

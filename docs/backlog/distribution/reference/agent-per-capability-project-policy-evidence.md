@@ -41,3 +41,5 @@ Pre-repair full gate27/27: two vitest timeouts in
 (load23.4/29.7/23.6 on12 CPUs). Failure did not reproduce in isolation;
 contention suspected, no speculative source repair. Fresh full gate follows
 this metadata repair.
+
+Final full gate27/27, unit214.7s/parity120.1s; no isolated reruns. Independent final PASS8d55757fc closes both review findings.

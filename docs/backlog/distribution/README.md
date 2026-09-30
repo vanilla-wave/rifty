@@ -33,7 +33,6 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `sdk-typed-sandbox-outcomes.md` | draft | no-coi-agent-host-kit | exported typed busy/occupied/conflict/persistence outcomes + retryable table |
 | `sdk-boot-and-snapshot-progress-events.md` | draft | no-coi-agent-host-kit | boot phases + snapshot-apply counts on `runtime.on` |
 | `agent-transcript-model.md` | draft | no-coi-agent-host-kit | framework-free transcript reducer; playground chat consumes it |
-| `agent-per-capability-project-policy.md` | draft | no-coi-agent-host-kit | distinct files/shell policy in one sandbox agent host |
 | `no-coi-agent-reference-host.md` | draft | no-coi-agent-host-kit | packed lane's Vite consumer → connections-only reference host in CI; closes the goal |
 | `no-coi-agent-npm-install.md` | draft | no-coi-agent-host-kit | agent shell `npm install` over the existing installer; loud without a registry |
 | `agent-tool-text-cap-and-run-budgets-measure.md` | draft | — | measure the 16 KiB cap before changing ADR-0424 D7; run budgets settled by agent-weak-models I9 |
