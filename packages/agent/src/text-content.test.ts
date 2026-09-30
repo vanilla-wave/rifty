@@ -224,3 +224,56 @@ it('invalid textOnlyContent rejects provider configuration', () => {
     }),
   ).toThrow(/textOnlyContent/);
 });
+
+it('string shaping follows caller content customization and preserves non-content fields', async () => {
+  const wire = scriptedProvider(['Complete.']);
+  const models = createModels();
+  models.setProvider(
+    createOpenAIProvider({
+      id: 'local',
+      fetch: wire.fetch,
+      models: [
+        {
+          id: 'strict',
+          name: 'Strict',
+          provider: 'local',
+          api: 'openai-completions',
+          baseUrl: 'https://text-only.invalid/v1',
+          contextWindow: 32768,
+          maxTokens: 4096,
+          textOnlyContent: true,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        },
+      ],
+    }),
+  );
+  const result = await models.completeSimple(
+    models.getModels()[0]!,
+    {
+      messages: [{ role: 'user', content: 'original', timestamp: 1 }],
+    },
+    {
+      onPayload(payload) {
+        return {
+          ...(payload as Record<string, unknown>),
+          seed: 27,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'custom' },
+                { type: 'text', text: ' content' },
+              ],
+              name: 'caller',
+            },
+          ],
+        };
+      },
+    },
+  );
+  expect(result.stopReason).toBe('stop');
+  expect(wire.requests[0]?.body).toMatchObject({
+    seed: 27,
+    messages: [{ role: 'user', content: 'custom content', name: 'caller' }],
+  });
+});

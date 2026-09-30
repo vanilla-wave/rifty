@@ -37,6 +37,14 @@ native OpenAI models (reasoning defaults false, input defaults ['text']); limits
 are required. Custom providers own wire/auth and return native streams with real
 response metadata. The old session-level settings/streamFn/fetch forms are removed.
 
+Set `textOnlyContent: true` on a built-in OpenAI model entry for endpoints requiring
+string message content. Text parts concatenate, empty tool-call content becomes
+`''`; roles, tool calls and other fields remain native. The flag applies per selected
+entry, including retries and compaction. Such entries reject image prompts before
+dispatch and refuse images in restored history; no image is silently discarded.
+Unset/false retains native parts. Native provider callers' `onPayload` runs before
+this final content conversion (ADR-0483).
+
 `modelOptions: { [modelId]: { reasoning: 'medium', temperature: 1,
 samplingParams: { top_p: 0.95 } } }` supplies pi request defaults. Thinking defaults
 off; absent sampling fields use provider defaults. Native Model.samplingParams

@@ -1,4 +1,5 @@
 import {
+  type Context,
   type Model,
   type Models,
   type Provider,
@@ -8,7 +9,10 @@ import {
 import { stream, streamSimple } from '@earendil-works/pi-ai/api/openai-completions';
 
 export type OpenAIModel = Omit<Model<'openai-completions'>, 'reasoning' | 'input'> &
-  Partial<Pick<Model<'openai-completions'>, 'reasoning' | 'input'>>;
+  Partial<Pick<Model<'openai-completions'>, 'reasoning' | 'input'>> & {
+    /** String-only message content; images are refused before network dispatch. */
+    readonly textOnlyContent?: boolean;
+  };
 
 export interface OpenAIProviderOptions {
   readonly id: string;
@@ -27,18 +31,43 @@ export function isOpenAIProvider(provider: Provider | undefined): boolean {
 export function createOpenAIProvider(
   options: OpenAIProviderOptions,
 ): Provider<'openai-completions'> {
+  const textOnly = new Set<string>();
   const models = options.models.map((entry) => {
     if (entry.provider !== options.id || entry.api !== 'openai-completions')
       throw new TypeError(`Model ${entry.id} does not belong to OpenAI provider ${options.id}`);
     validateModel(entry);
+    if (entry.textOnlyContent !== undefined && typeof entry.textOnlyContent !== 'boolean')
+      throw new TypeError(`Model ${entry.id}: textOnlyContent must be a boolean`);
+    if (entry.textOnlyContent) textOnly.add(entry.id);
     return {
       ...entry,
       baseUrl: new URL(entry.baseUrl, typeof location === 'undefined' ? undefined : location.href)
         .href,
       reasoning: entry.reasoning ?? false,
-      input: entry.input ?? ['text' as const],
+      input: entry.textOnlyContent ? ['text' as const] : (entry.input ?? ['text' as const]),
     };
   });
+  function contentPolicy(
+    model: Model<import('@earendil-works/pi-ai').Api>,
+    context: Context,
+    request: ProviderRequestOptions | undefined,
+  ): Pick<ProviderRequestOptions, 'onPayload'> {
+    if (!textOnly.has(model.id)) return {};
+    return {
+      async onPayload(payload, selected) {
+        if (
+          context.messages.some(
+            (message) =>
+              Array.isArray(message.content) &&
+              message.content.some((part) => part.type === 'image'),
+          )
+        )
+          throw new TypeError(`Model ${model.id} does not accept images in history`);
+        const customized = await request?.onPayload?.(payload, selected);
+        return stringContentPayload(customized === undefined ? payload : customized);
+      },
+    };
+  }
   const provider = createProvider({
     id: options.id,
     models,
@@ -59,12 +88,14 @@ export function createOpenAIProvider(
       stream: (model, context, request) =>
         stream(model as Model<'openai-completions'>, context, {
           ...request,
+          ...contentPolicy(model, context, request),
           ...(options.fetch ? { fetch: options.fetch } : {}),
           maxRetries: 0,
         }),
       streamSimple: (model, context, request) =>
         streamSimple(model as Model<'openai-completions'>, context, {
           ...request,
+          ...contentPolicy(model, context, request),
           ...(options.fetch ? { fetch: options.fetch } : {}),
           maxRetries: 0,
         }),
@@ -72,6 +103,37 @@ export function createOpenAIProvider(
   });
   providerKeys.set(provider, options.apiKey ? [options.apiKey] : []);
   return provider;
+}
+
+function stringContentPayload(payload: unknown): unknown {
+  if (!payload || typeof payload !== 'object' || !('messages' in payload))
+    throw new TypeError('textOnlyContent requires a message payload');
+  const messages = payload.messages;
+  if (!Array.isArray(messages)) throw new TypeError('textOnlyContent requires messages');
+  return {
+    ...payload,
+    messages: messages.map((message: unknown) => {
+      if (!message || typeof message !== 'object')
+        throw new TypeError('textOnlyContent requires message objects');
+      const content: unknown = 'content' in message ? message.content : undefined;
+      if (content == null || typeof content === 'string')
+        return { ...message, content: content ?? '' };
+      if (
+        !Array.isArray(content) ||
+        !content.every(
+          (part: unknown) =>
+            part !== null &&
+            typeof part === 'object' &&
+            'type' in part &&
+            part.type === 'text' &&
+            'text' in part &&
+            typeof part.text === 'string',
+        )
+      )
+        throw new TypeError('textOnlyContent refuses non-text message content');
+      return { ...message, content: content.map((part: { text: string }) => part.text).join('') };
+    }),
+  };
 }
 
 function validateModel(

@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Offer an opt-in per-entry text-only message content flag for OpenAI-compatible endpoints that reject content parts
 created: 2026-09-27
 why: the default transport sends structured content parts; an endpoint that accepts only string content fails, and the host's only escape is a full Pi streamFn that flattens content itself — transport shaping the user wants inside rifty
@@ -47,6 +47,13 @@ silently disappear when a flagged entry is selected.
 
 challenge: 2026-09-30 — clear; reuse accepted I6 premise and user per-entry flag decision; native Pi payload hook is the minimal carrier.
 
+## Out of scope
+
+- Endpoint auto-detection; custom providers continue to own their transport.
+- Image transport to flagged entries: explicit refusal before network.
+
 ## Decisions
+
+ready-verdict: 2026-09-30 — Contract+RED @ 9339f2810187adbb9015f3847c3bb8e8715eb6f2
 
 - 2026-09-30 — ADR-0483: per-entry flag on OpenAIModel, native payload hook; no new transport or model-selection form.

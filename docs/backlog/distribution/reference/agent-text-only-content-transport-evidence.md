@@ -15,3 +15,9 @@ passes. Raw RED: `/tmp/rifty-pr357-text-content-red.log`.
 
 Tests use real Pi transport and real MemoryVfs file tools. Only scripted model
 HTTP is substituted; the strict endpoint rejects every nonstring content field.
+
+GREEN: text-content/catalog/images suites18/18; agent typecheck passes. Added
+caller-content override proof for Contract+RED advisory. Executed mutant moving
+shaping before caller `onPayload`: test `string shaping follows` fails with array
+instead of string, exit1; original source restored. Raw artifact:
+`/tmp/rifty-pr357-text-content-order-mutant.log`.

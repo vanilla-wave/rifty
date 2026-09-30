@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Built-in OpenAI catalog entries support `textOnlyContent`; native transport sends strings and refuses image prompts/history before network (ADR-0483).
+
 - Shell results preserve streamed stdout/stderr order after the status header.
 
 - Repeated-call detection ignores mutation host-diagnostics timing (pending vs settled); README/ADR-0475 note state exactly which consumer results get budget receipts.
