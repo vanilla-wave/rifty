@@ -270,3 +270,76 @@ test('capability policies cannot introduce another root and captured notes do no
   expect(value.before.join('\n')).toContain('locked');
   expect(value.before.join('\n')).not.toContain('later');
 });
+
+test('notes include non-enumerable SDK policy values and readonly overrides replace common paths', async ({
+  page,
+}) => {
+  await page.goto('/no-coi-harness.html');
+  const value = await page.evaluate(async (root) => {
+    const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
+    const { createSandboxAgentHost } = await import(`/@fs${root}/packages/agent/src/index.ts`);
+    const sandbox = await createSandbox({
+      requireCrossOriginIsolation: false,
+      skipServiceWorker: true,
+      storage: { persistence: 'ephemeral' },
+      toolchain: {
+        workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
+      },
+    });
+    try {
+      for (const directory of ['files', 'shell', 'common'])
+        await sandbox.fs.writeFile(`/policy/${directory}/value.txt`, 'original');
+      const project = Object.defineProperties(
+        { root: '/policy' },
+        {
+          readonlyPaths: { value: ['common'] },
+          allowedCommands: { value: ['echo'] },
+        },
+      );
+      const host = createSandboxAgentHost({
+        sandbox,
+        project,
+        mode: () => 'commands',
+        policies: {
+          files: Object.defineProperty({}, 'readonlyPaths', { value: ['files'] }),
+          shell: Object.defineProperty({}, 'readonlyPaths', { value: ['shell'] }),
+        },
+      });
+      const caps = host.capabilities();
+      const fileError = await caps
+        .files!.change('/policy/files/value.txt', () => 'bad')
+        .then(
+          () => 'written',
+          (error: Error & { code?: string }) => error.code,
+        );
+      const shellDenied = await caps.shell!('echo bad > shell/value.txt', undefined, () => {});
+      const shellAllowed = await caps.shell!(
+        'echo allowed > common/value.txt',
+        undefined,
+        () => {},
+      );
+      await caps.files!.change('/policy/common/value.txt', () => 'file-allowed');
+      return {
+        fileError,
+        shellDenied,
+        shellAllowed,
+        notes: caps.notes,
+        files: await sandbox.fs.readFile('/policy/files/value.txt', 'utf8'),
+        shell: await sandbox.fs.readFile('/policy/shell/value.txt', 'utf8'),
+        common: await sandbox.fs.readFile('/policy/common/value.txt', 'utf8'),
+      };
+    } finally {
+      sandbox.dispose();
+    }
+  }, root);
+  expect(value.fileError).toBe('EROFS');
+  expect(value.shellDenied.stderr).toMatch(/EROFS|read.only/i);
+  expect(value.shellAllowed.exitCode).toBe(0);
+  expect(value).toMatchObject({ files: 'original', shell: 'original', common: 'file-allowed' });
+  expect(value.notes.join('\n')).toContain(
+    JSON.stringify({
+      files: { root: '/policy', readonlyPaths: ['files'], allowedCommands: ['echo'] },
+      shell: { root: '/policy', readonlyPaths: ['shell'], allowedCommands: ['echo'] },
+    }),
+  );
+});

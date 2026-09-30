@@ -43,7 +43,15 @@ export function createSandboxAgentHost(options: SandboxAgentHostOptions): AgentH
   const project = options.sandbox.project(filePolicy);
   const shellProject = options.sandbox.project(shellPolicy);
   const root = options.project.root;
-  const policy = JSON.stringify({ files: filePolicy, shell: shellPolicy });
+  const policyValues = (value: SandboxAgentHostOptions['project']) => ({
+    root: value.root,
+    readonlyPaths: value.readonlyPaths,
+    allowedCommands: value.allowedCommands,
+  });
+  const policy = JSON.stringify({
+    files: policyValues(filePolicy),
+    shell: policyValues(shellPolicy),
+  });
   const files: AgentFiles = {
     async read(path) {
       const bytes = await project.fs.readFile(path);
