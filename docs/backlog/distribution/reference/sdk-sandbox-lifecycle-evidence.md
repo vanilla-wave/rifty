@@ -50,3 +50,10 @@ retain honest domains. No weakened byte assertion.
 
 Existing SDK/runtime unit57/57; SDK+Workbench typechecks, refs/backlog/arch,
 dir-owner/file-size pass. Full pr:check and independent Final+GREEN follow.
+
+Full gate first26/27: only exact TypeScript-worker artifact pin stale after shared
+chunk changes (docs/process/traps.md copied-asset-fingerprints). Unit222s and
+parity119.3s GREEN, no isolated reruns. Reviewed emitted import graph; updated
+only typescript-worker.js size10022664/SHA00545aee8a0a8a792277e38e752c1e05e5b6d00c546b86d5363722399a28f45b.
+2MB ceiling and negative payload tests unchanged. Isolated retirement gate and
+its10 adversarial tests GREEN; full gate repeated after exact-pin repair.
