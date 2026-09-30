@@ -6,40 +6,47 @@ created: 2026-09-27
 why: the default transport sends structured content parts; an endpoint that accepts only string content fails, and the host's only escape is a full Pi streamFn that flattens content itself — transport shaping the user wants inside rifty
 epic: no-coi-agent-host-kit
 sources: [ADR-0436, docs/backlog/distribution/reference/no-coi-agent-host-kit-evidence.md]
-code: [packages/agent/src/session.ts, packages/agent/src/types.ts]
+code: [packages/agent/src/catalog.ts, packages/agent/src/text-content.test.ts]
 ---
 
 ## Context
 
-Finding. The default transport is pi-ai's `streamSimple` for
-`openai-completions` (`packages/agent/src/session.ts:3,99`); pi-agent-core
-builds user content as parts and pi-ai 0.85.1 sends user parts as arrays
-(assistant/tool/system go as strings); `Model.compat`
-(`OpenAICompletionsCompat`, `dist/types.d.ts:465-500`) exposes provider
-quirks with no string-content flag, and rifty passes no `compat`
-(`grep -n compat packages/agent/src/session.ts` → 0). Issue #345's host
-flattened content inside its own `streamFn`. Per the user's 2026-09-27
-decision, anything that shapes what the model receives is a rifty obligation.
+Built-in native Pi 0.85.1 OpenAI conversion emits user content parts and null
+assistant tool-call content. I6 requires a per-entry flag for string-only
+endpoints. Native `onPayload` runs after conversion and before network.
+ADR-0483 chooses this seam; native model selection remains ADR-0471.
 
-Goal obligation: I6 — an opt-in text-only content flag on the model-catalog
-entry (`epics/agent-weak-models` I1, `distribution/ai-agent-model-catalog`,
-PR #359 — lands first) completes the scenario turn on the built-in `fetch`
-transport against a string-only endpoint, without a consumer `streamFn` or a
-direct pi-ai dependency; `send` with images to a flagged entry fails before
-any request (agent-weak-models I3 path). Seam addition on ADR-0436 and the
-catalog ADR → short ADR citing both at pickup.
+## User scenario
 
-## Out of scope
+A catalog contains an OpenAI-compatible endpoint accepting only string message
+content. The embedder marks that entry, sends a text prompt, completes a file-tool
+turn, switches to an ordinary entry and back, retaining history. Images cannot
+silently disappear when a flagged entry is selected.
 
-- Images to a flagged entry — refused before any request; image transport
-  itself is agent-weak-models I3.
-- Auto-detection of endpoint capabilities; the flag is explicit.
-- Other per-entry fields (context window, max tokens, reasoning, `compat`) —
-  the catalog entry (agent-weak-models I1).
+## Acceptance
+
+1. Per-entry `textOnlyContent: true` completes a real standard-file-tool turn via
+   the built-in provider; all wire message content is string, tool calls/results
+   and retained history survive model switches. → I6 + scenario
+2. Flag unset/false preserves native parts; invalid flags fail configuration
+   explicitly. Consumers supply no custom streamFn or Pi import. → I6
+3. Flagged entries refuse image sends before any request; restored image history
+   also fails before network rather than dropping content. → I6 + AGENTS.md
+4. Both native stream and streamSimple paths shape the selected entry, including
+   retry/compaction; non-content fields remain native. → I6 + ADR-0471
+
+## Fault matrix
+
+| Axis × operation | Honest outcome | Proof |
+| --- | --- | --- |
+| corrupt-input × nontext content on flagged entry | refuse before network | image/history tests → I6 |
+| sibling-drift × switching ordinary/flagged models | selected entry only shapes its wire | retained history switch test → I6 |
+| lossy-aggregate × message parts | exact concatenated text, preserve tool_calls/results | real file-tool wire test → I6 |
+
+## Challenge
+
+challenge: 2026-09-30 — clear; reuse accepted I6 premise and user per-entry flag decision; native Pi payload hook is the minimal carrier.
 
 ## Decisions
 
-- carrier (rifty-side conversion before `streamSimple` vs an upstream pi-ai
-  compat flag) at pickup; the flag is a field of the catalog entry, not a
-  session option (user 2026-09-27 «2 - a»); after
-  `distribution/ai-agent-model-catalog` (agent-weak-models item 1, PR #359).
+- 2026-09-30 — ADR-0483: per-entry flag on OpenAIModel, native payload hook; no new transport or model-selection form.
