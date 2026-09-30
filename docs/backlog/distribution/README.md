@@ -30,6 +30,17 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `ai-sandbox-reference-demo.md` | draft | open-bolt-ai-sandbox-demo | open client-side AI sandbox (eval+install slice; live preview question remains) |
 | `landing-blog-surface.md` | ready | wasi-in-browser-showcase | rifty.dev/blog route + first WASI post |
 | `ai-agent-context-file-unicode-tags.md` | draft | — | question: strip invisible Unicode tag chars from loaded AGENTS.md/SKILL.md (pi byte parity vs Claude Code strip); user fork at pickup |
+| `sdk-typed-sandbox-outcomes.md` | draft | no-coi-agent-host-kit | exported typed busy/occupied/conflict/persistence outcomes + retryable table |
+| `sdk-boot-and-snapshot-progress-events.md` | draft | no-coi-agent-host-kit | boot phases + snapshot-apply counts on `runtime.on` |
+| `agent-transcript-model.md` | draft | no-coi-agent-host-kit | framework-free transcript reducer; playground chat consumes it |
+| `agent-per-capability-project-policy.md` | draft | no-coi-agent-host-kit | distinct files/shell policy in one sandbox agent host |
+| `agent-text-only-content-transport.md` | draft | no-coi-agent-host-kit | opt-in per-entry string-content flag on the model catalog entry (after PR #359 item 1) |
+| `no-coi-agent-reference-host.md` | draft | no-coi-agent-host-kit | packed lane's Vite consumer → connections-only reference host in CI; closes the goal |
+| `no-coi-agent-npm-install.md` | draft | no-coi-agent-host-kit | agent shell `npm install` over the existing installer; loud without a registry |
+| `agent-shell-tool-output-order.md` | draft | no-coi-agent-host-kit | shell tool text in terminal order |
+| `agent-tool-text-cap-and-run-budgets-measure.md` | draft | — | measure the 16 KiB cap before changing ADR-0424 D7; run budgets settled by agent-weak-models I9 |
+| `no-coi-command-env-and-npm-lifecycle-vars.md` | draft | — | real env + npm lifecycle vars for no-COI commands |
+| `no-coi-node-print-and-input-type-flags.md` | draft | — | `node -p` / `--input-type` / `-r` on the no-COI path |
 
 ## Dependency map
 

@@ -111,8 +111,9 @@ exploration (an aborted spike, never shipped) as the in-browser-agent direction 
 opencode's tool layer needs native process spawn (a browser
 ceiling) plus permanent vendoring; the agent is built instead on the embeddable **Pi**
 harness (`@earendil-works/pi-agent-core`, verified browser-clean), registering rifty-native
-tools as plain pluggable functions. **AI lives outside rifty** — a consumer of `@riftydev/*`;
-rifty grows only AI-agnostic capabilities (TS language service, git over VFS). Positioning:
+tools as plain pluggable functions. The agent loop ships as `@riftydev/agent` (ADR-0424,
+published under ADR-0436); endpoint, keys and UI stay with the consumer, and rifty's
+AI-agnostic capabilities (TS language service, git over VFS) serve it. Positioning:
 `docs/research/open-webcontainers-alternative-2026-06.md`.
 Delivered foundation: headless Pi agent over public Workbench/no-COI hosts,
 lazy playground "+chat", three-lane42-run diagnostic. Consumer guide:
@@ -122,6 +123,7 @@ open:
 - `docs/backlog/distribution/ai-ide-product-ui` — chat + streamed tool-call/diff/approve UI over the IDE-kit.
 - `docs/backlog/toolchain-build/ts-language-service` — in-browser TS diagnostics/hover/defs over VFS (agent `typecheck` + editor squiggles).
 - `docs/backlog/shell/git-command-isomorphic` — git over VFS (isomorphic-git) for git-aware tools.
+- `docs/backlog/epics/no-coi-agent-host-kit` — an existing non-COI app embeds sandbox + agent by wiring connections only; every quality-relevant part stays a rifty package obligation.
 
 ## M13 — Sharing & import
 
