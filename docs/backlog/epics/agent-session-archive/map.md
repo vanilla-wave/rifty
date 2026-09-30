@@ -2,11 +2,9 @@
 
 ## Items
 
-1. `distribution/agent-session-archive` — shared archive — capture, durable snapshots,
-   reset/compaction preservation, paginated discovery/read; owns I1–I3 implementation.
-2. `distribution/agent-session-archive-public-proof` — installed public host proof —
+1. `distribution/agent-session-archive-public-proof` — installed public host proof —
    SDK + Workbench, source lifecycle, reload, real-model recall; closes I2/I4.
-   Existing archive behavior is its baseline; no competing storage owner.
+   Core I1–I3 implementation: Final+GREEN PASS at d97031386.
 
 ## Open questions
 

@@ -1,15 +1,9 @@
 {
-  "overall_verdict": "blocker",
-  "merge_call": "BLOCK: исправить F1 и повторить независимый Final+GREEN. Installed SDK/Workbench proof остаётся следующим mapped unit.",
+  "overall_verdict": "pass",
+  "merge_call": "PASS core unit: F1 исправлен и независимо проверен; продолжить mapped installed-host proof, goal ещё не закрыт.",
   "checkpoint": "Final+GREEN",
-  "unit_goal_source": "docs/backlog/distribution/agent-session-archive.md @ 75df9978713b8b9616263a40050e8dc15bd66c32; BASE 25266b71a; docs/backlog/epics/agent-session-archive/goal.md + map.md; ADR-0482. Contract+RED independently reviewed at 7bc66f2aa9c22e96f1b4eb6c41bb2c0ec32a993a.",
-  "unit_residuals": [
-    {
-      "clause": "Acceptance 2 → I2; ADR-0482 original-text search",
-      "location": "packages/agent/src/archive.ts:160",
-      "summary": "F1: поиск экранируемых исходных строк теряет существующую беседу; необходимы RED, исправление и independent verify."
-    }
-  ],
+  "unit_goal_source": "docs/backlog/distribution/agent-session-archive.md @ d97031386b10a32989d80a483f25e70091f1a30a; BASE 25266b71a; docs/backlog/epics/agent-session-archive/goal.md + map.md; ADR-0482. Contract+RED @ 7bc66f2aa9c22e96f1b4eb6c41bb2c0ec32a993a. Verify F1 repair @ 34075ec5b; original finding/evidence preserved in prior core Final+GREEN and /tmp/rifty-archive-final-probe.log. Independent scratch rerun: 12/12 PASS (11 committed tests + unchanged original quote reproducer), /tmp/rifty-archive-final-verify.log. Author RED/GREEN inspected: /tmp/rifty-archive-search-red.log and /tmp/rifty-archive-search-green.log. Post-fix pr:check 27/27 PASS, /tmp/rifty-archive-pr-check-2.log; initial 3 failures/2 timeouts passed isolated rerun, no unexplained failure presented as a product fix.",
+  "unit_residuals": [],
   "goal_residuals": [
     {
       "clause": "I2 + I4; User scenario 2–4",
@@ -31,9 +25,9 @@
       "row": "Acceptance 2: discover and paginate original conversations from another project",
       "source": "acceptance",
       "trace": "I2",
-      "status": "weak",
-      "citation": "tests/browser-unit/agent-archive.spec.ts:24",
-      "note": "Committed carrier tests unescaped cookie-saffron only; executed quoted-text probe fails (finding F1)."
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-archive.spec.ts:179",
+      "note": ""
     },
     {
       "row": "Acceptance 3: durable native close, interruption, visible errors and corrupt records",
@@ -111,9 +105,9 @@
       "row": "archive_search: paginated original text/project search",
       "source": "public-api",
       "trace": "ADR-0482 + I2",
-      "status": "weak",
-      "citation": "tests/browser-unit/agent-archive.spec.ts:24",
-      "note": "F1: serialized JSON is searched instead of decoded original strings."
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-archive.spec.ts:179",
+      "note": ""
     },
     {
       "row": "archive_read: bounded original JSON pages, no tool replay",
@@ -152,16 +146,8 @@
     },
     {
       "axis": "Bugs",
-      "verdict": "blocker",
-      "findings": [
-        {
-          "severity": "blocker",
-          "location": "packages/agent/src/archive.ts:160",
-          "summary": "F1 — archive_search silently misses original text containing JSON-escaped characters. Saving Use \"cookie-saffron\" for authentication, then searching \"cookie-saffron\" (including quotes), returns matches:[] despite the saved conversation. Search decoded original strings. Fault class lossy-aggregate; missing RED for quoted/backslash/control-character content and project names; sweep both metadata and message strings at this predicate.",
-          "authority": "ADR-0482 Decision: archive_search scans project identity and original text; Acceptance 2 → I2",
-          "evidence": "Executed against unmodified HEAD 75df9978713b8b9616263a40050e8dc15bd66c32 in /tmp/rifty-archive-final-scratch: RIFTY_PLAYGROUND_PORT=5421 node node_modules/@playwright/test/cli.js test --config playwright.browser-unit.config.ts tests/browser-unit/archive-review-probe.spec.ts. Real Chromium + OPFS + MemoryVfs, only external provider scripted. /tmp/rifty-archive-final-probe.log: REVIEW_QUOTE_RESULT toolName=archive_search, isError=false, matches=[], nextOffset=null; 1 failed, expected shop. Repro source /tmp/rifty-archive-final-scratch/tests/browser-unit/archive-review-probe.spec.ts:4. Existing /tmp/rifty-archive-green.log proves 10/10 GREEN; existing /tmp/rifty-archive-pr-check.log proves 27/27, including initial two Workbench timer assertions followed by successful isolated rerun."
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     },
     {
       "axis": "Regressions",
@@ -173,5 +159,6 @@
       "verdict": "pass",
       "findings": []
     }
-  ]
+  ],
+  "reviewed_sha": "d97031386b10a32989d80a483f25e70091f1a30a"
 }
