@@ -105,7 +105,7 @@ import { createBrowserAgentPreview, createSandboxAgentHost } from '@riftydev/age
 
 const host = createSandboxAgentHost({
   sandbox,
-  project: { root: '/project', readonlyPaths: ['locked'], allowedCommands: ['npm', 'node'] },
+  project: { root: '/project' }, // unrestricted reference configuration
   mode: () => mode, // host sets 'commands' or 'preview'
   preview: () => {
     const current = resident;
@@ -123,6 +123,16 @@ disposal occurs in this adapter. SDK readonly/command policy stays authoritative
 root bounds standard file tools, not arbitrary guest code. Each command starts
 with fresh cwd/env. File edits use ordinary read/transform/write without CAS;
 forced Stop returns the SDK's unknown effects. Diagnostics/SCM are unavailable.
+
+Optional `policies: { files: { readonlyPaths: [...] }, shell: { readonlyPaths: [...],
+allowedCommands: [...] } }` selects distinct SDK policies over the same root.
+Absent fields inherit `project`; present `undefined` clears a common restriction,
+arrays replace it. Empty `allowedCommands` denies all commands; empty
+`readonlyPaths` permits writes. SDK validates/enforces each policy (ADR-0484).
+For example, `policies: { shell: { readonlyPaths: ['.'] } }` leaves file tools
+writable while shell writes under the root fail. Explicit command allowlists must
+also include commands reached inside npm scripts: `['npm', 'node']` alone refuses
+`npm run build` when the script invokes `vite`; add `vite` or omit the allowlist.
 
 `send` continues retained history, including after errors. `stop` resolves after
 the host command settles and the slot is reusable. `reset` requires an idle

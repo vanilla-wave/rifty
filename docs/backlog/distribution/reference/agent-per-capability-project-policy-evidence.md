@@ -20,3 +20,9 @@ now succeeds while npm/node-only denies the nested bin. Product unchanged.
 SDK owns all policy checking (`host-project-inputs.ts`, `no-coi-project-fs.ts`,
 `no-coi-project-command.ts`). Project handles have no independent lifetime;
 no new coordinator or enforcement. Native command outcomes are returned intact.
+
+GREEN: new policy plus baseline policy/output/Stop Chromium suite8/8; strengthened
+notes suite4/4; agent typecheck passes. Wrong-shell-notes mutant replaced shell
+policy description with file policy: exact effective-policy assertion failed,
+exit1 (`/tmp/rifty-pr357-policy-notes-mutant.log`); source restored. This closes
+the Contract+RED advisory without changing the accepted policy semantics.

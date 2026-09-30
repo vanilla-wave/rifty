@@ -62,6 +62,12 @@ test('one agent host writes through file tools while shell redirects and Node wr
   expect(value.bytes).toBe('file-tool');
   expect(JSON.stringify(tools.slice(1, 3))).toMatch(/EROFS|read.only/i);
   expect(value.notes.join('\n')).toMatch(/files.*shell/s);
+  expect(value.notes.join('\n')).toContain(
+    JSON.stringify({
+      files: { root: '/policy' },
+      shell: { root: '/policy', readonlyPaths: ['.'] },
+    }),
+  );
 });
 
 test('SDK remains the owner of inherited, replaced, cleared and empty capability policies', async ({
@@ -122,6 +128,7 @@ test('SDK remains the owner of inherited, replaced, cleared and empty capability
         replacedDenied: await command(replaced, 'pwd'),
         replacedAllowed: await command(replaced, 'node --version'),
         emptyDenied: await command(empty, 'pwd'),
+        clearedNotes: cleared.capabilities().notes,
         after: await sandbox.fs.readFile('/policy/value.txt', 'utf8'),
         locked: await sandbox.fs.readFile('/policy/locked/value.txt', 'utf8'),
       };
@@ -145,6 +152,12 @@ test('SDK remains the owner of inherited, replaced, cleared and empty capability
   expect(value.cleared.stdout).toBe('unrestricted\n');
   expect(value.after).toBe('shell-write\n');
   expect(value.locked).toBe('locked');
+  expect(value.clearedNotes.join('\n')).toContain(
+    JSON.stringify({
+      files: { root: '/policy', allowedCommands: ['pwd'] },
+      shell: { root: '/policy' },
+    }),
+  );
 });
 
 test('reference default runs npm build and an explicit allowlist still checks nested bins', async ({

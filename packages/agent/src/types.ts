@@ -77,6 +77,11 @@ export interface WorkbenchAgentHostOptions {
 export interface SandboxAgentHostOptions {
   readonly sandbox: ToolchainSandbox;
   readonly project: SandboxProjectOptions;
+  /** Absent fields inherit project; present undefined removes the common restriction. */
+  readonly policies?: {
+    readonly files?: Omit<SandboxProjectOptions, 'root'>;
+    readonly shell?: Omit<SandboxProjectOptions, 'root'>;
+  };
   /** Host owns startBin/stopResident; report preview while a resident owns the Worker. */
   readonly mode: () => 'commands' | 'preview';
   readonly preview?: () => AgentPreview | undefined;

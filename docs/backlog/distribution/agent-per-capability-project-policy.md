@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Accept distinct file-tool and shell policy values in one createSandboxAgentHost
 created: 2026-09-27
 why: SandboxProjectOptions carries one readonlyPaths/allowedCommands policy for the whole project, so a host that wants a read-only shell with writes only through file tools must instantiate two agent hosts and splice their capabilities by hand
@@ -53,5 +53,7 @@ agent recommends additive policies over public SDK handles, no policy engine.
 - Workbench adapter policy extensions; only sandbox adapter has this contract.
 
 ## Decisions
+
+ready-verdict: 2026-09-30 — Contract+RED @ a1fd603c50b93439298b2f76116840b807f40677
 
 - 2026-09-30 — ADR-0484: additive policies, same root, one SDK handle per capability; independent DEC-2 review `policy_decision`.
