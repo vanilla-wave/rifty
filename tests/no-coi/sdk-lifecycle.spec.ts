@@ -351,3 +351,51 @@ observeNativeReplicaWrites(records => { if (records.some(record => record.path =
     content: 'command\n',
   });
 });
+
+test('opening retains asynchronous validation and a real generic event subscription', async ({
+  page,
+}) => {
+  await page.goto('/no-coi-harness.html');
+  const result = await page.evaluate(async (root) => {
+    const sdk = await import(`/@fs${root}/packages/rifty/src/index.ts`);
+    let synchronous = false;
+    let rejected = false;
+    try {
+      const invalid = sdk.createSandbox({ requireCrossOriginIsolation: 'invalid' });
+      rejected = await invalid.then(
+        () => false,
+        () => true,
+      );
+    } catch {
+      synchronous = true;
+    }
+    const events: { type: string; chunk?: string; phase?: string }[] = [];
+    const opening = sdk.createSandbox({
+      requireCrossOriginIsolation: false,
+      skipServiceWorker: true,
+      workerUrl: `/@fs${root}/packages/runtime-js/src/worker-entry.ts`,
+    });
+    const detach = opening.runtime.on((event: (typeof events)[number]) => events.push(event));
+    const sandbox = await opening;
+    try {
+      await sandbox.runtime.eval('console.log("GENERIC_EVENT")');
+      const before = [...events];
+      detach();
+      await sandbox.runtime.eval('console.log("DETACHED_EVENT")');
+      return { synchronous, rejected, before, after: events };
+    } finally {
+      sandbox.dispose();
+    }
+  }, root);
+  expect(result.synchronous).toBe(false);
+  expect(result.rejected).toBe(true);
+  expect(result.before).toContainEqual(
+    expect.objectContaining({ type: 'progress', phase: 'worker-spawned' }),
+  );
+  expect(
+    result.before.some(
+      (event) => event.type === 'stdout' && event.chunk?.includes('GENERIC_EVENT'),
+    ),
+  ).toBe(true);
+  expect(result.after).toEqual(result.before);
+});

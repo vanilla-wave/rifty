@@ -32,3 +32,21 @@ and untargeted files under force. Same semantics remain, not blanket nonempty.
 Native project file+command quota test separately RED1: effects still correctly
 applied=yes/persistence=failed and live content command; only exported kind absent.
 Log `/tmp/rifty-pr357-sdk-persistence-red.log`. SDK typecheck GREEN.
+
+GREEN2026-09-30: lifecycle/snapshot/native baseline34/34 (1.1min), plus generic
+opening/async-validation1/1. Real counts compared to separately observed native
+OpfsFsSync.flush receipts; a constant persisted=total=1 payload mutant fails at
+that comparison (restored automatically). Native held-fetch/restart rejects the
+old apply and only replacement progress remains. Same-peer artificially delayed
+frames remain source-guard evidence, not claimed as an executed mutant proof.
+Logs `/tmp/rifty-pr357-sdk-green2.log`, `-generic.log`, `-flush-mutant.log`.
+
+First pass19/20: Playwright fulfilled an encoded response without native HTTP
+decoding, so the encoded fixture was wrong. Moved encoded delivery to a real
+chunked Node HTTP server; browser decodes it. Added actual CORS hidden-encoding
+case: compressed Content-Length is not a trusted decoded-byte total. Both visible
+and hidden encoding omit total; raw same-origin declared length and chunked body
+retain honest domains. No weakened byte assertion.
+
+Existing SDK/runtime unit57/57; SDK+Workbench typechecks, refs/backlog/arch,
+dir-owner/file-size pass. Full pr:check and independent Final+GREEN follow.

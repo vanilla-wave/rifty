@@ -177,6 +177,7 @@ export function serializeRuntimeError(
     effects?: RuntimeEffects;
   };
   const applied = effects ?? extra.effects;
+  const cause = failure.cause as { name?: unknown; message?: unknown } | null | undefined;
   return {
     name: failure.name,
     message: failure.message,
@@ -184,8 +185,8 @@ export function serializeRuntimeError(
     ...(typeof extra.code === 'string' ? { code: extra.code } : {}),
     ...(typeof extra.path === 'string' ? { path: extra.path } : {}),
     ...(typeof extra.feature === 'string' ? { feature: extra.feature } : {}),
-    ...(failure.cause instanceof Error
-      ? { cause: { name: failure.cause.name, message: failure.cause.message } }
+    ...(typeof cause?.name === 'string' && typeof cause.message === 'string'
+      ? { cause: { name: cause.name, message: cause.message } }
       : {}),
     ...(applied === undefined ? {} : { effects: applied }),
   };

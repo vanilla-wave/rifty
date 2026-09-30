@@ -31,6 +31,7 @@ import {
   handleWorkerFsRequest,
   invalidateRuntimeWorkerModules,
   releaseSandboxToolchainResidentTransition,
+  serializeRuntimeError,
   setRuntimeWorkerFsComposition,
   takeUnhandledRejection,
   validateCommandInput,
@@ -163,11 +164,16 @@ async function openInstallation(input: Extract<ToolchainRequest, { op: 'open' }>
   return activationSnapshot(input.cwd, bindings);
 }
 
-async function applySnapshot(input: Extract<ToolchainRequest, { op: 'apply-snapshot' }>['input']) {
+async function applySnapshot(
+  input: Extract<ToolchainRequest, { op: 'apply-snapshot' }>['input'],
+  id: number,
+) {
   const { applyNoCoiSnapshot } = await import('./no-coi-snapshot-application.ts');
   const bindings = await applyNoCoiSnapshot(input, {
     fs: installContext.applicationFs,
-    flush: () => installContext.fs.flush(),
+    flush: (onProgress) => installContext.fs.flush({ onProgress }),
+    onProgress: (progress) =>
+      self.postMessage({ type: 'progress', operation: 'snapshot', id, ...progress }),
   });
   const { activateWorkbenchRuntimeAdapters } = await import('./no-coi-toolchain-install.ts');
   await activateWorkbenchRuntimeAdapters({ bindings, fs: syncMirror(), cwd: input.cwd });
@@ -371,7 +377,7 @@ async function dispatch(request: ToolchainRequest): Promise<ToolchainResultValue
     }
   }
   if (request.op === 'apply-snapshot')
-    return { activationState: await applySnapshot(request.input) };
+    return { activationState: await applySnapshot(request.input, request.id) };
   if (request.op === 'open') return { activationState: await openInstallation(request.input) };
   if (request.op === 'install') {
     return { activationState: await installManifest(request.input) };
@@ -380,24 +386,6 @@ async function dispatch(request: ToolchainRequest): Promise<ToolchainResultValue
   if (request.op === 'start-bin') return await startInstalledBin(request.input);
   await restoreActivation(request.input);
   return undefined;
-}
-
-function serializedError(error: unknown): SerializedRuntimeError {
-  const inspected = error instanceof Error ? error : new Error(String(error));
-  const details = inspected as Error & {
-    readonly code?: unknown;
-    readonly path?: unknown;
-    readonly feature?: unknown;
-    readonly effects?: unknown;
-  };
-  return {
-    name: inspected.name,
-    message: inspected.message,
-    ...(inspected.stack === undefined ? {} : { stack: inspected.stack }),
-    ...(typeof details.code === 'string' ? { code: details.code } : {}),
-    ...(typeof details.path === 'string' ? { path: details.path } : {}),
-    ...(typeof details.feature === 'string' ? { feature: details.feature } : {}),
-  };
 }
 
 let busy = false;
@@ -413,7 +401,7 @@ self.addEventListener('message', (event: MessageEvent<{ type?: unknown; request?
   if (busy) {
     const error = new Error('another sandbox toolchain operation is already active');
     error.name = 'SandboxToolchainBusyError';
-    post({ id: request.id, ok: false, error: serializedError(error) });
+    post({ id: request.id, ok: false, error: serializeRuntimeError(error) });
     return;
   }
   busy = true;
@@ -422,8 +410,8 @@ self.addEventListener('message', (event: MessageEvent<{ type?: unknown; request?
       (value) => post({ id: request.id, ok: true, ...(value === undefined ? {} : { value }) }),
       (error: unknown) => {
         if (request.op === 'start-bin' && residentPort === null) {
-          closeToolchainWorker(serializedError(error));
-        } else post({ id: request.id, ok: false, error: serializedError(error) });
+          closeToolchainWorker(serializeRuntimeError(error));
+        } else post({ id: request.id, ok: false, error: serializeRuntimeError(error) });
       },
     )
     .finally(() => {

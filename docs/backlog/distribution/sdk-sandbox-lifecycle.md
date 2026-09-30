@@ -70,4 +70,6 @@ reuse runtime peer and request maps (ADR-0486).
 
 ## Decisions
 
+ready-verdict: 2026-09-30 — Contract+RED @ 1024adea2133a39684462bdf571e1234870dfb69
+
 - 2026-09-30 — ADR-0486; former map items 1–2 combined, destination unchanged.

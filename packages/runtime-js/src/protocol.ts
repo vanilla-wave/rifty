@@ -214,7 +214,30 @@ export type HostMessage =
    * `setVmEngineOverride`, taking precedence over the `__RIFTY_VM_ENGINE` env. */
   | { readonly type: 'vm-config'; readonly engine: VmEngineName };
 
+export type SnapshotProgress =
+  | { readonly phase: 'fetch'; readonly bytes: number; readonly total?: number }
+  | { readonly phase: 'entries'; readonly written: number; readonly total: number }
+  | {
+      readonly phase: 'flush-cache' | 'flush-payload';
+      readonly persisted: number;
+      readonly total: number;
+    };
+
+export type RuntimeProgressEvent = { readonly type: 'progress' } & (
+  | {
+      readonly operation: 'boot';
+      readonly phase: 'worker-spawned' | 'storage-admitted' | 'toolchain-ready';
+    }
+  | {
+      readonly operation: 'boot';
+      readonly phase: 'waiting-for-storage-writer';
+      readonly cause: { readonly name: string; readonly message: string };
+    }
+  | ({ readonly operation: 'snapshot'; readonly id: number } & SnapshotProgress)
+);
+
 export type WorkerMessage =
+  | RuntimeProgressEvent
   | { readonly type: 'ready' }
   | { readonly type: 'stdout'; readonly chunk: string }
   | { readonly type: 'stderr'; readonly chunk: string }

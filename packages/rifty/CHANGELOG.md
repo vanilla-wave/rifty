@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add early SandboxOpening.runtime.on, structural sandboxErrorKind and real boot/snapshot progress; preserve awaited readiness and restart subscriptions (ADR-0486).
+
 - README links the browser support matrix (ADR-0469).
 - Report no-COI Worker/threaded-WASM capability as the explicit worker_threads.Worker gap; shared memory allocation remains native (ADR-0470).
 

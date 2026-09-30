@@ -190,9 +190,53 @@ bytes fail at actual use. Explicit install/apply is optional recovery after
 interruption, never an admission requirement or automatic retry.
 
 Update SDK and copied Worker together (protocol v5). Older Workers reject during
-handshake. Errors cross the boundary as ordinary `Error` objects; inspect
-`name`/`message`, including `SandboxPersistenceError`, rather than class identity.
+handshake. Errors retain ordinary Error receipts; `sandboxErrorKind(error)` from
+the SDK root discriminates known outcomes across Worker/package boundaries.
+Unknown failures return undefined; preserve their original name/message/cause.
+
+| Kind | Retry condition |
+| --- | --- |
+| busy | Active toolchain operation has settled; no automatic queue. |
+| resident-busy | Stop the resident before the incompatible operation. |
+| occupied | Native namespace holder closes; recreate sandbox. Both existing startup/guard deadlines retain native contention cause; guard expiry stays OpfsPreloadError. |
+| snapshot-conflict | Host resolves conflicting payload targets or explicitly chooses force; same bytes and unrelated files are allowed. |
+| snapshot-mismatch | Correct snapshot bytes/id/template/runtime compatibility before retry. |
+| restart-busy | Active restart has settled. |
+| persistence | Clear native storage fault and inspect effects/live data before recovery; a failed receipt can already have applied writes. |
+
 Unreadable OPFS preload rejects: clear the native fault and recreate the sandbox.
+A permission/import timeout or hydration stall after admission is not occupied.
+
+### Opening and application progress
+
+```ts
+import { createSandbox, sandboxErrorKind } from '@riftydev/sdk';
+const opening = createSandbox({
+  requireCrossOriginIsolation: false,
+  toolchain: { workerUrl },
+});
+const unsubscribe = opening.runtime.on(event => {
+  if (event.type === 'progress') console.log(event);
+});
+const sandbox = await opening; // Still waits for actual readiness.
+// Subscription survives resolution and sandbox.restart().
+// Later: unsubscribe(); sandbox.dispose();
+```
+
+`SandboxOpening<T>` is a Promise with an early runtime.on view. No replay; attach
+before await. Boot phases: worker-spawned → storage-admitted → toolchain-ready.
+Native contention adds waiting-for-storage-writer with its cause before admission.
+Generic mode has no toolchain handshake phase.
+
+Snapshot progress uses operation=snapshot and its existing request id (scoped to
+one Worker generation; reset at replacement). Phases: fetch(bytes,total?),
+entries(written,total), flush-cache(persisted,total), flush-payload(persisted,total).
+Entries count changed payload files/directories, excluding root/cache; same bytes
+write zero. Flush counts native pending watermark operations, not archive entries.
+Missing, content-encoded or CORS-hidden-encoding byte totals stay absent. No pending native writes
+means no flush-count event; failures never synthesize completion. These are separate
+operation counts, not a percentage of the whole opening. Dispose/restart cancels
+old requests; their late frames cannot update the replacement operation.
 
 ### Agent files and commands without COI
 

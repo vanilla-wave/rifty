@@ -3,14 +3,20 @@ import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import type { bakeApplicationPackage } from '../browser-unit/fixtures/snapshot-application-package.ts';
-import { type Page, expect, test } from './fixtures/test.ts';
+import { type Page, expect, test, waitForBoundary } from './fixtures/test.ts';
 const root = process.cwd().replaceAll('\\', '/');
 const fixture = `/@fs${root}/tests/no-coi/fixtures/no-coi-snapshot-page.ts`;
 let snapshot: Awaited<ReturnType<typeof bakeApplicationPackage>>;
 let chunkedUrl: string;
-const server = createServer((_request, response) => {
+const server = createServer((request, response) => {
   response.setHeader('access-control-allow-origin', '*');
   const bytes = Buffer.from(snapshot.archive);
+  if (request.url?.includes('encoded')) {
+    response.setHeader('content-encoding', 'gzip');
+    response.setHeader('content-length', bytes.length);
+    if (!request.url.includes('hidden'))
+      response.setHeader('access-control-expose-headers', 'content-encoding');
+  }
   response.write(bytes.subarray(0, 128));
   response.end(bytes.subarray(128));
 });
@@ -49,9 +55,11 @@ async function invoke<T = unknown>(page: Page, method: string, args: unknown[] =
 async function boot(page: Page, fault?: string) {
   await page.goto('/no-coi-harness.html');
   await invoke(page, 'boot', [
-    fault
-      ? `/@fs${root}/tests/no-coi/fixtures/no-coi-snapshot-fault-worker.ts?fault=${fault}`
-      : `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
+    fault === 'observe'
+      ? `/@fs${root}/tests/no-coi/fixtures/sdk-snapshot-observer-worker.ts`
+      : fault
+        ? `/@fs${root}/tests/no-coi/fixtures/no-coi-snapshot-fault-worker.ts?fault=${fault}`
+        : `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
   ]);
 }
 interface Progress {
@@ -69,8 +77,8 @@ const descriptor = () => ({
   snapshotId: snapshot.snapshotId,
   templateId: 'opfs-ms',
 });
-for (const transport of ['declared', 'encoded', 'chunked'] as const) {
-  const encoded = transport === 'encoded';
+for (const transport of ['declared', 'encoded', 'encoded-hidden', 'chunked'] as const) {
+  const encoded = transport.startsWith('encoded');
   test(`snapshot real bytes, applied entries and native flush counts; transport=${transport}`, async ({
     page,
     context,
@@ -84,11 +92,11 @@ for (const transport of ['declared', 'encoded', 'chunked'] as const) {
         },
       }),
     );
-    await boot(page);
+    await boot(page, 'observe');
     try {
       const input = {
         ...descriptor(),
-        ...(transport === 'chunked' ? { assetUrl: chunkedUrl } : {}),
+        ...(transport !== 'declared' ? { assetUrl: `${chunkedUrl}/${transport}` } : {}),
       };
       await invoke(page, 'apply', [input]);
       const events = await invoke<Progress[]>(page, 'takeProgress');
@@ -102,9 +110,17 @@ for (const transport of ['declared', 'encoded', 'chunked'] as const) {
       const entries = events.filter((e) => e.phase === 'entries');
       const native = await invoke<string[]>(page, 'nativePayloadEntries');
       expect(entries.at(-1)).toMatchObject({ written: native.length, total: native.length });
-      for (const phase of ['flush-cache', 'flush-payload']) {
+      const nativeFlushes = await invoke<
+        { counts: { persisted: number; total: number }[]; failed: number }[]
+      >(page, 'takeNativeFlushes');
+      expect(nativeFlushes).toHaveLength(2);
+      for (const [index, phase] of ['flush-cache', 'flush-payload'].entries()) {
         const flushes = events.filter((e) => e.phase === phase);
         expect(flushes.length).toBeGreaterThan(0);
+        expect(flushes.map(({ persisted, total }) => ({ persisted, total }))).toEqual(
+          nativeFlushes[index]?.counts,
+        );
+        expect(nativeFlushes[index]?.failed).toBe(0);
         expect(flushes.at(-1)?.persisted).toBe(flushes.at(-1)?.total);
         expect(flushes.at(-1)?.total).toBeGreaterThan(0);
       }
@@ -204,3 +220,43 @@ for (const fault of [
     }
   });
 }
+
+test('restart cancels held snapshot and only the replacement operation progresses', async ({
+  page,
+  context,
+}) => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let requested!: () => void;
+  const request = new Promise<void>((resolve) => {
+    requested = resolve;
+  });
+  await context.route('**/kit-held-snapshot', async (route) => {
+    requested();
+    await held;
+    await route.fulfill({ body: Buffer.from(snapshot.archive) }).catch(() => {});
+  });
+  await context.route('**/kit-snapshot', (route) =>
+    route.fulfill({ body: Buffer.from(snapshot.archive) }),
+  );
+  await boot(page);
+  try {
+    await invoke(page, 'beginApply', [{ ...descriptor(), assetUrl: '/kit-held-snapshot' }]);
+    await waitForBoundary(request, 'old Worker snapshot fetch');
+    await invoke(page, 'restart');
+    expect(await invoke(page, 'applied')).toMatch(/^failed:/);
+    await invoke(page, 'takeProgress');
+    release();
+    await invoke(page, 'apply', [descriptor()]);
+    const events = await invoke<Progress[]>(page, 'takeProgress');
+    expect(events.length).toBeGreaterThan(0);
+    expect(events.every((event) => event.operation === 'snapshot')).toBe(true);
+    expect(new Set(events.map((event) => event.id)).size).toBe(1);
+    expect(events.filter((event) => event.phase === 'entries').at(-1)?.written).toBeGreaterThan(0);
+  } finally {
+    release();
+    await invoke(page, 'dispose');
+  }
+});

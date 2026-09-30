@@ -4,6 +4,7 @@ import { type ToolchainSandbox, createSandbox } from '../../../packages/rifty/sr
 let sandbox: ToolchainSandbox;
 let output = '';
 const progress: unknown[] = [];
+const nativeFlushes: unknown[] = [];
 let held = false;
 let application: Promise<string> | undefined;
 let applicationState = 'idle';
@@ -15,6 +16,7 @@ export async function boot(workerUrl: string, namespace = 'sdk-snapshot') {
       const worker = Reflect.construct(target, args) as Worker;
       worker.addEventListener('message', (event) => {
         if (event.data.type === 'snapshot-native-held') held = true;
+        if (event.data.type === 'native-flush-receipt') nativeFlushes.push(event.data);
       });
       return worker;
     },
@@ -121,4 +123,11 @@ export async function nativePayloadEntries() {
   return [...(await nativeReplicaEntries(root)).values()]
     .filter((entry) => entry.path.startsWith('/project/'))
     .map((entry) => entry.path);
+}
+
+export function takeNativeFlushes() {
+  return nativeFlushes.splice(0);
+}
+export function restart() {
+  return sandbox.restart({ preview: { src: '' } });
 }

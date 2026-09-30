@@ -137,6 +137,7 @@ const boot = (async () => {
   try {
     const initialized = await initializeBackend(
       startup.storage ?? (isSandboxToolchainRealm() ? { persistence: 'preferred' } : undefined),
+      (event) => post({ type: 'progress', operation: 'boot', ...event }),
     );
     backend = initialized.backend;
     if (initialized.layoutIssue) {
@@ -156,6 +157,9 @@ const boot = (async () => {
     installMemoryFs();
     backend = 'memory';
   }
+
+  if (backend === 'memory')
+    post({ type: 'progress', operation: 'boot', phase: 'storage-admitted' });
 
   // Preload the QuickJS WASM engine into the boot promise (ADR-0142) so a
   // SYNCHRONOUS `vm.*` sandbox call in evaled code always finds the engine ready

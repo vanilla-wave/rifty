@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Forward native startup/snapshot progress with existing peer/request guards; distinguish observed OPFS contention under the host deadline and retain native causes (ADR-0486).
+
 - Advanced IPC captures optional Float16Array behind an explicit availability guard, preserving its value table on capable hosts and ES2022 startup without it (ADR-0481).
 
 - Advanced IPC refuses own/inherited view constructor accessors before dispatch instead of sending stale bytes; data constructors and Buffer branding remain (ADR-0480).
