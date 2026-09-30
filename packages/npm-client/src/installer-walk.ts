@@ -368,6 +368,9 @@ export async function walkAndPin(
       });
     }
     inFlight.set(key, pending);
+    // Settled by allSettled after the walk; a rejection landing mid-walk must not surface as an
+    // unhandled rejection (the owner realm exits 1 before the install can report its failure).
+    void pending.catch(() => {});
     return pending;
   }
 
