@@ -11,39 +11,47 @@ code: [packages/agent/src/sandbox-host.ts, packages/agent/src/types.ts, packages
 
 ## Context
 
-Finding. `SandboxAgentHostOptions` (`packages/agent/src/types.ts:60-68`) takes
-one `project: SandboxProjectOptions` (`{ root, readonlyPaths?,
-allowedCommands? }`, `packages/runtime-js/src/protocol.ts:142-146`) and builds
-both `files` and `shell` over one `sandbox.project(...)` handle
-(`packages/agent/src/sandbox-host.ts`, 75 lines; ADR-0426 D1 "creates one
-public `sandbox.project(project)` handle"). Enforcement lives in the SDK
-project policy (`no-coi-project-command.ts:59-62`; ADR-0426: "SDK
-readonly/command policy stays authoritative"). Issue #345's host created two
-hosts with different policies and spliced `files` from one with `shell` from
-the other into a hand-written `AgentHost` (≈60 lines).
+I4 uses the existing SDK project policy. ADR-0484 partially supersedes
+ADR-0426 D1's one-handle requirement after independent DEC-2 review.
+The README's npm/node-only allowlist rejects nested project bins; keep per-stage
+semantics and demonstrate unrestricted default plus explicit complete allowlist.
 
-Goal obligation: I4 — one host, distinct `readonlyPaths` / `allowedCommands`
-values for the file tools and for the shell; policy values are a host
-connection, enforcement stays in the SDK project policy (candidate carrier:
-two `sandbox.project()` handles over the same root — a seam on ADR-0426 D1
-that the pickup ADR decides), no second policy engine.
+## User scenario
 
-Defect to repair in the same unit (fidelity audit row 3): `allowedCommands`
-is asserted on every stage including scripts spawned by `npm run`
-(`no-coi-project-command.ts:162-166`), so the README example
-`allowedCommands: ['npm', 'node']` (`packages/agent/README.md:50`) makes
-`npm run build` fail with `EACCES Command is prohibited: vite`; the
-combination is untested. The README example must run the goal scenario and
-the allowlist + nested-script case gets a test; the per-stage semantics
-themselves stay (an allowlist that `npm run` could bypass would be a lie).
+An embedder supplies one root and optionally distinct files/shell policy values.
+File tools may edit while a read-only shell can inspect; another embedding can
+choose the inverse. Unspecified policy stays unrestricted in the reference host.
+
+## Acceptance
+
+1. One agent session writes with file tools while shell redirection and Node fs
+   writes receive the existing SDK readonly refusal; bytes remain correct. → I4
+2. Inverse policy rejects file-tool writes while shell writes succeed; policy
+   does not leak between sequential capability calls. → I4
+3. Existing common project policy remains inherited; per-capability present
+   fields replace common fields, explicit undefined clears and empty command
+   allowlist denies all. No second root or policy engine. → I4 + ADR-0426
+4. Reference README defaults unrestricted. Actual npm build executes its own bin;
+   explicit allowlist checks nested bins and cannot bypass SDK enforcement. → I4 + scenario
+
+## Fault matrix
+
+| Axis × operation | Honest outcome | Proof |
+| --- | --- | --- |
+| sibling-drift × files/shell | one SDK enforces each effective policy | real host + Worker tests → I4 |
+| corrupt-input × capability root | reject invalid new root, preserve common root | public host creation test → I4 |
+| provenance-lie × policy notes | captured notes describe effective policy values | real session prompt/notes → I4 |
+
+## Challenge
+
+challenge: 2026-09-30 — clear; reuse accepted I4 premise. Independent DEC-2
+agent recommends additive policies over public SDK handles, no policy engine.
 
 ## Out of scope
 
-- A filesystem jail or path escape guarantees beyond the existing root-as-path-origin (ADR-0418 D2).
-- Workbench agent host (`createWorkbenchAgentHost`) parity — only if the same shape applies for free.
+- Hostile-code filesystem jail; existing SDK root semantics remain.
+- Workbench adapter policy extensions; only sandbox adapter has this contract.
 
 ## Decisions
 
-- option shape (`project: { root, files?: policy, shell?: policy }` vs two
-  project options) at pickup; the pickup ADR names ADR-0426 D1 (one handle →
-  one handle per capability is a seam on it), public API.
+- 2026-09-30 — ADR-0484: additive policies, same root, one SDK handle per capability; independent DEC-2 review `policy_decision`.
