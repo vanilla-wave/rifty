@@ -81,3 +81,31 @@ The combined baseline was interrupted at its reproduced hang; full baseline reru
 follows the repair, no passing claim from the interrupted run.
 
 Final baseline no-coi-sandbox-build-loop21/21 GREEN (1.5min), including live COI/no-COI build parity; `/tmp/rifty-pr357-install-baseline-final.log`. SDK/workbench/agent typechecks and lint pass; source cause controls restored5/5.
+
+## Final-review correction and complete baseline
+
+Independent Final blocked b3e3b4547: native `ms@~2` saves ^2.1.3; initial
+heuristic saved ~2.1.3. Class sweep against npm11.17's Arborist/semver7.8.4
+also reproduced ~2.0, bounded, union and minor-wildcard save mismatches.
+Shared live differential RED5/control12 → GREEN17. ADR-0488 replaces operator
+heuristics with npm's actual subset rule; same sixteen cases run in Chromium.
+Logs `/tmp/rifty-pr357-install-{review-ranges,ranges-red,ranges-green}.log`.
+
+Initial full gate: copied TypeScript-worker digest changed from shared-chunk
+references (size unchanged10022664); unit23 failures/7 timeouts under load38.
+Gate was stopped during automatic isolation to apply review repair. Completed
+manual isolated rerun:7 files/15 failures;4 files passed (including IPC resize,
+shadow installer, snapshot and physical-Worker parity controls). No clean-gate
+claim from that interrupted run. `/tmp/rifty-pr357-install-isolated-red.log`.
+
+Baseline criterion corrections (PR-4):
+- Prompt golden removes only the superseded host-only dependency sentence.
+- Prefix and durable catalog expectations use native saved caret ranges;
+  root selection, failure/reload and byte-preservation assertions retained.
+- Extraction map follows the existing npm suite's exact new integration path;
+  production closure gains the extracted helper, semver is declared explicitly.
+- Affected owner explicit-install/FIFO cases use actual kleur/ms; unchanged
+  legacy doubles elsewhere remain outside this acquisition proof. The .vite-temp
+  lifecycle carrier now snapshots genuine ms, installs genuine semver with its
+  real bin, preserves an extraneous marker and churned .vite-temp files through
+  install/run/install/A→B→A. No manufactured lock result or fake bin closes it.

@@ -47,6 +47,13 @@
       "manifest": "diamond-conflict-parent-1.0.0.json",
       "tarball": "diamond-conflict-parent-1.0.0.tgz",
       "integrity": "sha256-x3cLAV/q5ExVgIJ0BTqFYwE9/oZxVCfk/GwHRuHIU/g="
+    },
+    {
+      "name": "semver",
+      "version": "7.8.4",
+      "manifest": "semver-7.8.4.json",
+      "tarball": "semver-7.8.4.tgz",
+      "integrity": "sha256-cA6a/rxZ8hTcLYM9FZrNBQcSgA54aK1QtUEplLdzHBI="
     }
   ]
 }

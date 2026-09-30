@@ -36,6 +36,7 @@ import {
   type PlaygroundPackageMutationKind as OwnerPackageMutationKind,
   createPlaygroundNpmObserver,
 } from './playground-package-mutations.ts';
+import { vendoredRegistry } from './vendored-registry.test-fixture.ts';
 import {
   type WorkbenchProjectRuntime,
   createWorkbenchProjectRuntime,
@@ -2499,22 +2500,12 @@ describe('Workbench project runtime', () => {
               : undefined));
       if (options === undefined) throw new Error('test install options missing');
       installCwds.push(options.cwd);
-      const packageJson = JSON.parse(
-        await options.vfs.readFileText(`${options.cwd}/package.json`),
-      ) as {
-        readonly dependencies?: Readonly<Record<string, string>>;
-      };
-      if (packageJson.dependencies?.['user-pkg'] === '1.0.0') {
-        await options.vfs.mkdir(`${options.cwd}/node_modules/user-pkg`, { recursive: true });
-        await options.vfs.writeFile(
-          `${options.cwd}/node_modules/user-pkg/package.json`,
-          '{"name":"user-pkg","version":"1.0.0"}\n',
-        );
-      }
+      if (options.cwd.endsWith('/sub')) return await installPackages(options);
       return await baseInstall(arg1, rootVersion, dependenciesOrOpts, explicitOpts);
     };
     const h = await harness(undefined, nodeCliPackageConfig, async () => {}, undefined, undefined, {
       install,
+      registry: vendoredRegistry(),
     });
     const nestedRoot = `${ROOT}/sub`;
     h.authority.mkdirSync(`${nestedRoot}/deep`, { recursive: true });
@@ -2527,7 +2518,7 @@ describe('Workbench project runtime', () => {
       type: 'pty:exec',
       sid: 'terminal-npm-prefix',
       rid: 'run-npm-prefix',
-      line: 'cd sub/deep && npm install user-pkg@1.0.0',
+      line: 'cd sub/deep && npm install ms@2.0.0 --save-exact',
       cols: 80,
       rows: 24,
       isTTY: true,
@@ -2541,10 +2532,10 @@ describe('Workbench project runtime', () => {
       ),
     ).toMatchObject({
       name: 'rifty-project',
-      dependencies: { 'user-pkg': '1.0.0' },
+      dependencies: { ms: '2.0.0' },
     });
-    expect(h.authority.existsSync(`${nestedRoot}/node_modules/user-pkg/package.json`)).toBe(true);
-    expect(h.authority.existsSync(`${ROOT}/node_modules/user-pkg/package.json`)).toBe(false);
+    expect(h.authority.existsSync(`${nestedRoot}/node_modules/ms/package.json`)).toBe(true);
+    expect(h.authority.existsSync(`${ROOT}/node_modules/ms/package.json`)).toBe(false);
     expect(h.frames).toContainEqual(
       expect.objectContaining({ type: 'pty:exit', rid: 'run-npm-prefix', code: 0 }),
     );

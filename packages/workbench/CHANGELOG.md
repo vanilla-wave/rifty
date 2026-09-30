@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve native npm bounded/partial/union save ranges using semver subset rules (ADR-0488).
+
 - Run no-COI shell npm install through the existing installer/claim owner with Stop and readonly policy. Shared npm save logic matches resolved ranges/sections and preserves concurrent manifest edits; successful acquisition tests use real tarballs/Eddy (ADR-0487).
 
 - No-COI snapshot apply reports fetched bytes, changed entries and native flush counts; discriminate snapshot mismatches and persistence failures (ADR-0486).

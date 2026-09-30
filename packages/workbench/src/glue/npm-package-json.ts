@@ -1,5 +1,18 @@
 import { NotImplementedError } from '@riftydev/io';
 import type { Vfs } from '@riftydev/vfs';
+import valid from 'semver/functions/valid.js';
+import subset from 'semver/ranges/subset.js';
+import validRange from 'semver/ranges/valid.js';
+
+/** npm Arborist preserves a requested range when the default save would widen it. */
+export function installedSaveRange(requested: string, version: string, exact = false): string {
+  const candidate = exact ? version : `^${version}`;
+  return valid(requested, true) ||
+    !validRange(requested, true) ||
+    subset(candidate, requested, { loose: true })
+    ? candidate
+    : requested;
+}
 
 export interface ProjectPackageJson {
   readonly raw: Record<string, unknown>;

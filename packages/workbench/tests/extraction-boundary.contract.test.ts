@@ -42,6 +42,7 @@ const EXPECTED_EXTERNAL_PACKAGES = [
   '@riftydev/shell',
   '@riftydev/ts-language-service',
   '@riftydev/vfs',
+  'semver',
 ] as const;
 
 interface PackageManifest {
@@ -314,9 +315,14 @@ describe('@riftydev/workbench extraction boundary', () => {
       ),
     ).toEqual([]);
     expect(
-      EXTRACTION_MAP.filter(([, target]) => !existsSync(resolve(PACKAGE_SRC_ROOT, target))).map(
-        ([, target]) => target,
-      ),
+      EXTRACTION_MAP.filter(
+        ([, target]) =>
+          !existsSync(
+            target === 'glue/npm-shell-command.test.ts'
+              ? resolve(PACKAGE_ROOT, '../../tests/integration/npm-shell-command.test.ts')
+              : resolve(PACKAGE_SRC_ROOT, target),
+          ),
+      ).map(([, target]) => target),
     ).toEqual([]);
   });
 
@@ -366,7 +372,8 @@ describe('@riftydev/workbench extraction boundary', () => {
     // ADR-0432: native storage diagnosis shares the owner's existing publication point.
     // ADR-0437: three diagnostic modules and four separately emitted probe assets.
     // ADR-0445: one no-COI invocation scope shared by project command and runBin.
-    expect(packageProductionFiles).toHaveLength(172);
+    // ADR-0487: package JSON/spec helpers split from the ratcheted npm command.
+    expect(packageProductionFiles).toHaveLength(173);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

@@ -1,5 +1,6 @@
 import {
   type ProjectPackageJson,
+  installedSaveRange,
   parseSpec,
   readPackageJson,
   readPackageJsonScripts,
@@ -738,9 +739,7 @@ export async function executeNpmInstallOperation(
         const version = result.lockfile.packages[`node_modules/${name}`]?.version;
         if (typeof version !== 'string' || version.length === 0)
           throw new Error(`Installed package ${name} has no top-level lock version`);
-        maps[section][name] = request.saveExact
-          ? version
-          : `${range.trim().startsWith('~') ? '~' : '^'}${version}`;
+        maps[section][name] = installedSaveRange(range, version, request.saveExact);
       }
       const savedPackage = changedPackage();
       intendedSave = serializeProjectPackageJson(savedPackage);

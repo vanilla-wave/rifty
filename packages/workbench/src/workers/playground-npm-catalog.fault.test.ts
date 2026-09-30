@@ -104,7 +104,7 @@ it.each(['quota-report', 'permission-rejection'] as const)(
           failed.authority.readFileBytesSync(`${failed.project.projectRoot}/package.json`),
         ),
       );
-      expect(manifest.devDependencies).toEqual({ ms: '2.0.0' });
+      expect(manifest.devDependencies).toEqual({ ms: '^2.0.0' });
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toMatch(/quota|permission/);
       expect(failed.catalog.snapshot()).toEqual(before);

@@ -2,7 +2,12 @@ import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { gzipSync } from 'node:zlib';
 import { globalProcessManager } from '@riftydev/kernel';
-import { type InstallOptions, type InstallResult, RegistryClient } from '@riftydev/npm-client';
+import {
+  type InstallOptions,
+  type InstallResult,
+  RegistryClient,
+  install as installPackages,
+} from '@riftydev/npm-client';
 import type { CommandContext, ProcessExit } from '@riftydev/shell';
 import {
   MemoryFsSync,
@@ -45,6 +50,7 @@ import { createNoShadowInstallResultFixture } from './install-result.test-fixtur
 import { type OwnerPackageState, createOwnerPackageState } from './owner-package-state.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import type { AcquisitionProvenance, SnapshotFailure } from './package-acquisition-authority.ts';
+import { vendoredRegistry } from './vendored-registry.test-fixture.ts';
 import { workbenchPackageConfig } from './workbench-package-config.ts';
 import { createWorkbenchProjectComposition } from './workbench-project-composition.ts';
 import { createWorkbenchProjectRuntime } from './workbench-project-runtime.ts';
@@ -94,6 +100,7 @@ interface Timeline {
 }
 
 interface OwnerHarnessOptions {
+  readonly registry?: RegistryClient;
   readonly beforeInstallReturn?: (options: InstallOptions) => Promise<void>;
 }
 
@@ -119,6 +126,7 @@ async function installResult(name: string, version: string): Promise<InstallResu
 function realInstallBoundary(
   timeline: Timeline,
   beforeReturn?: (options: InstallOptions) => Promise<void>,
+  registry?: RegistryClient,
 ): InstallFn {
   return async (input) => {
     if (typeof input !== 'object') throw new Error('Expected InstallOptions');
@@ -132,6 +140,12 @@ function realInstallBoundary(
     timeline.activeInstalls += 1;
     timeline.maxActiveInstalls = Math.max(timeline.maxActiveInstalls, timeline.activeInstalls);
     try {
+      if (registry) {
+        const result = await installPackages({ ...options, registry });
+        await beforeReturn?.(options);
+        timeline.events.push(`install:end:${options.cwd}`);
+        return result;
+      }
       await options.vfs.mkdir(`${options.cwd}/node_modules/${name}`, { recursive: true });
       await options.vfs.writeFile(
         `${options.cwd}/node_modules/${name}/package.json`,
@@ -955,7 +969,7 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
       baseUrl: 'https://playground.test/registry',
       fetch: async () => new Response('', { status: 599 }),
     }),
-    install: realInstallBoundary(timeline, options.beforeInstallReturn),
+    install: realInstallBoundary(timeline, options.beforeInstallReturn, options.registry),
     resolverUrl: () => undefined,
     resolverBundleBaseUrl: () => undefined,
     resolverPin: () => undefined,
@@ -1543,39 +1557,58 @@ describe('Workbench companion first materialization Contract+RED', () => {
   it('pins extraneous .vite-temp writes across install → npm run → install, then A→B→A', async () => {
     const id = 'vite-reopen-current-manifest';
     const templateId = 'vite-reopen-current-manifest-v1';
-    const packageJson = '{"name":"vite-run-contract","scripts":{"dev":"vite"}}\n';
-    const fixture = serializedSnapshotFixture(
-      viteDefinition({ kind: 'install' }, id, packageJson),
-      templateId,
+    const registry = vendoredRegistry();
+    const definition = (projectId: string, firstMaterialization: FirstMaterialization) =>
+      withPlaygroundMetadata(
+        inspectProjectDefinition(
+          defineNodeCliProject({
+            id: projectId,
+            files: {
+              '/main.cjs': "console.log(require('ms')('2s'))",
+              '/package.json': JSON.stringify({
+                name: 'cache-owner',
+                version: '1.0.0',
+                scripts: { dev: 'node main.cjs' },
+                dependencies: { ms: '2.0.0' },
+              }),
+            },
+            entryPath: '/main.cjs',
+          }),
+        ),
+        { starterId: 'cache-owner', templateId, firstMaterialization },
+      );
+    const initial = definition(id, { kind: 'install' });
+    const baked = createMemoryFs();
+    await baked.vfs.mkdir('/bake', { recursive: true });
+    for (const [path, bytes] of Object.entries(initial.files))
+      await baked.vfs.writeFile(`/bake${path}`, bytes);
+    const installed = await installPackages({ vfs: baked.vfs, cwd: '/bake', registry });
+    const fixture = snapshotFixtureFromValue(
+      buildDepSnapshot(baked.fsSync, '/bake', {
+        templateId,
+        deps: { ms: '2.0.0' },
+        packages: installed.packages.length,
+      }),
     );
     const descriptor = {
       snapshotId: fixture.snapshotId,
-      assetUrl: 'https://playground.test/snapshots/vite-reopen-current-manifest.json.gz',
+      assetUrl: 'https://playground.test/snapshots/cache-owner.json.gz',
       templateId,
     } as const;
-    const definitionA = viteDefinition({ kind: 'snapshot', snapshot: descriptor }, id, packageJson);
-    const definitionB = viteDefinition({ kind: 'install' }, 'vite-reopen-switch-away');
+    const definitionA = definition(id, { kind: 'snapshot', snapshot: descriptor });
+    const definitionB = definition('cache-owner-switch-away', { kind: 'install' });
     const installerManifests: string[] = [];
     const fetchSnapshot = vi.fn(async () => new Response(gzipSnapshot(fixture.bytes, 6)));
     vi.stubGlobal('fetch', fetchSnapshot);
     const h = ownerHarness({
+      registry,
       beforeInstallReturn: async (options) => {
         const manifest = await options.vfs.readFileText(`${options.cwd}/package.json`);
         installerManifests.push(manifest);
-        if (dependencyMap(manifest).cowsay !== '1.6.0') return;
-        await options.vfs.mkdir(`${options.cwd}/node_modules/cowsay`, { recursive: true });
+        if (dependencyMap(manifest).semver !== '7.8.4') return;
         await options.vfs.writeFile(
-          `${options.cwd}/node_modules/cowsay/package.json`,
-          '{"name":"cowsay","version":"1.6.0"}\n',
-        );
-        await options.vfs.writeFile(
-          `${options.cwd}/node_modules/cowsay/marker.txt`,
-          'cowsay-ready\n',
-        );
-        await options.vfs.mkdir(`${options.cwd}/node_modules/.bin`, { recursive: true });
-        await options.vfs.writeFile(
-          `${options.cwd}/node_modules/.bin/cowsay`,
-          '#!/usr/bin/env node\n',
+          `${options.cwd}/node_modules/semver/marker.txt`,
+          'semver-ready\n',
         );
       },
     });
@@ -1620,14 +1653,14 @@ describe('Workbench companion first materialization Contract+RED', () => {
       stdout: sink,
       stderr: sink,
     };
-    await expect(npm(['install', 'cowsay@1.6.0'], context)).resolves.toBe(0);
+    await expect(npm(['install', 'semver@7.8.4', '--save-exact'], context)).resolves.toBe(0);
     await h.packageState.quiesce();
     const warmBeforeMutation = await h.open(definitionA);
 
-    const markerPath = `${first.projectRoot}/node_modules/cowsay/marker.txt`;
-    const cowsayBinPath = `${first.projectRoot}/node_modules/.bin/cowsay`;
+    const markerPath = `${first.projectRoot}/node_modules/semver/marker.txt`;
+    const semverBinPath = `${first.projectRoot}/node_modules/.bin/semver`;
     expect.soft(h.authority.existsSync(markerPath)).toBe(true);
-    expect.soft(h.authority.existsSync(cowsayBinPath)).toBe(true);
+    expect.soft(h.authority.existsSync(semverBinPath)).toBe(true);
 
     await expect(npm(['run', 'dev'], context)).resolves.toBe(0);
     await h.packageState.quiesce();
@@ -1668,12 +1701,12 @@ describe('Workbench companion first materialization Contract+RED', () => {
     expect.soft(installsBeforeReopen).toBe(2);
     expect.soft(h.timeline.installs).toHaveLength(installsBeforeReopen);
     expect.soft(dependencyMap(installerManifests.at(-1) ?? '{}')).toMatchObject({
-      vite: '8.0.16',
-      cowsay: '1.6.0',
+      ms: '2.0.0',
+      semver: '7.8.4',
     });
     expect.soft(decoder.decode(h.authority.readFileBytesSync(runMarker))).toBe('{"run":1}\n');
     expect.soft(h.authority.existsSync(markerPath)).toBe(true);
-    expect.soft(h.authority.existsSync(cowsayBinPath)).toBe(true);
+    expect.soft(h.authority.existsSync(semverBinPath)).toBe(true);
   });
 
   // One Workbench owns one active ProjectSession/VFS cursor. Exercise duplicate
