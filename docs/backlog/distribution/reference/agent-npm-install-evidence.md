@@ -32,3 +32,7 @@ conformance from “change as npm would”. No source repair has started yet.
 
 Native persistence carrier separately RED1 (missing persistence kind because
 script-only install never runs), `/tmp/rifty-pr357-install-persistence-red.log`.
+
+Contract+RED accepted8121fb14e,11/11 coverage, no blockers. Broader metadata
+observations captured in `../../npm-client/npm-project-metadata.md`; real same-HTTP
+probe confirms them, public compat row marks ❌. No I9 dependency-state exemption.

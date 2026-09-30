@@ -45,6 +45,22 @@ persistence failures retain honest effects and installation claims.
    restores manifest; native quota never promotes a trusted claim, reports failed
    persistence and explicit retry recovers. → I9/I4 baseline
 
+## Reference contract
+
+Native Node24.16.0/npm11.17.0, real local HTTP registry with genuine vendored
+ms2.0.0/2.1.3. Each case starts a fresh project/cache; committed fixture executes
+npm and compares its actual saved dependency state. ADR-0487 owns the semantic
+copy. Native flags disabling audit/scripts do not change these pure-JS fixtures.
+
+## Parity cases
+
+- Fresh bare/exact/caret/tilde requests and save-exact/dev match full manifest,
+  lock root dependency maps and installed version. → I9
+- Explicit dev moves prod; bare names retain existing dev section/selected range;
+  no-args installs the manifest without changing it. → I9
+- Installed genuine ms returns the same duration in the live Worker and after
+  restart; real Pi calls the identical shell route. → I9/scenario6
+
 ## Fault matrix
 
 | Axis × operation | Honest outcome | Proof |
@@ -69,5 +85,7 @@ probes reject copying old raw-range save behavior; no new coordination needed.
   this unit proves requested dependency changes, not byte-identical npm logs/locks.
 
 ## Decisions
+
+ready-verdict: 2026-09-30 — Contract+RED @ 8121fb14e0718a917fb4fd2d8793bdae9c042d9f
 
 - 2026-09-30 — ADR-0487; native npm11.17/Node24.16 oracle against genuine ms archives. Shared save defect repaired at its owner; no no-COI fork.
