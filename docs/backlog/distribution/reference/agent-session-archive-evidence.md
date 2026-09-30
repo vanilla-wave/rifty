@@ -105,3 +105,7 @@ RED: `RIFTY_PLAYGROUND_PORT=5417 pnpm test:browser-unit tests/browser-unit/agent
 → 1 failed: two archive files contained the original text (expected 1). /tmp/rifty-archive-restore-red.log.
 GREEN: same suite in full → 12/12 PASS (8.8 s), /tmp/rifty-archive-restore-green.log.
 `pnpm --filter @riftydev/agent typecheck` PASS; `pnpm exec vitest run --project unit packages/agent/src` 118/118.
+Independent Final+GREEN (fresh reviewer, read-only) at 312344012: pass; new test
+pins the defect through both the file count and `archive_search` match count;
+suite rerun 12/12. `pnpm pr:check`: 27/27 PASS (`test:run` 240.9 s, parity 126.0 s),
+/tmp/rifty-archive-restore-pr-check.log.
