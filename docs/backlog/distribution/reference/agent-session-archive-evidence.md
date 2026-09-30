@@ -109,3 +109,22 @@ Independent Final+GREEN (fresh reviewer, read-only) at 312344012: pass; new test
 pins the defect through both the file count and `archive_search` match count;
 suite rerun 12/12. `pnpm pr:check`: 27/27 PASS (`test:run` 240.9 s, parity 126.0 s),
 /tmp/rifty-archive-restore-pr-check.log.
+
+## Review repair: discovery order, corrupt tolerance, image bytes
+
+Same inline review: `archive_search` returned readdir (UUID) order, so recency was
+random across pages; one corrupt/foreign/newer entry threw and hid every healthy
+conversation with no in-agent repair path; base64 image data matched short queries.
+Classes: `observable-order` (discovery order) and `false-fallback` (one unreadable
+entry breaking the whole read-only path) at the archive directory scan; `lossy-aggregate`
+for image bytes treated as text. Fix: scan collects `corrupt` entries and sorts matches
+by `createdAt` desc; `archive_read` of a corrupt id still fails loudly; image `data`
+is excluded from text search. Contract change recorded in ADR-0482/README: the old
+"corrupt archive is reported as an error by discovery" case is replaced by the
+per-entry listing case, not weakened.
+`packages/agent/package.json`: workspace dependency order restored (nit).
+
+RED: `RIFTY_PLAYGROUND_PORT=5417 pnpm test:browser-unit tests/browser-unit/agent-archive.spec.ts -g 'corrupt entry|newest conversations|never image bytes'`
+→ 3 failed (search receipt failed on the corrupt file; order `[1000, 3000, 2000]`; image bytes matched). /tmp/rifty-archive-search-red.log.
+GREEN: full suite → 14/14 PASS (9.4 s), /tmp/rifty-archive-search-green.log.
+`pnpm --filter @riftydev/agent typecheck` PASS; agent unit 118/118; `biome check` clean.

@@ -75,6 +75,37 @@ export async function saved() {
     })),
   );
 }
+/** Real envelope bytes with chosen ids/times: discovery order and tolerance are under test. */
+export async function seed(
+  rows: readonly { sessionId: string; createdAt: number; text: string }[],
+) {
+  const fs = new OpfsVfs();
+  await fs.mkdir(directory, { recursive: true });
+  for (const row of rows) {
+    const payload = JSON.stringify({
+      version: 1,
+      sessionId: row.sessionId,
+      project: { id: 'shop', name: 'shop' },
+      createdAt: row.createdAt,
+      revision: 1,
+      state: 'complete',
+      restoredMessageCount: 0,
+      messages: [{ role: 'user', content: row.text, timestamp: row.createdAt }],
+    });
+    const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload));
+    const sha256 = Array.from(new Uint8Array(bytes), (value) =>
+      value.toString(16).padStart(2, '0'),
+    ).join('');
+    await fs.writeFile(`${directory}/${row.sessionId}.json`, JSON.stringify({ payload, sha256 }));
+  }
+}
+export const corruptSessionId = '00000000-0000-4000-8000-000000000000';
+/** Truncated native file, as a torn or foreign writer would leave it. */
+export async function corrupt() {
+  const fs = new OpfsVfs();
+  await fs.mkdir(directory, { recursive: true });
+  await fs.writeFile(`${directory}/${corruptSessionId}.json`, '{"messages":');
+}
 /** Host restore (ADR-0466) of the single archived conversation, then one more turn. */
 export async function resume() {
   const [record, ...rest] = await saved();

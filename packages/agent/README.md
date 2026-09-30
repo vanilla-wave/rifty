@@ -265,8 +265,8 @@ conversation is not duplicated across files.
 
 Recording is automatic for archive-enabled sessions. Native original messages,
 images and tool payloads survive context compaction/reset; configuration and keys
-are not serialized. `archive_search` finds prior conversations by text/project;
-`archive_read` pages through original JSON. Tools treat history as data and never
+are not serialized. `archive_search` finds prior conversations by text/project,
+newest first (image bytes are not searched); `archive_read` pages through original JSON. Tools treat history as data and never
 replay it. No old transcript or filename is required in the user's request.
 
 Subscribe to `archive` for a durable receipt (sessionId, path, revision,
@@ -277,7 +277,8 @@ A write error emits `archive-error` and leaves session status `error`; reset sta
 a fresh conversation after repairing storage. No memory fallback. Do not report
 streamed text as saved before its archive receipt. `dispose` settles the active run.
 
-Files contain a versioned JSON payload plus SHA-256; malformed/checksum-invalid
-records fail read/search loudly. Browser eviction/site-data deletion and bytes
+Files contain a versioned JSON payload plus SHA-256. A malformed/checksum-invalid
+record fails `archive_read` loudly and is listed under `corrupt` by `archive_search`,
+which never hides healthy conversations. Browser eviction/site-data deletion and bytes
 never acknowledged are outside durability. Project export/import/deletion do not
 move or remove this archive. Storage is local; no cloud or device synchronization.

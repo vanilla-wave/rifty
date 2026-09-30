@@ -4,6 +4,20 @@ const fixture = `/@fs${process.cwd()}/tests/browser-unit/fixtures/agent-archive.
 async function saved(page: Page) {
   return page.evaluate(async (url) => (await import(/* @vite-ignore */ url)).saved(), fixture);
 }
+/** Parsed archive_search body after the built-in receipt line; an error receipt throws. */
+function searchResult(trace: { transcript: { role: string; toolName?: string }[] }) {
+  const result = trace.transcript.find(
+    (message) => message.role === 'toolResult' && message.toolName === 'archive_search',
+  ) as { isError: boolean; content: { text: string }[] } | undefined;
+  if (!result || result.isError)
+    throw new Error(`archive_search failed: ${JSON.stringify(result)}`);
+  const text = result.content[0].text;
+  return JSON.parse(text.slice(text.indexOf('\n') + 1)) as {
+    matches: { sessionId: string; createdAt: number; restoredMessageCount: number }[];
+    corrupt: { entry: string; message: string }[];
+    nextOffset: number | null;
+  };
+}
 test('automatically preserves original messages and tools across reset and reload', async ({
   page,
 }) => {
@@ -45,12 +59,7 @@ test('a session restored from host history archives only its own messages', asyn
     async (url) => (await import(/* @vite-ignore */ url)).search('cookie-saffron'),
     fixture,
   );
-  const result = trace.transcript.find(
-    (message: { role: string; toolName?: string }) =>
-      message.role === 'toolResult' && message.toolName === 'archive_search',
-  );
-  const text: string = result.content[0].text;
-  const { matches } = JSON.parse(text.slice(text.indexOf('\n') + 1));
+  const { matches } = searchResult(trace);
   expect(matches).toHaveLength(1);
   expect(matches[0].restoredMessageCount).toBe(0);
 });
@@ -91,29 +100,72 @@ test('storage permission failure is visible and never yields done', async ({ pag
   );
   expect(result.firstStatus).toBe('error');
 });
-test('corrupt archive is reported as an error by discovery', async ({ page }) => {
+test('a corrupt entry is listed by discovery without hiding healthy conversations', async ({
+  page,
+}) => {
   await gotoHarness(page);
   await page.evaluate(async (url) => {
     const f = await import(/* @vite-ignore */ url);
-    const root = await navigator.storage.getDirectory();
-    const base = await root.getDirectoryHandle('.rifty-agent-archives', { create: true });
-    const dir = await base.getDirectoryHandle(f.namespace, { create: true });
-    const writer = await (
-      await dir.getFileHandle('00000000-0000-4000-8000-000000000000.json', { create: true })
-    ).createWritable();
-    await writer.write('{"messages":');
-    await writer.close();
+    await f.save();
+    await f.corrupt();
   }, fixture);
   const trace = await page.evaluate(
-    async (url) => (await import(/* @vite-ignore */ url)).search('shop'),
+    async (url) => (await import(/* @vite-ignore */ url)).search('cookie-saffron'),
     fixture,
   );
-  const result = trace.transcript.find(
+  const { matches, corrupt } = searchResult(trace);
+  expect(matches).toHaveLength(1);
+  expect(corrupt).toEqual([
+    {
+      entry: '00000000-0000-4000-8000-000000000000.json',
+      message: expect.stringContaining('corrupt'),
+    },
+  ]);
+  const read = await page.evaluate(
+    async ({ url, id }) => (await import(/* @vite-ignore */ url)).read(id),
+    { url: fixture, id: '00000000-0000-4000-8000-000000000000' },
+  );
+  const result = read.transcript.find(
     (message: { role: string; toolName?: string }) =>
-      message.role === 'toolResult' && message.toolName === 'archive_search',
+      message.role === 'toolResult' && message.toolName === 'archive_read',
   );
   expect(result?.isError).toBe(true);
   expect(JSON.stringify(result)).toContain('corrupt');
+});
+test('discovery lists newest conversations first regardless of file name order', async ({
+  page,
+}) => {
+  await gotoHarness(page);
+  await page.evaluate(
+    async (url) =>
+      (await import(/* @vite-ignore */ url)).seed([
+        { sessionId: '00000000-0000-4000-8000-000000000001', createdAt: 1000, text: 'ordered old' },
+        { sessionId: '00000000-0000-4000-8000-000000000002', createdAt: 3000, text: 'ordered new' },
+        { sessionId: '00000000-0000-4000-8000-000000000003', createdAt: 2000, text: 'ordered mid' },
+      ]),
+    fixture,
+  );
+  const trace = await page.evaluate(
+    async (url) => (await import(/* @vite-ignore */ url)).search('ordered'),
+    fixture,
+  );
+  expect(
+    searchResult(trace).matches.map((match: { createdAt: number }) => match.createdAt),
+  ).toEqual([3000, 2000, 1000]);
+});
+test('discovery matches original text but never image bytes', async ({ page }) => {
+  await gotoHarness(page);
+  await page.evaluate(async (url) => (await import(/* @vite-ignore */ url)).saveImage(), fixture);
+  const bytes = await page.evaluate(
+    async (url) => (await import(/* @vite-ignore */ url)).search('AAAANSUhEUg'),
+    fixture,
+  );
+  expect(searchResult(bytes).matches).toHaveLength(0);
+  const text = await page.evaluate(
+    async (url) => (await import(/* @vite-ignore */ url)).search('Keep this original image'),
+    fixture,
+  );
+  expect(searchResult(text).matches).toHaveLength(1);
 });
 
 test('compaction retains original messages outside the projected context', async ({ page }) => {

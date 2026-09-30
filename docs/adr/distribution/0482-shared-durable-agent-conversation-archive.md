@@ -27,9 +27,11 @@ contract; ADR-0474 compaction remains a context projection.
   afterwards; `send` settles all admitted writes before final status. Begin each
   run with an incomplete snapshot; finish marks complete only after settlement.
   Browser death leaves the last acknowledged snapshot and explicit incompleteness.
-  Corrupt files fail discovery/read loudly. Historical tools are never replayed.
-- `archive_search` scans project identity and original text, returns paginated
-  matches; `archive_read` returns paginated original JSON. Both read-only, available
+  A corrupt file fails `archive_read` loudly; `archive_search` lists it under
+  `corrupt` and keeps healthy conversations discoverable. Historical tools are
+  never replayed.
+- `archive_search` scans project identity and original text (never image bytes),
+  returns paginated matches newest first; `archive_read` returns paginated original JSON. Both read-only, available
   even when project tools are unavailable. No transcript injected automatically.
 - Capture Pi message_end and discarded assistant retry receipts before compaction.
   Preserve admitted images/tool payloads, never serialize provider configuration.
