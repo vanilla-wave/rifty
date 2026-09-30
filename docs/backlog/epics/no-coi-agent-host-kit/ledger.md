@@ -15,3 +15,5 @@
 - 2026-09-30 — re-chart after text-content (final-green PASS @ 34198608833979f1ef390fa8179f9a55e7e4b244): I6 complete;18 targeted tests, native payload-order mutant killed, pr:check27/27; advisory wire tool-call metadata assertions remain for reference-host proof. Verdict: `../../distribution/reference/agent-text-only-content-transport-final-green.json`. Next: policy.
 
 - 2026-09-30 — re-chart after policy (final-green PASS @ 8d55757fc7471975d337ac47ace0b84f0fbe8696): I4 complete; native Chromium5/5 after descriptor RED→GREEN, baseline policy/Stop/output proofs retained; final pr:check27/27 with no reruns. Verdict: `../../distribution/reference/agent-per-capability-project-policy-final-green.json`. Next: transcript.
+
+- 2026-09-30 — re-chart after transcript (final-green PASS @ c4830dc642cefcef3ab1f60495b841126a14b75c): I7 complete; native reducer7/7, real Playground22/22, pr:check27/27. Verdict: `../../distribution/reference/agent-transcript-model-final-green.json`. Next: combine SDK typed outcomes and progress in one lifecycle unit because occupied I1 requires pre-ready observation; destination unchanged.

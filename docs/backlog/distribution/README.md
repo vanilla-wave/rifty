@@ -32,7 +32,6 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `ai-agent-context-file-unicode-tags.md` | draft | — | question: strip invisible Unicode tag chars from loaded AGENTS.md/SKILL.md (pi byte parity vs Claude Code strip); user fork at pickup |
 | `sdk-typed-sandbox-outcomes.md` | draft | no-coi-agent-host-kit | exported typed busy/occupied/conflict/persistence outcomes + retryable table |
 | `sdk-boot-and-snapshot-progress-events.md` | draft | no-coi-agent-host-kit | boot phases + snapshot-apply counts on `runtime.on` |
-| `agent-transcript-model.md` | draft | no-coi-agent-host-kit | framework-free transcript reducer; playground chat consumes it |
 | `no-coi-agent-reference-host.md` | draft | no-coi-agent-host-kit | packed lane's Vite consumer → connections-only reference host in CI; closes the goal |
 | `no-coi-agent-npm-install.md` | draft | no-coi-agent-host-kit | agent shell `npm install` over the existing installer; loud without a registry |
 | `agent-tool-text-cap-and-run-budgets-measure.md` | draft | — | measure the 16 KiB cap before changing ADR-0424 D7; run budgets settled by agent-weak-models I9 |

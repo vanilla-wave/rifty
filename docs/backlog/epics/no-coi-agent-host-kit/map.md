@@ -1,15 +1,9 @@
 # Map — no-coi-agent-host-kit
 
-Live plan: index, not store. Minimal pattern first; each child a `draft`
-finding compiled to `ready` at its own PICKUP (`RDY-1`). 1–4, 8, 9 are
-independent except 8 after 1 (typed no-registry outcome); 5 is removed
-(model selection is `epics/agent-weak-models`, PR #359); 6 after
-agent-weak-models item 1 (the catalog entry it flags); 7 after all others and
-after agent-weak-models item 1 (bench no-COI lane on the catalog) and closes
-the goal. Goals run whole and in sequence: `epics/agent-weak-models` (PR
-#359) → this goal → `epics/agent-code-quality-evaluation` (PR #341); the
-per-item "after agent-weak-models item 1" notes follow from that. Cross-branch
-order is text, not `blocked_by` (checker scope = one tree).
+Remaining path: SDK lifecycle (items 1–2 together: I1 needs both native
+contention and pre-ready progress), then agent install, then shared reference
+host and whole-goal proof. PR #359 is merged. I4/I6/I7/I10 accepted; ledger
+links the evidence. Quality measurement remains the following goal (PR #341).
 
 ## Items
 
@@ -19,20 +13,11 @@ order is text, not `blocked_by` (checker scope = one tree).
    discriminate on.
 2. `distribution/sdk-boot-and-snapshot-progress-events` — **progress** — I1
    (waiting phase), I3; boot phases and apply counts on `runtime.on`.
-3. `distribution/agent-transcript-model` — **transcript** — I7; framework-free
-   reducer; playground chat consumes it (dogfood). Covers the chat events
-   agent-weak-models (PR #359, lands before this goal) adds: model switch,
-   compaction marker, retry attempts, steering message, `context-exceeded`.
-5. removed 2026-09-27 (user «1 - a») — model selection and switching are
-   `distribution/ai-agent-model-catalog` (agent-weak-models item 1, PR #359:
-   catalog + `setModel`); I5 re-pointed there; no `settings`-form mechanism.
 7. `distribution/no-coi-agent-reference-host` — **reference-host** — I8 and
    scenario 1–9; the packed lane's Vite consumer refactored into a
    connections-only `host.ts` (registry connected / none), SDK README links
    it, packed-consumer lane runs it, and `tools/agent-bench`'s no-COI lane
-   boots the same module (user: measure what we ship). After 1–4, 6, 8, 9
-   and agent-weak-models item 1 (PR #359: session from a one-entry catalog,
-   bench lanes migrated); closes the goal.
+   boots the same module (user: measure what we ship). After 1–2 and 8; closes the goal.
 8. `distribution/no-coi-agent-npm-install` — **agent-install** — I9; the
    agent's shell `npm install` over the existing installer; loud no-registry
    outcome; truthful prompt text. After 1.
@@ -68,9 +53,6 @@ order is text, not `blocked_by` (checker scope = one tree).
   host module from `tests/integration/fixtures/workbench-vite-consumer` under
   the arch/vitest wiring, or the module moves to a shared private location —
   owner: agent — item 7 pickup.
-- Shell tool text ordering carrier: rebuild text from the ordered `output`
-  events vs an ordered capture in `SandboxCommandOutcome` — owner: agent —
-  item 9 pickup; ADR-0436 D4 status header unchanged.
 - Error identifier form: exported classes (need serialize/re-attach across the
   Worker hop, `errors.ts:217-277` precedent; fail under duplicated package
   copies) vs exported name constants + `isX(error)` predicates — owner: agent —
@@ -87,10 +69,6 @@ order is text, not `blocked_by` (checker scope = one tree).
   `Content-Length`) and whether the dep-snapshot v3 payload exposes an entry
   total before extraction — owner: agent — probe at item 2 pickup; absent
   totals are reported as absent, never estimated.
-- Text-only content carrier: pi-ai 0.85.1 `Model.compat`
-  (`OpenAICompletionsCompat`) has no string-content flag; rifty-side message
-  conversion before `streamSimple` vs an upstream compat flag — owner: agent —
-  item 6 pickup. The flag lives on the catalog entry (user «2 - a»).
 
 ## Out of scope
 

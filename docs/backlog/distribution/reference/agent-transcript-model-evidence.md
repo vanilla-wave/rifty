@@ -47,3 +47,8 @@ and `test-results/ai-mode-headless-transcrip-73d0b-nd-explicit-cancelled-state-c
 visually inspected: retained done/cancelled rows, budget receipt, actual output;
 chat stays bounded/scrollable. Native reverse lookup uses an ES2022 loop per
 ADR-0469/0481; post-change reducer7/7 and typechecks pass.
+
+Final pr:check27/27 GREEN (unit204.4s, parity117.3s), no reruns. Independent
+Final+GREEN accepted c4830dc642cefcef3ab1f60495b841126a14b75c; no blockers.
+Advisory only: native same-toolCallId continuation coverage; implementation
+already preserves settled rows. Verdict: agent-transcript-model-final-green.json.
