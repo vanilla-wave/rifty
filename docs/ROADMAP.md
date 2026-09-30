@@ -118,12 +118,14 @@ AI-agnostic capabilities (TS language service, git over VFS) serve it. Positioni
 Delivered foundation: headless Pi agent over public Workbench/no-COI hosts,
 lazy playground "+chat", three-lane42-run diagnostic. Consumer guide:
 `packages/agent/README.md`; proof: `docs/backlog/distribution/reference/ai-agent-mode-closure-evidence.md`.
+Delivered no-COI host kit: copyable SDK + agent composition shared by packed CI
+and the benchmark; typed lifecycle/progress, policies, transcript, text transport
+and registry install. Proof: `docs/backlog/distribution/reference/no-coi-agent-host-kit-close.md`.
 open:
 - `docs/backlog/distribution/ai-agent-subagent-orchestration` — `task`/subagent orchestration over the embeddable loop.
 - `docs/backlog/distribution/ai-ide-product-ui` — chat + streamed tool-call/diff/approve UI over the IDE-kit.
 - `docs/backlog/toolchain-build/ts-language-service` — in-browser TS diagnostics/hover/defs over VFS (agent `typecheck` + editor squiggles).
 - `docs/backlog/shell/git-command-isomorphic` — git over VFS (isomorphic-git) for git-aware tools.
-- `docs/backlog/epics/no-coi-agent-host-kit` — an existing non-COI app embeds sandbox + agent by wiring connections only; every quality-relevant part stays a rifty package obligation.
 
 ## M13 — Sharing & import
 

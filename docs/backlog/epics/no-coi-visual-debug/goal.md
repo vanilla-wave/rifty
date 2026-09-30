@@ -10,7 +10,7 @@ user_story: As a developer embedding the no-COI agent host, I want to see what t
 ## Outcome
 
 Open — owner: user. Captured 2026-09-27 from the kit refine
-(`epics/no-coi-agent-host-kit`): «пока не делаем. Отдельный эпик про
+(`docs/backlog/distribution/reference/no-coi-agent-host-kit-close.md`): «пока не делаем. Отдельный эпик про
 визуальный дебаг». What "visual debugging" must include beyond an iframe on
 the resident preview URL (console mirror, HMR, DOM inspection, network view)
 is the user's scope question; nothing is prescribed here.

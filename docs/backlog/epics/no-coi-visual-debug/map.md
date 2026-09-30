@@ -19,4 +19,4 @@
 
 ## Out of scope
 
-- The kit itself — `epics/no-coi-agent-host-kit`.
+- The kit itself — `docs/backlog/distribution/reference/no-coi-agent-host-kit-close.md`.
