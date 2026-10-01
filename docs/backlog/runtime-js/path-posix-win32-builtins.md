@@ -61,6 +61,7 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 
 ## Decisions
 
+ready-verdict: 2026-10-01 — Contract+RED @ 35e0a5d0b7a29c35cb5843416afb19e097c6eefc
 - 2026-10-01 — carrier: two `registerBuiltin` calls (`path/posix`,
   `path/win32`) returning the existing namespaces; no resolver change (the
   registry already strips `node:` and caches per bare name).
