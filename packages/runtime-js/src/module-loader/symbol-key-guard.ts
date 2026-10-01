@@ -13,6 +13,7 @@
  */
 import {
   isComputedMember,
+  literalString,
   propertyMayBeFunction,
   staticPropertyKeyName,
   staticPropertyName,
@@ -25,8 +26,16 @@ export interface SymbolKeyScope {
   readonly symbolKeyAliases: Set<string>;
 }
 
-/** Same shape as the twins' isGuardShadowed/isShadowed, bound to their ctx. */
+/**
+ * Same shape as the twins' isGuardShadowed/isShadowed, bound to their ctx —
+ * plus one disjunct the twins add: once the module observably tampers the
+ * Symbol intrinsic, 'Symbol' reports as shadowed, so every provable-key
+ * pattern goes loud (F1: lexical unshadowed ≠ unchanged intrinsic).
+ */
 export type SymbolKeyShadowProbe = (name: string) => boolean;
+
+/** Same shape as the twins' isGlobalObjectExpression, bound to their ctx. */
+export type SymbolKeyGlobalProbe = (node: unknown) => boolean;
 
 // const-bound alias to a provable Symbol key; no unmark — const cannot
 // reassign, and the twins' addGuardBinding/addBinding clear the mark on
@@ -130,4 +139,99 @@ export function objectMayContainFunctionKey(
     const p = property as unknown as { computed?: boolean; key?: unknown };
     return !(p.computed && isProvablySymbolKey(p.key, scopes, isShadowed));
   });
+}
+
+// F1 tamper detection: an explicitly observable substitution of the Symbol
+// intrinsic — bare assignment (`Symbol = …`), a member write/delete on it
+// (`Symbol.for = …`), or a write/delete of `globalThis.Symbol` — means a
+// later `Symbol.for(...)` may return any string, so the module keeps the
+// loud path. Source-ordered like the twins' existing alias trackers; a
+// shadowed (locally bound) Symbol is a local, never tamper.
+export function isSymbolTamperTarget(
+  target: unknown,
+  isShadowed: SymbolKeyShadowProbe,
+  isGlobalObject: SymbolKeyGlobalProbe,
+): boolean {
+  if (!target || typeof target !== 'object') return false;
+  const t = target as GuardAstNode;
+  if (t.type === 'Identifier') {
+    return (t as unknown as { name?: string }).name === 'Symbol' && !isShadowed('Symbol');
+  }
+  if (t.type !== 'MemberExpression') return false;
+  const object = (t as unknown as { object?: unknown }).object as GuardAstNode | undefined;
+  if (
+    object?.type === 'Identifier' &&
+    (object as unknown as { name?: string }).name === 'Symbol' &&
+    !isShadowed('Symbol')
+  ) {
+    return true;
+  }
+  return isGlobalObject(object) && staticPropertyName(t) === 'Symbol';
+}
+
+// The defineProperty-family twin of isSymbolTamperTarget:
+// `Object.defineProperty(Symbol, 'for', …)` & friends substitute the
+// intrinsic without an assignment target, and a literal 'Symbol' key through
+// the global object (`Object.defineProperty(globalThis, 'Symbol', …)`,
+// `Reflect.set(globalThis, 'Symbol', …)`, an assign/defineProperties literal
+// `Symbol:` key) slips the Function guard — unknown keys on globalThis are
+// already ceiling-loud, so only the literal 'Symbol' forms need flagging.
+export function isSymbolIntrinsicMutationCall(
+  node: GuardAstNode,
+  isShadowed: SymbolKeyShadowProbe,
+  isGlobalObject: SymbolKeyGlobalProbe,
+): boolean {
+  const call = node as unknown as { callee?: GuardAstNode; arguments?: unknown[] };
+  const callee = call.callee;
+  const args = call.arguments ?? [];
+  if (!callee || callee.type !== 'MemberExpression') return false;
+  const object = (callee as unknown as { object?: GuardAstNode }).object;
+  const objectName =
+    object?.type === 'Identifier' ? (object as unknown as { name?: string }).name : undefined;
+  const propertyName = staticPropertyName(callee);
+  const isUnshadowedSymbol = (a: unknown): boolean => {
+    const n = a as GuardAstNode | undefined | null;
+    return (
+      n?.type === 'Identifier' &&
+      (n as unknown as { name?: string }).name === 'Symbol' &&
+      !isShadowed('Symbol')
+    );
+  };
+  if (
+    isUnshadowedSymbol(object) &&
+    (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
+  ) {
+    return true;
+  }
+  const isBuiltinObject = objectName === 'Object' && !isShadowed('Object');
+  const isBuiltinReflect = objectName === 'Reflect' && !isShadowed('Reflect');
+  const isDefineFamily =
+    (isBuiltinObject &&
+      (propertyName === 'assign' ||
+        propertyName === 'defineProperty' ||
+        propertyName === 'defineProperties')) ||
+    (isBuiltinReflect &&
+      (propertyName === 'set' ||
+        propertyName === 'defineProperty' ||
+        propertyName === 'deleteProperty'));
+  if (!isDefineFamily) return false;
+  if (isUnshadowedSymbol(args[0])) return true;
+  if (!isGlobalObject(args[0])) return false;
+  if (propertyName === 'assign' || propertyName === 'defineProperties') {
+    return args.slice(1).some(hasLiteralSymbolKey);
+  }
+  return literalString(args[1]) === 'Symbol';
+}
+
+// Only literal `Symbol:` keys count — a non-literal/unknown key on the
+// global object is already Function-ceiling loud, so the tamper flag would
+// change nothing.
+function hasLiteralSymbolKey(node: unknown): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const object = node as GuardAstNode;
+  if (object.type !== 'ObjectExpression') return false;
+  const properties = (object as unknown as { properties?: GuardAstNode[] }).properties ?? [];
+  return properties.some(
+    (property) => property.type !== 'SpreadElement' && staticPropertyKeyName(property) === 'Symbol',
+  );
 }

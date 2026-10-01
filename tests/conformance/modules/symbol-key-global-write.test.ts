@@ -74,6 +74,19 @@ describe('provably-Symbol computed keys bypass the Function guard', () => {
       globalThis[K] = 10;
       export const r = globalThis[K];
     `,
+    // Scope control for the tamper boundary: mutating a SHADOWED local
+    // Symbol (a parameter) is not intrinsic substitution — the module's own
+    // provable keys stay exempt. Kills a scope-insensitive tamper mutant.
+    '/shadowed-local-mutation.mjs': `
+      function f(Symbol) {
+        Symbol.for = () => 'tampered-sentinel';
+      }
+      f({ for: () => 'x' });
+      const K = Symbol.for('scope.control');
+      globalThis[K] = 11;
+      export const r = globalThis[K];
+      delete globalThis[K];
+    `,
   };
 
   for (const [path, source] of Object.entries(allowedEsm)) {
@@ -178,6 +191,52 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       F('x');
       export const r = 1;
     `,
+    // Provenance boundary (Final+GREEN R1 F1): lexical unshadowed ≠ unchanged
+    // intrinsic. A module that observably substitutes Symbol/Symbol.for keeps
+    // every pattern loud — the "symbol" key may be any string. The fakes
+    // return a benign sentinel (not 'Function') and the carriers restore the
+    // intrinsic + delete the sentinel, so the RED-state run (guard wrongly
+    // silent) leaves the shared in-process harness untouched.
+    '/tamper-member-for.mjs': `
+      const originalFor = Symbol.for;
+      Symbol.for = () => 'tampered-sentinel';
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    '/tamper-bare-assign.mjs': `
+      const OriginalSymbol = Symbol;
+      Symbol = { for: () => 'tampered-sentinel' };
+      globalThis[Symbol.for('x')] = 1;
+      Symbol = OriginalSymbol;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    '/tamper-global-member.mjs': `
+      const OriginalSymbol = globalThis.Symbol;
+      globalThis.Symbol = { for: () => 'tampered-sentinel' };
+      globalThis[Symbol.for('x')] = 1;
+      globalThis.Symbol = OriginalSymbol;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    '/tamper-define-property.mjs': `
+      const originalFor = Symbol.for;
+      Object.defineProperty(Symbol, 'for', { value: () => 'tampered-sentinel' });
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    '/tamper-global-define-property.mjs': `
+      const OriginalSymbol = globalThis.Symbol;
+      Object.defineProperty(globalThis, 'Symbol', { value: { for: () => 'tampered-sentinel' } });
+      globalThis[Symbol.for('x')] = 1;
+      globalThis.Symbol = OriginalSymbol;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
   };
 
   for (const [path, source] of Object.entries(stillLoudEsm)) {
@@ -215,6 +274,54 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       const K = Symbol.for('cjs.rg.stays-loud');
       const F = Reflect.get(globalThis, K);
       F('x');
+      module.exports = 1;
+    `,
+    '/cjs-keyfor.cjs': `
+      const K = Symbol.keyFor(Symbol.for('cjs.registered'));
+      globalThis[K] = 1;
+      module.exports = 1;
+    `,
+    // Provenance boundary (Final+GREEN R1 F1), ESM twins above: observable
+    // Symbol/Symbol.for substitution keeps every pattern loud. Benign
+    // sentinel + restore so the RED-state run leaves the harness untouched.
+    '/cjs-tamper-member-for.cjs': `
+      const originalFor = Symbol.for;
+      Symbol.for = () => 'tampered-sentinel';
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-bare-assign.cjs': `
+      const OriginalSymbol = Symbol;
+      Symbol = { for: () => 'tampered-sentinel' };
+      globalThis[Symbol.for('x')] = 1;
+      Symbol = OriginalSymbol;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-global-member.cjs': `
+      const OriginalSymbol = globalThis.Symbol;
+      globalThis.Symbol = { for: () => 'tampered-sentinel' };
+      globalThis[Symbol.for('x')] = 1;
+      globalThis.Symbol = OriginalSymbol;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-define-property.cjs': `
+      const originalFor = Symbol.for;
+      Object.defineProperty(Symbol, 'for', { value: () => 'tampered-sentinel' });
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-global-define-property.cjs': `
+      const OriginalSymbol = globalThis.Symbol;
+      Object.defineProperty(globalThis, 'Symbol', { value: { for: () => 'tampered-sentinel' } });
+      globalThis[Symbol.for('x')] = 1;
+      globalThis.Symbol = OriginalSymbol;
+      delete globalThis['tampered-sentinel'];
       module.exports = 1;
     `,
   };

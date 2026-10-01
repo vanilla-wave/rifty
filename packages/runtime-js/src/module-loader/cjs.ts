@@ -20,8 +20,11 @@ import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
 import {
+  type SymbolKeyGlobalProbe,
   type SymbolKeyShadowProbe,
   isProvablySymbolKey,
+  isSymbolIntrinsicMutationCall,
+  isSymbolTamperTarget,
   mutationKeyMayBeFunction,
   objectMayContainFunctionKey,
   updateSymbolKeyAliasesFromPatternValue,
@@ -155,6 +158,7 @@ interface FunctionRewriteCtx {
   hasDerivedHostFunctionConstructor: boolean;
   hasRoutedFunctionReference: boolean;
   hasFunctionEvalText: boolean;
+  symbolIntrinsicTampered: boolean;
 }
 
 // TODO(backlog: runtime-js/function-constructor-exhaustive-metaprogramming-ceiling):
@@ -262,6 +266,7 @@ function rewriteCjsFunctionConstructorReferences(
     hasDerivedHostFunctionConstructor: false,
     hasRoutedFunctionReference: false,
     hasFunctionEvalText: false,
+    symbolIntrinsicTampered: false,
   };
   walkFunctionReferences(program as unknown as AnyNodeShape, ctx);
   if (ctx.hasDerivedHostFunctionConstructor) {
@@ -456,7 +461,13 @@ function isMaybeEvalAlias(ctx: FunctionRewriteCtx, name: string): boolean {
 }
 
 function shadowProbe(ctx: FunctionRewriteCtx): SymbolKeyShadowProbe {
-  return (name) => isShadowed(ctx, name);
+  // Once the module observably substitutes the Symbol intrinsic, 'Symbol'
+  // reports as shadowed: every provable-key pattern goes loud (F1).
+  return (name) => isShadowed(ctx, name) || (name === 'Symbol' && ctx.symbolIntrinsicTampered);
+}
+
+function globalObjectProbe(ctx: FunctionRewriteCtx): SymbolKeyGlobalProbe {
+  return (node) => isGlobalObjectExpression(node, ctx);
 }
 
 function declarePattern(scope: Scope, pattern: unknown): void {
@@ -720,6 +731,9 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
       if (isGlobalFunctionMutationCall(n, ctx)) {
         ctx.hasGlobalFunctionWrite = true;
       }
+      if (isSymbolIntrinsicMutationCall(n, shadowProbe(ctx), globalObjectProbe(ctx))) {
+        ctx.symbolIntrinsicTampered = true;
+      }
       if (calleeMayBeHostFunction(callee, ctx)) {
         ctx.hasGlobalFunctionWrite = true;
       }
@@ -911,6 +925,9 @@ function walkPatternExpressions(pattern: unknown, ctx: FunctionRewriteCtx): void
 function walkAssignmentTarget(target: unknown, ctx: FunctionRewriteCtx): void {
   if (!target || typeof target !== 'object') return;
   const t = target as AnyNodeShape;
+  if (isSymbolTamperTarget(t, shadowProbe(ctx), globalObjectProbe(ctx))) {
+    ctx.symbolIntrinsicTampered = true;
+  }
   if (t.type === 'Identifier') {
     markGlobalFunctionWrite(t, ctx);
     return;
@@ -932,6 +949,9 @@ function walkAssignmentPatternTarget(pattern: unknown, ctx: FunctionRewriteCtx):
   switch (pat.type) {
     case 'Identifier':
       markGlobalFunctionWrite(pat, ctx);
+      if (isSymbolTamperTarget(pat, shadowProbe(ctx), globalObjectProbe(ctx))) {
+        ctx.symbolIntrinsicTampered = true;
+      }
       return;
     case 'ObjectPattern': {
       const props = (pat as unknown as { properties?: unknown[] }).properties ?? [];

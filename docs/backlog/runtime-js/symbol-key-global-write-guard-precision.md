@@ -44,6 +44,15 @@ Function/'eval'-suspect when it is
 
 `Symbol.keyFor` returns a string, not a symbol — NOT accepted. A shadowed
 `Symbol` (e.g. a function parameter named `Symbol`) keeps every pattern loud.
+So does a module that OBSERVABLY substitutes the intrinsic (Final+GREEN R1
+F1 — lexical unshadowed ≠ unchanged intrinsic): bare/member/global-target
+assignment or delete on unshadowed `Symbol` (`Symbol = …`, `Symbol.for = …`,
+`globalThis.Symbol = …`), or a defineProperty-family call on `Symbol` or on
+the global object with a literal `'Symbol'` key — detected source-ordered
+like the existing alias trackers, then `Symbol` reports as shadowed for the
+rest of the walk. A shadowed-local `Symbol` mutation (function parameter)
+is NOT tamper; `Symbol++`-class updates yield NaN and cannot mint a
+'Function' key, so they stay untracked.
 
 ## Challenge
 
@@ -125,15 +134,16 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
    and full key cleanup → I6
 
 Unit REDs (guard precision): `tests/conformance/modules/symbol-key-global-write.test.ts`
-— 17 positive carriers (Acceptance 1/2/4 patterns compile and run in both
-loaders, incl. an export-wrapped `export const K = Symbol.for(…)` alias and
-a CJS stash method call — RED today — plus the export-wrapped
-`globalThis`-alias ceiling hole, see Decisions) + 12 boundary pins
-(Acceptance 3 in BOTH loaders:
+— 18 positive carriers (Acceptance 1/2/4 patterns compile and run in both
+loaders, incl. an export-wrapped `export const K = Symbol.for(…)` alias,
+a CJS stash method call, and a shadowed-local scope control — RED today —
+plus the export-wrapped `globalThis`-alias ceiling hole, see Decisions) +
+23 boundary pins (Acceptance 3 in BOTH loaders:
 string-literal, concatenated, unknown-identifier, `let`-bound-symbol,
-shadowed-`Symbol`, `Symbol.keyFor` keys stay loud, and called
-`Reflect.get(globalThis, K)` results stay loud — green today,
-regression-only).
+shadowed-`Symbol`, `Symbol.keyFor` keys stay loud, called
+`Reflect.get(globalThis, K)` results stay loud, and the five
+intrinsic-tamper carriers per loader stay loud — tamper pins RED at
+Final+GREEN R1, the rest green today, regression-only).
 
 ## Out of scope
 
@@ -198,3 +208,12 @@ regression-only).
   boundaries unchanged from the R3-passed contract; cjs's markSymbolKeyAlias
   deliberately drops the local root-fallback convention (a never-registered
   binding must not exempt a key).
+- 2026-10-02 — reception (REV-12) of Final+GREEN R1 (blocker, F1): lexical
+  unshadowed ≠ unchanged intrinsic — `Symbol.for = () => 'Function'`,
+  `Symbol = …`, `globalThis.Symbol = …`, or a defineProperty-family call on
+  `Symbol` substitutes the intrinsic without a lexical binding, and the
+  provable-key exemption then mints a 'Function' key. Fixed by observable-
+  tamper detection (source-ordered, per the rule clause above): once any
+  tamper carrier is walked, `Symbol` reports as shadowed for the rest of
+  the module. RED-pinned per loader (5 carriers each) + a shadowed-local
+  scope control; CJS `Symbol.keyFor` pin added (R1 weak row).
