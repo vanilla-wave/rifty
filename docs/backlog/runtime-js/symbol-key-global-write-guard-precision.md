@@ -108,15 +108,17 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
    write, and a provable-key `delete` — `expected` oracle-pinned → I6
 2. Node v24.16.0 CJS carrier
    `tools/node-parity-runner/cases/modules/symbol-key-global-write-cjs.case.ts`:
-   the undici defineProperty shape (alias AND direct key), const-alias
-   write/read-back, Reflect.set / Object.assign / Object.defineProperties,
+   the undici defineProperty shape (alias AND direct key), the @vitest/utils
+   stash shape (const-alias write/read-back AND a method call on the stashed
+   object), Reflect.set / Object.assign / Object.defineProperties,
    and full key cleanup → I6
 
 Unit REDs (guard precision): `tests/conformance/modules/symbol-key-global-write.test.ts`
-— 16 positive carriers (Acceptance 1/2/4 patterns compile and run in both
-loaders, incl. an export-wrapped `export const K = Symbol.for(…)` alias —
-RED today — plus the export-wrapped `globalThis`-alias ceiling hole, see
-Decisions) + 12 boundary pins (Acceptance 3 in BOTH loaders:
+— 17 positive carriers (Acceptance 1/2/4 patterns compile and run in both
+loaders, incl. an export-wrapped `export const K = Symbol.for(…)` alias and
+a CJS stash method call — RED today — plus the export-wrapped
+`globalThis`-alias ceiling hole, see Decisions) + 12 boundary pins
+(Acceptance 3 in BOTH loaders:
 string-literal, concatenated, unknown-identifier, `let`-bound-symbol,
 shadowed-`Symbol`, `Symbol.keyFor` keys stay loud, and called
 `Reflect.get(globalThis, K)` results stay loud — green today,
@@ -169,3 +171,10 @@ regression-only).
   export-wrapped `globalThis`-alias ceiling hole closes (`export const g =
   globalThis; g.Function = fn` evades the guard today — probed; after the
   unwrap it throws, matching the non-export twin).
+- 2026-10-01 — reception (REV-12) of Contract+RED R3 (concern, NOTE): the
+  Acceptance-2 phrase "the same two shapes" could promise a CJS stash
+  method call the CJS carriers never exercised. Closed by strengthening
+  the proof, not the words: the CJS parity case gained the @vitest/utils
+  stash-method-call carrier (`expected` re-pinned on host Node v24.16.0)
+  and the unit file a CJS stash-method-call positive (16 → 17 RED). No
+  read-site exemption follows from it.

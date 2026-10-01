@@ -116,6 +116,17 @@ describe('provably-Symbol computed keys bypass the Function guard', () => {
     expect(loader.require('./direct-define.cjs', '/entry.cjs')).toBe('direct');
   });
 
+  it('CJS compiles and runs the stash method-call shape (@vitest/utils timers)', () => {
+    const loader = setup({
+      '/method-call.cjs': `
+        const M = Symbol.for('cjs.timers');
+        globalThis[M] = { ping() { return 'pong'; } };
+        module.exports = globalThis[M].ping();
+      `,
+    });
+    expect(loader.require('./method-call.cjs', '/entry.cjs')).toBe('pong');
+  });
+
   it('CJS runs the Reflect.set / Object.assign / Object.defineProperties mutation shapes', () => {
     const loader = setup({
       '/mutations.cjs': `
