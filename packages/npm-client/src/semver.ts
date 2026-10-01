@@ -295,10 +295,10 @@ export function isRangeLike(spec: string): boolean {
 function isRangeComparator(cmp: string): boolean {
   const base = cmp.replace(/^(>=|<=|>|<|=|\^|~)/, '');
   if (coerce(base) !== null) return true;
-  // x-range forms coerce rejects: `1.x`, `1.2.*`, `x`, `*`.
-  return /^[v=]?(?:\d+|x|X|\*)(?:\.(?:\d+|x|X|\*)){0,2}(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(
-    base,
-  );
+  // x-range forms coerce rejects: `1.x`, `1.2.*`, `x`, `*`. A wildcard is
+  // terminal-only (node-semver: `x.1`, `8.x.2` are not valid ranges) — a
+  // trailing-component pattern stays a package NAME.
+  return /^[v=]?(?:\d+(?:\.\d+)?\.)?(?:x|X|\*)$/.test(base);
 }
 
 export function pickBestVersion(

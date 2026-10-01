@@ -55,10 +55,15 @@ function parseTarget(target: string, keyName?: string): { name: string; range: s
     );
   }
   let str = target;
-  if (str.startsWith('npm:')) str = str.slice(4);
+  const alias = str.startsWith('npm:');
+  if (alias) str = str.slice(4);
   const at = str.lastIndexOf('@');
   if (at <= 0) {
-    if (keyName !== undefined && isRangeLike(str)) return { name: keyName, range: str };
+    // The keyed-package range reading never applies to the `npm:` alias form:
+    // `npm:8` names the package "8", it is not a range on the keyed package.
+    if (!alias && keyName !== undefined && isRangeLike(str)) {
+      return { name: keyName, range: str };
+    }
     return { name: str, range: null };
   }
   return { name: str.slice(0, at), range: str.slice(at + 1) };

@@ -129,6 +129,30 @@ describe('resolveOverride — npm bare-version spelling (I1)', () => {
       source: 'user',
     });
   });
+
+  it.each(['x.1', 'x.1.2', '8.x.2'])(
+    'keeps name semantics for wildcard-with-trailing-component %s (not a range)',
+    (value) => {
+      expect(resolveOverride('vite', undefined, { vite: value })).toEqual({
+        name: value,
+        range: null,
+        source: 'user',
+      });
+    },
+  );
+
+  it('never reads the npm: alias form as a keyed-package range', () => {
+    expect(resolveOverride('vite', undefined, { vite: 'npm:8' })).toEqual({
+      name: '8',
+      range: null,
+      source: 'user',
+    });
+    expect(resolveOverride('vite', undefined, { vite: 'npm:x' })).toEqual({
+      name: 'x',
+      range: null,
+      source: 'user',
+    });
+  });
 });
 
 describe('install — npm bare-version override end to end (I1)', () => {
