@@ -8,9 +8,6 @@ are the original map indices; landed items are removed (ledger).
 
 ## Items
 
-3. `runtime-js/builtin-static-names-prototype-methods` — **process-named-imports** —
-   I6; static export names of a builtin include its prototype methods
-   (`import { cwd } from 'node:process'`).
 4. `runtime-js/absent-builtin-members-loud-throws` — **loud-members** — I6;
    `fs.statfsSync`, `child_process.spawnSync`, `process.memoryUsage` exist as
    real or named-loud members instead of link-time misses / `undefined.bind`.
