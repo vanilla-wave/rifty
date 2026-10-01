@@ -417,11 +417,17 @@ describe('CJS static export link validation', () => {
     // chain is Function.prototype / the parent constructor, whose names
     // (call/apply/bind, EventEmitter statics) are not Node named exports —
     // real Node link-throws on every one of these imports.
+    // listenerCount alone cannot discriminate the function gate: rifty's
+    // EventEmitter has no such static, so the name never appears either way.
+    // captureRejectionSymbol/defaultMaxListeners DO exist as rifty statics —
+    // deleting the gate makes exactly those imports link (mutant dies here).
     const vfs = new MemoryFsSync();
     vfs.loadFixture({
       '/work/events-call.mjs': `import { call } from 'node:events'; export const r = call;`,
       '/work/assert-bind.mjs': `import { bind } from 'node:assert'; export const r = bind;`,
       '/work/stream-lc.mjs': `import { listenerCount } from 'node:stream'; export const r = listenerCount;`,
+      '/work/stream-crs.mjs': `import { captureRejectionSymbol } from 'node:stream'; export const r = captureRejectionSymbol;`,
+      '/work/stream-dml.mjs': `import { defaultMaxListeners } from 'node:stream'; export const r = defaultMaxListeners;`,
       '/work/events-on.mjs': `
         import { EventEmitter, once } from 'node:events';
         import { Readable } from 'node:stream';
@@ -433,6 +439,8 @@ describe('CJS static export link validation', () => {
     expect(() => loader.require('./events-call.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
     expect(() => loader.require('./assert-bind.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
     expect(() => loader.require('./stream-lc.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
+    expect(() => loader.require('./stream-crs.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
+    expect(() => loader.require('./stream-dml.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
     expect(loader.require('./events-on.mjs', '/work/entry.cjs')).toMatchObject({
       result: 'function function function function',
     });
