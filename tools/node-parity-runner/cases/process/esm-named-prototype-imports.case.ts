@@ -6,18 +6,31 @@ import type { ParityCase } from '../../src/types.ts';
  * members — the static name authority must collect the direct prototype.
  * Node's own boundary EXCLUDES EventEmitter methods (`on`/`emit`/`once` live
  * on `EventEmitter.prototype` and are not named exports in real Node).
- * `expected` pinned from Node v24.16.0.
+ * No ambient `process` global reads — the in-process harness's global is the
+ * HOST process (traps.md parity-runner-in-process). `expected` pinned from
+ * Node v24.16.0.
  */
 const c: ParityCase = {
   kind: 'esm',
-  expected: ['true', 'function function function', 'false false false true', 'true'].join('\n'),
+  expected: [
+    'string function',
+    'function function function',
+    'false false false true',
+    'true',
+    'true',
+    'true',
+  ].join('\n'),
   code: `
     import * as ns from 'node:process';
     import { cwd, nextTick, hrtime, uptime } from 'node:process';
-    console.log(cwd() === process.cwd());
+    import { createRequire } from 'node:module';
+    const req = createRequire(import.meta.url);
+    console.log(typeof cwd(), typeof cwd);
     console.log(typeof nextTick, typeof hrtime, typeof uptime);
     console.log('on' in ns, 'emit' in ns, 'once' in ns, 'cwd' in ns);
     console.log(ns.cwd === cwd);
+    console.log(req('node:process').cwd === cwd);
+    console.log(req('node:process') === ns.default);
   `,
 };
 
