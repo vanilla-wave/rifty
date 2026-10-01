@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Register `node:path/posix` and `node:path/win32` subpath builtins returning the main module's live `posix`/`win32` namespaces (parity-proven identity across `node:`/bare forms).
+
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).

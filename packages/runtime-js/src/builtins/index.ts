@@ -71,6 +71,11 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
   runtimeJsBuiltinsRegistered = true;
 
   registerBuiltin('path', () => pathModule);
+  // Subpath builtins return the main module's live namespaces (Node:
+  // `require('path/posix') === require('path').posix`); the registry caches
+  // per bare name, so both specifier forms share one object.
+  registerBuiltin('path/posix', () => pathModule.posix);
+  registerBuiltin('path/win32', () => pathModule.win32);
   registerBuiltin('events', () => {
     const exports = EventEmitter as unknown as Record<string, unknown>;
     exports.EventEmitter = EventEmitter;
