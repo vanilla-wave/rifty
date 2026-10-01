@@ -282,15 +282,27 @@ export function isRangeLike(spec: string): boolean {
   const branches = spec
     .trim()
     .split('||')
-    .map((b) => b.trim())
-    .filter(Boolean);
-  if (branches.length === 0) return false;
+    .map((b) => b.trim());
+  // node-semver reads an empty `||` branch as `*`; rifty's evaluator drops it
+  // — refuse the spec instead of resolving a narrower range than npm's.
+  if (branches.some((b) => b === '')) return false;
   return branches.every((branch) => {
     const normalized = branch.replace(/([<>=^~])\s+/g, '$1');
     const comparators = normalized.split(/\s+/).filter(Boolean);
     return comparators.length > 0 && comparators.every(isRangeComparator);
   });
 }
+
+// semver §9 prerelease identifiers (no leading zeroes on numeric) and §10
+// build identifiers — the strict grammar node-semver validates; rifty's loose
+// parse must not absorb what npm treats as a dist-tag (`8.0.16-beta..1`,
+// `8.0.16-01`).
+const PRERELEASE_ID = '(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)';
+const BUILD_ID = '[0-9A-Za-z-]+';
+const FULL_VERSION_RE = new RegExp(
+  `^v?\\d+\\.\\d+\\.\\d+(?:-${PRERELEASE_ID}(?:\\.${PRERELEASE_ID})*)?(?:\\+${BUILD_ID}(?:\\.${BUILD_ID})*)?$`,
+);
+const PARTIAL_VERSION_RE = /^v?\d+(?:\.\d+)?$/;
 
 function isRangeComparator(cmp: string): boolean {
   const m = /^(>=|<=|>|<|=|\^|~)?(.*)$/.exec(cmp);
@@ -305,15 +317,18 @@ function isRangeComparator(cmp: string): boolean {
     // in node-semver at all.
     return op === '' && /^[v=]?(?:\d+(?:\.\d+)?\.)?(?:x|X|\*)$/.test(base);
   }
-  // Numeric partial (`8`, `8.0`, with any operator) or full `X.Y.Z` with
-  // optional prerelease/build. node-semver rejects a partial carrying a
-  // prerelease (`1.2-beta`, `>=1.2-beta` are tags, not ranges); a partial
-  // with build (`1.2+build`) is a valid npm range rifty mis-evaluates — both
-  // stay names here.
-  return (
-    /^v?\d+(?:\.\d+)?(?:\.\d+)?$/.test(base) ||
-    /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(base)
-  );
+  if (op === '>' || op === '<=' || op === '=') {
+    // npm zero-fills partial bases UP for these (`>8` → `>=9.0.0`, `<=8` →
+    // `<9.0.0-0`, `=8` → `8.x`); rifty's coerce zero-fills DOWN (`>8.0.0`,
+    // exact `8.0.0`) — admit only full versions both compare exactly.
+    return FULL_VERSION_RE.test(base);
+  }
+  // Bare / `^` / `~` / `>=` / `<`: caret/tilde bounds and `>=`/`<` zero-fill
+  // partials per npm; a bare partial x-ranges. node-semver rejects a partial
+  // carrying a prerelease (`1.2-beta`, `>=1.2-beta` are tags); a partial with
+  // build (`1.2+build`) is a valid npm range rifty mis-evaluates — both stay
+  // names here.
+  return PARTIAL_VERSION_RE.test(base) || FULL_VERSION_RE.test(base);
 }
 
 export function pickBestVersion(

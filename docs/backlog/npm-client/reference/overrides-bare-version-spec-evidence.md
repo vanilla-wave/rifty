@@ -54,6 +54,18 @@ rifty mis-evaluates (operator+wildcard, hyphen, partial+build) stay on the
 loud packument-404 path; npm-invalid forms (non-terminal wildcard,
 partial+prerelease, names/tags) keep name semantics.
 
+Second probe (same semver 7.8.4), pinning partial-base operator and grammar
+edges:
+
+```
+"<=8" → "<9.0.0-0"   "=8" → ">=8.0.0 <9.0.0-0"   ">8" → ">=9.0.0"   (npm zero-fills UP)
+">=8" → ">=8.0.0"    "<8" → "<8.0.0-0"           (rifty's down-fill agrees)
+"<=8.0.16" / "=8.0.16" / ">8.0.16" → exact comparator (both agree)
+"8 ||" / "|| 8" / "8 || || 9" → "*"   (empty branch = match-all)
+"8.0.16-01" → null (leading-zero prerelease)   "8.0.16+01" → valid (build allows zeros)
+"8.0.16-beta..1" → null (empty prerelease identifier)
+```
+
 ## rifty today (main 0c4c1b07)
 
 `overrides.ts` `parseTarget("8.0.16")` → `{name: "8.0.16", range: null}` →

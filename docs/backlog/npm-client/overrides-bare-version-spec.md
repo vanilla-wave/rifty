@@ -72,10 +72,13 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
   fetch for the `$`-name.
 - Range forms rifty's `semver.ts` cannot evaluate — hyphen ranges
   (`"1.2.3 - 2.0.0"`), operator + wildcard bases (`"<8.x"`, `"^8.x"`,
-  `"~8.x"`, `"=8.x"`), partials with build metadata (`"1.2+build"`) — valid in
-  npm, but here they keep today's loud packument-404 path instead of a
-  silently wrong resolution. node-semver rejects partials with a prerelease
-  (`"1.2-beta"`, `">=1.2-beta"`) — those are dist-tags in npm and keep
+  `"~8.x"`, `"=8.x"`), partial bases under `>`/`<=`/`=` (npm zero-fills UP:
+  `">8"` → `>=9.0.0`; rifty zero-fills down), empty `||` branches (npm: `*`),
+  partials with build metadata (`"1.2+build"`) — valid in npm, but here they
+  keep today's loud packument-404 path instead of a silently wrong
+  resolution. node-semver rejects partials with a prerelease (`"1.2-beta"`,
+  `">=1.2-beta"`) and malformed prerelease/build grammars
+  (`"8.0.16-beta..1"`, `"8.0.16-01"`) — those are dist-tags in npm and keep
   replacement-name semantics.
 - Bare non-range values (`"bcryptjs"`, `"latest"`): npm reads them as
   same-name dist-tags; rifty keeps its replacement-name reading — recorded

@@ -65,7 +65,7 @@ describe('resolveOverride — npm bare-version spelling (I1)', () => {
     });
   });
 
-  it.each(['^8', '8.x', '*', '>=8.0.0 <9'])(
+  it.each(['^8', '8.x', '*', '>=8.0.0 <9', '<=8.0.16', '=8.0.16', '>8.0.16', '8.0.16+01'])(
     'parses bare range %s as a range on the keyed package',
     (range) => {
       expect(resolveOverride('vite', undefined, { vite: range })).toEqual({
@@ -162,9 +162,23 @@ describe('resolveOverride — npm bare-version spelling (I1)', () => {
     '~8.x',
     '=8.x',
     '1.2+build',
+    // npm zero-fills partial bases UP for these operators (`>8` → `>=9.0.0`,
+    // `<=8` → `<9.0.0-0`, `=8` → `8.x`); rifty zero-fills DOWN → name path.
+    '>8',
+    '<=8',
+    '=8',
+    '>8.0',
+    '>8 <9',
+    // node-semver reads an empty `||` branch as `*`; rifty drops it → name path.
+    '8 ||',
+    '|| 8',
+    '8 || || 9',
     // node-semver rejects these (dist-tags in npm) → name semantics.
     '1.2-beta',
     '>=1.2-beta',
+    '8.0.16-beta..1',
+    '8.0.16-01',
+    '8.0.16+..build',
   ])('keeps name semantics for %s', (value) => {
     expect(resolveOverride('vite', undefined, { vite: value })).toEqual({
       name: value,
