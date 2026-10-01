@@ -1,4 +1,19 @@
-# No-COI agent host kit — closed 2026-09-30
+# No-COI agent host kit
+
+## Current scope — amended 2026-10-01
+
+amend: 2026-10-01 — user: «давай явно выпилим ее из этого ПРа» — remove the
+reference host identity → force → reconciliation chain from PR357 scenario4/9
+and I8. ADR-0490 supersedes ADR-0489 D1–D2. Initial preparation and saved open
+are explicit; no replacement marker or automatic overwrite. Other obligations
+retain their prior authority and evidence. SDK validation/explicit force stay.
+
+The closure below and prior verdicts describe the pre-amendment tree, not proof
+of the amended result. Current proof: `agent-host-explicit-open-evidence.md`.
+Known PR review residuals remain: npm optional→dev save and overlapping prod/dev
+selection; this removal unit does not repair or re-certify npm semantics.
+
+## Historical closure — 2026-09-30
 
 Delivered in PR #357. Implementation reviewed at
 `2534d1e97ef838c07c0c4caa6c464877347dc7a4`; independent whole-goal PASS,

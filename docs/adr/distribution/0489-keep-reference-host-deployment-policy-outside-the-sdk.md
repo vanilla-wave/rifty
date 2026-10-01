@@ -37,3 +37,8 @@ Evidence: `docs/backlog/distribution/reference/agent-reference-host-evidence.md`
 - Host manifest diff/merge: unnecessary policy. App-owned desired bytes plus
   existing install meet the accepted scenario without another merge algorithm.
 - Duplicate benchmark composition: rejected by I8's explicit same-module decision.
+
+## Corrections (active)
+
+2026-10-01 — ADR-0490 supersedes decisions 1–2: user removed the reference host's
+identity → force → reconciliation policy. Decisions 3–4 remain active.
