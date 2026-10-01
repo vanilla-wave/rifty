@@ -61,7 +61,11 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 - Mechanism: in `buildStaticNameNode`'s builtin branch, after
   `Object.keys(instance)`, add `Object.getOwnPropertyNames` of the DIRECT
   prototype when it is neither `null` nor `Object.prototype`, excluding
-  `constructor`. One fix point feeds link validation and namespace
+  `constructor` — but only for non-function exports. Function-valued builtins
+  (`events`/`assert`/`stream` export constructors) are excluded: their
+  prototype chain is `Function.prototype` / the parent constructor, whose
+  names (`call`/`apply`/`bind`, EventEmitter statics) are not Node named
+  exports either. One fix point feeds link validation and namespace
   construction. Plain-object builtins are unaffected (direct prototype IS
   `Object.prototype`); `console`'s direct prototype contributes only
   `constructor` (excluded) since its methods are own class fields.
@@ -87,7 +91,8 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
   `node:process` named-export set lacks them (rifty links where Node
   link-throws). Excluding them means either a name denylist or an
   own-property refactor of `NodeProcess` — machinery the claimed path doesn't
-  need (§Simplicity); frozen by a unit test naming the exact extra set.
+  need (§Simplicity); frozen by a unit test pinning the exact
+  `NodeProcess.prototype` own-name set (all 12 names, legit + divergence).
 
 ## Decisions
 
@@ -105,3 +110,8 @@ ready-verdict: 2026-10-01 — Contract+RED @ 0f0f62eb (concern verdict; amendmen
   boundary for `process` (methods are own props in Node's bootstrap;
   EventEmitter methods are not exported). A full-chain walk would diverge
   (link-succeed where Node link-throws).
+re-cut: 2026-10-01 — mechanism gains the function-valued-export gate
+  (Final+GREEN R1 blocker: Function.prototype / EventEmitter-static names
+  leaked into the `events`/`assert`/`stream` namespaces); parity case carries
+  the function-builtin boundary probes; freeze test pins the exact 12-name
+  NodeProcess.prototype set — trace: none

@@ -72,11 +72,17 @@ export function createCjsInteropAuthority(options: {
       // direct class prototype, invisible to Object.keys. Collect that one
       // level — Node's own boundary for `process` (its methods are own props
       // in Node's bootstrap; EventEmitter.prototype members are NOT named
-      // exports in real Node, so never walk further).
-      const proto: unknown = Object.getPrototypeOf(builtin);
-      if (proto !== null && proto !== Object.prototype) {
-        for (const name of Object.getOwnPropertyNames(proto)) {
-          if (name !== 'constructor') node.names.add(name);
+      // exports in real Node, so never walk further). Function-valued exports
+      // (`events`/`assert`/`stream` are constructor functions) are excluded:
+      // their prototype chain is Function.prototype / the parent constructor,
+      // whose names (call/apply/bind, EventEmitter statics) are not Node
+      // named exports either.
+      if (typeof builtin !== 'function') {
+        const proto: unknown = Object.getPrototypeOf(builtin);
+        if (proto !== null && proto !== Object.prototype) {
+          for (const name of Object.getOwnPropertyNames(proto)) {
+            if (name !== 'constructor') node.names.add(name);
+          }
         }
       }
       return node;

@@ -361,12 +361,38 @@ describe('CJS static export link validation', () => {
     expect(() => loader.require('./emitter.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
   });
 
-  it('freezes the recorded extra-name divergence of the process namespace', () => {
-    // NodeProcess.prototype declares EventEmitter OVERRIDES plus the internal
-    // pushStdin; direct-prototype collection exports them although real
-    // Node's node:process named-export set lacks them (rifty links where Node
-    // link-throws). Recorded divergence — contract Out of scope; this test
-    // pins the exact extra set so a silent growth or shrink is visible.
+  it('freezes the exact prototype-contributed name set of the process namespace', () => {
+    // The complete NodeProcess.prototype own-name set (minus constructor) is
+    // pinned: legit methods (cwd, chdir, exit, exitCode, hrtime, kill,
+    // uptime) AND the recorded divergence — EventEmitter OVERRIDES plus the
+    // internal pushStdin, which real Node's node:process named-export set
+    // lacks (rifty links where Node link-throws; contract Out of scope).
+    // Any growth/shrink of NodeProcess.prototype breaks this test on purpose.
+    const proc = loadBuiltin('node:process');
+    if (proc === null) throw new Error('node:process builtin is not registered');
+    const proto: unknown = Object.getPrototypeOf(proc);
+    if (proto === null || typeof proto !== 'object') {
+      throw new Error('node:process builtin lost its class prototype');
+    }
+    expect(
+      Object.getOwnPropertyNames(proto)
+        .filter((n) => n !== 'constructor')
+        .sort(),
+    ).toEqual([
+      'addListener',
+      'chdir',
+      'cwd',
+      'exit',
+      'exitCode',
+      'hrtime',
+      'kill',
+      'prependListener',
+      'pushStdin',
+      'removeAllListeners',
+      'removeListener',
+      'uptime',
+    ]);
+
     const vfs = new MemoryFsSync();
     vfs.loadFixture({
       '/work/probe.mjs': `
@@ -383,6 +409,32 @@ describe('CJS static export link validation', () => {
     const loader = createModuleLoader(vfs, { cwd: '/work' });
     expect(loader.require('./probe.mjs', '/work/entry.cjs')).toMatchObject({
       result: 'true true true true true',
+    });
+  });
+
+  it('never collects prototype names from function-valued builtins', () => {
+    // events/assert/stream export constructor FUNCTIONS: their prototype
+    // chain is Function.prototype / the parent constructor, whose names
+    // (call/apply/bind, EventEmitter statics) are not Node named exports —
+    // real Node link-throws on every one of these imports.
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/events-call.mjs': `import { call } from 'node:events'; export const r = call;`,
+      '/work/assert-bind.mjs': `import { bind } from 'node:assert'; export const r = bind;`,
+      '/work/stream-lc.mjs': `import { listenerCount } from 'node:stream'; export const r = listenerCount;`,
+      '/work/events-on.mjs': `
+        import { EventEmitter, once } from 'node:events';
+        import { Readable } from 'node:stream';
+        import { strict } from 'node:assert';
+        export const result = [typeof EventEmitter, typeof once, typeof Readable, typeof strict].join(' ');
+      `,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+    expect(() => loader.require('./events-call.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
+    expect(() => loader.require('./assert-bind.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
+    expect(() => loader.require('./stream-lc.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
+    expect(loader.require('./events-on.mjs', '/work/entry.cjs')).toMatchObject({
+      result: 'function function function function',
     });
   });
 
