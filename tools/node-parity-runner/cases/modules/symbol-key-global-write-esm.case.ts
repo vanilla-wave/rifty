@@ -6,12 +6,13 @@ import type { ParityCase } from '../../src/types.ts';
  * write, read-back, method call through the stash) and the undici shape
  * (`Object.defineProperty(globalThis, Symbol.for(…), …)`) must compile and
  * run — rifty's Function-assignment ceiling governs only keys that MAY be
- * 'Function'. Keys are deleted at the end so the in-process harness global
- * stays clean. `expected` pinned from Node v24.16.0.
+ * 'Function'. Every key the case sets is deleted at the end so the
+ * in-process harness global stays clean. `expected` pinned from Node
+ * v24.16.0.
  */
 const c: ParityCase = {
   kind: 'esm',
-  expected: ['stash pong', 'dp', '42', 'undefined'].join('\n'),
+  expected: ['stash pong', 'dp', '42', 'undefined undefined undefined'].join('\n'),
   code: `
     const SAFE = Symbol.for('vitest:utils:SAFE_TIMERS');
     globalThis[SAFE] = { tag: 'stash', ping() { return 'pong'; } };
@@ -23,7 +24,9 @@ const c: ParityCase = {
     globalThis[direct] = 42;
     console.log(globalThis[direct]);
     delete globalThis[SAFE];
-    console.log(typeof globalThis[SAFE]);
+    delete globalThis[Symbol.for('undici.globalDispatcher.2')];
+    delete globalThis[direct];
+    console.log(typeof globalThis[SAFE], typeof globalThis[Symbol.for('undici.globalDispatcher.2')], typeof globalThis[direct]);
   `,
 };
 

@@ -54,27 +54,38 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
    output; the undici shape `Object.defineProperty(globalThis,
    Symbol.for('undici.globalDispatcher.2'), …)` runs → I6
 2. CJS parity: the same two shapes through `cjs.ts` run with Node-identical
-   output → I6
+   output — the carrier covers defineProperty with a const alias AND with a
+   direct `Symbol.for(...)` key (the alias cannot discriminate a
+   direct-key-only regression) → I6
 3. Ceiling unchanged (regression): string-literal, concatenated-string,
    unknown-identifier, `let`-bound-symbol, and shadowed-`Symbol` computed keys
-   still throw `module-loader.{esm,cjs}-global-function-assignment`; the
+   still throw `module-loader.{esm,cjs}-global-function-assignment` — pinned
+   in BOTH loaders (a CJS let-allowing mutant must die); the
    existing conformance pins (`tests/conformance/modules/resolver.test.ts`
    Function-assignment describe) stay green → I6 honesty
 4. `Reflect.set`/`Object.assign`/`Object.defineProperties`/`delete` with
-   provable Symbol keys stop throwing (unit-pinned; they share the two
-   helpers) → I6
+   provable Symbol keys stop throwing in BOTH loaders (parity + unit) → I6
+5. The compat note for the ceiling (`docs/public/compat/modules.md`, the
+   `module-loader.{esm,cjs}-global-function-assignment` row) is refined to
+   state the Symbol-key exception → I6 honesty
 
 ## Reference contract
 
 - Oracle: Node v24.16.0 (host) — Node has no such guard; the patterns simply
   run. Parity `expected` pinned from the oracle, never from memory.
 - Mechanism: one `isProvablySymbolKey(node, ctx)` helper per loader twin
-  (esm.ts, cjs.ts) consulted wherever the guard today treats
-  `propertyName === undefined && isComputedMember` (or a non-literal key
-  argument) as Function/'eval'-suspect: write member, mutation-call key
-  positions, object-literal computed keys, computed read member (feeds
-  `guardCalleeMayBeHostFunction` — the method-call pattern), eval read/call
-  twins. One rule, no per-site judgment.
+  (esm.ts, cjs.ts) consulted at exactly three suspect-site families:
+  `isGlobalFunctionWriteMember` (direct writes AND `delete` — delete routes
+  through `walkGuardAssignmentTarget`), `propertyMayBeFunction` (defineProperty
+  / Reflect.set / `__defineGetter__` key arguments; the same helper also
+  serves `Reflect.get`'s key — the exemption is correct there too, the value
+  at a Symbol key is never the host Function), and
+  `objectMayContainFunctionKey` (defineProperties / Object.assign literal
+  keys). READ/eval/callee sites are NOT touched: probed 2026-10-01 —
+  computed reads, member access and method calls on a stashed object pass
+  today without any exemption (the R1-contract claim that the method-call
+  pattern needs the read site was wrong; its RED was masked by the write in
+  the same module).
 - Scope discipline: `let`/`var`-bound and shadowed keys stay loud — the
   claimed evidence (@vitest/utils, undici) uses `const` only.
 
@@ -87,14 +98,17 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
    write, and a provable-key `delete` — `expected` oracle-pinned → I6
 2. Node v24.16.0 CJS carrier
    `tools/node-parity-runner/cases/modules/symbol-key-global-write-cjs.case.ts`:
-   the undici defineProperty shape + const-alias write/read-back + delete →
-   I6
+   the undici defineProperty shape (alias AND direct key), const-alias
+   write/read-back, Reflect.set / Object.assign / Object.defineProperties,
+   and full key cleanup → I6
 
 Unit REDs (guard precision): `tests/conformance/modules/symbol-key-global-write.test.ts`
-— 12 positive carriers (Acceptance 1/2/4 patterns compile and run, RED
-today) + 7 boundary pins (Acceptance 3: string-literal, concatenated,
-unknown-identifier, `let`-bound-symbol, shadowed-`Symbol`, `Symbol.keyFor`
-keys stay loud — green today, regression-only).
+— 15 positive carriers (Acceptance 1/2/4 patterns compile and run in both
+loaders, incl. an export-wrapped `export const K = Symbol.for(…)` alias —
+RED today) + 10 boundary pins (Acceptance 3 in BOTH loaders:
+string-literal, concatenated, unknown-identifier, `let`-bound-symbol,
+shadowed-`Symbol`, `Symbol.keyFor` keys stay loud — green today,
+regression-only).
 
 ## Out of scope
 
@@ -106,16 +120,26 @@ keys stay loud — green today, regression-only).
   (`function-constructor-exhaustive-metaprogramming-ceiling`) and the global
   Function-assignment ceiling itself (`cjs-global-function-assignment`) —
   unchanged for every key that may be 'Function'.
-- Any read-side alias de-marking beyond what the shared helpers already cover.
+- Read/eval/callee guard sites (`isGlobalFunctionUnknownReadMember`,
+  `isGlobalEvalCallMember`, `guardCalleeMayBeHostFunction`): probed not loud
+  for the claimed shapes, so unchanged — calling a Symbol-keyed global
+  (`globalThis[K]()`) stays on the conservative path.
 
 ## Decisions
 
-- 2026-10-01 — uniform rule over per-site picks: every computed-key suspect
-  site consults the same provably-Symbol helper (write, mutation calls,
-  object-literal keys, computed read, eval twins). Reads are included because
-  the method-call-on-stash pattern (`globalThis[K].setTimeout`) routes
-  through `guardCalleeMayBeHostFunction` on the computed read — excluding
-  reads would leave the claimed vitest pattern loud.
 - 2026-10-01 — `const`-only alias marking: `let`/`var` stay unknown (loud).
   The claimed evidence uses `const`; reassignment tracking would add
   machinery the contract is deliverable without (§Simplicity).
+- 2026-10-01 — reception (REV-12) of Contract+RED R1 (blocker, F1–F6):
+  F2 — the read/eval-site exemption mandate is CUT: probed on the branch,
+  computed reads and method calls on a stashed object pass today (the R1
+  RED was masked by the write in the same module); the helper consults only
+  the three write/mutation site families. F1 — CJS carriers extended:
+  direct-`Symbol.for` defineProperty + Reflect.set/Object.assign/
+  defineProperties in both the parity case and the unit file. F3 —
+  export-wrapped const alias carrier added; alias marking is
+  Identifier-pattern-only (destructuring/defaults never marked), lookup
+  stops at the nearest binding (existing scope-stack machinery). F4 — CJS
+  boundary pins added (string-literal/unknown/let-bound/shadowed) so a CJS
+  let-allowing mutant dies. F5 — both parity cases now delete EVERY key they
+  set. F6 — compat-note refinement declared as Acceptance 5.

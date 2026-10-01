@@ -69,6 +69,11 @@ describe('provably-Symbol computed keys bypass the Function guard', () => {
       Reflect.deleteProperty(globalThis, K);
       export const r = typeof globalThis[K];
     `,
+    '/export-wrapped-alias.mjs': `
+      export const K = Symbol.for('exported');
+      globalThis[K] = 10;
+      export const r = globalThis[K];
+    `,
   };
 
   for (const [path, source] of Object.entries(allowedEsm)) {
@@ -99,6 +104,31 @@ describe('provably-Symbol computed keys bypass the Function guard', () => {
       `,
     });
     expect(loader.require('./alias-write.cjs', '/entry.cjs')).toBe('cjs-ok');
+  });
+
+  it('CJS runs defineProperty with a DIRECT Symbol.for key (alias cannot discriminate it)', () => {
+    const loader = setup({
+      '/direct-define.cjs': `
+        Object.defineProperty(globalThis, Symbol.for('cjs.direct'), { value: 'direct', configurable: true });
+        module.exports = globalThis[Symbol.for('cjs.direct')];
+      `,
+    });
+    expect(loader.require('./direct-define.cjs', '/entry.cjs')).toBe('direct');
+  });
+
+  it('CJS runs the Reflect.set / Object.assign / Object.defineProperties mutation shapes', () => {
+    const loader = setup({
+      '/mutations.cjs': `
+        const R = Symbol.for('cjs.reflect');
+        Reflect.set(globalThis, R, 'rs');
+        const A = Symbol.for('cjs.assign');
+        Object.assign(globalThis, { [A]: 'as' });
+        const P = Symbol.for('cjs.props');
+        Object.defineProperties(globalThis, { [P]: { value: 'ps', configurable: true } });
+        module.exports = [globalThis[R], globalThis[A], globalThis[P]].join(' ');
+      `,
+    });
+    expect(loader.require('./mutations.cjs', '/entry.cjs')).toBe('rs as ps');
   });
 });
 
@@ -140,16 +170,33 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
     });
   }
 
-  it('CJS stays loud on an unknown computed write', () => {
-    const loader = setup({
-      '/unknown.cjs': `
-        const K = Math.random() > 2 ? 'Function' : 'other';
-        globalThis[K] = 1;
-        module.exports = 1;
-      `,
+  const stillLoudCjs: Record<string, string> = {
+    '/cjs-string-literal.cjs': `globalThis["Function"] = 1; module.exports = 1;`,
+    '/cjs-unknown.cjs': `
+      const K = Math.random() > 2 ? 'Function' : 'other';
+      globalThis[K] = 1;
+      module.exports = 1;
+    `,
+    '/cjs-let-bound.cjs': `
+      let K = Symbol.for('cjs.let');
+      globalThis[K] = 1;
+      module.exports = 1;
+    `,
+    '/cjs-shadowed.cjs': `
+      function f(Symbol) {
+        globalThis[Symbol.for('cjs.shadowed')] = 1;
+      }
+      f({ for: () => 'Function' });
+      module.exports = 1;
+    `,
+  };
+
+  for (const [path, source] of Object.entries(stillLoudCjs)) {
+    it(`CJS stays loud on ${path}`, () => {
+      const loader = setup({ [path]: source });
+      expect(() => loader.require(`.${path}`, '/entry.cjs')).toThrowError(
+        /module-loader\.cjs-global-function-assignment/,
+      );
     });
-    expect(() => loader.require('./unknown.cjs', '/entry.cjs')).toThrowError(
-      /module-loader\.cjs-global-function-assignment/,
-    );
-  });
+  }
 });
