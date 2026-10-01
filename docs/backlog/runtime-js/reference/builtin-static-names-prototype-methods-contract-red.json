@@ -1,0 +1,110 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED допускает IMPLEMENT с advisory; backlog:check и validator прошли, tracked tree чист. Final+GREEN не проверен.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md; BASE 0c4c1b07",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: cwd/nextTick/hrtime/uptime links; cwd совпадает с process.cwd(), остальные функции",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-prototype-imports.case.ts:16",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: namespace исключает on/emit/once, включает cwd",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-prototype-imports.case.ts:19",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: CJS cwd работает; require.cwd === import.cwd",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-prototype-imports.case.ts:20",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: Node v24.16.0 named imports и namespace boundary; pinned expected",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-prototype-imports.case.ts:13",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md:47",
+          "summary": "A3 identity не проверена: case сравнивает два ESM доступа, require отсутствует. I6 exact identity не заявляет; REV-4/5 требуют здесь pass + concern, не blocker.",
+          "authority": "",
+          "evidence": "Node v24.16.0, cwd /: node /private/tmp/rifty-carrier-mutant-who27S/mutant.mjs → committed matches=true; отдельный A3 probe=\"function\\ntrue\\nfalse\\n\". Production-source mutant bind-wraps cwd только в CJS loadSync; named ESM сценарий сохраняется."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/process/esm-named-prototype-imports.case.ts:17",
+          "summary": "Default ESM runner сохраняет host process: после заявленного исправления cwd comparison даёт лишний RED. Default process import устраняет contamination. На HEAD RED падает правильно; blocker по REV-5 не установлен.",
+          "authority": "",
+          "evidence": "pnpm test:parity esm-named-prototype-imports → error: SyntaxError: The requested module 'node:process' does not provide an export named 'cwd' (imported by /work/main.mjs); 1 case(s) failed. Node v24.16.0, runInNode(committed case) → \"true\\nfunction function function\\nfalse false false true\\ntrue\"; pinned expected matches=true. node /private/tmp/rifty-carrier-mutant-who27S/candidate.mjs из repo → \"false\\nfunction function function\\nfalse false false true\\ntrue\\n\", matches=false; с default process import → matches=true; исходный case из cwd / → matches=true. Host namespace: 84 exports; on/emit/once отсутствуют; import { on } → SyntaxError: The requested module 'node:process' does not provide an export named 'on'."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md:24",
+          "summary": "Предпосылка «только process — class instance, остальные Object.prototype» ложна: Console — экземпляр класса; events/assert/stream — функции. Direct collection также добавляет process.addListener/prependListener/removeListener/removeAllListeners/pushStdin, отсутствующие в Node namespace. Более глубокий обход нынешним builtin не нужен. Локальная предпосылка/механизм — advisory по REV-5.",
+          "authority": "",
+          "evidence": "node --import tsx --input-type=module, реальные loadBuiltin: process proto=NodeProcess; console proto=Console; events/assert/assert/strict/stream type=function, plain=false. Node v24.16.0: перечисленные пять process names отсутствуют. Scratch direct-only candidate → other names=\"true true true true true\\n\", membership assertion остаётся \"false false false true\". Registry sweep: 47 registrations; deeperRealNodeNames=[] для nonplain exports. Single authority подтверждена: esm-job-linker.ts:78 → loader.ts:488; cjs-interop-authority.ts:115,137 → interop.ts:59."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "0f0f62eb4771fe69b2ae7e43be3a0f340126dcae"
+}
