@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- ESM named imports of class-backed builtins link prototype methods (`import { cwd } from 'node:process'`) — the static name authority collects the direct class prototype; EventEmitter members stay excluded, matching Node's boundary. Recorded divergence: the `node:process` namespace also carries `NodeProcess`'s emitter-override/`pushStdin` names real Node lacks.
+
 - Register `node:path/posix` and `node:path/win32` subpath builtins returning the main module's live `posix`/`win32` namespaces (parity-proven identity across `node:`/bare forms).
 
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.

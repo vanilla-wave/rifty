@@ -339,6 +339,53 @@ describe('CJS static export link validation', () => {
     }
   });
 
+  it('links class-backed builtin prototype methods without gaining EventEmitter members', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/valid.mjs': `
+        import { cwd, nextTick, hrtime } from 'node:process';
+        export const result = [typeof cwd(), typeof nextTick, typeof hrtime].join(' ');
+      `,
+      '/work/emitter.mjs': `
+        import { on } from 'node:process';
+        export const result = on;
+      `,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+
+    expect(loader.require('./valid.mjs', '/work/entry.cjs')).toMatchObject({
+      result: 'string function function',
+    });
+    // Node's boundary: EventEmitter.prototype members are NOT named exports
+    // of node:process (real Node link-throws on `import { on }`).
+    expect(() => loader.require('./emitter.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
+  });
+
+  it('freezes the recorded extra-name divergence of the process namespace', () => {
+    // NodeProcess.prototype declares EventEmitter OVERRIDES plus the internal
+    // pushStdin; direct-prototype collection exports them although real
+    // Node's node:process named-export set lacks them (rifty links where Node
+    // link-throws). Recorded divergence — contract Out of scope; this test
+    // pins the exact extra set so a silent growth or shrink is visible.
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/probe.mjs': `
+        import * as ns from 'node:process';
+        export const result = [
+          'addListener',
+          'prependListener',
+          'removeListener',
+          'removeAllListeners',
+          'pushStdin',
+        ].map((name) => name in ns).join(' ');
+      `,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+    expect(loader.require('./probe.mjs', '/work/entry.cjs')).toMatchObject({
+      result: 'true true true true true',
+    });
+  });
+
   it('re-lexes a repaired CJS surface after coherent invalidation', () => {
     withEffects((effects) => {
       const vfs = new MemoryFsSync();

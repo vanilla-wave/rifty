@@ -66,7 +66,19 @@ export function createCjsInteropAuthority(options: {
     }
     node.names.add('default');
     if (resolved.kind === 'builtin') {
-      for (const name of Object.keys(loadBuiltin(resolved.id))) node.names.add(name);
+      const builtin = loadBuiltin(resolved.id);
+      for (const name of Object.keys(builtin)) node.names.add(name);
+      // Class-backed builtins (`NodeProcess`): exported methods live on the
+      // direct class prototype, invisible to Object.keys. Collect that one
+      // level — Node's own boundary for `process` (its methods are own props
+      // in Node's bootstrap; EventEmitter.prototype members are NOT named
+      // exports in real Node, so never walk further).
+      const proto: unknown = Object.getPrototypeOf(builtin);
+      if (proto !== null && proto !== Object.prototype) {
+        for (const name of Object.getOwnPropertyNames(proto)) {
+          if (name !== 'constructor') node.names.add(name);
+        }
+      }
       return node;
     }
     if (resolved.kind === 'json') {
