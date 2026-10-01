@@ -2,6 +2,22 @@ import { NotImplementedError } from '@riftydev/io';
 import type { Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
 import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
+import {
+  isComputedMember,
+  literalString,
+  propertyMayBeConstructor,
+  propertyMayBeFunction,
+  staticPropertyKeyName,
+  staticPropertyName,
+  unwrapGuardChain,
+} from './guard-ast.ts';
+import {
+  type SymbolKeyShadowProbe,
+  isProvablySymbolKey,
+  mutationKeyMayBeFunction,
+  objectMayContainFunctionKey,
+  updateSymbolKeyAliasesFromPatternValue,
+} from './symbol-key-guard.ts';
 
 interface GuardNodeShape {
   readonly type: string;
@@ -16,6 +32,7 @@ interface GuardScope {
   readonly maybeFunctionAliases: Set<string>;
   readonly maybeDerivedFunctionAliases: Set<string>;
   readonly maybeEvalAliases: Set<string>;
+  readonly symbolKeyAliases: Set<string>;
 }
 
 interface EsmFunctionGuardCtx {
@@ -93,6 +110,7 @@ function createGuardScope(): GuardScope {
     maybeFunctionAliases: new Set(),
     maybeDerivedFunctionAliases: new Set(),
     maybeEvalAliases: new Set(),
+    symbolKeyAliases: new Set(),
   };
 }
 
@@ -117,6 +135,7 @@ function addGuardBinding(scope: GuardScope, name: string | undefined): void {
   scope.maybeFunctionAliases.delete(name);
   scope.maybeDerivedFunctionAliases.delete(name);
   scope.maybeEvalAliases.delete(name);
+  scope.symbolKeyAliases.delete(name);
 }
 
 function isGuardShadowed(ctx: EsmFunctionGuardCtx, name: string): boolean {
@@ -248,6 +267,10 @@ function isGuardMaybeEvalAlias(ctx: EsmFunctionGuardCtx, name: string): boolean 
   return false;
 }
 
+function guardShadowProbe(ctx: EsmFunctionGuardCtx): SymbolKeyShadowProbe {
+  return (name) => isGuardShadowed(ctx, name);
+}
+
 function declareGuardPattern(scope: GuardScope, pattern: unknown): void {
   if (!pattern || typeof pattern !== 'object') return;
   const pat = pattern as GuardNodeShape;
@@ -341,13 +364,23 @@ function predeclareGuardLexicalScope(body: readonly GuardNodeShape[], scope: Gua
   for (const node of body) {
     if (node.type === 'ImportDeclaration') {
       declareGuardImport(scope, node);
-    } else if (
-      node.type === 'VariableDeclaration' &&
-      (node as unknown as { kind?: string }).kind !== 'var'
+      continue;
+    }
+    // Export wrappers expose their inner declaration's bindings; without the
+    // unwrap an `export const K = …` never enters `bindings` and every alias
+    // marking silently no-ops (probed 2026-10-01).
+    const target =
+      node.type === 'ExportNamedDeclaration' || node.type === 'ExportDefaultDeclaration'
+        ? ((node as unknown as { declaration?: GuardNodeShape | null }).declaration ?? undefined)
+        : node;
+    if (!target) continue;
+    if (
+      target.type === 'VariableDeclaration' &&
+      (target as unknown as { kind?: string }).kind !== 'var'
     ) {
-      declareGuardVariable(scope, node);
-    } else if (node.type === 'ClassDeclaration' || node.type === 'FunctionDeclaration') {
-      addGuardBinding(scope, (node.id as { name?: string } | undefined)?.name);
+      declareGuardVariable(scope, target);
+    } else if (target.type === 'ClassDeclaration' || target.type === 'FunctionDeclaration') {
+      addGuardBinding(scope, (target.id as { name?: string } | undefined)?.name);
     }
   }
 }
@@ -377,6 +410,7 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
       return;
     case 'VariableDeclaration': {
       const declarations = (n as unknown as { declarations?: GuardNodeShape[] }).declarations ?? [];
+      const isConst = (n as unknown as { kind?: string }).kind === 'const';
       for (const decl of declarations) {
         const declId = decl.id as GuardNodeShape | undefined;
         walkGuardPatternExpressions(declId, ctx);
@@ -386,6 +420,15 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
           updateGuardMaybeFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateGuardMaybeDerivedFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateGuardMaybeEvalAliasesFromPatternValue(declId, decl.init, ctx);
+          // let/var stay unmarked: reassignment keeps their keys unknown.
+          if (isConst) {
+            updateSymbolKeyAliasesFromPatternValue(
+              ctx.scopes,
+              declId,
+              decl.init,
+              guardShadowProbe(ctx),
+            );
+          }
         }
       }
       return;
@@ -1258,7 +1301,12 @@ function isGlobalFunctionReadMember(node: GuardNodeShape, ctx: EsmFunctionGuardC
 function isGlobalFunctionWriteMember(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {
   if (!isGlobalObjectExpression(node.object, ctx)) return false;
   const propertyName = staticPropertyName(node);
-  return propertyName === 'Function' || (propertyName === undefined && isComputedMember(node));
+  return (
+    propertyName === 'Function' ||
+    (propertyName === undefined &&
+      isComputedMember(node) &&
+      !isProvablySymbolKey(node.property, ctx.scopes, guardShadowProbe(ctx)))
+  );
 }
 
 function guardExpressionMayBeHostFunction(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
@@ -1452,7 +1500,9 @@ function isGlobalFunctionMutationCall(node: GuardNodeShape, ctx: EsmFunctionGuar
   const isBuiltinReflect = objectName === 'Reflect' && !isGuardShadowed(ctx, 'Reflect');
 
   if (isBuiltinObject && propertyName === 'assign' && isGlobalObjectExpression(args[0], ctx)) {
-    return args.slice(1).some((arg) => objectMayContainFunctionKey(arg));
+    return args
+      .slice(1)
+      .some((arg) => objectMayContainFunctionKey(arg, ctx.scopes, guardShadowProbe(ctx)));
   }
 
   const isObjectDefine =
@@ -1464,101 +1514,17 @@ function isGlobalFunctionMutationCall(node: GuardNodeShape, ctx: EsmFunctionGuar
       propertyName === 'deleteProperty');
   if ((isObjectDefine || isReflectMutation) && isGlobalObjectExpression(args[0], ctx)) {
     if (propertyName === 'defineProperties') {
-      return objectMayContainFunctionKey(args[1]);
+      return objectMayContainFunctionKey(args[1], ctx.scopes, guardShadowProbe(ctx));
     }
-    return propertyMayBeFunction(args[1]);
+    return mutationKeyMayBeFunction(args[1], ctx.scopes, guardShadowProbe(ctx));
   }
 
   if (
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
-    return propertyMayBeFunction(args[0]);
+    return mutationKeyMayBeFunction(args[0], ctx.scopes, guardShadowProbe(ctx));
   }
 
   return false;
-}
-
-function propertyMayBeFunction(node: unknown): boolean {
-  const value = literalString(node);
-  return value === 'Function' || value === undefined;
-}
-
-function propertyMayBeConstructor(node: unknown): boolean {
-  const value = literalString(node);
-  return value === 'constructor' || value === undefined;
-}
-
-function objectMayContainFunctionKey(node: unknown): boolean {
-  if (!node || typeof node !== 'object') return true;
-  const object = node as GuardNodeShape;
-  if (object.type !== 'ObjectExpression') return true;
-  const properties = (object as unknown as { properties?: GuardNodeShape[] }).properties ?? [];
-  return properties.some((property) => {
-    if (property.type === 'SpreadElement') return true;
-    const key = staticPropertyKeyName(property);
-    return key === 'Function' || key === undefined;
-  });
-}
-
-function staticPropertyName(node: GuardNodeShape): string | undefined {
-  const n = unwrapGuardChain(node) as GuardNodeShape;
-  const member = n as unknown as { computed?: boolean; property?: GuardNodeShape };
-  const property = member.property;
-  if (!property) return undefined;
-  if (!member.computed && property.type === 'Identifier') {
-    return (property as unknown as { name?: string }).name;
-  }
-  return member.computed ? literalString(property) : undefined;
-}
-
-function isComputedMember(node: GuardNodeShape): boolean {
-  return Boolean((unwrapGuardChain(node) as unknown as { computed?: boolean }).computed);
-}
-
-function staticPropertyKeyName(node: GuardNodeShape): string | undefined {
-  const property = node as unknown as { computed?: boolean; key?: GuardNodeShape };
-  const key = property.key;
-  if (!key) return undefined;
-  if (!property.computed && key.type === 'Identifier') {
-    return (key as unknown as { name?: string }).name;
-  }
-  return literalString(key);
-}
-
-function literalString(node: unknown): string | undefined {
-  if (!node || typeof node !== 'object') return undefined;
-  const n = unwrapGuardChain(node) as GuardNodeShape;
-  if (n.type === 'Literal') {
-    const value = (n as unknown as { value?: unknown }).value;
-    return typeof value === 'string' ? value : undefined;
-  }
-  if (n.type === 'BinaryExpression' && (n as unknown as { operator?: string }).operator === '+') {
-    const left = literalString(n.left);
-    const right = literalString(n.right);
-    return left !== undefined && right !== undefined ? left + right : undefined;
-  }
-  if (n.type === 'TemplateLiteral') {
-    const expressions = (n as unknown as { expressions?: unknown[] }).expressions ?? [];
-    if (expressions.length > 0) return undefined;
-    const quasis = (n as unknown as { quasis?: GuardNodeShape[] }).quasis ?? [];
-    return quasis
-      .map((quasi) => {
-        const value = quasi.value as { cooked?: unknown } | undefined;
-        return typeof value?.cooked === 'string' ? value.cooked : '';
-      })
-      .join('');
-  }
-  return undefined;
-}
-
-function unwrapGuardChain(node: unknown): unknown {
-  if (!node || typeof node !== 'object') return node;
-  const n = node as GuardNodeShape;
-  if (n.type === 'ChainExpression') return unwrapGuardChain(n.expression);
-  if (n.type === 'SequenceExpression') {
-    const expressions = (n as unknown as { expressions?: unknown[] }).expressions ?? [];
-    return unwrapGuardChain(expressions[expressions.length - 1]);
-  }
-  return node;
 }

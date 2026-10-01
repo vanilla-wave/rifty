@@ -7,9 +7,25 @@ import { type Edit, applyEdits, uniqueHelperName } from './cjs-source-rewrite.ts
 import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
+import {
+  isComputedMember,
+  literalString,
+  propertyMayBeConstructor,
+  propertyMayBeFunction,
+  staticPropertyKeyName,
+  staticPropertyName,
+  unwrapGuardChain as unwrapChain,
+} from './guard-ast.ts';
 import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
+import {
+  type SymbolKeyShadowProbe,
+  isProvablySymbolKey,
+  mutationKeyMayBeFunction,
+  objectMayContainFunctionKey,
+  updateSymbolKeyAliasesFromPatternValue,
+} from './symbol-key-guard.ts';
 
 const jsonStringifyPrimordial = JSON.stringify;
 const objectDefinePropertyPrimordial = Object.defineProperty;
@@ -124,6 +140,7 @@ interface Scope {
   readonly maybeFunctionAliases: Set<string>;
   readonly maybeDerivedFunctionAliases: Set<string>;
   readonly maybeEvalAliases: Set<string>;
+  readonly symbolKeyAliases: Set<string>;
 }
 
 interface FunctionRewriteCtx {
@@ -279,6 +296,7 @@ function createScope(): Scope {
     maybeFunctionAliases: new Set(),
     maybeDerivedFunctionAliases: new Set(),
     maybeEvalAliases: new Set(),
+    symbolKeyAliases: new Set(),
   };
 }
 
@@ -297,6 +315,7 @@ function addBinding(scope: Scope, name: string | undefined): void {
   scope.maybeFunctionAliases.delete(name);
   scope.maybeDerivedFunctionAliases.delete(name);
   scope.maybeEvalAliases.delete(name);
+  scope.symbolKeyAliases.delete(name);
 }
 
 function isShadowed(ctx: FunctionRewriteCtx, name: string): boolean {
@@ -436,6 +455,10 @@ function isMaybeEvalAlias(ctx: FunctionRewriteCtx, name: string): boolean {
   return Boolean(ctx.scopes[0]?.maybeEvalAliases.has(name));
 }
 
+function shadowProbe(ctx: FunctionRewriteCtx): SymbolKeyShadowProbe {
+  return (name) => isShadowed(ctx, name);
+}
+
 function declarePattern(scope: Scope, pattern: unknown): void {
   if (!pattern || typeof pattern !== 'object') return;
   const pat = pattern as AnyNodeShape;
@@ -561,6 +584,7 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
 
     case 'VariableDeclaration': {
       const declarations = (n as unknown as { declarations?: AnyNodeShape[] }).declarations ?? [];
+      const isConst = (n as unknown as { kind?: string }).kind === 'const';
       for (const decl of declarations) {
         const declId = decl.id as AnyNodeShape | undefined;
         walkPatternExpressions(declId, ctx);
@@ -570,6 +594,10 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
           updateMaybeFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateMaybeDerivedFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateMaybeEvalAliasesFromPatternValue(declId, decl.init, ctx);
+          // let/var stay unmarked: reassignment keeps their keys unknown.
+          if (isConst) {
+            updateSymbolKeyAliasesFromPatternValue(ctx.scopes, declId, decl.init, shadowProbe(ctx));
+          }
         }
       }
       return;
@@ -1446,7 +1474,12 @@ function isGlobalFunctionReadMember(node: AnyNodeShape, ctx: FunctionRewriteCtx)
 function isGlobalFunctionWriteMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
   if (!isGlobalObjectExpression(node.object, ctx)) return false;
   const propertyName = staticPropertyName(node);
-  return propertyName === 'Function' || (propertyName === undefined && isComputedMember(node));
+  return (
+    propertyName === 'Function' ||
+    (propertyName === undefined &&
+      isComputedMember(node) &&
+      !isProvablySymbolKey(node.property, ctx.scopes, shadowProbe(ctx)))
+  );
 }
 
 function expressionMayBeHostFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
@@ -1645,7 +1678,9 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
   const isBuiltinReflect = objectName === 'Reflect' && !isShadowed(ctx, 'Reflect');
 
   if (isBuiltinObject && propertyName === 'assign' && isGlobalObjectExpression(args[0], ctx)) {
-    return args.slice(1).some((arg) => objectMayContainFunctionKey(arg));
+    return args
+      .slice(1)
+      .some((arg) => objectMayContainFunctionKey(arg, ctx.scopes, shadowProbe(ctx)));
   }
 
   const isObjectDefine =
@@ -1657,103 +1692,19 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
       propertyName === 'deleteProperty');
   if ((isObjectDefine || isReflectMutation) && isGlobalObjectExpression(args[0], ctx)) {
     if (propertyName === 'defineProperties') {
-      return objectMayContainFunctionKey(args[1]);
+      return objectMayContainFunctionKey(args[1], ctx.scopes, shadowProbe(ctx));
     }
-    return propertyMayBeFunction(args[1]);
+    return mutationKeyMayBeFunction(args[1], ctx.scopes, shadowProbe(ctx));
   }
 
   if (
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
-    return propertyMayBeFunction(args[0]);
+    return mutationKeyMayBeFunction(args[0], ctx.scopes, shadowProbe(ctx));
   }
 
   return false;
-}
-
-function propertyMayBeFunction(node: unknown): boolean {
-  const value = literalString(node);
-  return value === 'Function' || value === undefined;
-}
-
-function propertyMayBeConstructor(node: unknown): boolean {
-  const value = literalString(node);
-  return value === 'constructor' || value === undefined;
-}
-
-function objectMayContainFunctionKey(node: unknown): boolean {
-  if (!node || typeof node !== 'object') return true;
-  const object = node as AnyNodeShape;
-  if (object.type !== 'ObjectExpression') return true;
-  const properties = (object as unknown as { properties?: AnyNodeShape[] }).properties ?? [];
-  return properties.some((property) => {
-    if (property.type === 'SpreadElement') return true;
-    const key = staticPropertyKeyName(property);
-    return key === 'Function' || key === undefined;
-  });
-}
-
-function staticPropertyName(node: AnyNodeShape): string | undefined {
-  const n = unwrapChain(node) as AnyNodeShape;
-  const member = n as unknown as { computed?: boolean; property?: AnyNodeShape };
-  const property = member.property;
-  if (!property) return undefined;
-  if (!member.computed && property.type === 'Identifier') {
-    return (property as unknown as { name?: string }).name;
-  }
-  return member.computed ? literalString(property) : undefined;
-}
-
-function isComputedMember(node: AnyNodeShape): boolean {
-  return Boolean((unwrapChain(node) as unknown as { computed?: boolean }).computed);
-}
-
-function staticPropertyKeyName(node: AnyNodeShape): string | undefined {
-  const property = node as unknown as { computed?: boolean; key?: AnyNodeShape };
-  const key = property.key;
-  if (!key) return undefined;
-  if (!property.computed && key.type === 'Identifier') {
-    return (key as unknown as { name?: string }).name;
-  }
-  return literalString(key);
-}
-
-function literalString(node: unknown): string | undefined {
-  if (!node || typeof node !== 'object') return undefined;
-  const n = unwrapChain(node) as AnyNodeShape;
-  if (n.type === 'Literal') {
-    const value = (n as unknown as { value?: unknown }).value;
-    return typeof value === 'string' ? value : undefined;
-  }
-  if (n.type === 'BinaryExpression' && (n as unknown as { operator?: string }).operator === '+') {
-    const left = literalString(n.left);
-    const right = literalString(n.right);
-    return left !== undefined && right !== undefined ? left + right : undefined;
-  }
-  if (n.type === 'TemplateLiteral') {
-    const expressions = (n as unknown as { expressions?: unknown[] }).expressions ?? [];
-    if (expressions.length > 0) return undefined;
-    const quasis = (n as unknown as { quasis?: AnyNodeShape[] }).quasis ?? [];
-    return quasis
-      .map((quasi) => {
-        const value = quasi.value as { cooked?: unknown } | undefined;
-        return typeof value?.cooked === 'string' ? value.cooked : '';
-      })
-      .join('');
-  }
-  return undefined;
-}
-
-function unwrapChain(node: unknown): unknown {
-  if (!node || typeof node !== 'object') return node;
-  const n = node as AnyNodeShape;
-  if (n.type === 'ChainExpression') return unwrapChain(n.expression);
-  if (n.type === 'SequenceExpression') {
-    const expressions = (n as unknown as { expressions?: unknown[] }).expressions ?? [];
-    return unwrapChain(expressions[expressions.length - 1]);
-  }
-  return node;
 }
 
 function walkDefaultForFunctionReferences(n: AnyNodeShape, ctx: FunctionRewriteCtx): void {

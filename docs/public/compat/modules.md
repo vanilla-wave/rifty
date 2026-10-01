@@ -89,6 +89,15 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
   constructor, deleting it, or silently mixing routed and replaced constructors:
   `module-loader.cjs-global-function-assignment` / `module-loader.esm-global-function-assignment`.
   Tracked in `docs/backlog/runtime-js/cjs-global-function-assignment.md`.
+  Exception: a computed key provably Symbol-valued — a `Symbol(...)` /
+  `Symbol.for(...)` call on an unshadowed `Symbol`, or an identifier
+  `const`-bound to one — can never be the string `Function`, so writes and
+  mutation-call key positions with such keys run
+  (`globalThis[Symbol.for('x')] = v`, `Object.defineProperty(globalThis,
+  Symbol.for('…'), …)`, `Reflect.set`, `Object.assign`, `delete`).
+  Read sites stay conservative: a Symbol key proves the key, never the stored
+  value, so a `Reflect.get(globalThis, K)` result used as a constructor keeps
+  its ceiling.
 - A direct, unshadowed `eval` with a statically known string containing ordinary
   `import()` syntax is routed through the constructing module's collision-free
   lexical import helper; a returned importer keeps that VFS-relative base when

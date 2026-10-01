@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Function-assignment guard accepts provably Symbol-valued computed keys (`globalThis[Symbol.for('…')] = v`, `Object.defineProperty(globalThis, Symbol.for('…'), …)` — the @vitest/utils timers stash and undici globalDispatcher shapes) in both module loaders; mutation key positions only — `Reflect.get` reads keep the conservative constructor taint. Export-wrapped declarations now enter guard lexical predeclaration, closing an export-wrapped `globalThis`-alias hole in the Function-write ceiling. Compat note refined in `modules.md`.
+
 - `fs.statfsSync`, `child_process.spawnSync`, and `process.memoryUsage` exist as named-loud members: named imports link and `typeof`/`bind`/arity match Node (1/3/0), but the CALL throws `NotImplementedError('<area>.<feature>')` — no fabricated volume/heap numbers, and an honest no-shell spawnSync needs a sync handler the claimed vitest path never calls. Compat ❌ rows in `fs.md`/`process.md`.
 
 - ESM named imports of class-backed builtins link prototype methods (`import { cwd } from 'node:process'`) — the static name authority collects the direct class prototype; EventEmitter members stay excluded, matching Node's boundary. Recorded divergence: the `node:process` namespace also carries `NodeProcess`'s emitter-override/`pushStdin` names real Node lacks.

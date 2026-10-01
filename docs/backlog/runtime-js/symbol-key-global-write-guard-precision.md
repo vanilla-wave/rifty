@@ -79,15 +79,26 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 
 - Oracle: Node v24.16.0 (host) — Node has no such guard; the patterns simply
   run. Parity `expected` pinned from the oracle, never from memory.
-- Mechanism: one `isProvablySymbolKey(node, ctx)` helper per loader twin
-  (esm.ts, cjs.ts) consulted at MUTATION key positions only, exactly three
-  site families: `isGlobalFunctionWriteMember` (direct writes AND `delete`
-  — delete routes through `walkGuardAssignmentTarget`), the mutation key
-  arguments inside `isGlobalFunctionMutationCall` (defineProperty /
-  Reflect.set / Reflect.deleteProperty / `__defineGetter__` /
-  `__defineSetter__` — via a mutation-only `propertyMayBeFunction` wrapper),
-  and `objectMayContainFunctionKey` (defineProperties / Object.assign
-  literal keys). READ sites keep the UNCHANGED conservative helpers: a
+- Mechanism: the provably-Symbol-key machinery lives ONCE in the new sibling
+  `module-loader/symbol-key-guard.ts` (`isProvablySymbolKey`,
+  `mutationKeyMayBeFunction`, `objectMayContainFunctionKey`, alias
+  mark/is/update over a structural `SymbolKeyScope` + a shadow-probe
+  callback), consulted by BOTH loader twins at MUTATION key positions only,
+  exactly three site families: `isGlobalFunctionWriteMember` (direct writes
+  AND `delete` — delete routes through `walkGuardAssignmentTarget`), the
+  mutation key arguments inside `isGlobalFunctionMutationCall`
+  (defineProperty / Reflect.set / Reflect.deleteProperty /
+  `__defineGetter__` / `__defineSetter__`), and
+  `objectMayContainFunctionKey` (defineProperties / Object.assign literal
+  keys). The twins' byte-identical guard-AST helpers (`unwrapGuardChain`,
+  `literalString`, `staticPropertyName`, `staticPropertyKeyName`,
+  `isComputedMember`, `propertyMayBeFunction`, `propertyMayBeConstructor`)
+  are deduplicated into `module-loader/guard-ast.ts`, which both twins
+  import. Layout amendment (2026-10-01, post-R3): the R3-contracted
+  per-twin helper copies cannot land — the file-size ratchet pins esm.ts at
+  1568 (4 lines headroom) and cjs.ts at 2052 (11); the sibling split follows
+  the fs-statfs.ts pattern and shrinks both twins under their pins.
+  READ sites keep the UNCHANGED conservative helpers: a
   Symbol key proves the KEY, never the VALUE — the slot may hold a host
   Function, so `Reflect.get(globalThis, K)` keeps its result taint
   (`isReflectGetFunctionCall` → constructor-read ceiling; probed
@@ -178,3 +189,12 @@ regression-only).
   stash-method-call carrier (`expected` re-pinned on host Node v24.16.0)
   and the unit file a CJS stash-method-call positive (16 → 17 RED). No
   read-site exemption follows from it.
+- 2026-10-01 — layout amendment at IMPLEMENT: the symbol-key machinery lives
+  in the new shared sibling `module-loader/symbol-key-guard.ts`, not as
+  per-twin copies — the file-size ratchet pins esm.ts/cjs.ts at 1568/2052
+  with 4/11 lines of headroom, so ~90 duplicated lines cannot land
+  (fs-statfs.ts split pattern). The twins' byte-identical guard-AST helpers
+  dedup into `module-loader/guard-ast.ts`. Behavior, site list, and
+  boundaries unchanged from the R3-passed contract; cjs's markSymbolKeyAlias
+  deliberately drops the local root-fallback convention (a never-registered
+  binding must not exempt a key).
