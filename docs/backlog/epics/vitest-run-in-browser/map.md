@@ -8,9 +8,6 @@ are the original map indices; landed items are removed (ledger).
 
 ## Items
 
-4. `runtime-js/absent-builtin-members-loud-throws` — **loud-members** — I6;
-   `fs.statfsSync`, `child_process.spawnSync`, `process.memoryUsage` exist as
-   real or named-loud members instead of link-time misses / `undefined.bind`.
 5. `runtime-js/symbol-key-global-write-guard-precision` — **guard-precision** — I6;
    ESM+CJS Function guards stop rejecting `globalThis[<Symbol const>]` writes
    (@vitest/utils, undici).

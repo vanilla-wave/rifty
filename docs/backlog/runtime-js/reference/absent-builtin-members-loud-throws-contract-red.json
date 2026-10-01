@@ -1,0 +1,157 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Можно IMPLEMENT: R1 F1/F2/F3 закрыты; 2 NOTE, блокеров нет. Parity: exit 1, ожидаемый statfsSync ESM SyntaxError. Unit: 3/3 ожидаемых FAIL. Node v24.16.0 независимо подтвердил oracle. Удаление statfsSync/spawnSync убивает link; отсутствие memoryUsage — bind. Гостевой process — NodeProcess, не host; prototype-method identity=true. No-op и generic Error: по 3/3 FAIL. Freeze baseline PASS; рост 12→13 объявлен. Named-loud premise честен; sync transport/compat amendments подтверждены кодом. Tracked tree чист. До merge нужны IMPLEMENT и Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md; BASE 0c4c1b07; ROUND 2, дерево eabda439, R1 d9717bdb",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:20",
+      "summary": "Worker keepalive: item 8 открыт."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:18",
+      "summary": "Process lifecycle/exitCode: item 7 открыт."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:16",
+      "summary": "stdio, advanced IPC, vm offsets и vitest acceptance: items 6, 9, 10, 12 открыты."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:29",
+      "summary": "Worker stdio/execArgv и threads acceptance: items 11, 12 открыты."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:11",
+      "summary": "Item 4 подготовлен; реализация/Final+GREEN впереди. Item 5 и полная проверка module tree открыты."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:32",
+      "summary": "Browser acceptance и vitest.md: item 12 открыт."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: ESM statfsSync links, function; CALL throws NotImplementedError('fs.statfsSync').",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/process/absent-members-link.case.ts:25; packages/runtime-js/src/builtins/absent-members-loud.test.ts:18",
+      "note": "R1 link/no-op holes убиты. F4 NOTE: NotImplementedError('fs.statfsSync.wrong') проходит неизменённые assertions; exact label не различается."
+    },
+    {
+      "row": "Acceptance 2: ESM spawnSync links, function; CALL throws NotImplementedError('child_process.spawnSync').",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/process/absent-members-link.case.ts:26; packages/runtime-js/src/builtins/absent-members-loud.test.ts:25",
+      "note": "Удалённый spawnSync даёт ESM SyntaxError; no-op убит. F4 NOTE: NotImplementedError('child_process.spawnSync.wrong') проходит."
+    },
+    {
+      "row": "Acceptance 3: process.memoryUsage function; bind succeeds; CALL throws NotImplementedError('process.memoryUsage').",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/process/absent-members-link.case.ts:30; packages/runtime-js/src/builtins/absent-members-loud.test.ts:34",
+      "note": "Гостевой process, отсутствие memoryUsage и no-op различаются. F4 NOTE: NotImplementedError('process.memoryUsage.wrong') проходит direct/bound assertions."
+    },
+    {
+      "row": "Acceptance 4: три ❌ compat rows с named gaps; fs через inventory/generation, process/child_process вручную.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md:61; tools/compat-matrix-generator/cli.js:334; tools/compat-matrix-generator/cli.js:1261; docs/public/compat/process.md:3; docs/public/compat/process.md:73",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: ESM named imports, explicit guest process, typeof/bind, arity 1/3/0, CJS↔ESM identity.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/absent-members-link.case.ts:24; packages/runtime-js/src/builtins/index.ts:59; packages/runtime-js/src/module-loader/cjs-interop-authority.ts:80",
+      "note": ""
+    },
+    {
+      "row": "Frozen oracle: function function function / function / 1 3 0 / true true true, Node v24.16.0.",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/absent-members-link.case.ts:18",
+      "note": ""
+    },
+    {
+      "row": "Reference contract: NodeProcess prototype freeze grows 12→13 only by memoryUsage; namespace identity retained.",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md:77; packages/runtime-js/src/module-loader/cjs-static-export-link.test.ts:364; tools/node-parity-runner/cases/process/absent-members-link.case.ts:37",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/absent-members-loud.test.ts:22",
+          "evidence": "node /private/tmp/r2-carrier-mutation-probe.mjs; Node v24.16.0, Vitest 2.1.9. Копии committed assertions: изменены только imports и mutation preamble; arity 1/3/0. feature+'.wrong' и изменённое .feature: 6/6 PASS, exit 0. No-op и generic Error с правильным message: 6/6 FAIL, exit 1. Output: /private/tmp/r2-carrier-mutation-results.json.",
+          "summary": "F4 NOTE: заявленные exact throws проверяются подстрокой, .feature не проверен (также строки 29, 40–41). Суффикс '.wrong' проходит все три direct/bound проверки. Carrier существует, исходный F2 закрыт; exactness advisory по REV-3/4.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/epics/vitest-run-in-browser/map.md:63",
+          "evidence": "",
+          "summary": "F5 NOTE: map всё ещё объясняет --changed как git via spawnSync, хотя unit:18–19 исправлен на async spawn. Остаточная неточность документации; границы claimed path не меняет.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "eabda439db2b7859761f2d689e6e6ba41990e984"
+}
