@@ -81,6 +81,10 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 
 ## Decisions
 
+ready-verdict: 2026-10-01 — Contract+RED @ aebb5c6c95d7a47aa4ab89e0cfea1ad60327cc08
+- 2026-10-01 — reception (REV-12): reviewer concern NOTE — Acceptance 2/4 and
+  Parity-2 range/tag/$ref parts are wider than I1's exact pin; kept as
+  discriminating guards (advisory, no contract change).
 - 2026-10-01 — discriminator: a bare override value is range-like iff every
   `||`-branch's every comparator is a version/x-range rifty `semver.ts`
   evaluates; non-range bare values keep name semantics; `$`-prefixed values

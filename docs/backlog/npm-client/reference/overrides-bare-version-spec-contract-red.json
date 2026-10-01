@@ -1,0 +1,110 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Можно IMPLEMENT: oracle подтверждён, 8 поведенческих RED, 3 допустимых guards GREEN, typecheck PASS. Merge после Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/npm-client/overrides-bare-version-spec.md; BASE 0c4c1b07",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: установка единственного vite@8.0.16 без 8.3.0 и literal-version fetch",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:135",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: ^8, 8.x, * связываются с keyed package",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:68",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: vite@8.0.16 сохраняет прежний результат",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:87",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: bare non-range сохраняет replacement-name semantics",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:100",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: npm и rifty получают один hoisted vite@8.0.16",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:135; docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md:225",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: npa version/range/tag/$ref discrimination; scoped rifty carriers",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:61; docs/backlog/npm-client/reference/overrides-bare-version-spec-evidence.md:14",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/npm-client/overrides-bare-version-spec.md:39",
+          "summary": "RDY-3: Acceptance 2/4 и ranges/tag/$ref части Parity 2 не следуют из I1 (docs/backlog/epics/vitest-run-in-browser/goal.md:97: точный pin и сохранение прежней spelling). Дополнительные guards допустимы как carrier notes/baseline; A4 подтверждает записанную divergence, не npm tag parity. По REV-4/5 coverage остаётся pass: исполнимого false-positive артефакта нет.",
+          "authority": "",
+          "evidence": "git show 0c4c1b07:docs/backlog/npm-client/overrides-bare-version-spec.md → draft без Acceptance/Parity. git diff 0c4c1b07..HEAD → новые критерии и tests; прежние tests/gates не ослаблены."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "aebb5c6c95d7a47aa4ab89e0cfea1ad60327cc08"
+}
