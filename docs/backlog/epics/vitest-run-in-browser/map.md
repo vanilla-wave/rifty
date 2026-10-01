@@ -60,7 +60,8 @@ are the original map indices; landed items are removed (ledger).
   `readline.emitKeypressEvents` NotImplementedError; not claimed.
 - coverage (`@vitest/coverage-v8` → `node:inspector` Session): loud proxy throw.
 - `vmThreads` / `vmForks` pools (`vm.SourceTextModule` absent): loud.
-- vitest browser mode, `typecheck` pool, `--changed` (git via spawnSync): loud.
+- vitest browser mode, `typecheck` pool, `--changed` (git via async spawn →
+  the spawn ceiling): loud.
 - vite versions other than exact 8.0.16 and vitest other than 4.1.11: unclaimed;
   vite outside the exact set keeps today's loud shadow/patch ceilings.
 - re-running `npm install` after changing the pin over an existing

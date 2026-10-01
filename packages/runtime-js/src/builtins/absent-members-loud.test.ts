@@ -14,20 +14,30 @@ import fs from './fs.ts';
 import cp from './child_process.ts';
 import proc from './process.ts';
 
+/** Exact feature pin: a substring message match would let
+ * `NotImplementedError('<feature>.wrong')` pass — only `.feature` is exact. */
+function thrownFeature(fn: () => unknown): string {
+  try {
+    fn();
+  } catch (err) {
+    expect(err).toBeInstanceOf(NotImplementedError);
+    return (err as NotImplementedError).feature;
+  }
+  throw new Error('expected a NotImplementedError, nothing was thrown');
+}
+
 describe('named-loud builtin members', () => {
   it('fs.statfsSync is a function whose CALL throws NotImplementedError', () => {
     expect(typeof fs.statfsSync).toBe('function');
     expect(fs.statfsSync.length).toBe(1);
-    expect(() => fs.statfsSync('/')).toThrowError(NotImplementedError);
-    expect(() => fs.statfsSync('/')).toThrowError('Not implemented: fs.statfsSync');
+    expect(thrownFeature(() => fs.statfsSync('/'))).toBe('fs.statfsSync');
   });
 
   it('child_process.spawnSync is a function whose CALL throws NotImplementedError', () => {
     expect(typeof cp.spawnSync).toBe('function');
     expect(cp.spawnSync.length).toBe(3);
-    expect(() => cp.spawnSync('git', ['status'])).toThrowError(NotImplementedError);
-    expect(() => cp.spawnSync('git', ['status'])).toThrowError(
-      'Not implemented: child_process.spawnSync',
+    expect(thrownFeature(() => cp.spawnSync('git', ['status']))).toBe(
+      'child_process.spawnSync',
     );
   });
 
@@ -36,8 +46,7 @@ describe('named-loud builtin members', () => {
     expect(proc.memoryUsage.length).toBe(0);
     const bound = proc.memoryUsage.bind(proc);
     expect(typeof bound).toBe('function');
-    expect(() => proc.memoryUsage()).toThrowError(NotImplementedError);
-    expect(() => proc.memoryUsage()).toThrowError('Not implemented: process.memoryUsage');
-    expect(() => bound()).toThrowError('Not implemented: process.memoryUsage');
+    expect(thrownFeature(() => proc.memoryUsage())).toBe('process.memoryUsage');
+    expect(thrownFeature(() => bound())).toBe('process.memoryUsage');
   });
 });
