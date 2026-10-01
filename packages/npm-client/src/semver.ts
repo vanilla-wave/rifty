@@ -293,12 +293,27 @@ export function isRangeLike(spec: string): boolean {
 }
 
 function isRangeComparator(cmp: string): boolean {
-  const base = cmp.replace(/^(>=|<=|>|<|=|\^|~)/, '');
-  if (coerce(base) !== null) return true;
-  // x-range forms coerce rejects: `1.x`, `1.2.*`, `x`, `*`. A wildcard is
-  // terminal-only (node-semver: `x.1`, `8.x.2` are not valid ranges) — a
-  // trailing-component pattern stays a package NAME.
-  return /^[v=]?(?:\d+(?:\.\d+)?\.)?(?:x|X|\*)$/.test(base);
+  const m = /^(>=|<=|>|<|=|\^|~)?(.*)$/.exec(cmp);
+  const op = m?.[1] ?? '';
+  const base = m?.[2] ?? '';
+  if (base === '') return false;
+  if (/[xX*]/.test(base)) {
+    // Bare terminal-wildcard x-ranges only: matchXRange evaluates those. An
+    // operator + wildcard base (`<8.x`, `^8.x`) is a valid npm range rifty
+    // mis-evaluates (string-compare fallback / null bounds) — not classified,
+    // loud packument-404 path. A non-terminal wildcard (`x.1`) is not a range
+    // in node-semver at all.
+    return op === '' && /^[v=]?(?:\d+(?:\.\d+)?\.)?(?:x|X|\*)$/.test(base);
+  }
+  // Numeric partial (`8`, `8.0`, with any operator) or full `X.Y.Z` with
+  // optional prerelease/build. node-semver rejects a partial carrying a
+  // prerelease (`1.2-beta`, `>=1.2-beta` are tags, not ranges); a partial
+  // with build (`1.2+build`) is a valid npm range rifty mis-evaluates — both
+  // stay names here.
+  return (
+    /^v?\d+(?:\.\d+)?(?:\.\d+)?$/.test(base) ||
+    /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(base)
+  );
 }
 
 export function pickBestVersion(

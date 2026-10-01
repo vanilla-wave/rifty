@@ -153,6 +153,33 @@ describe('resolveOverride — npm bare-version spelling (I1)', () => {
       source: 'user',
     });
   });
+
+  it.each([
+    // Valid npm ranges rifty's evaluator mis-reads → loud 404 path, not a
+    // silently wrong resolution (out of scope).
+    '<8.x',
+    '^8.x',
+    '~8.x',
+    '=8.x',
+    '1.2+build',
+    // node-semver rejects these (dist-tags in npm) → name semantics.
+    '1.2-beta',
+    '>=1.2-beta',
+  ])('keeps name semantics for %s', (value) => {
+    expect(resolveOverride('vite', undefined, { vite: value })).toEqual({
+      name: value,
+      range: null,
+      source: 'user',
+    });
+  });
+
+  it('classifies a full version with prerelease as a range', () => {
+    expect(resolveOverride('vite', undefined, { vite: '8.0.16-beta.1' })).toEqual({
+      name: 'vite',
+      range: '8.0.16-beta.1',
+      source: 'user',
+    });
+  });
 });
 
 describe('install — npm bare-version override end to end (I1)', () => {

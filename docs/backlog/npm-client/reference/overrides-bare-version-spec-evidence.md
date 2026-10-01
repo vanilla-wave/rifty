@@ -34,6 +34,26 @@ manifest `devDependencies {vitest 4.1.11}` + `overrides {"vite": "8.0.16"}` →
 `node_modules/vite@8.0.16` satisfying vitest's `^6.0.0 || ^7.0.0 || ^8.0.0`
 edge.
 
+## node-semver validRange discrimination (7.8.4, bundled with npm 11.17.0)
+
+Probed 2026-10-01 (`semver.validRange`) to pin which bare forms are ranges in
+npm at all, cross-checked against what rifty's `semver.ts` `matchesRange`
+evaluates correctly:
+
+```
+"8.0.16" → "8.0.16"                     "x.1" / "8.x.2" → null (not ranges)
+"^8" / "8.x" / "8" / "v8" / "=8" → ranges   "1.2-beta" / ">=1.2-beta" → null (tags)
+"*" / "x" → "*"                          "latest" / "bcryptjs" → null (tags/names)
+"1.2.3-beta" → "1.2.3-beta"              "8.0.0 - 8.9.9" → range (hyphen)
+"<8.x" / "^8.x" / "~1.x" / "=8.x" → ranges (operator + wildcard base)
+"1.2+build" → ">=1.2.0 <1.3.0-0"         ">=8.0.0 <9" → range
+```
+
+Rifty classifier = npm-range ∧ rifty-evaluates-correctly. npm-valid forms
+rifty mis-evaluates (operator+wildcard, hyphen, partial+build) stay on the
+loud packument-404 path; npm-invalid forms (non-terminal wildcard,
+partial+prerelease, names/tags) keep name semantics.
+
 ## rifty today (main 0c4c1b07)
 
 `overrides.ts` `parseTarget("8.0.16")` → `{name: "8.0.16", range: null}` →

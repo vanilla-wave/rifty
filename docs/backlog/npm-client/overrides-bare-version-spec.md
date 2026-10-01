@@ -70,9 +70,13 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 - `$ref` override values (`{"vite": "$dep"}`) — loud
   `NotImplementedError('npm-client.overrides.dollar-ref')`, never a packument
   fetch for the `$`-name.
-- Range forms rifty's `semver.ts` cannot evaluate (hyphen ranges
-  `"1.2.3 - 2.0.0"`) — not classified as ranges; keep today's loud
-  packument-404 path.
+- Range forms rifty's `semver.ts` cannot evaluate — hyphen ranges
+  (`"1.2.3 - 2.0.0"`), operator + wildcard bases (`"<8.x"`, `"^8.x"`,
+  `"~8.x"`, `"=8.x"`), partials with build metadata (`"1.2+build"`) — valid in
+  npm, but here they keep today's loud packument-404 path instead of a
+  silently wrong resolution. node-semver rejects partials with a prerelease
+  (`"1.2-beta"`, `">=1.2-beta"`) — those are dist-tags in npm and keep
+  replacement-name semantics.
 - Bare non-range values (`"bcryptjs"`, `"latest"`): npm reads them as
   same-name dist-tags; rifty keeps its replacement-name reading — recorded
   divergence (reference evidence), not claimed here.
@@ -85,6 +89,7 @@ ready-verdict: 2026-10-01 — Contract+RED @ aebb5c6c95d7a47aa4ab89e0cfea1ad6032
 - 2026-10-01 — reception (REV-12): reviewer concern NOTE — Acceptance 2/4 and
   Parity-2 range/tag/$ref parts are wider than I1's exact pin; kept as
   discriminating guards (advisory, no contract change).
+re-cut: 2026-10-01 — Out of scope enumerates the operator+wildcard / partial-prerelease / partial-build range forms as loud gaps (Final+GREEN blocker fixes) — trace: none
 - 2026-10-01 — discriminator: a bare override value is range-like iff every
   `||`-branch's every comparator is a version/x-range rifty `semver.ts`
   evaluates; non-range bare values keep name semantics; `$`-prefixed values
