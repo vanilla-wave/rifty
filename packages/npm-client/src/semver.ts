@@ -271,6 +271,36 @@ function matchXRange(version: string, range: string): boolean {
   return true;
 }
 
+/**
+ * True iff `spec` is a version/range in the forms {@link matchesRange}
+ * evaluates: exact/partial versions, x-ranges, `^`/`~`/comparator sets,
+ * `||` unions. Tells npm's bare-range override spelling (`"vite": "8.0.16"`)
+ * from a package name; anything outside these forms stays a name (loud
+ * packument-404 path), never a silently mis-evaluated range.
+ */
+export function isRangeLike(spec: string): boolean {
+  const branches = spec
+    .trim()
+    .split('||')
+    .map((b) => b.trim())
+    .filter(Boolean);
+  if (branches.length === 0) return false;
+  return branches.every((branch) => {
+    const normalized = branch.replace(/([<>=^~])\s+/g, '$1');
+    const comparators = normalized.split(/\s+/).filter(Boolean);
+    return comparators.length > 0 && comparators.every(isRangeComparator);
+  });
+}
+
+function isRangeComparator(cmp: string): boolean {
+  const base = cmp.replace(/^(>=|<=|>|<|=|\^|~)/, '');
+  if (coerce(base) !== null) return true;
+  // x-range forms coerce rejects: `1.x`, `1.2.*`, `x`, `*`.
+  return /^[v=]?(?:\d+|x|X|\*)(?:\.(?:\d+|x|X|\*)){0,2}(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(
+    base,
+  );
+}
+
 export function pickBestVersion(
   versions: readonly string[],
   range: string | undefined | null,

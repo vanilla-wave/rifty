@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- npm's bare-version override spelling (`"overrides": {"vite": "8.0.16"}`) resolves as a range on the keyed package instead of fetching a packument named by the value; `$ref` override values throw a named `NotImplementedError('npm-client.overrides.dollar-ref')`.
+
 - Match npm tar root stripping for DefinitelyTyped and other named roots; preserve ordinary property-name files and traversal rejection.
 
 
