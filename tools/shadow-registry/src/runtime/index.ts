@@ -28,3 +28,5 @@ export {
   DEFAULT_VITE8_CONFIG_PATH,
   DEFAULT_VITE8_CONFIG_JS,
 } from './project-defaults.ts';
+
+export { admitInstalledCliEntry } from './vitest-cli-admission.ts';

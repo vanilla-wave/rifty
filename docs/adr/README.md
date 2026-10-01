@@ -98,6 +98,14 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0383 | No COI VM default and preboot worker selection |
 | 0385 | Keep one foreground drain across HTTP server close |
 | 0422 | Retire callbacks with completed command invocations |
+| 0491 | Node lifecycle handlers and referenced Worker handles |
+| 0492 | Advanced fork IPC over the structured-clone channel |
+| 0493 | Host vm script offsets in shared stack mapping |
+| 0494 | Async WebAssembly jobs hold the Node event loop |
+| 0495 | Check dynamic global write keys at execution |
+| 0496 | Guest MessagePort references with native host channels |
+| 0497 | Node entry v5 startup execArgv semantics |
+| 0499 | Worker startup errors over existing private control |
 
 ### runtime-wasi
 
@@ -178,6 +186,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0399 | Preserve declared companion policy through retained-lock acquisition |
 | 0433 | Preserve Vite module URLs at the filesystem root |
 | 0435 | Follow npm tar root stripping for materialized installs |
+| 0500 | Installed CLI capability admission before native execution |
 
 ### playground
 

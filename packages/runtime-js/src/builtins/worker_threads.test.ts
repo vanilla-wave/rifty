@@ -421,6 +421,7 @@ globalThis.onmessage = ({ data }) => {
           { RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm' },
           {
             kind: 'worker-thread',
+            execArgv: [],
             remoteFs: true,
             threadId: worker.threadId,
           },
@@ -430,63 +431,7 @@ globalThis.onmessage = ({ data }) => {
     });
   });
 
-  it('rejects inherited eval execArgv before allocating a lossy worker thread', async () => {
-    _resetThreadIdCounterForTests();
-    const spawn = vi
-      .spyOn(globalProcessManager, 'spawnWorker')
-      .mockImplementation(() => makeFakeWorkerHandle([]));
-    (globalThis as Coi).crossOriginIsolated = true;
-    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
-    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
-      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
-    });
-    const parentEntry = buildNodeEntryWorkerEntry(
-      'https://rifty.test/node-entry.js',
-      { RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js' },
-      {
-        kind: 'eval',
-        source: '42',
-        print: false,
-        execArgv: ['-e', '42'],
-        remoteFs: true,
-        remoteFsRoot: REMOTE_FS_ROOT,
-      },
-    );
-    publishKernelEntryBootstrap(parentEntry.bootstrap ?? null);
-    const parent = new NodeProcess();
-    parent.execArgv.length = 0;
-    let worker: Worker | undefined;
-    let thrown: unknown;
-
-    await withProcessGlobal(parent, async () => {
-      try {
-        worker = new Worker('/workspace/worker.mjs');
-      } catch (error) {
-        thrown = error;
-      }
-      await Promise.resolve();
-      await worker?.terminate();
-    });
-
-    expect(thrown).toEqual(
-      expect.objectContaining({
-        name: 'NotImplementedError',
-        feature: 'worker_threads.Worker.execArgv',
-      }),
-    );
-    expect(spawn).not.toHaveBeenCalled();
-
-    publishKernelEntryBootstrap(null);
-    (globalThis as Coi).crossOriginIsolated = false;
-    writeFileSync('/worker-after-inherited-gap.js', ';');
-    const valid = new Worker('/worker-after-inherited-gap.js');
-    const exit = onceEvent(valid, 'exit');
-    expect(valid.threadId).toBe(1);
-    await exit;
-    expect(spawn).not.toHaveBeenCalled();
-  });
-
-  it('rejects an explicit execArgv override before allocating a worker thread', async () => {
+  it('rejects a nonempty execArgv override before allocating a worker thread', async () => {
     _resetThreadIdCounterForTests();
     const spawn = vi
       .spyOn(globalProcessManager, 'spawnWorker')
@@ -497,7 +442,7 @@ globalThis.onmessage = ({ data }) => {
       RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
     });
 
-    expect(() => new Worker('/workspace/worker.mjs', { execArgv: [] })).toThrow(
+    expect(() => new Worker('/workspace/worker.mjs', { execArgv: ['--inspect'] })).toThrow(
       expect.objectContaining({
         name: 'NotImplementedError',
         feature: 'worker_threads.Worker.execArgv',
@@ -590,6 +535,7 @@ globalThis.onmessage = ({ data }) => {
       { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
       {
         kind: 'program',
+        execArgv: [],
         bin: false,
         remoteFs: true,
         remoteFsRoot: REMOTE_FS_ROOT,
@@ -610,7 +556,7 @@ globalThis.onmessage = ({ data }) => {
         entry: {
           bootstrap: {
             payload: {
-              launch: { kind: 'worker-thread', remoteFsRoot: REMOTE_FS_ROOT },
+              launch: { kind: 'worker-thread', execArgv: [], remoteFsRoot: REMOTE_FS_ROOT },
             },
           },
         },
@@ -685,6 +631,7 @@ globalThis.onmessage = ({ data }) => {
           },
           {
             kind: 'worker-thread',
+            execArgv: [],
             remoteFs: true,
             threadId: worker.threadId,
           },
@@ -811,6 +758,7 @@ globalThis.onmessage = ({ data }) => {
         hostRuntime: { RIFTY_KERNEL_WORKER_URL: 'kernel.js' },
         launch: {
           kind: 'worker-thread',
+          execArgv: [],
           remoteFs: true,
           threadId: 77,
           workerDataJson: '{"mode":"rolldown"}',

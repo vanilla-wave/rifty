@@ -1,5 +1,6 @@
 import { dirname } from '@riftydev/vfs';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import { URLConstructor, fileURLToPathPosix } from '../internal/posix-file-url.ts';
 import { fileURLFromResolvedPath } from '../internal/posix-file-url.ts';
 import { hasURLScheme } from '../internal/url-scheme.ts';
 import { ModuleLoadError } from './errors.ts';
@@ -23,6 +24,7 @@ import {
   type PreparedEsm,
 } from './esm-job-types.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
+import { globalWriteKeyGuard } from './global-write-key.ts';
 import { withStackRemapping } from './source-maps.ts';
 
 export function evaluateAsyncJob(
@@ -245,9 +247,23 @@ function factoryArguments(
     }
   };
   const assetPath = (specifier: string): string => deps.resolve(specifier, resolved.id, true).id;
-  const metaResolve = (specifier: string): string => {
+  const metaResolve = (specifier: string, parent?: string): string => {
     if (hasURLScheme(specifier, 'node')) return specifier;
-    const dependency = deps.resolve(specifier, resolved.id, true);
+    const base =
+      deps.resolveParent && parent !== undefined
+        ? parent
+        : fileURLFromResolvedPath(resolved.id).href;
+    if (
+      specifier.startsWith('.') ||
+      specifier.startsWith('/') ||
+      /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(specifier)
+    )
+      return new URLConstructor(specifier, base).href;
+    const fromFile =
+      deps.resolveParent && parent !== undefined
+        ? fileURLToPathPosix(new URLConstructor(parent))
+        : resolved.id;
+    const dependency = deps.resolve(specifier, fromFile, true);
     return dependency.kind === 'builtin'
       ? dependency.id
       : fileURLFromResolvedPath(dependency.id).href;
@@ -266,6 +282,7 @@ function factoryArguments(
     metaResolve,
     routedConstructors.Function,
     deps.WebAssembly,
+    globalWriteKeyGuard('esm'),
   ];
 }
 

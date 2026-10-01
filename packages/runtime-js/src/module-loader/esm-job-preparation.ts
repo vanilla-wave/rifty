@@ -1,9 +1,10 @@
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
+import { uniqueHelperName } from './cjs-source-rewrite.ts';
 import { ModuleLoadError } from './errors.ts';
 import { transformEsm } from './esm-ast.ts';
 import { syncTransformCeiling } from './esm-job-state.ts';
 import type { EsmDirectFactory, EsmFactory, EsmLoaderDeps, PreparedEsm } from './esm-job-types.ts';
-import { assertNoEsmFunctionRoutingCeiling } from './esm.ts';
+import { rewriteEsmGlobalWriteKeys } from './esm.ts';
 import type { ResolvedModule } from './resolver.ts';
 
 export function transformedLoaderForId(id: string): 'ts' | 'tsx' | 'jsx' | null {
@@ -41,8 +42,9 @@ export function finishPreparation(
   source: string,
   mode: 'async' | 'sync',
 ): PreparedEsm {
-  assertNoEsmFunctionRoutingCeiling(source, resolved.id);
-  const transformed = (deps.transformEsm ?? transformEsm)(source, resolved.id);
+  const globalWriteKeyHelper = uniqueHelperName(source, '__riftyGlobalWriteKey');
+  const guarded = rewriteEsmGlobalWriteKeys(source, resolved.id, globalWriteKeyHelper);
+  const transformed = (deps.transformEsm ?? transformEsm)(guarded, resolved.id);
   deps.sourceMaps?.setGeneratedLineMap(resolved.id, transformed.lineMap);
   const stash: Record<string, string> = readRuntimeGlobal('esmStash') ?? {};
   stash[resolved.id] = transformed.body;
@@ -53,7 +55,7 @@ export function finishPreparation(
     resolved: deps.resolve(specifier, resolved.id, true),
   }));
   if (mode === 'sync' && transformed.hasTopLevelAwait) {
-    return { resolved, transformed, dependencies };
+    return { resolved, transformed, dependencies, globalWriteKeyHelper };
   }
   if (
     mode === 'async' &&
@@ -62,16 +64,23 @@ export function finishPreparation(
   ) {
     return {
       resolved,
+      globalWriteKeyHelper,
       transformed,
       dependencies,
-      directFactory: compileDirectEsmFactory(resolved, transformed),
+      directFactory: compileDirectEsmFactory(resolved, transformed, globalWriteKeyHelper),
     };
   }
   return {
     resolved,
+    globalWriteKeyHelper,
     transformed,
     dependencies,
-    factory: compileEsmFactory(resolved, transformed, transformed.hasTopLevelAwait),
+    factory: compileEsmFactory(
+      resolved,
+      transformed,
+      transformed.hasTopLevelAwait,
+      globalWriteKeyHelper,
+    ),
   };
 }
 
@@ -94,6 +103,7 @@ function compileEsmFactory(
   resolved: ResolvedModule,
   transformed: PreparedEsm['transformed'],
   asyncBody: boolean,
+  globalWriteKeyHelper: string,
 ): EsmFactory {
   const helper = transformed.helpers;
   try {
@@ -110,6 +120,7 @@ function compileEsmFactory(
       helper.metaResolve,
       'Function',
       helper.webAssembly,
+      globalWriteKeyHelper,
       `const ${helper.runtimeObject} = Object; return (${asyncBody ? 'async ' : ''}function* () {\nconst ${helper.importMeta} = { url: ${helper.importMetaUrl}, dirname: ${helper.metaDirname}, filename: ${helper.metaFilename}, resolve: ${helper.metaResolve} }; ${transformed.instantiationBody} yield;\n${transformed.body}\n})();\n//# sourceURL=${resolved.id}`,
     ) as EsmFactory;
   } catch (error) {
@@ -133,6 +144,7 @@ function compileEsmFactory(
 function compileDirectEsmFactory(
   resolved: ResolvedModule,
   transformed: PreparedEsm['transformed'],
+  globalWriteKeyHelper: string,
 ): EsmDirectFactory {
   const helper = transformed.helpers;
   try {
@@ -149,6 +161,7 @@ function compileDirectEsmFactory(
       helper.metaResolve,
       'Function',
       helper.webAssembly,
+      globalWriteKeyHelper,
       `const ${helper.runtimeObject} = Object; return (async function () {
 const ${helper.importMeta} = { url: ${helper.importMetaUrl}, dirname: ${helper.metaDirname}, filename: ${helper.metaFilename}, resolve: ${helper.metaResolve} }; ${transformed.instantiationBody}
 ${transformed.body}

@@ -714,34 +714,15 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
     return this;
   }
 
-  /**
-   * Connect a source `Readable` to a destination `Writable`.
-   *
-   * Symmetric wiring (improves on the pre-fix shape that left dangling
-   * listeners on either side after an error):
-   *   - source `'data'` → `dest.write()` (pause on backpressure);
-   *   - source `'end'`  → `dest.end()` (unless `opts.end === false`);
-   *   - source `'error'`→ propagate to dest then cleanup the wiring;
-   *   - dest   `'drain'`→ resume source;
-   *   - dest   `'error'`→ cleanup the wiring on both ends;
-   *   - dest   `'close'`→ cleanup the wiring on both ends.
-   *
-   * Multiple `pipe(dest, …)` calls to the same destination overwrite the
-   * previous wiring (the old cleanup runs first). This keeps the Map-per-dest
-   * contract — `unpipe(dest)` removes all of this readable's wirings to that
-   * destination in one call.
-   *
-   * @param dest Writable-like sink (anything matching {@link PipeableWritable}).
-   * @param opts `{end?: boolean}` — when `false`, source's `end` does NOT call
-   *   `dest.end()`. Default `true`, matching Node.
-   */
+  /** Pipe with backpressure; process stdio stays open, ordinary sinks end by default. */
   pipe<W extends PipeableWritable>(dest: W, opts: { end?: boolean } = {}): W {
     // Already piping to this dest: clean up first so the listener count returns
     // to baseline; the new wiring replaces it.
     const existing = this.pipeCleanups.get(dest);
     if (existing) existing();
 
-    const endOnFinish = opts.end ?? true;
+    const stdio = (globalThis as { process?: { stdout?: unknown; stderr?: unknown } }).process;
+    const endOnFinish = opts.end !== false && dest !== stdio?.stdout && dest !== stdio?.stderr;
     const onData = (chunk: unknown): void => {
       const writeResult = dest.write(chunk);
       if (writeResult === false) {

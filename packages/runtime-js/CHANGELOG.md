@@ -1,6 +1,18 @@
 # Changelog
 
+
 ## [Unreleased]
+
+- Generic beforeEntry shares startup cache; handled native info preserves natural drain (ADR-0500).
+
+- Forward inherited stdin privately; child close does not leave guest stdin flowing or referenced.
+- Missing inspector/promises imports and constructor calls now reach a named Session ceiling.
+
+- Dispatch process error handlers and exit events; inherit exitCode; reference live Workers and native WASM jobs (ADR-0491/0494).
+- Preserve advanced fork clone values/Buffer identity; expose Worker stdio (ADR-0492).
+- Apply host vm offsets and live global write-key guards (ADR-0493/0495).
+- Guest MessagePorts hold the Node loop; host channels remain independent (ADR-0496).
+- Migrate every launch to v5 raw execArgv; shared preload cache, custom conditions and resolve-parent support (ADR-0497).
 
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 

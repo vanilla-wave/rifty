@@ -12,7 +12,7 @@
  * for the terminated Worker's lifetime to own an already-queued error event.
  */
 
-import { NotImplementedError } from '@riftydev/io';
+import { NotImplementedError, createHostMessageChannel } from '@riftydev/io';
 import { getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
 import { DEFAULT_PAYLOAD_CAPACITY, type SabRing, createSabRing } from './ipc/sab-ring.ts';
 import type { SyncRpcCallerContext, SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
@@ -352,7 +352,7 @@ export function spawnKernelWorker(
     ring = createdRing.ring;
 
     const createTrackedChannel = (): MessageChannel => {
-      const channel = new MessageChannel();
+      const channel = createHostMessageChannel();
       acquiredFixedPorts.push(channel.port1, channel.port2);
       return channel;
     };

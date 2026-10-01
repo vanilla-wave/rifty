@@ -1,6 +1,10 @@
 # Changelog
 
+
 ## [Unreleased]
+
+- Keep process stdout/stderr open when a piped Readable ends.
+- Capture native host MessageChannels separately from guest ref tracking (ADR-0496).
 
 - Retire completed command listener scopes without guest meta-events; preserve surviving host listeners (ADR-0422).
 

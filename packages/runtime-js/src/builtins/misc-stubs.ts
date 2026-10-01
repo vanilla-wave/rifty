@@ -13,7 +13,7 @@ function loudProxy(name: string): Record<string, unknown> {
         if (prop === '__esModule') return true;
         if (typeof prop === 'symbol') return undefined;
         if (prop === 'default') return loudProxy(`${name}.default`);
-        return () => {
+        return function unsupportedBuiltinMember() {
           throw new NotImplementedError(`${name}.${String(prop)}`);
         };
       },
@@ -107,6 +107,7 @@ export const async_hooks = {
     }
   },
 };
+export const inspectorPromises = loudProxy('inspector/promises');
 export const inspector = loudProxy('inspector');
 export const repl = loudProxy('repl');
 export const punycode = loudProxy('punycode');

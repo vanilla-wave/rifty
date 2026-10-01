@@ -6,6 +6,7 @@ import { __setCreateRequireImpl } from '../builtins/module.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
 import { createRequirePath } from '../internal/create-require-path.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import { parseNodeStartup } from '../internal/node-startup.ts';
 import { sandboxToolchainWebAssembly } from '../internal/sandbox-toolchain-realm.ts';
 import { createCjsInteropAuthority } from './cjs-interop-authority.ts';
 import {
@@ -27,6 +28,7 @@ export type { TransformSourceHook } from './esm-job.ts';
 export type { PathAliases } from './resolver.ts';
 
 export interface ModuleLoaderOptions {
+  readonly execArgv?: readonly string[];
   /** Working directory used when the caller passes a relative `entry` to `import`/`require`. */
   readonly cwd?: string;
   /**
@@ -397,7 +399,8 @@ function createModuleLoaderCore(
   // bypassing a later custom hook while preserving normal CJS cache identity.
   const customJsRegistry = new ModuleRegistry();
   const defaultRequiredEsm = new Set<string>();
-  const resolver = createResolver(vfs, opts);
+  const startup = parseNodeStartup(opts.execArgv ?? []);
+  const resolver = createResolver(vfs, { ...opts, conditions: startup.conditions });
   let loaderModuleBuiltin: Record<string, unknown> | null = null;
   const loadBuiltinForLoader = (id: string): Record<string, unknown> => {
     if (builtinOverrides !== undefined && id === 'node:module') {
@@ -485,6 +488,7 @@ function createModuleLoaderCore(
     transformSource: cachedTransform,
     transformEsm: cachedTransformEsm,
     WebAssembly: sandboxToolchainWebAssembly(),
+    resolveParent: startup.resolveParent,
     staticImportNames: cjsInterop.staticImportNames,
     resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule {
       return resolver.resolve(specifier, { fromFile, esm });
@@ -668,8 +672,11 @@ export function createNodeEvalScriptRunner(opts: {
   readonly cwd: string;
   readonly explicitCommonJs: boolean;
   readonly compiler?: NodeEvalCompiler;
+  readonly execArgv?: readonly string[];
 }): NodeEvalScriptRunner {
-  const core = createModuleLoaderCore(opts.vfs, { cwd: opts.cwd });
+  const core = createModuleLoaderCore(opts.vfs, { cwd: opts.cwd, execArgv: opts.execArgv });
+  for (const preload of parseNodeStartup(opts.execArgv ?? []).preloads)
+    core.loader.require(preload, `${opts.cwd}/[preload].cjs`);
   return {
     registry: core.loader.registry,
     run: (source) => core.runNodeEvalScript(source, opts.explicitCommonJs, opts.compiler),

@@ -284,15 +284,17 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
       vfs,
       entryPath,
       cwd: spec.cwd,
+      execArgv: launch.execArgv,
       ...(launch.kind === 'program' && launch.bin ? { bin: true } : {}),
     });
-  if (launch.kind !== 'program' || !launch.nodeServe) {
+  if (launch.kind === 'program' && !launch.nodeServe) {
     await runEntry();
     return;
   }
 
   registerNetBuiltins();
   const proc = globalThis.process;
+  const previewScope = launch.kind === 'worker-thread' ? undefined : launch.previewScope;
   await runNodeProgramLifecycle({
     runEntry,
     listPorts,
@@ -303,9 +305,9 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
       serveCrossRealmPreview(
         port,
         async (request) => dispatchToPort(port, request),
-        launch.previewScope === undefined ? {} : { scope: launch.previewScope },
+        previewScope === undefined ? {} : { scope: previewScope },
       ),
-    postListening: (ports) => postNodeProcessListeningControl(proc, ports, launch.previewScope),
+    postListening: (ports) => postNodeProcessListeningControl(proc, ports, previewScope),
     readExitCode: () => proc.exitCode,
     exit: (code) => proc.exit(code),
   });

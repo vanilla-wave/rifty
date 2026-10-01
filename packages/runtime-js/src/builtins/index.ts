@@ -21,7 +21,16 @@ import diagnosticsChannelModule from './diagnostics_channel.ts';
  */
 import { EventEmitter, once as eventsOnce } from './events.ts';
 import fsModule, { promises as fsPromises } from './fs.ts';
-import { cluster, punycode, repl, sys, async_hooks, inspector, v8 } from './misc-stubs.ts';
+import {
+  cluster,
+  punycode,
+  repl,
+  sys,
+  async_hooks,
+  inspector,
+  inspectorPromises,
+  v8,
+} from './misc-stubs.ts';
 import moduleModule from './module.ts';
 import { dgram, dns, readline, tls, http2 } from './null-net-stubs.ts';
 import osModule from './os.ts';
@@ -71,6 +80,8 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
   runtimeJsBuiltinsRegistered = true;
 
   registerBuiltin('path', () => pathModule);
+  registerBuiltin('path/posix', () => pathModule.posix);
+  registerBuiltin('path/win32', () => pathModule.win32);
   registerBuiltin('events', () => {
     const exports = EventEmitter as unknown as Record<string, unknown>;
     exports.EventEmitter = EventEmitter;
@@ -132,6 +143,7 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
   registerBuiltin('wasi', () => wasiModule);
   registerBuiltin('async_hooks', () => async_hooks);
   registerBuiltin('inspector', () => inspector);
+  registerBuiltin('inspector/promises', () => inspectorPromises);
   registerBuiltin('repl', () => repl);
   registerBuiltin('constants', () => nodeConstants);
   registerBuiltin('punycode', () => punycode);

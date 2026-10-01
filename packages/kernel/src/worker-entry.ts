@@ -35,6 +35,7 @@
  *     follow-ups.
  */
 
+import { markHostMessagePort } from '@riftydev/io';
 import { DEFAULT_PAYLOAD_CAPACITY, SabRing } from './ipc/sab-ring.ts';
 import { SyncRpcClient } from './ipc/sync-client.ts';
 import {
@@ -494,6 +495,9 @@ export function installWorkerEntry(
     target.removeEventListener('message', onMessage as unknown as EventListener);
 
     const spec = msg.spec;
+    for (const port of Object.values(spec.stdio)) {
+      if (port instanceof MessagePort) markHostMessagePort(port);
+    }
     const closeAfterExit = installWorkerPeerCloseAttestation(target, spec);
     target.addEventListener('error', (event) => {
       scheduleWorkerMicrotask(() => {

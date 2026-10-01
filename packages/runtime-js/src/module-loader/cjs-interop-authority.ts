@@ -66,7 +66,17 @@ export function createCjsInteropAuthority(options: {
     }
     node.names.add('default');
     if (resolved.kind === 'builtin') {
-      for (const name of Object.keys(loadBuiltin(resolved.id))) node.names.add(name);
+      const outer = loadBuiltin(resolved.id);
+      for (const name of Object.keys(outer)) node.names.add(name);
+      if (typeof outer === 'object' && outer !== null) {
+        const prototype = Object.getPrototypeOf(outer) as object | null;
+        const inherited = prototype && Object.getPrototypeOf(prototype);
+        if (prototype && prototype !== Object.prototype) {
+          for (const name of Object.getOwnPropertyNames(prototype)) {
+            if (name !== 'constructor' && !(inherited && name in inherited)) node.names.add(name);
+          }
+        }
+      }
       return node;
     }
     if (resolved.kind === 'json') {

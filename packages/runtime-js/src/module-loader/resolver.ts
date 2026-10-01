@@ -66,6 +66,7 @@ export type PathAliases = Readonly<Record<string, string | readonly string[]>>;
 
 /** Options for {@link createResolver}. */
 export interface ResolverOptions {
+  readonly conditions?: readonly string[];
   /** tsconfig-style path aliases (ADR-0066). Absent = Node-faithful resolution. */
   readonly paths?: PathAliases;
   /**
@@ -110,16 +111,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
   const autoDiscoverTsconfigPaths = resolverOpts.autoDiscoverTsconfigPaths === true;
   const tsconfig =
     autoDiscoverTsconfigPaths && explicitPaths === undefined ? requireTsconfigPaths() : undefined;
-  // package.json parse cache (perf #5). N sibling imports from one package
-  // re-decoded+re-parsed its package.json N times; cache by absolute path.
-  // Cleared whole in `loader.invalidate()` (both arms) — `load-fixture` reload
-  // overwrites package.json then invalidates, so a stale `type`/`main`/`exports`
-  // would silently flip ESM/CJS classification.
   const pkgCache: PkgCache = new Map();
-  // Resolution memo (perf #15): key `esm\0fromDir\0specifier` -> resolved
-  // file-id. NEVER caches not-found (guest writes / npm install create files
-  // without firing invalidate) nor the ERR_PACKAGE_PATH_NOT_EXPORTED throw.
-  // Cleared whole on ANY invalidate (input-keyed; cannot prune by resolved id).
   const resolveCache = new Map<string, string>();
   const nearestTsconfigCache = new Map<string, string | null>();
   const tsconfigResolutionCache = new Map<string, TsconfigPathResolution | null>();
@@ -167,7 +159,14 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
       }
 
       if (specifier.startsWith('#')) {
-        const filePath = resolveImportsSpecifier(vfs, pkgCache, specifier, fromDir, opts.esm);
+        const filePath = resolveImportsSpecifier(
+          vfs,
+          pkgCache,
+          specifier,
+          fromDir,
+          opts.esm,
+          resolverOpts.conditions ?? [],
+        );
         if (filePath === null) {
           throw new ModuleLoadError(
             'MODULE_NOT_FOUND',
@@ -209,16 +208,18 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
         }
       }
 
-      // Resolution memo (perf #15): key by (esm,fromDir,specifier). A HIT skips
-      // the full node_modules walk; `readResolved` still re-reads source fresh.
-      // Only SUCCESSFUL (non-null) resolutions are cached — a miss leaves the
-      // memo untouched so a later-created file resolves, and the
-      // ERR_PACKAGE_PATH_NOT_EXPORTED throw propagates before any `set` is reached.
       const resolveKey = `${opts.esm ? 1 : 0}\0${fromDir}\0${specifier}`;
       const cached = resolveCache.get(resolveKey);
       if (cached !== undefined) return readResolved(vfs, pkgCache, cached, opts.esm);
 
-      const filePath = resolveSpecifierToFile(vfs, pkgCache, specifier, fromDir, opts.esm);
+      const filePath = resolveSpecifierToFile(
+        vfs,
+        pkgCache,
+        specifier,
+        fromDir,
+        opts.esm,
+        resolverOpts.conditions ?? [],
+      );
       if (filePath === null) {
         throw moduleNotFound(specifier, opts.fromFile, opts.esm);
       }
@@ -339,6 +340,7 @@ function resolveSpecifierToFile(
   specifier: string,
   fromDir: string,
   esm: boolean,
+  customConditions: readonly string[] = [],
 ): string | null {
   const order = resolutionOrder(esm);
   if (isRelativeSpecifier(specifier)) {
@@ -348,7 +350,7 @@ function resolveSpecifierToFile(
   if (isAbsolute(specifier)) {
     return resolveAsFileOrDir(vfs, pkgCache, normalizePath(specifier), order);
   }
-  return resolveBareSpecifier(vfs, pkgCache, specifier, fromDir, esm);
+  return resolveBareSpecifier(vfs, pkgCache, specifier, fromDir, esm, customConditions);
 }
 
 /**
@@ -511,11 +513,19 @@ function resolveBareSpecifier(
   specifier: string,
   fromDir: string,
   esm: boolean,
+  customConditions: readonly string[] = [],
 ): string | null {
   const order = resolutionOrder(esm);
   const trailingDirectorySegment = hasTrailingDirectorySegment(specifier);
   for (const nodeModulesDir of nodeModulesPaths(fromDir)) {
-    const exported = resolvePackageExports(vfs, pkgCache, nodeModulesDir, specifier, esm);
+    const exported = resolvePackageExports(
+      vfs,
+      pkgCache,
+      nodeModulesDir,
+      specifier,
+      esm,
+      customConditions,
+    );
     if (exported !== null) return exported;
 
     const candidate = joinPath(nodeModulesDir, specifier);
@@ -575,6 +585,7 @@ function resolvePackageExports(
   nodeModulesDir: string,
   specifier: string,
   esm: boolean,
+  customConditions: readonly string[] = [],
 ): string | null {
   const parsed = parsePackageRequest(specifier);
   if (parsed === null) return null;
@@ -584,7 +595,7 @@ function resolvePackageExports(
   const pkg = readPackageJson(vfs, pkgCache, pkgJsonPath);
   if (pkg.exports === undefined || pkg.exports === null) return null;
 
-  const target = resolveExports(pkg.exports, parsed.subpath, esm);
+  const target = resolveExports(pkg.exports, parsed.subpath, esm, customConditions);
   if (target === null) {
     throw new ModuleLoadError(
       'ERR_PACKAGE_PATH_NOT_EXPORTED',
@@ -638,6 +649,7 @@ function resolveImportsSpecifier(
   specifier: string,
   fromDir: string,
   esm: boolean,
+  customConditions: readonly string[] = [],
 ): string | null {
   let dir = fromDir;
   while (true) {
@@ -645,7 +657,7 @@ function resolveImportsSpecifier(
     if (vfs.statSyncOrNull(pkgJsonPath)?.isFile) {
       const pkg = readPackageJson(vfs, pkgCache, pkgJsonPath);
       if (pkg.imports !== undefined) {
-        const resolved = resolveImports(pkg.imports, specifier, esm);
+        const resolved = resolveImports(pkg.imports, specifier, esm, customConditions);
         if (resolved !== null) {
           // `imports` targets may be absolute, file-relative, or bare ("lodash").
           if (resolved.startsWith('./') || resolved.startsWith('../')) {
@@ -655,10 +667,9 @@ function resolveImportsSpecifier(
             return resolveExactPackageTarget(vfs, normalizePath(resolved));
           }
           // Bare specifier — recurse through the normal bare resolver.
-          return resolveBareSpecifier(vfs, pkgCache, resolved, dir, esm);
+          return resolveBareSpecifier(vfs, pkgCache, resolved, dir, esm, customConditions);
         }
       }
-      // First package.json found, no match — stop walking (Node spec).
       return null;
     }
     if (dir === '/') return null;
@@ -668,28 +679,38 @@ function resolveImportsSpecifier(
   }
 }
 
-function resolveImports(field: ExportsField, specifier: string, esm: boolean): string | null {
+function resolveImports(
+  field: ExportsField,
+  specifier: string,
+  esm: boolean,
+  customConditions: readonly string[] = [],
+): string | null {
   if (field === null || typeof field !== 'object' || Array.isArray(field)) return null;
   const obj = field as { [key: string]: ExportsField | null };
   const direct = obj[specifier];
   if (direct !== undefined && direct !== null) {
-    return resolveConditionTree(direct, esm);
+    return resolveConditionTree(direct, esm, customConditions);
   }
   const wildcard = findWildcard(obj, specifier);
   // `undefined` = no pattern matched; `null` = most-specific pattern is a block.
   // Both mean no resolution; only a real target resolves.
   if (wildcard !== null && wildcard !== undefined) {
-    return resolveConditionTree(wildcard, esm);
+    return resolveConditionTree(wildcard, esm, customConditions);
   }
   return null;
 }
 
-function resolveExports(field: ExportsField, subpath: string, esm: boolean): string | null {
+function resolveExports(
+  field: ExportsField,
+  subpath: string,
+  esm: boolean,
+  customConditions: readonly string[] = [],
+): string | null {
   if (typeof field === 'string') return subpath === '.' ? field : null;
   if (Array.isArray(field)) {
     const tried = field as readonly ExportsField[];
     for (const item of tried) {
-      const r = resolveExports(item, subpath, esm);
+      const r = resolveExports(item, subpath, esm, customConditions);
       if (r !== null) return r;
     }
     return null;
@@ -703,33 +724,37 @@ function resolveExports(field: ExportsField, subpath: string, esm: boolean): str
   if (hasSubpaths) {
     const direct = obj[subpath];
     if (direct !== undefined && direct !== null) {
-      return resolveConditionTree(direct, esm);
+      return resolveConditionTree(direct, esm, customConditions);
     }
     const wildcard = findWildcard(obj, subpath);
     // `undefined` = no pattern matched; `null` = most-specific pattern is a block
     // (e.g. effect's `"./internal/*": null`) → caller throws
     // ERR_PACKAGE_PATH_NOT_EXPORTED. Only a real target resolves.
     if (wildcard !== null && wildcard !== undefined) {
-      return resolveConditionTree(wildcard, esm);
+      return resolveConditionTree(wildcard, esm, customConditions);
     }
     return null;
   }
 
   if (subpath !== '.') return null;
-  return resolveConditionTree(field, esm);
+  return resolveConditionTree(field, esm, customConditions);
 }
 
-function resolveConditionTree(node: ExportsField, esm: boolean): string | null {
+function resolveConditionTree(
+  node: ExportsField,
+  esm: boolean,
+  customConditions: readonly string[] = [],
+): string | null {
   if (typeof node === 'string') return node;
   if (Array.isArray(node)) {
     for (const item of node) {
-      const r = resolveConditionTree(item, esm);
+      const r = resolveConditionTree(item, esm, customConditions);
       if (r !== null) return r;
     }
     return null;
   }
   if (node === null || typeof node !== 'object') return null;
-  const conditions = activeConditions(esm);
+  const conditions: readonly string[] = [...activeConditions(esm), ...customConditions];
   const conditional = node as Record<string, ExportsField | null>;
   // Node walks conditional-object keys in declaration order. `conditions` is a
   // membership set, not a priority list: an earlier `default` intentionally
@@ -739,7 +764,7 @@ function resolveConditionTree(node: ExportsField, esm: boolean): string | null {
     const sub = conditional[cond];
     if (sub === null) return null;
     if (sub !== undefined) {
-      const r = resolveConditionTree(sub, esm);
+      const r = resolveConditionTree(sub, esm, customConditions);
       if (r !== null) return r;
     }
   }

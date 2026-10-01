@@ -5,36 +5,36 @@ import { proveRiftyServiceWorkerControl } from './service-worker-control.ts';
 
 class BoundaryWorker {
   reply: MessagePort | undefined;
+  receive: MessagePort | undefined;
   postMessage(_message: unknown, transfer: Transferable[]) {
     const reply = transfer[0];
     if (!(reply instanceof MessagePort)) throw new Error('Expected native reply port');
     this.reply = reply;
+    this.receive = receivingPorts.at(-1);
+    boundaries.push(this);
   }
 }
 class BoundaryContainer extends EventTarget {
   controller: BoundaryWorker | null = new BoundaryWorker();
 }
-const nativeMessageChannel = globalThis.MessageChannel;
-const channels: MessageChannel[] = [];
-const aborts: AbortController[] = [];
+const boundaries: BoundaryWorker[] = [];
+const receivingPorts: MessagePort[] = [];
+const nativeAdd = MessagePort.prototype.addEventListener;
 beforeEach(() => {
-  vi.stubGlobal(
-    'MessageChannel',
-    class extends nativeMessageChannel {
-      constructor() {
-        super();
-        channels.push(this);
-      }
-    },
-  );
+  vi.spyOn(MessagePort.prototype, 'addEventListener').mockImplementation(function (
+    this: MessagePort,
+    ...args: Parameters<MessagePort['addEventListener']>
+  ) {
+    if (args[0] === 'message') receivingPorts.push(this);
+    return Reflect.apply(nativeAdd, this, args);
+  });
 });
+const aborts: AbortController[] = [];
 afterEach(() => {
   for (const abort of aborts.splice(0)) abort.abort('test cleanup');
-  for (const channel of channels.splice(0)) {
-    channel.port1.close();
-    channel.port2.close();
-  }
-  vi.unstubAllGlobals();
+  for (const worker of boundaries.splice(0)) worker.reply?.close();
+  receivingPorts.length = 0;
+  vi.restoreAllMocks();
 });
 
 function begin(previewPrefix?: string) {
@@ -83,15 +83,17 @@ function begin(previewPrefix?: string) {
 }
 async function deliver(worker: BoundaryWorker | null, frame: unknown) {
   const reply = worker?.reply;
-  const channel = channels.find((channel) => channel.port2 === reply);
-  if (reply === undefined || channel === undefined) throw new Error('Missing native proof channel');
+  if (reply === undefined) throw new Error('Missing native proof channel');
+  const receive = worker?.receive;
+  if (!receive) throw new Error('Missing native receiving port');
   const delivered = new Promise<void>((resolve) =>
-    channel.port1.addEventListener('message', () => resolve(), { once: true }),
+    nativeAdd.call(receive, 'message', () => resolve(), { once: true }),
   );
   reply.postMessage(frame);
   await delivered;
   await Promise.resolve();
 }
+
 function pong(previewPrefix?: string) {
   return {
     type: SW_PONG,

@@ -1,3 +1,4 @@
+import { createHostMessageChannel } from '@riftydev/io';
 import { DEFAULT_PREVIEW_PREFIX } from '@riftydev/io';
 import { SW_FRAME_VERSION, SW_PING, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service-worker';
 
@@ -95,7 +96,7 @@ export function proveRiftyServiceWorkerControl(
       if (controller === null) return;
       let channel: MessageChannel;
       try {
-        channel = new MessageChannel();
+        channel = createHostMessageChannel();
       } catch (error) {
         finish(toError(error));
         return;

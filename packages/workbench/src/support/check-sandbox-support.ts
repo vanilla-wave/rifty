@@ -1,3 +1,4 @@
+import { createHostMessageChannel } from '@riftydev/io';
 import { CHECK_IDS, WORKER_CLAIMS, WORKER_EVIDENCE, failure, modes } from './report.ts';
 import type {
   SandboxSupportCheck,
@@ -203,7 +204,7 @@ export async function checkSandboxSupport(
         resolveBroadcast = resolve;
       });
       work.push(workerDone, portDone, broadcastDone);
-      port = new MessageChannel();
+      port = createHostMessageChannel();
       port.port1.onmessage = (event) => {
         const data = event.data as { name?: unknown; bytes?: unknown };
         if (

@@ -80,3 +80,5 @@ ADR-0267, ADR-0326, ADR-0325, ADR-0332, and ADR-0334.
 ## Corrections (active)
 
 2026-09-10 — ADR-0416: Node entry now uses v4 for optional SQLite host configuration; eval semantics unchanged.
+
+2026-10-01 — ADR-0497: active v5 requires raw execArgv for program/worker launches; supported require preloads now share the entry loader. Eval identity/lifecycle remain.

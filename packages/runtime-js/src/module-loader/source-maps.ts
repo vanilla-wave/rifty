@@ -75,13 +75,45 @@ interface ActiveSourceMap {
 }
 
 const activeSourceMaps: ActiveSourceMap[] = [];
+interface VmOffsets {
+  filename: string;
+  lineOffset: number;
+  columnOffset: number;
+}
+const vmOffsets = new Map<string, VmOffsets>();
+let vmScriptId = 0;
+
+/** Each evaluation has its own source identity; returned functions keep its offsets. */
+export function registerVmStackOffsets(
+  filename: string,
+  lineOffset: number,
+  columnOffset: number,
+): string {
+  const id = `rifty-vm-${++vmScriptId}`;
+  vmOffsets.set(id, { filename, lineOffset, columnOffset });
+  installStackDispatcher();
+  return id;
+}
+
+function remapVmOffsets(stack: string): string {
+  return stack.replace(
+    /rifty-vm-\d+:(-?\d+):(-?\d+)/g,
+    (frame, lineText: string, columnText: string) => {
+      const id = frame.slice(0, frame.indexOf(':'));
+      const entry = vmOffsets.get(id);
+      if (!entry) return frame;
+      const line = Number(lineText);
+      return `${entry.filename}:${line + entry.lineOffset}:${Number(columnText) + (line === 1 ? entry.columnOffset : 0)}`;
+    },
+  );
+}
 let previousPrepareStackTrace: PrepareStackTrace | undefined;
 
 const dispatcherPrepareStackTrace: PrepareStackTrace = (err, stackTraces) => {
   const rendered = previousPrepareStackTrace
     ? String(previousPrepareStackTrace(err, stackTraces))
     : renderDefaultStack(err, stackTraces);
-  return remapActiveStack(rendered);
+  return remapActiveStack(remapVmOffsets(rendered));
 };
 
 export function extractInlineSourceMap(source: string): ExtractedSourceMap {
@@ -125,14 +157,15 @@ export async function withStackRemapping<T>(
 }
 
 function installStackDispatcher(): void {
-  if (activeSourceMaps.length > 0) return;
+  if ((Error as ErrorWithPrepareStackTrace).prepareStackTrace === dispatcherPrepareStackTrace)
+    return;
   const errorCtor = Error as ErrorWithPrepareStackTrace;
   previousPrepareStackTrace = errorCtor.prepareStackTrace;
   errorCtor.prepareStackTrace = dispatcherPrepareStackTrace;
 }
 
 function restoreStackDispatcherIfIdle(): void {
-  if (activeSourceMaps.length > 0) return;
+  if (activeSourceMaps.length > 0 || vmOffsets.size > 0) return;
   const errorCtor = Error as ErrorWithPrepareStackTrace;
   if (errorCtor.prepareStackTrace === dispatcherPrepareStackTrace) {
     if (previousPrepareStackTrace) errorCtor.prepareStackTrace = previousPrepareStackTrace;

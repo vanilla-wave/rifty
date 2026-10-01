@@ -75,3 +75,9 @@ export {
   synthesizePreviewUrl,
   parsePreviewPath,
 } from './preview-protocol.ts';
+
+export {
+  createHostMessageChannel,
+  markHostMessagePort,
+  HOST_MESSAGE_PORT,
+} from './host-message-channel.ts';

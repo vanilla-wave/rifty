@@ -1,6 +1,16 @@
 # Changelog
 
+- Drain worker-thread entries by referenced parentPort listeners and runtime handles.
+
 ## [Unreleased]
+
+- Registry CLI admission uses the real Node-entry loader after preloads; no source/argv rewrite (ADR-0500).
+
+- Report physical Worker startup failures before exit with real error data (ADR-0499).
+
+- Run exact Vitest 4.1.11/Vite 8.0.16 TS config/tests on forks and threads; native Worker lifecycle and startup parity.
+- Use v5 startup snapshots in every Node launch; naturally drain Worker threads (ADR-0491/0497).
+- Keep control/support host channels independent from guest MessagePort references (ADR-0496).
 
 - Remove `checkSandboxSupport` scratch storage even when the probe deadline expires while the Worker still holds its OPFS sync access handle; the lock is waited out inside the cleanup deadline, and a lock that outlives it reports `cleanup: incomplete` naming the native error instead of a failure the caller cannot act on (ADR-0439).
 - Report an observed cleanup rejection ahead of deadline expiry, with each native name and message retained in the aggregate reason.

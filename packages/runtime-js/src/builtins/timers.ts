@@ -1,3 +1,4 @@
+import { createHostMessageChannel } from '@riftydev/io';
 /**
  * Node-compatible timers. We rely on the host's `setTimeout`/`clearTimeout`/
  * `setInterval`/`clearInterval` and polyfill `setImmediate`/`clearImmediate`
@@ -216,7 +217,7 @@ const immediates = new Map<number, { fn: (...args: unknown[]) => void; args: unk
 let nextImmediateId = 1;
 
 const channel: MessageChannel | null =
-  typeof MessageChannel === 'function' ? new MessageChannel() : null;
+  typeof MessageChannel === 'function' ? createHostMessageChannel() : null;
 
 if (channel) {
   channel.port1.onmessage = () => {

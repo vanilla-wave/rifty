@@ -85,6 +85,24 @@ function parsePreviewPath(path, prefix = DEFAULT_PREVIEW_PREFIX) {
   return { port, rest };
 }
 
+// ../../packages/io/src/host-message-channel.ts
+var HOST_CONSTRUCTOR = Symbol.for("rifty.io.host-message-channel.v1");
+var HOST_MESSAGE_PORT = Symbol.for("rifty.io.host-message-port.v1");
+if (!Reflect.has(globalThis, HOST_CONSTRUCTOR)) {
+  Object.defineProperty(globalThis, HOST_CONSTRUCTOR, { value: globalThis.MessageChannel });
+}
+function markHostMessagePort(port) {
+  if (!Reflect.has(port, HOST_MESSAGE_PORT))
+    Object.defineProperty(port, HOST_MESSAGE_PORT, { value: true });
+}
+function createHostMessageChannel() {
+  const Native = Reflect.get(globalThis, HOST_CONSTRUCTOR);
+  const channel = new Native();
+  markHostMessagePort(channel.port1);
+  markHostMessagePort(channel.port2);
+  return channel;
+}
+
 // ../../packages/service-worker/src/owner-resolver.ts
 var fallbackWarned = /* @__PURE__ */ new WeakSet();
 var FirstWindowOwnerResolver = class {
@@ -674,7 +692,7 @@ async function routePreview(scope, request, match, readiness, timeoutMs, clientI
     }
     return previewErrorResponse(`preview-bridge not ready within ${timeoutMs}ms`, 503);
   }
-  const channel = new MessageChannel();
+  const channel = createHostMessageChannel();
   const bodyBytes = request.method === "GET" || request.method === "HEAD" ? null : new Uint8Array(await request.arrayBuffer());
   const requestId = readiness.nextRequestId();
   const headers = Object.fromEntries(request.headers);

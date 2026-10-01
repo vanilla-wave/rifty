@@ -67,3 +67,7 @@ has that lifecycle (ADR-0155).
 > selected only by canonical direct-entry script bytes. Installed nodemon uses
 > the generic server-capable `.bin` path and remains the sole watcher/restart
 > owner. Vite's installed-bin ownership is unchanged.
+
+## Corrections (active)
+
+2026-10-02 — ADR-0500 permits finite registry-owned installed-CLI capability admission before native entry. Other decisions/corrections remain.

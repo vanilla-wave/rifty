@@ -39,8 +39,10 @@ import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import {
   adoptNodeProcessBootstrap,
+  nodeProcessWorkerIpc,
   postNodeProcessListeningControl,
 } from '@riftydev/runtime-js/builtins/process';
+import { admitInstalledCliEntry } from '@riftydev/shadow-registry/runtime';
 import { syncMirror } from '@riftydev/vfs';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
@@ -63,7 +65,7 @@ const nodeWorkerRuntimeConfig = readNodeWorkerRuntimeConfig(
 );
 installNodeWorkerRuntimeConfig(nodeWorkerRuntimeConfig);
 const bin = launch.kind === 'program' && launch.bin;
-const nodeServe = launch.kind === 'eval' || (launch.kind === 'program' && launch.nodeServe);
+const nodeServe = launch.kind !== 'program' || launch.nodeServe;
 const previewScope = launch.kind === 'worker-thread' ? undefined : launch.previewScope;
 const entryPath = launch.kind === 'eval' ? undefined : proc.argv[1];
 function requiredEntryPath(value: unknown): string {
@@ -133,7 +135,7 @@ if (launch.kind === 'eval') {
   });
 }
 
-const runEntry = (): Promise<void> =>
+const runRawEntry = (): Promise<void> =>
   launch.kind === 'eval'
     ? runNodeEntry({
         kind: 'eval',
@@ -141,14 +143,41 @@ const runEntry = (): Promise<void> =>
         cwd: proc.cwd(),
         source: launch.source,
         print: launch.print,
-        explicitCommonJs: launch.execArgv[0] === '--input-type=commonjs',
+        explicitCommonJs: launch.execArgv.includes('--input-type=commonjs'),
+        execArgv: launch.execArgv,
       })
     : runNodeEntry({
         vfs: syncMirror(),
         entryPath: requiredEntryPath(entryPath),
         cwd: proc.cwd(),
         bin,
+        execArgv: launch.execArgv,
+        beforeEntry: (loader, specifier, fromFile) =>
+          admitInstalledCliEntry({
+            fs: syncMirror(),
+            specifier,
+            fromFile,
+            args: proc.argv.slice(2),
+            importModule: (name, parent) => loader.import(name, parent),
+          }),
       });
+
+const terminateWorker = proc.exit.bind(proc);
+const runEntry = async (): Promise<void> => {
+  try {
+    await runRawEntry();
+  } catch (error) {
+    if (
+      launch.kind !== 'worker-thread' ||
+      (typeof error === 'object' &&
+        error !== null &&
+        Reflect.get(error, 'code') === 'RIFTY_PROCESS_EXIT')
+    )
+      throw error;
+    nodeProcessWorkerIpc(proc).reportEntryError(error);
+    terminateWorker(1);
+  }
+};
 
 // `node <file>` server-capable path (ADR-0155): the child spawns serve:true, so
 // the bootstrap (not the kernel drain hook) owns the run-vs-serve decision. Net

@@ -11,6 +11,7 @@ import {
   readActiveNodeProcessBootstrap,
   readNodeProcessBootstrapIdentity,
 } from './process-bootstrap-identity.ts';
+import { forwardOwnedProcessStdin } from './process-stdin-forwarding.ts';
 
 type Listener = (...args: unknown[]) => void;
 
@@ -289,12 +290,18 @@ function forward(
   const onEnd: Listener = () => {
     if (endTarget) target.end?.();
   };
+  const stopForwarding = endTarget ? forwardOwnedProcessStdin(source, onData, onEnd) : undefined;
   const cleanup = (): void => {
-    detach(source, 'data', onData);
-    detach(source, 'end', onEnd);
+    if (stopForwarding) stopForwarding();
+    else {
+      detach(source, 'data', onData);
+      detach(source, 'end', onEnd);
+    }
   };
-  source.on('data', onData);
-  source.on('end', onEnd);
+  if (!stopForwarding) {
+    source.on('data', onData);
+    source.on('end', onEnd);
+  }
   handle.once('close', cleanup);
 }
 
@@ -308,6 +315,8 @@ export interface SpawnWorkerChildOptions {
   readonly cwd?: string;
   readonly env?: Record<string, string>;
   readonly fork: boolean;
+  readonly serialization?: 'json' | 'advanced';
+  readonly execArgv?: readonly string[];
 }
 
 /** Translate a validated `node <script>` launch to one real remote-FS Worker. */
@@ -322,9 +331,10 @@ export function spawnWorkerChild(
   const entryPath = plan.entryPath;
   const entry = buildConfiguredNodeEntryWorkerEntry({
     kind: 'program',
+    execArgv: options.execArgv ?? [],
     bin: false,
     remoteFs: true,
-    ipc: options.fork ? 'json' : 'none',
+    ipc: options.fork ? (options.serialization ?? 'json') : 'none',
     nodeServe: true,
   });
   const spec: SpawnWorkerSpec = {

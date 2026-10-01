@@ -1,3 +1,4 @@
+import { createHostMessageChannel } from '@riftydev/io';
 /**
  * SW-side routing for a matched `/preview/<port>/*` fetch. Asks the
  * {@link PreviewOwnerBinding} for the realm owning the registered process,
@@ -81,7 +82,7 @@ export async function routePreview(
     return previewErrorResponse(`preview-bridge not ready within ${timeoutMs}ms`, 503);
   }
 
-  const channel = new MessageChannel();
+  const channel = createHostMessageChannel();
   const bodyBytes =
     request.method === 'GET' || request.method === 'HEAD'
       ? null

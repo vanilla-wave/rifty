@@ -43,3 +43,7 @@ The goal manifest pins vite with `overrides: {vite: "8.0.16"}`.
 ## Decisions
 
 - 2026-10-01 — observed defect: existing npm oracle + executed parser RED (5 failures); no new-promise checkpoint (`RDY-8`).
+
+## Out of scope
+
+- Resolver/hoisting and `$ref` override forms; existing install errors remain visible.
