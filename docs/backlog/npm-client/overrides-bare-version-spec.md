@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: npm's bare-version override spelling (`"vite": "8.0.16"`) resolves as a range, not a package name
 created: 2026-09-15
 why: npm's own overrides spelling is a bare version/range; rifty's parser treats a value without '@' as a package NAME, so `{"overrides":{"vite":"8.0.16"}}` fetches packument "8.0.16" (404) — silent misparse of a real npm manifest
@@ -26,3 +26,20 @@ branch — no resolution/hoisting change (goal Decisions).
 ## Challenge
 
 challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved in goal.md; P1 verified by probe)
+
+## User scenario
+
+The goal manifest pins vite with `overrides: {vite: "8.0.16"}`.
+
+## Acceptance
+
+1. Bare version/range keeps the requested package name and pins its range. → I1
+2. Explicit `name@range` keeps working. → I1
+
+## Parity cases
+
+- npm 11.17.0 install oracle: goal evidence §Oracle. → I1
+
+## Decisions
+
+- 2026-10-01 — observed defect: existing npm oracle + executed parser RED (5 failures); no new-promise checkpoint (`RDY-8`).
