@@ -76,6 +76,8 @@ describe('resolveOverride — npm bare-version spelling (I1)', () => {
     '8.0.16+01',
     '0',
     '9007199254740990',
+    // Build metadata is stripped before node-semver's length check.
+    `8.0.16+${'b'.repeat(300)}`,
   ])('parses bare range %s as a range on the keyed package', (range) => {
     expect(resolveOverride('vite', undefined, { vite: range })).toEqual({
       name: 'vite',
@@ -195,6 +197,9 @@ describe('resolveOverride — npm bare-version spelling (I1)', () => {
     '12345678901234567',
     '9999999999999999',
     '9007199254740991',
+    // node-semver MAX_LENGTH (256, build stripped before the check).
+    `8.0.16-${'a'.repeat(250)}`,
+    `>=8.0.16-${'a'.repeat(250)}`,
   ])('keeps name semantics for %s', (value) => {
     expect(resolveOverride('vite', undefined, { vite: value })).toEqual({
       name: value,

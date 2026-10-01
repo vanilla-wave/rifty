@@ -74,13 +74,21 @@ bounds — node-semver rejects leading zeroes, >16-digit components, and values
 validRange: "08" / "08.0.16" / "08.x" / "00" → null   "0" / "0.0" / "0.0.0" → valid
 validRange: "12345678901234567" / "9999999999999999" / "9007199254740991" → null
 validRange: "9007199254740990" → ">=9007199254740990.0.0 <9007199254740991.0.0-0"
-npa type:   "08"/"00" → range (fails at pick time)   "08.0.16"/"8.0.16-01" → version (loose)
+npa type:   "08"/"00" → range   "08.0.16"/"8.0.16-01" → version (loose)
 npa type:   "12345678901234567" / "9999999999999999" / "9007199254740991" → tag
 ```
 
+npm-pick-manifest RESOLVES the loose forms: `"08"` → `>=8.0.0 <9.0.0-0` →
+picks 8.0.16; `"08.0.16"` → exact 8.0.16 (probed 2026-10-01 against npm
+11.17.0's bundled npm-pick-manifest). node-semver's length bound: the SemVer
+constructor rejects >256 chars, but range parsing strips build metadata
+first (BUILDSTRIPRE) — `"8.0.16-" + "a"*250` (257) → null, `"8.0.16+" +
+"b"*300` (307) → valid `"8.0.16"`.
+
 Rifty excludes every out-of-bounds form from the range classifier
-conservatively (loud replacement-name path), including `"8.0.16-01"` which
-npa reads loosely as a version.
+conservatively (loud replacement-name path), including the loose-resolvable
+leading-zero forms and `"8.0.16-01"` — recorded divergences from npm
+resolution, not npm failures.
 
 ## rifty today (main 0c4c1b07)
 

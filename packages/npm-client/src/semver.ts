@@ -314,6 +314,11 @@ function isValidBuild(build: string): boolean {
   return build.split('.').every((id) => id !== '' && /^[0-9A-Za-z-]+$/.test(id));
 }
 
+// node-semver MAX_LENGTH: the SemVer constructor rejects versions longer
+// than 256 chars. Range parsing strips build metadata BEFORE that check
+// (BUILDSTRIPRE in parseRange), so the bound applies to core+prerelease only.
+const MAX_VERSION_LENGTH = 256;
+
 /**
  * Strict node-semver version grammar: `8`, `8.0`, `8.0.16` with optional
  * prerelease/build on the FULL form only. Returns whether all three
@@ -330,6 +335,8 @@ function parseStrictVersion(base: string): { full: boolean } | null {
   if ((m[4] !== undefined || m[5] !== undefined) && !full) return null;
   if (m[4] !== undefined && !isValidPrerelease(m[4])) return null;
   if (m[5] !== undefined && !isValidBuild(m[5])) return null;
+  const withoutBuild = m[5] !== undefined ? base.slice(0, -(m[5].length + 1)) : base;
+  if (withoutBuild.length > MAX_VERSION_LENGTH) return null;
   return { full };
 }
 
