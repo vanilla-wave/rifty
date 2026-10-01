@@ -747,6 +747,16 @@ export class NodeProcess extends EventEmitter {
     return performance.now() / 1000;
   }
 
+  // Named-loud member (vitest-run-in-browser): Node returns the process's
+  // real V8 heap (rss/heapTotal/heapUsed/external/arrayBuffers); the browser
+  // realm cannot supply process-faithful heap statistics (`performance.memory`
+  // measures the whole host page, is non-standard, and is rounded), so any
+  // number would be fabricated — the member links/binds (vitest worker init
+  // does `process.memoryUsage.bind(process)`), the CALL is the loud gap.
+  memoryUsage(): never {
+    throw new NotImplementedError('process.memoryUsage');
+  }
+
   exit(code: unknown = 0): never {
     const c = coerceExitCode(code); // coerce string / throw on invalid (Node parity)
     this.#exitCode = c;

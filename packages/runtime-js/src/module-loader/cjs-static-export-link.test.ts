@@ -364,7 +364,7 @@ describe('CJS static export link validation', () => {
   it('freezes the exact prototype-contributed name set of the process namespace', () => {
     // The complete NodeProcess.prototype own-name set (minus constructor) is
     // pinned: legit methods (cwd, chdir, exit, exitCode, hrtime, kill,
-    // uptime) AND the recorded divergence — EventEmitter OVERRIDES plus the
+    // memoryUsage, uptime) AND the recorded divergence — EventEmitter OVERRIDES plus the
     // internal pushStdin, which real Node's node:process named-export set
     // lacks (rifty links where Node link-throws; contract Out of scope).
     // Any growth/shrink of NodeProcess.prototype breaks this test on purpose.
@@ -386,6 +386,7 @@ describe('CJS static export link validation', () => {
       'exitCode',
       'hrtime',
       'kill',
+      'memoryUsage',
       'prependListener',
       'pushStdin',
       'removeAllListeners',

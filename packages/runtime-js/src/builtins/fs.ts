@@ -721,6 +721,13 @@ export function existsSync(p: string): boolean {
   return syncMirror().existsSync(resolvePath(p));
 }
 
+// Named-loud member (vitest-run-in-browser): Node returns real volume
+// statistics; the Memory VFS has no volume, so any number would be
+// fabricated — the member links/binds, the CALL is the loud gap.
+export function statfsSync(p: string): never {
+  throw new NotImplementedError('fs.statfsSync');
+}
+
 // Remove-family kind gates (review 2026-07-05 handoff r3): the generic VFS
 // rmSync removes any empty-or-file path, so each Node entry point enforces
 // its own target-kind contract here — unlink never removes a directory,
@@ -1598,6 +1605,7 @@ const fs = {
   readdirSync,
   mkdirSync,
   statSync,
+  statfsSync,
   existsSync,
   unlinkSync,
   rmSync,

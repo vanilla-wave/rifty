@@ -9,19 +9,23 @@
  * calls. The call-time divergence vs Node is the declared compat ❌.
  */
 import { describe, expect, it } from 'vitest';
-import { NotImplementedError } from '@riftydev/io';
 import fs from './fs.ts';
 import cp from './child_process.ts';
 import proc from './process.ts';
 
 /** Exact feature pin: a substring message match would let
- * `NotImplementedError('<feature>.wrong')` pass — only `.feature` is exact. */
+ * `NotImplementedError('<feature>.wrong')` pass — only `.feature` is exact.
+ * Duck-typed on `name`: `@riftydev/vfs` and `@riftydev/io` each carry their
+ * own NotImplementedError class (vfs is the lower layer), and process.ts
+ * throws the vfs one — `instanceof` against either single class would lie. */
 function thrownFeature(fn: () => unknown): string {
   try {
     fn();
   } catch (err) {
-    expect(err).toBeInstanceOf(NotImplementedError);
-    return (err as NotImplementedError).feature;
+    if (!(err instanceof Error) || err.name !== 'NotImplementedError') {
+      throw new Error(`expected a NotImplementedError, got ${String(err)}`);
+    }
+    return (err as unknown as { feature: string }).feature;
   }
   throw new Error('expected a NotImplementedError, nothing was thrown');
 }
