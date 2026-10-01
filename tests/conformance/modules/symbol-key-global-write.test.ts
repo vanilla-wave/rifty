@@ -158,6 +158,15 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       globalThis[K] = 1;
       export const r = 1;
     `,
+    // Mutation-only exemption boundary: a Symbol key proves the KEY, never
+    // the VALUE — the Reflect.get read taint (constructor-read ceiling) is
+    // unchanged, so calling the read result stays loud.
+    '/reflect-get-called.mjs': `
+      const K = Symbol.for('rg.stays-loud');
+      const F = Reflect.get(globalThis, K);
+      F('x');
+      export const r = 1;
+    `,
   };
 
   for (const [path, source] of Object.entries(stillLoudEsm)) {
@@ -189,6 +198,14 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       f({ for: () => 'Function' });
       module.exports = 1;
     `,
+    // Mutation-only exemption boundary (ESM twin above): the Reflect.get
+    // read taint is unchanged for provable-Symbol keys.
+    '/cjs-reflect-get-called.cjs': `
+      const K = Symbol.for('cjs.rg.stays-loud');
+      const F = Reflect.get(globalThis, K);
+      F('x');
+      module.exports = 1;
+    `,
   };
 
   for (const [path, source] of Object.entries(stillLoudCjs)) {
@@ -199,4 +216,26 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       );
     });
   }
+});
+
+describe('export-wrapped declarations enter guard bindings', () => {
+  // RED today (probed 2026-10-01): predeclareGuardLexicalScope does not
+  // unwrap ExportNamedDeclaration, so `export const g = globalThis` never
+  // enters `bindings`, alias marking no-ops, and the Function-assignment
+  // ceiling is evaded. The predeclare unwrap (forced by the export-wrapped
+  // Symbol-alias carrier) closes the hole — pinned here, declared in the
+  // contract Decisions.
+  it('ESM export-wrapped globalThis alias write throws like its non-export twin', async () => {
+    const loader = setup({
+      '/export-global-alias.mjs': `
+        export const g = globalThis;
+        g.Function = function F() {};
+        export const r = 1;
+      `,
+    });
+    await expect(loader.import('/export-global-alias.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.esm-global-function-assignment',
+    });
+  });
 });

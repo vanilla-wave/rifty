@@ -25,11 +25,14 @@ Symbol-valued can never be the string 'Function' (nor 'eval').
 
 RED baseline (probed 2026-10-01 on the epic branch, module-loader in-process):
 THROWS today — direct write `globalThis[Symbol.for('x')] = v`, const-alias
-write, method call on the stashed object `globalThis[K].f()` (via
-`guardCalleeMayBeHostFunction` on the computed read), `Reflect.set`,
-`Object.assign(globalThis, { [K]: v })`, `Object.defineProperties`,
-`Object.defineProperty`, `delete globalThis[K]`, CJS twins. PASSES today
-(unchanged): plain alias read-back `const v = globalThis[K]`.
+write, `Reflect.set`, `Object.assign(globalThis, { [K]: v })`,
+`Object.defineProperties`, `Object.defineProperty`, `delete globalThis[K]`,
+CJS twins. PASSES today (unchanged): plain alias read-back
+`const v = globalThis[K]`, member access and method call `globalThis[K].f()`
+on the stashed object (the R1 record listed the method call as THROWS —
+wrong; its RED was masked by the write in the same module), and read-only
+`Reflect.get(globalThis, K)` (calling the read result throws —
+constructor-read taint, stays).
 
 Provable rule (both loaders, one helper each): a computed key is NOT
 Function/'eval'-suspect when it is
@@ -60,7 +63,10 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 3. Ceiling unchanged (regression): string-literal, concatenated-string,
    unknown-identifier, `let`-bound-symbol, and shadowed-`Symbol` computed keys
    still throw `module-loader.{esm,cjs}-global-function-assignment` — pinned
-   in BOTH loaders (a CJS let-allowing mutant must die); the
+   in BOTH loaders (a CJS let-allowing mutant must die); a
+   `Reflect.get(globalThis, K)` result with provable-Symbol `K` stays
+   tainted — calling it throws (mutation-only exemption, read ceiling
+   untouched) — pinned in BOTH loaders; the
    existing conformance pins (`tests/conformance/modules/resolver.test.ts`
    Function-assignment describe) stay green → I6 honesty
 4. `Reflect.set`/`Object.assign`/`Object.defineProperties`/`delete` with
@@ -74,18 +80,22 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 - Oracle: Node v24.16.0 (host) — Node has no such guard; the patterns simply
   run. Parity `expected` pinned from the oracle, never from memory.
 - Mechanism: one `isProvablySymbolKey(node, ctx)` helper per loader twin
-  (esm.ts, cjs.ts) consulted at exactly three suspect-site families:
-  `isGlobalFunctionWriteMember` (direct writes AND `delete` — delete routes
-  through `walkGuardAssignmentTarget`), `propertyMayBeFunction` (defineProperty
-  / Reflect.set / `__defineGetter__` key arguments; the same helper also
-  serves `Reflect.get`'s key — the exemption is correct there too, the value
-  at a Symbol key is never the host Function), and
-  `objectMayContainFunctionKey` (defineProperties / Object.assign literal
-  keys). READ/eval/callee sites are NOT touched: probed 2026-10-01 —
-  computed reads, member access and method calls on a stashed object pass
-  today without any exemption (the R1-contract claim that the method-call
-  pattern needs the read site was wrong; its RED was masked by the write in
-  the same module).
+  (esm.ts, cjs.ts) consulted at MUTATION key positions only, exactly three
+  site families: `isGlobalFunctionWriteMember` (direct writes AND `delete`
+  — delete routes through `walkGuardAssignmentTarget`), the mutation key
+  arguments inside `isGlobalFunctionMutationCall` (defineProperty /
+  Reflect.set / Reflect.deleteProperty / `__defineGetter__` /
+  `__defineSetter__` — via a mutation-only `propertyMayBeFunction` wrapper),
+  and `objectMayContainFunctionKey` (defineProperties / Object.assign
+  literal keys). READ sites keep the UNCHANGED conservative helpers: a
+  Symbol key proves the KEY, never the VALUE — the slot may hold a host
+  Function, so `Reflect.get(globalThis, K)` keeps its result taint
+  (`isReflectGetFunctionCall` → constructor-read ceiling; probed
+  2026-10-01: read-only Reflect.get passes, calling the result throws
+  `module-loader.esm-global-function-assignment`). Plain computed reads,
+  member access and method calls on a stashed object pass today without any
+  exemption (the R1-contract claim that the method-call pattern needs the
+  read site was wrong; its RED was masked by the write in the same module).
 - Scope discipline: `let`/`var`-bound and shadowed keys stay loud — the
   claimed evidence (@vitest/utils, undici) uses `const` only.
 
@@ -103,11 +113,13 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
    and full key cleanup → I6
 
 Unit REDs (guard precision): `tests/conformance/modules/symbol-key-global-write.test.ts`
-— 15 positive carriers (Acceptance 1/2/4 patterns compile and run in both
+— 16 positive carriers (Acceptance 1/2/4 patterns compile and run in both
 loaders, incl. an export-wrapped `export const K = Symbol.for(…)` alias —
-RED today) + 10 boundary pins (Acceptance 3 in BOTH loaders:
+RED today — plus the export-wrapped `globalThis`-alias ceiling hole, see
+Decisions) + 12 boundary pins (Acceptance 3 in BOTH loaders:
 string-literal, concatenated, unknown-identifier, `let`-bound-symbol,
-shadowed-`Symbol`, `Symbol.keyFor` keys stay loud — green today,
+shadowed-`Symbol`, `Symbol.keyFor` keys stay loud, and called
+`Reflect.get(globalThis, K)` results stay loud — green today,
 regression-only).
 
 ## Out of scope
@@ -143,3 +155,17 @@ regression-only).
   boundary pins added (string-literal/unknown/let-bound/shadowed) so a CJS
   let-allowing mutant dies. F5 — both parity cases now delete EVERY key they
   set. F6 — compat-note refinement declared as Acceptance 5.
+- 2026-10-01 — reception (REV-12) of Contract+RED R2 (blocker F2 + concern):
+  the R2 mechanism premise "the value at a Symbol key is never the host
+  Function" was FALSE — a Symbol key proves the key, never the value.
+  Exemption limited to MUTATION key positions; `Reflect.get` keeps the
+  conservative read taint, pinned by new boundary tests in both loaders
+  (called result stays loud). Context baseline corrected: the method-call
+  pattern passes today (R1 record was masked by the write). Implementation
+  note (probed): `predeclareGuardLexicalScope` does not unwrap
+  `ExportNamedDeclaration`, so export-wrapped consts never enter `bindings`
+  and alias marking silently no-ops — IMPLEMENT unwraps export declarations
+  in lexical predeclaration. Forced consequence, declared + pinned: the
+  export-wrapped `globalThis`-alias ceiling hole closes (`export const g =
+  globalThis; g.Function = fn` evades the guard today — probed; after the
+  unwrap it throws, matching the non-export twin).
