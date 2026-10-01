@@ -2,14 +2,12 @@
 
 Live plan: index, not store. Minimal pattern first; each child a `draft`
 finding compiled to `ready` at its own PICKUP (`RDY-1`). Where a child
-depends on another (8 after 7, 11 after 8, 12 after 1–11) the order is also
-recorded as `blocked_by`; the other children are independent.
+depends on another (8 after 7, 11 after 8, 12 after 2–11) the order is also
+recorded as `blocked_by`; the other children are independent. Item numbers
+are the original map indices; landed items are removed (ledger).
 
 ## Items
 
-1. `npm-client/overrides-bare-version-spec` — **overrides-spelling** — I1; npm's
-   `"vite": "8.0.16"` parses as a range, not a package name; unblocks the
-   scenario install with zero resolver work.
 2. `runtime-js/path-posix-win32-builtins` — **path-subpaths** — I6; `node:path/posix`
    and `node:path/win32` registered from the existing namespaces.
 3. `runtime-js/builtin-static-names-prototype-methods` — **process-named-imports** —
@@ -38,7 +36,7 @@ recorded as `blocked_by`; the other children are independent.
     `execArgv: []` accepted; after 8.
 12. `runtime-js/vitest-run-acceptance` — **acceptance** — I4, I5, I7; e2e spec
     running the scenario (`vitest.config.ts`, `.ts` tests) on both pools + a
-    `vitest.md` page in `docs/public/compat/`; closes the goal. After 1–11.
+    `vitest.md` page in `docs/public/compat/`; closes the goal. After 2–11.
 
 ## Open questions
 
