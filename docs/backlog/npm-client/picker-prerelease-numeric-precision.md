@@ -5,7 +5,7 @@ title: Picker mis-selects prerelease versions with numeric identifiers above Num
 created: 2026-10-01
 why: `comparePreRelease` (`semver.ts`) compares numeric prerelease identifiers via `Number.parseInt`, which rounds above 2^53-1 — `8.0.16-beta.9007199254740993` compares equal to `…beta.9007199254740992`, and `pickBestVersion`'s stable max-scan then keeps the earlier (wrong) candidate; npm-pick-manifest 11.0.3 selects the exact `.9007199254740993` (also: npm shortcuts an exact version match before range max-scan, rifty has no such shortcut)
 user_story: As a user installing a package whose prerelease versions carry huge numeric identifiers (build numbers, timestamps), I want the same version npm would pick, but today rifty can select a lower prerelease
-sources: [Final+GREEN verify pass 2026-10-01 for docs/backlog/npm-client/overrides-bare-version-spec.md (verdict concern, Bugs axis)]
+sources: [docs/backlog/npm-client/reference/overrides-bare-version-spec-final-green.json]
 code: [packages/npm-client/src/semver.ts, packages/npm-client/src/installer-sources.ts]
 ---
 
