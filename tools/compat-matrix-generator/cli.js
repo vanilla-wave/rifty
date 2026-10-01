@@ -9,7 +9,6 @@ const matrixDir = new URL('../../docs/public/compat/', here);
 const rootDir = new URL('../../', here);
 const esbuildPolicyUrl = new URL('../shadow-registry/esbuild-runtime-policy.json', here);
 const sassPolicyUrl = new URL('../shadow-registry/sass-embedded-policy.json', here);
-
 const legend =
   'Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not implemented (throws `NotImplementedError` or `UNSUPPORTED_PROTOCOL`).';
 
@@ -409,11 +408,7 @@ const matrices = [
         '❌',
         "Throws `NotImplementedError('fs.<surface>.bigint')` AFTER Node-visible errors (missing target stays `ENOENT`, bad fd stays `EBADF`); number-shaped `Stats` are never returned for a BigIntStats request",
       ],
-      [
-        '`fs.statfsSync`',
-        '❌',
-        "Named-loud member: links/imports and `typeof`/`bind` behave (Node arity 1), but the CALL throws `NotImplementedError('fs.statfsSync')` — the Memory VFS has no volume, so bsize/blocks/bfree numbers would be fabricated",
-      ],
+      ['`fs.statfsSync`', '❌', "Named-loud: CALL throws `NotImplementedError('fs.statfsSync')`"],
       [
         'Durable `fsync` / inode-like open-unlink semantics',
         '❌',
@@ -432,8 +427,6 @@ const matrices = [
       '`tests/conformance/builtins/shared-vfs.test.ts`',
       '`tests/conformance/builtins/fs-watch.test.ts`',
       '`tools/node-parity-runner/cases/fs/*.case.ts`',
-      '`tools/node-parity-runner/cases/process/absent-members-link.case.ts`',
-      '`packages/runtime-js/src/builtins/absent-members-loud.test.ts`',
     ],
     limitations: [
       '`O_SYNC`, `O_DSYNC`, reflink constants and unsupported numeric flag bits are intentionally absent or rejected.',

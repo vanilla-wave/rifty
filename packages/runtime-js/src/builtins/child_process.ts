@@ -670,7 +670,11 @@ export function fork(
 // spawnSync needs a sync handler + Node's full result shape on the kernel
 // sync-RPC transport — machinery the claimed vitest path never calls. The
 // member links/binds (tinyexec imports it), the CALL is the loud gap.
-export function spawnSync(command: string, args?: readonly string[], options?: SpawnOptions): never {
+export function spawnSync(
+  command: string,
+  args?: readonly string[],
+  options?: SpawnOptions,
+): never {
   throw new NotImplementedError('child_process.spawnSync');
 }
 
@@ -681,5 +685,13 @@ export { execSync };
 
 export const ChildProcess_ = ChildProcess;
 
-const child_process = { spawn, spawnSync, exec, execFile, fork, execSync, ChildProcess: ChildProcess_ };
+const child_process = {
+  spawn,
+  spawnSync,
+  exec,
+  execFile,
+  fork,
+  execSync,
+  ChildProcess: ChildProcess_,
+};
 export default child_process;

@@ -106,9 +106,8 @@ function installProcessExitErrorTrap(): void {
 }
 
 function drainNextTicks(): void {
-  // Re-read `.length` each iteration so items enqueued mid-drain (nextTick from
-  // inside nextTick) are processed — same as the old shift()-until-empty loop.
-  // Do NOT snapshot the array.
+  // Re-read `.length` each iteration so items enqueued mid-drain are processed
+  // (nextTick from inside nextTick) — do NOT snapshot the array.
   while (drainHead < nextTickQueue.length) {
     const item = nextTickQueue[drainHead++];
     if (!item) continue;
@@ -122,8 +121,7 @@ function drainNextTicks(): void {
       (target as unknown as EventEmitter).emit('uncaughtException', err);
     }
   }
-  // Fully drained: clear the array + cursor so the next nextTick sees length
-  // 0->1 and re-arms ensureDrainScheduled. Reached exactly once per drain.
+  // Fully drained: clear array + cursor so the next nextTick re-arms the drain.
   nextTickQueue.length = 0;
   drainHead = 0;
 }
@@ -522,16 +520,14 @@ export class NodeProcess extends EventEmitter {
   readonly platform = NODE_PROCESS_IDENTITY.platform;
   readonly arch = NODE_PROCESS_IDENTITY.arch;
   readonly version = NODE_PROCESS_IDENTITY.version;
-  // Shallow copy so per-process mutation (e.g. process.versions.x = …) works
-  // without throwing and doesn't leak across processes (ADR-0150: each
-  // foreground CLI gets an isolated child worker). `Record` keeps absent-key reads type-safe.
+  // Shallow copy: per-process mutation works without leaking across processes
+  // (ADR-0150 isolated child workers). `Record` keeps absent-key reads type-safe.
   readonly versions: Record<string, string> = { ...NODE_PROCESS_IDENTITY.versions };
   readonly features = { require_module: true } as const;
   declare readonly release: NodeProcessRelease;
   readonly title = NODE_PROCESS_IDENTITY.title;
   env: Record<string, string | undefined>;
-  // Node-faithful: assigning an invalid exit code throws at the SETTER (loud),
-  // a numeric string coerces; reads return the validated integer.
+  // Node-faithful: invalid codes throw at the SETTER; numeric strings coerce.
   #exitCode = 0;
   get exitCode(): number {
     return this.#exitCode;
@@ -561,8 +557,7 @@ export class NodeProcess extends EventEmitter {
   readonly #workerIpcBacklog: unknown[] = [];
   #latestTtyControlSize: { readonly cols: number; readonly rows: number } | null = null;
   #descendantAuthority: NodeProcessDescendantAuthority | null = null;
-  // Frames received before any `'message'` listener attaches (ADR-0045) — flushed
-  // in order on the first listener; mirrors makeStdinReader's pending buffer.
+  // Pre-listener 'message' frames (ADR-0045), flushed in order on first attach.
   readonly #ipcBacklog: unknown[] = [];
 
   constructor(spec?: KernelProcessSpec) {
@@ -747,12 +742,8 @@ export class NodeProcess extends EventEmitter {
     return performance.now() / 1000;
   }
 
-  // Named-loud member (vitest-run-in-browser): Node returns the process's
-  // real V8 heap (rss/heapTotal/heapUsed/external/arrayBuffers); the browser
-  // realm cannot supply process-faithful heap statistics (`performance.memory`
-  // measures the whole host page, is non-standard, and is rounded), so any
-  // number would be fabricated — the member links/binds (vitest worker init
-  // does `process.memoryUsage.bind(process)`), the CALL is the loud gap.
+  // Named-loud (vitest-run-in-browser): no process-faithful heap stats in a browser
+  // realm (`performance.memory` is host-page-wide, non-standard, rounded) — never fabricated.
   memoryUsage(): never {
     throw new NotImplementedError('process.memoryUsage');
   }

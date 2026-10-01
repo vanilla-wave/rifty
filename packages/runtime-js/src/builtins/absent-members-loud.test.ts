@@ -9,8 +9,8 @@
  * calls. The call-time divergence vs Node is the declared compat ❌.
  */
 import { describe, expect, it } from 'vitest';
-import fs from './fs.ts';
 import cp from './child_process.ts';
+import fs from './fs.ts';
 import proc from './process.ts';
 
 /** Exact feature pin: a substring message match would let
@@ -40,9 +40,7 @@ describe('named-loud builtin members', () => {
   it('child_process.spawnSync is a function whose CALL throws NotImplementedError', () => {
     expect(typeof cp.spawnSync).toBe('function');
     expect(cp.spawnSync.length).toBe(3);
-    expect(thrownFeature(() => cp.spawnSync('git', ['status']))).toBe(
-      'child_process.spawnSync',
-    );
+    expect(thrownFeature(() => cp.spawnSync('git', ['status']))).toBe('child_process.spawnSync');
   });
 
   it('process.memoryUsage binds like the vitest worker-init shape and throws on CALL', () => {

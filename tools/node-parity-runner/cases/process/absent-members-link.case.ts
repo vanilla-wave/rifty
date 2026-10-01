@@ -15,12 +15,7 @@ import type { ParityCase } from '../../src/types.ts';
  */
 const c: ParityCase = {
   kind: 'esm',
-  expected: [
-    'function function function',
-    'function',
-    '1 3 0',
-    'true true true',
-  ].join('\n'),
+  expected: ['function function function', 'function', '1 3 0', 'true true true'].join('\n'),
   code: `
     import { statfsSync } from 'node:fs';
     import { spawnSync } from 'node:child_process';
