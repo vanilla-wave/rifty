@@ -66,6 +66,22 @@ edges:
 "8.0.16-beta..1" → null (empty prerelease identifier)
 ```
 
+Third probe (same semver 7.8.4 + npa 13.0.2), pinning version-core numeric
+bounds — node-semver rejects leading zeroes, >16-digit components, and values
+≥ `Number.MAX_SAFE_INTEGER`:
+
+```
+validRange: "08" / "08.0.16" / "08.x" / "00" → null   "0" / "0.0" / "0.0.0" → valid
+validRange: "12345678901234567" / "9999999999999999" / "9007199254740991" → null
+validRange: "9007199254740990" → ">=9007199254740990.0.0 <9007199254740991.0.0-0"
+npa type:   "08"/"00" → range (fails at pick time)   "08.0.16"/"8.0.16-01" → version (loose)
+npa type:   "12345678901234567" / "9999999999999999" / "9007199254740991" → tag
+```
+
+Rifty excludes every out-of-bounds form from the range classifier
+conservatively (loud replacement-name path), including `"8.0.16-01"` which
+npa reads loosely as a version.
+
 ## rifty today (main 0c4c1b07)
 
 `overrides.ts` `parseTarget("8.0.16")` → `{name: "8.0.16", range: null}` →

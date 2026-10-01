@@ -293,16 +293,52 @@ export function isRangeLike(spec: string): boolean {
   });
 }
 
-// semver §9 prerelease identifiers (no leading zeroes on numeric) and §10
-// build identifiers — the strict grammar node-semver validates; rifty's loose
-// parse must not absorb what npm treats as a dist-tag (`8.0.16-beta..1`,
-// `8.0.16-01`).
-const PRERELEASE_ID = '(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)';
-const BUILD_ID = '[0-9A-Za-z-]+';
-const FULL_VERSION_RE = new RegExp(
-  `^v?\\d+\\.\\d+\\.\\d+(?:-${PRERELEASE_ID}(?:\\.${PRERELEASE_ID})*)?(?:\\+${BUILD_ID}(?:\\.${BUILD_ID})*)?$`,
-);
-const PARTIAL_VERSION_RE = /^v?\d+(?:\.\d+)?$/;
+// node-semver version-core component: no leading zeroes, ≤16 digits, and
+// strictly below Number.MAX_SAFE_INTEGER (its own bound rejects
+// 9007199254740991). Anything outside is not a range in npm — a name/tag.
+function isValidNumericComponent(part: string): boolean {
+  return /^(?:0|[1-9]\d{0,15})$/.test(part) && Number(part) < Number.MAX_SAFE_INTEGER;
+}
+
+/** semver §9: dot-separated non-empty identifiers; numeric ones without leading zeroes. */
+function isValidPrerelease(pre: string): boolean {
+  return pre.split('.').every((id) => {
+    if (!/^[0-9A-Za-z-]+$/.test(id)) return false;
+    if (/^\d+$/.test(id)) return id === '0' || !id.startsWith('0');
+    return true;
+  });
+}
+
+/** semver §10: dot-separated non-empty identifiers (leading zeroes allowed). */
+function isValidBuild(build: string): boolean {
+  return build.split('.').every((id) => id !== '' && /^[0-9A-Za-z-]+$/.test(id));
+}
+
+/**
+ * Strict node-semver version grammar: `8`, `8.0`, `8.0.16` with optional
+ * prerelease/build on the FULL form only. Returns whether all three
+ * components are present, or null when the grammar is violated.
+ */
+function parseStrictVersion(base: string): { full: boolean } | null {
+  const m = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/.exec(
+    base,
+  );
+  if (!m) return null;
+  const core = [m[1], m[2], m[3]].filter((p): p is string => p !== undefined);
+  if (!core.every(isValidNumericComponent)) return null;
+  const full = m[3] !== undefined;
+  if ((m[4] !== undefined || m[5] !== undefined) && !full) return null;
+  if (m[4] !== undefined && !isValidPrerelease(m[4])) return null;
+  if (m[5] !== undefined && !isValidBuild(m[5])) return null;
+  return { full };
+}
+
+/** Bare terminal-wildcard x-range: `*`, `x`, `8.x`, `8.0.*` (valid core prefix). */
+function isTerminalXRange(base: string): boolean {
+  const m = /^[v=]?(?:(\d+)\.(?:(\d+)\.)?)?(?:x|X|\*)$/.exec(base);
+  if (!m) return false;
+  return [m[1], m[2]].every((p) => p === undefined || isValidNumericComponent(p));
+}
 
 function isRangeComparator(cmp: string): boolean {
   const m = /^(>=|<=|>|<|=|\^|~)?(.*)$/.exec(cmp);
@@ -315,20 +351,22 @@ function isRangeComparator(cmp: string): boolean {
     // mis-evaluates (string-compare fallback / null bounds) — not classified,
     // loud packument-404 path. A non-terminal wildcard (`x.1`) is not a range
     // in node-semver at all.
-    return op === '' && /^[v=]?(?:\d+(?:\.\d+)?\.)?(?:x|X|\*)$/.test(base);
+    return op === '' && isTerminalXRange(base);
   }
+  const version = parseStrictVersion(base);
+  if (version === null) return false;
   if (op === '>' || op === '<=' || op === '=') {
     // npm zero-fills partial bases UP for these (`>8` → `>=9.0.0`, `<=8` →
     // `<9.0.0-0`, `=8` → `8.x`); rifty's coerce zero-fills DOWN (`>8.0.0`,
     // exact `8.0.0`) — admit only full versions both compare exactly.
-    return FULL_VERSION_RE.test(base);
+    return version.full;
   }
   // Bare / `^` / `~` / `>=` / `<`: caret/tilde bounds and `>=`/`<` zero-fill
   // partials per npm; a bare partial x-ranges. node-semver rejects a partial
   // carrying a prerelease (`1.2-beta`, `>=1.2-beta` are tags); a partial with
   // build (`1.2+build`) is a valid npm range rifty mis-evaluates — both stay
-  // names here.
-  return PARTIAL_VERSION_RE.test(base) || FULL_VERSION_RE.test(base);
+  // names here (parseStrictVersion admits pre/build on the full form only).
+  return true;
 }
 
 export function pickBestVersion(

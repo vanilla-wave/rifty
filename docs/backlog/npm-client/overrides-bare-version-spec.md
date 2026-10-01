@@ -77,9 +77,13 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
   partials with build metadata (`"1.2+build"`) — valid in npm, but here they
   keep today's loud packument-404 path instead of a silently wrong
   resolution. node-semver rejects partials with a prerelease (`"1.2-beta"`,
-  `">=1.2-beta"`) and malformed prerelease/build grammars
-  (`"8.0.16-beta..1"`, `"8.0.16-01"`) — those are dist-tags in npm and keep
-  replacement-name semantics.
+  `">=1.2-beta"`), malformed prerelease/build grammars (`"8.0.16-beta..1"`),
+  and version-core components outside its bounds — leading zeroes (`"08"`,
+  `"08.0.16"`, `"08.x"`), >16 digits or ≥ `Number.MAX_SAFE_INTEGER`
+  (`"12345678901234567"`, `"9999999999999999"`, `"9007199254740991"`). npa
+  reads some of those as dist-tags, some loosely as versions/ranges
+  (`"8.0.16-01"` → version); rifty keeps all of them on the loud
+  replacement-name path conservatively, never a silent wrong resolution.
 - Bare non-range values (`"bcryptjs"`, `"latest"`): npm reads them as
   same-name dist-tags; rifty keeps its replacement-name reading — recorded
   divergence (reference evidence), not claimed here.
@@ -93,6 +97,7 @@ ready-verdict: 2026-10-01 — Contract+RED @ aebb5c6c95d7a47aa4ab89e0cfea1ad6032
   Parity-2 range/tag/$ref parts are wider than I1's exact pin; kept as
   discriminating guards (advisory, no contract change).
 re-cut: 2026-10-01 — Out of scope enumerates the operator+wildcard / partial-prerelease / partial-build range forms as loud gaps (Final+GREEN blocker fixes) — trace: none
+re-cut: 2026-10-01 — Out of scope adds version-core bounds (leading zeroes, >16 digits, ≥ MAX_SAFE_INTEGER) as loud name-path exclusions and corrects the npa reading of `"8.0.16-01"` (loose version, not a tag) (Final+GREEN blocker fixes) — trace: none
 - 2026-10-01 — discriminator: a bare override value is range-like iff every
   `||`-branch's every comparator is a version/x-range rifty `semver.ts`
   evaluates; non-range bare values keep name semantics; `$`-prefixed values

@@ -65,16 +65,24 @@ describe('resolveOverride — npm bare-version spelling (I1)', () => {
     });
   });
 
-  it.each(['^8', '8.x', '*', '>=8.0.0 <9', '<=8.0.16', '=8.0.16', '>8.0.16', '8.0.16+01'])(
-    'parses bare range %s as a range on the keyed package',
-    (range) => {
-      expect(resolveOverride('vite', undefined, { vite: range })).toEqual({
-        name: 'vite',
-        range,
-        source: 'user',
-      });
-    },
-  );
+  it.each([
+    '^8',
+    '8.x',
+    '*',
+    '>=8.0.0 <9',
+    '<=8.0.16',
+    '=8.0.16',
+    '>8.0.16',
+    '8.0.16+01',
+    '0',
+    '9007199254740990',
+  ])('parses bare range %s as a range on the keyed package', (range) => {
+    expect(resolveOverride('vite', undefined, { vite: range })).toEqual({
+      name: 'vite',
+      range,
+      source: 'user',
+    });
+  });
 
   it('binds a nested-key bare range to the leaf package', () => {
     expect(resolveOverride('vite', 'vitest', { 'vitest>vite': '8.0.16' })).toEqual({
@@ -179,6 +187,14 @@ describe('resolveOverride — npm bare-version spelling (I1)', () => {
     '8.0.16-beta..1',
     '8.0.16-01',
     '8.0.16+..build',
+    // Version-core bounds: leading zeroes, >16 digits, ≥ MAX_SAFE_INTEGER.
+    '08',
+    '08.0.16',
+    '08.x',
+    '00',
+    '12345678901234567',
+    '9999999999999999',
+    '9007199254740991',
   ])('keeps name semantics for %s', (value) => {
     expect(resolveOverride('vite', undefined, { vite: value })).toEqual({
       name: value,
