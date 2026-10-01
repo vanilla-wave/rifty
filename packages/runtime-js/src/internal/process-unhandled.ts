@@ -8,7 +8,7 @@ interface ProcessEvents {
 /** Only the runtime-owned process receives browser-realm failures. */
 export function dispatchProcessUnhandled(
   reason: unknown,
-  origin: 'uncaught-error' | 'rejection',
+  origin: 'uncaught-error' | 'rejection' | 'entry-esm',
   promise?: unknown,
 ): boolean {
   const proc = readActiveNodeProcessBootstrap()?.process as Partial<ProcessEvents> | undefined;
@@ -20,7 +20,7 @@ export function dispatchProcessUnhandled(
     return proc.emit(
       'uncaughtException',
       reason,
-      origin === 'rejection' ? 'unhandledRejection' : 'uncaughtException',
+      origin === 'uncaught-error' ? 'uncaughtException' : 'unhandledRejection',
     );
   }
   return false;

@@ -1,4 +1,15 @@
 import { Buffer } from '@riftydev/io';
+import { isTrackedProxy } from './proxy-clone-guard.ts';
+
+const nativeFunctionToString = Function.prototype.toString;
+const nativeMapEntries = Map.prototype.entries;
+const nativeSetValues = Set.prototype.values;
+// V8 serializes web values as ordinary own-property records, not host clones.
+const ordinaryWebPrototypes = new Set<object>();
+for (const name of ['Blob', 'File', 'URL', 'URLSearchParams', 'DOMException']) {
+  const constructor = Reflect.get(globalThis, name);
+  if (typeof constructor === 'function') ordinaryWebPrototypes.add(constructor.prototype);
+}
 
 interface AdvancedPayload {
   data: unknown;
@@ -8,27 +19,55 @@ interface AdvancedPayload {
 /** Side references preserve Buffer identity through the native structured-clone graph. */
 export function encodeAdvancedIpc(message: unknown): unknown {
   const buffers: object[] = [];
-  const seen = new Set<object>();
-  const visit = (value: unknown): void => {
-    if (value === null || typeof value !== 'object' || seen.has(value)) return;
-    seen.add(value);
+  const seen = new Map<object, object>();
+  const visit = (value: unknown): unknown => {
+    if (value === null || typeof value !== 'object') return value;
+    if (isTrackedProxy(value)) return structuredClone(value);
+    const cached = seen.get(value);
+    if (cached) return cached;
     if (Buffer.isBuffer(value)) {
+      seen.set(value, value);
       buffers.push(value);
-      return;
+      return value;
     }
     if (value instanceof Map) {
-      for (const [key, item] of value) {
-        visit(key);
-        visit(item);
-      }
-    } else if (value instanceof Set) {
-      for (const item of value) visit(item);
-    } else if (!ArrayBuffer.isView(value)) {
-      for (const item of Object.values(value)) visit(item);
+      const copy = new Map<unknown, unknown>();
+      seen.set(value, copy);
+      for (const [key, item] of nativeMapEntries.call(value)) copy.set(visit(key), visit(item));
+      return copy;
     }
+    if (value instanceof Set) {
+      const copy = new Set<unknown>();
+      seen.set(value, copy);
+      for (const item of nativeSetValues.call(value)) copy.add(visit(item));
+      return copy;
+    }
+    // Native branded values keep native clone semantics (including rejection).
+    // Ordinary objects/arrays snapshot enumerable getters exactly once.
+    let proto = Object.getPrototypeOf(value);
+    while (proto && proto !== Object.prototype && proto !== Array.prototype) {
+      if (ordinaryWebPrototypes.has(proto)) break;
+      const ctor = Object.getOwnPropertyDescriptor(proto, 'constructor')?.value;
+      if (typeof ctor === 'function' && /\[native code\]/.test(nativeFunctionToString.call(ctor)))
+        return value;
+      proto = Object.getPrototypeOf(proto);
+    }
+    const copy: Record<string, unknown> = Array.isArray(value)
+      ? (new Array(value.length) as unknown as Record<string, unknown>)
+      : Object.create(null);
+    seen.set(value, copy);
+    for (const key of Object.keys(value)) {
+      if (!Object.hasOwn(value, key)) continue;
+      Object.defineProperty(copy, key, {
+        value: visit(Reflect.get(value, key)),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+    }
+    return copy;
   };
-  visit(message);
-  return structuredClone({ data: message, buffers } satisfies AdvancedPayload);
+  return structuredClone({ data: visit(message), buffers } satisfies AdvancedPayload);
 }
 
 export function decodeAdvancedIpc(payload: unknown): unknown {

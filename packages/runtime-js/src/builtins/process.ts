@@ -17,6 +17,7 @@ import {
   deserializeNodeIpcMessage,
   serializeNodeIpcMessage,
 } from '../internal/node-ipc-serialization.ts';
+import { installProxyCloneGuard } from '../internal/proxy-clone-guard.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -750,7 +751,7 @@ export class NodeProcess extends EventEmitter {
   }
 
   exit(code?: unknown): never {
-    const c = coerceExitCode(code ?? this.#exitCode); // coerce string / throw on invalid (Node parity)
+    const c = coerceExitCode(code === undefined ? this.#exitCode : code); // coerce string / throw on invalid (Node parity)
     this.#exitCode = c;
     if (!this.#exitEmitted) {
       this.#exitEmitted = true;
@@ -1190,6 +1191,7 @@ export function writeProcessStdin(data: string | Uint8Array): void {
  * backlog: runtime-js/worker-entry-process-globals-side-effect).
  */
 export function installProcessGlobals(): void {
+  installProxyCloneGuard();
   installNodeMessageChannels();
   // A kernel-installed binding is realm-private authority. A later idempotent
   // call must not let a guest-replaced public global replace or downgrade it.
@@ -1216,7 +1218,6 @@ export function setProcessCwd(next: string): void {
   currentCwd = next;
 }
 
-/** Internal cwd accessor for sibling builtins (e.g. `fs.resolvePath`). */
 export function getProcessCwd(): string {
   return currentCwd;
 }

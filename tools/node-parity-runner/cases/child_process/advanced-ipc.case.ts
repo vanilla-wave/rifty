@@ -21,13 +21,20 @@ const c: ParityCase = {
     child.on('error', error => { throw error; });
     child.on('message', value => {
       console.log(value.date instanceof Date, value.map instanceof Map, value.set instanceof Set, value.bytes instanceof Uint8Array, value.array[0] === undefined, value.self === value);
+      console.log(Buffer.isBuffer(value.accessorBuffer), value.accessorBuffer[0]);
       console.log(value.date.toISOString(), value.map.get('key'), value.set.has(3), Array.from(value.bytes).join(','));
       console.log(Buffer.isBuffer(value.buffer), value.buffer === value.bufferAgain, value.map.get('buffer') === value.buffer, value.buffer.toString('hex'));
       child.kill('SIGKILL');
     });
     child.on('close', () => console.log('closed'));
     const value = {date:new Date(0),map:new Map([['key',7]]),set:new Set([3]),bytes:new Uint8Array([1,2]),array:[undefined]}; value.self = value; value.buffer = Buffer.from([3,4]); value.bufferAgain = value.buffer; value.map.set('buffer', value.buffer);
+    let gets = 0;
+    Object.defineProperty(value, 'accessorBuffer', { enumerable: true, get() { return Buffer.from([++gets]); } });
     child.send(value);
+    for (const proxy of [new Proxy({x:1}, {}), Proxy.revocable({x:1}, {}).proxy]) {
+      try { child.send(proxy); console.log('BAD-PROXY'); } catch { console.log('proxy rejected'); }
+    }
+    console.log('gets', gets);
     try { child.send(() => {}); } catch (error) { console.log(error.code); }
   `,
 };

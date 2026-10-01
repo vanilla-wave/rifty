@@ -21,6 +21,9 @@ setTimeout(() => { throw new Error('boom'); }, 5);
 setTimeout(() => Promise.reject(new Error('reject')), 15);
 setTimeout(() => { console.log('after'); process.exitCode = 3; }, 30);
 `,
+  'top-exception.cjs': `process.on('uncaughtException', (error, origin) => console.log('TOP', error.message, origin)); process.once('exit', code => console.log('EXIT', code)); setTimeout(() => console.log('after'), 5); throw new Error('entry-boom');`,
+  'top-exception.mjs': `process.on('uncaughtException', (error, origin) => console.log('TOP', error.message, origin)); process.on('unhandledRejection', () => console.log('WRONG-ENTRY-REJECTION')); process.once('exit', code => console.log('EXIT', code)); setTimeout(() => console.log('after'), 5); throw new Error('entry-boom');`,
+  'eval-source.cjs': `process.on('uncaughtException', (error, origin) => console.log('EVAL', error.message, origin)); process.once('exit', code => console.log('EXIT', code)); setTimeout(() => console.log('after'), 5); throw new Error('eval-boom');`,
   'explicit-exit.cjs': `process.once('exit', code => console.log('EXIT', code)); process.exitCode = 7; process.exit();`,
   'port-ref.cjs': `const {Worker, MessageChannel} = require('node:worker_threads'); const channel = new MessageChannel(); const w = new Worker('./worker.cjs', {stdout:true, stderr:true}); w.on('message', msg => {console.log('PORT-REF', msg); channel.port1.unref(); channel.port1.close(); channel.port2.close();}); w.unref(); channel.port1.ref();`,
   'worker.cjs': `const { parentPort } = require('node:worker_threads'); setTimeout(() => { console.log('worker-stdout'); console.error('worker-stderr'); parentPort.postMessage('hi'); }, 700);`,
@@ -56,14 +59,17 @@ setTimeout(() => { console.log('after'); process.exitCode = 3; }, 30);
   'flags-errors.cjs': `const {Worker} = require('node:worker_threads'); for (const arg of ['--require','--conditions']) { try { new Worker('./must-not-run.cjs', {execArgv:[arg]}); } catch (e) { console.log('SYNC', e.code); } } for (const pre of ['./missing.cjs','./pre-throw.cjs']) { let deferred = false; const w = new Worker('./must-not-run.cjs', {execArgv:['--require',pre]}); w.on('error', e => console.log('ASYNC', deferred, pre, e.code || e.message)); w.on('exit', code => console.log('FAIL-EXIT', pre, code)); deferred = true; }`,
 };
 
-function nativeOracle(file: keyof typeof fixtures): { output: string; code: number | null } {
+function nativeOracle(
+  file: keyof typeof fixtures,
+  evalEntry = false,
+): { output: string; code: number | null } {
   const dir = mkdtempSync(join(tmpdir(), 'rifty-vitest-oracle-'));
   try {
     for (const [name, source] of Object.entries(fixtures)) {
       mkdirSync(dirname(join(dir, name)), { recursive: true });
       writeFileSync(join(dir, name), source.replaceAll('\n', ' '));
     }
-    const result = spawnSync(process.execPath, [file], {
+    const result = spawnSync(process.execPath, evalEntry ? ['-e', fixtures[file]] : [file], {
       cwd: dir,
       encoding: 'utf8',
       env: { ...process.env, NODE_NO_WARNINGS: '1' },
@@ -165,6 +171,9 @@ test('Node lifecycle and physical Worker contracts used by Vitest', async ({
   for (const file of [
     'lifecycle.cjs',
     'explicit-exit.cjs',
+    'top-exception.cjs',
+    'top-exception.mjs',
+    'eval-source.cjs',
     'port-ref.cjs',
     'worker-parent.cjs',
     'worker-unref.cjs',
@@ -172,8 +181,9 @@ test('Node lifecycle and physical Worker contracts used by Vitest', async ({
     'flags-parent.cjs',
     'flags-errors.cjs',
   ] as (keyof typeof fixtures)[]) {
-    const oracle = nativeOracle(file);
-    const result = await run(page, `node ${file}`);
+    const evalEntry = file === 'eval-source.cjs';
+    const oracle = nativeOracle(file, evalEntry);
+    const result = await run(page, evalEntry ? `node -e ${quote(fixtures[file])}` : `node ${file}`);
     expect(result.code, `${file}: ${result.output}`).toBe(oracle.code);
     for (const line of new Set(oracle.output.trim().split('\n'))) {
       expect(result.output, file).toContain(line);

@@ -106,6 +106,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0496 | Guest MessagePort references with native host channels |
 | 0497 | Node entry v5 startup execArgv semantics |
 | 0499 | Worker startup errors over existing private control |
+| 0501 | Snapshot advanced IPC accessors once before native cloning |
 
 ### runtime-wasi
 

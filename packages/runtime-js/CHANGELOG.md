@@ -3,6 +3,12 @@
 
 ## [Unreleased]
 
+- Reject guest Proxy IPC values before observing traps; keep native constructor/revocable semantics (ADR-0501).
+
+- Dispatch handled CJS/ESM entry exceptions before lifecycle termination; preserve native exception origin.
+
+- Keep explicit exit(null) at zero; snapshot advanced IPC getters once with Buffer identity (ADR-0501).
+
 - Generic beforeEntry shares startup cache; handled native info preserves natural drain (ADR-0500).
 
 - Forward inherited stdin privately; child close does not leave guest stdin flowing or referenced.

@@ -1,0 +1,446 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "FIX F1/F2; rerun full gate and isolated packed consumer; independent verify changed SHA.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "1abb86ea52d728d81a9025fbde204229ee2ff795",
+  "unit_goal_source": "docs/backlog/runtime-js/vitest-run-acceptance.md; goal docs/backlog/epics/vitest-run-in-browser/goal.md; npm preparatory d138a104; BASE 0c4c1b07",
+  "unit_residuals": [
+    {
+      "clause": "Named baseline process.exit(null)",
+      "location": "packages/runtime-js/src/builtins/process.ts:753",
+      "summary": "F1 remains on reviewed SHA."
+    },
+    {
+      "clause": "ADR-0492 / IPC Fault matrix → I4",
+      "location": "packages/runtime-js/src/internal/advanced-ipc-values.ts:27",
+      "summary": "F2 remains on reviewed SHA."
+    },
+    {
+      "clause": "Final+GREEN precondition: green pr:check / packed delivery validation",
+      "location": "/tmp/vitest-pr-check-final.log",
+      "summary": "Not green at checkpoint: test:run isolated stdin-forwarding load failure; packed cleanup deadline needs isolated rerun. Standalone file-size/compat drift repaired per driver."
+    }
+  ],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: npm override installs exact one Vite; legacy spelling works",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:224",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: referenced Worker message/exit; unref releases loop",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:170",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: process handlers continue, exit event, inherited exitCode",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:170",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: TS config/include, failing default/verbose/npm reporter and fixed run",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:242",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: same results and codes for threads and forks",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:242",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: exact claimed module tree loads; unclaimed operations loud",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:242",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: exact compat claim and positive/negative rows",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:284",
+      "note": ""
+    },
+    {
+      "row": "Parity: npm spelling reference/parser/browser",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Parity: real Node and physical Worker lifecycle/stdio",
+      "source": "acceptance",
+      "trace": "I2 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:170",
+      "note": ""
+    },
+    {
+      "row": "Parity: identical process lifecycle scripts",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:170",
+      "note": ""
+    },
+    {
+      "row": "Parity: builtin names/path/Symbol/vm offsets",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/vitest-builtin-imports.case.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Parity: real Vitest files pools/reporter/codes",
+      "source": "acceptance",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:242",
+      "note": ""
+    },
+    {
+      "row": "Fault: Worker final message/stdio precedes exit; parent drains after terminal",
+      "source": "fault-matrix",
+      "trace": "I2 + I5",
+      "status": "weak",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:170",
+      "note": "Output comparison checks membership/count, not order; reordered exit/message can pass (F3)."
+    },
+    {
+      "row": "Fault: advanced cloneable values both directions; JSON default; uncloneable loud",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/child_process/advanced-ipc.case.ts:20",
+      "note": "Accessor returning fresh Buffer survives carrier but executes twice/loses Buffer (F2)."
+    },
+    {
+      "row": "Fault: handled errors continue; exit callback precedes terminal",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "weak",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:170",
+      "note": "Output comparison checks membership/count, not order; reordered exit callback can pass (F3)."
+    },
+    {
+      "row": "npm Acceptance 1: bare ranges retain identity",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "npm Acceptance 2: explicit name@range remains",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:13",
+      "note": ""
+    },
+    {
+      "row": "npm parity: real npm 11.17.0 install",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md:1",
+      "note": ""
+    },
+    {
+      "row": "IO createHostMessageChannel",
+      "source": "public-api",
+      "trace": "ADR-0496",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/message-port-globals.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "IO markHostMessagePort",
+      "source": "public-api",
+      "trace": "ADR-0496",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/message-port-globals.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "IO HOST_MESSAGE_PORT",
+      "source": "public-api",
+      "trace": "ADR-0496",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/message-port-globals.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Kernel IpcFrame control:entry-error / decodeIpcFrame",
+      "source": "public-api",
+      "trace": "ADR-0499",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:170",
+      "note": ""
+    },
+    {
+      "row": "Kernel WorkerProcessHandle entryerror delivery",
+      "source": "public-api",
+      "trace": "ADR-0499",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:170",
+      "note": ""
+    },
+    {
+      "row": "Node-entry v5 protocol / launch execArgv and advanced IPC",
+      "source": "public-api",
+      "trace": "ADR-0497 + ADR-0492",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts:58",
+      "note": ""
+    },
+    {
+      "row": "runNodeEntry execArgv/beforeEntry handled disposition",
+      "source": "public-api",
+      "trace": "ADR-0497 + ADR-0500",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-startup.test.ts:60",
+      "note": ""
+    },
+    {
+      "row": "ModuleLoaderOptions execArgv / ResolverOptions conditions",
+      "source": "public-api",
+      "trace": "ADR-0497",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-startup.test.ts:38",
+      "note": ""
+    },
+    {
+      "row": "NodeProcessWorkerIpc reportEntryError",
+      "source": "public-api",
+      "trace": "ADR-0499",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:170",
+      "note": ""
+    },
+    {
+      "row": "InstalledCliAdmission / admitInstalledCliEntry",
+      "source": "public-api",
+      "trace": "ADR-0500",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Node builtin fs.statfsSync, child_process.spawnSync, process.memoryUsage",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Node builtin path/posix and path/win32 projection",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Node builtin vm constants/SourceTextModule/SyntheticModule; inspector/promises",
+      "source": "public-api",
+      "trace": "I6 + I7",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:48",
+      "note": ""
+    },
+    {
+      "row": "Node Worker stdout/stderr, execArgv, ref/unref",
+      "source": "public-api",
+      "trace": "I2 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:170",
+      "note": ""
+    },
+    {
+      "row": "Native CLI projection oracle",
+      "source": "frozen-artifact",
+      "trace": "ADR-0500",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts:11",
+      "note": ""
+    },
+    {
+      "row": "Native informational envelope output",
+      "source": "frozen-artifact",
+      "trace": "ADR-0500",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/vitest-cli-envelope-info-probe.cjs:1",
+      "note": ""
+    },
+    {
+      "row": "Native Worker/fork execArgv output",
+      "source": "frozen-artifact",
+      "trace": "ADR-0497",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/vitest-execargv-probe.cjs:1",
+      "note": ""
+    },
+    {
+      "row": "ADR lifecycle projection and Worker lifetime",
+      "source": "acceptance",
+      "trace": "ADR-0491",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:170",
+      "note": ""
+    },
+    {
+      "row": "ADR advanced clone/Buffer graph",
+      "source": "acceptance",
+      "trace": "ADR-0492",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/advanced-ipc.case.ts:20",
+      "note": ""
+    },
+    {
+      "row": "ADR host vm offset identity",
+      "source": "acceptance",
+      "trace": "ADR-0493",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/vm-script-offsets.case.ts:3",
+      "note": ""
+    },
+    {
+      "row": "ADR WASM jobs hold loop",
+      "source": "acceptance",
+      "trace": "ADR-0494",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/wasm-keepalive.test.ts:10",
+      "note": ""
+    },
+    {
+      "row": "ADR dynamic global keys preserve conversion order and ceilings",
+      "source": "acceptance",
+      "trace": "ADR-0495",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/symbol-global-write.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "ADR guest port refs/host channels",
+      "source": "acceptance",
+      "trace": "ADR-0496",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/message-port-globals.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "ADR v5 raw startup identity/effects",
+      "source": "acceptance",
+      "trace": "ADR-0497",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:170",
+      "note": ""
+    },
+    {
+      "row": "ADR asynchronous preload errors before exit",
+      "source": "acceptance",
+      "trace": "ADR-0499",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:170",
+      "note": ""
+    },
+    {
+      "row": "ADR canonical actual CLI admission/info completion",
+      "source": "acceptance",
+      "trace": "ADR-0500",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:270",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/e2e/vitest-run-in-browser.spec.ts:170",
+          "summary": "F3: lifecycle output checks presence/count but do not discriminate message/stdio/exit ordering.",
+          "authority": "",
+          "evidence": "Reading e2e loop: unordered Set of oracle lines; no ordered comparison. Production physical acceptance green; no behavioral order defect established."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "packages/runtime-js/src/internal/advanced-ipc-values.ts:27",
+          "summary": "F2: advanced IPC visits getters twice; fresh Buffer getter loses Buffer identity and returns second value.",
+          "authority": "ADR-0492: receiver reconstructs Buffers retaining clone graph references/cycles; unit Fault matrix sibling-drift → I4: advanced preserves cloneable values both directions.",
+          "evidence": "Actual native fork serialization advanced /tmp/vitest-review-getter-ipc.cjs => GETS 1 BUFFER true BYTE 1. Direct runtime serializeNodeIpcMessage/deserializeNodeIpcMessage via node --import tsx => GETS 2 BUFFER false BYTE 2. Source prewalk Object.values evaluates getter before native structuredClone."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "packages/runtime-js/src/builtins/process.ts:753",
+          "summary": "F1: process.exit(null) incorrectly inherits exitCode; baseline/Node explicitly exits 0.",
+          "authority": "Named baseline process.exit(null): BASE 0c4c1b07 coerceExitCode(null) exits 0; ADR-0491 inherits exitCode only when argument omitted.",
+          "evidence": "Node v24.16.0: node -e process.exitCode=7; process.on(exit,c=>console.log(c)); process.exit(null) => 0, exit 0. node --import tsx --input-type=module direct real NodeProcess equivalent => EXIT 7 / CODE 7."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -1,5 +1,5 @@
-import { createHostMessageChannel } from '@riftydev/io';
 import { expect, it } from 'vitest';
+import { createHostMessageChannel } from '../../packages/io/src/index.ts';
 import {
   bindWorkerStdioOutput,
   createWorkerOutputState,

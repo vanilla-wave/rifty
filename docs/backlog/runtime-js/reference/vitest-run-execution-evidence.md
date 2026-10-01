@@ -48,3 +48,28 @@ The 2 MB carrier ceiling and negative inventory tests remain unchanged.
 - Lint/typecheck/build: passed. Full gate/packed results recorded before final review.
 
 Goal completion requires independent Final+GREEN on the delivered revision.
+
+## Independent repair pass
+
+Review 1 on 1abb86ea found exit(null) inheritance regression and double-read
+Buffer getters. Both real REDs captured; native Node oracle retained. Repair
+unit selection: 9 passed; getter physical fork parity: 1 case matches Node.
+Sibling sweep uses native Map contents and V8-ordinary Blob properties. Earlier
+Blob host-clone assertion was a frozen structuredClone assumption, corrected
+by executed Node v24.16.0 V8 oracle, not a widened browser claim.
+First packed consumer failed Chromium cleanup deadline while competing with
+full unit gate; isolated rerun required. First full gate's actual failures were
+uncommitted compat drift, generator file-size, and missing integration import.
+No behavior test expectation weakened.
+
+I3 entry-origin sweep: CJS/ESM top-level Native Node v24.16.0 handlers print
+entry-boom with origins uncaughtException/unhandledRejection, then after and exit0.
+Real loader RED 2; GREEN entry/startup regression selection 26 tests.
+
+Final sibling sweep: native Proxy is uncloneable; snapshot initially copied it
+to an ordinary object (executed RED). Shared loader/Node bootstrap now record
+guest native Proxy constructor/revocable outputs in one private WeakSet; native
+clone rejects before traps. Unit reflection/rejection plus physical fork parity
+GREEN. Proxy creation metadata is required; no extra lifetime/terminal owner.
+CLI eval handler GREEN: real behavioral RED then 31-test entry/IPC selection;
+physical CJS/ESM/eval acceptance 1 passed (27.0 s).

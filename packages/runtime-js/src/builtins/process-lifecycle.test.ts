@@ -17,6 +17,14 @@ afterEach(() => {
 });
 
 describe('process lifecycle', () => {
+  it('exit(null) explicitly exits zero despite a prior exitCode', () => {
+    const proc = new NodeProcess();
+    proc.exitCode = 7;
+    const codes: unknown[] = [];
+    proc.once('exit', (code) => codes.push(code));
+    expect(() => proc.exit(null)).toThrow(expect.objectContaining({ exitCode: 0 }));
+    expect(codes).toEqual([0]);
+  });
   it('exit() inherits exitCode and emits exit once', () => {
     const proc = new NodeProcess();
     const codes: unknown[] = [];
