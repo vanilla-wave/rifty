@@ -294,8 +294,12 @@ export function isRangeLike(spec: string): boolean {
 }
 
 // node-semver version-core component: no leading zeroes, ≤16 digits, and
-// strictly below Number.MAX_SAFE_INTEGER (its own bound rejects
-// 9007199254740991). Anything outside is not a range in npm — a name/tag.
+// strictly below Number.MAX_SAFE_INTEGER. npm's own bound is `>` (a FULL
+// version-core may equal MAX_SAFE_INTEGER: `9007199254740991.0.0` is valid);
+// the bare partial `9007199254740991` is rejected only because its x-range
+// upper-bound expansion overflows. rifty excludes == MAX_SAFE_INTEGER in
+// every form — an extra conservative divergence. Anything else outside is
+// not a range in npm — a name/tag.
 function isValidNumericComponent(part: string): boolean {
   return /^(?:0|[1-9]\d{0,15})$/.test(part) && Number(part) < Number.MAX_SAFE_INTEGER;
 }

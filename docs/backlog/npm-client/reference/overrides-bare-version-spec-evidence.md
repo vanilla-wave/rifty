@@ -68,11 +68,15 @@ edges:
 
 Third probe (same semver 7.8.4 + npa 13.0.2), pinning version-core numeric
 bounds — node-semver rejects leading zeroes, >16-digit components, and values
-≥ `Number.MAX_SAFE_INTEGER`:
+> `Number.MAX_SAFE_INTEGER`. A FULL version-core may equal MAX_SAFE_INTEGER
+(`"9007199254740991.0.0"` → valid version, `">=9007199254740991.0.0"` → valid
+range); the BARE partial `"9007199254740991"` is rejected only because its
+x-range upper-bound expansion overflows to MAX_SAFE_INTEGER+1:
 
 ```
 validRange: "08" / "08.0.16" / "08.x" / "00" → null   "0" / "0.0" / "0.0.0" → valid
 validRange: "12345678901234567" / "9999999999999999" / "9007199254740991" → null
+validRange: "9007199254740991.0.0" → valid   ">=9007199254740991.0.0" → valid
 validRange: "9007199254740990" → ">=9007199254740990.0.0 <9007199254740991.0.0-0"
 npa type:   "08"/"00" → range   "08.0.16"/"8.0.16-01" → version (loose)
 npa type:   "12345678901234567" / "9999999999999999" / "9007199254740991" → tag
@@ -87,8 +91,9 @@ first (BUILDSTRIPRE) — `"8.0.16-" + "a"*250` (257) → null, `"8.0.16+" +
 
 Rifty excludes every out-of-bounds form from the range classifier
 conservatively (loud replacement-name path), including the loose-resolvable
-leading-zero forms and `"8.0.16-01"` — recorded divergences from npm
-resolution, not npm failures.
+leading-zero forms, `"8.0.16-01"`, and full cores at exactly
+MAX_SAFE_INTEGER — recorded divergences from npm resolution, not npm
+failures.
 
 ## rifty today (main 0c4c1b07)
 

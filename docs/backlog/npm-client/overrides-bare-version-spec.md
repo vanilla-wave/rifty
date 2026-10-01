@@ -79,10 +79,11 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
   resolution. node-semver rejects partials with a prerelease (`"1.2-beta"`,
   `">=1.2-beta"`), malformed prerelease/build grammars (`"8.0.16-beta..1"`),
   and version-core components outside its bounds — leading zeroes (`"08"`,
-  `"08.0.16"`, `"08.x"`), >16 digits or ≥ `Number.MAX_SAFE_INTEGER`
-  (`"12345678901234567"`, `"9999999999999999"`, `"9007199254740991"`), and
-  versions longer than node-semver's 256-char bound (build metadata is
-  stripped before that check). npa reads some of those as dist-tags, some
+  `"08.0.16"`, `"08.x"`), >16 digits or > `Number.MAX_SAFE_INTEGER`
+  (`"12345678901234567"`, `"9999999999999999"`, bare `"9007199254740991"`),
+  and versions longer than node-semver's 256-char bound (build metadata is
+  stripped before that check). rifty also excludes full cores at exactly
+  MAX_SAFE_INTEGER, which npm admits — an extra conservative divergence. npa reads some of those as dist-tags, some
   loosely as versions/ranges that npm-pick-manifest genuinely resolves
   (`"08"` → `>=8.0.0 <9.0.0-0`, `"8.0.16-01"` → version); rifty keeps all of
   them on the loud replacement-name path conservatively — recorded
@@ -102,6 +103,7 @@ ready-verdict: 2026-10-01 — Contract+RED @ aebb5c6c95d7a47aa4ab89e0cfea1ad6032
 re-cut: 2026-10-01 — Out of scope enumerates the operator+wildcard / partial-prerelease / partial-build range forms as loud gaps (Final+GREEN blocker fixes) — trace: none
 re-cut: 2026-10-01 — Out of scope adds version-core bounds (leading zeroes, >16 digits, ≥ MAX_SAFE_INTEGER) as loud name-path exclusions and corrects the npa reading of `"8.0.16-01"` (loose version, not a tag) (Final+GREEN blocker fixes) — trace: none
 re-cut: 2026-10-01 — Out of scope adds the 256-char version-length bound (build stripped before the check) and records that npm-pick-manifest resolves the loose leading-zero forms (Final+GREEN blocker fix) — trace: none
+re-cut: 2026-10-01 — Out of scope wording: npm's component bound is `>` MAX_SAFE_INTEGER (full cores may equal it); rifty's `>=` exclusion is an extra conservative divergence (Final+GREEN concern NOTE) — trace: none
 - 2026-10-01 — discriminator: a bare override value is range-like iff every
   `||`-branch's every comparator is a version/x-range rifty `semver.ts`
   evaluates; non-range bare values keep name semantics; `$`-prefixed values
