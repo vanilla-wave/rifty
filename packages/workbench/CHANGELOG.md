@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- Emit fatal/natural Node exit events through captured termination; preserve raw codes before terminal uint8 wrapping.
+
 - Detach owner control IPC subscription at lifetime settlement; counted Node listeners no longer wedge close.
 
 - Registry CLI admission uses the real Node-entry loader after preloads; no source/argv rewrite (ADR-0500).

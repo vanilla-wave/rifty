@@ -1138,3 +1138,243 @@ AssertionError: expected error to match asymmetric matcher
    Duration  2.85s (transform 1.68s, setup 0ms, collect 2.46s, tests 24ms, environment 0ms, prepare 50ms)
 
 [ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-ipc-opaque-red.log
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (15 tests | 4 failed) 11ms
+   × rejects opaque uncloneable brands before observing their properties 3ms
+     → expected [Function] to throw an error
+   × rejects opaque uncloneable brands before observing their properties 0ms
+     → expected [Function] to throw an error
+   × rejects opaque uncloneable brands before observing their properties 0ms
+     → expected [Function] to throw an error
+   × rejects a live MessagePort instead of replacing it with an empty record 1ms
+     → expected [Function] to throw an error
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects opaque uncloneable brands before observing their properties
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects opaque uncloneable brands before observing their properties
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects opaque uncloneable brands before observing their properties
+AssertionError: expected [Function] to throw an error
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:18:42
+     16|   expect(() => serialize(value)).toThrow();
+     17|   expect(gets).toBe(0);
+     18|   expect(() => encodeAdvancedIpc(value)).toThrow();
+       |                                          ^
+     19|   expect(gets).toBe(0);
+     20| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects a live MessagePort instead of replacing it with an empty record
+AssertionError: expected [Function] to throw an error
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:26:52
+     24|   try {
+     25|     expect(() => serialize(channel.port1)).toThrow();
+     26|     expect(() => encodeAdvancedIpc(channel.port1)).toThrow();
+       |                                                    ^
+     27|   } finally { channel.port1.close(); channel.port2.close(); }
+     28| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 11 passed (15)
+   Start at  05:11:57
+   Duration  700ms (transform 399ms, setup 0ms, collect 537ms, tests 11ms, environment 0ms, prepare 23ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-symbol-mutation-red.log
+$ vitest run packages/runtime-js/src/module-loader/symbol-global-write.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/module-loader/symbol-global-write.test.ts (26 tests | 4 failed) 50ms
+   × cjs Symbol global writes > rejects computed legacy __defineGetter__ keys with mutable global Symbol 10ms
+     → promise resolved "{}" instead of rejecting
+   × cjs Symbol global writes > rejects computed legacy __defineSetter__ keys with mutable global Symbol 1ms
+     → promise resolved "{}" instead of rejecting
+   × esm Symbol global writes > rejects computed legacy __defineGetter__ keys with mutable global Symbol 1ms
+     → Cannot use 'in' operator to search for 'description' in undefined
+   × esm Symbol global writes > rejects computed legacy __defineSetter__ keys with mutable global Symbol 1ms
+     → Cannot use 'in' operator to search for 'description' in undefined
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/module-loader/symbol-global-write.test.ts > cjs Symbol global writes > rejects computed legacy __defineGetter__ keys with mutable global Symbol
+ FAIL |unit|  packages/runtime-js/src/module-loader/symbol-global-write.test.ts > cjs Symbol global writes > rejects computed legacy __defineSetter__ keys with mutable global Symbol
+AssertionError: promise resolved "{}" instead of rejecting
+
+- Expected
++ Received
+
+- [Error: rejected promise]
++ Object {}
+
+ ❯ packages/runtime-js/src/module-loader/symbol-global-write.test.ts:49:123
+     47|     const fn = globalThis.Function;
+     48|     try {
+     49|       await expect(run(`globalThis.Symbol = () => "Function"; const ke…
+       |                                                                                                                           ^
+     50|       expect(globalThis.Function).toBe(fn);
+     51|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL |unit|  packages/runtime-js/src/module-loader/symbol-global-write.test.ts > esm Symbol global writes > rejects computed legacy __defineGetter__ keys with mutable global Symbol
+ FAIL |unit|  packages/runtime-js/src/module-loader/symbol-global-write.test.ts > esm Symbol global writes > rejects computed legacy __defineSetter__ keys with mutable global Symbol
+TypeError: Cannot use 'in' operator to search for 'description' in undefined
+ ❯ packages/runtime-js/src/module-loader/symbol-global-write.test.ts:49:7
+     47|     const fn = globalThis.Function;
+     48|     try {
+     49|       await expect(run(`globalThis.Symbol = () => "Function"; const ke…
+       |       ^
+     50|       expect(globalThis.Function).toBe(fn);
+     51|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 22 passed (26)
+   Start at  05:04:00
+   Duration  2.28s (transform 1.29s, setup 0ms, collect 2.00s, tests 50ms, environment 0ms, prepare 28ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-fatal-exit-red.log
+$ vitest run --project integration tests/integration/node-program-exit-events.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |integration| tests/integration/node-program-exit-events.test.ts (3 tests | 2 failed) 143ms
+   × entry failure emits the raw exit code once before kernel status wrapping 55ms
+     → expected [] to deeply equal [ 1 ]
+   × natural wide code emits the raw exit code once before kernel status wrapping 41ms
+     → expected [ 44 ] to deeply equal [ 300 ]
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > entry failure emits the raw exit code once before kernel status wrapping
+AssertionError: expected [] to deeply equal [ 1 ]
+
+- Expected
++ Received
+
+- Array [
+-   1,
+- ]
++ Array []
+
+ ❯ tests/integration/node-program-exit-events.test.ts:44:19
+     42|     });
+     43|     expect(outcome.code).toBe(native.status);
+     44|     expect(exits).toEqual([rawCode]);
+       |                   ^
+     45|     if (rawCode === 1) expect(diagnostics.join('')).toContain('boom');
+     46|     else expect(diagnostics).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > natural wide code emits the raw exit code once before kernel status wrapping
+AssertionError: expected [ 44 ] to deeply equal [ 300 ]
+
+- Expected
++ Received
+
+  Array [
+-   300,
++   44,
+  ]
+
+ ❯ tests/integration/node-program-exit-events.test.ts:44:19
+     42|     });
+     43|     expect(outcome.code).toBe(native.status);
+     44|     expect(exits).toEqual([rawCode]);
+       |                   ^
+     45|     if (rawCode === 1) expect(diagnostics.join('')).toContain('boom');
+     46|     else expect(diagnostics).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  05:05:20
+   Duration  2.39s (transform 1.39s, setup 0ms, collect 1.91s, tests 143ms, environment 0ms, prepare 74ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-fatal-exit-revert.log
+$ vitest run --project integration tests/integration/node-program-exit-events.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |integration| tests/integration/node-program-exit-events.test.ts (8 tests | 5 failed) 230ms
+   × entry failure emits the raw exit code once before kernel status wrapping 35ms
+     → expected [] to deeply equal [ 1 ]
+   × natural wide code emits the raw exit code once before kernel status wrapping 31ms
+     → expected [ 44 ] to deeply equal [ 300 ]
+   × captured fatal exit emits the raw exit code once before kernel status wrapping 28ms
+     → expected [] to deeply equal [ 1 ]
+   × drain failure emits the raw exit code once before kernel status wrapping 25ms
+     → expected [] to deeply equal [ 1 ]
+   × eval entry failure emits the raw exit code once before kernel status wrapping 28ms
+     → expected [] to deeply equal [ 1 ]
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > entry failure emits the raw exit code once before kernel status wrapping
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > captured fatal exit emits the raw exit code once before kernel status wrapping
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > drain failure emits the raw exit code once before kernel status wrapping
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > eval entry failure emits the raw exit code once before kernel status wrapping
+AssertionError: expected [] to deeply equal [ 1 ]
+
+- Expected
++ Received
+
+- Array [
+-   1,
+- ]
++ Array []
+
+ ❯ tests/integration/node-program-exit-events.test.ts:111:21
+    109|       });
+    110|       expect(outcome.code).toBe(native.status);
+    111|       expect(exits).toEqual([rawCode]);
+       |                     ^
+    112|       if (rawCode === 1) expect(diagnostics.join('')).toContain('boom'…
+    113|       else expect(diagnostics).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > natural wide code emits the raw exit code once before kernel status wrapping
+AssertionError: expected [ 44 ] to deeply equal [ 300 ]
+
+- Expected
++ Received
+
+  Array [
+-   300,
++   44,
+  ]
+
+ ❯ tests/integration/node-program-exit-events.test.ts:111:21
+    109|       });
+    110|       expect(outcome.code).toBe(native.status);
+    111|       expect(exits).toEqual([rawCode]);
+       |                     ^
+    112|       if (rawCode === 1) expect(diagnostics.join('')).toContain('boom'…
+    113|       else expect(diagnostics).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 3 passed (8)
+   Start at  05:08:24
+   Duration  964ms (transform 431ms, setup 0ms, collect 585ms, tests 230ms, environment 0ms, prepare 32ms)
+
+[ELIFECYCLE] Command failed with exit code 1.

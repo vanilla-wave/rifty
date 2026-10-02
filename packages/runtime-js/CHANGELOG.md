@@ -5,11 +5,11 @@
 
 - Named exit/kill exports retain their process receiver and native function names.
 
-- Reject guest Proxy IPC values before observing traps; keep native constructor/revocable semantics (ADR-0501).
+- Native advanced IPC rejects opaque brands before getters; weak Buffer references preserve single-read accessors (ADR-0502).
 
 - Dispatch handled CJS/ESM entry exceptions before lifecycle termination; preserve native exception origin.
 
-- Keep explicit exit(null) at zero; snapshot advanced IPC getters once with Buffer identity (ADR-0501).
+- Keep explicit exit(null) at zero; browser-only advanced IPC clone brands have named ceilings (ADR-0502).
 
 - Generic beforeEntry shares startup cache; handled native info preserves natural drain (ADR-0500).
 

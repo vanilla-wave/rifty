@@ -5,6 +5,41 @@ import { expect, it } from 'vitest';
 import { createModuleLoader } from '../module-loader/loader.ts';
 import { decodeAdvancedIpc, encodeAdvancedIpc } from './advanced-ipc-values.ts';
 
+it.each([
+  () => {
+    const value = Promise.resolve(1);
+    Object.setPrototypeOf(value, null);
+    return value;
+  },
+  () => new WeakRef({}),
+  () => new FinalizationRegistry(() => {}),
+])('rejects opaque uncloneable brands before observing their properties', (factory) => {
+  const value = factory();
+  let gets = 0;
+  Object.defineProperty(value, 'buffer', {
+    enumerable: true,
+    get() {
+      gets++;
+      return Buffer.from([1]);
+    },
+  });
+  expect(() => serialize(value)).toThrow();
+  expect(gets).toBe(0);
+  expect(() => encodeAdvancedIpc(value)).toThrow();
+  expect(gets).toBe(0);
+});
+
+it('rejects a live MessagePort instead of replacing it with an empty record', () => {
+  const channel = new MessageChannel();
+  try {
+    expect(() => serialize(channel.port1)).toThrow();
+    expect(() => encodeAdvancedIpc(channel.port1)).toThrow();
+  } finally {
+    channel.port1.close();
+    channel.port2.close();
+  }
+});
+
 it('rejects SharedArrayBuffer as native V8 IPC does', () => {
   const message = new SharedArrayBuffer(4);
   expect(() => serialize(message)).toThrow();
@@ -68,20 +103,78 @@ it('skips properties deleted by an earlier getter', () => {
   expect(Object.keys(result as object)).toEqual(['a']);
 });
 
-it('serializes Blob own properties as the native V8 ordinary record', () => {
+it('rejects browser-only Blob clone semantics with a named ceiling', () => {
   const message = new Blob(['bytes']);
+  expect(Object.getPrototypeOf(deserialize(serialize(message)))).toBe(Object.prototype);
+  expect(() => encodeAdvancedIpc(message)).toThrow(/serialization.advanced.WebObject/);
+});
+
+it('preserves an existing Buffer hidden behind a getter and repeated aliases', () => {
+  const buffer = Buffer.from([7]);
   let gets = 0;
-  Object.defineProperty(message, 'buffer', {
-    enumerable: true,
+  const message = {
+    get hidden() {
+      gets++;
+      return buffer;
+    },
+    again: buffer,
+  };
+  const result = decodeAdvancedIpc(encodeAdvancedIpc(message)) as typeof message;
+  expect(gets).toBe(1);
+  expect(Buffer.isBuffer(result.hidden)).toBe(true);
+  expect(result.hidden).toBe(result.again);
+});
+
+it.each([
+  (value: Uint8Array) => Object.setPrototypeOf(value, Buffer.prototype),
+  (value: Uint8Array) => Reflect.setPrototypeOf(value, Buffer.prototype),
+  (value: Uint8Array) =>
+    Object.getOwnPropertyDescriptor(Object.prototype, '__proto__')!.set!.call(
+      value,
+      Buffer.prototype,
+    ),
+])('preserves a byte view adopted into Buffer.prototype', (adopt) => {
+  const value = new Uint8Array([4]);
+  adopt(value);
+  const result = decodeAdvancedIpc(encodeAdvancedIpc(value)) as Uint8Array;
+  expect(Buffer.isBuffer(result)).toBe(true);
+  expect(result[0]).toBe(4);
+});
+
+it('tracks a custom typed-array newTarget with Buffer.prototype', () => {
+  const value = Reflect.construct(Uint8Array, [[5]], Buffer) as Uint8Array;
+  const result = decodeAdvancedIpc(encodeAdvancedIpc(value)) as Uint8Array;
+  expect(Buffer.isBuffer(result)).toBe(true);
+  expect(result[0]).toBe(5);
+});
+
+it('filters detached and unbranded views without reading unrelated guest accessors', () => {
+  const unrelated = Buffer.from([8]);
+  structuredClone(unrelated.buffer, { transfer: [unrelated.buffer as ArrayBuffer] });
+  const view = new Uint8Array([9]);
+  let gets = 0;
+  Object.defineProperty(view, Symbol.for('@riftydev/io.Buffer'), {
     get() {
-      return Buffer.from([++gets]);
+      gets++;
+      return true;
     },
   });
-  const result = decodeAdvancedIpc(encodeAdvancedIpc(message)) as { buffer: Uint8Array };
-  expect(result instanceof Blob).toBe(false);
-  expect(gets).toBe(1);
+  const result = decodeAdvancedIpc(encodeAdvancedIpc({ value: Buffer.from([3]) })) as {
+    value: Uint8Array;
+  };
+  expect(gets).toBe(0);
+  expect(Buffer.isBuffer(result.value)).toBe(true);
+  expect(result.value[0]).toBe(3);
+});
+
+it('preserves Buffer/map aliases and a circular ordinary graph', () => {
+  const buffer = Buffer.from([6]);
+  const map = new Map<unknown, unknown>();
+  const message = { buffer, map };
+  map.set(buffer, message);
+  const result = decodeAdvancedIpc(encodeAdvancedIpc(message)) as typeof message;
   expect(Buffer.isBuffer(result.buffer)).toBe(true);
-  expect(result.buffer[0]).toBe(1);
+  expect(result.map.get(result.buffer)).toBe(result);
 });
 
 it('retains native Proxy constructor and revocable reflection/behavior', () => {

@@ -106,7 +106,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0496 | Guest MessagePort references with native host channels |
 | 0497 | Node entry v5 startup execArgv semantics |
 | 0499 | Worker startup errors over existing private control |
-| 0501 | Snapshot advanced IPC accessors once before native cloning |
+| 0502 | Clone the original IPC graph with weak Buffer side references |
 
 ### runtime-wasi
 
@@ -386,6 +386,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0044 | 0316 | swc/WASIp1 discovery retained; product carrier retired |
 | 0047 | 0316 | real WASIp1 proof becomes package-sourced; vendored M8/M10 carrier removed |
 | 0046 | 0125 | owner-binding seam; microtask invariant dropped, context grafted |
+| 0501 | 0502 | native IPC graph replaces snapshots; Buffer weak side references |
 | 0055 | n/a | retired opencode facade ADR; integration cancelled |
 | 0074 | 0077 | SW preview-nav routing; ported into ADR-0077 |
 | 0092 | n/a | retired opencode facade ADR; integration cancelled |

@@ -85,3 +85,13 @@ fork IPC ceiling added after reproduced RED.
 Named process exit receiver: real Node v24.16.0 status7/EXIT7; actual loader
 RED loses private receiver. Constructor exit/kill bindings retain names; GREEN13
 builtin/lifecycle tests. Owner+IPC+controller selection GREEN21.
+
+## Native IPC authority / final repairs (2026-10-02)
+
+- Review2 @08c6c18b BLOCK saved in vitest-run-in-browser-review-2-final-green.json.
+- Independent DEC-2 ipc_brand_decision: erased Promise has no non-mutating JS slot probe; native original-graph clone + weak Buffer side refs chosen (ADR0502 supersedes0501).
+- `pnpm test:run packages/runtime-js/src/internal/advanced-ipc-values.test.ts packages/io packages/runtime-js/src/module-loader/symbol-global-write.test.ts tests/integration/node-program-exit-events.test.ts`: 31 files /756 tests GREEN.
+- `pnpm test:parity child_process/advanced-ipc`: one physical Worker, same Node output; getter count1, opaque getter count0, Buffer/cycles/core slots GREEN.
+- `pnpm test:packed-consumer` @08c6c18b: GREEN 1 test /229.58s; owner IPC finally detaches before drain.
+- Build libs GREEN; exact compiler payload10,022,694 bytes, SHA ec34807999c518d3680ee751812f6cc21d595695725eea8872bed9c74f5590a5. Original byte/other asset ceilings unchanged; inventory gate GREEN.
+- Lint2590files GREEN. Full gate + latest production recomposition pending.

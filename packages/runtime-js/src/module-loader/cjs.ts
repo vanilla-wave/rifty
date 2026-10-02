@@ -1686,7 +1686,8 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
-    return propertyMayBeFunction(args[0], ctx);
+    const key = literalString(args[0]);
+    return key === 'Function' || key === undefined;
   }
 
   return false;

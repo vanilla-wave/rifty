@@ -22,6 +22,7 @@ export { NotImplementedError } from './errors.ts';
 export { EventEmitter, once, captureEventEmitterListenerScope } from './event-emitter.ts';
 export {
   Buffer,
+  getLiveBufferCloneRefs,
   getInspectMaxBytes,
   setInspectMaxBytes,
   isUtf8,

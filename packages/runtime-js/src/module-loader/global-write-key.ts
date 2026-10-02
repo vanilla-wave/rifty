@@ -3,6 +3,7 @@ import type { Edit } from './cjs-source-rewrite.ts';
 
 const ownKeys = Reflect.ownKeys;
 const apply = Reflect.apply;
+const toPrimitive = Symbol.toPrimitive;
 const mutationMethods = new Set<unknown>([
   Object.defineProperty,
   Reflect.defineProperty,
@@ -21,7 +22,7 @@ export function globalWriteKeyGuard(kind: 'esm' | 'cjs'): GlobalWriteGuard {
       throw new NotImplementedError(`module-loader.${kind}-global-function-assignment`);
     return converted;
   };
-  const deferred = (key: unknown): object => ({ [Symbol.toPrimitive]: () => convert(key) });
+  const deferred = (key: unknown): object => ({ [toPrimitive]: () => convert(key) });
   return Object.assign(deferred, {
     mutation(method: unknown) {
       if (!mutationMethods.has(method))

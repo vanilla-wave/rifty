@@ -7,7 +7,6 @@ import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts'
 import { createRequirePath } from '../internal/create-require-path.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { parseNodeStartup } from '../internal/node-startup.ts';
-import { installProxyCloneGuard } from '../internal/proxy-clone-guard.ts';
 import { sandboxToolchainWebAssembly } from '../internal/sandbox-toolchain-realm.ts';
 import { createCjsInteropAuthority } from './cjs-interop-authority.ts';
 import {
@@ -393,7 +392,6 @@ function createModuleLoaderCore(
   opts: ModuleLoaderOptions = {},
   builtinOverrides?: ReadonlyMap<string, Record<string, unknown>>,
 ): ModuleLoaderCore {
-  installProxyCloneGuard();
   const registry = new ModuleRegistry();
   // Node's replaceable `.js` translator publishes a CJS `require.cache`
   // projection even when the same file already has an independent ESM job.

@@ -35,6 +35,13 @@ const c: ParityCase = {
     for (const proxy of [new Proxy({x:1}, {}), Proxy.revocable({x:1}, {}).proxy]) {
       try { child.send(proxy); console.log('BAD-PROXY'); } catch { console.log('proxy rejected'); }
     }
+    const promise = Promise.resolve(1); Object.setPrototypeOf(promise, null);
+    let opaqueGets = 0;
+    for (const opaque of [promise, new WeakRef({}), new FinalizationRegistry(() => {})]) {
+      Object.defineProperty(opaque, 'buffer', {enumerable:true, get() { opaqueGets++; return Buffer.from([8]); }});
+      try { child.send(opaque); console.log('BAD-OPAQUE'); } catch { console.log('opaque rejected'); }
+    }
+    console.log('opaque gets', opaqueGets);
     console.log('gets', gets);
     try { child.send(() => {}); } catch (error) { console.log(error.code); }
   `,

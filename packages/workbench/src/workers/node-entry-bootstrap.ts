@@ -48,7 +48,7 @@ import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-hand
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { installNodeEntryRemoteFs } from './node-entry-remote-fs.ts';
 import { prepareNodeEntryRuntime } from './node-entry-runtime-preparation.ts';
-import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
+import { runNodeProgramLifecycle, terminateNodeProgramFailure } from './node-program-lifecycle.ts';
 import {
   installNodeWorkerRuntimeConfig,
   readNodeWorkerRuntimeConfig,
@@ -163,6 +163,7 @@ const runRawEntry = (): Promise<void> =>
       });
 
 const terminateWorker = proc.exit.bind(proc);
+const writeStderr = proc.stderr.write.bind(proc.stderr);
 const runEntry = async (): Promise<void> => {
   try {
     await runRawEntry();
@@ -216,13 +217,20 @@ if (nodeServe) {
       ),
     postListening: (ports) => postNodeProcessListeningControl(proc, ports, previewScope),
     readExitCode: () => proc.exitCode,
-    exit: (code) => proc.exit(code),
+    exit: terminateWorker,
+    writeStderr,
   });
 } else {
-  await runEntry();
-  // Honor process.exitCode on a clean return (Node parity, ADR-0157 D4): the kernel
-  // reaps a no-throw return as exit 0, so a `.bin`/execSync CLI that set a non-zero
-  // process.exitCode must surface it (proc.exit throws RIFTY_PROCESS_EXIT → kernel
-  // maps the code). exitCode 0 stays a clean exit 0.
-  if (proc.exitCode) proc.exit(proc.exitCode);
+  try {
+    await runEntry();
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      Reflect.get(error, 'code') === 'RIFTY_PROCESS_EXIT'
+    )
+      throw error;
+    terminateNodeProgramFailure(error, { exit: terminateWorker, writeStderr });
+  }
+  terminateWorker(proc.exitCode);
 }

@@ -41,6 +41,26 @@ describe.each(['cjs', 'esm'])('%s Symbol global writes', (kind) => {
     );
   });
 
+  it.each(['__defineGetter__', '__defineSetter__'])(
+    'rejects computed legacy %s keys with mutable global Symbol',
+    async (method) => {
+      const symbol = globalThis.Symbol;
+      const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'Function')!;
+      const fn = globalThis.Function;
+      try {
+        await expect(
+          run(
+            `globalThis.Symbol = () => "Function"; const key = Symbol(); globalThis.${method}(key, () => 42);`,
+          ),
+        ).rejects.toThrow(/global-function-assignment/);
+        expect(globalThis.Function).toBe(fn);
+      } finally {
+        globalThis.Symbol = symbol;
+        Object.defineProperty(globalThis, 'Function', descriptor);
+      }
+    },
+  );
+
   it.each([
     'const key = "Function"; globalThis[key] = () => {};',
     'let key = Symbol(); key = "Function"; globalThis[key] = () => {};',

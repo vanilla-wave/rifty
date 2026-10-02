@@ -294,6 +294,8 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
 
   registerNetBuiltins();
   const proc = globalThis.process;
+  const terminateWorker = proc.exit.bind(proc);
+  const writeStderr = proc.stderr.write.bind(proc.stderr);
   const previewScope = launch.kind === 'worker-thread' ? undefined : launch.previewScope;
   await runNodeProgramLifecycle({
     runEntry,
@@ -309,7 +311,8 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
       ),
     postListening: (ports) => postNodeProcessListeningControl(proc, ports, previewScope),
     readExitCode: () => proc.exitCode,
-    exit: (code) => proc.exit(code),
+    exit: terminateWorker,
+    writeStderr,
   });
 }
 
