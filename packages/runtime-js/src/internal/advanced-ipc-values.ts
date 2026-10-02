@@ -1,14 +1,40 @@
-import { Buffer } from '@riftydev/io';
+import { Buffer, NotImplementedError } from '@riftydev/io';
 import { isTrackedProxy } from './proxy-clone-guard.ts';
 
-const nativeFunctionToString = Function.prototype.toString;
+const nativeApply = Reflect.apply;
+const nativeClone = structuredClone;
 const nativeMapEntries = Map.prototype.entries;
 const nativeSetValues = Set.prototype.values;
-// V8 serializes web values as ordinary own-property records, not host clones.
-const ordinaryWebPrototypes = new Set<object>();
-for (const name of ['Blob', 'File', 'URL', 'URLSearchParams', 'DOMException']) {
-  const constructor = Reflect.get(globalThis, name);
-  if (typeof constructor === 'function') ordinaryWebPrototypes.add(constructor.prototype);
+const nativeMapSize = Object.getOwnPropertyDescriptor(Map.prototype, 'size')!.get!;
+const nativeSetSize = Object.getOwnPropertyDescriptor(Set.prototype, 'size')!.get!;
+const nativeIsView = ArrayBuffer.isView;
+const sharedSize =
+  typeof SharedArrayBuffer === 'undefined'
+    ? null
+    : Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, 'byteLength')!.get!;
+const nativeIsError = Reflect.get(Error, 'isError') as ((value: unknown) => boolean) | undefined;
+const nativeCoreProbes = [
+  Date.prototype.getTime,
+  Object.getOwnPropertyDescriptor(RegExp.prototype, 'source')!.get!,
+  Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength')!.get!,
+  Number.prototype.valueOf,
+  String.prototype.valueOf,
+  Boolean.prototype.valueOf,
+  BigInt.prototype.valueOf,
+  Symbol.prototype.valueOf,
+  WeakMap.prototype.has,
+  WeakSet.prototype.has,
+];
+const promisePrototype = Promise.prototype;
+const errorPrototype = Error.prototype;
+const nativeIsPrototypeOf = Object.prototype.isPrototypeOf;
+function hasSlot(value: object, probe: (...args: never[]) => unknown): boolean {
+  try {
+    nativeApply(probe, value, []);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 interface AdvancedPayload {
@@ -22,7 +48,9 @@ export function encodeAdvancedIpc(message: unknown): unknown {
   const seen = new Map<object, object>();
   const visit = (value: unknown): unknown => {
     if (value === null || typeof value !== 'object') return value;
-    if (isTrackedProxy(value)) return structuredClone(value);
+    if (isTrackedProxy(value)) return nativeClone(value);
+    if (sharedSize && hasSlot(value, sharedSize))
+      throw new NotImplementedError('child_process.serialization.advanced.SharedArrayBuffer');
     const cached = seen.get(value);
     if (cached) return cached;
     if (Buffer.isBuffer(value)) {
@@ -30,28 +58,33 @@ export function encodeAdvancedIpc(message: unknown): unknown {
       buffers.push(value);
       return value;
     }
-    if (value instanceof Map) {
+    if (hasSlot(value, nativeMapSize)) {
       const copy = new Map<unknown, unknown>();
       seen.set(value, copy);
-      for (const [key, item] of nativeMapEntries.call(value)) copy.set(visit(key), visit(item));
+      for (const [key, item] of nativeApply(nativeMapEntries, value, []) as IterableIterator<
+        [unknown, unknown]
+      >)
+        copy.set(visit(key), visit(item));
       return copy;
     }
-    if (value instanceof Set) {
+    if (hasSlot(value, nativeSetSize)) {
       const copy = new Set<unknown>();
       seen.set(value, copy);
-      for (const item of nativeSetValues.call(value)) copy.add(visit(item));
+      for (const item of nativeApply(nativeSetValues, value, []) as IterableIterator<unknown>)
+        copy.add(visit(item));
       return copy;
     }
-    // Native branded values keep native clone semantics (including rejection).
-    // Ordinary objects/arrays snapshot enumerable getters exactly once.
-    let proto = Object.getPrototypeOf(value);
-    while (proto && proto !== Object.prototype && proto !== Array.prototype) {
-      if (ordinaryWebPrototypes.has(proto)) break;
-      const ctor = Object.getOwnPropertyDescriptor(proto, 'constructor')?.value;
-      if (typeof ctor === 'function' && /\[native code\]/.test(nativeFunctionToString.call(ctor)))
-        return value;
-      proto = Object.getPrototypeOf(proto);
-    }
+    if (
+      nativeIsView(value) ||
+      nativeIsError?.(value) ||
+      nativeCoreProbes.some((probe) => hasSlot(value, probe))
+    )
+      return value;
+    if (
+      nativeApply(nativeIsPrototypeOf, promisePrototype, [value]) ||
+      nativeApply(nativeIsPrototypeOf, errorPrototype, [value])
+    )
+      return value;
     const copy: Record<string, unknown> = Array.isArray(value)
       ? (new Array(value.length) as unknown as Record<string, unknown>)
       : Object.create(null);
@@ -67,7 +100,7 @@ export function encodeAdvancedIpc(message: unknown): unknown {
     }
     return copy;
   };
-  return structuredClone({ data: visit(message), buffers } satisfies AdvancedPayload);
+  return nativeClone({ data: visit(message), buffers } satisfies AdvancedPayload);
 }
 
 export function decodeAdvancedIpc(payload: unknown): unknown {

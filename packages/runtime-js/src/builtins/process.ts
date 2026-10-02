@@ -555,6 +555,10 @@ export class NodeProcess extends EventEmitter {
 
   constructor(spec?: KernelProcessSpec) {
     super();
+    this.exit = this.exit.bind(this);
+    this.kill = this.kill.bind(this);
+    Object.defineProperty(this.exit, 'name', { value: 'exit' });
+    Object.defineProperty(this.kill, 'name', { value: 'kill' });
     Object.defineProperty(this, 'release', {
       value: createNodeProcessRelease(),
       writable: false,
@@ -1118,7 +1122,6 @@ export function bindNodeProcessDescendantAuthority(
 
 /**
  * Adopt the kernel bundle's spec-seeded process into this node-entry bundle.
- * One-shot before guest code (ADR-0334).
  */
 export function adoptNodeProcessBootstrap(
   process: unknown,
@@ -1184,10 +1187,7 @@ export function writeProcessStdin(data: string | Uint8Array): void {
 }
 
 /**
- * Install the no-spec REPL `process` on `globalThis` + patch Promise for nextTick
- * ordering. Idempotent: skips when `globalThis.process` is already a `NodeProcess`
- * (the kernel pre-entry seam already installed the seeded one), so a stray
- * top-level call in a co-bundled chunk cannot clobber it (ADR-0157;
+ * Install REPL globals; retain kernel-seeded process (ADR-0157;
  * backlog: runtime-js/worker-entry-process-globals-side-effect).
  */
 export function installProcessGlobals(): void {

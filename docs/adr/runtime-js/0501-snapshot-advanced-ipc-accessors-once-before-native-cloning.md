@@ -15,8 +15,8 @@ browser structured clone. Native Node v24.16.0 Blob probe: 1 Object true 1.
 
 Snapshot ordinary enumerable string properties once, sharing one graph map.
 Skip keys deleted by earlier getters; enumerable key set is captured initially.
-Captured native Map/Set contents bypass guest iterator overrides. V8-ordinary
-web prototypes remain records; native branded core values retain native clone.
+Captured native Map/Set contents bypass guest iterator overrides. Native slot probes, not constructor/prototype text, recognize core values.
+Ordinary web objects remain own-property records; native core values retain clone.
 One structuredClone packet retains Buffer side references; no second serialization
 walk of accessors, no new transport or receiver authority.
 

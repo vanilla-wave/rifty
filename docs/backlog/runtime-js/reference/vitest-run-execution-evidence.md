@@ -73,3 +73,15 @@ clone rejects before traps. Unit reflection/rejection plus physical fork parity
 GREEN. Proxy creation metadata is required; no extra lifetime/terminal owner.
 CLI eval handler GREEN: real behavioral RED then 31-test entry/IPC selection;
 physical CJS/ESM/eval acceptance 1 passed (27.0 s).
+
+Isolated packed rerun reproduces Workspace owner exit timeout after close.
+Root cause: private host IPC callback remains a counted public Node message
+listener after owner lifetime settles. Real NodeProcess/kernel transport RED
+refs1/no detach; GREEN detaches to refs0. Native guest IPC refs stay intact.
+IPC slot-brand RED3→GREEN10: native V8 Date/Map/Set with changed prototypes;
+constructor-source classification removed. SharedArrayBuffer V8 rejects; named
+fork IPC ceiling added after reproduced RED.
+
+Named process exit receiver: real Node v24.16.0 status7/EXIT7; actual loader
+RED loses private receiver. Constructor exit/kill bindings retain names; GREEN13
+builtin/lifecycle tests. Owner+IPC+controller selection GREEN21.

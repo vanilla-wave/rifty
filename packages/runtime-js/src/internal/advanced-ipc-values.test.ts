@@ -1,8 +1,27 @@
+import { deserialize, serialize } from 'node:v8';
 import { Buffer } from '@riftydev/io';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { expect, it } from 'vitest';
 import { createModuleLoader } from '../module-loader/loader.ts';
 import { decodeAdvancedIpc, encodeAdvancedIpc } from './advanced-ipc-values.ts';
+
+it('rejects SharedArrayBuffer as native V8 IPC does', () => {
+  const message = new SharedArrayBuffer(4);
+  expect(() => serialize(message)).toThrow();
+  expect(() => encodeAdvancedIpc(message)).toThrow();
+});
+
+it.each([() => new Date(0), () => new Map([['key', 7]]), () => new Set([3])])(
+  'preserves core internal slots when the sender changes its prototype',
+  (factory) => {
+    const message = factory();
+    Object.setPrototypeOf(message, null);
+    const native = deserialize(serialize(message)) as object;
+    const result = decodeAdvancedIpc(encodeAdvancedIpc(message)) as object;
+    expect(Object.getPrototypeOf(result) === Object.getPrototypeOf(native)).toBe(true);
+    expect(result).toEqual(native);
+  },
+);
 
 it('reads enumerable accessors once and preserves their fresh Buffer value', () => {
   let gets = 0;

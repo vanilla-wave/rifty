@@ -3,6 +3,8 @@
 
 ## [Unreleased]
 
+- Named exit/kill exports retain their process receiver and native function names.
+
 - Reject guest Proxy IPC values before observing traps; keep native constructor/revocable semantics (ADR-0501).
 
 - Dispatch handled CJS/ESM entry exceptions before lifecycle termination; preserve native exception origin.

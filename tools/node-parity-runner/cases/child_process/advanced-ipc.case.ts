@@ -30,6 +30,7 @@ const c: ParityCase = {
     const value = {date:new Date(0),map:new Map([['key',7]]),set:new Set([3]),bytes:new Uint8Array([1,2]),array:[undefined]}; value.self = value; value.buffer = Buffer.from([3,4]); value.bufferAgain = value.buffer; value.map.set('buffer', value.buffer);
     let gets = 0;
     Object.defineProperty(value, 'accessorBuffer', { enumerable: true, get() { return Buffer.from([++gets]); } });
+    Object.setPrototypeOf(value.date, null); Object.setPrototypeOf(value.map, null); Object.setPrototypeOf(value.set, null);
     child.send(value);
     for (const proxy of [new Proxy({x:1}, {}), Proxy.revocable({x:1}, {}).proxy]) {
       try { child.send(proxy); console.log('BAD-PROXY'); } catch { console.log('proxy rejected'); }

@@ -21,11 +21,13 @@ export interface ProcStdio {
   stderr?: { write?: unknown };
   env?: Record<string, string | undefined>;
   on?(event: 'message', handler: (message: unknown) => void): unknown;
+  off?(event: 'message', handler: (message: unknown) => void): unknown;
   send?(message: unknown): unknown;
 }
 
 export interface KernelIpc {
-  onMessage?(handler: (message: unknown) => void): void;
+  // biome-ignore lint/suspicious/noConfusingVoidType: legacy transport callbacks return void.
+  onMessage?(handler: (message: unknown) => void): void | (() => void);
   /** Fork-IPC send back to the page (ADR-0045); absent when no IPC channel. */
   send?(message: unknown): void;
 }
@@ -74,7 +76,13 @@ export function installRuntimeGlobals(): KernelIpc {
   const onMessage =
     typeof proc?.on === 'function'
       ? (handler: (message: unknown) => void) => {
+          if (typeof proc.off !== 'function')
+            throw new Error('Worker IPC requires detachable listeners');
+          const off = proc.off;
           proc.on?.('message', handler);
+          return () => {
+            off.call(proc, 'message', handler);
+          };
         }
       : undefined;
   const send =

@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- Detach owner control IPC subscription at lifetime settlement; counted Node listeners no longer wedge close.
+
 - Registry CLI admission uses the real Node-entry loader after preloads; no source/argv rewrite (ADR-0500).
 
 - Report physical Worker startup failures before exit with real error data (ADR-0499).
