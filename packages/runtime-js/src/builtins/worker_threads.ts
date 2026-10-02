@@ -220,8 +220,8 @@ export class Worker extends EventEmitter {
           stdout: Parameters<Readable['pipe']>[0];
           stderr: Parameters<Readable['pipe']>[0];
         };
-        if (!this.captureStdout) this.stdoutStream.pipe(owner.stdout);
-        if (!this.captureStderr) this.stderrStream.pipe(owner.stderr);
+        if (!this.captureStdout) this.stdoutStream.pipe(owner.stdout, { end: false });
+        if (!this.captureStderr) this.stderrStream.pipe(owner.stderr, { end: false });
         handle.stdout().on('data', (chunk) => {
           this.stdoutStream.push(chunk);
           this.emitToOwner('stdout', chunk);

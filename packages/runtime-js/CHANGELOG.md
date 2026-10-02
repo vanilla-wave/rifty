@@ -3,6 +3,8 @@
 
 ## [Unreleased]
 
+- Worker default stdout/stderr pipes never end the captured parent streams, including same-realm child ownership.
+
 - Shared-backed advanced fork views fail with an explicit ceiling; native V8 snapshot observation remains outside the Vitest scenario (ADR-0503).
 
 - Route owned uncaught browser errors/rejections through Node drain and exit; suppress racing browser peer teardown.

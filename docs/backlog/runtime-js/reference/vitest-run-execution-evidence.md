@@ -113,3 +113,12 @@ builtin/lifecycle tests. Owner+IPC+controller selection GREEN21.
 - Interrupted earlier full gates for newly required repairs; no full PASS claim. Latest full gate, production and packed proof pending.
 
 Web-object oracle: `node docs/backlog/runtime-js/reference/vitest-web-clone-native-probe.mjs` → Nodev24.16.0, `v8 true { own: 7 } 1`, `clone true [] 0`; sibling output retained. Native ordinary own getter vs browser branded clone is the explicit WebObject ceiling.
+
+### Full-gate Worker stdio repair
+
+- Full gate @e9: 10,598 tests passed/18 skipped, one unhandled dest.end error; lint probe formatting also red. No failed assertions, test-file auto-rerun could not infer the error's source.
+- Manual isolated child_process-worker-identity rerun reproduces10passed +1 unhandled; kernel Worker default pipes captured same-realm owner's write-only stdout/stderr, which differ from ambient process globals.
+- Root owner uses end:false on both automatic parent pipes. Isolated10 +worker26 GREEN; revert10passed +1unhandled RED; restored10 GREEN. No test edited, no stream fake/stub introduced.
+- Probe-only formatting fixed, lint GREEN. Product source changed only the two automatic pipe options; latest full gate still required.
+
+- Worker stdio source build GREEN; exact compiler10,022,694bytes SHA0a43e58f88b33600fd2eabc8b2e4d3e3ab878c766046af7c6c01c9f0369530e4. Exact pin only; no ceiling change.

@@ -33,3 +33,5 @@
 - 2026-10-02 — final follow-on RED→GREEN: shared Buffer snapshot, owned async fatal suppression/drain, nonserve timer + pending entry drain. IPC25 + physical fork1, lifecycle55 GREEN. Source freeze for final gates; required I3/I4 remain with this unit.
 
 - 2026-10-02 — verify e71: Node SAB-buffer observation differs with later getter; DEC-2 ADR0503 sets explicit outside-scenario shared-backed view ceiling, no false snapshot. Nonserve pending ESM fatal uses same lifecycle owner (real loader RED, 57 lifecycle GREEN). Outside-goal shared/web captures carry named ❌; goal unchanged. Full gate attempts interrupted for repairs; not PASS.
+
+- 2026-10-02 — full gate e9 source lanes parity/build/type GREEN; unit10,598passed but1unhandled. Isolated Worker-parent stdio reproduction RED→end:false at existing auto-pipe owner→36GREEN, revertRED/restoredGREEN. Probe formatting fixed. Full gate retry +production/packed required before closure.

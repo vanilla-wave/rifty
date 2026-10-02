@@ -1676,3 +1676,73 @@ Error: owned fatal error left real ESM entry pending
    Duration  3.30s (transform 1.33s, setup 0ms, collect 1.89s, tests 1.08s, environment 0ms, prepare 36ms)
 
 [ELIFECYCLE] Command failed with exit code 1.
+
+Full-gate unhandled Worker stdio failure, isolated reproduction
+$ vitest run packages/runtime-js/src/builtins/child_process-worker-identity.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+stderr | packages/runtime-js/src/builtins/child_process-worker-identity.test.ts > child_process Worker ancestry > restores the same-realm child process around worker parent callbacks
+[rifty:worker_threads] Falling back to same-realm execution: kernel.spawnWorker capability not available (SAB IPC unsupported or kernelWorkerUrl not configured). workerData and parentPort still propagate, but this Worker shares the parent event loop — no real parallelism. To enable real Workers: ensure cross-origin isolation (SharedArrayBuffer) and call kernel.setKernelWorkerUrl(...) at host boot (ADR-0011 phase 2).
+
+ ✓ |unit| packages/runtime-js/src/builtins/child_process-worker-identity.test.ts (10 tests) 61ms
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+TypeError: dest.end is not a function
+ ❯ publishedConstructor.onEnd packages/io/src/streams/readable.ts:749:29
+ ❯ publishedConstructor.emit packages/io/src/event-emitter.ts:150:22
+ ❯ packages/io/src/streams/readable.ts:653:14
+
+This error originated in "packages/runtime-js/src/builtins/child_process-worker-identity.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "uses the same-realm child identity when it constructs a kernel worker thread". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+     Errors  1 error
+   Start at  06:01:20
+   Duration  849ms (transform 433ms, setup 0ms, collect 600ms, tests 61ms, environment 0ms, prepare 31ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+Worker parent stdio guard revert
+$ vitest run packages/runtime-js/src/builtins/child_process-worker-identity.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+stderr | packages/runtime-js/src/builtins/child_process-worker-identity.test.ts > child_process Worker ancestry > restores the same-realm child process around worker parent callbacks
+[rifty:worker_threads] Falling back to same-realm execution: kernel.spawnWorker capability not available (SAB IPC unsupported or kernelWorkerUrl not configured). workerData and parentPort still propagate, but this Worker shares the parent event loop — no real parallelism. To enable real Workers: ensure cross-origin isolation (SharedArrayBuffer) and call kernel.setKernelWorkerUrl(...) at host boot (ADR-0011 phase 2).
+
+ ✓ |unit| packages/runtime-js/src/builtins/child_process-worker-identity.test.ts (10 tests) 63ms
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+TypeError: dest.end is not a function
+ ❯ publishedConstructor.onEnd packages/io/src/streams/readable.ts:749:29
+ ❯ publishedConstructor.emit packages/io/src/event-emitter.ts:150:22
+ ❯ packages/io/src/streams/readable.ts:653:14
+
+This error originated in "packages/runtime-js/src/builtins/child_process-worker-identity.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "uses the same-realm child identity when it constructs a kernel worker thread". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+     Errors  1 error
+   Start at  06:03:49
+   Duration  768ms (transform 376ms, setup 0ms, collect 527ms, tests 63ms, environment 0ms, prepare 28ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
