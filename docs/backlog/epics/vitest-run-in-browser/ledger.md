@@ -41,3 +41,11 @@
 - 2026-10-02 — production Chromium @497632a5 GREEN2/2 (5.0min), complete real Vitest scenario +composed Node physical contracts. Final packed consumer running; canonicalFinal+goalCLOSE still pending.
 
 - 2026-10-02 — verify normal Error.cause edge: causeBufferbrand/alias +nestedSAB loud required. Shared native-cloned graph walker closes both passes; sweep boxedString readonly leaf. NativeErrorcause accessor is skipped (oracle0 reads); wrong extra test premise explicitly corrected. 29GREEN, validrevert3RED/restoredGREEN, physicalforkGREEN; latestbuildGREEN. Freshfull/composed gates pending for changedsource.
+
+- 2026-10-02 — full gate @3eb1e3c3 GREEN25/25, unit182.1s/nativeparity62.4s. Source fixed/frozen; repeated production+packed then canonicalFinal/CLOSE pending.
+
+- 2026-10-02 — production @3eb1e3c3 GREEN2/2 (8.0min), exact bothpool TSproject +physicalNode transitions. Final packedconsumer running; no source changes.
+
+- 2026-10-02 — latestpacked @3eb1e3c3 GREEN1/1,158.62s. All3 finalsource carriers GREEN, raw validation retained; independentcanonicalFinal pending before CLOSE.
+
+- 2026-10-02 — re-chart after runtime-js/vitest-run-acceptance (final-green PASS @3eb1e3c3ee9ca8ff1cb3ca289c56aba199c04ff4): I1–I7 complete; map empty; canonical57coverage,0blockers,2advisory, requiredresiduals[]. Sourcefullgate25/25 +production2/2 +latestpacked1/1 GREEN. CLOSE next, docs-only; local-only user packaging, no push.

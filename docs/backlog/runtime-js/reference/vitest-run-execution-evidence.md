@@ -138,3 +138,11 @@ Earlier fullgate/production/packed @497 allGREEN, but changed codec requires fre
 
 - Native accessor oracle persisted: `node docs/backlog/runtime-js/reference/vitest-error-cause-accessor-native-probe.mjs` → v24.16.0 0 false undefined. Corrected test29 GREEN; valid guard revert3RED, restored29GREEN (prior4RED included that wrong extra expectation).
 - Native-edge build GREEN; exact compiler10,022,694bytes SHA dfa9f3c5c9ea6784401beb915b2edaf43bfec36f28006e916887615363d37b2c, no widened ceiling. Physical advanced forkGREEN includes causeBufferalias +causeSABreject.
+
+`pnpm pr:check --all` @3eb1e3c3 GREEN25/25: unit182.1s, full Nativeparity62.4s, no unhandled errors. Production Chromium is rerun on changed IPC source with fresh preview5489; packed follows it.
+
+Production `RIFTY_PLAYGROUND_PORT=5489 pnpm exec playwright test --config playwright.prod.config.ts tests/e2e-prod/vitest-run-in-browser.spec.ts --project chromium --workers=1` @3eb1e3c3 GREEN2/2,8.0min: actual physicalNode contracts +complete exact VitestTSconfig/tests bothpools scenario. Latest packed consumer runs next, source remains frozen.
+
+Final packed: `pnpm test:packed-consumer` @3eb1e3c3 GREEN1/1,158.62s. All three final carriers GREEN on the same source; raw final summaries retained in vitest-run-final-validation.txt. Independent Final+GREEN artifact follows; closure changes docs only.
+
+Independent canonicalFinal+GREEN: vitest-run-in-browser-final-green.json @3eb1e3c3ee9ca8ff1cb3ca289c56aba199c04ff4,57coverage/56pass/1weak,0blockers,2advisory, unit/goalrequiredresiduals[], goalcomplete true. Node/VitestI1–I7 complete. Shared-backed/webIPC and beforeExit stay explicitly outside the accepted result; their independently checked draft records remain. Sourceunchanged since review; delivery local only.

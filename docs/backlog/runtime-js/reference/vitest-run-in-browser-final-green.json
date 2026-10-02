@@ -1,0 +1,526 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "PASS Final+GREEN; source 3eb1e3c3 accepted, goal complete. Two report-only advisories; local CLOSE commit, no push.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "3eb1e3c3ee9ca8ff1cb3ca289c56aba199c04ff4",
+  "unit_goal_source": "docs/backlog/runtime-js/vitest-run-acceptance.md + docs/backlog/epics/vitest-run-in-browser/goal.md; includes npm d138a104; BASE 0c4c1b07; reviewed 3eb1e3c3ee9ca8ff1cb3ca289c56aba199c04ff4",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Acceptance 1: npm override installs exact one Vite; legacy spelling works",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:246 + packages/npm-client/src/overrides.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: referenced Worker message/exit; unref releases loop",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: process handlers continue, exit event, inherited exitCode",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:175 + tests/integration/node-program-exit-events.test.ts:22",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: TS config/include, failing default/verbose/npm reporter and fixed run",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:258",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: same results and codes for threads and forks",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:258",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: exact claimed module tree loads; unclaimed operations loud",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:258",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: exact compat claim and positive/negative rows",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:301 + docs/public/compat/vitest.md:1",
+      "note": ""
+    },
+    {
+      "row": "Parity: npm spelling reference/parser/browser",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Parity: real Node and physical Worker lifecycle/stdio",
+      "source": "acceptance",
+      "trace": "I2 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "Parity: identical process lifecycle scripts",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "Parity: builtin names/path/Symbol/vm offsets",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/vitest-builtin-imports.case.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Parity: real Vitest files pools/reporter/codes",
+      "source": "acceptance",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:258",
+      "note": ""
+    },
+    {
+      "row": "Fault: Worker final message/stdio precedes exit; parent drains after terminal",
+      "source": "fault-matrix",
+      "trace": "I2 + I5",
+      "status": "weak",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:175",
+      "note": "Advisory F3: physical oracle checks message counts and captured stdio at exit, but the per-line comparison does not explicitly discriminate message-before-exit order. No current behavioral defect established."
+    },
+    {
+      "row": "Fault: claimed advanced cloneable values both directions; JSON default; native uncloneable input loud. Explicit web/shared ceilings: ADR-0502/0503.",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/advanced-ipc.case.ts:20 + packages/runtime-js/src/internal/advanced-ipc-values.test.ts:8",
+      "note": ""
+    },
+    {
+      "row": "Fault: handled errors continue; exit callback precedes terminal",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/integration/node-program-exit-events.test.ts:22 + tests/integration/node-process-unhandled-traps.test.ts:29",
+      "note": ""
+    },
+    {
+      "row": "npm Acceptance 1: bare ranges retain identity",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "npm Acceptance 2: explicit name@range remains",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:13",
+      "note": ""
+    },
+    {
+      "row": "npm parity: real npm 11.17.0 install",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md:1",
+      "note": ""
+    },
+    {
+      "row": "IO createHostMessageChannel",
+      "source": "public-api",
+      "trace": "ADR-0496",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/message-port-globals.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "IO markHostMessagePort",
+      "source": "public-api",
+      "trace": "ADR-0496",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/message-port-globals.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "IO HOST_MESSAGE_PORT",
+      "source": "public-api",
+      "trace": "ADR-0496",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/message-port-globals.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Kernel IpcFrame control:entry-error / decodeIpcFrame",
+      "source": "public-api",
+      "trace": "ADR-0499",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "Kernel WorkerProcessHandle entryerror delivery",
+      "source": "public-api",
+      "trace": "ADR-0499",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "Node-entry v5 protocol / launch execArgv and advanced IPC",
+      "source": "public-api",
+      "trace": "ADR-0497 + ADR-0492",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts:58",
+      "note": ""
+    },
+    {
+      "row": "runNodeEntry execArgv/beforeEntry handled disposition",
+      "source": "public-api",
+      "trace": "ADR-0497 + ADR-0500",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-startup.test.ts:60",
+      "note": ""
+    },
+    {
+      "row": "ModuleLoaderOptions execArgv / ResolverOptions conditions",
+      "source": "public-api",
+      "trace": "ADR-0497",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-startup.test.ts:38",
+      "note": ""
+    },
+    {
+      "row": "NodeProcessWorkerIpc reportEntryError",
+      "source": "public-api",
+      "trace": "ADR-0499",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "InstalledCliAdmission / admitInstalledCliEntry",
+      "source": "public-api",
+      "trace": "ADR-0500",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Node builtin fs.statfsSync, child_process.spawnSync, process.memoryUsage",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Node builtin path/posix and path/win32 projection",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Node builtin vm constants/SourceTextModule/SyntheticModule; inspector/promises",
+      "source": "public-api",
+      "trace": "I6 + I7",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:48",
+      "note": ""
+    },
+    {
+      "row": "Node Worker stdout/stderr, execArgv, ref/unref",
+      "source": "public-api",
+      "trace": "I2 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "Native CLI projection oracle",
+      "source": "frozen-artifact",
+      "trace": "ADR-0500",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts:11",
+      "note": ""
+    },
+    {
+      "row": "Native informational envelope output",
+      "source": "frozen-artifact",
+      "trace": "ADR-0500",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/vitest-cli-envelope-info-probe.cjs:1",
+      "note": ""
+    },
+    {
+      "row": "Native Worker/fork execArgv output",
+      "source": "frozen-artifact",
+      "trace": "ADR-0497",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/vitest-execargv-probe.cjs:1",
+      "note": ""
+    },
+    {
+      "row": "ADR lifecycle projection and Worker lifetime",
+      "source": "acceptance",
+      "trace": "ADR-0491",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "ADR advanced clone/Buffer graph",
+      "source": "acceptance",
+      "trace": "ADR-0492",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/advanced-ipc.case.ts:20",
+      "note": ""
+    },
+    {
+      "row": "ADR host vm offset identity",
+      "source": "acceptance",
+      "trace": "ADR-0493",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/vm-script-offsets.case.ts:3",
+      "note": ""
+    },
+    {
+      "row": "ADR WASM jobs hold loop",
+      "source": "acceptance",
+      "trace": "ADR-0494",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/wasm-keepalive.test.ts:10",
+      "note": ""
+    },
+    {
+      "row": "ADR dynamic global keys preserve conversion order and ceilings",
+      "source": "acceptance",
+      "trace": "ADR-0495",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/symbol-global-write.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "ADR guest port refs/host channels",
+      "source": "acceptance",
+      "trace": "ADR-0496",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/message-port-globals.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "ADR v5 raw startup identity/effects",
+      "source": "acceptance",
+      "trace": "ADR-0497",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "ADR asynchronous preload errors before exit",
+      "source": "acceptance",
+      "trace": "ADR-0499",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "ADR canonical actual CLI admission/info completion",
+      "source": "acceptance",
+      "trace": "ADR-0500",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run-in-browser.spec.ts:285",
+      "note": ""
+    },
+    {
+      "row": "Owner IPC lifetime teardown releases control listener / natural drain",
+      "source": "acceptance",
+      "trace": "ADR-0491 + I2",
+      "status": "pass",
+      "citation": "tests/integration/workbench-owner-ipc-drain.test.ts:14",
+      "note": ""
+    },
+    {
+      "row": "Native getter Buffer fork reference",
+      "source": "frozen-artifact",
+      "trace": "ADR-0501",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/vitest-ipc-getter-probe.cjs:1",
+      "note": ""
+    },
+    {
+      "row": "ADR-0502: original native clone; one weak Buffer registry; original getters once, branded/aliased buffers, opaque rejection; explicit web ceiling",
+      "source": "acceptance",
+      "trace": "ADR-0502 + I4",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/advanced-ipc-values.test.ts:8",
+      "note": ""
+    },
+    {
+      "row": "ADR-0503: reached SharedArrayBuffer/all shared-backed views reject; unrelated shared side refs excluded",
+      "source": "acceptance",
+      "trace": "ADR-0503 + I4",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/advanced-ipc-values.test.ts:101",
+      "note": ""
+    },
+    {
+      "row": "Native Error.cause retained data edge: Buffer brand/alias and shared/web ceilings; boxed core primitives stay atomic",
+      "source": "acceptance",
+      "trace": "ADR-0492 + ADR-0502 + ADR-0503",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/advanced-ipc-values.test.ts:47 + tools/node-parity-runner/cases/child_process/advanced-ipc.case.ts:25",
+      "note": ""
+    },
+    {
+      "row": "IO getLiveBufferCloneRefs public side-reference reader",
+      "source": "public-api",
+      "trace": "ADR-0502",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/advanced-ipc-values.test.ts:192",
+      "note": ""
+    },
+    {
+      "row": "Buffer constructors / byte/prototype/Reflect.construct admission preserves genuine Buffer-created/adopted views without guest accessor probes",
+      "source": "public-api",
+      "trace": "ADR-0502",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/advanced-ipc-values.test.ts:207",
+      "note": ""
+    },
+    {
+      "row": "Owned default error/rejection terminal including pending ESM and nonserve completion; existing drain, final exit event",
+      "source": "acceptance",
+      "trace": "I3 + ADR-0491",
+      "status": "pass",
+      "citation": "tests/integration/node-process-unhandled-traps.test.ts:29",
+      "note": ""
+    },
+    {
+      "row": "Nonserve referenced work finishes before natural exit; raw wide exit code and captured terminal methods",
+      "source": "acceptance",
+      "trace": "I3 + ADR-0491",
+      "status": "pass",
+      "citation": "tests/integration/node-program-exit-events.test.ts:22",
+      "note": ""
+    },
+    {
+      "row": "Worker auto-forwarding stdio never ends its captured parent stdout/stderr",
+      "source": "acceptance",
+      "trace": "I2 + I5 + ADR-0491",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/child_process-worker-identity.test.ts:1 + tests/e2e/vitest-run-in-browser.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "Native IPC opaque/core graph authority probe and captured output",
+      "source": "frozen-artifact",
+      "trace": "ADR-0502",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/vitest-ipc-native-authority-probe.mjs:1",
+      "note": ""
+    },
+    {
+      "row": "Native SAB timing/ceiling probe and captured DEC-2 evidence",
+      "source": "frozen-artifact",
+      "trace": "ADR-0503",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/vitest-ipc-sab-ceiling-probe.mjs:1",
+      "note": ""
+    },
+    {
+      "row": "Native Error.cause accessor oracle: ignored, zero reads/no own cause",
+      "source": "frozen-artifact",
+      "trace": "ADR-0502 + ADR-0492",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/vitest-error-cause-accessor-native-probe.mjs:1",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/e2e/vitest-run-in-browser.spec.ts:175",
+          "summary": "F3 report-only: physical lifecycle output comparison checks counts/presence rather than explicit message-before-exit ordering. Captured stdio and terminal data carriers exist; no current ordering defect.",
+          "authority": "",
+          "evidence": "Reading committed nativeOracle/e2e loop; actual full production 2 passed, including lifecycle/Worker contracts. Kernel worker-terminal-drain.fault.test.ts:704 independently discriminates stdio-before-terminal ordering."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/io/src/buffer-clone-refs.ts:64",
+          "summary": "F6 report-only: byte/prototype admission uses native proxies; exact Function.prototype.toString text of these intrinsics is unclaimed. Proxy constructor reflection itself is restored.",
+          "authority": "",
+          "evidence": "Reading captured-native admission wrappers; original Proxy-wrapper reflection observation retained as history. Name/length/native constructor behavior tested; exact wrapped-intrinsic source text is outside the accepted clause."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

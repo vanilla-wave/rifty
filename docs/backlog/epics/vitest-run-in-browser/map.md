@@ -5,8 +5,7 @@ Final+GREEN. No change to accepted goal.md.
 
 ## Items
 
-1. `runtime-js/vitest-run-acceptance` — I1–I7; composed runtime repairs,
-   exact real Vitest scenario, production proof, compat page and final review.
+None. Final+GREEN PASS @3eb1e3c3; I1–I7 proven; CLOSE next.
 
 ## Open questions
 
