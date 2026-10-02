@@ -1746,3 +1746,306 @@ The latest test that might've caused the error is "uses the same-realm child ide
    Duration  768ms (transform 376ms, setup 0ms, collect 527ms, tests 63ms, environment 0ms, prepare 28ms)
 
 [ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-ipc-error-cause-red.log
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (27 tests | 2 failed) 13ms
+   × preserves a Buffer in nonenumerable Error.cause and its outer alias 3ms
+     → expected false to be true // Object.is equality
+   × rejects shared and web objects reached through nonenumerable Error.cause 1ms
+     → expected [Function] to throw an error
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > preserves a Buffer in nonenumerable Error.cause and its outer alias
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:54:58
+     52|   const buffer = Buffer.from([3]);
+     53|   const result = decodeAdvancedIpc(encodeAdvancedIpc({buffer,error:new…
+     54|   expect(Buffer.isBuffer(result.error.cause.get('key'))).toBe(true);
+       |                                                          ^
+     55|   expect(result.error.cause.get('key')).toBe(result.buffer);
+     56|   expect(result.buffer[0]).toBe(3);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects shared and web objects reached through nonenumerable Error.cause
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:63:43
+     61|   const shared = new Error('outer',{cause:new SharedArrayBuffer(1)});
+     62|   expect(() => serialize(shared)).toThrow();
+     63|   expect(() => encodeAdvancedIpc(shared)).toThrow(/serialization.advan…
+       |                                           ^
+     64|   expect(() => encodeAdvancedIpc(new Error('outer',{cause:new Blob(['b…
+     65| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 25 passed (27)
+   Start at  06:38:44
+   Duration  688ms (transform 391ms, setup 0ms, collect 525ms, tests 13ms, environment 0ms, prepare 23ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-ipc-native-edges-red.log
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (28 tests | 3 failed) 14ms
+   × round-trips boxed core primitives without writing readonly String indexes 2ms
+     → Cannot assign to read only property '0' of object '[object String]'
+   × preserves a Buffer in nonenumerable Error.cause and its outer alias 2ms
+     → expected false to be true // Object.is equality
+   × rejects shared and web objects reached through nonenumerable Error.cause 1ms
+     → expected [Function] to throw an error
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > round-trips boxed core primitives without writing readonly String indexes
+TypeError: Cannot assign to read only property '0' of object '[object String]'
+ ❯ visit packages/runtime-js/src/internal/advanced-ipc-values.ts:124:56
+    122|     } else if (!nativeIsView(value)) {
+    123|       const record = value as Record<string, unknown>;
+    124|       for (const key of Object.keys(record)) record[key] = visit(recor…
+       |                                                        ^
+    125|     }
+    126|     return value;
+ ❯ Module.decodeAdvancedIpc packages/runtime-js/src/internal/advanced-ipc-values.ts:128:10
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:50:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > preserves a Buffer in nonenumerable Error.cause and its outer alias
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:62:58
+     60|   const buffer = Buffer.from([3]);
+     61|   const result = decodeAdvancedIpc(encodeAdvancedIpc({buffer,error:new…
+     62|   expect(Buffer.isBuffer(result.error.cause.get('key'))).toBe(true);
+       |                                                          ^
+     63|   expect(result.error.cause.get('key')).toBe(result.buffer);
+     64|   expect(result.buffer[0]).toBe(3);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects shared and web objects reached through nonenumerable Error.cause
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:71:43
+     69|   const shared = new Error('outer',{cause:new SharedArrayBuffer(1)});
+     70|   expect(() => serialize(shared)).toThrow();
+     71|   expect(() => encodeAdvancedIpc(shared)).toThrow(/serialization.advan…
+       |                                           ^
+     72|   expect(() => encodeAdvancedIpc(new Error('outer',{cause:new Blob(['b…
+     73| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 25 passed (28)
+   Start at  06:41:16
+   Duration  691ms (transform 390ms, setup 0ms, collect 524ms, tests 14ms, environment 0ms, prepare 23ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-ipc-native-edges-revert.log
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (29 tests | 4 failed) 14ms
+   × round-trips boxed core primitives without writing readonly String indexes 2ms
+     → Cannot assign to read only property '0' of object '[object String]'
+   × preserves a Buffer in nonenumerable Error.cause and its outer alias 2ms
+     → expected false to be true // Object.is equality
+   × reads a nonenumerable Error.cause getter once and preserves its fresh Buffer 0ms
+     → expected +0 to be 1 // Object.is equality
+   × rejects shared and web objects reached through nonenumerable Error.cause 1ms
+     → expected [Function] to throw an error
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > round-trips boxed core primitives without writing readonly String indexes
+TypeError: Cannot assign to read only property '0' of object '[object String]'
+ ❯ visit packages/runtime-js/src/internal/advanced-ipc-values.ts:62:56
+     60|     } else if (!nativeIsView(value)) {
+     61|       const record = value as Record<string, unknown>;
+     62|       for (const key of Object.keys(record)) record[key] = visit(recor…
+       |                                                        ^
+     63|     }
+     64|     return value;
+ ❯ mapClonedGraph packages/runtime-js/src/internal/advanced-ipc-values.ts:66:10
+ ❯ Module.encodeAdvancedIpc packages/runtime-js/src/internal/advanced-ipc-values.ts:77:3
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:50:38
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > preserves a Buffer in nonenumerable Error.cause and its outer alias
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:69:58
+     67|     encodeAdvancedIpc({ buffer, error: new Error('outer', { cause: new…
+     68|   ) as { buffer: Uint8Array; error: Error & { cause: Map<string, unkno…
+     69|   expect(Buffer.isBuffer(result.error.cause.get('key'))).toBe(true);
+       |                                                          ^
+     70|   expect(result.error.cause.get('key')).toBe(result.buffer);
+     71|   expect(result.buffer[0]).toBe(3);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > reads a nonenumerable Error.cause getter once and preserves its fresh Buffer
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:85:16
+     83|   });
+     84|   const result = decodeAdvancedIpc(encodeAdvancedIpc(error)) as Error …
+     85|   expect(gets).toBe(1);
+       |                ^
+     86|   expect(Buffer.isBuffer(result.cause)).toBe(true);
+     87|   expect(result.cause[0]).toBe(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects shared and web objects reached through nonenumerable Error.cause
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:93:43
+     91|   const shared = new Error('outer', { cause: new SharedArrayBuffer(1) …
+     92|   expect(() => serialize(shared)).toThrow();
+     93|   expect(() => encodeAdvancedIpc(shared)).toThrow(/serialization.advan…
+       |                                           ^
+     94|   expect(() => encodeAdvancedIpc(new Error('outer', { cause: new Blob(…
+     95|     /serialization.advanced.WebObject/,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 25 passed (29)
+   Start at  06:49:58
+   Duration  694ms (transform 391ms, setup 0ms, collect 524ms, tests 14ms, environment 0ms, prepare 23ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+Valid native-edge revert (getter premise corrected)
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (29 tests | 3 failed) 14ms
+   × round-trips boxed core primitives without writing readonly String indexes 2ms
+     → Cannot assign to read only property '0' of object '[object String]'
+   × preserves a Buffer in nonenumerable Error.cause and its outer alias 2ms
+     → expected false to be true // Object.is equality
+   × rejects shared and web objects reached through nonenumerable Error.cause 1ms
+     → expected [Function] to throw an error
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > round-trips boxed core primitives without writing readonly String indexes
+TypeError: Cannot assign to read only property '0' of object '[object String]'
+ ❯ visit packages/runtime-js/src/internal/advanced-ipc-values.ts:62:56
+     60|     } else if (!nativeIsView(value)) {
+     61|       const record = value as Record<string, unknown>;
+     62|       for (const key of Object.keys(record)) record[key] = visit(recor…
+       |                                                        ^
+     63|     }
+     64|     return value;
+ ❯ mapClonedGraph packages/runtime-js/src/internal/advanced-ipc-values.ts:66:10
+ ❯ Module.encodeAdvancedIpc packages/runtime-js/src/internal/advanced-ipc-values.ts:77:3
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:50:38
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > preserves a Buffer in nonenumerable Error.cause and its outer alias
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:69:58
+     67|     encodeAdvancedIpc({ buffer, error: new Error('outer', { cause: new…
+     68|   ) as { buffer: Uint8Array; error: Error & { cause: Map<string, unkno…
+     69|   expect(Buffer.isBuffer(result.error.cause.get('key'))).toBe(true);
+       |                                                          ^
+     70|   expect(result.error.cause.get('key')).toBe(result.buffer);
+     71|   expect(result.buffer[0]).toBe(3);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects shared and web objects reached through nonenumerable Error.cause
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:96:43
+     94|   const shared = new Error('outer', { cause: new SharedArrayBuffer(1) …
+     95|   expect(() => serialize(shared)).toThrow();
+     96|   expect(() => encodeAdvancedIpc(shared)).toThrow(/serialization.advan…
+       |                                           ^
+     97|   expect(() => encodeAdvancedIpc(new Error('outer', { cause: new Blob(…
+     98|     /serialization.advanced.WebObject/,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 26 passed (29)
+   Start at  06:57:42
+   Duration  695ms (transform 391ms, setup 0ms, collect 527ms, tests 14ms, environment 0ms, prepare 23ms)
+
+[ELIFECYCLE] Command failed with exit code 1.

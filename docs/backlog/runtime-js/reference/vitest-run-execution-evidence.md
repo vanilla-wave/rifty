@@ -122,3 +122,19 @@ Web-object oracle: `node docs/backlog/runtime-js/reference/vitest-web-clone-nati
 - Probe-only formatting fixed, lint GREEN. Product source changed only the two automatic pipe options; latest full gate still required.
 
 - Worker stdio source build GREEN; exact compiler10,022,694bytes SHA0a43e58f88b33600fd2eabc8b2e4d3e3ab878c766046af7c6c01c9f0369530e4. Exact pin only; no ceiling change.
+
+### Complete full gate
+
+`pnpm pr:check --all` @497632a5: GREEN25/25. Unit run182.4s with no unhandled errors; full Native parity62.4s. Build/type/architecture/asset/artifact/doc lanes GREEN. Previous unhandled Worker stdio failure reproduced isolated once; repaired/revert-proved, all-source rerun clean.
+BeforeExit outside-goal note split to draft process-before-exit-natural-drain; fresh RDY6PASS preserves the note when completed child is removed. Production Chromium and latest packed proof running sequentially next.
+
+Production: `RIFTY_PLAYGROUND_PORT=5481 pnpm exec playwright test --config playwright.prod.config.ts tests/e2e-prod/vitest-run-in-browser.spec.ts --project chromium --workers=1` @497632a5: GREEN2/2,5.0min. Actual default fatal entry/timer/rejection +raw300/OS44 +physicalWorker contracts, then exact real Vitest TSconfig/tests bothpools fail→fix/npm/verbose/info/negative configuration. Latest packed follows sequentially.
+
+### Native cloned-edge repair
+
+Review found Error.cause data Buffer loses brand, nestedSAB bypasses0503. Native V8 actualoracle +RED; sweep also finds boxedString readonly indexes incorrectly assigned. One shared cloned-edge walker for encoder validation/decoder rebranding: Error.cause data, Map/Set, ordinary enumerable data; core primitives remain leaves. No original accessor replay/newtransport. Revert4RED. Physical fork Error.causeBufferalias +nestedSABreject GREEN.
+An extra accessor Error.cause test incorrectly assumed getter1; executed Nodev24.16.0 serialize oracle returns gets0/hasOwnfalse/undefined. Corrected that reference premise explicitly; both Native and runtime skip this accessor. No implementation weakened to satisfy it.
+Earlier fullgate/production/packed @497 allGREEN, but changed codec requires fresh composedproof.
+
+- Native accessor oracle persisted: `node docs/backlog/runtime-js/reference/vitest-error-cause-accessor-native-probe.mjs` → v24.16.0 0 false undefined. Corrected test29 GREEN; valid guard revert3RED, restored29GREEN (prior4RED included that wrong extra expectation).
+- Native-edge build GREEN; exact compiler10,022,694bytes SHA dfa9f3c5c9ea6784401beb915b2edaf43bfec36f28006e916887615363d37b2c, no widened ceiling. Physical advanced forkGREEN includes causeBufferalias +causeSABreject.

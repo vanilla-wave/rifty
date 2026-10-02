@@ -1,3 +1,4 @@
+import { Buffer as NativeBuffer } from 'node:buffer';
 import { deserialize, serialize } from 'node:v8';
 import { Buffer } from '@riftydev/io';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
@@ -41,6 +42,61 @@ it('rejects a live MessagePort instead of replacing it with an empty record', ()
     channel.port1.close();
     channel.port2.close();
   }
+});
+
+it('round-trips boxed core primitives without writing readonly String indexes', () => {
+  for (const value of [Object('bytes'), Object(7), Object(true), Object(3n)]) {
+    const native = deserialize(serialize(value));
+    const result = decodeAdvancedIpc(encodeAdvancedIpc(value)) as { valueOf(): unknown };
+    expect(result.valueOf()).toBe(native.valueOf());
+  }
+});
+
+it('preserves a Buffer in nonenumerable Error.cause and its outer alias', () => {
+  const nativeBuffer = NativeBuffer.from([3]);
+  const native = deserialize(
+    serialize({
+      buffer: nativeBuffer,
+      error: new Error('outer', { cause: new Map([['key', nativeBuffer]]) }),
+    }),
+  );
+  expect(NativeBuffer.isBuffer(native.error.cause.get('key'))).toBe(true);
+  expect(native.error.cause.get('key')).toBe(native.buffer);
+  const buffer = Buffer.from([3]);
+  const result = decodeAdvancedIpc(
+    encodeAdvancedIpc({ buffer, error: new Error('outer', { cause: new Map([['key', buffer]]) }) }),
+  ) as { buffer: Uint8Array; error: Error & { cause: Map<string, unknown> } };
+  expect(Buffer.isBuffer(result.error.cause.get('key'))).toBe(true);
+  expect(result.error.cause.get('key')).toBe(result.buffer);
+  expect(result.buffer[0]).toBe(3);
+  expect(Object.getOwnPropertyDescriptor(result.error, 'cause')?.enumerable).toBe(false);
+});
+
+it('ignores accessor Error.cause without invoking it, as native V8 does', () => {
+  let gets = 0;
+  const error = new Error('outer');
+  Object.defineProperty(error, 'cause', {
+    configurable: true,
+    get() {
+      gets++;
+      return Buffer.from([1]);
+    },
+  });
+  const native = deserialize(serialize(error));
+  expect(gets).toBe(0);
+  expect(Object.hasOwn(native, 'cause')).toBe(false);
+  const result = decodeAdvancedIpc(encodeAdvancedIpc(error)) as Error;
+  expect(gets).toBe(0);
+  expect(Object.hasOwn(result, 'cause')).toBe(false);
+});
+
+it('rejects shared and web objects reached through nonenumerable Error.cause', () => {
+  const shared = new Error('outer', { cause: new SharedArrayBuffer(1) });
+  expect(() => serialize(shared)).toThrow();
+  expect(() => encodeAdvancedIpc(shared)).toThrow(/serialization.advanced.SharedArrayBuffer/);
+  expect(() => encodeAdvancedIpc(new Error('outer', { cause: new Blob(['bytes']) }))).toThrow(
+    /serialization.advanced.WebObject/,
+  );
 });
 
 it('keeps SAB-backed Buffer out of advanced IPC with a named ceiling', () => {

@@ -3,6 +3,8 @@
 
 ## [Unreleased]
 
+- Advanced IPC walks native Error.cause edges for Buffer identity and finite ceilings; boxed String leaves retain readonly indexes.
+
 - Worker default stdout/stderr pipes never end the captured parent streams, including same-realm child ownership.
 
 - Shared-backed advanced fork views fail with an explicit ceiling; native V8 snapshot observation remains outside the Vitest scenario (ADR-0503).

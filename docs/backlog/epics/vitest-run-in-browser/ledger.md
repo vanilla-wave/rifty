@@ -35,3 +35,9 @@
 - 2026-10-02 — verify e71: Node SAB-buffer observation differs with later getter; DEC-2 ADR0503 sets explicit outside-scenario shared-backed view ceiling, no false snapshot. Nonserve pending ESM fatal uses same lifecycle owner (real loader RED, 57 lifecycle GREEN). Outside-goal shared/web captures carry named ❌; goal unchanged. Full gate attempts interrupted for repairs; not PASS.
 
 - 2026-10-02 — full gate e9 source lanes parity/build/type GREEN; unit10,598passed but1unhandled. Isolated Worker-parent stdio reproduction RED→end:false at existing auto-pipe owner→36GREEN, revertRED/restoredGREEN. Probe formatting fixed. Full gate retry +production/packed required before closure.
+
+- 2026-10-02 — full pr:check --all @497632a5 GREEN25/25 (unit182.4s, fullparity62.4s). No unhandled errors. BeforeExit outside note preserved in independently checked draft; accepted destination unchanged. Await production2 +packed +canonicalFinal before CLOSE.
+
+- 2026-10-02 — production Chromium @497632a5 GREEN2/2 (5.0min), complete real Vitest scenario +composed Node physical contracts. Final packed consumer running; canonicalFinal+goalCLOSE still pending.
+
+- 2026-10-02 — verify normal Error.cause edge: causeBufferbrand/alias +nestedSAB loud required. Shared native-cloned graph walker closes both passes; sweep boxedString readonly leaf. NativeErrorcause accessor is skipped (oracle0 reads); wrong extra test premise explicitly corrected. 29GREEN, validrevert3RED/restoredGREEN, physicalforkGREEN; latestbuildGREEN. Freshfull/composed gates pending for changedsource.
