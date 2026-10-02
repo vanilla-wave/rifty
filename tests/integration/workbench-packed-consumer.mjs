@@ -22,6 +22,7 @@ import {
   CLIENT_BUNDLE_BUDGETS,
   assertClientBundleBudgets,
 } from '../../tools/checks/client-bundle-budget.mjs';
+import { provePackedArchive } from './agent-archive-browser-proof.mjs';
 import { browserRegistryPackages } from './browser-registry-fixture.mjs';
 import { provePackedCompilerLoading } from './client-bundle-browser-proof.mjs';
 import {
@@ -57,9 +58,28 @@ const fixtureRoot = resolve(
 );
 const workbenchRoot = resolve(repoRoot, 'packages/workbench');
 const keepTemp = process.argv.includes('--keep');
+const archiveModelIndex = process.argv.indexOf('--archive-model-config');
+const archiveModelPath = archiveModelIndex < 0 ? undefined : process.argv[archiveModelIndex + 1];
+if (archiveModelIndex >= 0 && !archiveModelPath)
+  throw new Error('--archive-model-config requires a JSON config path');
+const archiveEndpoint = archiveModelPath
+  ? JSON.parse(await readFile(resolve(repoRoot, archiveModelPath), 'utf8')).endpoint
+  : undefined;
+const archiveModel = archiveEndpoint
+  ? { baseUrl: archiveEndpoint.baseUrl, model: archiveEndpoint.id }
+  : undefined;
 const unknownArguments = process.argv
   .slice(2)
-  .filter((argument) => !['--keep', '--surface-only', '--check-budgets'].includes(argument));
+  .filter(
+    (argument) =>
+      ![
+        '--keep',
+        '--surface-only',
+        '--check-budgets',
+        '--archive-model-config',
+        archiveModelPath,
+      ].includes(argument),
+  );
 if (unknownArguments.length > 0) {
   throw new Error(`Unknown packed-consumer arguments: ${unknownArguments.join(', ')}`);
 }
@@ -673,6 +693,7 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
       }
     });
     browser = await browserLaunch;
+    await provePackedArchive(browser, previewOrigin, archiveModel);
     const context = await browser.newContext({ serviceWorkers: 'allow' });
     const blockedUrls = [];
     const observedUrls = [];

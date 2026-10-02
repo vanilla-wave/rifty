@@ -166,6 +166,9 @@ importers:
       '@riftydev/sdk':
         specifier: workspace:*
         version: link:../rifty
+      '@riftydev/vfs':
+        specifier: workspace:*
+        version: link:../vfs
       '@riftydev/workbench':
         specifier: workspace:*
         version: link:../workbench

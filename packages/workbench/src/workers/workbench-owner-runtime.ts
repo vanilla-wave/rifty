@@ -342,7 +342,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
   let initialPlaygroundCatalog: PlaygroundCatalogSnapshot | undefined;
   let closeAuthority: (() => Promise<void>) | undefined;
   if (config.playgroundUrlContext === undefined) {
-    const projectStore = createWorkbenchProjectStore(authority);
+    const projectStore = createWorkbenchProjectStore(authority, installStampClaims);
     const coreMaterializer = createProjectMaterializer({
       owner: projectStore,
       acquisition: {

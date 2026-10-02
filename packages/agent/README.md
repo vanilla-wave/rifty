@@ -296,3 +296,36 @@ rejected diagnostics are explicit unavailable. Mutation success/effects remain.
 
 The shared v2 profile adds one workflow recipe. `recipe:false` omits only that
 paragraph; `trace.config.recipe` records the effective setting.
+
+## Shared conversation archive
+
+Pass `archive: { namespace: 'my-app', project: { id: projectId, name: projectName } }`
+to `createAgentSession` with either public host adapter. Same origin/profile and
+namespace share history across projects. Archive files live in rifty OpfsVfs at
+`/.rifty-agent-archives/<namespace>/<sessionId>.json`, outside project storage.
+Namespace: 1–100 ASCII letters/digits/underscores/hyphens. Project id/name: nonempty,
+at most 1000 characters. Values are copied at creation; each reset gets a new session ID.
+Host-restored `initialMessages` (ADR-0466) are never re-archived: the file records
+`restoredMessageCount` and stores only this session's messages, so a restored
+conversation is not duplicated across files.
+
+Recording is automatic for archive-enabled sessions. Native original messages,
+images and tool payloads survive context compaction/reset; configuration and keys
+are not serialized. `archive_search` finds prior conversations by text/project,
+newest first (image bytes are not searched); `archive_read` pages through original JSON. Tools treat history as data and never
+replay it. No old transcript or filename is required in the user's request.
+
+Subscribe to `archive` for a durable receipt (sessionId, path, revision,
+messageCount, state), emitted after native OPFS close. `send` waits for admitted
+writes before terminal status. `complete` means the turn settled successfully;
+`incomplete` marks interrupted/failed turns, whose acknowledged messages remain.
+A write error emits `archive-error` and leaves session status `error`; reset starts
+a fresh conversation after repairing storage. No memory fallback. Do not report
+streamed text as saved before its archive receipt. `dispose` settles the active run.
+
+Files contain a versioned JSON payload plus SHA-256. A malformed/checksum-invalid
+record fails `archive_read` loudly and is listed under `corrupt` (at most 10 entries,
+`corruptCount` total) by `archive_search`, which never hides healthy conversations.
+A version-1 file written before `restoredMessageCount` existed reads as 0 restored. Browser eviction/site-data deletion and bytes
+never acknowledged are outside durability. Project export/import/deletion do not
+move or remove this archive. Storage is local; no cloud or device synchronization.

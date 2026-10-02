@@ -1,0 +1,42 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS документации: исходный запрос, ответы, итоговые goal/map/draft и baseline сверены; пропущенных материальных развилок нет. Независимый reviewer: /root/archive_final_review. backlog:check и refs:check выполнены, PASS.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "7790a94de6174aeb03ff79ff1e25c94de495d11a",
+  "unit_goal_source": "RDY-6 final written-result review; BASE 7e695a25059c850e35cca55a64d1e3e472866a3d. Источники: docs/backlog/distribution/reference/agent-session-archive-refine.md; результат: docs/backlog/epics/agent-session-archive/{goal,map,ledger}.md, docs/backlog/distribution/agent-session-archive.md, docs/backlog/distribution/ai-ide-product-ui.md. Проверены ADR-0424/0427/0466/0474/0479 и соответствующие session/host/project-store/UI реализации. Scope: только refine/FIT-документация; реализация архива не заявлена.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/agent-session-archive/goal.md:42",
+      "summary": "Автоматический полный файловый архив с provenance ещё не реализован; сохранён в связанном draft."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/agent-session-archive/goal.md:46",
+      "summary": "Межпроектный поиск/чтение, включая переименование и удаление исходного проекта, ещё не реализованы."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/agent-session-archive/goal.md:50",
+      "summary": "Durability acknowledgement, восстановление после прерывания и явные ошибки хранения требуют PICKUP, RED и реализации."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/agent-session-archive/goal.md:54",
+      "summary": "Публичные SDK/Workbench интеграции и installed-package browser proof ещё отсутствуют."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [],
+  "axes": [
+    { "axis": "Completeness", "verdict": "pass", "findings": [] },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    { "axis": "Bugs", "verdict": "pass", "findings": [] },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+  ]
+}

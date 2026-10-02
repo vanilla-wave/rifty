@@ -23,7 +23,7 @@ const oracleTarballs = [
   ['chokidar', 'chokidar-5.0.0.tgz'],
   ['readdirp', 'readdirp-5.1.1.tgz'],
   ['immutable', 'immutable-5.1.9.tgz'],
-  ['source-map-js', 'source-map-js-1.2.1.tgz'],
+  ['source-map-js', 'source-map-js-1.2.2.tgz'],
 ] as const;
 const asyncImporterError = `The canonicalize() function can't return a Promise for synchronous compile functions.
   ╷

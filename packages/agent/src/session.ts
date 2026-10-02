@@ -13,6 +13,7 @@ import {
   isContextOverflow,
 } from '@earendil-works/pi-ai';
 import { NotImplementedError } from '@riftydev/io';
+import { createArchive } from './archive.ts';
 import { isOpenAIProvider, selectModel } from './catalog.ts';
 import { unsupportedChatCommand } from './chat-command.ts';
 import { createContinuation } from './continuation.ts';
@@ -52,6 +53,9 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
   const listeners = new Set<(event: AgentSessionEvent) => void>();
   const events: { at: number; event: AgentSessionEvent }[] = [];
   const timings: { startedAt: number; endedAt: number }[] = [];
+  const archive = options.archive
+    ? createArchive(options.archive, initialMessages.length, emit)
+    : undefined;
   let resources: AgentResourceReport | undefined;
   // Latest admitted read: send and dispose settle on it; reload chains after it.
   let pending: Promise<AgentResourceReport>;
@@ -170,6 +174,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
   }
 
   function emit(event: AgentSessionEvent): void {
+    archive?.observe(event);
     events.push({ at: Date.now(), event: structuredClone(event) });
     for (const listener of listeners) {
       try {
@@ -198,7 +203,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
 
   function refreshCapabilities() {
     const capabilities = host.capabilities();
-    const standard = standardTools(host.root, capabilities, emit);
+    const standard = [...standardTools(host.root, capabilities, emit), ...(archive?.tools ?? [])];
     ownedTools = new Set(standard.map((tool) => tool.name));
     const tools = [...standard, ...(options.tools ?? [])];
     const names = tools.map((tool) => tool.name);
@@ -252,7 +257,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       if (isToolFailure(context.result)) return { isError: true };
     },
   });
-  const detach = agent.subscribe((event) => {
+  const detach = agent.subscribe(async (event) => {
     if (event.type === 'tool_execution_start') currentArgs = structuredClone(event.args);
     if (event.type === 'tool_execution_end')
       finalizeTool(event.toolName, event.result, event.isError, currentArgs);
@@ -293,6 +298,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       return;
     }
     emit({ type: 'agent', event });
+    await archive?.flush();
   });
 
   function completeSkippedCalls(): ToolResultMessage[] {
@@ -415,6 +421,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
         agent.state.systemPrompt = refreshed.systemPrompt;
         agent.state.tools = refreshed.tools;
         checkImages(images);
+        await archive?.begin();
         await compactHistory('threshold', true);
         if (!runController.signal.aborted)
           await agent.prompt(prompt, images ? [...images] : undefined);
@@ -471,6 +478,12 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       runController = undefined;
       timings.push({ startedAt, endedAt: Date.now() });
     }
+    try {
+      await archive?.finish(outcome === 'done');
+    } catch (error) {
+      outcome = 'error';
+      outcomeDetail = `Archive: ${error instanceof Error ? error.message : String(error)}`;
+    }
     setStatus(outcome, outcomeDetail);
   }
 
@@ -525,6 +538,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     reset() {
       if (active || reloading) throw new Error('Stop the agent before Reset');
       if (disposed) throw new Error('Agent session is disposed');
+      archive?.reset();
       agent.reset();
       continuation.reset();
       previousCall = undefined;
