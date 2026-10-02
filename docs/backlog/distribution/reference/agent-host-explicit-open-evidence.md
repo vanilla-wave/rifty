@@ -78,3 +78,24 @@ used Exclude and admitted archive receipts the reducer never emits. Restrict the
 type to the actual six notice kinds; runtime unchanged. Playground typecheck
 passes (/private/tmp/rifty-pr357-merge-typecheck-green.log). First full gate remains
 recorded as failed; final clean-tree gate follows. Compiler bytes/SHA unchanged.
+
+## Final verification — 2026-10-02
+
+Reviewed source8cd595116fcb8b5ad71f999ea3d9126a60306829, clean committed tree.
+pnpm pr:check27/27 passes, no isolated reruns; test:run192.8s, parity122.6s.
+Log: /private/tmp/rifty-pr357-final-pr-check-green.log.
+
+Full default node tests/integration/workbench-packed-consumer.mjs exits0:
+16 first-party +178 external tarballs; separate consumer TypeScript/build;
+fresh Chromium real Vite install/build/edit/reopen, force/update/interruption/quota;
+reference host both registry configurations with edit/install/model/build/busy/
+reopen/occupied; archive SDK/workbench and project lifecycle; snapshot-only and
+scoped-preview Vite/HMR/sqlite baseline; mandatory shared-host benchmark smoke.
+Log: /private/tmp/rifty-pr357-final-packed.log. SDK force/update remain their own
+baseline proof; the reference host has no implicit deployment policy.
+
+Independent final reviewer also reran60/60 focused tests and native npm tag/range
+probes; log /private/tmp/rifty-pr357-final-independent-tests.log. Separate
+arch-review reviewer reran53 npm/Eddy tests plus4 Chromium tests for explicit
+open and recovered registry failures. Final+GREEN artifact:
+agent-host-explicit-open-final-green.json. No required unit/goal residuals.

@@ -10,8 +10,11 @@ retain their prior authority and evidence. SDK validation/explicit force stay.
 
 The closure below and prior verdicts describe the pre-amendment tree, not proof
 of the amended result. Current proof: `agent-host-explicit-open-evidence.md`.
-Known PR review residuals remain: npm optional→dev save and overlapping prod/dev
-selection; this removal unit does not repair or re-certify npm semantics.
+Independent arch-review repairs cover npm optional→dev saves, overlapping root
+dependency selection and recovered registry errors. Current tree8cd595116 passes
+pr:check27/27 and the full packed consumer, including both registry configurations,
+saved open, unchanged SDK snapshot/archive proofs and shared-host benchmark smoke.
+Final verdict: `agent-host-explicit-open-final-green.json`; no required residuals.
 
 ## Historical closure — 2026-09-30
 
