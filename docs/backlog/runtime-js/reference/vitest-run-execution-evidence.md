@@ -95,3 +95,12 @@ builtin/lifecycle tests. Owner+IPC+controller selection GREEN21.
 - `pnpm test:packed-consumer` @08c6c18b: GREEN 1 test /229.58s; owner IPC finally detaches before drain.
 - Build libs GREEN; exact compiler payload10,022,694 bytes, SHA ec34807999c518d3680ee751812f6cc21d595695725eea8872bed9c74f5590a5. Original byte/other asset ceilings unchanged; inventory gate GREEN.
 - Lint2590files GREEN. Full gate + latest production recomposition pending.
+
+### Final review follow-on repairs
+
+- Native SAB Buffer snapshot RED (1→2 input mutation); encoder copies reachable shared Buffer bytes and rewrites both graph aliases/side refs; 25 IPC tests GREEN, physical advanced-fork parity GREEN.
+- Native default timer exception/rejection RED: real DOM dispatch + real NodeProcess/drain/kernel; foreign defaults retained. Owned fatal records drain and suppresses browser peer-error race.
+- Actual nonserve regression RED + pending-entry fatal RED: one existing drain tracks the existing entry outcome; nonserve waits for drain before natural exit. 55 focused lifecycle tests GREEN.
+- Physical production fixtures now include fatal entry/timer/rejection + raw300/OS44; fatal oracle compares stdout/exit, independently checks diagnostic and no survivor. Stack paths intentionally unclaimed.
+
+- Frozen repair build GREEN; compiler10,022,694 bytes unchanged, SHA111cc8295960af34a8a828a3b5c68e31c714cf20f0fc930ed76a624bbd2e56f8; exact pin refreshed, no ceiling widened. Full typecheck GREEN after both lifecycle producers adapted.

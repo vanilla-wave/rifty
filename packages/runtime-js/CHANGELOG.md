@@ -3,6 +3,8 @@
 
 ## [Unreleased]
 
+- Route owned uncaught browser errors/rejections through Node drain and exit; suppress racing browser peer teardown.
+
 - Named exit/kill exports retain their process receiver and native function names.
 
 - Native advanced IPC rejects opaque brands before getters; weak Buffer references preserve single-read accessors (ADR-0502).

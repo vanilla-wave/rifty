@@ -13,6 +13,7 @@
  */
 
 import { setKernelDrainHook } from '@riftydev/kernel';
+import { readActiveNodeProcessBootstrap } from '../builtins/process-bootstrap-identity.ts';
 import { dispatchProcessUnhandled } from './process-unhandled.ts';
 
 const PromiseConstructorPrimordial = Promise;
@@ -487,7 +488,10 @@ export function installUnhandledErrorTrap(
       event.preventDefault?.();
       return;
     }
-    if (!beginNodeEvalUnhandled(reason, 'uncaught-error')) return;
+    if (!beginNodeEvalUnhandled(reason, 'uncaught-error')) {
+      if (readActiveNodeProcessBootstrap() === null) return;
+      recordRejection(reason, 'uncaught-error');
+    }
     event.preventDefault?.();
   });
 }
@@ -499,8 +503,8 @@ export function installUnhandledErrorTrap(
  * LOUDLY.
  *
  * Eval claims are controlled terminal paths: print flushes before the drain or
- * served-worker fallback emits the diagnostic and exit. Other realms retain
- * default reporting while their run-to-completion drain records the reason.
+ * served-worker fallback emits the diagnostic and exit. Owned Node programs
+ * terminate through their drain; foreign realms retain browser reporting.
  */
 export function installUnhandledRejectionTrap(
   target: RejectionTarget = self as unknown as RejectionTarget,
@@ -514,6 +518,7 @@ export function installUnhandledRejectionTrap(
       return;
     }
     recordRejection(ev.reason);
+    if (readActiveNodeProcessBootstrap() !== null) ev.preventDefault?.();
   });
 }
 

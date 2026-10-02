@@ -1378,3 +1378,198 @@ AssertionError: expected [ 44 ] to deeply equal [ 300 ]
    Duration  964ms (transform 431ms, setup 0ms, collect 585ms, tests 230ms, environment 0ms, prepare 32ms)
 
 [ELIFECYCLE] Command failed with exit code 1.
+
+SAB Buffer byte snapshot
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (23 tests | 1 failed) 12ms
+   × snapshots SAB-backed Buffer bytes while preserving repeated aliases 3ms
+     → expected 2 to be 1 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > snapshots SAB-backed Buffer bytes while preserving repeated aliases
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:49:27
+     47|   buffer[0] = 2;
+     48|   const result = decodeAdvancedIpc(packet) as {first:Uint8Array; again…
+     49|   expect(result.first[0]).toBe(native[0]);
+       |                           ^
+     50|   expect(Buffer.isBuffer(result.first)).toBe(true);
+     51|   expect(result.first).toBe(result.again);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 22 passed (23)
+   Start at  05:24:19
+   Duration  726ms (transform 416ms, setup 0ms, collect 566ms, tests 12ms, environment 0ms, prepare 29ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+Async fatal owned trap
+$ vitest run --project integration tests/integration/node-process-unhandled-traps.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |integration| tests/integration/node-process-unhandled-traps.test.ts (2 tests | 2 failed) 59ms
+   × owned error reaches Node exit before kernel teardown 33ms
+     → expected +0 to be 1 // Object.is equality
+   × owned unhandledrejection reaches Node exit before kernel teardown 26ms
+     → expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned error reaches Node exit before kernel teardown
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/integration/node-process-unhandled-traps.test.ts:40:26
+     38|       }),
+     39|     });
+     40|     expect(outcome.code).toBe(1);
+       |                          ^
+     41|     expect(exits).toEqual([1]);
+     42|     expect(event.defaultPrevented).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned unhandledrejection reaches Node exit before kernel teardown
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/integration/node-process-unhandled-traps.test.ts:42:36
+     40|     expect(outcome.code).toBe(1);
+     41|     expect(exits).toEqual([1]);
+     42|     expect(event.defaultPrevented).toBe(true);
+       |                                    ^
+     43|     expect(diagnostics.join('')).toContain('boom');
+     44|   } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  05:24:29
+   Duration  444ms (transform 185ms, setup 0ms, collect 248ms, tests 59ms, environment 0ms, prepare 24ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+Nonserve/pending-entry drain
+$ vitest run --project integration tests/integration/node-program-exit-events.test.ts tests/integration/node-process-unhandled-traps.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |integration| tests/integration/node-program-exit-events.test.ts (9 tests | 1 failed) 214ms
+   × run-to-completion waits for referenced work before its exit event 13ms
+     → expected false to be true // Object.is equality
+ ❯ |integration| tests/integration/node-process-unhandled-traps.test.ts (8 tests | 2 failed) 3203ms
+   × owned error handled=false reaches Node exit before kernel teardown 1531ms
+     → Test timed out in 1500ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × owned unhandledrejection handled=false reaches Node exit before kernel teardown 1550ms
+     → Test timed out in 1500ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned error handled=false reaches Node exit before kernel teardown
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned unhandledrejection handled=false reaches Node exit before kernel teardown
+Error: Test timed out in 1500ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > run-to-completion waits for referenced work before its exit event
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/integration/node-program-exit-events.test.ts:145:25
+    143|       awaitDrain, readExitCode: () => proc.exitCode, exit: proc.exit.b…
+    144|     })).rejects.toMatchObject({ code: 'RIFTY_PROCESS_EXIT', exitCode: …
+    145|     expect(firedAtExit).toBe(true);
+       |                         ^
+    146|     expect(activeRefs()).toBe(0);
+    147|   } finally { await timerDone; resetKeepalive(); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 14 passed (17)
+   Start at  05:28:53
+   Duration  3.63s (transform 453ms, setup 0ms, collect 814ms, tests 3.42s, environment 0ms, prepare 64ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+Nonserve/pending-entry revert check
+$ vitest run --project integration tests/integration/node-program-exit-events.test.ts tests/integration/node-process-unhandled-traps.test.ts -t 'run-to-completion|pending=true'
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |integration| tests/integration/node-program-exit-events.test.ts (9 tests | 1 failed | 8 skipped) 53ms
+   × run-to-completion waits for referenced work before its exit event 53ms
+     → expected false to be true // Object.is equality
+ ❯ |integration| tests/integration/node-process-unhandled-traps.test.ts (8 tests | 2 failed | 6 skipped) 3084ms
+   × owned error handled=false pending=true reaches Node exit before kernel teardown 1535ms
+     → Test timed out in 1500ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × owned unhandledrejection handled=false pending=true reaches Node exit before kernel teardown 1549ms
+     → Test timed out in 1500ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned error handled=false pending=true reaches Node exit before kernel teardown
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned unhandledrejection handled=false pending=true reaches Node exit before kernel teardown
+Error: Test timed out in 1500ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > run-to-completion waits for referenced work before its exit event
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/integration/node-program-exit-events.test.ts:176:25
+    174|       }),
+    175|     ).rejects.toMatchObject({ code: 'RIFTY_PROCESS_EXIT', exitCode: 0 …
+    176|     expect(firedAtExit).toBe(true);
+       |                         ^
+    177|     expect(activeRefs()).toBe(0);
+    178|   } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 14 skipped (17)
+   Start at  05:31:22
+   Duration  3.47s (transform 434ms, setup 0ms, collect 779ms, tests 3.14s, environment 0ms, prepare 52ms)
+
+[ELIFECYCLE] Command failed with exit code 1.

@@ -6,11 +6,18 @@ import { runNodeEntry } from '../../packages/runtime-js/src/builtins/node-entry.
 import { NodeProcess } from '../../packages/runtime-js/src/builtins/process.ts';
 import { resetKeepalive } from '../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import {
+  activeRefs,
+  awaitDrain,
+  ref,
+  unref,
+} from '../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
+import {
   MemoryFsSync,
   resetSyncMirror,
   setSyncMirror,
 } from '../../packages/vfs/src/internal/index.ts';
 import { runNodeProgramLifecycle } from '../../packages/workbench/src/workers/node-program-lifecycle.ts';
+import { runNodeProgramToCompletion } from '../../packages/workbench/src/workers/node-program-lifecycle.ts';
 
 it.each([
   ['entry failure', "throw new Error('boom')", 1],
@@ -127,3 +134,49 @@ it.each([
     }
   },
 );
+
+it('run-to-completion waits for referenced work before its exit event', async () => {
+  const native = spawnSync(
+    'node',
+    [
+      '-e',
+      "let fired = false; process.once('exit', () => console.log(fired)); setTimeout(() => { fired = true }, 10)",
+    ],
+    { encoding: 'utf8' },
+  );
+  expect(native.status).toBe(0);
+  expect(native.stdout.trim()).toBe('true');
+  const proc = new NodeProcess();
+  let timerFired = false;
+  let firedAtExit: boolean | undefined;
+  proc.once('exit', () => {
+    firedAtExit = timerFired;
+  });
+  let complete!: () => void;
+  const timerDone = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
+  try {
+    await expect(
+      runNodeProgramToCompletion({
+        runEntry: async () => {
+          ref();
+          setTimeout(() => {
+            timerFired = true;
+            unref();
+            complete();
+          }, 10);
+        },
+        awaitDrain,
+        readExitCode: () => proc.exitCode,
+        exit: proc.exit.bind(proc),
+        writeStderr: () => {},
+      }),
+    ).rejects.toMatchObject({ code: 'RIFTY_PROCESS_EXIT', exitCode: 0 });
+    expect(firedAtExit).toBe(true);
+    expect(activeRefs()).toBe(0);
+  } finally {
+    await timerDone;
+    resetKeepalive();
+  }
+});

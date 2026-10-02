@@ -22,7 +22,7 @@ export interface NodeLifecycleDeps {
   /** Subscribe to net-registry port changes (onRegistryChange); returns unsubscribe. */
   readonly onPortsChange: (cb: () => void) => () => void;
   /** Await event-loop drain (keepalive awaitDrain). */
-  readonly awaitDrain: () => Promise<void>;
+  readonly awaitDrain: (hasPendingEntry?: () => boolean) => Promise<void>;
   /** Wire `/preview/<port>/` for a listened port; returns a teardown. */
   readonly servePreview: (port: number) => () => void;
   /** Report the CURRENT listened port set to the owner (rifty:node-listening). */
@@ -57,6 +57,22 @@ type DrainOutcome =
   | { readonly kind: 'pending' }
   | { readonly kind: 'resolved' }
   | { readonly kind: 'rejected'; readonly err: unknown };
+
+export async function runNodeProgramToCompletion(
+  deps: Pick<NodeLifecycleDeps, 'runEntry' | 'readExitCode' | 'exit' | 'writeStderr'> & {
+    readonly awaitDrain: () => Promise<void>;
+  },
+): Promise<void> {
+  try {
+    await deps.runEntry();
+    await deps.awaitDrain();
+  } catch (error) {
+    if (exitCodeOf(error) !== null) throw error;
+    terminateNodeProgramFailure(error, deps);
+  }
+  const code = deps.readExitCode();
+  deps.exit(typeof code === 'number' && Number.isFinite(code) ? code : 0);
+}
 
 export async function runNodeProgramLifecycle(deps: NodeLifecycleDeps): Promise<void> {
   // Wake-versioned event loop: any of {entry settled, drain settled, port
@@ -103,16 +119,18 @@ export async function runNodeProgramLifecycle(deps: NodeLifecycleDeps): Promise<
   const startDrain = (): void => {
     if (drainStarted) return;
     drainStarted = true;
-    void deps.awaitDrain().then(
-      () => {
-        drainOutcome = { kind: 'resolved' };
-        wake();
-      },
-      (err) => {
-        drainOutcome = { kind: 'rejected', err };
-        wake();
-      },
-    );
+    void deps
+      .awaitDrain(() => currentEntryOutcome() === null)
+      .then(
+        () => {
+          drainOutcome = { kind: 'resolved' };
+          wake();
+        },
+        (err) => {
+          drainOutcome = { kind: 'rejected', err };
+          wake();
+        },
+      );
   };
 
   for (;;) {
@@ -142,6 +160,8 @@ export async function runNodeProgramLifecycle(deps: NodeLifecycleDeps): Promise<
       terminateNodeProgramFailure(drained.err, deps);
     }
 
+    // Fatal tasks must reach the same drain while top-level evaluation waits.
+    startDrain();
     const ports = deps.listPorts();
     if (ports.length > 0 && stopPreview === undefined) {
       stopPreview = watchServedPorts({
@@ -154,7 +174,6 @@ export async function runNodeProgramLifecycle(deps: NodeLifecycleDeps): Promise<
     }
 
     if (outcome?.kind === 'returned') {
-      startDrain();
       if (ports.length === 0 && currentDrainOutcome().kind === 'resolved') {
         cleanup();
         // Natural exit honours process.exitCode (Node parity, D4): a clean

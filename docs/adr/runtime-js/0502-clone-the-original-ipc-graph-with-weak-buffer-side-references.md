@@ -23,15 +23,21 @@ bundles share one registry. Buffer constructors, native byte-view construction
 and prototype/Reflect.construct admission record views; current intrinsic slots
 and data-only brand descriptors select Buffer views without invoking guest getters.
 Detached unrelated views are excluded by captured native values validation.
-No new transport, handle, terminal owner, Promise reaction, or Proxy wrapper.
+No new transport, handle, terminal owner, Promise reaction, or Proxy constructor wrapper.
 
 Browser-only cloned brands (Blob/File/DOMException etc) and SharedArrayBuffer
 outside Buffer payloads fail named advanced.WebObject / advanced.SharedArrayBuffer
 ceilings before sending. This explicitly withdraws ADR-0501's extra Blob-positive
 claim; exact Vitest I1–I7 and Node-core IPC claims remain unchanged. Runtime-private
 brand spoofing is not a Node API or an admitted Buffer construction path.
+SAB-backed Buffer nodes copy bytes synchronously after clone, replacing data and
+side references together; no live shared-memory payload is sent.
 Registry scans live byte views; packet copies live Buffer views. Production perf
 is outside this goal; this correctness cost is explicit.
+
+Mechanism sweep: existing Buffer brand recognizes values; port/keepalive refs own
+lifetime. Neither enumerates clone Buffer identities. This registry owns only weak
+allocation metadata; no duplicated lifetime or message-order authority.
 
 ## Alternatives
 

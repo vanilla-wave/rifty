@@ -11,6 +11,9 @@ it.each([
     Object.setPrototypeOf(value, null);
     return value;
   },
+  () => (async () => 1)(),
+  () =>
+    Reflect.construct(Promise, [(resolve: (value: number) => void) => resolve(1)], class Custom {}),
   () => new WeakRef({}),
   () => new FinalizationRegistry(() => {}),
 ])('rejects opaque uncloneable brands before observing their properties', (factory) => {
@@ -38,6 +41,27 @@ it('rejects a live MessagePort instead of replacing it with an empty record', ()
     channel.port1.close();
     channel.port2.close();
   }
+});
+
+it('snapshots SAB-backed Buffer bytes while preserving repeated aliases', () => {
+  const buffer = Buffer.from(new SharedArrayBuffer(1));
+  buffer[0] = 1;
+  const native = deserialize(serialize(buffer)) as Uint8Array;
+  const packet = encodeAdvancedIpc({
+    first: buffer,
+    again: buffer,
+    map: new Map([[buffer, buffer]]),
+  });
+  buffer[0] = 2;
+  const result = decodeAdvancedIpc(packet) as {
+    first: Uint8Array;
+    again: Uint8Array;
+    map: Map<unknown, unknown>;
+  };
+  expect(result.first[0]).toBe(native[0]);
+  expect(Buffer.isBuffer(result.first)).toBe(true);
+  expect(result.first).toBe(result.again);
+  expect(result.map.get(result.first)).toBe(result.first);
 });
 
 it('rejects SharedArrayBuffer as native V8 IPC does', () => {

@@ -74,7 +74,7 @@ describe('runNodeProgramLifecycle', () => {
     await settle();
     expect(d.servePreview).toHaveBeenCalledWith(5174);
     expect(d.postListening).toHaveBeenCalledWith([5174]);
-    expect(d.awaitDrain).not.toHaveBeenCalled();
+    expect(d.awaitDrain).toHaveBeenCalledOnce();
     expect(d.exit).not.toHaveBeenCalled();
   });
 

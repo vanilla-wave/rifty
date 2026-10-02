@@ -29,3 +29,5 @@
 - 2026-10-02 — re-chart: one integrated acceptance frontier I1–I7; old watch/readline premise replaced by executed non-TTY evidence and ADR-0500, no goal amendment. Production real scenario GREEN 2 tests (2.2 min); config-only DOM/coverage named ceilings also executed. Compiler worker remains 10,022,694 bytes; exact SHA refreshed for rebuilt shared chunk imports, 2 MB ceiling unchanged.
 
 - 2026-10-02 — review2 BLOCK @08c6c18b: opaque IPC brands, fatal exit event, mutable Symbol legacy accessor bypass. Required repairs on this unit; no goal change. ADR0502 (DEC-2 independent ipc_brand_decision) supersedes snapshot0501: native original graph + weak Buffer refs; finite web-object ceiling. 756 focused GREEN; packed @08c GREEN. Full recomposed proof pending.
+
+- 2026-10-02 — final follow-on RED→GREEN: shared Buffer snapshot, owned async fatal suppression/drain, nonserve timer + pending entry drain. IPC25 + physical fork1, lifecycle55 GREEN. Source freeze for final gates; required I3/I4 remain with this unit.

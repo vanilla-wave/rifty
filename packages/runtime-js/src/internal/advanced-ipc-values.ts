@@ -7,6 +7,7 @@ const nativeSetSize = Object.getOwnPropertyDescriptor(Set.prototype, 'size')!.ge
 const nativeMapEntries = Map.prototype.entries;
 const nativeSetValues = Set.prototype.values;
 const nativeIsView = ArrayBuffer.isView;
+const nativeByteSet = Uint8Array.prototype.set;
 const sharedSize =
   typeof SharedArrayBuffer === 'undefined'
     ? null
@@ -44,38 +45,55 @@ export function encodeAdvancedIpc(message: unknown): unknown {
   }) as AdvancedPayload;
   const buffers = new Set(packet.buffers);
   const seen = new Set<object>();
-  const validate = (value: unknown): void => {
-    if (value === null || typeof value !== 'object' || seen.has(value)) return;
+  const copies = new Map<object, object>();
+  const visit = (value: unknown): unknown => {
+    if (value === null || typeof value !== 'object') return value;
+    const cached = copies.get(value);
+    if (cached) return cached;
+    if (seen.has(value)) return value;
     seen.add(value);
-    if (buffers.has(value)) return;
+    if (buffers.has(value)) {
+      if (nativeIsView(value) && sharedSize && hasSlot(value.buffer, sharedSize)) {
+        const copy = new Uint8Array(value.byteLength);
+        nativeApply(nativeByteSet, copy, [value]);
+        copies.set(value, copy);
+        return copy;
+      }
+      return value;
+    }
     if (sharedSize && hasSlot(value, sharedSize))
       throw new NotImplementedError('child_process.serialization.advanced.SharedArrayBuffer');
     if (nativeIsView(value)) {
       if (sharedSize && hasSlot(value.buffer, sharedSize))
         throw new NotImplementedError('child_process.serialization.advanced.SharedArrayBuffer');
-      return;
+      return value;
     }
     if (hasSlot(value, nativeMapSize)) {
-      for (const [key, item] of nativeApply(nativeMapEntries, value, []) as IterableIterator<
-        [unknown, unknown]
-      >) {
-        validate(key);
-        validate(item);
-      }
-      return;
+      const map = value as Map<unknown, unknown>;
+      const entries = [
+        ...(nativeApply(nativeMapEntries, value, []) as IterableIterator<[unknown, unknown]>),
+      ];
+      map.clear();
+      for (const [key, item] of entries) map.set(visit(key), visit(item));
+      return value;
     }
     if (hasSlot(value, nativeSetSize)) {
-      for (const item of nativeApply(nativeSetValues, value, []) as IterableIterator<unknown>)
-        validate(item);
-      return;
+      const set = value as Set<unknown>;
+      const entries = [...(nativeApply(nativeSetValues, value, []) as IterableIterator<unknown>)];
+      set.clear();
+      for (const item of entries) set.add(visit(item));
+      return value;
     }
-    if (nativeIsError?.(value) || coreProbes.some((probe) => hasSlot(value, probe))) return;
+    if (nativeIsError?.(value) || coreProbes.some((probe) => hasSlot(value, probe))) return value;
     const prototype = Object.getPrototypeOf(value);
     if (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null)
       throw new NotImplementedError('child_process.serialization.advanced.WebObject');
-    for (const key of Object.keys(value)) validate(Reflect.get(value, key));
+    const record = value as Record<string, unknown>;
+    for (const key of Object.keys(record)) record[key] = visit(record[key]);
+    return value;
   };
-  validate(packet.data);
+  packet.data = visit(packet.data);
+  packet.buffers = packet.buffers.map((value) => copies.get(value) ?? value);
   return packet;
 }
 

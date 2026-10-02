@@ -24,6 +24,10 @@ setTimeout(() => { console.log('after'); process.exitCode = 3; }, 30);
   'top-exception.cjs': `process.on('uncaughtException', (error, origin) => console.log('TOP', error.message, origin)); process.once('exit', code => console.log('EXIT', code)); setTimeout(() => console.log('after'), 5); throw new Error('entry-boom');`,
   'top-exception.mjs': `process.on('uncaughtException', (error, origin) => console.log('TOP', error.message, origin)); process.on('unhandledRejection', () => console.log('WRONG-ENTRY-REJECTION')); process.once('exit', code => console.log('EXIT', code)); setTimeout(() => console.log('after'), 5); throw new Error('entry-boom');`,
   'eval-source.cjs': `process.on('uncaughtException', (error, origin) => console.log('EVAL', error.message, origin)); process.once('exit', code => console.log('EXIT', code)); setTimeout(() => console.log('after'), 5); throw new Error('eval-boom');`,
+  'fatal-entry.cjs': `process.once('exit', code => console.log('EXIT', code)); throw new Error('fatal-boom');`,
+  'fatal-timeout.cjs': `process.once('exit', code => console.log('EXIT', code)); setTimeout(() => { throw new Error('fatal-boom'); }, 5);`,
+  'fatal-rejection.cjs': `process.once('exit', code => console.log('EXIT', code)); setTimeout(() => console.log('MUST-NOT-SURVIVE'), 100); Promise.reject(new Error('fatal-boom'));`,
+  'wide-exit.cjs': `process.once('exit', code => console.log('EXIT', code)); process.exitCode = 300;`,
   'explicit-exit.cjs': `process.once('exit', code => console.log('EXIT', code)); process.exitCode = 7; process.exit();`,
   'port-ref.cjs': `const {Worker, MessageChannel} = require('node:worker_threads'); const channel = new MessageChannel(); const w = new Worker('./worker.cjs', {stdout:true, stderr:true}); w.on('message', msg => {console.log('PORT-REF', msg); channel.port1.unref(); channel.port1.close(); channel.port2.close();}); w.unref(); channel.port1.ref();`,
   'worker.cjs': `const { parentPort } = require('node:worker_threads'); setTimeout(() => { console.log('worker-stdout'); console.error('worker-stderr'); parentPort.postMessage('hi'); }, 700);`,
@@ -77,7 +81,7 @@ function nativeOracle(
     });
     if (result.error) throw result.error;
     return {
-      output: (result.stdout + result.stderr).replace(
+      output: (file.startsWith('fatal-') ? result.stdout : result.stdout + result.stderr).replace(
         new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g'),
         '',
       ),
@@ -171,6 +175,10 @@ test('Node lifecycle and physical Worker contracts used by Vitest', async ({
   for (const file of [
     'lifecycle.cjs',
     'explicit-exit.cjs',
+    'fatal-entry.cjs',
+    'fatal-timeout.cjs',
+    'fatal-rejection.cjs',
+    'wide-exit.cjs',
     'top-exception.cjs',
     'top-exception.mjs',
     'eval-source.cjs',
@@ -192,6 +200,10 @@ test('Node lifecycle and physical Worker contracts used by Vitest', async ({
         .split('\n')
         .filter((value) => value === line).length;
       expect(result.output.split(line).length - 1, `${file}: ${line}`).toBe(count);
+    }
+    if (file.startsWith('fatal-')) {
+      expect(result.output).toContain('fatal-boom');
+      expect(result.output).not.toContain('MUST-NOT-SURVIVE');
     }
     if (file === 'flags-parent.cjs')
       expect(result.output).not.toMatch(/(?:^|\r?\n)MUST-NOT-REPLAY(?:\r?\n|$)/);

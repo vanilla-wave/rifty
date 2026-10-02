@@ -48,7 +48,7 @@ import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-hand
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { installNodeEntryRemoteFs } from './node-entry-remote-fs.ts';
 import { prepareNodeEntryRuntime } from './node-entry-runtime-preparation.ts';
-import { runNodeProgramLifecycle, terminateNodeProgramFailure } from './node-program-lifecycle.ts';
+import { runNodeProgramLifecycle, runNodeProgramToCompletion } from './node-program-lifecycle.ts';
 import {
   installNodeWorkerRuntimeConfig,
   readNodeWorkerRuntimeConfig,
@@ -207,8 +207,11 @@ if (nodeServe) {
     // A serve-capable foreground process may be a real long-lived supervisor
     // (nodemon) whose referenced watcher/timer handles are its Node lifetime.
     // The owner signal/peer boundary remains the physical stop authority.
-    awaitDrain: () =>
-      awaitDrain({ capMs: Number.POSITIVE_INFINITY, hasRef: () => listPorts().length > 0 }),
+    awaitDrain: (hasPendingEntry) =>
+      awaitDrain({
+        capMs: Number.POSITIVE_INFINITY,
+        hasRef: () => (hasPendingEntry?.() ?? false) || listPorts().length > 0,
+      }),
     servePreview: (port) =>
       serveCrossRealmPreview(
         port,
@@ -221,16 +224,11 @@ if (nodeServe) {
     writeStderr,
   });
 } else {
-  try {
-    await runEntry();
-  } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      Reflect.get(error, 'code') === 'RIFTY_PROCESS_EXIT'
-    )
-      throw error;
-    terminateNodeProgramFailure(error, { exit: terminateWorker, writeStderr });
-  }
-  terminateWorker(proc.exitCode);
+  await runNodeProgramToCompletion({
+    runEntry,
+    awaitDrain: () => awaitDrain(),
+    readExitCode: () => proc.exitCode,
+    exit: terminateWorker,
+    writeStderr,
+  });
 }
