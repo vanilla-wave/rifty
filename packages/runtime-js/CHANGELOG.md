@@ -3,6 +3,8 @@
 
 ## [Unreleased]
 
+- Close vitest-run-in-browser: exact Vitest4.1.11/Vite8.0.16 TS config/tests on forks and threads; real fail→fix, npm/verbose, Node lifecycle and finite compatibility ceilings verified.
+
 - Advanced IPC walks native Error.cause edges for Buffer identity and finite ceilings; boxed String leaves retain readonly indexes.
 
 - Worker default stdout/stderr pipes never end the captured parent streams, including same-realm child ownership.

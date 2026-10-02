@@ -146,3 +146,9 @@ Production `RIFTY_PLAYGROUND_PORT=5489 pnpm exec playwright test --config playwr
 Final packed: `pnpm test:packed-consumer` @3eb1e3c3 GREEN1/1,158.62s. All three final carriers GREEN on the same source; raw final summaries retained in vitest-run-final-validation.txt. Independent Final+GREEN artifact follows; closure changes docs only.
 
 Independent canonicalFinal+GREEN: vitest-run-in-browser-final-green.json @3eb1e3c3ee9ca8ff1cb3ca289c56aba199c04ff4,57coverage/56pass/1weak,0blockers,2advisory, unit/goalrequiredresiduals[], goalcomplete true. Node/VitestI1–I7 complete. Shared-backed/webIPC and beforeExit stay explicitly outside the accepted result; their independently checked draft records remain. Sourceunchanged since review; delivery local only.
+
+## CLOSE
+
+I1–I7 fulfilled; independent canonicalFinal+GREEN @3eb1e3c3, all3 final carriers GREEN. RECHART committed93cb6047; map empty. Completed12children +goal3documents removed; beforeExit/shared-backed/webIPC outside-goal drafts retained. No required residuals, no scope amendment. Delivery local commits only; source after review unchanged, closure docs-only. History preserves accepted goal/unit and ledger; canonical artifact/evidence/ADRs/compat stay in tree.
+
+Closure20documentation/referee lanes GREEN via existing pr-check TASKS/selectTasks/runChecks against verifiedsource3eb docs-only diff. Skipped unchangedtypecheck/build:libs/check:arch/test:run/test:parity alreadyfullGREEN. First restricted attempt hit tsx local-socket EPERM; escalated same20 rerun GREEN, no bypass. Rawclosure summary retained in vitest-run-close-gates.txt.

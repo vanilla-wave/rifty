@@ -1,0 +1,22 @@
+Closure docs-only; skipped unchanged source lanes: typecheck, build:libs, check:arch, test:run, test:parity
+PASS lint
+PASS check:parity-coverage
+PASS check:e2e-coverage
+PASS check:compat-drift
+PASS check:esbuild-runtime-drift
+PASS check:eval-compiler-drift
+PASS check:shadow-catalog-drift
+PASS check:install-artifact-drift
+PASS check:snapshot-artifact-drift
+PASS check:publish-config-drift
+PASS check:source-grep
+PASS check:dir-owner
+PASS check:file-size
+PASS check:contract-drift
+PASS check:install-stamp-writers
+PASS check:runtime-adapter-boundary
+PASS check:esbuild-legacy-retirement
+PASS check:sync-sha256-cores
+PASS backlog:check
+PASS refs:check
+Closure gates 20: GREEN
