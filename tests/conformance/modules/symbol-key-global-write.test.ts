@@ -573,11 +573,19 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
 
   for (const [path, source] of Object.entries(stillLoudEsm)) {
     it(`ESM stays loud on ${path}`, async () => {
+      // R5b C2: the literal/concat pins write into the shared host Function
+      // slot — a wrongly-silent RED run would execute the write. Restore the
+      // slot whatever the guard does.
+      const slot = Object.getOwnPropertyDescriptor(globalThis, 'Function');
       const loader = setup({ [path]: source });
-      await expect(loader.import(path, '/entry.mjs')).rejects.toMatchObject({
-        name: 'NotImplementedError',
-        feature: 'module-loader.esm-global-function-assignment',
-      });
+      try {
+        await expect(loader.import(path, '/entry.mjs')).rejects.toMatchObject({
+          name: 'NotImplementedError',
+          feature: 'module-loader.esm-global-function-assignment',
+        });
+      } finally {
+        if (slot) Object.defineProperty(globalThis, 'Function', slot);
+      }
     });
   }
 
@@ -870,10 +878,16 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
 
   for (const [path, source] of Object.entries(stillLoudCjs)) {
     it(`CJS stays loud on ${path}`, () => {
+      // R5b C2: restore the shared host Function slot — see the ESM twin.
+      const slot = Object.getOwnPropertyDescriptor(globalThis, 'Function');
       const loader = setup({ [path]: source });
-      expect(() => loader.require(`.${path}`, '/entry.cjs')).toThrowError(
-        /module-loader\.cjs-global-function-assignment/,
-      );
+      try {
+        expect(() => loader.require(`.${path}`, '/entry.cjs')).toThrowError(
+          /module-loader\.cjs-global-function-assignment/,
+        );
+      } finally {
+        if (slot) Object.defineProperty(globalThis, 'Function', slot);
+      }
     });
   }
 });
@@ -919,6 +933,217 @@ describe('key-interior evaluation order is source order (R5)', () => {
         [`/r5-order-${site}.cjs`]: `${prelude}${mutation}${cleanup} module.exports = r;`,
       });
       expect(loader.require(`./r5-order-${site}.cjs`, '/entry.cjs')).toBe(2);
+    });
+  }
+});
+
+describe('mutation-site evaluation order matches Node (R5b)', () => {
+  // Final+GREEN R5b F1: the site's OWN intrinsic substitution lands after
+  // its interior evaluates — a nested genuine Symbol-key write inside the
+  // target key or the right-hand side runs before the tamper and stays
+  // exempt (write-before-tamper, R2 C1). The tamper flag must not be set
+  // before the object/key/right-hand-side walk. The discriminating position
+  // carries a FRESH Symbol.for key (a const alias is flag-immune and could
+  // not discriminate); the const alias K serves the post-tamper cleanup.
+  // Node v24.16.0 evaluates every carrier to 1 (oracle-pinned 2026-10-02).
+  const orderFaithful: Record<string, string> = {
+    'member-assignment': `
+      const saved = Symbol.for; const K = Symbol.for('r6.member.assign');
+      Symbol[(Reflect.set(globalThis, Symbol.for('r6.member.assign'), 1), 'for')] = () => 'r6.sentinel';
+      Symbol.for = saved;
+      const r = globalThis[K]; delete globalThis[K];
+    `,
+    'member-delete': `
+      const saved = Symbol.for; const K = Symbol.for('r6.member.delete');
+      delete Symbol[(Reflect.set(globalThis, Symbol.for('r6.member.delete'), 1), 'for')];
+      Object.defineProperty(Symbol, 'for', { value: saved, writable: true, configurable: true });
+      const r = globalThis[K]; delete globalThis[K];
+    `,
+    // `Symbol.x++` yields NaN and cannot substitute the intrinsic — updates
+    // stay untracked (contract), so neither the nested write nor a LATER
+    // fresh key may go loud.
+    'member-update': `
+      const K = Symbol.for('r6.member.update');
+      Symbol[(Reflect.set(globalThis, Symbol.for('r6.member.update'), 1), 'r6.count')]++;
+      globalThis[Symbol.for('r6.member.update.fresh')] = 1;
+      const r = globalThis[K] + globalThis[Symbol.for('r6.member.update.fresh')] - 1;
+      delete globalThis[K]; delete globalThis[Symbol.for('r6.member.update.fresh')];
+      delete Symbol['r6.count'];
+    `,
+    'bare-assignment-rhs': `
+      const savedSymbol = Symbol; const K = Symbol.for('r6.bare.assign');
+      Symbol = (Reflect.set(globalThis, Symbol.for('r6.bare.assign'), 1), { for: savedSymbol.for });
+      const r = globalThis[K]; delete globalThis[K]; Symbol = savedSymbol;
+    `,
+    'member-assignment-rhs': `
+      const saved = Symbol.for; const K = Symbol.for('r6.member.rhs');
+      Symbol.for = (Reflect.set(globalThis, Symbol.for('r6.member.rhs'), 1), () => 'r6.sentinel');
+      Symbol.for = saved;
+      const r = globalThis[K]; delete globalThis[K];
+    `,
+    'call-value-tamper': `
+      const saved = Symbol.for; const K = Symbol.for('r6.call.value');
+      Reflect.set(globalThis, Symbol.for('r6.call.value'), (Symbol.for = () => 'r6.sentinel', Symbol.for = saved, 1));
+      const r = globalThis[K]; delete globalThis[K];
+    `,
+    'define-property-value-tamper': `
+      const saved = Symbol.for; const K = Symbol.for('r6.dp.value');
+      Object.defineProperty(globalThis, Symbol.for('r6.dp.value'), { value: (Symbol.for = () => 'r6.sentinel', Symbol.for = saved, 1), configurable: true });
+      const r = globalThis[K]; delete globalThis[K];
+    `,
+    'assign-value-tamper': `
+      const saved = Symbol.for; const K = Symbol.for('r6.assign.value');
+      Object.assign(globalThis, { [Symbol.for('r6.assign.value')]: (Symbol.for = () => 'r6.sentinel', Symbol.for = saved, 1) });
+      const r = globalThis[K]; delete globalThis[K];
+    `,
+    'define-properties-value-tamper': `
+      const saved = Symbol.for; const K = Symbol.for('r6.dps.value');
+      Object.defineProperties(globalThis, { [Symbol.for('r6.dps.value')]: { value: (Symbol.for = () => 'r6.sentinel', Symbol.for = saved, 1), configurable: true } });
+      const r = globalThis[K]; delete globalThis[K];
+    `,
+    'define-getter-value-tamper': `
+      const saved = Symbol.for; const K = Symbol.for('r6.getter.value');
+      globalThis.__defineGetter__(Symbol.for('r6.getter.value'), (Symbol.for = () => 'r6.sentinel', Symbol.for = saved, () => 1));
+      const r = globalThis[K]; delete globalThis[K];
+    `,
+    // Sibling sites, same class: a for-in/of target write lands after the
+    // iterated expression; a destructuring write after the right-hand side;
+    // a pattern-target write after its default initialiser.
+    'for-in-target': `
+      const saved = Symbol.for; const K = Symbol.for('r6.forin');
+      for (Symbol.for of [(globalThis[Symbol.for('r6.forin')] = 1, () => 'r6.sentinel')]) {}
+      Symbol.for = saved;
+      const r = globalThis[K]; delete globalThis[K];
+    `,
+    'destructure-rhs': `
+      const saved = Symbol.for; const K = Symbol.for('r6.destructure');
+      [Symbol.for] = [(globalThis[Symbol.for('r6.destructure')] = 1, () => 'r6.sentinel')];
+      Symbol.for = saved;
+      const r = globalThis[K]; delete globalThis[K];
+    `,
+    'pattern-default': `
+      const saved = Symbol.for; const K = Symbol.for('r6.default');
+      [Symbol.for = (globalThis[Symbol.for('r6.default')] = 1, () => 'r6.sentinel')] = [];
+      Symbol.for = saved;
+      const r = globalThis[K]; delete globalThis[K];
+    `,
+  };
+  for (const [name, body] of Object.entries(orderFaithful)) {
+    it(`ESM runs write-before-own-tamper at the ${name} site`, async () => {
+      const loader = setup({ [`/r6-order-${name}.mjs`]: `${body} export { r };` });
+      const ns = await loader.import(`/r6-order-${name}.mjs`, '/entry.mjs');
+      expect(ns.r).toBe(1);
+    });
+    it(`CJS runs write-before-own-tamper at the ${name} site`, () => {
+      const loader = setup({ [`/r6-order-${name}.cjs`]: `${body} module.exports = r;` });
+      expect(loader.require(`./r6-order-${name}.cjs`, '/entry.cjs')).toBe(1);
+    });
+  }
+
+  // Final+GREEN R5b F2: the target/callee object reference evaluates FIRST —
+  // a later key/argument interior that rebinds the alias must not re-classify
+  // the captured reference. A captured LOCAL target stays allowed even when
+  // the interior rebinds the alias to the global object (Node: 1).
+  const capturedLocalTarget: Record<string, string> = {
+    direct: `
+      const target = {}; let g = target;
+      g[(g = globalThis, 'Function')] = 1;
+      const r = target.Function; delete target.Function;
+    `,
+    'reflect-set': `
+      const target = {}; let g = target;
+      Reflect.set(g, (g = globalThis, 'Function'), 1);
+      const r = target.Function; delete target.Function;
+    `,
+    assign: `
+      const target = {}; let g = target;
+      Object.assign(g, { [(g = globalThis, 'Function')]: 1 });
+      const r = target.Function; delete target.Function;
+    `,
+    getter: `
+      const target = {}; let g = target;
+      g.__defineGetter__((g = globalThis, 'Function'), () => 1);
+      const r = target.Function; delete target.Function;
+    `,
+    'define-properties': `
+      const target = {}; let g = target;
+      Object.defineProperties(g, { [(g = globalThis, 'Function')]: { value: 1, configurable: true } });
+      const r = target.Function; delete target.Function;
+    `,
+    'define-property': `
+      const target = {}; let g = target;
+      Object.defineProperty(g, (g = globalThis, 'Function'), { value: 1, configurable: true });
+      const r = target.Function; delete target.Function;
+    `,
+  };
+  for (const [name, body] of Object.entries(capturedLocalTarget)) {
+    it(`ESM keeps the captured local target at the ${name} site`, async () => {
+      const loader = setup({ [`/r6-local-${name}.mjs`]: `${body} export { r };` });
+      const ns = await loader.import(`/r6-local-${name}.mjs`, '/entry.mjs');
+      expect(ns.r).toBe(1);
+    });
+    it(`CJS keeps the captured local target at the ${name} site`, () => {
+      const loader = setup({ [`/r6-local-${name}.cjs`]: `${body} module.exports = r;` });
+      expect(loader.require(`./r6-local-${name}.cjs`, '/entry.cjs')).toBe(1);
+    });
+  }
+
+  // F2 mirror: a captured GLOBAL target stays loud even when the interior
+  // rebinds the alias to a local — the write lands on the real global object
+  // (baseline 0c4c1b07 rejected all six; the walk-first redesign flipped the
+  // verdicts). The value is a benign literal (a globalThis.Function READ
+  // would taint independently and could not discriminate the target
+  // classification); the harness finally restores the host slot, so a
+  // wrongly-silent RED run leaves the shared process clean (R4 C4, R5b C2).
+  const capturedGlobalTarget: Record<string, string> = {
+    direct: `
+      let g = globalThis;
+      g[(g = {}, 'Function')] = 1;
+    `,
+    'reflect-set': `
+      let g = globalThis;
+      Reflect.set(g, 'Function', (g = {}, 1));
+    `,
+    assign: `
+      let g = globalThis;
+      Object.assign(g, (g = {}, { Function: 1 }));
+    `,
+    getter: `
+      let g = globalThis;
+      g.__defineGetter__((g = {}, 'Function'), () => 1);
+    `,
+    'define-properties': `
+      let g = globalThis;
+      Object.defineProperties(g, { [(g = {}, 'Function')]: { value: 1, configurable: true } });
+    `,
+    'define-property': `
+      let g = globalThis;
+      Object.defineProperty(g, 'Function', (g = {}, { value: 1, writable: true, configurable: true }));
+    `,
+  };
+  for (const [name, body] of Object.entries(capturedGlobalTarget)) {
+    it(`ESM stays loud on the captured global target at the ${name} site`, async () => {
+      const slot = Object.getOwnPropertyDescriptor(globalThis, 'Function');
+      const loader = setup({ [`/r6-global-${name}.mjs`]: `${body} export const r = 1;` });
+      try {
+        await expect(loader.import(`/r6-global-${name}.mjs`, '/entry.mjs')).rejects.toMatchObject({
+          name: 'NotImplementedError',
+          feature: 'module-loader.esm-global-function-assignment',
+        });
+      } finally {
+        if (slot) Object.defineProperty(globalThis, 'Function', slot);
+      }
+    });
+    it(`CJS stays loud on the captured global target at the ${name} site`, () => {
+      const slot = Object.getOwnPropertyDescriptor(globalThis, 'Function');
+      const loader = setup({ [`/r6-global-${name}.cjs`]: `${body} module.exports = 1;` });
+      try {
+        expect(() => loader.require(`./r6-global-${name}.cjs`, '/entry.cjs')).toThrowError(
+          /module-loader\.cjs-global-function-assignment/,
+        );
+      } finally {
+        if (slot) Object.defineProperty(globalThis, 'Function', slot);
+      }
     });
   }
 });

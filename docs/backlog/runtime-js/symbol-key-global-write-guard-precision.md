@@ -70,7 +70,16 @@ provable — a dynamic scope may shadow Symbol (R3 F5, CJS-only: the ESM
 loader parses `sourceType: 'module'`, strict — `with` is a SyntaxError
 before the guard runs, so the ESM twin carries no withDepth). A genuine Symbol-key write BEFORE any tamper stays exempt
 (source order, R2 C1); `Symbol++`-class updates yield NaN and cannot mint
-a 'Function' key, so they stay untracked. eval-text Symbol substitution is
+a 'Function' key, so they stay untracked. Every reference at a mutation
+site is classified at its OWN evaluation point (R5b F1/F2): the target or
+callee object after its walk, the key after the key walk, and the site's own
+tamper flag only after the whole interior — a nested genuine write inside
+the key/right-hand-side runs before the substitution and stays exempt, a
+captured global target stays loud when a later interior rebinds the alias,
+and a captured local target stays allowed. Destructuring evaluates the
+right-hand side before the targets, a pattern default before its target
+write, and a for-in/of target after the iterated expression. eval-text
+Symbol substitution is
 out of scope here — owned by
 `function-constructor-exhaustive-metaprogramming-ceiling` (R3 C3).
 
@@ -110,16 +119,20 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
   run. Parity `expected` pinned from the oracle, never from memory.
 - Mechanism: the provably-Symbol-key machinery lives ONCE in the new sibling
   `module-loader/symbol-key-guard.ts` (`isProvablySymbolKey`,
-  `mutationKeyMayBeFunction`, `objectMayContainFunctionKey`, alias
+  `mutationKeyMayBeFunction`, alias
   mark/is/update over a structural `SymbolKeyScope` + a shadow-probe
   callback), consulted by BOTH loader twins at MUTATION key positions only,
   exactly three site families: `isGlobalFunctionWriteMember` (direct writes
-  AND `delete` — delete routes through `walkGuardAssignmentTarget`), the
-  mutation key arguments inside `isGlobalFunctionMutationCall`
+  AND `delete` — delete routes through the twins' assignment-target walk),
+  the mutation key arguments inside `isGlobalFunctionMutationCall`
   (defineProperty / Reflect.set / Reflect.deleteProperty /
-  `__defineGetter__` / `__defineSetter__`), and
-  `objectMayContainFunctionKey` (defineProperties / Object.assign literal
-  keys). The twins' byte-identical guard-AST helpers (`unwrapGuardChain`,
+  `__defineGetter__` / `__defineSetter__`), and the defineProperties /
+  Object.assign source-object keys. Layout amendment (2026-10-02, R5b): the
+  call-site predicates consume a `MutationSiteCapture` produced by
+  `walkMutationCallSite` (shared, one walk in source order — per-argument
+  classification at each evaluation point, per-property key proofs inside
+  source objects); the twins keep only the probe wiring. The twins'
+  byte-identical guard-AST helpers (`unwrapGuardChain`,
   `literalString`, `staticPropertyName`, `staticPropertyKeyName`,
   `isComputedMember`, `propertyMayBeFunction`, `propertyMayBeConstructor`)
   are deduplicated into `module-loader/guard-ast.ts`, which both twins
@@ -163,8 +176,10 @@ export-wrapped `globalThis`-alias ceiling hole, see Decisions; R4 adds the
 early-walk scope control with a FRESH Symbol.call (C1), the alias-replay
 pair (F2), and the CJS key-interior edit-producer sweep (F1); R5 adds the
 twelve-carrier key-interior write-then-tamper source-order matrix — six
-mutation sites × both loaders) +
-69 boundary pins (Acceptance 3 in BOTH loaders:
+mutation sites × both loaders; R5b adds the evaluation-order family — ten
+write-before-own-tamper shapes plus the for-in/destructuring/pattern-default
+siblings and the six captured-local-target forms, all × both loaders) +
+81 boundary pins (Acceptance 3 in BOTH loaders:
 string-literal, concatenated, unknown-identifier, `let`-bound-symbol,
 shadowed-`Symbol`, `Symbol.keyFor` keys stay loud, called
 `Reflect.get(globalThis, K)` results stay loud, and the intrinsic-tamper
@@ -175,7 +190,8 @@ wrapped-reference pair, the R3 prototype-injection form, the R3
 const-intrinsic-alias pair, the R4 pure-setPrototypeOf / wrapped-global /
 wrapped-define-callee / alias-callee forms; CJS-only the R3 `with`-shadowed
 form, the R4 `with`-shadowed key-alias form, and the R5 with-interior
-tamper-detection pair — tamper
+tamper-detection pair; per loader the R5b captured-global-target sextet —
+tamper
 pins RED at their introducing round, the rest green today,
 regression-only).
 
@@ -345,3 +361,37 @@ regression-only).
   loud). RED-pinned 14 failed / 95 passed pre-fix (12 replay-matrix
   positives — six sites × two loaders — + 2 with-interior tamper
   carriers), 109/109 post-fix (40 positives + 69 boundary).
+- 2026-10-02 — reception (REV-12) of Final+GREEN R5b (blocker, F1/F2 +
+  concerns C1/C2): the R5 walk-first-then-decide still classified every
+  reference at ONE moment. F1 — an intrinsic target set the tamper flag
+  before the object/key/right-hand-side walk, rejecting nested genuine
+  writes that run BEFORE the substitution (Node evaluates all nine
+  reviewer carriers to 1). F2 — the target/callee object was classified
+  AFTER the children walk, so a key/argument interior that rebinds the
+  alias flipped the verdict: captured-global targets went silent (ceiling
+  lost vs baseline 0c4c1b07), captured-local targets went loud. Fix:
+  evaluation-order capture — `walkMutationCallSite` (shared) walks callee
+  and arguments once in source order and records each classification at
+  its own point (per-property key proofs inside assign/defineProperties
+  source objects); the site predicates (`isGlobalFunctionMutationCall`
+  moved into symbol-key-guard.ts, deduplicating the twin copies;
+  `isSymbolIntrinsicMutationCall`) consume the capture; the twins apply
+  the tamper flag only after the site's interior (after the right-hand
+  side for assignments, after the target reference for delete, in pattern
+  order for destructuring). Destructuring now walks the right-hand side
+  before the targets, a pattern default before its target write, and
+  for-in/of the iterated expression before the target; `Symbol.x++`-class
+  updates are untracked per the declared rule (they were flagged since
+  the R1 reception — no pin relied on it). `objectMayContainFunctionKey`
+  is deleted (REV-7 — subsumed by the capture walk). C1 — a let-alias
+  created inside the target evades tamper detection: bounded by the
+  declared R4 C3 exclusion (let/var alias flows stay beyond the
+  provenance model), no code change. C2 — the three literal/concat RED
+  pins wrote into the shared host Function slot without restoring; the
+  loud-pin loops now snapshot/restore the slot descriptor (the new
+  captured-global pins carry benign literal values for the same reason).
+  RED-pinned 50 failed / 109 passed pre-fix (ten write-before-own-tamper
+  shapes + for-in/destructuring/pattern-default siblings + six
+  captured-local forms, all × both loaders, plus the six
+  captured-global loud forms × both loaders), 159/159 post-fix;
+  workbench re-pinned (sha256 dd0a0abd…, bytes unchanged).

@@ -171,26 +171,6 @@ export function mutationKeyMayBeFunction(
   return propertyMayBeFunction(node) && !isProvablySymbolKey(node, scopes, isShadowed, withDepth);
 }
 
-// defineProperties / Object.assign literal keys.
-export function objectMayContainFunctionKey(
-  node: unknown,
-  scopes: readonly SymbolKeyScope[],
-  isShadowed: SymbolKeyShadowProbe,
-  withDepth = 0,
-): boolean {
-  if (!node || typeof node !== 'object') return true;
-  const object = node as GuardAstNode;
-  if (object.type !== 'ObjectExpression') return true;
-  const properties = (object as unknown as { properties?: GuardAstNode[] }).properties ?? [];
-  return properties.some((property) => {
-    if (property.type === 'SpreadElement') return true;
-    const key = staticPropertyKeyName(property);
-    if (key !== undefined) return key === 'Function';
-    const p = property as unknown as { computed?: boolean; key?: unknown };
-    return !(p.computed && isProvablySymbolKey(p.key, scopes, isShadowed, withDepth));
-  });
-}
-
 // The intrinsic is reachable two ways: the unshadowed `Symbol` identifier,
 // or `globalThis.Symbol` / `globalThis['Symbol']` — the global form names
 // the real intrinsic even when a local binding shadows the identifier
@@ -245,7 +225,208 @@ export function isSymbolTamperTarget(
   return isGlobalObject(object) && staticPropertyName(t) === 'Symbol';
 }
 
-// The defineProperty-family twin of isSymbolTamperTarget:
+// ---------------------------------------------------------------------------
+// Evaluation-order capture (Final+GREEN R5b F1/F2): every reference at a
+// mutation call site is classified at its OWN evaluation point — the callee
+// object after the callee walk, the target argument after its walk, the key
+// after its walk. A later argument interior may rebind an alias or
+// substitute the intrinsic, but JS has already fixed the earlier reference:
+// classifying it post-walk flipped captured-global writes to silent and
+// captured-local writes to loud (F2), and setting the site's own tamper flag
+// before its interior walk rejected a nested write that runs BEFORE the
+// substitution (F1). The caller applies the flags after the walk returns.
+// ---------------------------------------------------------------------------
+
+export interface MutationSiteCapture {
+  calleeObjectIsGlobal: boolean; // raw callee.object — the Function-guard arm
+  calleeObjectIsGlobalUnwrapped: boolean; // unwrapped — the Symbol-tamper arm
+  calleeObjectIsSymbol: boolean;
+  targetIsGlobal: boolean; // raw args[0]
+  targetIsGlobalUnwrapped: boolean;
+  targetIsSymbol: boolean;
+  getterKeyMayBeFunction: boolean; // args[0] as the __defineGetter__ key
+  keyMayBeFunction: boolean; // args[1] as the define/Reflect key
+  sourcesMayContainFunctionKey: boolean; // assign/defineProperties sources
+}
+
+export interface MutationSiteProbes {
+  // Lexical shadowing only — tamper detection and builtin-name checks (the
+  // augmented probe's flag/withDepth disjuncts would excuse real
+  // substitution, R5).
+  readonly isShadowed: SymbolKeyShadowProbe;
+  // Augmented (tamper-flag/withDepth-aware) — key provability proofs.
+  readonly isShadowedProvability: SymbolKeyShadowProbe;
+  readonly isGlobalObject: SymbolKeyGlobalProbe; // unwrapping
+  readonly isGlobalObjectRaw: SymbolKeyGlobalProbe; // Function-guard parity
+}
+
+// Walks the callee and the arguments exactly once, in source order,
+// capturing each classification at its own evaluation point. The site
+// predicates then read the capture; the tamper flag is applied by the caller
+// only after the whole interior was walked (the call executes last).
+export function walkMutationCallSite(
+  node: unknown,
+  walk: (node: unknown) => void,
+  scopes: readonly SymbolKeyScope[],
+  probes: MutationSiteProbes,
+  withDepth = 0,
+): MutationSiteCapture {
+  const call = node as unknown as { callee?: GuardAstNode; arguments?: unknown[] };
+  const callee = call.callee;
+  const args = call.arguments ?? [];
+  const capture: MutationSiteCapture = {
+    calleeObjectIsGlobal: false,
+    calleeObjectIsGlobalUnwrapped: false,
+    calleeObjectIsSymbol: false,
+    targetIsGlobal: false,
+    targetIsGlobalUnwrapped: false,
+    targetIsSymbol: false,
+    getterKeyMayBeFunction: true,
+    keyMayBeFunction: true,
+    sourcesMayContainFunctionKey: false,
+  };
+  walk(callee);
+  const rawCalleeObject =
+    callee?.type === 'MemberExpression'
+      ? (callee as unknown as { object?: unknown }).object
+      : undefined;
+  const calleeObject = unwrapGuardChain(rawCalleeObject) as GuardAstNode | undefined;
+  capture.calleeObjectIsGlobal = probes.isGlobalObjectRaw(rawCalleeObject);
+  capture.calleeObjectIsGlobalUnwrapped = probes.isGlobalObject(calleeObject);
+  capture.calleeObjectIsSymbol = isSymbolReference(
+    calleeObject,
+    scopes,
+    probes.isShadowed,
+    probes.isGlobalObject,
+  );
+  const objectName =
+    calleeObject?.type === 'Identifier'
+      ? (calleeObject as unknown as { name?: string }).name
+      : undefined;
+  const propertyName = callee ? staticPropertyName(callee) : undefined;
+  const isAssign =
+    objectName === 'Object' && !probes.isShadowed('Object') && propertyName === 'assign';
+  const isDefineProperties =
+    objectName === 'Object' && !probes.isShadowed('Object') && propertyName === 'defineProperties';
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if ((isAssign && i >= 1) || (isDefineProperties && i === 1)) {
+      walkSourceArgument(arg, capture, walk, scopes, probes, withDepth);
+      continue;
+    }
+    walk(arg);
+    if (i === 0) {
+      capture.targetIsGlobal = probes.isGlobalObjectRaw(arg);
+      capture.targetIsGlobalUnwrapped = probes.isGlobalObject(arg);
+      capture.targetIsSymbol = isSymbolReference(
+        arg,
+        scopes,
+        probes.isShadowed,
+        probes.isGlobalObject,
+      );
+      capture.getterKeyMayBeFunction = mutationKeyMayBeFunction(
+        arg,
+        scopes,
+        probes.isShadowedProvability,
+        withDepth,
+      );
+    } else if (i === 1) {
+      capture.keyMayBeFunction = mutationKeyMayBeFunction(
+        arg,
+        scopes,
+        probes.isShadowedProvability,
+        withDepth,
+      );
+    }
+  }
+  // `Object.defineProperties(g)` with no source argument is conservative,
+  // mirroring objectMayContainFunctionKey(undefined).
+  if (isDefineProperties && args.length < 2) capture.sourcesMayContainFunctionKey = true;
+  return capture;
+}
+
+// defineProperties/Object.assign source object: each computed key is proven
+// right after ITS walk — a tamper inside a later value must not poison an
+// earlier-evaluated key (R5b F1). Non-literal sources stay conservative.
+function walkSourceArgument(
+  arg: unknown,
+  capture: MutationSiteCapture,
+  walk: (node: unknown) => void,
+  scopes: readonly SymbolKeyScope[],
+  probes: MutationSiteProbes,
+  withDepth: number,
+): void {
+  if (!arg || typeof arg !== 'object' || (arg as GuardAstNode).type !== 'ObjectExpression') {
+    walk(arg);
+    capture.sourcesMayContainFunctionKey = true;
+    return;
+  }
+  const properties = (arg as unknown as { properties?: GuardAstNode[] }).properties ?? [];
+  for (const property of properties) {
+    if (property.type === 'SpreadElement') {
+      walk((property as unknown as { argument?: unknown }).argument);
+      capture.sourcesMayContainFunctionKey = true;
+      continue;
+    }
+    const p = property as unknown as { computed?: boolean; key?: unknown; value?: unknown };
+    if (p.computed) {
+      walk(p.key);
+      if (!isProvablySymbolKey(p.key, scopes, probes.isShadowedProvability, withDepth)) {
+        capture.sourcesMayContainFunctionKey = true;
+      }
+      walk(p.value);
+      continue;
+    }
+    const keyName = staticPropertyKeyName(property);
+    if (keyName === undefined || keyName === 'Function') {
+      capture.sourcesMayContainFunctionKey = true;
+    }
+    walk(property);
+  }
+}
+
+// The Function-ceiling site predicate over the capture: the defineProperty/
+// Reflect.set/deleteProperty/__defineGetter__ key positions and the
+// assign/defineProperties source objects on a captured-global target.
+export function isGlobalFunctionMutationCall(
+  node: unknown,
+  capture: MutationSiteCapture,
+  isShadowed: SymbolKeyShadowProbe,
+): boolean {
+  const call = node as unknown as { callee?: GuardAstNode };
+  const callee = call.callee;
+  if (!callee || callee.type !== 'MemberExpression') return false;
+  const object = (callee as unknown as { object?: GuardAstNode }).object;
+  const objectName =
+    object?.type === 'Identifier' ? (object as unknown as { name?: string }).name : undefined;
+  const propertyName = staticPropertyName(callee);
+  const isBuiltinObject = objectName === 'Object' && !isShadowed('Object');
+  const isBuiltinReflect = objectName === 'Reflect' && !isShadowed('Reflect');
+  if (isBuiltinObject && propertyName === 'assign' && capture.targetIsGlobal) {
+    return capture.sourcesMayContainFunctionKey;
+  }
+  const isObjectDefine =
+    isBuiltinObject && (propertyName === 'defineProperty' || propertyName === 'defineProperties');
+  const isReflectMutation =
+    isBuiltinReflect &&
+    (propertyName === 'defineProperty' ||
+      propertyName === 'set' ||
+      propertyName === 'deleteProperty');
+  if ((isObjectDefine || isReflectMutation) && capture.targetIsGlobal) {
+    return propertyName === 'defineProperties'
+      ? capture.sourcesMayContainFunctionKey
+      : capture.keyMayBeFunction;
+  }
+  if (
+    capture.calleeObjectIsGlobal &&
+    (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
+  ) {
+    return capture.getterKeyMayBeFunction;
+  }
+  return false;
+}
+
+// The defineProperty-family twin of isSymbolTamperTarget, over the capture:
 // `Object.defineProperty(Symbol, 'for', …)` & friends substitute the
 // intrinsic without an assignment target, and a literal 'Symbol' key through
 // the global object (`Object.defineProperty(globalThis, 'Symbol', …)`,
@@ -253,10 +434,9 @@ export function isSymbolTamperTarget(
 // `Symbol:` key) slips the Function guard — unknown keys on globalThis are
 // already ceiling-loud, so only the literal 'Symbol' forms need flagging.
 export function isSymbolIntrinsicMutationCall(
-  node: GuardAstNode,
-  scopes: readonly SymbolKeyScope[],
+  node: unknown,
+  capture: MutationSiteCapture,
   isShadowed: SymbolKeyShadowProbe,
-  isGlobalObject: SymbolKeyGlobalProbe,
 ): boolean {
   const call = node as unknown as { callee?: GuardAstNode; arguments?: unknown[] };
   // Wrapped callees name the same builtin: `(0, Object).defineProperty` IS
@@ -271,7 +451,7 @@ export function isSymbolIntrinsicMutationCall(
     object?.type === 'Identifier' ? (object as unknown as { name?: string }).name : undefined;
   const propertyName = staticPropertyName(callee);
   if (
-    isSymbolReference(object, scopes, isShadowed, isGlobalObject) &&
+    capture.calleeObjectIsSymbol &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
     return true;
@@ -279,7 +459,7 @@ export function isSymbolIntrinsicMutationCall(
   // `globalThis.__defineGetter__('Symbol', …)` installs a getter for the
   // intrinsic slot through the global object (Final+GREEN R2 F1).
   if (
-    isGlobalObject(object) &&
+    capture.calleeObjectIsGlobalUnwrapped &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
     return literalString(args[0]) === 'Symbol';
@@ -291,7 +471,7 @@ export function isSymbolIntrinsicMutationCall(
   if (
     propertyName === 'setPrototypeOf' &&
     (isBuiltinObject || isBuiltinReflect) &&
-    isSymbolReference(args[0], scopes, isShadowed, isGlobalObject)
+    capture.targetIsSymbol
   ) {
     return true;
   }
@@ -305,8 +485,8 @@ export function isSymbolIntrinsicMutationCall(
         propertyName === 'defineProperty' ||
         propertyName === 'deleteProperty'));
   if (!isDefineFamily) return false;
-  if (isSymbolReference(args[0], scopes, isShadowed, isGlobalObject)) return true;
-  if (!isGlobalObject(args[0])) return false;
+  if (capture.targetIsSymbol) return true;
+  if (!capture.targetIsGlobalUnwrapped) return false;
   if (propertyName === 'assign' || propertyName === 'defineProperties') {
     return args.slice(1).some(hasLiteralSymbolKey);
   }
