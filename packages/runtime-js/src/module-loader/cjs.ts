@@ -20,12 +20,14 @@ import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
 import {
+  type MemberObjectCapture,
   type SymbolKeyGlobalProbe,
   type SymbolKeyShadowProbe,
   isGlobalFunctionMutationCall,
-  isProvablySymbolKey,
+  isGlobalFunctionWriteMember,
   isSymbolIntrinsicMutationCall,
   isSymbolTamperTarget,
+  recordMemberObjectCapture,
   updateSymbolAliasesFromPatternValue,
   walkMutationCallSite,
 } from './symbol-key-guard.ts';
@@ -164,6 +166,8 @@ interface FunctionRewriteCtx {
    *  dynamic scope may shadow `Symbol`, so no Symbol key is provable (R3
    *  F5; CJS scripts are non-strict, so `with` is reachable here). */
   withDepth: number;
+  // Member object classifications captured at each member's walk point (R6 F2).
+  readonly memberObjectCaptures: Map<unknown, MemberObjectCapture>;
 }
 
 // TODO(backlog: runtime-js/function-constructor-exhaustive-metaprogramming-ceiling):
@@ -273,6 +277,7 @@ function rewriteCjsFunctionConstructorReferences(
     hasFunctionEvalText: false,
     symbolIntrinsicTampered: false,
     withDepth: 0,
+    memberObjectCaptures: new Map(),
   };
   walkFunctionReferences(program as unknown as AnyNodeShape, ctx);
   if (ctx.hasDerivedHostFunctionConstructor) {
@@ -617,8 +622,9 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
       const isConst = (n as unknown as { kind?: string }).kind === 'const';
       for (const decl of declarations) {
         const declId = decl.id as AnyNodeShape | undefined;
-        walkPatternExpressions(declId, ctx);
+        // The initializer evaluates before the pattern's defaults/keys (R6 F3).
         if (decl.init) walkFunctionReferences(decl.init, ctx);
+        walkPatternExpressions(declId, ctx);
         if (decl.init) {
           updateGlobalAliasesFromPatternValue(declId, decl.init, ctx);
           updateMaybeFunctionAliasesFromPatternValue(declId, decl.init, ctx);
@@ -632,6 +638,7 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
               decl.init,
               shadowProbe(ctx),
               globalObjectProbe(ctx),
+              (member) => ctx.memberObjectCaptures.get(member),
             );
           }
         }
@@ -690,6 +697,13 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
         ctx.hasDynamicFunctionScope = true;
       }
       walkFunctionReferences(n.object, ctx);
+      recordMemberObjectCapture(
+        ctx.memberObjectCaptures,
+        n,
+        n.object,
+        (node) => isGlobalObjectExpression(node, ctx),
+        globalObjectProbe(ctx),
+      );
       if ((n as unknown as { computed?: boolean }).computed)
         walkFunctionReferences(n.property, ctx);
       return;
@@ -736,8 +750,7 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
     case 'AssignmentExpression': {
       const left = n.left as AnyNodeShape | undefined;
       if (left?.type === 'ObjectPattern' || left?.type === 'ArrayPattern') {
-        // Destructuring evaluates the right-hand side BEFORE the targets
-        // (R5b F1).
+        // Destructuring evaluates the right-hand side BEFORE the targets (R5b F1).
         walkFunctionReferences(n.right, ctx);
         walkAssignmentPatternTarget(left, ctx);
       } else {
@@ -786,10 +799,8 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
           ctx.hasFunctionEvalText ||
           (directEvalImportEdit === null && evalArgumentMayTouchFunction(args[0]));
       }
-      // The key-consulting checks classify every reference at its OWN
-      // evaluation point — the callee object after the callee walk, each
-      // argument after its walk; the call (and any tamper it performs)
-      // lands last — one walk, source order, no probe pass (R5, R5b F1/F2).
+      // Key-consulting checks classify each reference at its OWN evaluation
+      // point; the call (and any tamper it performs) lands last (R5, R5b F1/F2).
       const capture = walkMutationCallSite(
         n,
         (m) => walkFunctionReferences(m, ctx),
@@ -799,6 +810,7 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
           isShadowedProvability: shadowProbe(ctx),
           isGlobalObject: globalObjectProbe(ctx),
           isGlobalObjectRaw: (node) => isGlobalObjectExpression(node, ctx),
+          memberObjectCapture: (member) => ctx.memberObjectCaptures.get(member),
         },
         ctx.withDepth,
       );
@@ -826,15 +838,13 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
     }
 
     case 'UpdateExpression':
-      // `x++` writes NaN — it cannot substitute the intrinsic, so updates
-      // stay untracked (the tamper return is deliberately dropped).
+      // `x++` writes NaN — updates stay untracked (the tamper return is dropped).
       walkAssignmentTarget(n.argument, ctx);
       return;
 
     case 'UnaryExpression':
       if ((n as unknown as { operator?: string }).operator === 'delete') {
-        // No right-hand side: the delete lands right after the target
-        // reference evaluates.
+        // No right-hand side: the delete lands right after the target reference.
         if (walkAssignmentTarget(n.argument, ctx)) ctx.symbolIntrinsicTampered = true;
         return;
       }
@@ -921,10 +931,12 @@ function walkForInOf(node: AnyNodeShape, ctx: FunctionRewriteCtx): void {
     declareVariable(topScope(ctx), left);
   }
   // The iterated expression evaluates before any per-iteration target write
-  // (R5b F1).
+  // (R5b F1); a PATTERN left routes to the pattern walker (R6 F1).
   walkFunctionReferences(node.right, ctx);
   if (left?.type === 'VariableDeclaration') walkFunctionReferences(left, ctx);
-  else if (walkAssignmentTarget(left, ctx)) ctx.symbolIntrinsicTampered = true;
+  else if (left?.type === 'ObjectPattern' || left?.type === 'ArrayPattern') {
+    walkAssignmentPatternTarget(left, ctx);
+  } else if (walkAssignmentTarget(left, ctx)) ctx.symbolIntrinsicTampered = true;
   walkFunctionReferences(node.body, ctx);
   popScope(ctx);
 }
@@ -991,10 +1003,9 @@ function walkAssignmentTarget(target: unknown, ctx: FunctionRewriteCtx): boolean
     return isSymbolTamperTarget(t, ctx.scopes, lexicalShadowProbe(ctx), globalObjectProbe(ctx));
   }
   if (t.type === 'MemberExpression') {
-    // The object reference evaluates before the key, the key before the
-    // right-hand side — capture each classification at its own point (R5b
-    // F2: a key interior that rebinds the alias must not re-classify the
-    // captured object).
+    // Classify each reference at its own point — a key interior that
+    // rebinds the alias must not re-classify the captured object; a nested
+    // member object reads its recorded capture (R5b/R6 F2).
     walkFunctionReferences(t.object, ctx);
     const objectIsGlobal = isGlobalObjectExpression(t.object, ctx);
     const tamper = isSymbolTamperTarget(
@@ -1002,9 +1013,12 @@ function walkAssignmentTarget(target: unknown, ctx: FunctionRewriteCtx): boolean
       ctx.scopes,
       lexicalShadowProbe(ctx),
       globalObjectProbe(ctx),
+      (member) => ctx.memberObjectCaptures.get(member),
     );
     if ((t as unknown as { computed?: boolean }).computed) walkFunctionReferences(t.property, ctx);
-    if (isGlobalFunctionWriteMember(t, ctx, objectIsGlobal)) {
+    if (
+      isGlobalFunctionWriteMember(t, objectIsGlobal, ctx.scopes, shadowProbe(ctx), ctx.withDepth)
+    ) {
       ctx.hasGlobalFunctionWrite = true;
     }
     return tamper;
@@ -1570,18 +1584,6 @@ function collectPatternBindingNames(pattern: unknown, out: Set<string>): void {
 
 function isGlobalFunctionReadMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
   return isGlobalObjectExpression(node.object, ctx) && staticPropertyName(node) === 'Function';
-}
-
-function isGlobalFunctionWriteMember(
-  node: AnyNodeShape,
-  ctx: FunctionRewriteCtx,
-  objectIsGlobal: boolean,
-): boolean {
-  if (!objectIsGlobal) return false;
-  const propertyName = staticPropertyName(node);
-  if (propertyName !== undefined) return propertyName === 'Function';
-  if (!isComputedMember(node)) return false;
-  return !isProvablySymbolKey(node.property, ctx.scopes, shadowProbe(ctx), ctx.withDepth);
 }
 
 function expressionMayBeHostFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {

@@ -38,6 +38,50 @@ export type SymbolKeyShadowProbe = (name: string) => boolean;
 /** Same shape as the twins' isGlobalObjectExpression, bound to their ctx. */
 export type SymbolKeyGlobalProbe = (node: unknown) => boolean;
 
+// A computed (or nested) member's OBJECT is fixed before the key interior
+// evaluates; a key/argument interior that rebinds the alias must not
+// re-classify the captured object (R6 F2). The twins record this at the
+// member's own walk point, keyed by the member node; consumers that run
+// after the subtree walk read the capture instead of re-deriving live.
+export interface MemberObjectCapture {
+  readonly raw: boolean; // isGlobalObjectExpression parity (Function guard)
+  readonly unwrapped: boolean; // unwrapping probe (Symbol-tamper arm)
+}
+
+// Undefined when the member was never walked (no capture point) — the
+// caller falls back to the live classification.
+export type MemberObjectCaptureProbe = (member: unknown) => MemberObjectCapture | undefined;
+
+// Records the member's object classification at the member's own walk
+// point (R6 F2) — a later key/argument interior may rebind the alias.
+export function recordMemberObjectCapture(
+  captures: Map<unknown, MemberObjectCapture>,
+  member: unknown,
+  object: unknown,
+  isGlobalObjectRaw: SymbolKeyGlobalProbe,
+  isGlobalObject: SymbolKeyGlobalProbe,
+): void {
+  captures.set(member, { raw: isGlobalObjectRaw(object), unwrapped: isGlobalObject(object) });
+}
+
+// The Function-guard write arm over a member target whose object was
+// already classified at its own evaluation point (R5b F2): a static
+// 'Function' key, or a computed key that is not provably Symbol.
+export function isGlobalFunctionWriteMember(
+  node: unknown,
+  objectIsGlobal: boolean,
+  scopes: readonly SymbolKeyScope[],
+  isShadowedProvability: SymbolKeyShadowProbe,
+  withDepth = 0,
+): boolean {
+  if (!objectIsGlobal) return false;
+  const propertyName = staticPropertyName(node as GuardAstNode);
+  if (propertyName !== undefined) return propertyName === 'Function';
+  if (!isComputedMember(node as GuardAstNode)) return false;
+  const property = (node as unknown as { property?: unknown }).property;
+  return !isProvablySymbolKey(property, scopes, isShadowedProvability, withDepth);
+}
+
 // const-bound alias to a provable Symbol key; no unmark — const cannot
 // reassign, and the twins' addGuardBinding/addBinding clear the mark on
 // shadowing. No root fallback: marking a name whose binding was never
@@ -75,6 +119,7 @@ export function updateSymbolAliasesFromPatternValue(
   value: unknown,
   isShadowed: SymbolKeyShadowProbe,
   isGlobalObject: SymbolKeyGlobalProbe,
+  memberCapture?: MemberObjectCaptureProbe,
 ): void {
   if (!pattern || typeof pattern !== 'object') return;
   const pat = pattern as GuardAstNode;
@@ -90,7 +135,10 @@ export function updateSymbolAliasesFromPatternValue(
       (((v as unknown as { name?: string }).name === 'Symbol' && !isShadowed('Symbol')) ||
         isSymbolIntrinsicAlias(scopes, (v as unknown as { name?: string }).name as string))) ||
     (v.type === 'MemberExpression' &&
-      isGlobalObject((v as unknown as { object?: unknown }).object) &&
+      // The member's object was classified at its own evaluation point
+      // (R6 F2) — the init walk may have rebound the alias since.
+      (memberCapture?.(v)?.unwrapped ??
+        isGlobalObject((v as unknown as { object?: unknown }).object)) &&
       staticPropertyName(v) === 'Symbol');
   if (isIntrinsic) markSymbolIntrinsicAlias(scopes, name);
 }
@@ -181,6 +229,7 @@ function isSymbolReference(
   scopes: readonly SymbolKeyScope[],
   isShadowed: SymbolKeyShadowProbe,
   isGlobalObject: SymbolKeyGlobalProbe,
+  memberCapture?: MemberObjectCaptureProbe,
 ): boolean {
   if (!node || typeof node !== 'object') return false;
   const n = unwrapGuardChain(node) as GuardAstNode;
@@ -194,7 +243,11 @@ function isSymbolReference(
   }
   if (n.type !== 'MemberExpression') return false;
   const object = (n as unknown as { object?: unknown }).object;
-  return isGlobalObject(object) && staticPropertyName(n) === 'Symbol';
+  // The member's own capture fixes its object classification at the
+  // object's evaluation point (R6 F2); live derivation only when the
+  // member was never walked.
+  const objectIsGlobal = memberCapture?.(n)?.unwrapped ?? isGlobalObject(object);
+  return objectIsGlobal && staticPropertyName(n) === 'Symbol';
 }
 
 // F1 tamper detection: an explicitly observable substitution of the Symbol
@@ -209,6 +262,7 @@ export function isSymbolTamperTarget(
   scopes: readonly SymbolKeyScope[],
   isShadowed: SymbolKeyShadowProbe,
   isGlobalObject: SymbolKeyGlobalProbe,
+  memberCapture?: MemberObjectCaptureProbe,
 ): boolean {
   if (!target || typeof target !== 'object') return false;
   const t = unwrapGuardChain(target) as GuardAstNode;
@@ -221,7 +275,7 @@ export function isSymbolTamperTarget(
   }
   if (t.type !== 'MemberExpression') return false;
   const object = (t as unknown as { object?: unknown }).object as GuardAstNode | undefined;
-  if (isSymbolReference(object, scopes, isShadowed, isGlobalObject)) return true;
+  if (isSymbolReference(object, scopes, isShadowed, isGlobalObject, memberCapture)) return true;
   return isGlobalObject(object) && staticPropertyName(t) === 'Symbol';
 }
 
@@ -258,6 +312,10 @@ export interface MutationSiteProbes {
   readonly isShadowedProvability: SymbolKeyShadowProbe;
   readonly isGlobalObject: SymbolKeyGlobalProbe; // unwrapping
   readonly isGlobalObjectRaw: SymbolKeyGlobalProbe; // Function-guard parity
+  // Per-member object classifications recorded at each member's own walk
+  // point (R6 F2) — the callee object is read from here, never re-derived
+  // after the key/argument interior may have rebound the alias.
+  readonly memberObjectCapture: MemberObjectCaptureProbe;
 }
 
 // Walks the callee and the arguments exactly once, in source order,
@@ -291,13 +349,19 @@ export function walkMutationCallSite(
       ? (callee as unknown as { object?: unknown }).object
       : undefined;
   const calleeObject = unwrapGuardChain(rawCalleeObject) as GuardAstNode | undefined;
-  capture.calleeObjectIsGlobal = probes.isGlobalObjectRaw(rawCalleeObject);
-  capture.calleeObjectIsGlobalUnwrapped = probes.isGlobalObject(calleeObject);
+  // The callee member's own capture fixes its object classification at the
+  // object's evaluation point — a computed-key interior that rebinds the
+  // alias must not re-classify it (R6 F2).
+  const calleeCapture = probes.memberObjectCapture(callee);
+  capture.calleeObjectIsGlobal = calleeCapture?.raw ?? probes.isGlobalObjectRaw(rawCalleeObject);
+  capture.calleeObjectIsGlobalUnwrapped =
+    calleeCapture?.unwrapped ?? probes.isGlobalObject(calleeObject);
   capture.calleeObjectIsSymbol = isSymbolReference(
     calleeObject,
     scopes,
     probes.isShadowed,
     probes.isGlobalObject,
+    probes.memberObjectCapture,
   );
   const objectName =
     calleeObject?.type === 'Identifier'
@@ -371,7 +435,15 @@ function walkSourceArgument(
     const p = property as unknown as { computed?: boolean; key?: unknown; value?: unknown };
     if (p.computed) {
       walk(p.key);
-      if (!isProvablySymbolKey(p.key, scopes, probes.isShadowedProvability, withDepth)) {
+      // A statically-known string key keeps the pre-capture safe-key
+      // disjunct (R6 F4): only 'Function' flags; a non-static key falls to
+      // the provable-Symbol proof, taken right after ITS walk (R5b F1).
+      const keyName = staticPropertyKeyName(property);
+      if (keyName === undefined) {
+        if (!isProvablySymbolKey(p.key, scopes, probes.isShadowedProvability, withDepth)) {
+          capture.sourcesMayContainFunctionKey = true;
+        }
+      } else if (keyName === 'Function') {
         capture.sourcesMayContainFunctionKey = true;
       }
       walk(p.value);

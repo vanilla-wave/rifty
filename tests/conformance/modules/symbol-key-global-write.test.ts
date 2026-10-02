@@ -22,40 +22,48 @@ describe('provably-Symbol computed keys bypass the Function guard', () => {
       const SAFE = Symbol.for('vitest:utils:SAFE_TIMERS');
       globalThis[SAFE] = { tag: 'stash' };
       export const r = globalThis[SAFE].tag;
+      delete globalThis[SAFE];
     `,
     '/direct-for-write.mjs': `
       globalThis[Symbol.for('direct')] = 1;
       export const r = globalThis[Symbol.for('direct')];
+      delete globalThis[Symbol.for('direct')];
     `,
     '/symbol-call-write.mjs': `
       const K = Symbol('local');
       globalThis[K] = 2;
       export const r = globalThis[K];
+      delete globalThis[K];
     `,
     '/method-call-on-stash.mjs': `
       const K = Symbol.for('timers');
       globalThis[K] = { ping() { return 'pong'; } };
       export const r = globalThis[K].ping();
+      delete globalThis[K];
     `,
     '/define-property-alias.mjs': `
       const D = Symbol.for('undici.globalDispatcher.2');
       Object.defineProperty(globalThis, D, { value: 'dp', configurable: true });
       export const r = globalThis[D];
+      delete globalThis[D];
     `,
     '/define-properties-computed.mjs': `
       const K = Symbol.for('dp2');
       Object.defineProperties(globalThis, { [K]: { value: 5, configurable: true } });
       export const r = globalThis[K];
+      delete globalThis[K];
     `,
     '/object-assign-computed.mjs': `
       const K = Symbol.for('assign');
       Object.assign(globalThis, { [K]: 6 });
       export const r = globalThis[K];
+      delete globalThis[K];
     `,
     '/reflect-set-alias.mjs': `
       const K = Symbol.for('reflect');
       Reflect.set(globalThis, K, 7);
       export const r = globalThis[K];
+      delete globalThis[K];
     `,
     '/delete-alias.mjs': `
       const K = Symbol.for('del');
@@ -73,6 +81,7 @@ describe('provably-Symbol computed keys bypass the Function guard', () => {
       export const K = Symbol.for('exported');
       globalThis[K] = 10;
       export const r = globalThis[K];
+      delete globalThis[K];
     `,
     // Scope control for the tamper boundary: mutating a SHADOWED local
     // Symbol (a parameter) is not intrinsic substitution — the module's own
@@ -151,6 +160,7 @@ describe('provably-Symbol computed keys bypass the Function guard', () => {
         const D = Symbol.for('undici.globalDispatcher.2');
         Object.defineProperty(globalThis, D, { value: 'dp', configurable: true });
         module.exports = globalThis[D];
+        delete globalThis[D];
       `,
     });
     expect(loader.require('./undici-shape.cjs', '/entry.cjs')).toBe('dp');
@@ -162,6 +172,7 @@ describe('provably-Symbol computed keys bypass the Function guard', () => {
         const K = Symbol.for('cjs.stash');
         globalThis[K] = 'cjs-ok';
         module.exports = globalThis[K];
+        delete globalThis[K];
       `,
     });
     expect(loader.require('./alias-write.cjs', '/entry.cjs')).toBe('cjs-ok');
@@ -294,6 +305,7 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
     '/unknown-identifier.mjs': `
       const K = Math.random() > 2 ? 'Function' : 'other';
       globalThis[K] = 1;
+      delete globalThis[K];
       export const r = 1;
     `,
     '/let-bound-symbol.mjs': `
@@ -315,6 +327,7 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
     '/symbol-keyfor.mjs': `
       const K = Symbol.keyFor(Symbol.for('registered'));
       globalThis[K] = 1;
+      delete globalThis[K];
       export const r = 1;
     `,
     // Mutation-only exemption boundary: a Symbol key proves the KEY, never
@@ -594,6 +607,7 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
     '/cjs-unknown.cjs': `
       const K = Math.random() > 2 ? 'Function' : 'other';
       globalThis[K] = 1;
+      delete globalThis[K];
       module.exports = 1;
     `,
     '/cjs-let-bound.cjs': `
@@ -620,6 +634,7 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
     '/cjs-keyfor.cjs': `
       const K = Symbol.keyFor(Symbol.for('cjs.registered'));
       globalThis[K] = 1;
+      delete globalThis[K];
       module.exports = 1;
     `,
     // Provenance boundary (Final+GREEN R1 F1), ESM twins above: observable
@@ -1148,6 +1163,254 @@ describe('mutation-site evaluation order matches Node (R5b)', () => {
   }
 });
 
+describe('evaluation-order capture completes the sweep (R6)', () => {
+  // Final+GREEN R6 F1: a for-in/of PATTERN target was skipped entirely —
+  // an unknown global key passed silently (baseline 0c4c1b07 rejected both)
+  // and a substitution through a destructuring target left the later fresh
+  // Symbol.for proof allowed. The loop target write lands after the
+  // iterated expression; pattern targets route to the pattern walker.
+  // Node v24.16.0 evaluates every carrier (oracle-pinned 2026-10-02); the
+  // harness finally deletes the sentinel a wrongly-silent RED run writes.
+  const forInOfPatternLoud: Record<string, string> = {
+    'for-of-pattern-unknown-key': `
+      const K = 'r6.loop.sentinel';
+      for ([globalThis[K]] of [[1]]) {}
+    `,
+    'for-in-pattern-unknown-key': `
+      const K = 'r6.loop.sentinel';
+      for ({0: globalThis[K]} in {x: 1}) {}
+    `,
+    'for-of-pattern-tamper': `
+      const saved = Symbol.for;
+      for ([Symbol.for] of [[() => 'r6.loop.sentinel']]) {}
+      globalThis[Symbol.for('r6.loop.after')] = 1;
+      Symbol.for = saved;
+    `,
+  };
+  for (const [name, body] of Object.entries(forInOfPatternLoud)) {
+    it(`ESM stays loud on the ${name} loop target`, async () => {
+      const loader = setup({ [`/r6-loop-${name}.mjs`]: `${body} export const r = 1;` });
+      try {
+        await expect(loader.import(`/r6-loop-${name}.mjs`, '/entry.mjs')).rejects.toMatchObject({
+          name: 'NotImplementedError',
+          feature: 'module-loader.esm-global-function-assignment',
+        });
+      } finally {
+        Reflect.deleteProperty(globalThis, 'r6.loop.sentinel');
+      }
+    });
+    it(`CJS stays loud on the ${name} loop target`, () => {
+      const loader = setup({ [`/r6-loop-${name}.cjs`]: `${body} module.exports = 1;` });
+      try {
+        expect(() => loader.require(`./r6-loop-${name}.cjs`, '/entry.cjs')).toThrowError(
+          /module-loader\.cjs-global-function-assignment/,
+        );
+      } finally {
+        Reflect.deleteProperty(globalThis, 'r6.loop.sentinel');
+      }
+    });
+  }
+
+  // F1 mirror: a provable-Symbol key at a loop pattern target stays exempt
+  // through the pattern walker (Node: 1 / 'x').
+  it('ESM allows a provable-Symbol key at a for-of pattern target', async () => {
+    const loader = setup({
+      '/r6-loop-symbol-of.mjs': `
+        const K = Symbol.for('r6.loopsym.of');
+        for ([globalThis[K]] of [[1]]) {}
+        export const r = globalThis[K];
+        delete globalThis[K];
+      `,
+    });
+    const ns = await loader.import('/r6-loop-symbol-of.mjs', '/entry.mjs');
+    expect(ns.r).toBe(1);
+  });
+  it('CJS allows a provable-Symbol key at a for-of pattern target', () => {
+    const loader = setup({
+      '/r6-loop-symbol-of.cjs': `
+        const K = Symbol.for('r6.loopsym.of');
+        for ([globalThis[K]] of [[1]]) {}
+        module.exports = globalThis[K];
+        delete globalThis[K];
+      `,
+    });
+    expect(loader.require('./r6-loop-symbol-of.cjs', '/entry.cjs')).toBe(1);
+  });
+  it('ESM allows a provable-Symbol key at a for-in pattern target', async () => {
+    const loader = setup({
+      '/r6-loop-symbol-in.mjs': `
+        const K = Symbol.for('r6.loopsym.in');
+        for ({0: globalThis[K]} in {x: 1}) {}
+        export const r = globalThis[K];
+        delete globalThis[K];
+      `,
+    });
+    const ns = await loader.import('/r6-loop-symbol-in.mjs', '/entry.mjs');
+    expect(ns.r).toBe('x');
+  });
+  it('CJS allows a provable-Symbol key at a for-in pattern target', () => {
+    const loader = setup({
+      '/r6-loop-symbol-in.cjs': `
+        const K = Symbol.for('r6.loopsym.in');
+        for ({0: globalThis[K]} in {x: 1}) {}
+        module.exports = globalThis[K];
+        delete globalThis[K];
+      `,
+    });
+    expect(loader.require('./r6-loop-symbol-in.cjs', '/entry.cjs')).toBe('x');
+  });
+
+  // Final+GREEN R6 F2: a computed member's OBJECT is fixed before its key
+  // interior evaluates — classifying it after the key walk (which may
+  // rebind the alias) lost captured-global writes (silent — ceiling lost;
+  // baseline rejected all three) and flipped captured-local writes loud
+  // (Node: 1). Sweeps the call-callee object, the const-initializer member
+  // read, and the nested member target object.
+  const capturedGlobalReference: Record<string, string> = {
+    // The getter key is a const string ALIAS (unknown to the guard): a
+    // literal key is statically safe and could not discriminate the
+    // captured-object classification.
+    'callee-key': `
+      const K = 'r6.ref.sentinel';
+      let g = globalThis;
+      g[(g = {}, '__defineGetter__')](K, () => 1);
+    `,
+    'const-intrinsic': `
+      const saved = Symbol.for;
+      let g = globalThis;
+      const S = g[(g = {}, 'Symbol')];
+      S.for = () => 'r6.ref.sentinel';
+      globalThis[Symbol.for('r6.ref.after')] = 1;
+      Symbol.for = saved;
+    `,
+    'member-intrinsic': `
+      const saved = Symbol.for;
+      let g = globalThis;
+      g[(g = {}, 'Symbol')].for = () => 'r6.ref.sentinel';
+      globalThis[Symbol.for('r6.ref.after')] = 1;
+      Symbol.for = saved;
+    `,
+  };
+  for (const [name, body] of Object.entries(capturedGlobalReference)) {
+    it(`ESM stays loud on the captured global reference at the ${name} position`, async () => {
+      const loader = setup({ [`/r6-ref-${name}.mjs`]: `${body} export const r = 1;` });
+      try {
+        await expect(loader.import(`/r6-ref-${name}.mjs`, '/entry.mjs')).rejects.toMatchObject({
+          name: 'NotImplementedError',
+          feature: 'module-loader.esm-global-function-assignment',
+        });
+      } finally {
+        Reflect.deleteProperty(globalThis, 'r6.ref.sentinel');
+      }
+    });
+    it(`CJS stays loud on the captured global reference at the ${name} position`, () => {
+      const loader = setup({ [`/r6-ref-${name}.cjs`]: `${body} module.exports = 1;` });
+      try {
+        expect(() => loader.require(`./r6-ref-${name}.cjs`, '/entry.cjs')).toThrowError(
+          /module-loader\.cjs-global-function-assignment/,
+        );
+      } finally {
+        Reflect.deleteProperty(globalThis, 'r6.ref.sentinel');
+      }
+    });
+  }
+
+  // F2 mirror: the captured LOCAL reference stays allowed — the key
+  // interior rebinds the alias to the global object, but the write/read
+  // landed on the local (Node: 1).
+  const capturedLocalReference: Record<string, string> = {
+    'callee-key': `
+      const target = {};
+      const K = 'r6.ref.local';
+      let g = target;
+      g[(g = globalThis, '__defineGetter__')](K, () => 1);
+      const r = target[K];
+    `,
+    'const-intrinsic': `
+      const target = { Symbol: { for: () => 'r6.ref.local' } };
+      let g = target;
+      const S = g[(g = globalThis, 'Symbol')];
+      S.for = () => 'r6.ref.sentinel';
+      const K = Symbol.for('r6.ref.local');
+      globalThis[Symbol.for('r6.ref.local')] = 1;
+      const r = globalThis[K];
+      delete globalThis[K];
+    `,
+    'member-intrinsic': `
+      const target = { Symbol: { for: () => 'r6.ref.local' } };
+      let g = target;
+      g[(g = globalThis, 'Symbol')].for = () => 'r6.ref.sentinel';
+      const K = Symbol.for('r6.ref.local');
+      globalThis[Symbol.for('r6.ref.local')] = 1;
+      const r = globalThis[K];
+      delete globalThis[K];
+    `,
+  };
+  for (const [name, body] of Object.entries(capturedLocalReference)) {
+    it(`ESM keeps the captured local reference at the ${name} position`, async () => {
+      const loader = setup({ [`/r6-reflocal-${name}.mjs`]: `${body} export { r };` });
+      const ns = await loader.import(`/r6-reflocal-${name}.mjs`, '/entry.mjs');
+      expect(ns.r).toBe(1);
+    });
+    it(`CJS keeps the captured local reference at the ${name} position`, () => {
+      const loader = setup({ [`/r6-reflocal-${name}.cjs`]: `${body} module.exports = r;` });
+      expect(loader.require(`./r6-reflocal-${name}.cjs`, '/entry.cjs')).toBe(1);
+    });
+  }
+
+  // Final+GREEN R6 F3: a declaration pattern's defaults/computed keys
+  // evaluate AFTER the initializer — a default-interior tamper must not
+  // poison the genuine Symbol-key write the initializer already ran
+  // (Node: 1). The assignment-pattern repair (R5b) now covers the
+  // declaration sibling.
+  for (const kind of ['ESM', 'CJS'] as const) {
+    it(`${kind} runs the initializer before the declaration pattern default`, async () => {
+      const body = `
+        const saved = Symbol.for; const K = Symbol.for('r6.decl.binding');
+        const [v = (Symbol.for = () => 'r6.decl.sentinel', 1)] = (Reflect.set(globalThis, Symbol.for('r6.decl.binding'), 1), []);
+        Symbol.for = saved;
+        const r = globalThis[K]; delete globalThis[K];
+      `;
+      if (kind === 'ESM') {
+        const loader = setup({ '/r6-decl.mjs': `${body} export { r };` });
+        const ns = await loader.import('/r6-decl.mjs', '/entry.mjs');
+        expect(ns.r).toBe(1);
+      } else {
+        const loader = setup({ '/r6-decl.cjs': `${body} module.exports = r;` });
+        expect(loader.require('./r6-decl.cjs', '/entry.cjs')).toBe(1);
+      }
+    });
+  }
+
+  // Final+GREEN R6 F4: a statically-safe computed STRING key in an
+  // assign/defineProperties source stays allowed (baseline allowed both;
+  // the per-property walk must keep the safe-key disjunct, not narrow to
+  // provable-Symbol only). Node: 1.
+  const safeSourceKey: Record<string, string> = {
+    assign: `
+      Object.assign(globalThis, { ['r6.source.sentinel']: 1 });
+      const r = globalThis['r6.source.sentinel'];
+      delete globalThis['r6.source.sentinel'];
+    `,
+    'define-properties': `
+      Object.defineProperties(globalThis, { ['r6.source.sentinel']: { value: 1, configurable: true } });
+      const r = globalThis['r6.source.sentinel'];
+      delete globalThis['r6.source.sentinel'];
+    `,
+  };
+  for (const [name, body] of Object.entries(safeSourceKey)) {
+    it(`ESM allows a safe computed string source key at ${name}`, async () => {
+      const loader = setup({ [`/r6-source-${name}.mjs`]: `${body} export { r };` });
+      const ns = await loader.import(`/r6-source-${name}.mjs`, '/entry.mjs');
+      expect(ns.r).toBe(1);
+    });
+    it(`CJS allows a safe computed string source key at ${name}`, () => {
+      const loader = setup({ [`/r6-source-${name}.cjs`]: `${body} module.exports = r;` });
+      expect(loader.require(`./r6-source-${name}.cjs`, '/entry.cjs')).toBe(1);
+    });
+  }
+});
+
 describe('export-wrapped declarations enter guard bindings', () => {
   // RED today (probed 2026-10-01): predeclareGuardLexicalScope does not
   // unwrap ExportNamedDeclaration, so `export const g = globalThis` never
@@ -1156,18 +1419,25 @@ describe('export-wrapped declarations enter guard bindings', () => {
   // Symbol-alias carrier) closes the hole — pinned here, declared in the
   // contract Decisions.
   it('ESM export-wrapped globalThis alias write throws like its non-export twin', async () => {
-    // The write puts the REAL Function back: a wrongly-silent RED run leaves
-    // the shared host Function intact (R4 C4) and still fails this pin.
+    // R6 C2: a benign literal RHS — a `globalThis.Function` READ would
+    // taint independently and could not discriminate the alias-write arm.
+    // A wrongly-silent RED run executes the write into the shared host
+    // slot, so the harness restores it whatever the guard does (R4 C4).
+    const slot = Object.getOwnPropertyDescriptor(globalThis, 'Function');
     const loader = setup({
       '/export-global-alias.mjs': `
         export const g = globalThis;
-        g.Function = globalThis.Function;
+        g.Function = 1;
         export const r = 1;
       `,
     });
-    await expect(loader.import('/export-global-alias.mjs', '/entry.mjs')).rejects.toMatchObject({
-      name: 'NotImplementedError',
-      feature: 'module-loader.esm-global-function-assignment',
-    });
+    try {
+      await expect(loader.import('/export-global-alias.mjs', '/entry.mjs')).rejects.toMatchObject({
+        name: 'NotImplementedError',
+        feature: 'module-loader.esm-global-function-assignment',
+      });
+    } finally {
+      if (slot) Object.defineProperty(globalThis, 'Function', slot);
+    }
   });
 });

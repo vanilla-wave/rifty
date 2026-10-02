@@ -131,7 +131,12 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
   call-site predicates consume a `MutationSiteCapture` produced by
   `walkMutationCallSite` (shared, one walk in source order — per-argument
   classification at each evaluation point, per-property key proofs inside
-  source objects); the twins keep only the probe wiring. The twins'
+  source objects); the twins keep only the probe wiring. Amendment (R6):
+  the twins record each member's object classification at the member's own
+  walk point (`memberObjectCaptures` via `recordMemberObjectCapture`) for
+  consumers that run after the subtree walk; for-in/of pattern lefts route
+  to the pattern walker; declaration initializers walk before their
+  pattern; `isGlobalFunctionWriteMember` is shared too. The twins'
   byte-identical guard-AST helpers (`unwrapGuardChain`,
   `literalString`, `staticPropertyName`, `staticPropertyKeyName`,
   `isComputedMember`, `propertyMayBeFunction`, `propertyMayBeConstructor`)
@@ -167,7 +172,7 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
    and full key cleanup → I6
 
 Unit REDs (guard precision): `tests/conformance/modules/symbol-key-global-write.test.ts`
-— 40 positive carriers (Acceptance 1/2/4 patterns compile and run in both
+— 94 positive carriers (Acceptance 1/2/4 patterns compile and run in both
 loaders, incl. an export-wrapped `export const K = Symbol.for(…)` alias,
 a CJS stash method call, a shadowed-local scope control, a
 write-before-tamper source-order control, and a key-interior
@@ -178,8 +183,12 @@ pair (F2), and the CJS key-interior edit-producer sweep (F1); R5 adds the
 twelve-carrier key-interior write-then-tamper source-order matrix — six
 mutation sites × both loaders; R5b adds the evaluation-order family — ten
 write-before-own-tamper shapes plus the for-in/destructuring/pattern-default
-siblings and the six captured-local-target forms, all × both loaders) +
-81 boundary pins (Acceptance 3 in BOTH loaders:
+siblings and the six captured-local-target forms, all × both loaders; R6
+adds the captured-reference family — three captured-local-reference forms
+(callee key, const initializer, nested member target), the declaration
+initializer-before-default form, the two safe-string source-key forms, and
+the two provable-Symbol loop-pattern forms, all × both loaders) +
+93 boundary pins (Acceptance 3 in BOTH loaders:
 string-literal, concatenated, unknown-identifier, `let`-bound-symbol,
 shadowed-`Symbol`, `Symbol.keyFor` keys stay loud, called
 `Reflect.get(globalThis, K)` results stay loud, and the intrinsic-tamper
@@ -190,7 +199,9 @@ wrapped-reference pair, the R3 prototype-injection form, the R3
 const-intrinsic-alias pair, the R4 pure-setPrototypeOf / wrapped-global /
 wrapped-define-callee / alias-callee forms; CJS-only the R3 `with`-shadowed
 form, the R4 `with`-shadowed key-alias form, and the R5 with-interior
-tamper-detection pair; per loader the R5b captured-global-target sextet —
+tamper-detection pair; per loader the R5b captured-global-target sextet and
+the R6 loud family (two unknown-key loop patterns, the loop-pattern tamper,
+three captured-global-reference forms) —
 tamper
 pins RED at their introducing round, the rest green today,
 regression-only).
@@ -395,3 +406,40 @@ regression-only).
   captured-local forms, all × both loaders, plus the six
   captured-global loud forms × both loaders), 159/159 post-fix;
   workbench re-pinned (sha256 dd0a0abd…, bytes unchanged).
+- 2026-10-02 — reception (REV-12) of Final+GREEN R6 (blocker, F1–F4 +
+  concerns C1/C2): the R5b capture still missed four classes. F1 — a
+  for-in/of PATTERN left routed to the simple target walker, which skips
+  patterns: the target's writes and tamper escaped entirely (baseline
+  rejected the unknown-key forms; the redesign passed them silently).
+  Fix: pattern lefts route to the pattern walker. F2 — a computed (or
+  nested) member's OBJECT was classified after the key/argument interior
+  walk, so an interior rebind flipped the verdict at three positions:
+  the call-callee object, the const-initializer member read, and the
+  nested member target object. Fix: the twins record a per-member object
+  classification (`memberObjectCaptures`, written at the member's own
+  walk point via `recordMemberObjectCapture`); `walkMutationCallSite`,
+  `isSymbolTamperTarget`/`isSymbolReference`, and
+  `updateSymbolAliasesFromPatternValue` read the capture instead of
+  re-deriving live. F3 — a declaration pattern's defaults/keys were
+  walked before the initializer; Node evaluates the initializer first,
+  so a default-interior tamper poisoned the initializer's genuine write.
+  Fix: the initializer walk precedes the pattern walk in both twins (the
+  R5b assignment-pattern repair's declaration sibling). F4 — the
+  per-property source-key proof narrowed to provable-Symbol only, losing
+  the pre-capture safe-key disjunct: statically-known string source keys
+  (`Object.assign(globalThis, {['k']: 1})`) went loud though baseline
+  allowed them. Fix: `walkSourceArgument` consults the static key name
+  first ('Function' flags), falling to the Symbol proof only for
+  non-static keys. `isGlobalFunctionWriteMember` moved into
+  symbol-key-guard.ts (the twins' copies were byte-identical modulo
+  probes) to hold the file-size ratchet. C1 — boundary/positive carriers
+  now delete the keys a wrongly-silent RED run would leave (harness
+  finally + in-module deletes). C2 — the export-wrapped global-alias pin
+  carried a host-constructor RHS read that independently forced the
+  ceiling; the pin now writes a benign literal with harness slot
+  restore, so only the alias-write arm discriminates. RED-pinned 24
+  failed / 163 passed pre-fix (six loud loop/captured-global forms +
+  three captured-local forms + the declaration-default form + two
+  safe-source forms, all × both loaders), 187/187 post-fix (94
+  positives + 93 boundary); workbench re-pinned (sha256 4d9a1989…,
+  bytes unchanged).
