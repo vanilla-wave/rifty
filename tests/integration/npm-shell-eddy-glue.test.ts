@@ -12,6 +12,7 @@ import {
   RegistryClient,
   type TarballCache,
   canonicalEddyRequestKey,
+  eddyRequestFromPackageJson,
   install,
   unpackEddyBundle,
 } from '@riftydev/npm-client';
@@ -98,6 +99,30 @@ afterEach(async () => {
 });
 
 describe('npm shell command → REAL install → real eddy (stub-drift tripwire)', () => {
+  it.each([
+    { dependencies: { ms: '2.1.3' }, devDependencies: { ms: '2.0.0' } },
+    { devDependencies: { ms: '2.0.0' }, optionalDependencies: { ms: '2.1.3' } },
+  ])('native dev precedence reaches real Eddy and its prefetch request: %j', async (maps) => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const text = JSON.stringify({ name: 'demo', version: '0.0.0', ...maps });
+    await vfs.writeFile('/proj/package.json', text);
+    const result = await install({
+      vfs,
+      cwd: '/proj',
+      registry: makeRegistry(),
+      resolverUrl: eddyUrl,
+    });
+    expect(result.source).toBe('eddy');
+    expect(JSON.parse(await vfs.readFileText('/proj/node_modules/ms/package.json')).version).toBe(
+      '2.0.0',
+    );
+    expect(eddyRequestFromPackageJson(text)).toEqual({
+      dependencies: { ms: '2.0.0' },
+      optionalDependencies: {},
+    });
+  });
+
   it('production npm adapter preserves both original causes when Eddy and registry fail', async () => {
     const eddyFailure = new Error('eddy connection refused');
     const registryFailure = new Error('registry unavailable');

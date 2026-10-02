@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Missing-registry diagnostics follow the final executed command; recovered npm failures no longer relabel later errors or cancellation.
+
+- Preserve optional declarations during npm save-dev; match native section inference, wildcard reuse and intersecting optional save ranges in shared shell installs.
+
 - Preserve native npm bounded/partial/union save ranges using semver subset rules (ADR-0488).
 
 - Run no-COI shell npm install through the existing installer/claim owner with Stop and readonly policy. Shared npm save logic matches resolved ranges/sections and preserves concurrent manifest edits; successful acquisition tests use real tarballs/Eddy (ADR-0487).

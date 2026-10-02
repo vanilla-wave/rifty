@@ -193,6 +193,8 @@ export async function runNoCoiProjectCommand(
       fileSystem: hooks.fs,
       allowBackground: false,
       assertCommand(name) {
+        // Only executed commands replace provenance; skipped branches retain it.
+        registryFailure = undefined;
         if (allowed !== undefined && !allowed.has(name)) {
           throw Object.assign(new Error(`Command is prohibited: ${name}`), { code: 'EACCES' });
         }

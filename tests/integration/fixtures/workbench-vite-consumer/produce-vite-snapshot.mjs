@@ -100,33 +100,3 @@ await writeFile(
     templateId,
   }),
 );
-
-// Reference-host deploy deliberately excludes the dependency the agent will add.
-const kitManifest = JSON.stringify({ ...originalManifest, version: '1.0.2' });
-await writeFile(resolve(inputRoot, 'package.json'), kitManifest);
-execFileSync(
-  'npm',
-  [
-    'install',
-    '--package-lock-only',
-    '--ignore-scripts',
-    '--no-audit',
-    '--no-fund',
-    '--registry',
-    registryUrl,
-    '--cache',
-    resolve('producer-vite-npm-cache'),
-  ],
-  { cwd: inputRoot, stdio: 'pipe' },
-);
-const kitUpdate = await produceDependencySnapshot({
-  packageJsonText: kitManifest,
-  packageLockText: await readFile(resolve(inputRoot, 'package-lock.json'), 'utf8'),
-  registryUrl,
-  templateId,
-});
-await writeFile(resolve('dist/producer-vite-kit-update.tar.gz'), kitUpdate.archive);
-await writeFile(
-  resolve('dist/producer-vite-kit-update.json'),
-  JSON.stringify({ snapshotId: kitUpdate.snapshotId, templateId, packageJsonText: kitManifest }),
-);

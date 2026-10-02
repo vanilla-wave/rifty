@@ -35,14 +35,6 @@ export async function provePackedReferenceHost(root, registryUrl) {
   const first = JSON.parse(
     await readFile(resolve(root, 'dist/producer-vite-snapshot.json'), 'utf8'),
   );
-  const next = JSON.parse(
-    await readFile(resolve(root, 'dist/producer-vite-kit-update.json'), 'utf8'),
-  );
-  assert.equal(
-    JSON.parse(next.packageJsonText).dependencies.ms,
-    undefined,
-    'deploy must not pre-seed the agent addition',
-  );
   await withClientServer(root, async (browser, base) => {
     for (const connected of [true, false]) {
       const context = await browser.newContext({ acceptDownloads: true });
@@ -118,11 +110,6 @@ export async function provePackedReferenceHost(root, registryUrl) {
         snapshotId: first.snapshotId,
         templateId: first.templateId,
       };
-      const update = {
-        assetUrl: `${base}/dist/producer-vite-kit-update.tar.gz`,
-        snapshotId: next.snapshotId,
-        templateId: next.templateId,
-      };
       const options = {
         namespace: `packed-reference-${connected}`,
         baseUrl: `${modelOrigin}/v1`,
@@ -167,7 +154,6 @@ export async function provePackedReferenceHost(root, registryUrl) {
           'build-log.mjs': `console.log('out-a'); console.error('err-b'); console.log('out-c'); await (await fetch(${JSON.stringify(`${modelOrigin}/hold-build`)})).text();`,
           'vite.config.js': 'export default {build:{minify:false,sourcemap:false}};',
         });
-        assert.equal(prepared.applied, first.snapshotId);
         for (const phase of ['fetch', 'entries', 'flush-cache', 'flush-payload'])
           assert(
             prepared.runtime.some(
@@ -303,21 +289,17 @@ export async function provePackedReferenceHost(root, registryUrl) {
         const traceDownload = await downloaded;
         assert.equal(JSON.parse(await readFile(await traceDownload.path(), 'utf8')).status, 'done');
         console.log(`Packed reference registry=${connected}: build/order/busy/transcript/trace`);
-        const desired = await invoke(page, 'saveDesired');
+        const savedManifest = await invoke(page, 'read', 'package.json');
+        const savedLock = await invoke(page, 'read', 'package-lock.json');
         const source = await invoke(page, 'read', 'src/route.js');
+        const fetchCount = requests.filter((url) => url === snapshot.assetUrl).length;
         await invoke(page, 'close');
         await invoke(page, 'boot', options);
-        const fetchCount = requests.filter((url) => url === snapshot.assetUrl).length;
-        await invoke(page, 'prepare', snapshot);
+        await invoke(page, 'open');
         assert.equal(requests.filter((url) => url === snapshot.assetUrl).length, fetchCount);
         assert.equal(await invoke(page, 'read', 'src/route.js'), source);
-        assert.equal(await invoke(page, 'read', 'package.json'), desired);
-        assert.equal(
-          await invoke(page, 'desired'),
-          desired,
-          'app did not persist actual post-agent manifest',
-        );
-        await invoke(page, 'prepare', update, { 'package.json': desired }, connected);
+        assert.equal(await invoke(page, 'read', 'package.json'), savedManifest);
+        assert.equal(await invoke(page, 'read', 'package-lock.json'), savedLock);
         const afterManifest = JSON.parse(await invoke(page, 'read', 'package.json'));
         const afterLock = JSON.parse(await invoke(page, 'read', 'package-lock.json'));
         assert.equal(afterManifest.dependencies.ms, connected ? '^2.0.0' : undefined);
@@ -335,8 +317,10 @@ export async function provePackedReferenceHost(root, registryUrl) {
         await invoke(page, 'close');
         const retried = await invoke(other, 'boot', options);
         assert.equal(retried.support.modes.nonCoi.conclusion, 'supported');
-        await invoke(other, 'prepare', update);
+        await invoke(other, 'open');
         assert.equal(await invoke(other, 'read', 'src/route.js'), source);
+        assert.equal(await invoke(other, 'read', 'package.json'), savedManifest);
+        assert.equal(await invoke(other, 'read', 'package-lock.json'), savedLock);
         await invoke(other, 'close');
         assert(
           !requests.some((url) => /\/sw\.js(?:\?|$)/u.test(url)),
@@ -352,7 +336,7 @@ export async function provePackedReferenceHost(root, registryUrl) {
         );
         assert.equal(provider.requests.length, replies.length);
         console.log(
-          `Packed reference host: registry=${connected}; real edit/install/build/order/busy/reopen/deploy/occupied; shared transcript`,
+          `Packed reference host: registry=${connected}; real edit/install/build/order/busy/reopen/occupied; shared transcript`,
         );
       } finally {
         release.resolve();

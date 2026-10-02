@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Match native npm root dev/optional/prod precedence in direct and Eddy installs; normalize optional duplicates in root lock dependency maps.
+
 - Observe deferred tarball failures immediately; slow descendant metadata no longer turns an owned install failure into an unhandled rejection that kills the Worker.
 
 - User `overrides` values follow npm's reading (ADR-0451): a version/range (node-semver loose grammar) or `latest` is the overridden edge's spec, so `{"vite": "8.0.16"}` pins vite instead of fetching packument `8.0.16`; baked redirects, shadow recipes and the ADR-0051 native gate apply as for a declared `name@spec`; exact `''`/`*` keep the edge spec; `$name` throws `NotImplementedError('npm-client.dependency-spec.override-reference')`. `name@range` and bare replacement names unchanged.

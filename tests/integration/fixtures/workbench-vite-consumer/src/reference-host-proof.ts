@@ -45,7 +45,6 @@ const api = {
       models: [model],
       model: model.id,
       apiKey: 'fixture-key',
-      snapshotState: { store: localStorage, key: `${options.namespace}:/project:applied` },
       renderSupport: (report) => {
         supportView.textContent = JSON.stringify(report);
       },
@@ -70,20 +69,14 @@ const api = {
       return { kind: sandboxErrorKind(error), runtime };
     }
   },
-  async prepare(snapshot: SandboxSnapshotSource, files?: Record<string, string>, install = false) {
-    await host.prepare({
-      snapshot,
-      files,
-      ...(install ? { install: { registryUrl: connections.registryUrl! } } : {}),
-    });
-    return {
-      runtime,
-      applied: connections.snapshotState!.store.getItem(connections.snapshotState!.key),
-    };
+  async prepare(snapshot: SandboxSnapshotSource, files?: Record<string, string>) {
+    await host.prepare({ snapshot, files });
+    return { runtime };
   },
+  open: () => host.call(() => host.sandbox.toolchain.open({ cwd: connections.root })),
   async conflict(snapshot: SandboxSnapshotSource) {
     try {
-      await host.sandbox.toolchain.applySnapshot({ cwd: '/project', snapshot });
+      await host.prepare({ snapshot });
     } catch (error) {
       return sandboxErrorKind(error);
     }
@@ -114,12 +107,6 @@ const api = {
   },
   read: (path: string) => host.call(() => host.project.fs.readFile(path, 'utf8')),
   run: (command: string) => host.call(() => host.project.run(command).completion),
-  async saveDesired() {
-    const text = await api.read('package.json');
-    localStorage.setItem(`${connections.storage.namespace}:/project:desired`, text);
-    return text;
-  },
-  desired: () => localStorage.getItem(`${connections.storage.namespace}:/project:desired`),
   download: () => host.downloadTrace(),
   normalize: normalizeTerminalLines,
   close: () => host.close(),

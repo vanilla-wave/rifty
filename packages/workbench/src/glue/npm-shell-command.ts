@@ -37,6 +37,7 @@ import {
   shellCommandExitCode,
 } from '@riftydev/shell';
 import { type PersistFailureReport, type Vfs, normalizePath } from '@riftydev/vfs';
+import intersects from 'semver/ranges/intersects.js';
 import {
   type PackageAcquisitionAuthority,
   PackageAcquisitionError,
@@ -608,25 +609,25 @@ export async function executeNpmInstallOperation(
   const optionalDependencies = { ...pkg.optionalDependencies };
   const maps = { dependencies, devDependencies, optionalDependencies };
   const additions: { name: string; range: string; section: keyof typeof maps }[] = [];
+  // npm normalizes optional/prod duplicates when saving, never on a no-args install.
+  if (pkgSpecs.length > 0) {
+    for (const name of Object.keys(optionalDependencies)) delete dependencies[name];
+  }
   for (const spec of pkgSpecs) {
     const parsed = parseSpec(spec);
     const { name } = parsed;
     if (!name) throw new Error(`malformed package spec '${spec}'`);
     const section =
-      target === 'devDependencies'
+      target === 'devDependencies' || Object.hasOwn(devDependencies, name)
         ? 'devDependencies'
         : Object.hasOwn(optionalDependencies, name)
           ? 'optionalDependencies'
-          : Object.hasOwn(dependencies, name)
-            ? 'dependencies'
-            : Object.hasOwn(devDependencies, name)
-              ? 'devDependencies'
-              : 'dependencies';
-    const range = parsed.explicit ? parsed.range : (maps[section][name] ?? parsed.range);
-    if (target === 'devDependencies') {
-      delete dependencies[name];
-      delete optionalDependencies[name];
-    }
+          : 'dependencies';
+    const range =
+      parsed.explicit && parsed.range !== '*'
+        ? parsed.range
+        : (maps[section][name] ?? parsed.range);
+    if (section === 'devDependencies') delete dependencies[name];
     maps[section][name] = range;
     additions.push({ name, range, section });
   }
@@ -739,14 +740,28 @@ export async function executeNpmInstallOperation(
         const version = result.lockfile.packages[`node_modules/${name}`]?.version;
         if (typeof version !== 'string' || version.length === 0)
           throw new Error(`Installed package ${name} has no top-level lock version`);
-        maps[section][name] = installedSaveRange(range, version, request.saveExact);
+        const saved = installedSaveRange(range, version, request.saveExact);
+        maps[section][name] = saved;
+        if (
+          target !== 'devDependencies' &&
+          section === 'devDependencies' &&
+          Object.hasOwn(optionalDependencies, name) &&
+          !intersects(saved, optionalDependencies[name]!)
+        ) {
+          optionalDependencies[name] = saved;
+        }
       }
       const savedPackage = changedPackage();
       intendedSave = serializeProjectPackageJson(savedPackage);
       await writePackageJson(deps.vfs, ctx.cwd, savedPackage);
       const root = result.lockfile.packages[''];
       if (root === undefined) throw new Error('Installed lock has no project root');
-      const lockMaps = { ...maps, dependencies: { ...dependencies, ...optionalDependencies } };
+      const lockMaps = { ...maps, dependencies: { ...dependencies } };
+      // npm retains the compatibility prod edge only for named optional additions.
+      for (const { name, section } of additions) {
+        if (section === 'optionalDependencies')
+          lockMaps.dependencies[name] = optionalDependencies[name]!;
+      }
       for (const section of ['dependencies', 'devDependencies', 'optionalDependencies'] as const) {
         if (Object.keys(lockMaps[section]).length > 0) root[section] = { ...lockMaps[section] };
         else delete root[section];

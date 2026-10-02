@@ -27,6 +27,47 @@ export const saveCases = [
   { args: ['ms'], initial: { devDependencies: { ms: '2.0.0' } } },
   { args: ['ms'], initial: { dependencies: { ms: '~2.0.0' } } },
   { args: [], initial: { dependencies: { ms: '2.0.0' } } },
+  { args: [], initial: { dependencies: { ms: '2.1.3' }, devDependencies: { ms: '2.0.0' } } },
+  {
+    args: [],
+    initial: { devDependencies: { ms: '2.1.3' }, optionalDependencies: { ms: '2.0.0' } },
+  },
+  { args: [], initial: { dependencies: { ms: '2.1.3' }, optionalDependencies: { ms: '2.0.0' } } },
+  { args: ['ms'], initial: { dependencies: { ms: '2.1.3' }, devDependencies: { ms: '2.0.0' } } },
+  {
+    args: ['ms', '-S'],
+    initial: { dependencies: { ms: '2.1.3' }, devDependencies: { ms: '2.0.0' } },
+  },
+  {
+    args: ['ms', '-E'],
+    initial: { dependencies: { ms: '2.1.3' }, devDependencies: { ms: '2.0.0' } },
+  },
+  { args: ['ms', '-D'], initial: { optionalDependencies: { ms: '2.0.0' } } },
+  {
+    args: ['ms'],
+    initial: { devDependencies: { ms: '2.1.3' }, optionalDependencies: { ms: '2.0.0' } },
+  },
+  {
+    args: ['ms'],
+    initial: { devDependencies: { ms: '2.0.0' }, optionalDependencies: { ms: '2.1.3' } },
+  },
+  {
+    args: ['ms', '-E'],
+    initial: { devDependencies: { ms: '2.0.0' }, optionalDependencies: { ms: '2.1.3' } },
+  },
+  {
+    args: ['ms', '-D'],
+    initial: { devDependencies: { ms: '2.1.3' }, optionalDependencies: { ms: '2.0.0' } },
+  },
+  {
+    args: ['ms'],
+    initial: { dependencies: { ms: '2.1.3' }, optionalDependencies: { ms: '2.0.0' } },
+  },
+  {
+    args: ['kleur'],
+    initial: { dependencies: { ms: '2.1.3' }, optionalDependencies: { ms: '2.0.0' } },
+  },
+  { args: ['ms@*'], initial: { dependencies: { ms: '2.0.0' } } },
 ] as const;
 
 /** HTTP only is controlled; npm and rifty consume identical upstream archives. */
@@ -46,6 +87,11 @@ export async function installRegistry() {
       integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
     };
   }
+  const kleurPath = fileURLToPath(new URL('kleur-4.1.5.tgz', fixtureRoot));
+  const kleur = await readFile(kleurPath);
+  const kleurManifest = JSON.parse(
+    execFileSync('tar', ['-xOf', kleurPath, 'package/package.json'], { encoding: 'utf8' }),
+  );
   let origin = '';
   const requests: string[] = [];
   let beforeResponse: ((path: string) => Promise<void>) | undefined;
@@ -55,6 +101,29 @@ export async function installRegistry() {
     response.setHeader('access-control-allow-origin', '*');
     try {
       await beforeResponse?.(path);
+      if (path === '/kleur') {
+        response.setHeader('content-type', 'application/json');
+        response.end(
+          JSON.stringify({
+            name: 'kleur',
+            'dist-tags': { latest: '4.1.5' },
+            versions: {
+              '4.1.5': {
+                ...kleurManifest,
+                dist: {
+                  tarball: `${origin}/kleur/-/kleur-4.1.5.tgz`,
+                  integrity: `sha512-${createHash('sha512').update(kleur).digest('base64')}`,
+                },
+              },
+            },
+          }),
+        );
+        return;
+      }
+      if (path === '/kleur/-/kleur-4.1.5.tgz') {
+        response.end(kleur);
+        return;
+      }
       if (path === '/ms') {
         response.setHeader('content-type', 'application/json');
         response.end(
@@ -134,6 +203,7 @@ export async function installRegistry() {
           pkg,
           lockDependencies: lock.packages[''].dependencies,
           lockDevDependencies: lock.packages[''].devDependencies,
+          lockOptionalDependencies: lock.packages[''].optionalDependencies,
           installedVersion: installed.version,
         };
       } finally {

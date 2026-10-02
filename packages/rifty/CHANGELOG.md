@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Link the shared no-COI agent reference host and explicit app-owned snapshot/manifest deployment recipe (ADR-0489).
+- Link the shared no-COI agent reference host with explicit initial preparation and saved open; remove automatic snapshot identity/force/reconciliation policy (ADR-0489/0490).
 
 - Add captured toolchain.registryUrl and readonly registryConnected; project/agent npm install reports registry-missing without a connection. Toolchain protocol v6 requires matching copied assets (ADR-0487).
 

@@ -154,6 +154,7 @@ export default defineConfig({
       '@riftydev/workbench > semver/functions/valid.js',
       '@riftydev/workbench > semver/ranges/valid.js',
       '@riftydev/workbench > semver/ranges/subset.js',
+      '@riftydev/workbench > semver/ranges/intersects.js',
       'sql.js',
       'typescript',
     ],

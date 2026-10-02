@@ -62,18 +62,16 @@ SDK/agent APIs, built-in transport and transcript reducer; no bundler plugin or
 runtime service worker. This private application recipe is also the benchmark's
 no-COI composition, not a published SDK entrypoint.
 
-`prepare({snapshot, files})` applies before writing first-open sources. The app
-stores applied snapshotId under its namespace/root key; reopen supplies only the
-snapshot descriptor and calls ordinary saved open without a fetch. On a changed
-ID the recipe forces the payload, then writes explicitly supplied app-owned
-sources. Preserve the actual post-agent manifest in your application storage;
-pass those desired bytes as `files['package.json']` plus `install:{registryUrl}`
-to reconcile dependencies after deploy. The app decides the desired manifest;
-there is no SDK merge. See the [complete recipe and proof](https://github.com/vanilla-wave/rifty/blob/main/tests/integration/fixtures/workbench-vite-consumer/README.md).
+For initial preparation, `prepare({snapshot, files})` explicitly applies the
+snapshot before writing supplied sources; `install:{registryUrl}` optionally
+installs from the prepared manifest. SDK snapshot conflicts remain visible.
+For saved reopen, call `host.call(() => host.sandbox.toolchain.open({cwd: root}))`
+without preparing the initial snapshot/files again: saved edits and dependencies
+remain. See the [complete recipe and proof](https://github.com/vanilla-wave/rifty/blob/main/tests/integration/fixtures/workbench-vite-consumer/README.md).
 
-The recorded ID means apply succeeded, not installation completed. Supplied
-files/install still execute on a same-ID retry. Errors stay visible; interrupted
-apply may need an explicit force, and this recipe adds no rollback guarantee.
+The reference host stores no applied snapshot identity, never selects force and
+owns no deployment/reconciliation policy (ADR-0490). Initial preparation is not
+an idempotent open operation; explicitly supplied files are written each time.
 Agent turns use `host.agent`; `host.call` serializes only the app's own calls.
 An app action overlapping the agent may receive typed busy; retry after the turn.
 

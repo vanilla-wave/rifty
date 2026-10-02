@@ -62,6 +62,7 @@ for (const [index, scenario] of saveCases.entries()) {
               pkg,
               lockDependencies: lock?.packages['']?.dependencies,
               lockDevDependencies: lock?.packages['']?.devDependencies,
+              lockOptionalDependencies: lock?.packages['']?.optionalDependencies,
               installedVersion: installed?.version,
             },
             used,

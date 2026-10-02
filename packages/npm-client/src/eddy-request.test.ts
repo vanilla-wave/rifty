@@ -6,7 +6,7 @@ import {
 } from './eddy-request.ts';
 
 describe('eddyRequestFromPackageJson — mirrors normalizeInstallArgs', () => {
-  it('merges devDependencies under dependencies (dependencies win) and carves out optionals', () => {
+  it('selects root edges with native npm dev > optional > prod precedence', () => {
     const body = eddyRequestFromPackageJson(
       JSON.stringify({
         dependencies: { a: '^1', both: '2.0.0' },
@@ -16,7 +16,7 @@ describe('eddyRequestFromPackageJson — mirrors normalizeInstallArgs', () => {
     );
     expect(body).toEqual({
       // `a` is optional → carved out of the merged map entirely.
-      dependencies: { dev: '^3', both: '2.0.0' },
+      dependencies: { dev: '^3', both: '1.0.0' },
       optionalDependencies: { opt: '^4', a: '^1' },
     });
   });

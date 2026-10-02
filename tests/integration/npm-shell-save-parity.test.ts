@@ -1,4 +1,4 @@
-import { RegistryClient } from '@riftydev/npm-client';
+import { RegistryClient, eddyRequestFromPackageJson, install } from '@riftydev/npm-client';
 import { Shell } from '@riftydev/shell';
 import { MemoryVfs } from '@riftydev/vfs';
 import { afterAll, beforeAll, expect, test } from 'vitest';
@@ -47,6 +47,7 @@ for (const [index, scenario] of saveCases.entries()) {
         pkg,
         lockDependencies: lock.packages[''].dependencies,
         lockDevDependencies: lock.packages[''].devDependencies,
+        lockOptionalDependencies: lock.packages[''].optionalDependencies,
         installedVersion: installed.version,
       }).toEqual(expected);
     } finally {
@@ -108,3 +109,34 @@ test('resolved save never overwrites a real package.json edit during registry ac
     await shell.dispose();
   }
 });
+
+for (const [index, scenario] of saveCases.filter((entry) => entry.args.length === 0).entries()) {
+  test(`direct installer follows native root dependency precedence: case ${index}`, async () => {
+    const expected = await registry.native(scenario.args, scenario.initial);
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/project', { recursive: true });
+    const text = JSON.stringify({ ...initialManifest, ...scenario.initial });
+    await vfs.writeFile('/project/package.json', text);
+    await install({
+      vfs,
+      cwd: '/project',
+      registry: new RegistryClient({ baseUrl: registry.origin }),
+    });
+    const lock = JSON.parse(await vfs.readFileText('/project/package-lock.json'));
+    const installed = JSON.parse(await vfs.readFileText('/project/node_modules/ms/package.json'));
+    expect(await vfs.readFileText('/project/package.json')).toBe(text);
+    expect({
+      pkg: JSON.parse(text),
+      lockDependencies: lock.packages[''].dependencies,
+      lockDevDependencies: lock.packages[''].devDependencies,
+      lockOptionalDependencies: lock.packages[''].optionalDependencies,
+      installedVersion: installed.version,
+    }).toEqual(expected);
+    const request = eddyRequestFromPackageJson(text)!;
+    expect(request.dependencies.ms ?? request.optionalDependencies.ms).toBe(
+      expected.installedVersion,
+    );
+    if ('devDependencies' in scenario.initial)
+      expect(request.optionalDependencies.ms).toBeUndefined();
+  });
+}

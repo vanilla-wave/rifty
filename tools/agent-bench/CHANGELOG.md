@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Shared reference host uses explicit preparation/open, with no snapshot deployment policy (ADR-0490).
+
 - Keep existing benchmark preview by registering its SW only on preview; default packed CI runs the shared-host smoke with real Vite.
 
 - Boot the exact packed reference-host module in no-COI, connect agent registry installs, adopt100-call defaults and expose per-capability/text-only toggles. Record optional no-COI policy settings in report/comparison identity (ADR-0489).

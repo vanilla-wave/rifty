@@ -35,11 +35,6 @@ export interface HostConnections {
   readonly policies?: SandboxAgentHostOptions['policies'];
   readonly limits?: AgentRunLimits;
   readonly mode?: SandboxAgentHostOptions['mode'];
-  readonly snapshotState?: {
-    readonly store: Pick<Storage, 'getItem' | 'setItem'>;
-    /** Application-owned key, scoped to this namespace and project root. */
-    readonly key: string;
-  };
   readonly renderSupport?: (report: SandboxSupportReport) => void;
   readonly renderRuntime?: (event: RuntimeEvent) => void;
   readonly renderTranscript?: (transcript: AgentTranscript) => void;
@@ -47,7 +42,7 @@ export interface HostConnections {
 
 export interface HostPreparation {
   readonly snapshot?: SandboxSnapshotSource;
-  /** First-open sources, or the app's actual saved edits/desired manifest on deploy. */
+  /** Initial source files, written only when explicitly supplied. */
   readonly files?: Readonly<Record<string, string>>;
   readonly install?: { readonly registryUrl: string };
 }
@@ -130,21 +125,11 @@ export async function openReferenceHost(connections: HostConnections) {
     },
     prepare(input: HostPreparation) {
       return call(async () => {
-        if (input.snapshot) {
-          const state = connections.snapshotState;
-          if (!state) throw new TypeError('Connect application snapshot storage before apply');
-          const applied = state.store.getItem(state.key);
-          if (applied === input.snapshot.snapshotId) {
-            await sandbox.toolchain.open({ cwd: connections.root });
-          } else {
-            await sandbox.toolchain.applySnapshot({
-              cwd: connections.root,
-              snapshot: input.snapshot,
-              force: applied !== null,
-            });
-            state.store.setItem(state.key, input.snapshot.snapshotId);
-          }
-        }
+        if (input.snapshot)
+          await sandbox.toolchain.applySnapshot({
+            cwd: connections.root,
+            snapshot: input.snapshot,
+          });
         for (const [path, text] of Object.entries(input.files ?? {}))
           await project.fs.writeFile(path, text);
         if (input.install)
