@@ -400,6 +400,28 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
     `,
     // Final+GREEN R3 F4: prototype injection + own-property delete —
     // setPrototypeOf installs an inherited 'for', the delete then opens it.
+    // Final+GREEN R3 self-sweep (pre-R4): a const-bound alias of the
+    // INTRINSIC ITSELF (`const S = Symbol`) — the member write through the
+    // alias substitutes the real intrinsic. let/var aliases stay untracked
+    // (reassignment makes them may-alias — the exhaustive ceiling's).
+    '/tamper-alias-member-for.mjs': `
+      const originalFor = Symbol.for;
+      const S = Symbol;
+      S.for = () => 'tampered-sentinel';
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    '/tamper-alias-define-property.mjs': `
+      const originalFor = Symbol.for;
+      const S = Symbol;
+      Object.defineProperty(S, 'for', { value: () => 'tampered-sentinel' });
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
     '/tamper-prototype-inject.mjs': `
       const originalFor = Symbol.for;
       const originalProto = Object.getPrototypeOf(Symbol);
@@ -590,6 +612,24 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
     '/cjs-tamper-wrapped-define-property.cjs': `
       const originalFor = Symbol.for;
       Object.defineProperty((0, Symbol), 'for', { value: () => 'tampered-sentinel' });
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-alias-member-for.cjs': `
+      const originalFor = Symbol.for;
+      const S = Symbol;
+      S.for = () => 'tampered-sentinel';
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-alias-define-property.cjs': `
+      const originalFor = Symbol.for;
+      const S = Symbol;
+      Object.defineProperty(S, 'for', { value: () => 'tampered-sentinel' });
       globalThis[Symbol.for('x')] = 1;
       Symbol.for = originalFor;
       delete globalThis['tampered-sentinel'];

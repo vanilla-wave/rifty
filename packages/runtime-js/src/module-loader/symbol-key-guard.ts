@@ -24,6 +24,7 @@ import type { GuardAstNode } from './guard-ast.ts';
 export interface SymbolKeyScope {
   readonly bindings: Set<string>;
   readonly symbolKeyAliases: Set<string>;
+  readonly symbolIntrinsicAliases: Set<string>;
 }
 
 /**
@@ -64,19 +65,62 @@ export function isSymbolKeyAlias(scopes: readonly SymbolKeyScope[], name: string
 }
 
 // Identifier-pattern-only (destructuring/defaults never marked); the twins
-// call it for const declarators only, so no unmark path is needed.
-export function updateSymbolKeyAliasesFromPatternValue(
+// call it for const declarators only, so no unmark path is needed. Marks
+// BOTH alias kinds: a provable Symbol KEY (`const K = Symbol.for(…)`) and
+// the INTRINSIC itself (`const S = Symbol`, `const S = globalThis.Symbol` —
+// tamper detection only, the proof never accepts alias callees).
+export function updateSymbolAliasesFromPatternValue(
   scopes: readonly SymbolKeyScope[],
   pattern: unknown,
   value: unknown,
   isShadowed: SymbolKeyShadowProbe,
+  isGlobalObject: SymbolKeyGlobalProbe,
 ): void {
   if (!pattern || typeof pattern !== 'object') return;
   const pat = pattern as GuardAstNode;
   if (pat.type !== 'Identifier') return;
+  const name = (pat as unknown as { name?: string }).name;
   if (isProvablySymbolKey(value, scopes, isShadowed)) {
-    markSymbolKeyAlias(scopes, (pat as unknown as { name?: string }).name);
+    markSymbolKeyAlias(scopes, name);
   }
+  if (!value || typeof value !== 'object') return;
+  const v = unwrapGuardChain(value) as GuardAstNode;
+  const isIntrinsic =
+    (v.type === 'Identifier' &&
+      (v as unknown as { name?: string }).name === 'Symbol' &&
+      !isShadowed('Symbol')) ||
+    (v.type === 'MemberExpression' &&
+      isGlobalObject((v as unknown as { object?: unknown }).object) &&
+      staticPropertyName(v) === 'Symbol');
+  if (isIntrinsic) markSymbolIntrinsicAlias(scopes, name);
+}
+
+// const-bound alias of the INTRINSIC ITSELF (`const S = Symbol`) — tracked
+// for TAMPER detection only (a write `S.for = …` substitutes the real
+// intrinsic); the provable-key proof does NOT accept alias callees (no
+// claimed evidence needs them). Same const-only/no-fallback discipline as
+// the key aliases; let/var aliases stay untracked (reassignment makes them
+// may-alias — the exhaustive metaprogramming ceiling's).
+export function markSymbolIntrinsicAlias(
+  scopes: readonly SymbolKeyScope[],
+  name: string | undefined,
+): void {
+  if (!name) return;
+  for (let i = scopes.length - 1; i >= 0; i--) {
+    const scope = scopes[i];
+    if (!scope?.bindings.has(name)) continue;
+    scope.symbolIntrinsicAliases.add(name);
+    return;
+  }
+}
+
+export function isSymbolIntrinsicAlias(scopes: readonly SymbolKeyScope[], name: string): boolean {
+  for (let i = scopes.length - 1; i >= 0; i--) {
+    const scope = scopes[i];
+    if (!scope?.bindings.has(name)) continue;
+    return scope.symbolIntrinsicAliases.has(name);
+  }
+  return false;
 }
 
 // A computed key is provably Symbol-valued when it is a
@@ -148,6 +192,7 @@ export function objectMayContainFunctionKey(
 // reads the same intrinsic (R3 F2).
 function isSymbolReference(
   node: unknown,
+  scopes: readonly SymbolKeyScope[],
   isShadowed: SymbolKeyShadowProbe,
   isGlobalObject: SymbolKeyGlobalProbe,
 ): boolean {
@@ -155,7 +200,11 @@ function isSymbolReference(
   const n = unwrapGuardChain(node) as GuardAstNode;
   if (typeof n.type !== 'string') return false;
   if (n.type === 'Identifier') {
-    return (n as unknown as { name?: string }).name === 'Symbol' && !isShadowed('Symbol');
+    const name = (n as unknown as { name?: string }).name;
+    return (
+      (name === 'Symbol' && !isShadowed('Symbol')) ||
+      (typeof name === 'string' && isSymbolIntrinsicAlias(scopes, name))
+    );
   }
   if (n.type !== 'MemberExpression') return false;
   const object = (n as unknown as { object?: unknown }).object;
@@ -171,17 +220,22 @@ function isSymbolReference(
 // local, never tamper.
 export function isSymbolTamperTarget(
   target: unknown,
+  scopes: readonly SymbolKeyScope[],
   isShadowed: SymbolKeyShadowProbe,
   isGlobalObject: SymbolKeyGlobalProbe,
 ): boolean {
   if (!target || typeof target !== 'object') return false;
   const t = unwrapGuardChain(target) as GuardAstNode;
   if (t.type === 'Identifier') {
-    return (t as unknown as { name?: string }).name === 'Symbol' && !isShadowed('Symbol');
+    const name = (t as unknown as { name?: string }).name;
+    return (
+      (name === 'Symbol' && !isShadowed('Symbol')) ||
+      (typeof name === 'string' && isSymbolIntrinsicAlias(scopes, name))
+    );
   }
   if (t.type !== 'MemberExpression') return false;
   const object = (t as unknown as { object?: unknown }).object as GuardAstNode | undefined;
-  if (isSymbolReference(object, isShadowed, isGlobalObject)) return true;
+  if (isSymbolReference(object, scopes, isShadowed, isGlobalObject)) return true;
   return isGlobalObject(object) && staticPropertyName(t) === 'Symbol';
 }
 
@@ -194,6 +248,7 @@ export function isSymbolTamperTarget(
 // already ceiling-loud, so only the literal 'Symbol' forms need flagging.
 export function isSymbolIntrinsicMutationCall(
   node: GuardAstNode,
+  scopes: readonly SymbolKeyScope[],
   isShadowed: SymbolKeyShadowProbe,
   isGlobalObject: SymbolKeyGlobalProbe,
 ): boolean {
@@ -206,7 +261,7 @@ export function isSymbolIntrinsicMutationCall(
     object?.type === 'Identifier' ? (object as unknown as { name?: string }).name : undefined;
   const propertyName = staticPropertyName(callee);
   if (
-    isSymbolReference(object, isShadowed, isGlobalObject) &&
+    isSymbolReference(object, scopes, isShadowed, isGlobalObject) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
     return true;
@@ -226,7 +281,7 @@ export function isSymbolIntrinsicMutationCall(
   if (
     propertyName === 'setPrototypeOf' &&
     (isBuiltinObject || isBuiltinReflect) &&
-    isSymbolReference(args[0], isShadowed, isGlobalObject)
+    isSymbolReference(args[0], scopes, isShadowed, isGlobalObject)
   ) {
     return true;
   }
@@ -240,7 +295,7 @@ export function isSymbolIntrinsicMutationCall(
         propertyName === 'defineProperty' ||
         propertyName === 'deleteProperty'));
   if (!isDefineFamily) return false;
-  if (isSymbolReference(args[0], isShadowed, isGlobalObject)) return true;
+  if (isSymbolReference(args[0], scopes, isShadowed, isGlobalObject)) return true;
   if (!isGlobalObject(args[0])) return false;
   if (propertyName === 'assign' || propertyName === 'defineProperties') {
     return args.slice(1).some(hasLiteralSymbolKey);

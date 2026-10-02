@@ -27,7 +27,7 @@ import {
   isSymbolTamperTarget,
   mutationKeyMayBeFunction,
   objectMayContainFunctionKey,
-  updateSymbolKeyAliasesFromPatternValue,
+  updateSymbolAliasesFromPatternValue,
 } from './symbol-key-guard.ts';
 
 const jsonStringifyPrimordial = JSON.stringify;
@@ -144,6 +144,7 @@ interface Scope {
   readonly maybeDerivedFunctionAliases: Set<string>;
   readonly maybeEvalAliases: Set<string>;
   readonly symbolKeyAliases: Set<string>;
+  readonly symbolIntrinsicAliases: Set<string>;
 }
 
 interface FunctionRewriteCtx {
@@ -307,6 +308,7 @@ function createScope(): Scope {
     maybeDerivedFunctionAliases: new Set(),
     maybeEvalAliases: new Set(),
     symbolKeyAliases: new Set(),
+    symbolIntrinsicAliases: new Set(),
   };
 }
 
@@ -326,6 +328,7 @@ function addBinding(scope: Scope, name: string | undefined): void {
   scope.maybeDerivedFunctionAliases.delete(name);
   scope.maybeEvalAliases.delete(name);
   scope.symbolKeyAliases.delete(name);
+  scope.symbolIntrinsicAliases.delete(name);
 }
 
 function isShadowed(ctx: FunctionRewriteCtx, name: string): boolean {
@@ -625,7 +628,13 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
           updateMaybeEvalAliasesFromPatternValue(declId, decl.init, ctx);
           // let/var stay unmarked: reassignment keeps their keys unknown.
           if (isConst) {
-            updateSymbolKeyAliasesFromPatternValue(ctx.scopes, declId, decl.init, shadowProbe(ctx));
+            updateSymbolAliasesFromPatternValue(
+              ctx.scopes,
+              declId,
+              decl.init,
+              shadowProbe(ctx),
+              globalObjectProbe(ctx),
+            );
           }
         }
       }
@@ -751,7 +760,7 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
       if (isGlobalFunctionMutationCall(n, ctx)) {
         ctx.hasGlobalFunctionWrite = true;
       }
-      if (isSymbolIntrinsicMutationCall(n, shadowProbe(ctx), globalObjectProbe(ctx))) {
+      if (isSymbolIntrinsicMutationCall(n, ctx.scopes, shadowProbe(ctx), globalObjectProbe(ctx))) {
         ctx.symbolIntrinsicTampered = true;
       }
       if (calleeMayBeHostFunction(callee, ctx)) {
@@ -945,7 +954,7 @@ function walkPatternExpressions(pattern: unknown, ctx: FunctionRewriteCtx): void
 function walkAssignmentTarget(target: unknown, ctx: FunctionRewriteCtx): void {
   if (!target || typeof target !== 'object') return;
   const t = target as AnyNodeShape;
-  if (isSymbolTamperTarget(t, shadowProbe(ctx), globalObjectProbe(ctx))) {
+  if (isSymbolTamperTarget(t, ctx.scopes, shadowProbe(ctx), globalObjectProbe(ctx))) {
     ctx.symbolIntrinsicTampered = true;
   }
   if (t.type === 'Identifier') {
@@ -969,7 +978,7 @@ function walkAssignmentPatternTarget(pattern: unknown, ctx: FunctionRewriteCtx):
   switch (pat.type) {
     case 'Identifier':
       markGlobalFunctionWrite(pat, ctx);
-      if (isSymbolTamperTarget(pat, shadowProbe(ctx), globalObjectProbe(ctx))) {
+      if (isSymbolTamperTarget(pat, ctx.scopes, shadowProbe(ctx), globalObjectProbe(ctx))) {
         ctx.symbolIntrinsicTampered = true;
       }
       return;

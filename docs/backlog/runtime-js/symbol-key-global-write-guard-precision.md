@@ -54,9 +54,11 @@ binding shadows the identifier — R2 F1), sequence/paren-wrapped references
 (`[Symbol.for] = […]`, `({for: Symbol.for} = …)` — R3 F1), a
 defineProperty-family call on `Symbol`/`globalThis.Symbol`,
 `Object.setPrototypeOf`/`Reflect.setPrototypeOf` on the intrinsic
-(prototype injection + own-property delete — R3 F4), a literal `'Symbol'`
-key through the global object, or `__defineGetter__/__defineSetter__` on
-either — detected source-ordered like the existing alias trackers, then
+(prototype injection + own-property delete — R3 F4), a const-bound alias of
+the intrinsic itself (`const S = Symbol; S.for = …` — R3 self-sweep;
+let/var aliases stay untracked, reassignment makes them may-alias — the
+exhaustive ceiling's), a literal `'Symbol'` key through the global object,
+or `__defineGetter__/__defineSetter__` on either — detected source-ordered like the existing alias trackers, then
 `Symbol` reports as shadowed for the rest of the walk. A tamper carrier
 nested INSIDE a mutation key expression runs before the write/call
 completes, so the key interior is walked with the full guard machinery
@@ -64,8 +66,9 @@ completes, so the key interior is walked with the full guard machinery
 F1/F3/F4 — the sequence unwrap must not discard the mutation, and a
 tamper-shaped assignment scoped to a nested function's OWN Symbol binding
 is a local mutation, never tamper). Inside a `with` body no Symbol key is
-provable — a dynamic scope may shadow Symbol (R3 F5, CJS-only: ESM modules
-are strict). A genuine Symbol-key write BEFORE any tamper stays exempt
+provable — a dynamic scope may shadow Symbol (R3 F5, CJS-only: the ESM
+loader parses `sourceType: 'module'`, strict — `with` is a SyntaxError
+before the guard runs, so the ESM twin carries no withDepth). A genuine Symbol-key write BEFORE any tamper stays exempt
 (source order, R2 C1); `Symbol++`-class updates yield NaN and cannot mint
 a 'Function' key, so they stay untracked. eval-text Symbol substitution is
 out of scope here — owned by
@@ -157,16 +160,17 @@ a CJS stash method call, a shadowed-local scope control, a
 write-before-tamper source-order control, and a key-interior
 nested-function local-Symbol control — RED today — plus the
 export-wrapped `globalThis`-alias ceiling hole, see Decisions) +
-52 boundary pins (Acceptance 3 in BOTH loaders:
+56 boundary pins (Acceptance 3 in BOTH loaders:
 string-literal, concatenated, unknown-identifier, `let`-bound-symbol,
 shadowed-`Symbol`, `Symbol.keyFor` keys stay loud, called
 `Reflect.get(globalThis, K)` results stay loud, and the intrinsic-tamper
 carriers stay loud — five R1 forms; per loader the R2 global-mediated
 trio, the R2 key-sequence quartet plus defineProperties/__defineGetter__
 key-interior pins (R3 C1), the R3 destructuring pair, the R3
-wrapped-reference pair, the R3 prototype-injection form; CJS-only the R3
-`with`-shadowed form — tamper pins RED at their introducing round, the
-rest green today, regression-only).
+wrapped-reference pair, the R3 prototype-injection form, the R3
+const-intrinsic-alias pair; CJS-only the R3 `with`-shadowed form — tamper
+pins RED at their introducing round, the rest green today,
+regression-only).
 
 ## Out of scope
 
@@ -277,3 +281,14 @@ rest green today, regression-only).
   `function-constructor-exhaustive-metaprogramming-ceiling` (noted there).
   RED-pinned: 13 failed / 61 passed pre-fix (F1×4, F2×4, F3×2, F4×2,
   F5×1; the C1 pins are green-today regression pins), 74/74 post-fix.
+- 2026-10-02 — pre-R4 self-sweep (REV-12, own adversarial pass before
+  re-review): a const-bound alias of the intrinsic itself
+  (`const S = Symbol; S.for = …`, `Object.defineProperty(S, 'for', …)`)
+  substituted the real intrinsic undetected. Fixed by
+  `symbolIntrinsicAliases` on the scope (const-only, cleared on shadow,
+  same discipline as the key aliases) folded into a renamed
+  `updateSymbolAliasesFromPatternValue`; the provable-key proof still
+  rejects alias callees (no claimed evidence needs them). The ESM
+  withDepth was removed as dead machinery (REV-7): the ESM loader parses
+  strict (`sourceType: 'module'`), so `with` never reaches the guard.
+  RED-pinned 4 failed / 74 passed pre-fix, 78/78 post-fix.

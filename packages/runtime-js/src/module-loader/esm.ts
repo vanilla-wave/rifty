@@ -19,7 +19,7 @@ import {
   isSymbolTamperTarget,
   mutationKeyMayBeFunction,
   objectMayContainFunctionKey,
-  updateSymbolKeyAliasesFromPatternValue,
+  updateSymbolAliasesFromPatternValue,
 } from './symbol-key-guard.ts';
 
 interface GuardNodeShape {
@@ -36,6 +36,7 @@ interface GuardScope {
   readonly maybeDerivedFunctionAliases: Set<string>;
   readonly maybeEvalAliases: Set<string>;
   readonly symbolKeyAliases: Set<string>;
+  readonly symbolIntrinsicAliases: Set<string>;
 }
 
 interface EsmFunctionGuardCtx {
@@ -47,8 +48,6 @@ interface EsmFunctionGuardCtx {
   hasRoutedFunctionReference: boolean;
   hasFunctionEvalText: boolean;
   symbolIntrinsicTampered: boolean;
-  /** WithStatement body depth — inside `with` no Symbol key is provable (R3 F5; ESM-unreachable, twin symmetry). */
-  withDepth: number;
 }
 
 // TODO(backlog: runtime-js/function-constructor-exhaustive-metaprogramming-ceiling):
@@ -84,7 +83,6 @@ export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): v
     hasRoutedFunctionReference: false,
     hasFunctionEvalText: false,
     symbolIntrinsicTampered: false,
-    withDepth: 0,
   };
   walkEsmFunctionGuard(program as unknown as GuardNodeShape, ctx);
 
@@ -119,6 +117,7 @@ function createGuardScope(): GuardScope {
     maybeDerivedFunctionAliases: new Set(),
     maybeEvalAliases: new Set(),
     symbolKeyAliases: new Set(),
+    symbolIntrinsicAliases: new Set(),
   };
 }
 
@@ -144,6 +143,7 @@ function addGuardBinding(scope: GuardScope, name: string | undefined): void {
   scope.maybeDerivedFunctionAliases.delete(name);
   scope.maybeEvalAliases.delete(name);
   scope.symbolKeyAliases.delete(name);
+  scope.symbolIntrinsicAliases.delete(name);
 }
 
 function isGuardShadowed(ctx: EsmFunctionGuardCtx, name: string): boolean {
@@ -276,11 +276,9 @@ function isGuardMaybeEvalAlias(ctx: EsmFunctionGuardCtx, name: string): boolean 
 }
 
 function guardShadowProbe(ctx: EsmFunctionGuardCtx): SymbolKeyShadowProbe {
-  // Tampered intrinsic or a `with` body (dynamic scope may shadow Symbol):
-  // 'Symbol' reports as shadowed, every provable-key pattern goes loud.
-  return (name) =>
-    isGuardShadowed(ctx, name) ||
-    (name === 'Symbol' && (ctx.symbolIntrinsicTampered || ctx.withDepth > 0));
+  // Once the module observably substitutes the Symbol intrinsic, 'Symbol'
+  // reports as shadowed: every provable-key pattern goes loud (F1).
+  return (name) => isGuardShadowed(ctx, name) || (name === 'Symbol' && ctx.symbolIntrinsicTampered);
 }
 
 function globalObjectProbe(ctx: EsmFunctionGuardCtx): SymbolKeyGlobalProbe {
@@ -446,11 +444,12 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
           updateGuardMaybeEvalAliasesFromPatternValue(declId, decl.init, ctx);
           // let/var stay unmarked: reassignment keeps their keys unknown.
           if (isConst) {
-            updateSymbolKeyAliasesFromPatternValue(
+            updateSymbolAliasesFromPatternValue(
               ctx.scopes,
               declId,
               decl.init,
               guardShadowProbe(ctx),
+              globalObjectProbe(ctx),
             );
           }
         }
@@ -494,12 +493,11 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
       return;
     }
     case 'WithStatement':
+      // Strict parse rejects `with` first — no withDepth here (R3 F5 is CJS-only).
       ctx.hasDynamicFunctionScope = true;
       ctx.hasWithDynamicFunctionScope = true;
       walkEsmFunctionGuard(n.object, ctx);
-      ctx.withDepth += 1;
       walkEsmFunctionGuard(n.body, ctx);
-      ctx.withDepth -= 1;
       return;
     case 'MemberExpression':
       if (isGlobalFunctionReadMember(n, ctx)) {
@@ -517,7 +515,9 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
       if (isGlobalFunctionMutationCall(n, ctx)) {
         ctx.hasGlobalFunctionWrite = true;
       }
-      if (isSymbolIntrinsicMutationCall(n, guardShadowProbe(ctx), globalObjectProbe(ctx))) {
+      if (
+        isSymbolIntrinsicMutationCall(n, ctx.scopes, guardShadowProbe(ctx), globalObjectProbe(ctx))
+      ) {
         ctx.symbolIntrinsicTampered = true;
       }
       if (guardCalleeMayBeHostFunction(callee, ctx)) {
@@ -737,7 +737,7 @@ function walkGuardPatternExpressions(pattern: unknown, ctx: EsmFunctionGuardCtx)
 function walkGuardAssignmentTarget(target: unknown, ctx: EsmFunctionGuardCtx): void {
   if (!target || typeof target !== 'object') return;
   const t = target as GuardNodeShape;
-  if (isSymbolTamperTarget(t, guardShadowProbe(ctx), globalObjectProbe(ctx))) {
+  if (isSymbolTamperTarget(t, ctx.scopes, guardShadowProbe(ctx), globalObjectProbe(ctx))) {
     ctx.symbolIntrinsicTampered = true;
   }
   if (t.type === 'Identifier') {
@@ -767,7 +767,7 @@ function walkGuardAssignmentPatternTarget(pattern: unknown, ctx: EsmFunctionGuar
       if (name === 'Function' && !isGuardShadowed(ctx, name)) {
         ctx.hasGlobalFunctionWrite = true;
       }
-      if (isSymbolTamperTarget(pat, guardShadowProbe(ctx), globalObjectProbe(ctx))) {
+      if (isSymbolTamperTarget(pat, ctx.scopes, guardShadowProbe(ctx), globalObjectProbe(ctx))) {
         ctx.symbolIntrinsicTampered = true;
       }
       return;
