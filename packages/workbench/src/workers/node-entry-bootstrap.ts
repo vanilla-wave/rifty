@@ -226,7 +226,7 @@ if (nodeServe) {
 } else {
   await runNodeProgramToCompletion({
     runEntry,
-    awaitDrain: () => awaitDrain(),
+    awaitDrain: (hasPendingEntry) => awaitDrain({ hasRef: () => hasPendingEntry?.() ?? false }),
     readExitCode: () => proc.exitCode,
     exit: terminateWorker,
     writeStderr,

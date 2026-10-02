@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { expect, it } from 'vitest';
 import { createHostMessageChannel } from '../../packages/io/src/index.ts';
 import { runEntryLifecycle } from '../../packages/kernel/src/worker-entry.ts';
+import { runNodeEntry } from '../../packages/runtime-js/src/builtins/node-entry.ts';
 import {
   readActiveNodeProcessBootstrap,
   setActiveNodeProcessBootstrap,
@@ -15,18 +16,28 @@ import {
   resetKeepalive,
   unref,
 } from '../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
-import { runNodeProgramLifecycle } from '../../packages/workbench/src/workers/node-program-lifecycle.ts';
+import {
+  MemoryFsSync,
+  resetSyncMirror,
+  setSyncMirror,
+} from '../../packages/vfs/src/internal/index.ts';
+import {
+  runNodeProgramLifecycle,
+  runNodeProgramToCompletion,
+} from '../../packages/workbench/src/workers/node-program-lifecycle.ts';
 
 it.each([
-  ['error', false, false],
-  ['unhandledrejection', false, false],
-  ['error', true, false],
-  ['unhandledrejection', true, false],
-  ['error', false, true],
-  ['unhandledrejection', false, true],
+  ['error', false, false, 'serve'],
+  ['unhandledrejection', false, false, 'serve'],
+  ['error', true, false, 'serve'],
+  ['unhandledrejection', true, false, 'serve'],
+  ['error', false, true, 'serve'],
+  ['unhandledrejection', false, true, 'serve'],
+  ['error', false, true, 'completion'],
+  ['unhandledrejection', false, true, 'completion'],
 ] as const)(
-  'owned %s handled=%s pending=%s reaches Node exit before kernel teardown',
-  async (kind, handled, pending) => {
+  'owned %s handled=%s pending=%s mode=%s reaches Node exit before kernel teardown',
+  async (kind, handled, pending, mode) => {
     const expectedCode = handled ? 0 : 1;
     const processEvent = kind === 'error' ? 'uncaughtException' : 'unhandledRejection';
     const handler = handled ? `process.on('${processEvent}', () => {});` : '';
@@ -77,36 +88,53 @@ it.each([
     if (kind === 'error') installUnhandledErrorTrap(target);
     else installUnhandledRejectionTrap(target);
     const diagnostics: string[] = [];
-    let releaseEntry: (() => void) | undefined;
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/pending.mjs':
+        'await new Promise(resolve => { globalThis.__riftyPendingEntryRelease = resolve; });',
+    });
+    setSyncMirror(vfs);
+    const deadline = { timer: undefined as ReturnType<typeof setTimeout> | undefined };
+    const deps = {
+      runEntry: async () => {
+        ref();
+        setTimeout(() => {
+          target.dispatchEvent(event);
+          unref();
+        }, 0);
+        if (pending) await runNodeEntry({ vfs, entryPath: '/pending.mjs', cwd: '/' });
+      },
+      awaitDrain: (hasPendingEntry?: () => boolean) =>
+        awaitDrain({ hasRef: () => hasPendingEntry?.() ?? false }),
+      readExitCode: () => proc.exitCode,
+      exit: proc.exit.bind(proc),
+      writeStderr: (chunk: string) => diagnostics.push(chunk),
+    };
     try {
-      const outcome = await runEntryLifecycle(spec, {
+      const lifecycle = runEntryLifecycle(spec, {
         preEntryHook: null,
         drainHook: null,
         writeStderr: (bytes) => diagnostics.push(new TextDecoder().decode(bytes)),
         runEntry: () =>
-          runNodeProgramLifecycle({
-            runEntry: async () => {
-              ref();
-              setTimeout(() => {
-                target.dispatchEvent(event);
-                unref();
-              }, 0);
-              if (pending)
-                await new Promise<void>((resolve) => {
-                  releaseEntry = resolve;
-                });
-            },
-            listPorts: () => [],
-            onPortsChange: () => () => {},
-            awaitDrain: (hasPendingEntry) =>
-              awaitDrain({ hasRef: () => hasPendingEntry?.() ?? false }),
-            servePreview: () => () => {},
-            postListening: () => {},
-            readExitCode: () => proc.exitCode,
-            exit: proc.exit.bind(proc),
-            writeStderr: (chunk) => diagnostics.push(chunk),
-          }),
+          mode === 'completion'
+            ? runNodeProgramToCompletion(deps)
+            : runNodeProgramLifecycle({
+                ...deps,
+                listPorts: () => [],
+                onPortsChange: () => () => {},
+                servePreview: () => () => {},
+                postListening: () => {},
+              }),
       });
+      const outcome = await Promise.race([
+        lifecycle,
+        new Promise<never>((_, reject) => {
+          deadline.timer = setTimeout(
+            () => reject(new Error('owned fatal error left real ESM entry pending')),
+            500,
+          );
+        }),
+      ]);
       expect(outcome.code).toBe(expectedCode);
       expect(exits).toEqual([expectedCode]);
       expect(event.defaultPrevented).toBe(true);
@@ -119,7 +147,11 @@ it.each([
         channel.port2.close();
       }
       resetKeepalive();
-      releaseEntry?.();
+      if (deadline.timer) clearTimeout(deadline.timer);
+      const release = Reflect.get(globalThis, '__riftyPendingEntryRelease');
+      if (typeof release === 'function') release();
+      Reflect.deleteProperty(globalThis, '__riftyPendingEntryRelease');
+      resetSyncMirror();
     }
   },
   1500,

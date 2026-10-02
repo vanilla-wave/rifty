@@ -72,8 +72,8 @@ export const vitestMatrix = {
     'Exact package pair and Node environment only. No Vitest source patches or substitute runner. Native public parseCLI performs finite CLI admission; actual CLI owns the admitted action.',
     'Canonical raw-first `vitest run` may take supported flags. Root single `--help`, `-h`, `--version`, `-v` and run help retain native output. Other command/argument entry shapes fail loudly.',
     'Pass/fail lines, counts and exit codes are claimed; timing/ANSI bytes are not. Heap statistics, sandbox VM offsets, import preloads and same-realm Worker startup effects retain named ceilings.',
-    'Advanced fork browser-only clone brands (Blob/File/DOMException etc) fail with child_process.serialization.advanced.WebObject; Node-core values and Buffer API allocations are the supported path.',
-    'Advanced fork SharedArrayBuffer data is an explicit child_process.serialization.advanced.SharedArrayBuffer ceiling; native V8 rejects this input. Worker-thread structured clone remains separate.',
+    'Advanced fork browser-only clone brands (Blob/File/DOMException etc) fail with child_process.serialization.advanced.WebObject; Node-core values and nonshared Buffer API allocations are the supported path.',
+    'Advanced fork SharedArrayBuffer and all shared-backed views (including Buffer) fail with child_process.serialization.advanced.SharedArrayBuffer. Native V8 accepts shared-backed views; this is an explicit browser gap. Worker-thread structured clone remains separate.',
     'Config-only DOM and coverage reach real dependencies and named runtime ceilings. Negative CLI modes fail before starting a run.',
   ],
 };

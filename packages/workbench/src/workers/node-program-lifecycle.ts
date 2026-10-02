@@ -59,19 +59,18 @@ type DrainOutcome =
   | { readonly kind: 'rejected'; readonly err: unknown };
 
 export async function runNodeProgramToCompletion(
-  deps: Pick<NodeLifecycleDeps, 'runEntry' | 'readExitCode' | 'exit' | 'writeStderr'> & {
-    readonly awaitDrain: () => Promise<void>;
-  },
+  deps: Pick<
+    NodeLifecycleDeps,
+    'runEntry' | 'readExitCode' | 'exit' | 'writeStderr' | 'awaitDrain'
+  >,
 ): Promise<void> {
-  try {
-    await deps.runEntry();
-    await deps.awaitDrain();
-  } catch (error) {
-    if (exitCodeOf(error) !== null) throw error;
-    terminateNodeProgramFailure(error, deps);
-  }
-  const code = deps.readExitCode();
-  deps.exit(typeof code === 'number' && Number.isFinite(code) ? code : 0);
+  await runNodeProgramLifecycle({
+    ...deps,
+    listPorts: () => [],
+    onPortsChange: () => () => {},
+    servePreview: () => () => {},
+    postListening: () => {},
+  });
 }
 
 export async function runNodeProgramLifecycle(deps: NodeLifecycleDeps): Promise<void> {

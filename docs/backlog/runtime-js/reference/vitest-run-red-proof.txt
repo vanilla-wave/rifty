@@ -1573,3 +1573,106 @@ AssertionError: expected false to be true // Object.is equality
    Duration  3.47s (transform 434ms, setup 0ms, collect 779ms, tests 3.14s, environment 0ms, prepare 52ms)
 
 [ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-ipc-sab-ceiling-red.log
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (25 tests | 1 failed) 14ms
+   × keeps SAB-backed Buffer out of advanced IPC with a named ceiling 3ms
+     → expected [Function] to throw an error
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > keeps SAB-backed Buffer out of advanced IPC with a named ceiling
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:54:44
+     52|   expect(gets).toBe(1);
+     53|   buffer[0] = 1; gets = 0;
+     54|   expect(() => encodeAdvancedIpc(message)).toThrow(/serialization.adva…
+       |                                            ^
+     55|   expect(gets).toBe(1);
+     56| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 24 passed (25)
+   Start at  05:40:56
+   Duration  2.40s (transform 1.51s, setup 0ms, collect 2.06s, tests 14ms, environment 0ms, prepare 40ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-nonserve-pending-red.log
+$ vitest run --project integration tests/integration/node-process-unhandled-traps.test.ts -t mode=completion
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |integration| tests/integration/node-process-unhandled-traps.test.ts (10 tests | 2 failed | 8 skipped) 1135ms
+   × owned error handled=false pending=true mode=completion reaches Node exit before kernel teardown 561ms
+     → owned fatal error left real ESM entry pending
+   × owned unhandledrejection handled=false pending=true mode=completion reaches Node exit before kernel teardown 573ms
+     → owned fatal error left real ESM entry pending
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned error handled=false pending=true mode=completion reaches Node exit before kernel teardown
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned unhandledrejection handled=false pending=true mode=completion reaches Node exit before kernel teardown
+Error: owned fatal error left real ESM entry pending
+ ❯ Timeout.<anonymous> tests/integration/node-process-unhandled-traps.test.ts:133:26
+    131|         new Promise<never>((_, reject) => {
+    132|           deadline.timer = setTimeout(
+    133|             () => reject(new Error('owned fatal error left real ESM en…
+       |                          ^
+    134|             500,
+    135|           );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 8 skipped (10)
+   Start at  05:39:56
+   Duration  3.44s (transform 1.35s, setup 0ms, collect 1.92s, tests 1.13s, environment 0ms, prepare 83ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-nonserve-pending-revert.log
+$ vitest run --project integration tests/integration/node-process-unhandled-traps.test.ts -t mode=completion
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |integration| tests/integration/node-process-unhandled-traps.test.ts (10 tests | 2 failed | 8 skipped) 1084ms
+   × owned error handled=false pending=true mode=completion reaches Node exit before kernel teardown 548ms
+     → owned fatal error left real ESM entry pending
+   × owned unhandledrejection handled=false pending=true mode=completion reaches Node exit before kernel teardown 536ms
+     → owned fatal error left real ESM entry pending
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned error handled=false pending=true mode=completion reaches Node exit before kernel teardown
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned unhandledrejection handled=false pending=true mode=completion reaches Node exit before kernel teardown
+Error: owned fatal error left real ESM entry pending
+ ❯ Timeout.<anonymous> tests/integration/node-process-unhandled-traps.test.ts:133:26
+    131|         new Promise<never>((_, reject) => {
+    132|           deadline.timer = setTimeout(
+    133|             () => reject(new Error('owned fatal error left real ESM en…
+       |                          ^
+    134|             500,
+    135|           );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 8 skipped (10)
+   Start at  05:41:18
+   Duration  3.30s (transform 1.33s, setup 0ms, collect 1.89s, tests 1.08s, environment 0ms, prepare 36ms)
+
+[ELIFECYCLE] Command failed with exit code 1.

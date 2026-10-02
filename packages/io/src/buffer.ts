@@ -506,6 +506,10 @@ export function getLiveBufferCloneRefs(): object[] {
   return liveBufferCloneRefs(hasCloneBufferBrand);
 }
 
+const cloneViewBuffer = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype),
+  'buffer',
+)!.get!;
 const typedArrayTag = Object.getOwnPropertyDescriptor(
   Object.getPrototypeOf(Uint8Array.prototype),
   Symbol.toStringTag,
@@ -515,6 +519,14 @@ const getPrototype = Object.getPrototypeOf;
 const getDescriptor = Object.getOwnPropertyDescriptor;
 function hasCloneBufferBrand(value: unknown): boolean {
   if (nativeApply(typedArrayTag, value, []) !== 'Uint8Array') return false;
+  if (sharedArrayBufferByteLength) {
+    try {
+      nativeApply(sharedArrayBufferByteLength, nativeApply(cloneViewBuffer, value, []), []);
+      return false;
+    } catch {
+      /* Nonshared view. */
+    }
+  }
   let current = value as object | null;
   while (current !== null) {
     const descriptor = getDescriptor(current, BUFFER_BRAND);

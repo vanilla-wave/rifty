@@ -43,25 +43,25 @@ it('rejects a live MessagePort instead of replacing it with an empty record', ()
   }
 });
 
-it('snapshots SAB-backed Buffer bytes while preserving repeated aliases', () => {
+it('keeps SAB-backed Buffer out of advanced IPC with a named ceiling', () => {
   const buffer = Buffer.from(new SharedArrayBuffer(1));
   buffer[0] = 1;
-  const native = deserialize(serialize(buffer)) as Uint8Array;
-  const packet = encodeAdvancedIpc({
-    first: buffer,
-    again: buffer,
-    map: new Map([[buffer, buffer]]),
-  });
-  buffer[0] = 2;
-  const result = decodeAdvancedIpc(packet) as {
-    first: Uint8Array;
-    again: Uint8Array;
-    map: Map<unknown, unknown>;
+  let gets = 0;
+  const message = {
+    buffer,
+    get after() {
+      gets++;
+      buffer[0] = 2;
+      return 0;
+    },
   };
-  expect(result.first[0]).toBe(native[0]);
-  expect(Buffer.isBuffer(result.first)).toBe(true);
-  expect(result.first).toBe(result.again);
-  expect(result.map.get(result.first)).toBe(result.first);
+  const native = deserialize(serialize(message)) as { buffer: Uint8Array };
+  expect(native.buffer[0]).toBe(1);
+  expect(gets).toBe(1);
+  buffer[0] = 1;
+  gets = 0;
+  expect(() => encodeAdvancedIpc(message)).toThrow(/serialization.advanced.SharedArrayBuffer/);
+  expect(gets).toBe(1);
 });
 
 it('rejects SharedArrayBuffer as native V8 IPC does', () => {

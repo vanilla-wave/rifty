@@ -167,7 +167,7 @@ it('run-to-completion waits for referenced work before its exit event', async ()
             complete();
           }, 10);
         },
-        awaitDrain,
+        awaitDrain: (hasPendingEntry) => awaitDrain({ hasRef: () => hasPendingEntry?.() ?? false }),
         readExitCode: () => proc.exitCode,
         exit: proc.exit.bind(proc),
         writeStderr: () => {},

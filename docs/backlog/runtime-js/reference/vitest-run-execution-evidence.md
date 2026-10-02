@@ -104,3 +104,12 @@ builtin/lifecycle tests. Owner+IPC+controller selection GREEN21.
 - Physical production fixtures now include fatal entry/timer/rejection + raw300/OS44; fatal oracle compares stdout/exit, independently checks diagnostic and no survivor. Stack paths intentionally unclaimed.
 
 - Frozen repair build GREEN; compiler10,022,694 bytes unchanged, SHA111cc8295960af34a8a828a3b5c68e31c714cf20f0fc930ed76a624bbd2e56f8; exact pin refreshed, no ceiling widened. Full typecheck GREEN after both lifecycle producers adapted.
+
+### Final finite IPC boundary
+
+- e71 SAB-positive repaired decision superseded only by ADR0503 (independent DEC-2): Native per-value byte observation cannot be delivered by browser clone's shared graph. All reached shared-backed views, including Buffer, are named ceilings. Unrelated shared side refs excluded. Explicit gap, not Native rejection. Exact Vitest destination unchanged.
+- 725 IPC/io tests GREEN; real-loader nonserve pending fatal repaired using same lifecycle owner, 57 lifecycle GREEN +full typecheck.
+- Build GREEN, compiler10,022,694bytes SHA45a5d25968abf73eba24535e9086cdaca2af4fa2ee1460b36baedffde8fba7d1. No byte/other asset ceiling widened.
+- Interrupted earlier full gates for newly required repairs; no full PASS claim. Latest full gate, production and packed proof pending.
+
+Web-object oracle: `node docs/backlog/runtime-js/reference/vitest-web-clone-native-probe.mjs` → Nodev24.16.0, `v8 true { own: 7 } 1`, `clone true [] 0`; sibling output retained. Native ordinary own getter vs browser branded clone is the explicit WebObject ceiling.

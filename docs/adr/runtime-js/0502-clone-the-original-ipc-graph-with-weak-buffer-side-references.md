@@ -52,3 +52,8 @@ allocation metadata; no duplicated lifetime or message-order authority.
 advanced-ipc-values tests: native V8 rejection-before-getter, Buffer getters,
 prototype/core slots, detached views, adopted views, cycles; physical fork parity.
 Captured RED: reference/vitest-run-red-proof.txt in runtime-js backlog evidence.
+
+## Corrections (active)
+
+2026-10-02 — ADR-0503 supersedes SAB-backed Buffer exemption/postclone copy only.
+All shared-backed fork data now has a named ceiling; nonshared/native graph stays.

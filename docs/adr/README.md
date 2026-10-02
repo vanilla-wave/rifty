@@ -107,6 +107,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0497 | Node entry v5 startup execArgv semantics |
 | 0499 | Worker startup errors over existing private control |
 | 0502 | Clone the original IPC graph with weak Buffer side references |
+| 0503 | Reject shared-backed advanced IPC values before send |
 
 ### runtime-wasi
 
@@ -424,6 +425,7 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0502 SAB-backed Buffer exemption | 0503 / note 2026-10-02 | named shared-backed view ceiling; native graph/nonshared Buffer retained |
 | 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
 | 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |

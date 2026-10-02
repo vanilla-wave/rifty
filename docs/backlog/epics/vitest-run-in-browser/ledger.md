@@ -31,3 +31,5 @@
 - 2026-10-02 — review2 BLOCK @08c6c18b: opaque IPC brands, fatal exit event, mutable Symbol legacy accessor bypass. Required repairs on this unit; no goal change. ADR0502 (DEC-2 independent ipc_brand_decision) supersedes snapshot0501: native original graph + weak Buffer refs; finite web-object ceiling. 756 focused GREEN; packed @08c GREEN. Full recomposed proof pending.
 
 - 2026-10-02 — final follow-on RED→GREEN: shared Buffer snapshot, owned async fatal suppression/drain, nonserve timer + pending entry drain. IPC25 + physical fork1, lifecycle55 GREEN. Source freeze for final gates; required I3/I4 remain with this unit.
+
+- 2026-10-02 — verify e71: Node SAB-buffer observation differs with later getter; DEC-2 ADR0503 sets explicit outside-scenario shared-backed view ceiling, no false snapshot. Nonserve pending ESM fatal uses same lifecycle owner (real loader RED, 57 lifecycle GREEN). Outside-goal shared/web captures carry named ❌; goal unchanged. Full gate attempts interrupted for repairs; not PASS.

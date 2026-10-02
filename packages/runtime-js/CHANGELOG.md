@@ -3,6 +3,8 @@
 
 ## [Unreleased]
 
+- Shared-backed advanced fork views fail with an explicit ceiling; native V8 snapshot observation remains outside the Vitest scenario (ADR-0503).
+
 - Route owned uncaught browser errors/rejections through Node drain and exit; suppress racing browser peer teardown.
 
 - Named exit/kill exports retain their process receiver and native function names.

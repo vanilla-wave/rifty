@@ -1,0 +1,9 @@
+node v24.16.0
+after native-v8 {"received":1,"source":2,"gets":1,"buffer":true,"shared":false}
+after rifty-e71 {"received":2,"source":2,"gets":1,"buffer":true,"shared":false}
+before native-v8 {"received":2,"source":2,"gets":1,"buffer":true,"shared":false}
+before rifty-e71 {"received":2,"source":2,"gets":1,"buffer":true,"shared":false}
+SharedArrayBuffer native rejects Error
+Uint8Array native accepts Uint8Array false
+DataView native accepts DataView false
+Buffer native accepts Buffer false

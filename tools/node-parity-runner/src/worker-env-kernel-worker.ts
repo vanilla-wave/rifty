@@ -296,7 +296,7 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
   if (launch.kind === 'program' && !launch.nodeServe) {
     await runNodeProgramToCompletion({
       runEntry,
-      awaitDrain: () => awaitDrain(),
+      awaitDrain: (hasPendingEntry) => awaitDrain({ hasRef: () => hasPendingEntry?.() ?? false }),
       readExitCode: () => proc.exitCode,
       exit: terminateWorker,
       writeStderr,
