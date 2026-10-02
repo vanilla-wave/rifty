@@ -14,6 +14,7 @@ import {
 import {
   type SymbolKeyGlobalProbe,
   type SymbolKeyShadowProbe,
+  commitKeyExpressionTamper,
   isProvablySymbolKey,
   isSymbolIntrinsicMutationCall,
   isSymbolTamperTarget,
@@ -280,6 +281,15 @@ function guardShadowProbe(ctx: EsmFunctionGuardCtx): SymbolKeyShadowProbe {
 
 function globalObjectProbe(ctx: EsmFunctionGuardCtx): SymbolKeyGlobalProbe {
   return (node) => isGlobalObjectExpression(node, ctx);
+}
+
+// A mutation key evaluates before the write/call completes: scan its
+// interior for a nested tamper carrier before consulting the provable-key
+// proof (F2 — the sequence unwrap must not discard the mutation).
+function scanGuardKeyTamper(ctx: EsmFunctionGuardCtx, key: unknown): void {
+  commitKeyExpressionTamper(key, guardShadowProbe(ctx), globalObjectProbe(ctx), () => {
+    ctx.symbolIntrinsicTampered = true;
+  });
 }
 
 function declareGuardPattern(scope: GuardScope, pattern: unknown): void {
@@ -1321,12 +1331,10 @@ function isGlobalFunctionReadMember(node: GuardNodeShape, ctx: EsmFunctionGuardC
 function isGlobalFunctionWriteMember(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {
   if (!isGlobalObjectExpression(node.object, ctx)) return false;
   const propertyName = staticPropertyName(node);
-  return (
-    propertyName === 'Function' ||
-    (propertyName === undefined &&
-      isComputedMember(node) &&
-      !isProvablySymbolKey(node.property, ctx.scopes, guardShadowProbe(ctx)))
-  );
+  if (propertyName !== undefined) return propertyName === 'Function';
+  if (!isComputedMember(node)) return false;
+  scanGuardKeyTamper(ctx, node.property);
+  return !isProvablySymbolKey(node.property, ctx.scopes, guardShadowProbe(ctx));
 }
 
 function guardExpressionMayBeHostFunction(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
@@ -1520,9 +1528,10 @@ function isGlobalFunctionMutationCall(node: GuardNodeShape, ctx: EsmFunctionGuar
   const isBuiltinReflect = objectName === 'Reflect' && !isGuardShadowed(ctx, 'Reflect');
 
   if (isBuiltinObject && propertyName === 'assign' && isGlobalObjectExpression(args[0], ctx)) {
-    return args
-      .slice(1)
-      .some((arg) => objectMayContainFunctionKey(arg, ctx.scopes, guardShadowProbe(ctx)));
+    return args.slice(1).some((arg) => {
+      scanGuardKeyTamper(ctx, arg);
+      return objectMayContainFunctionKey(arg, ctx.scopes, guardShadowProbe(ctx));
+    });
   }
 
   const isObjectDefine =
@@ -1534,8 +1543,10 @@ function isGlobalFunctionMutationCall(node: GuardNodeShape, ctx: EsmFunctionGuar
       propertyName === 'deleteProperty');
   if ((isObjectDefine || isReflectMutation) && isGlobalObjectExpression(args[0], ctx)) {
     if (propertyName === 'defineProperties') {
+      scanGuardKeyTamper(ctx, args[1]);
       return objectMayContainFunctionKey(args[1], ctx.scopes, guardShadowProbe(ctx));
     }
+    scanGuardKeyTamper(ctx, args[1]);
     return mutationKeyMayBeFunction(args[1], ctx.scopes, guardShadowProbe(ctx));
   }
 
@@ -1543,6 +1554,7 @@ function isGlobalFunctionMutationCall(node: GuardNodeShape, ctx: EsmFunctionGuar
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
+    scanGuardKeyTamper(ctx, args[0]);
     return mutationKeyMayBeFunction(args[0], ctx.scopes, guardShadowProbe(ctx));
   }
 

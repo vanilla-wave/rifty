@@ -22,6 +22,7 @@ import type { Resolver } from './resolver.ts';
 import {
   type SymbolKeyGlobalProbe,
   type SymbolKeyShadowProbe,
+  commitKeyExpressionTamper,
   isProvablySymbolKey,
   isSymbolIntrinsicMutationCall,
   isSymbolTamperTarget,
@@ -468,6 +469,15 @@ function shadowProbe(ctx: FunctionRewriteCtx): SymbolKeyShadowProbe {
 
 function globalObjectProbe(ctx: FunctionRewriteCtx): SymbolKeyGlobalProbe {
   return (node) => isGlobalObjectExpression(node, ctx);
+}
+
+// A mutation key evaluates before the write/call completes: scan its
+// interior for a nested tamper carrier before consulting the provable-key
+// proof (F2 — the sequence unwrap must not discard the mutation).
+function scanKeyTamper(ctx: FunctionRewriteCtx, key: unknown): void {
+  commitKeyExpressionTamper(key, shadowProbe(ctx), globalObjectProbe(ctx), () => {
+    ctx.symbolIntrinsicTampered = true;
+  });
 }
 
 function declarePattern(scope: Scope, pattern: unknown): void {
@@ -1494,12 +1504,10 @@ function isGlobalFunctionReadMember(node: AnyNodeShape, ctx: FunctionRewriteCtx)
 function isGlobalFunctionWriteMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
   if (!isGlobalObjectExpression(node.object, ctx)) return false;
   const propertyName = staticPropertyName(node);
-  return (
-    propertyName === 'Function' ||
-    (propertyName === undefined &&
-      isComputedMember(node) &&
-      !isProvablySymbolKey(node.property, ctx.scopes, shadowProbe(ctx)))
-  );
+  if (propertyName !== undefined) return propertyName === 'Function';
+  if (!isComputedMember(node)) return false;
+  scanKeyTamper(ctx, node.property);
+  return !isProvablySymbolKey(node.property, ctx.scopes, shadowProbe(ctx));
 }
 
 function expressionMayBeHostFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
@@ -1698,9 +1706,10 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
   const isBuiltinReflect = objectName === 'Reflect' && !isShadowed(ctx, 'Reflect');
 
   if (isBuiltinObject && propertyName === 'assign' && isGlobalObjectExpression(args[0], ctx)) {
-    return args
-      .slice(1)
-      .some((arg) => objectMayContainFunctionKey(arg, ctx.scopes, shadowProbe(ctx)));
+    return args.slice(1).some((arg) => {
+      scanKeyTamper(ctx, arg);
+      return objectMayContainFunctionKey(arg, ctx.scopes, shadowProbe(ctx));
+    });
   }
 
   const isObjectDefine =
@@ -1712,8 +1721,10 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
       propertyName === 'deleteProperty');
   if ((isObjectDefine || isReflectMutation) && isGlobalObjectExpression(args[0], ctx)) {
     if (propertyName === 'defineProperties') {
+      scanKeyTamper(ctx, args[1]);
       return objectMayContainFunctionKey(args[1], ctx.scopes, shadowProbe(ctx));
     }
+    scanKeyTamper(ctx, args[1]);
     return mutationKeyMayBeFunction(args[1], ctx.scopes, shadowProbe(ctx));
   }
 
@@ -1721,6 +1732,7 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
+    scanKeyTamper(ctx, args[0]);
     return mutationKeyMayBeFunction(args[0], ctx.scopes, shadowProbe(ctx));
   }
 

@@ -87,6 +87,19 @@ describe('provably-Symbol computed keys bypass the Function guard', () => {
       export const r = globalThis[K];
       delete globalThis[K];
     `,
+    // Source-order control (Final+GREEN R2 C1): a genuine Symbol-key write
+    // BEFORE any tamper is legitimate — the key was a real Symbol at write
+    // time. Kills a whole-module pre-scan mutant (tamper flagged regardless
+    // of order would wrongly reject the pre-tamper write).
+    '/write-before-tamper.mjs': `
+      const originalFor = Symbol.for;
+      const K = Symbol.for('write.before.tamper');
+      globalThis[K] = 12;
+      Symbol.for = () => 'tampered-sentinel';
+      Symbol.for = originalFor;
+      export const r = globalThis[K];
+      delete globalThis[K];
+    `,
   };
 
   for (const [path, source] of Object.entries(allowedEsm)) {
@@ -138,6 +151,21 @@ describe('provably-Symbol computed keys bypass the Function guard', () => {
       `,
     });
     expect(loader.require('./method-call.cjs', '/entry.cjs')).toBe('pong');
+  });
+
+  it('CJS allows a genuine Symbol-key write before any tamper (source order)', () => {
+    const loader = setup({
+      '/write-before-tamper.cjs': `
+        const originalFor = Symbol.for;
+        const K = Symbol.for('cjs.write.before.tamper');
+        globalThis[K] = 'wbt-ok';
+        Symbol.for = () => 'tampered-sentinel';
+        Symbol.for = originalFor;
+        module.exports = globalThis[K];
+        delete globalThis[K];
+      `,
+    });
+    expect(loader.require('./write-before-tamper.cjs', '/entry.cjs')).toBe('wbt-ok');
   });
 
   it('CJS runs the Reflect.set / Object.assign / Object.defineProperties mutation shapes', () => {
@@ -237,6 +265,65 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       delete globalThis['tampered-sentinel'];
       export const r = 1;
     `,
+    // Final+GREEN R2 F1: the same substitution through the GLOBAL object —
+    // member chain, defineProperty on globalThis.Symbol, or a 'Symbol'
+    // getter on the global — names the real intrinsic even when a local
+    // binding shadows the identifier.
+    '/tamper-global-member-for.mjs': `
+      const originalFor = Symbol.for;
+      globalThis.Symbol.for = () => 'tampered-sentinel';
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    '/tamper-define-property-global-symbol.mjs': `
+      const originalFor = Symbol.for;
+      Object.defineProperty(globalThis.Symbol, 'for', { value: () => 'tampered-sentinel' });
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    '/tamper-global-define-getter.mjs': `
+      const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'Symbol');
+      globalThis.__defineGetter__('Symbol', () => ({ for: () => 'tampered-sentinel' }));
+      globalThis[Symbol.for('x')] = 1;
+      Object.defineProperty(globalThis, 'Symbol', descriptor);
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    // Final+GREEN R2 F2: a tamper carrier nested INSIDE the mutation key
+    // evaluates before the write/call completes — the sequence unwrap must
+    // not discard it. One pin per mutation-site family.
+    '/tamper-key-sequence.mjs': `
+      const originalFor = Symbol.for;
+      globalThis[(Symbol.for = () => 'tampered-sentinel', Symbol.for('x'))] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    '/tamper-reflect-set-key-sequence.mjs': `
+      const originalFor = Symbol.for;
+      Reflect.set(globalThis, (Symbol.for = () => 'tampered-sentinel', Symbol.for('x')), 1);
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    '/tamper-define-property-key-sequence.mjs': `
+      const originalFor = Symbol.for;
+      Object.defineProperty(globalThis, (Symbol.for = () => 'tampered-sentinel', Symbol.for('x')), { value: 1 });
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    '/tamper-assign-key-sequence.mjs': `
+      const originalFor = Symbol.for;
+      Object.assign(globalThis, { [(Symbol.for = () => 'tampered-sentinel', Symbol.for('x'))]: 1 });
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
   };
 
   for (const [path, source] of Object.entries(stillLoudEsm)) {
@@ -321,6 +408,59 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       Object.defineProperty(globalThis, 'Symbol', { value: { for: () => 'tampered-sentinel' } });
       globalThis[Symbol.for('x')] = 1;
       globalThis.Symbol = OriginalSymbol;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    // Final+GREEN R2 F1/F2, ESM twins above.
+    '/cjs-tamper-global-member-for.cjs': `
+      const originalFor = Symbol.for;
+      globalThis.Symbol.for = () => 'tampered-sentinel';
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-define-property-global-symbol.cjs': `
+      const originalFor = Symbol.for;
+      Object.defineProperty(globalThis.Symbol, 'for', { value: () => 'tampered-sentinel' });
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-global-define-getter.cjs': `
+      const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'Symbol');
+      globalThis.__defineGetter__('Symbol', () => ({ for: () => 'tampered-sentinel' }));
+      globalThis[Symbol.for('x')] = 1;
+      Object.defineProperty(globalThis, 'Symbol', descriptor);
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-key-sequence.cjs': `
+      const originalFor = Symbol.for;
+      globalThis[(Symbol.for = () => 'tampered-sentinel', Symbol.for('x'))] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-reflect-set-key-sequence.cjs': `
+      const originalFor = Symbol.for;
+      Reflect.set(globalThis, (Symbol.for = () => 'tampered-sentinel', Symbol.for('x')), 1);
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-define-property-key-sequence.cjs': `
+      const originalFor = Symbol.for;
+      Object.defineProperty(globalThis, (Symbol.for = () => 'tampered-sentinel', Symbol.for('x')), { value: 1 });
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-assign-key-sequence.cjs': `
+      const originalFor = Symbol.for;
+      Object.assign(globalThis, { [(Symbol.for = () => 'tampered-sentinel', Symbol.for('x'))]: 1 });
+      Symbol.for = originalFor;
       delete globalThis['tampered-sentinel'];
       module.exports = 1;
     `,
