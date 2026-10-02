@@ -367,9 +367,6 @@ export async function walkAndPin(
         return acquisition;
       });
     }
-    // Own rejection now; traversal may await metadata before allSettled observes it.
-    // Retain the original promise so required failures still abort publication.
-    void pending.catch(() => {});
     inFlight.set(key, pending);
     // Settled by allSettled after the walk; a rejection landing mid-walk must not surface as an
     // unhandled rejection (the owner realm exits 1 before the install can report its failure).

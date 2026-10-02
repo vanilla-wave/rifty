@@ -3,7 +3,10 @@ import type { ImageContent } from '@earendil-works/pi-ai';
 import type { AgentSessionEvent, AgentStatus } from './types.ts';
 
 type CapabilityEvent = Extract<AgentSessionEvent, { type: 'capabilities' }>;
-type NoticeEvent = Exclude<AgentSessionEvent, { type: 'agent' | 'output' | 'resources' }>;
+type NoticeEvent = Extract<
+  AgentSessionEvent,
+  { type: 'status' | 'capabilities' | 'model' | 'compaction' | 'repeated-call' | 'retry' }
+>;
 
 export interface AgentTranscriptResult {
   readonly content: readonly { readonly type: string; readonly text?: string }[];

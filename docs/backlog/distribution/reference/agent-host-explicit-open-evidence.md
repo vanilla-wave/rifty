@@ -65,3 +65,16 @@ pipeline and nested npm scripts share actual dispatch. Loss/reordering excluded.
 Real Chromium RED3 → GREEN3 → revert RED3 → restored GREEN3. Cases: later
 Node/false/unknown/redirection errors, short-circuits, nested scripts, pipeline
 last-stage and Stop. Logs /private/tmp/rifty-pr357-f3-{red,green,revert,restored}.log.
+
+## Integration with current main
+
+Merged main45067718e before final validation. Resolved ADR index and packed-driver
+imports retaining both conversation archive and reference-host proofs. Removed
+the duplicate immediate pending.catch observer; both independently added rejection
+regression suites pass13/13 (/private/tmp/rifty-pr357-merge-installer.log).
+
+First full gate exposed typecheck after main's archive event addition: NoticeEvent
+used Exclude and admitted archive receipts the reducer never emits. Restrict the
+type to the actual six notice kinds; runtime unchanged. Playground typecheck
+passes (/private/tmp/rifty-pr357-merge-typecheck-green.log). First full gate remains
+recorded as failed; final clean-tree gate follows. Compiler bytes/SHA unchanged.
