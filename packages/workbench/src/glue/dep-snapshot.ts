@@ -342,12 +342,16 @@ export async function verifyDepSnapshotReplayCache(snapshot: DepSnapshotV3): Pro
  * (vite dev among them) serve `.gz` with `Content-Encoding: gzip`, so the
  * browser hands us already-decoded tar/JSON; others serve the raw gzip bytes.
  */
-async function fetchDepSnapshotBytes(url: string): Promise<Uint8Array<ArrayBuffer>> {
+async function fetchDepSnapshotBytes(
+  url: string,
+  onProgress?: (bytes: number, total?: number) => void,
+): Promise<Uint8Array<ArrayBuffer>> {
   let bytes: Uint8Array<ArrayBuffer>;
   try {
     bytes = await fetchAssetBytesBounded(url, {
       label: `dependency snapshot ${url}`,
       maxBytes: SNAPSHOT_MAX_BYTES,
+      onProgress,
     });
   } catch (error) {
     throw new DepSnapshotFetchError(url, 'fetch', error);
@@ -394,8 +398,9 @@ export async function sha256Identity(bytes: Uint8Array<ArrayBuffer>): Promise<st
 export async function fetchVerifiedDepSnapshot(
   url: string,
   expectedSnapshotId: string,
+  onProgress?: (bytes: number, total?: number) => void,
 ): Promise<VerifiedDepSnapshot> {
-  const bytes = await fetchDepSnapshotBytes(url);
+  const bytes = await fetchDepSnapshotBytes(url, onProgress);
   if ((await sha256Identity(bytes)) !== expectedSnapshotId) return { status: 'mismatch' };
   return { status: 'matched', snapshot: parseFetchedDepSnapshot(url, bytes) };
 }

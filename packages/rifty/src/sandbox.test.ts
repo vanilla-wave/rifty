@@ -426,7 +426,7 @@ describe('createSandbox', () => {
         worker.emit({ type: 'ready' });
         worker.emit({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v5',
+          protocol: 'rifty.sandbox-toolchain/v6',
           vfsBackend: 'opfs',
         });
       }
@@ -500,7 +500,7 @@ describe('createSandbox', () => {
       worker.emit({ type: 'ready' });
       worker.emit({
         type: 'toolchain-ready',
-        protocol: 'rifty.sandbox-toolchain/v5',
+        protocol: 'rifty.sandbox-toolchain/v6',
         vfsBackend: workerBackend,
       });
       const sandbox = await creating;
@@ -561,7 +561,7 @@ describe('createSandbox', () => {
     first.emit({ type: 'ready' });
     first.emit({
       type: 'toolchain-ready',
-      protocol: 'rifty.sandbox-toolchain/v5',
+      protocol: 'rifty.sandbox-toolchain/v6',
       vfsBackend: 'memory',
     });
     const sandbox = (await creating) as ToolchainSandbox;
@@ -619,7 +619,7 @@ describe('createSandbox', () => {
     second.emit({ type: 'ready' });
     second.emit({
       type: 'toolchain-ready',
-      protocol: 'rifty.sandbox-toolchain/v5',
+      protocol: 'rifty.sandbox-toolchain/v6',
       vfsBackend: 'memory',
     });
     await Promise.resolve();
@@ -675,7 +675,7 @@ describe('createSandbox', () => {
     first.emit({ type: 'ready' });
     first.emit({
       type: 'toolchain-ready',
-      protocol: 'rifty.sandbox-toolchain/v5',
+      protocol: 'rifty.sandbox-toolchain/v6',
       vfsBackend: 'memory',
       vfsReason: 'first boot fallback',
     });
@@ -692,7 +692,7 @@ describe('createSandbox', () => {
     second.emit({ type: 'ready' });
     second.emit({
       type: 'toolchain-ready',
-      protocol: 'rifty.sandbox-toolchain/v5',
+      protocol: 'rifty.sandbox-toolchain/v6',
       vfsBackend: 'opfs',
     });
     await expect(restarting).resolves.toEqual({ unflushedWrites: false, resident: null });
@@ -717,7 +717,7 @@ describe('createSandbox', () => {
             this.emit({
               type: 'toolchain-ready',
               protocol:
-                this.generation === 2 && fault === 'boot' ? 'broken' : 'rifty.sandbox-toolchain/v5',
+                this.generation === 2 && fault === 'boot' ? 'broken' : 'rifty.sandbox-toolchain/v6',
               vfsBackend: 'memory',
             } as WorkerMessage);
           });
@@ -945,7 +945,7 @@ describe('sandbox.project invocations', () => {
         this.emit({ type: 'ready' });
         this.emit({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v5',
+          protocol: 'rifty.sandbox-toolchain/v6',
           vfsBackend: 'memory',
         });
       });

@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import {
   cp,
   lstat,
@@ -18,14 +17,13 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
-import { gunzip } from 'node:zlib';
 import ts from 'typescript';
 import {
   CLIENT_BUNDLE_BUDGETS,
   assertClientBundleBudgets,
 } from '../../tools/checks/client-bundle-budget.mjs';
 import { provePackedArchive } from './agent-archive-browser-proof.mjs';
+import { browserRegistryPackages } from './browser-registry-fixture.mjs';
 import { provePackedCompilerLoading } from './client-bundle-browser-proof.mjs';
 import {
   closeServer,
@@ -36,13 +34,13 @@ import {
   readJson,
   registryEntries,
   startInstalledRegistry,
-  tarballIntegrity,
 } from './installed-registry.mjs';
 import { provePackedAgent } from './no-coi-agent-browser-proof.mjs';
 import { provePackedInstallLoading } from './no-coi-install-browser-proof.mjs';
 import { provePackedNoCoiPiAgent } from './no-coi-pi-agent-browser-proof.mjs';
 import { provePackedNoCoiSnapshots } from './no-coi-snapshot-browser-proof.mjs';
 import { provePackedVmSelection } from './no-coi-vm-browser-proof.mjs';
+import { provePackedReferenceHost } from './reference-host-browser-proof.mjs';
 import { proveSdkPackaging } from './sdk-packaging-proof.mjs';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
@@ -59,10 +57,6 @@ const fixtureRoot = resolve(
     : 'tests/integration/fixtures/workbench-vite-consumer',
 );
 const workbenchRoot = resolve(repoRoot, 'packages/workbench');
-const viteSnapshot = resolve(
-  repoRoot,
-  'apps/playground/public/snapshots/vite-node-modules.json.gz',
-);
 const keepTemp = process.argv.includes('--keep');
 const archiveModelIndex = process.argv.indexOf('--archive-model-config');
 const archiveModelPath = archiveModelIndex < 0 ? undefined : process.argv[archiveModelIndex + 1];
@@ -91,7 +85,6 @@ if (unknownArguments.length > 0) {
 }
 
 const maxCapturedOutput = 1024 * 1024;
-const gunzipAsync = promisify(gunzip);
 const resources = createResourceCleanup({
   exit: (code) => process.exit(code),
   reportError: (error) => {
@@ -321,71 +314,6 @@ async function packPackages(packages, tarballRoot) {
     tarballs.set(name, resolve(tarballRoot, created[0]));
   }
   return tarballs;
-}
-
-function lockfilePackageName(path) {
-  const prefix = 'node_modules/';
-  if (!path.startsWith(prefix)) throw new Error(`Unsupported snapshot lock path: ${path}`);
-  const segments = path.slice(prefix.length).split('/');
-  if (segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..')) {
-    throw new Error(`Packed consumer snapshot requires a flat package tree: ${path}`);
-  }
-  if (segments[0]?.startsWith('@') && segments.length === 2) {
-    return `${segments[0]}/${segments[1]}`;
-  }
-  if (segments.length === 1) return segments[0];
-  throw new Error(`Packed consumer snapshot requires a flat package tree: ${path}`);
-}
-
-async function browserRegistryPackages() {
-  const snapshot = JSON.parse(String(await gunzipAsync(await readFile(viteSnapshot))));
-  if (snapshot.version !== 3 || snapshot.templateId !== 'vite')
-    throw new Error('Packed consumer requires the committed Vite snapshot v3');
-  const required = new Map();
-  for (const [path, entry] of Object.entries(JSON.parse(snapshot.lockfile).packages)) {
-    if (path.length === 0) continue;
-    const name = lockfilePackageName(path);
-    if (required.has(name)) throw new Error(`Duplicate snapshot package ${name}`);
-    required.set(name, entry.version);
-  }
-  assert.equal(required.get('esbuild-wasm'), '0.28.0', 'existing registry recipe asset');
-  const fixture = resolve(repoRoot, 'tests/integration/fixtures/registry/rollup-companions');
-  const provenance = await readJson(resolve(fixture, 'provenance.json'));
-  const packages = new Map();
-  for (const [name, version] of required) {
-    const source = provenance.packages.find(
-      (item) => item.name === name && item.version === version,
-    );
-    if (!source) throw new Error(`Missing original npm fixture ${name}@${version}`);
-    const manifest = await readJson(resolve(fixture, 'packages', `${source.file}.json`));
-    assert.equal(manifest.name, name);
-    assert.equal(manifest.version, version);
-    assert.equal(manifest.dist.integrity, source.integrity);
-    assert.equal(manifest.dist.tarball, source.tarball);
-    const tarball = resolve(fixture, 'packages', `${source.file}.tgz`);
-    const bytes = await readFile(tarball);
-    assert.equal(bytes.length, source.bytes, `original ${name} byte length`);
-    assert.equal(tarballIntegrity(bytes), source.integrity, `original ${name} npm integrity`);
-    packages.set(name, {
-      name,
-      manifest,
-      tarball,
-      integrity: source.integrity,
-      shasum: createHash('sha1').update(bytes).digest('hex'),
-    });
-  }
-  const msTarball = resolve(repoRoot, 'tests/integration/fixtures/registry/ms-2.0.0.tgz');
-  const msBytes = await readFile(msTarball);
-  packages.set('ms', {
-    name: 'ms',
-    tarball: msTarball,
-    manifest: JSON.parse(
-      execFileSync('tar', ['-xzOf', msTarball, 'package/package.json'], { encoding: 'utf8' }),
-    ),
-    integrity: tarballIntegrity(msBytes),
-    shasum: createHash('sha1').update(msBytes).digest('hex'),
-  });
-  return packages;
 }
 
 function delay(milliseconds) {
@@ -729,6 +657,7 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
   });
   await provePackedNoCoiSnapshots(consumerRoot);
   await provePackedNoCoiPiAgent(consumerRoot);
+  await provePackedReferenceHost(consumerRoot, registry.origin);
   await run('node', ['prepare-orphan-payload.mjs'], {
     cwd: consumerRoot,
     timeoutMs: 120_000,
@@ -1269,7 +1198,7 @@ async function main() {
         consumerRoot,
         await readJson(resolve(consumerRoot, 'measure/report.json')),
       );
-      const agentRegistry = await startBrowserRegistry(await browserRegistryPackages());
+      const agentRegistry = await startBrowserRegistry(await browserRegistryPackages(repoRoot));
       try {
         await provePackedAgent(consumerRoot, agentRegistry.origin);
         assert(
@@ -1301,8 +1230,21 @@ async function main() {
       await run('npm', ['run', 'typecheck'], { cwd: consumerRoot, timeoutMs: 180_000 });
       await run('npm', ['run', 'build'], { cwd: consumerRoot, timeoutMs: 300_000 });
       await stat(resolve(consumerRoot, 'dist/index.html'));
-      const registryPackages = await browserRegistryPackages();
+      const registryPackages = await browserRegistryPackages(repoRoot);
       await runChromiumJourney(consumerRoot, registryPackages);
+      await run(
+        'pnpm',
+        [
+          'exec',
+          'playwright',
+          'test',
+          '-c',
+          'tools/agent-bench/playwright.config.ts',
+          'reference-host.spec.ts',
+        ],
+        { timeoutMs: 600_000 },
+      );
+      console.log('Packed benchmark shared reference host passed');
       console.log(
         `Packed Workbench consumer passed: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, packed TypeScript/build, fresh Chromium`,
       );

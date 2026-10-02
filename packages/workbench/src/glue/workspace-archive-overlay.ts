@@ -11,6 +11,7 @@ export function prepareWorkspaceArchiveOverlay(
   options: {
     readonly preflightRoot?: string;
     readonly conflict: 'error' | 'overwrite';
+    readonly onProgress?: (written: number, total: number) => void;
   },
 ) {
   const root = decoded.root;
@@ -29,12 +30,17 @@ export function prepareWorkspaceArchiveOverlay(
   const conflicts = new Set<string>();
   const blockedDirectories: string[] = [];
   const intents: VfsMutationIntent[] = [];
+  let total = 0;
   const inspectionPath = (path: string) => `${preflightRoot}${path.slice(root.length)}`;
   const blocked = (path: string) =>
     blockedDirectories.some((parent) => path.startsWith(`${parent}/`));
   for (const path of orderedDirectories) {
-    if (blocked(path)) continue;
+    if (blocked(path)) {
+      total++;
+      continue;
+    }
     const current = fs.statSyncOrNull(inspectionPath(path));
+    if (current?.isDirectory !== true) total++;
     if (current !== null && !current.isDirectory) {
       conflicts.add(path.slice(root.length));
       blockedDirectories.push(path);
@@ -44,10 +50,14 @@ export function prepareWorkspaceArchiveOverlay(
   const sameBytes = (left: Uint8Array, right: Uint8Array) =>
     left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
   for (const entry of decoded.files) {
-    if (blocked(entry.target)) continue;
+    if (blocked(entry.target)) {
+      total++;
+      continue;
+    }
     const path = inspectionPath(entry.target);
     const current = fs.statSyncOrNull(path);
     if (current?.isFile && sameBytes(fs.readFileBytesSync(path), entry.content)) continue;
+    total++;
     if (current !== null) conflicts.add(entry.target.slice(root.length));
     intents.push({ kind: current?.isDirectory ? 'replace' : 'write', path: entry.target });
   }
@@ -57,10 +67,15 @@ export function prepareWorkspaceArchiveOverlay(
   return {
     intents: Object.freeze(intents),
     apply() {
+      let written = 0;
+      options.onProgress?.(written, total);
       for (const path of orderedDirectories) {
         const current = fs.statSyncOrNull(path);
         if (current !== null && !current.isDirectory) fs.rmSync(path, { force: true });
-        if (current?.isDirectory !== true) fs.mkdirSync(path, { recursive: true });
+        if (current?.isDirectory !== true) {
+          fs.mkdirSync(path, { recursive: true });
+          options.onProgress?.(++written, total);
+        }
       }
       for (const entry of decoded.files) {
         const current = fs.statSyncOrNull(entry.target);
@@ -69,6 +84,7 @@ export function prepareWorkspaceArchiveOverlay(
         if (current !== null && !current.isFile)
           fs.rmSync(entry.target, { recursive: true, force: true });
         fs.writeFileSync(entry.target, entry.content);
+        options.onProgress?.(++written, total);
       }
     },
   };

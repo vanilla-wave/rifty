@@ -6,6 +6,7 @@
  * from the same manifest, or the prefetch is (correctly) ignored.
  */
 
+import { selectRootDependencyEdges } from './installer-request.ts';
 import type { OverrideMap } from './overrides.ts';
 
 /** The POST body (ADR-0182): devDependencies are pre-merged into
@@ -18,8 +19,7 @@ export interface EddyRequestBody {
 
 /**
  * Build the request an `install({ vfs, cwd })` call would send for this
- * package.json — the EXACT `normalizeInstallArgs` merge: `{ ...devDependencies,
- * ...dependencies }`, optionalDependencies carved out of that merge, overrides
+ * package.json — the same dev > optional > prod edge selection, overrides
  * carried when non-empty. Returns `null` on any shape the installer would
  * reject (malformed JSON, non-object, nested/non-string entries): a prefetch
  * must never throw — the install itself surfaces the loud error.
@@ -38,9 +38,11 @@ export function eddyRequestFromPackageJson(text: string): EddyRequestBody | null
   const optional = stringRecordOrNull(raw.optionalDependencies);
   const overrides = stringRecordOrNull(raw.overrides);
   if (!dev || !deps || !optional || !overrides) return null;
-  const dependencies = { ...dev, ...deps };
-  for (const name of Object.keys(optional)) delete dependencies[name];
-  const body: EddyRequestBody = { dependencies, optionalDependencies: optional };
+  const body: EddyRequestBody = selectRootDependencyEdges({
+    dependencies: deps,
+    devDependencies: dev,
+    optionalDependencies: optional,
+  });
   if (Object.keys(overrides).length > 0) body.overrides = overrides;
   return body;
 }

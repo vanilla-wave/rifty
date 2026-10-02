@@ -170,6 +170,7 @@ it('preserves nonzero context/edit counters and both provenance headers', () => 
 it.each([
   'endpoint',
   'limits',
+  'noCoiPolicies',
   'taskSet',
   'runsPerTask',
   'missing',
@@ -182,6 +183,8 @@ it.each([
   const before = clone();
   const after = clone();
   if (kind === 'endpoint') after.header.endpoint = { ...after.header.endpoint, maxTokens: 1234 };
+  if (kind === 'noCoiPolicies')
+    Reflect.set(after.header, 'noCoiPolicies', { shell: { allowedCommands: ['node'] } });
   if (kind === 'limits') after.header.limits = { ...after.header.limits, maxToolCalls: 1 };
   if (kind === 'taskSet') after.header.taskSet = 'changed-tasks';
   if (kind === 'runsPerTask') after.header.runsPerTask = 2;

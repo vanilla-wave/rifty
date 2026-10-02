@@ -1,6 +1,7 @@
 import { VfsError } from './errors.ts';
 import { type OpfsErrorContext, mapOpfsError } from './opfs-errors.ts';
 import { OpfsReplicaStore } from './opfs-replica-store.ts';
+import type { ReplicaAdmissionEvent } from './opfs-replica-types.ts';
 import type { OpfsLayoutIssue } from './opfs-replica-types.ts';
 import { OpfsFsSync } from './opfs-sync.ts';
 import { chunkedFileStream } from './opfs.ts';
@@ -93,13 +94,20 @@ class ReplicaVfs implements Vfs {
 
 export async function createReplicaPair(
   root: FileSystemDirectoryHandle,
-  options: { readonly ioReportTimeoutMs?: number },
+  options: {
+    readonly ioReportTimeoutMs?: number;
+    readonly onAdmission?: (event: ReplicaAdmissionEvent) => void;
+  },
 ): Promise<{
   readonly vfs: Vfs;
   readonly fsSync: OpfsFsSync;
   readonly layoutIssue?: OpfsLayoutIssue;
 }> {
-  const { store, images } = await OpfsReplicaStore.open(root, options.ioReportTimeoutMs);
+  const { store, images } = await OpfsReplicaStore.open(
+    root,
+    options.ioReportTimeoutMs,
+    options.onAdmission,
+  );
   let fsSync: OpfsFsSync;
   const vfs = new ReplicaVfs(store, () => fsSync);
   try {

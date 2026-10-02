@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Observe native replica admission before hydration; retain actual contention cause on occupied guard expiry without changing wait/fallback semantics (ADR-0486).
+
 - Require createWritable before paired OPFS admission; identify native root acquisition failures with preserved cause (ADR-0476).
 
 - Treat a first HEAD created but never closed as uncommitted storage; fresh replay stays empty without a false corruption diagnosis.

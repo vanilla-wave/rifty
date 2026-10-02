@@ -54,3 +54,8 @@ AI remains outside SDK/runtime. No new external dependency; agent gains its
 declared SDK type dependency. Preview exit replaces the realm, so only existing
 acknowledgement/recovery guarantees apply; unflushed writes stay explicit.
 Ordinary file tools do not turn a trusted SDK host into a hostile-code jail.
+
+## Corrections (active)
+
+2026-09-30 — ADR-0484 supersedes D1's one-handle requirement only: files and
+shell may use distinct SDK project policies over the same root/owner.

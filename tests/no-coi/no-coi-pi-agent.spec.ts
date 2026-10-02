@@ -7,6 +7,80 @@ const fixture = `/@fs${root}/tests/integration/fixtures/workbench-vite-consumer/
 const results = (trace: AgentTrace) =>
   trace.transcript.filter((entry) => entry.role === 'toolResult');
 
+test('shell model text preserves interleaved terminal output on success and failure', async ({
+  page,
+}) => {
+  await page.goto('/no-coi-harness.html');
+  const observations = await page.evaluate(async (root) => {
+    const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
+    const { createAgentSession, createSandboxAgentHost } = await import(
+      `/@fs${root}/packages/agent/src/index.ts`
+    );
+    const { modelCatalog } = await import(
+      `/@fs${root}/tests/integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts`
+    );
+    const { scriptedProvider } = await import(
+      `/@fs${root}/tests/integration/fixtures/workbench-vite-consumer/src/agent-scripted-provider.ts`
+    );
+    const sandbox = await createSandbox({
+      requireCrossOriginIsolation: false,
+      skipServiceWorker: true,
+      toolchain: {
+        workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
+      },
+    });
+    try {
+      const project = sandbox.project({ root: '/ordered' });
+      await project.fs.writeFile(
+        'out.cjs',
+        "process.stderr.write('first\\n'); process.stdout.write('second\\n'); process.stderr.write('third\\n'); process.stdout.write('fourth\\n');",
+      );
+      const observed = [];
+      for (const command of ['node out.cjs', 'node out.cjs && false']) {
+        const provider = scriptedProvider([[{ name: 'shell', args: { command } }], 'Observed.']);
+        const agent = createAgentSession({
+          host: createSandboxAgentHost({
+            sandbox,
+            project: { root: '/ordered' },
+            mode: () => 'commands',
+          }),
+          ...modelCatalog(undefined, provider.fetch),
+        });
+        try {
+          await agent.send('Run the command.');
+          observed.push({ trace: await agent.exportTrace(), requests: provider.requests });
+        } finally {
+          await agent.dispose();
+        }
+      }
+      return observed;
+    } finally {
+      sandbox.dispose();
+    }
+  }, root);
+  for (const [index, value] of observations.entries()) {
+    const terminal = value.trace.events
+      .flatMap(
+        ({ event }: { event: import('../../packages/agent/src/index.ts').AgentSessionEvent }) =>
+          event.type === 'output' ? [event.chunk] : [],
+      )
+      .join('');
+    expect(terminal).toBe('first\nsecond\nthird\nfourth\n');
+    const tool = results(value.trace)[0]!;
+    expect(tool.isError).toBe(index === 1);
+    const text = tool.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('');
+    expect(JSON.parse(text.split('\n')[0]!)).toMatchObject({
+      status: 'exited',
+      exitCode: index === 0 ? 0 : 1,
+    });
+    expect(text.split('\n').slice(1).join('\n')).toBe(terminal);
+    expect(
+      value.requests[1]?.body.messages.find((entry: { role: string }) => entry.role === 'tool')
+        ?.content,
+    ).toBe(text);
+  }
+});
+
 async function run(page: Page, method: 'sandboxAgentPolicy' | 'sandboxAgentStop', hard = false) {
   await page.goto('/no-coi-harness.html');
   return page.evaluate(

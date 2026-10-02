@@ -26,6 +26,7 @@ export interface NoCoiProjectFsController {
   readonly fs: NoCoiProjectFs;
   activate(policy: NoCoiProjectFsPolicy): () => void;
   effects(): 'no' | 'yes' | 'unknown';
+  assertWritable(path: string): void;
 }
 
 function absolute(path: string): string {
@@ -145,5 +146,8 @@ export function createNoCoiProjectFs(inner: NoCoiProjectFsInner): NoCoiProjectFs
       };
     },
     effects: () => applied,
+    assertWritable(path: string) {
+      writable(path);
+    },
   });
 }

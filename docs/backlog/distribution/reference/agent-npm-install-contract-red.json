@@ -1,0 +1,156 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED \u043f\u0440\u0438\u043d\u044f\u0442: \u043c\u043e\u0436\u043d\u043e IMPLEMENT; merge \u0442\u043e\u043b\u044c\u043a\u043e \u043f\u043e\u0441\u043b\u0435 Final+GREEN. \u041e\u0434\u0438\u043d advisory, \u0431\u043b\u043e\u043a\u0435\u0440\u043e\u0432 \u043d\u0435\u0442.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/no-coi-agent-npm-install.md @ 8121fb14e0718a917fb4fd2d8793bdae9c042d9f; BASE 8f5516e070d7fd918309f0a9de5379c51351b462 (accepted SDK lifecycle); docs/backlog/epics/no-coi-agent-host-kit/goal.md I9/scenario6/Decisions; ADR-0487 with ADR-0375/0376/0418/0424 owners. Reviewed raw diff and BASE criteria. Independently reran shared real-installer RED8/control2 (/tmp/rifty-pr357-install-review-shared.log), Chromium RED15 (/tmp/rifty-pr357-install-review-browser.log), native Node24.16/npm11.17 section probes and committed fixture (/tmp/rifty-pr357-install-review-sections.json, /tmp/rifty-pr357-install-review-fresh-sections.json, /tmp/rifty-pr357-install-review-native-fixture.jsonl). All RED failures behavioral, no import/typecheck harness failures. No product implementation in reviewed diff. Full package.json plus requested dependency maps/versions and real module execution meet I9 works/scenario6; byte-identical lock serialization is not stated. Existing root-name/license metadata and absent-manifest baseline observations do not establish a scenario6 blocker; the opened scenario has package.json. This does not exempt dependency/installed-state differences from native parity. Native bare existing dev dependency stays in dev and resolves 2.0.0 with saved ^2.0.0; apparent log discrepancy was Vitest error grouping, confirmed directly.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I8 + scenario1\u20139",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:170",
+      "summary": "Connections-only packed reference host, both registry configurations and benchmark shared composition remain for next unit; whole-goal acceptance not proven."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Captured registryUrl, readonly registryConnected, restart and host override isolation",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:143; tests/no-coi/agent-npm-install.spec.ts:285",
+      "note": ""
+    },
+    {
+      "row": "Real agent shell uses installer; installed module executes and survives restart",
+      "source": "acceptance",
+      "trace": "I9 + scenario6",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:19; tests/no-coi/agent-npm-install.spec.ts:80",
+      "note": ""
+    },
+    {
+      "row": "Native dependency save semantics; shared COI owner; unsupported inputs remain loud",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/npm-install-registry.ts:14; tests/integration/npm-shell-save-parity.test.ts:21; tests/no-coi/agent-npm-install.spec.ts:19; packages/workbench/src/glue/npm-shell-command.test.ts:887",
+      "note": ""
+    },
+    {
+      "row": "SDK registry-missing, no mutation, shell recovery, truthful prompt without URL",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:80; tests/no-coi/agent-npm-install.spec.ts:143",
+      "note": ""
+    },
+    {
+      "row": "Held install rejects overlap; Stop aborts and settles before reuse",
+      "source": "acceptance",
+      "trace": "I9 + ADR-0376",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:202",
+      "note": ""
+    },
+    {
+      "row": "Readonly preflight, failed registry rollback, native quota and explicit retry",
+      "source": "acceptance",
+      "trace": "I9 + I4",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:285; tests/no-coi/agent-npm-install.spec.ts:346",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift \u00d7 npm argument save",
+      "source": "fault-matrix",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tests/integration/npm-shell-save-parity.test.ts:21; tests/no-coi/agent-npm-install.spec.ts:19",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie \u00d7 missing registry",
+      "source": "fault-matrix",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:143",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key \u00d7 install",
+      "source": "fault-matrix",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:202",
+      "note": ""
+    },
+    {
+      "row": "torn-state \u00d7 aborted/failed install",
+      "source": "fault-matrix",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:202; tests/no-coi/agent-npm-install.spec.ts:285; tests/no-coi/agent-npm-install.spec.ts:346",
+      "note": ""
+    },
+    {
+      "row": "observable-order \u00d7 readonly install",
+      "source": "fault-matrix",
+      "trace": "I4 + I9",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:285",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/no-coi/agent-npm-install.spec.ts:181",
+          "summary": "\u0414\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u0442\u043e\u0447\u043d\u043e\u0441\u0442\u044c API-\u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438: suite \u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 registryConnected=false, \u043d\u043e \u043d\u0435 true \u0438 \u043d\u0435 readonly-\u0434\u0435\u0441\u043a\u0440\u0438\u043f\u0442\u043e\u0440; missing-registry carrier \u043d\u0435 \u0441\u0447\u0438\u0442\u0430\u0435\u0442 \u0441\u0435\u0442\u0435\u0432\u044b\u0435 \u0437\u0430\u043f\u0440\u043e\u0441\u044b \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u043e. \u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043f\u0440\u044f\u043c\u044b\u0435 assertions \u0436\u0435\u043b\u0430\u0442\u0435\u043b\u044c\u043d\u043e; \u0438\u0441\u043f\u043e\u043b\u043d\u0435\u043d\u043d\u043e\u0433\u043e surviving mutant \u043d\u0435\u0442, \u043f\u043e\u044d\u0442\u043e\u043c\u0443 REV-4 coverage \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f pass.",
+          "authority": "",
+          "evidence": "Reading only; no executed mutant. Existing behavior RED repeated by pnpm test:no-coi agent-npm-install.spec.ts: /tmp/rifty-pr357-install-review-browser.log (15 behavioral RED)."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "8121fb14e0718a917fb4fd2d8793bdae9c042d9f"
+}

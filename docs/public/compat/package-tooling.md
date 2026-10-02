@@ -9,7 +9,9 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Feature | Status | Notes |
 |---|---|---|
 | `npm install` from `package.json` | ✅ | Installs registry `dependencies`/`devDependencies`/root `optionalDependencies` tarballs and honors `dist-tags.latest` for unconstrained specs |
+| SDK no-COI agent shell `npm install [<pkg>…]` | ✅ | `toolchain.registryUrl` connects the existing installer; native saved dependency ranges/sections, readonly policy, busy rejection and Stop. No connection is valid and fails with SDK `registry-missing`; a host per-call install does not establish it (ADR-0487). |
 | Required network acquisition without a configured registry | ❌ | Workbench snapshot-only and optional `InstallOptions.registry` keep local replay; required uncached metadata/tarballs throw `NotImplementedError('npm-client.registry.packument')` / `NotImplementedError('npm-client.registry.tarball')`. Eddy without registry rejects before callbacks. This host policy is separate from npm `--offline` |
+| Exact npm project metadata/empty-project initialization | ❌ | Existing glue differs on default manifest fields, empty-project lock creation, root name and package license metadata; tracked in `backlog/npm-client/npm-project-metadata`. Dependency-change parity is a separate claim. |
 | npm-authored `package-lock.json` replay | ⚠️ | Entry `optionalDependencies` replay through the shared cpu gate (native siblings skip with a warning, their lock-recorded subtrees preserved), lock-pinned `peerDependencies` traversal, loud `EBROKENLOCK unreached-entries` for entries no edge reaches. Proven end-to-end against real npm 11.17.0 locks: `vite@8.0.16` (47 entries, wasm32 rolldown binding + `vite build`) and a 6-package peer-only lock (module import). Recorded divergence: `npm ci` materializes parentless orphan lock entries verbatim; rifty refuses loudly — delete the lockfile and re-install |
 | npm workspaces | ❌ | Non-workspace `package.json`/`node_modules` prefix discovery matches npm; `package.json#workspaces` at the selected or an ancestor root throws `NotImplementedError('npm.workspaces')` before install/script mutation because npm separates the root lock/tree prefix from the selected member manifest/lifecycle target; malformed declarations fail as `EWORKSPACESCONFIG`; `--workspaces=false` remains a loud unsupported flag |
 | `npm` top-level command help | ✅ | `npm help` prints the browser npm subset and exits 0; bare `npm` / `-h` / `--help` print the same list with npm's usage exit 1; `npm help <topic>` is an explicit `NotImplementedError('npm.help.topic')` ceiling |
@@ -39,7 +41,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tests/e2e/command-resolver-discovery.spec.ts`
 - `tests/browser-unit/owner-shell-routing.spec.ts`
 - `tests/integration/npm-shell-prefix-parity.test.ts`
-- `packages/workbench/src/glue/npm-shell-command.test.ts`
+- `tests/integration/npm-shell-command.test.ts`
 - `packages/workbench/src/workers/workbench-project-runtime.test.ts`
 - `packages/workbench/src/glue/pty-client.test.ts`
 - `apps/playground/src/adapters/playground-terminal-ui.contract.test.ts`

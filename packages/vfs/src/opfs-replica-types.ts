@@ -28,3 +28,11 @@ export interface ReplicaPersistence {
   ): Promise<{ readonly base: boolean }>;
   closeAfter(settled: Promise<void>): void;
 }
+
+/** Native admission only; hydration follows the admitted notification. */
+export type ReplicaAdmissionEvent =
+  | {
+      readonly phase: 'waiting-for-storage-writer';
+      readonly cause: { readonly name: string; readonly message: string };
+    }
+  | { readonly phase: 'storage-admitted' };

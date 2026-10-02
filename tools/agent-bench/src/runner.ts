@@ -42,6 +42,7 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
       taskSet,
       endpoint,
       limits: config.limits,
+      ...(config.noCoiPolicies === undefined ? {} : { noCoiPolicies: config.noCoiPolicies }),
       runsPerTask: config.runsPerTask,
       toolContextCaveat: caveat,
       unsupported: ['rifty-no-coi/node-endpoint: installed-bin resident preview only'],

@@ -53,6 +53,28 @@ For active checks of COI Workbench and the non-COI Workbench toolchain, see
 [`checkSandboxSupport`](https://github.com/vanilla-wave/rifty/blob/main/docs/public/sandbox-support.md).
 The generic SDK sandbox is a different composition; `checkCapabilities()` stays synchronous.
 
+## Agent in an existing no-COI app
+
+Copy the [reference host](https://github.com/vanilla-wave/rifty/blob/main/tests/integration/fixtures/workbench-vite-consumer/src/host.ts)
+and connect your copied Workbench assets, namespace/root, model catalog/endpoint,
+optional registry, policy values and render callbacks. It uses the public
+SDK/agent APIs, built-in transport and transcript reducer; no bundler plugin or
+runtime service worker. This private application recipe is also the benchmark's
+no-COI composition, not a published SDK entrypoint.
+
+For initial preparation, `prepare({snapshot, files})` explicitly applies the
+snapshot before writing supplied sources; `install:{registryUrl}` optionally
+installs from the prepared manifest. SDK snapshot conflicts remain visible.
+For saved reopen, call `host.call(() => host.sandbox.toolchain.open({cwd: root}))`
+without preparing the initial snapshot/files again: saved edits and dependencies
+remain. See the [complete recipe and proof](https://github.com/vanilla-wave/rifty/blob/main/tests/integration/fixtures/workbench-vite-consumer/README.md).
+
+The reference host stores no applied snapshot identity, never selects force and
+owns no deployment/reconciliation policy (ADR-0490). Initial preparation is not
+an idempotent open operation; explicitly supplied files are written each time.
+Agent turns use `host.agent`; `host.call` serializes only the app's own calls.
+An app action overlapping the agent may receive typed busy; retry after the turn.
+
 ## Install
 
 ```bash
@@ -189,10 +211,72 @@ Only valid lock facts grant adapters; missing/corrupt dependencies or adapter
 bytes fail at actual use. Explicit install/apply is optional recovery after
 interruption, never an admission requirement or automatic retry.
 
-Update SDK and copied Worker together (protocol v5). Older Workers reject during
-handshake. Errors cross the boundary as ordinary `Error` objects; inspect
-`name`/`message`, including `SandboxPersistenceError`, rather than class identity.
+Update SDK and copied Worker together (protocol v6). Older Workers reject during
+handshake. Errors retain ordinary Error receipts; `sandboxErrorKind(error)` from
+the SDK root discriminates known outcomes across Worker/package boundaries.
+Unknown failures return undefined; preserve their original name/message/cause.
+
+| Kind | Retry condition |
+| --- | --- |
+| busy | Active toolchain operation has settled; no automatic queue. |
+| resident-busy | Stop the resident before the incompatible operation. |
+| occupied | Native namespace holder closes; recreate sandbox. Both existing startup/guard deadlines retain native contention cause; guard expiry stays OpfsPreloadError. |
+| snapshot-conflict | Host resolves conflicting payload targets or explicitly chooses force; same bytes and unrelated files are allowed. |
+| snapshot-mismatch | Correct snapshot bytes/id/template/runtime compatibility before retry. |
+| restart-busy | Active restart has settled. |
+| registry-missing | Configure toolchain.registryUrl when creating the sandbox; a per-call host override does not connect shell installs. |
+| persistence | Clear native storage fault and inspect effects/live data before recovery; a failed receipt can already have applied writes. |
+
 Unreadable OPFS preload rejects: clear the native fault and recreate the sandbox.
+A permission/import timeout or hydration stall after admission is not occupied.
+
+### Opening and application progress
+
+```ts
+import { createSandbox, sandboxErrorKind } from '@riftydev/sdk';
+const opening = createSandbox({
+  requireCrossOriginIsolation: false,
+  toolchain: { workerUrl },
+});
+const unsubscribe = opening.runtime.on(event => {
+  if (event.type === 'progress') console.log(event);
+});
+const sandbox = await opening; // Still waits for actual readiness.
+// Subscription survives resolution and sandbox.restart().
+// Later: unsubscribe(); sandbox.dispose();
+```
+
+`SandboxOpening<T>` is a Promise with an early runtime.on view. No replay; attach
+before await. Boot phases: worker-spawned → storage-admitted → toolchain-ready.
+Native contention adds waiting-for-storage-writer with its cause before admission.
+Generic mode has no toolchain handshake phase.
+
+Snapshot progress uses operation=snapshot and its existing request id (scoped to
+one Worker generation; reset at replacement). Phases: fetch(bytes,total?),
+entries(written,total), flush-cache(persisted,total), flush-payload(persisted,total).
+Entries count changed payload files/directories, excluding root/cache; same bytes
+write zero. Flush counts native pending watermark operations, not archive entries.
+Missing, content-encoded or CORS-hidden-encoding byte totals stay absent. No pending native writes
+means no flush-count event; failures never synthesize completion. These are separate
+operation counts, not a percentage of the whole opening. Dispose/restart cancels
+old requests; their late frames cannot update the replacement operation.
+
+### Registry connection for shell installs
+
+Set `toolchain: { workerUrl, registryUrl }` when creating the sandbox to allow
+project/agent `npm install [<pkg>…]`. The captured endpoint survives restart;
+`toolchain.registryConnected` is a readonly configuration fact, not a probe.
+The command uses the same installer/claims/activation as host toolchain.install.
+It needs the opened project's package.json; registry semver/tag specs and
+`-D`/`--save-dev`, `-E`/`--save-exact`, `-S`/`--save`, `--prefer-online` are supported.
+Manifest/lock dependency maps save resolved npm ranges; failed acquisition restores
+our manifest edit. Concurrent edits remain intact and cannot certify an install.
+
+Omitting the connection is valid: shell install fails before install writes/fetch
+with `sandboxErrorKind(outcome.error) === 'registry-missing'`. Existing dependencies
+remain usable. Per-call host `install({ registryUrl })` does not connect later shell
+calls. Install shares command busy/Stop and project readonly policy; no queue.
+Unsupported specs, flags and lifecycle scripts retain their existing loud errors.
 
 ### Agent files and commands without COI
 

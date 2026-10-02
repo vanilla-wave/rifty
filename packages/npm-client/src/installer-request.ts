@@ -57,16 +57,17 @@ export async function normalizeInstallArgs(
     const manifest = await readRootPackageJson(opts.vfs, opts.cwd);
     rootName = rootName ?? manifest.name ?? 'root';
     normalizedRootVersion = normalizedRootVersion ?? manifest.version ?? '0.0.0';
+    const rootDependencies = { ...manifest.dependencies };
     rootLockfileDependencyMaps = {
-      dependencies: { ...manifest.dependencies },
+      dependencies: rootDependencies,
       devDependencies: { ...manifest.devDependencies },
       optionalDependencies: { ...manifest.optionalDependencies },
     };
-    dependencies = { ...manifest.devDependencies, ...manifest.dependencies };
-    optionalDependencies = { ...manifest.optionalDependencies };
-    for (const name of Object.keys(optionalDependencies)) {
-      delete dependencies[name];
+    // npm's normalized root omits prod duplicates of optional declarations.
+    for (const name of Object.keys(manifest.optionalDependencies)) {
+      delete rootDependencies[name];
     }
+    ({ dependencies, optionalDependencies } = selectRootDependencyEdges(manifest));
     opts = {
       ...opts,
       overrides: mergeOverrides(manifest.overrides, opts.overrides),
@@ -91,6 +92,20 @@ export async function normalizeInstallArgs(
     rootLockfileDependencyMaps,
     opts,
   };
+}
+
+/** npm's root edge precedence: dev, optional, prod. Shared with Eddy prefetch. */
+export function selectRootDependencyEdges(maps: RootLockfileDependencyMaps): {
+  dependencies: Record<string, string>;
+  optionalDependencies: Record<string, string>;
+} {
+  const dependencies = { ...maps.dependencies, ...maps.devDependencies };
+  const optionalDependencies = { ...maps.optionalDependencies };
+  for (const name of Object.keys(optionalDependencies)) {
+    if (Object.hasOwn(maps.devDependencies, name)) delete optionalDependencies[name];
+    else delete dependencies[name];
+  }
+  return { dependencies, optionalDependencies };
 }
 
 function isInstallOptions(value: unknown): value is InstallOptions {

@@ -5,14 +5,16 @@
   "type": "module",
   "dependencies": {
     "@earendil-works/pi-ai": "0.85.1",
-    "@riftydev/agent": "workspace:*",
     "@esbuild/wasi-preview1": "0.28.0",
+    "@riftydev/agent": "workspace:*",
     "@riftydev/net": "workspace:*",
     "@riftydev/npm-client": "workspace:*",
     "@riftydev/runtime-js": "workspace:*",
     "@riftydev/runtime-wasi": "workspace:*",
+    "@riftydev/sdk": "workspace:*",
     "@riftydev/shadow-registry": "workspace:*",
     "@riftydev/shell": "workspace:*",
-    "@riftydev/vfs": "workspace:*"
+    "@riftydev/vfs": "workspace:*",
+    "@riftydev/workbench": "workspace:*"
   }
 }

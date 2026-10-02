@@ -1,3 +1,4 @@
+import type { ReplicaAdmissionEvent } from './opfs-replica-types.ts';
 /**
  * Synchronous mirror of a VFS — needed by `fs.readFileSync` and friends.
  *
@@ -148,18 +149,29 @@ export function installOpfsFs(
 ): Promise<{ vfs: OpfsVfs; fsSync: OpfsFsSync }>;
 export function installOpfsFs(
   root: FileSystemDirectoryHandle | undefined,
-  options: { readonly ioReportTimeoutMs?: number; readonly layout: 'replica' },
+  options: {
+    readonly ioReportTimeoutMs?: number;
+    readonly layout: 'replica';
+    readonly onAdmission?: (event: ReplicaAdmissionEvent) => void;
+  },
 ): Promise<{ vfs: Vfs; fsSync: OpfsFsSync; layoutIssue?: OpfsLayoutIssue }>;
 export async function installOpfsFs(
   root?: FileSystemDirectoryHandle,
-  options: { readonly ioReportTimeoutMs?: number; readonly layout?: 'files' | 'replica' } = {},
+  options: {
+    readonly ioReportTimeoutMs?: number;
+    readonly layout?: 'files' | 'replica';
+    readonly onAdmission?: (event: ReplicaAdmissionEvent) => void;
+  } = {},
 ): Promise<{ vfs: Vfs; fsSync: OpfsFsSync; layoutIssue?: OpfsLayoutIssue }> {
   const ioReportTimeoutMs = options.ioReportTimeoutMs;
   const layout = options.layout ?? 'files';
   if (layout !== 'files' && layout !== 'replica') throw new TypeError('Unknown OPFS layout');
   const mount = root ?? (await acquireOpfsRoot());
   if (layout === 'replica') {
-    const pair = await createReplicaPair(mount, { ioReportTimeoutMs });
+    const pair = await createReplicaPair(mount, {
+      ioReportTimeoutMs,
+      onAdmission: options.onAdmission,
+    });
     setSyncMirror(pair.fsSync, { async: pair.vfs });
     return pair;
   }

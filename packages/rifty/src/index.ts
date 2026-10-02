@@ -26,6 +26,7 @@
  * }
  * ```
  */
+export { sandboxErrorKind, type SandboxErrorKind } from './sandbox-errors.ts';
 export { COI_REQUIRED_MESSAGE, createSandbox } from './sandbox.ts';
 export type {
   SandboxProject,
@@ -39,6 +40,7 @@ export type {
   CreateSandboxOptions,
   GenericCreateSandboxOptions,
   Sandbox,
+  SandboxOpening,
   SandboxCapabilityFeature,
   SandboxCapabilityReport,
   SandboxDeps,
@@ -64,6 +66,8 @@ export type {
   EvalResult,
   RuntimeController,
   RuntimeEvent,
+  RuntimeProgressEvent,
+  SnapshotProgress,
   RuntimeFs,
   RuntimeEffects,
   RuntimeFsDirent,

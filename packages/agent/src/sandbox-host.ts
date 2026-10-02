@@ -2,10 +2,56 @@ import type { AgentCapabilities, AgentFiles, AgentHost, SandboxAgentHostOptions 
 
 const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
+function policyRecord(
+  value: unknown,
+  fields: readonly string[],
+  label: string,
+): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)
+  )
+    throw new TypeError(`${label} must be a plain object`);
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (typeof key !== 'string' || !fields.includes(key))
+      throw new TypeError(`${label} has unsupported field ${String(key)}`);
+    if (!('value' in descriptors[key]!)) throw new TypeError(`${label} has accessor fields`);
+  }
+  return value as Record<string, unknown>;
+}
+
 export function createSandboxAgentHost(options: SandboxAgentHostOptions): AgentHost {
-  const project = options.sandbox.project(options.project);
+  const policies = policyRecord(options.policies, ['files', 'shell'], 'capability policies');
+  const effective = (capability: 'files' | 'shell') => {
+    const override = policyRecord(
+      policies?.[capability],
+      ['readonlyPaths', 'allowedCommands'],
+      `${capability} policy`,
+    );
+    if (override === undefined) return options.project;
+    // Preserve SDK validation of the original object's prototype/accessors.
+    return Object.create(Object.getPrototypeOf(options.project), {
+      ...Object.getOwnPropertyDescriptors(options.project),
+      ...Object.getOwnPropertyDescriptors(override),
+    }) as SandboxAgentHostOptions['project'];
+  };
+  const filePolicy = effective('files');
+  const shellPolicy = effective('shell');
+  const project = options.sandbox.project(filePolicy);
+  const shellProject = options.sandbox.project(shellPolicy);
   const root = options.project.root;
-  const policy = JSON.stringify(options.project);
+  const policyValues = (value: SandboxAgentHostOptions['project']) => ({
+    root: value.root,
+    readonlyPaths: value.readonlyPaths,
+    allowedCommands: value.allowedCommands,
+  });
+  const policy = JSON.stringify({
+    files: policyValues(filePolicy),
+    shell: policyValues(shellPolicy),
+  });
   const files: AgentFiles = {
     async read(path) {
       const bytes = await project.fs.readFile(path);
@@ -30,7 +76,7 @@ export function createSandboxAgentHost(options: SandboxAgentHostOptions): AgentH
   };
   const shell: NonNullable<AgentCapabilities['shell']> = async (command, signal, onOutput) => {
     signal?.throwIfAborted();
-    const run = project.run(command);
+    const run = shellProject.run(command);
     const detach = run.onOutput(({ chunk, stream }) => onOutput(chunk, stream));
     const stop = () => {
       void run.stop().catch(() => {});
@@ -64,6 +110,9 @@ export function createSandboxAgentHost(options: SandboxAgentHostOptions): AgentH
         shell,
         notes: [
           'no-COI commands mode: each invocation starts at the project root with a fresh environment. Files use ordinary read/transform/write, without CAS or rollback. The host owns build/preview mode changes.',
+          options.sandbox.toolchain.registryConnected
+            ? 'npm install uses the configured registry, subject to project policy; unsupported dependency specs and lifecycle scripts fail loudly.'
+            : 'No registry is connected: npm install fails with registry-missing. Existing installed dependencies remain usable.',
           `Project policy: ${policy}. Root bounds file tools; SDK command policy is not a hostile-code filesystem jail.`,
         ],
       };

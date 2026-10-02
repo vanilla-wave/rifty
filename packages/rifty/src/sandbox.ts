@@ -1,7 +1,6 @@
 import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@riftydev/net';
 import {
   type RuntimeController,
-  type RuntimeEvent,
   type RuntimeFs,
   type RuntimeOptions,
   spawnRuntime,
@@ -25,6 +24,7 @@ import {
   setupPreviewBridge,
 } from '@riftydev/service-worker';
 import type { CapabilityCheck } from './capabilities.ts';
+import { createSandboxEvents } from './sandbox-events.ts';
 import { delegateSandboxFs } from './sandbox-fs.ts';
 import {
   type SandboxProject,
@@ -71,8 +71,12 @@ export interface ToolchainCreateSandboxOptions extends CreateSandboxCommonOption
   /** Explicit admission for the shared-memory-free tier. */
   readonly requireCrossOriginIsolation: false;
   /** Bundler-resolved `@riftydev/workbench/no-coi-toolchain-worker` URL. */
-  readonly toolchain: { readonly workerUrl: string | URL };
+  readonly toolchain: { readonly workerUrl: string | URL; readonly registryUrl?: string };
 }
+
+export type SandboxOpening<T extends Sandbox> = Promise<T> & {
+  readonly runtime: Pick<RuntimeController, 'on'>;
+};
 
 export type CreateSandboxOptions = GenericCreateSandboxOptions | ToolchainCreateSandboxOptions;
 
@@ -112,6 +116,8 @@ export type SandboxSnapshotSource = ToolchainSnapshotSource;
 export type SandboxApplySnapshotInput = ToolchainApplySnapshotRequest;
 
 export interface SandboxToolchain {
+  /** Configured endpoint, not network reachability; per-call install overrides do not connect it. */
+  readonly registryConnected: boolean;
   install(input: ToolchainInstallRequest): Promise<void>;
   /** Open saved files without installation admission or acquisition. */
   open(input: ToolchainOpenRequest): Promise<void>;
@@ -244,8 +250,8 @@ export const COI_REQUIRED_MESSAGE =
  * realm-global singletons (ADR-0070 D4). Toolchain mode owns VFS/runtime inside
  * its selected Worker. {@link Sandbox.dispose} tears down only that Worker; the
  * service-worker registration persists. Register your
- * `sandbox.runtime.on(...)` handler immediately after this resolves so you don't
- * miss early `ready` / `stdout` events (the controller does not replay them).
+ * `opening.runtime.on(...)` handler before awaiting to observe boot; events are
+ * not replayed. The subscription remains active on the resolved sandbox.
  *
  * @param options - generic or explicit toolchain Worker configuration.
  * @param deps - test-only injection seam; leave empty in production.
@@ -253,18 +259,34 @@ export const COI_REQUIRED_MESSAGE =
 export function createSandbox(
   options: ToolchainCreateSandboxOptions,
   deps?: SandboxDeps,
-): Promise<ToolchainSandbox>;
+): SandboxOpening<ToolchainSandbox>;
 export function createSandbox(
   options: GenericCreateSandboxOptions,
   deps?: SandboxDeps,
-): Promise<Sandbox>;
+): SandboxOpening<Sandbox>;
 export function createSandbox(
   options: CreateSandboxOptions,
   deps?: SandboxDeps,
-): Promise<Sandbox | ToolchainSandbox>;
-export async function createSandbox(
+): SandboxOpening<Sandbox | ToolchainSandbox>;
+export function createSandbox(
   options: CreateSandboxOptions,
   deps: SandboxDeps = {},
+): SandboxOpening<Sandbox | ToolchainSandbox> {
+  const events = createSandboxEvents();
+  const opening = bootSandbox(options, deps, events).catch((error) => {
+    events.clear();
+    throw error;
+  });
+  return Object.defineProperty(opening, 'runtime', {
+    value: Object.freeze({ on: events.on }),
+    enumerable: true,
+  }) as SandboxOpening<Sandbox | ToolchainSandbox>;
+}
+
+async function bootSandbox(
+  options: CreateSandboxOptions,
+  deps: SandboxDeps,
+  events: ReturnType<typeof createSandboxEvents>,
 ): Promise<Sandbox | ToolchainSandbox> {
   const requireCrossOriginIsolation: unknown = options.requireCrossOriginIsolation;
   if (
@@ -294,16 +316,26 @@ export async function createSandbox(
       startupTimeoutMs: options.startupTimeoutMs,
     });
     const workerUrl = String(options.toolchain.workerUrl);
+    const registryUrl = options.toolchain.registryUrl;
+    if (
+      registryUrl !== undefined &&
+      (typeof registryUrl !== 'string' ||
+        registryUrl.trim().length === 0 ||
+        registryUrl.includes('\0'))
+    )
+      throw new TypeError('toolchain.registryUrl must be a non-empty string without NUL');
     const { swError } = await bootServiceWorker(options, deps, logger);
     return bootToolchainSandbox(
       {
         ...startup,
         workerUrl,
+        ...(registryUrl === undefined ? {} : { registryUrl }),
         vmEngine: startup.vmEngine ?? 'rewrite',
         capabilities,
         ...(swError === undefined ? {} : { swError }),
       },
       logger,
+      events,
     );
   }
 
@@ -314,7 +346,14 @@ export async function createSandbox(
   const { swError } = await bootServiceWorker(options, deps, logger);
 
   const spawn = deps.spawn ?? spawnRuntime;
-  const runtime = spawn({ workerUrl: String(options.workerUrl) });
+  const native = spawn({ workerUrl: String(options.workerUrl) });
+  const detach = native.on(events.emit);
+  const dispose = () => {
+    detach();
+    events.clear();
+    native.dispose();
+  };
+  const runtime = { ...native, on: events.on, dispose };
 
   return {
     runtime,
@@ -371,15 +410,18 @@ function logToolchainStartup(
 async function bootToolchainSandbox(
   options: ToolchainRuntimeOptions & {
     readonly workerUrl: string;
+    readonly registryUrl?: string;
     readonly vmEngine: NonNullable<RuntimeOptions['vmEngine']>;
     readonly capabilities: CapabilityCheck;
     readonly swError?: string;
   },
   logger: Pick<Console, 'warn' | 'error'>,
+  events: ReturnType<typeof createSandboxEvents>,
 ): Promise<ToolchainSandbox> {
   let current: ToolchainRuntimeController = spawnToolchainRuntime(options);
   let vfs: VfsBootInfo;
   const detachStartup = logToolchainStartup(current, logger);
+  const detachOpening = current.on(events.emit);
   try {
     await current.toolchainReady;
     vfs = current.toolchainVfs;
@@ -388,10 +430,10 @@ async function bootToolchainSandbox(
     throw error;
   } finally {
     detachStartup();
+    detachOpening();
   }
 
   const ownerToken = `sdk-${crypto.randomUUID()}`;
-  const handlers = new Set<(event: RuntimeEvent) => void>();
   let detachCurrent: () => void = () => {};
   let tearPreview: (() => void) | null = null;
   let pendingWrites = 0;
@@ -402,15 +444,7 @@ async function bootToolchainSandbox(
   let activation: ReturnType<ToolchainRuntimeController['snapshotToolchainState']> = null;
   let residentRequest = current.snapshotResidentRequest();
 
-  const emit = (event: RuntimeEvent): void => {
-    for (const handler of handlers) {
-      try {
-        handler(event);
-      } catch (error) {
-        console.error('runtime listener threw', error);
-      }
-    }
-  };
+  const emit = events.emit;
 
   const attachCurrent = (): void => {
     detachCurrent();
@@ -479,10 +513,7 @@ async function bootToolchainSandbox(
     dispose() {
       disposeSandbox();
     },
-    on(handler) {
-      handlers.add(handler);
-      return () => handlers.delete(handler);
-    },
+    on: events.on,
     writeFile(path, content) {
       assertOperable();
       current.writeFile(path, content);
@@ -497,6 +528,9 @@ async function bootToolchainSandbox(
   };
 
   const toolchain: SandboxToolchain = {
+    get registryConnected() {
+      return options.registryUrl !== undefined;
+    },
     async applySnapshot(input) {
       assertOperable();
       await current.toolchain.applySnapshot(input);
@@ -534,7 +568,7 @@ async function bootToolchainSandbox(
     tearPreview = null;
     detachCurrent();
     current.dispose();
-    handlers.clear();
+    events.clear();
   }
 
   async function restart(restartOptions: SandboxRestartOptions): Promise<SandboxRestartReport> {
@@ -616,6 +650,7 @@ async function bootToolchainSandbox(
     project(projectOptions) {
       assertOperable();
       return createSandboxProject(projectOptions, {
+        registryUrl: options.registryUrl,
         current() {
           assertOperable();
           return current;

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Link the shared no-COI agent reference host with explicit initial preparation and saved open; remove automatic snapshot identity/force/reconciliation policy (ADR-0489/0490).
+
+- Add captured toolchain.registryUrl and readonly registryConnected; project/agent npm install reports registry-missing without a connection. Toolchain protocol v6 requires matching copied assets (ADR-0487).
+
+- Add early SandboxOpening.runtime.on, structural sandboxErrorKind and real boot/snapshot progress; preserve awaited readiness and restart subscriptions (ADR-0486).
+
 - README links the browser support matrix (ADR-0469).
 - Report no-COI Worker/threaded-WASM capability as the explicit worker_threads.Worker gap; shared memory allocation remains native (ADR-0470).
 

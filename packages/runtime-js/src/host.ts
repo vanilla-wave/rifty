@@ -1,4 +1,5 @@
 import { type RuntimeFs, createRuntimeFs, deserializeRuntimeError } from './host-fs.ts';
+import type { RuntimeProgressEvent } from './protocol.ts';
 export type { RuntimeFs } from './host-fs.ts';
 import { NotImplementedError } from '@riftydev/io';
 import { applyRecoveryFsOperation } from './host-fs-recovery.ts';
@@ -60,6 +61,7 @@ export interface RuntimeOptions {
 export type ToolchainRuntimeOptions = RuntimeOptions & RuntimeStartupOptions;
 
 export type RuntimeEvent =
+  | RuntimeProgressEvent
   | { readonly type: 'ready' }
   | { readonly type: 'stdout'; readonly chunk: string }
   | { readonly type: 'stderr'; readonly chunk: string }
@@ -136,6 +138,7 @@ type PendingRequest =
     }
   | {
       readonly kind: 'toolchain';
+      readonly operation: ToolchainRequest['op'];
       readonly observer?: RuntimeCommandObserver;
       resolve(result: ToolchainResult): void;
       reject(err: unknown): void;
@@ -176,6 +179,7 @@ function createRuntimeController(
   const pendingRequests = new Map<number, PendingRequest>();
   let toolchainBackend: 'opfs' | 'memory' | null = null;
   let toolchainReason: string | undefined;
+  let waitingCause: { readonly name: string; readonly message: string } | undefined;
   let toolchainReadySettled = false;
   let resolveToolchainReady: ((backend: 'opfs' | 'memory') => void) | undefined;
   let rejectToolchainReady: ((error: unknown) => void) | undefined;
@@ -197,6 +201,7 @@ function createRuntimeController(
     if (!toolchainMode || toolchainReadySettled || !ready || toolchainBackend === null) return;
     toolchainReadySettled = true;
     if (toolchainHandshakeTimer !== undefined) clearTimeout(toolchainHandshakeTimer);
+    emit({ type: 'progress', operation: 'boot', phase: 'toolchain-ready' });
     resolveToolchainReady?.(toolchainBackend);
   }
 
@@ -288,7 +293,13 @@ function createRuntimeController(
       return Promise.reject(err);
     }
     const promise = new Promise<ToolchainResult>((resolve, reject) => {
-      pendingRequests.set(request.id, { kind: 'toolchain', resolve, reject, observer });
+      pendingRequests.set(request.id, {
+        kind: 'toolchain',
+        operation: request.op,
+        resolve,
+        reject,
+        observer,
+      });
     });
     try {
       send({ type: 'toolchain', request });
@@ -312,10 +323,26 @@ function createRuntimeController(
       ...(name === undefined ? {} : { name }),
     });
     const peer = worker;
+    waitingCause = undefined;
+    queueMicrotask(() => {
+      if (worker === peer) emit({ type: 'progress', operation: 'boot', phase: 'worker-spawned' });
+    });
     peer.addEventListener('message', (event: MessageEvent<ToolchainWorkerMessage>) => {
       if (worker !== peer) return;
       const msg = event.data;
       switch (msg.type) {
+        case 'progress': {
+          if (msg.operation === 'boot') {
+            if (toolchainReadySettled) break;
+            if (msg.phase === 'waiting-for-storage-writer') waitingCause = msg.cause;
+            if (msg.phase === 'storage-admitted') waitingCause = undefined;
+          } else {
+            const request = pendingRequests.get(msg.id);
+            if (request?.kind !== 'toolchain' || request.operation !== 'apply-snapshot') break;
+          }
+          emit(msg);
+          break;
+        }
         case 'ready':
           ready = true;
           if (opts.fixture) send({ type: 'load-fixture', files: opts.fixture });
@@ -428,11 +455,12 @@ function createRuntimeController(
 
   if (toolchainMode) {
     toolchainHandshakeTimer = setTimeout(() => {
-      terminateToolchainPeer(
-        toolchainHandshakeError(
-          `toolchain Worker did not complete ${TOOLCHAIN_PROTOCOL} handshake within ${startupTimeoutMs}ms`,
-        ),
+      const error = toolchainHandshakeError(
+        `toolchain Worker did not complete ${TOOLCHAIN_PROTOCOL} handshake within ${startupTimeoutMs}ms`,
       );
+      if (waitingCause !== undefined)
+        Object.assign(error, { code: 'ERR_STORAGE_OCCUPIED', cause: waitingCause });
+      terminateToolchainPeer(error);
     }, startupTimeoutMs);
   }
   try {

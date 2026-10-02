@@ -1,0 +1,172 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted; implement I8. No merge/goal-completion claim: actual shared host, both packed registry journeys and packed benchmark smoke still require Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/no-coi-agent-reference-host.md @ 2287ff4f0d031aa01f68c89bfe0f86acd99341ac; BASE becdaddfb1b35484a4c183a18556d7abe5a8d47f (accepted I9); goal docs/backlog/epics/no-coi-agent-host-kit/goal.md scenario1–9/I8 and actual Decisions; ADR-0417/0420/0489. Fresh reviewer /root/reference_contract read raw contract, complete BASE diff, PR357 body (/tmp/rifty-pr357-reference-contract-pr.json), goal/ledger, accepted SDK/agent review records and source carriers. RDY-8 reuse applies only to unchanged SDK/agent semantics: final I8 composition is NOT inherited. New stateful recipe uses real current SDK sequence as composition-gap RED. Independently ran pnpm exec playwright test -c playwright.no-coi.config.ts --project=chromium tests/no-coi/reference-host-deploy.spec.ts: behavioral RED at lines120/123, expected ^4.1.5 received undefined; successful pre-install/require and post-force require controls; /tmp/rifty-pr357-reference-contract-independent-red.log. First sandboxed attempt could not bind Vite port; escalated rerun reached these assertions. No host implementation exists at reviewed HEAD. Coverage below grades preparation/promise, not delivered I8 GREEN.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I8 + scenario1–9",
+      "location": "docs/backlog/distribution/no-coi-agent-reference-host.md:26",
+      "summary": "Implement shared private host and app-owned applied-ID/reconciliation recipe; bind unchanged deploy postconditions to it; execute full packed scenario in both registry configurations plus packed benchmark smoke/defaults/preview baseline; independent Final+GREEN and whole-goal proof remain."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: inherited support/boot/snapshot and packed install semantics; new same-host CI wiring is final composition proof",
+      "source": "acceptance",
+      "trace": "I8 + scenario1–3 + scenario9",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:6; tests/no-coi/sdk-snapshot-progress.spec.ts:80; tests/integration/no-coi-agent-browser-proof.mjs:4; docs/backlog/distribution/reference/sdk-sandbox-lifecycle-final-green.json:1; docs/backlog/distribution/no-coi-agent-reference-host.md:26",
+      "note": ""
+    },
+    {
+      "row": "Acceptance2: new deploy reconciliation RED; inherited saved-open/force semantics; actual host ID selection and source sequencing bind at Final",
+      "source": "acceptance",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "tests/no-coi/reference-host-deploy.spec.ts:77; tests/no-coi/reference-host-deploy.spec.ts:118; tests/no-coi/no-coi-snapshot-application.spec.ts:118; docs/adr/distribution/0489-keep-reference-host-deployment-policy-outside-the-sdk.md:15",
+      "note": ""
+    },
+    {
+      "row": "Acceptance3: inherited catalog/setModel/text-only/reducer; packed health journey and exact wire metadata are final composition assertions",
+      "source": "acceptance",
+      "trace": "I8 + scenario5",
+      "status": "pass",
+      "citation": "packages/agent/src/text-content.test.ts:87; packages/agent/src/transcript.test.ts:116; docs/backlog/distribution/reference/agent-text-only-content-transport-final-green.json:1; docs/backlog/distribution/reference/agent-transcript-model-final-green.json:1; docs/backlog/distribution/no-coi-agent-reference-host.md:28",
+      "note": ""
+    },
+    {
+      "row": "Acceptance4: inherited real connected/unconnected shell install and unrestricted policies; both packed configurations remain final proof",
+      "source": "acceptance",
+      "trace": "I8 + scenario6",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:85; tests/no-coi/agent-npm-install.spec.ts:148; tests/no-coi/agent-capability-policy.spec.ts:163; docs/backlog/distribution/reference/agent-npm-install-final-green.json:1; docs/backlog/distribution/no-coi-agent-reference-host.md:29",
+      "note": ""
+    },
+    {
+      "row": "Acceptance5: inherited real Vite build, ordered model receipts and SDK busy; combined held-build reference journey remains final proof",
+      "source": "acceptance",
+      "trace": "I8 + scenario7",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-agent-browser-proof.mjs:98; tests/no-coi/no-coi-pi-agent.spec.ts:10; tests/no-coi/sdk-lifecycle.spec.ts:148; docs/backlog/distribution/reference/agent-shell-tool-output-order-final-green.json:1; docs/backlog/distribution/no-coi-agent-reference-host.md:30",
+      "note": ""
+    },
+    {
+      "row": "Acceptance6: inherited native two-page waiting/occupied/deadline/retry; final reference journey composes these unchanged semantics",
+      "source": "acceptance",
+      "trace": "I8 + scenario8",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:50; tests/no-coi/sdk-lifecycle.spec.ts:233; docs/backlog/distribution/reference/sdk-sandbox-lifecycle-final-green.json:1; docs/backlog/distribution/no-coi-agent-reference-host.md:31",
+      "note": ""
+    },
+    {
+      "row": "Acceptance7: accepted same-module/defaults promise; existing bench composition/preview baseline retained; new packed bench smoke is required at Final, no fresh library behavior introduced",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/no-coi-page.ts:35; tools/agent-bench/src/no-coi-page.ts:89; tests/integration/fixtures/workbench-vite-consumer/src/sandbox-agent-proof.ts:148; docs/adr/distribution/0489-keep-reference-host-deployment-policy-outside-the-sdk.md:25; docs/backlog/distribution/no-coi-agent-reference-host.md:32",
+      "note": ""
+    },
+    {
+      "row": "Acceptance8: documented connections-only boundary and allowed recipe match accepted goal; new recipe RED and inherited library ownership, final actual source/README inspection required",
+      "source": "acceptance",
+      "trace": "I8 + scenario9",
+      "status": "pass",
+      "citation": "tests/no-coi/reference-host-deploy.spec.ts:89; docs/backlog/epics/no-coi-agent-host-kit/goal.md:91; docs/adr/distribution/0489-keep-reference-host-deployment-policy-outside-the-sdk.md:15; docs/backlog/distribution/no-coi-agent-reference-host.md:33",
+      "note": ""
+    },
+    {
+      "row": "Fault nonempty payload × direct apply: inherited conflict and unchanged-byte control",
+      "source": "fault-matrix",
+      "trace": "scenario4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:156; tests/no-coi/sdk-snapshot-progress.spec.ts:142; docs/backlog/distribution/reference/sdk-sandbox-lifecycle-final-green.json:1",
+      "note": ""
+    },
+    {
+      "row": "Fault missing registry × agent install: inherited real loud missing-registry receipt/no effects",
+      "source": "fault-matrix",
+      "trace": "scenario6",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:85; tests/no-coi/agent-npm-install.spec.ts:148; docs/backlog/distribution/reference/agent-npm-install-final-green.json:1",
+      "note": ""
+    },
+    {
+      "row": "Fault same-Worker overlap × build: inherited admitted-run busy semantics and retry; final held-build proof composes them",
+      "source": "fault-matrix",
+      "trace": "scenario7",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:148; tests/no-coi/agent-npm-install.spec.ts:209; docs/backlog/distribution/no-coi-agent-reference-host.md:49",
+      "note": ""
+    },
+    {
+      "row": "Fault native writer contention × second opener: inherited real two-page waiting/occupied then holder release/retry",
+      "source": "fault-matrix",
+      "trace": "scenario8",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:50; tests/no-coi/sdk-lifecycle.spec.ts:233; docs/backlog/distribution/reference/sdk-sandbox-lifecycle-final-green.json:1",
+      "note": ""
+    },
+    {
+      "row": "Fault force deploy × previous user dependency: NEW independently executed behavioral RED, actual post-install desired manifest lost from manifest/lock; executable leftover is a passing control",
+      "source": "fault-matrix",
+      "trace": "scenario4",
+      "status": "pass",
+      "citation": "tests/no-coi/reference-host-deploy.spec.ts:83; tests/no-coi/reference-host-deploy.spec.ts:118; /tmp/rifty-pr357-reference-contract-independent-red.log",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/no-coi/reference-host-deploy.spec.ts:91",
+          "authority": "",
+          "summary": "The new RED deliberately calls explicit apply(force), so it proves missing desired-manifest reconciliation, not the future applied-ID selector. Final coverage must also exercise same-ID reopen without refetch/stale-source overwrite and explicit reconciliation retry after the marker was written; SDK saved-open evidence alone cannot certify those host branches. No imagined implementation defect or extra preparation blocker asserted.",
+          "evidence": "Independent Chromium run: /tmp/rifty-pr357-reference-contract-independent-red.log; two failures only at120/123 (undefined versus ^4.1.5), install/use controls pass. Source91 invokes force directly and contains no host import or marker. REV-5 reading concern; no executed selector mutant exists before implementation."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "2287ff4f0d031aa01f68c89bfe0f86acd99341ac"
+}

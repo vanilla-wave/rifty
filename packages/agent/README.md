@@ -3,6 +3,28 @@
 Framework-free Pi coding agent over public rifty hosts. Runtime packages do not
 depend on it. ADR-0424/0436/0471/0479.
 
+Headless chat state comes from the exported pure reducer (ADR-0485):
+
+```ts
+import { createAgentTranscript, reduceAgentTranscript } from '@riftydev/agent';
+
+let transcript = createAgentTranscript();
+const detach = agent.subscribe(event => {
+  transcript = reduceAgentTranscript(transcript, event);
+  render(transcript);
+});
+```
+
+Pass the whole state back; read `items`, `status`, `detail`, `capabilities`.
+Message items separate `streamingText` from final `text`/native `message`.
+Tool items keep `callId`, `args`, raw `result`, ordered `output` chunks and
+`state`: pending/running/success/error/cancelled. Cancellation does not mean
+no effects; inspect the result. Notice items retain model/retry/compaction,
+steering, changed capabilities and terminal budget/context events. IDs stay
+stable through updates; native reset clears the projection. Keep state across
+sends/model switches; create fresh state for a new session. Only supplied live
+events are projected; cross-session history storage is caller-owned.
+
 ```ts
 import { createAgentSession, createWorkbenchAgentHost, createModels, createOpenAIProvider } from '@riftydev/agent';
 
@@ -36,6 +58,14 @@ The catalog is native pi `Models`: register providers with `setProvider` and
 native OpenAI models (reasoning defaults false, input defaults ['text']); limits
 are required. Custom providers own wire/auth and return native streams with real
 response metadata. The old session-level settings/streamFn/fetch forms are removed.
+
+Set `textOnlyContent: true` on a built-in OpenAI model entry for endpoints requiring
+string message content. Text parts concatenate, empty tool-call content becomes
+`''`; roles, tool calls and other fields remain native. The flag applies per selected
+entry, including retries and compaction. Such entries reject image prompts before
+dispatch and refuse images in restored history; no image is silently discarded.
+Unset/false retains native parts. Native provider callers' `onPayload` runs before
+this final content conversion (ADR-0483).
 
 `modelOptions: { [modelId]: { reasoning: 'medium', temperature: 1,
 samplingParams: { top_p: 0.95 } } }` supplies pi request defaults. Thinking defaults
@@ -97,7 +127,7 @@ import { createBrowserAgentPreview, createSandboxAgentHost } from '@riftydev/age
 
 const host = createSandboxAgentHost({
   sandbox,
-  project: { root: '/project', readonlyPaths: ['locked'], allowedCommands: ['npm', 'node'] },
+  project: { root: '/project' }, // unrestricted reference configuration
   mode: () => mode, // host sets 'commands' or 'preview'
   preview: () => {
     const current = resident;
@@ -109,12 +139,28 @@ const host = createSandboxAgentHost({
 ```
 
 Host owns `startBin` and `await sandbox.stopResident()` plus its preview element.
+The adapter reports the sandbox's configured registry truthfully. With
+`createSandbox({ toolchain: { workerUrl, registryUrl }, … })`, the ordinary shell
+tool can run npm install; there is no separate install tool. Without a connection,
+it reports registry-missing before install effects. The endpoint URL is not put
+in prompt notes. File/shell policies still apply; defaults remain unrestricted.
+
 Set preview mode after start; return to commands mode after exit. Preview mode
 omits file/shell tools. No raw FS fallback, automatic mode switch or sandbox
 disposal occurs in this adapter. SDK readonly/command policy stays authoritative;
 root bounds standard file tools, not arbitrary guest code. Each command starts
 with fresh cwd/env. File edits use ordinary read/transform/write without CAS;
 forced Stop returns the SDK's unknown effects. Diagnostics/SCM are unavailable.
+
+Optional `policies: { files: { readonlyPaths: [...] }, shell: { readonlyPaths: [...],
+allowedCommands: [...] } }` selects distinct SDK policies over the same root.
+Absent fields inherit `project`; present `undefined` clears a common restriction,
+arrays replace it. Empty `allowedCommands` denies all commands; empty
+`readonlyPaths` permits writes. SDK validates/enforces each policy (ADR-0484).
+For example, `policies: { shell: { readonlyPaths: ['.'] } }` leaves file tools
+writable while shell writes under the root fail. Explicit command allowlists must
+also include commands reached inside npm scripts: `['npm', 'node']` alone refuses
+`npm run build` when the script invokes `vite`; add `vite` or omit the allowlist.
 
 `send` continues retained history, including after errors. `stop` resolves after
 the host command settles and the slot is reusable. `reset` requires an idle

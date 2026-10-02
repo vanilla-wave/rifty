@@ -11,7 +11,7 @@
  * `fs.readFileSync`, the same realm where `initBackend()` runs.
  */
 
-import type { OpfsLayoutIssue } from './opfs-replica-types.ts';
+import type { OpfsLayoutIssue, ReplicaAdmissionEvent } from './opfs-replica-types.ts';
 import { OpfsFsSync } from './opfs-sync.ts';
 import { acquireOpfsRoot } from './opfs.ts';
 import { installMemoryFs, installOpfsFs } from './sync-mirror.ts';
@@ -71,6 +71,7 @@ export function detectVfsBackend(): 'opfs' | 'memory' {
  */
 export async function initializeBackend(
   options?: VfsStorageOptions,
+  onAdmission?: (event: ReplicaAdmissionEvent) => void,
 ): Promise<{ backend: 'opfs' | 'memory'; layoutIssue?: OpfsLayoutIssue }> {
   const storage = captureVfsStorageOptions(options);
   if (storage?.persistence === 'ephemeral') {
@@ -100,7 +101,7 @@ export async function initializeBackend(
       );
     }
     if (storage === undefined) await installOpfsFs(root);
-    else ({ layoutIssue } = await installOpfsFs(root, { layout: 'replica' }));
+    else ({ layoutIssue } = await installOpfsFs(root, { layout: 'replica', onAdmission }));
   } else {
     if (storage !== undefined) {
       const missingWritable =

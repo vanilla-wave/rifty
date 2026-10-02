@@ -1,17 +1,16 @@
 import {
-  type AgentEvent,
   type AgentHost,
-  type AgentMessage,
   type AgentResourceReport,
   type AgentSession,
   type AgentSessionEvent,
-  type AgentStatus,
   type AgentTrace,
-  type ImageContent,
+  type AgentTranscriptItem,
   createAgentSession,
+  createAgentTranscript,
+  reduceAgentTranscript,
 } from '@riftydev/agent';
 import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
-import { createStore, reconcile } from 'solid-js/store';
+import { createStore, reconcile, unwrap } from 'solid-js/store';
 import { downloadBlob } from '../glue/download.ts';
 import { CatalogSettings } from './CatalogSettings.tsx';
 import { ResourceReport } from './ResourceReport.tsx';
@@ -25,25 +24,6 @@ import {
   validateSettings,
 } from './settings.ts';
 import './chat.css';
-
-type ChatItem =
-  | {
-      readonly kind: 'message';
-      readonly id: number;
-      readonly role: 'user' | 'assistant';
-      readonly text: string;
-      readonly images?: readonly ImageContent[];
-    }
-  | {
-      readonly kind: 'tool';
-      readonly id: number;
-      readonly callId: string;
-      readonly name: string;
-      readonly args: unknown;
-      readonly running?: boolean;
-      readonly result?: string;
-      readonly isError?: boolean;
-    };
 
 interface ActiveSession {
   readonly agent: AgentSession;
@@ -66,22 +46,6 @@ interface BenchHook {
     readonly maxToolCalls: number;
     readonly runTimeoutMs: number;
   }>;
-}
-
-function messageText(message: AgentMessage): string {
-  if (message.role !== 'user' && message.role !== 'assistant') return '';
-  return typeof message.content === 'string'
-    ? message.content
-    : message.content
-        .filter((part) => part.type === 'text')
-        .map((part) => part.text)
-        .join('');
-}
-
-function messageImages(message: AgentMessage): ImageContent[] {
-  return message.role === 'user' && Array.isArray(message.content)
-    ? message.content.filter((part) => part.type === 'image')
-    : [];
 }
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -108,19 +72,43 @@ function resultText(result: ToolResult): string {
     : `${text}${text ? '\n\n' : ''}${json(result.details)}`;
 }
 
+function transcriptNotice(
+  event: Extract<AgentTranscriptItem, { kind: 'notice' }>['event'],
+): string {
+  switch (event.type) {
+    case 'retry':
+      return event.phase === 'start'
+        ? `Retry ${event.attempt}/${event.maxAttempts} in ${event.delayMs} ms (${event.source}).`
+        : `Retry ${event.attempt} ${event.success ? 'succeeded' : 'failed'} (${event.source}).`;
+    case 'compaction':
+      return event.phase === 'start'
+        ? `Compacting context: ${event.tokensBefore} tokens.`
+        : event.success
+          ? `Context compacted: ${event.tokensBefore} → ${event.tokensAfter} tokens (${event.source}).`
+          : `Compaction ${event.aborted ? 'aborted' : 'failed'}: ${event.errorMessage ?? ''}`;
+    case 'model':
+      return `Model: ${event.provider}/${event.model}`;
+    case 'capabilities':
+      return `Tools: ${event.tools.join(', ') || 'none'}. ${event.notes.join(' ')}`;
+    case 'repeated-call':
+      return `Repeated ${event.toolName} call (${event.count}).`;
+    case 'status':
+      return event.detail ?? event.status;
+  }
+}
+
 export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: () => void }) {
   const [settings, setSettings] = createSignal(loadSettings());
   const [draft, setDraft] = createSignal<ChatSettings>({ ...settings() });
   const [settingsOpen, setSettingsOpen] = createSignal(false);
-  const [rows, setRows] = createStore<ChatItem[]>([]);
-  const items = () => rows;
-  const setItems = (
-    update: readonly ChatItem[] | ((current: readonly ChatItem[]) => readonly ChatItem[]),
-  ) => {
-    const next = typeof update === 'function' ? update(rows) : update;
-    setRows(reconcile([...next], { key: 'id' }));
+  const [transcript, setTranscript] = createStore(createAgentTranscript());
+  const [localError, setLocalError] = createSignal(false);
+  const items = () => transcript.items;
+  const status = () => (localError() ? 'error' : transcript.status);
+  const clearTranscript = () => {
+    setLocalError(false);
+    setTranscript(reconcile(createAgentTranscript(), { key: 'id' }));
   };
-  const [status, setStatus] = createSignal<AgentStatus>('idle');
   const [detail, setDetail] = createSignal('');
   const [notice, setNotice] = createSignal('');
   const [resources, setResources] = createSignal<AgentResourceReport>();
@@ -132,10 +120,6 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
   const [busy, setBusy] = createSignal(false);
   const [hasSession, setHasSession] = createSignal(false);
   let active: ActiveSession | undefined;
-  let assistantIndex = -1;
-  let runStart = 0;
-  const [continuationNotices, setContinuationNotices] = createSignal<string[]>([]);
-  let nextMessageId = 1;
   let alive = true;
   let taskId: string | undefined;
   let list: HTMLDivElement | undefined;
@@ -143,145 +127,18 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
   const running = () => status() === 'running' || busy();
 
   createEffect(() => {
-    items().map((item) => (item.kind === 'message' ? item.text : item.result));
+    items().map((item) =>
+      item.kind === 'message'
+        ? (item.streamingText ?? item.text)
+        : item.kind === 'tool'
+          ? [item.result, item.output.length]
+          : item,
+    );
     if (followOutput)
       queueMicrotask(() => {
         if (list?.isConnected) list.scrollTop = list.scrollHeight;
       });
   });
-
-  function receive(event: AgentEvent) {
-    if (!alive) return;
-    if (event.type === 'agent_start') runStart = items().length;
-    if (
-      event.type === 'message_start' &&
-      (event.message.role === 'user' || event.message.role === 'assistant')
-    ) {
-      if (event.message.role === 'assistant') assistantIndex = items().length;
-      else setAttachments([]);
-      setItems((current) => [
-        ...current,
-        {
-          kind: 'message',
-          id: nextMessageId++,
-          role: event.message.role as 'user' | 'assistant',
-          text: messageText(event.message),
-          images: messageImages(event.message),
-        },
-      ]);
-    } else if (
-      (event.type === 'message_update' || event.type === 'message_end') &&
-      event.message.role === 'assistant'
-    ) {
-      setItems((current) =>
-        current.map((item, index) =>
-          index === assistantIndex && item.kind === 'message'
-            ? { ...item, text: messageText(event.message) }
-            : item,
-        ),
-      );
-      if (
-        event.type === 'message_end' &&
-        event.message.stopReason !== 'error' &&
-        event.message.stopReason !== 'aborted'
-      ) {
-        const calls: ChatItem[] = event.message.content
-          .filter((part) => part.type === 'toolCall')
-          .map((call) => ({
-            kind: 'tool',
-            id: nextMessageId++,
-            callId: call.id,
-            name: call.name,
-            args: structuredClone(call.arguments),
-          }));
-        setItems((current) => [...current, ...calls]);
-      }
-    } else if (event.type === 'tool_execution_start') {
-      const index = items().findIndex(
-        (item) =>
-          item.kind === 'tool' &&
-          item.callId === event.toolCallId &&
-          !item.running &&
-          item.result === undefined,
-      );
-      const fields = { running: true, args: structuredClone(event.args as unknown) };
-      setItems((current) =>
-        index < 0
-          ? [
-              ...current,
-              {
-                kind: 'tool',
-                id: nextMessageId++,
-                callId: event.toolCallId,
-                name: event.toolName,
-                ...fields,
-              },
-            ]
-          : current.map((item, offset) => (offset === index ? { ...item, ...fields } : item)),
-      );
-    } else if (event.type === 'tool_execution_end') {
-      const index = items().findIndex(
-        (item) =>
-          item.kind === 'tool' &&
-          item.callId === event.toolCallId &&
-          item.running &&
-          item.result === undefined,
-      );
-      setItems((current) =>
-        current.map((item, offset) =>
-          item.kind === 'tool' && offset === index
-            ? {
-                ...item,
-                result: resultText(event.result as ToolResult),
-                isError: event.isError,
-                running: false,
-              }
-            : item,
-        ),
-      );
-    } else if (event.type === 'agent_end') {
-      // The core supplies this run's completed history, including skipped Stop calls.
-      const current = items().slice(runStart);
-      const settled: ChatItem[] = [];
-      const id = () => current[settled.length]?.id ?? nextMessageId++;
-      for (const message of event.messages) {
-        if (message.role === 'user' || message.role === 'assistant') {
-          settled.push({
-            kind: 'message',
-            id: id(),
-            role: message.role,
-            text: messageText(message),
-            images: messageImages(message),
-          });
-          if (
-            message.role === 'assistant' &&
-            message.stopReason !== 'aborted' &&
-            message.stopReason !== 'error'
-          ) {
-            for (const call of message.content.filter((part) => part.type === 'toolCall'))
-              settled.push({
-                kind: 'tool',
-                id: id(),
-                callId: call.id,
-                name: call.name,
-                args: structuredClone(call.arguments),
-              });
-          }
-        } else if (message.role === 'toolResult') {
-          const index = settled.findIndex(
-            (item) =>
-              item.kind === 'tool' &&
-              item.callId === message.toolCallId &&
-              item.result === undefined,
-          );
-          const item = settled[index];
-          if (item?.kind === 'tool')
-            settled[index] = { ...item, result: resultText(message), isError: message.isError };
-        }
-      }
-      setItems([...items().slice(0, runStart), ...settled]);
-    }
-  }
 
   function ensureSession(): ActiveSession {
     if (active) return active;
@@ -297,30 +154,17 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
       });
       const detach = agent.subscribe((event) => {
         if (!alive) return;
-        if (event.type === 'agent') receive(event.event);
-        else if (event.type === 'model')
-          setSettings((current) => ({ ...current, model: event.model }));
+        setTranscript(reconcile(reduceAgentTranscript(unwrap(transcript), event), { key: 'id' }));
+        if (
+          event.type === 'agent' &&
+          event.event.type === 'message_start' &&
+          event.event.message.role === 'user'
+        )
+          setAttachments([]);
+        if (event.type === 'model') setSettings((current) => ({ ...current, model: event.model }));
         else if (event.type === 'resources') setResources(event.report);
-        else if (event.type === 'retry' && event.phase === 'start') {
-          setContinuationNotices((current) => [
-            ...current,
-            `Retry ${event.attempt}/${event.maxAttempts} in ${event.delayMs} ms (${event.source}).`,
-          ]);
-          if (event.source === 'assistant')
-            setItems((current) =>
-              current.map((item, index) =>
-                index === assistantIndex && item.kind === 'message' ? { ...item, text: '' } : item,
-              ),
-            );
-        } else if (event.type === 'compaction' && event.phase === 'end') {
-          setContinuationNotices((current) => [
-            ...current,
-            event.success
-              ? `Context compacted: ${event.tokensBefore} → ${event.tokensAfter} tokens (${event.source}).`
-              : `Compaction ${event.aborted ? 'aborted' : 'failed'}: ${event.errorMessage ?? ''}`,
-          ]);
-        } else if (event.type === 'status') {
-          setStatus(event.status);
+        else if (event.type === 'status') {
+          setLocalError(false);
           setDetail(playgroundAgentDetail(event.detail ?? ''));
         }
       });
@@ -380,7 +224,7 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
       }
     } catch (error) {
       if (!input()) setInput(draft);
-      setStatus('error');
+      setLocalError(true);
       setDetail(errorMessage(error));
     } finally {
       setBusy(false);
@@ -390,10 +234,7 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
   function reset() {
     if (running()) return;
     active?.agent.reset();
-    assistantIndex = -1;
-    setItems([]);
-    setContinuationNotices([]);
-    setStatus('idle');
+    clearTranscript();
     setDetail('');
     setNotice('');
   }
@@ -413,11 +254,8 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
           : 'Settings not saved; using them in this chat.',
       );
       setSettingsOpen(false);
-      setItems([]);
-      setContinuationNotices([]);
-      setStatus('idle');
+      clearTranscript();
       setDetail('');
-      assistantIndex = -1;
     } catch (error) {
       setNotice(errorMessage(error));
     } finally {
@@ -640,20 +478,13 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
             send a request.
           </p>
         </Show>
-        <For each={continuationNotices()}>
-          {(notice) => (
-            <p class="rf-ai__notice" data-testid="ai-continuation">
-              {notice}
-            </p>
-          )}
-        </For>
         <For each={items()}>
           {(item) =>
             item.kind === 'message' ? (
-              <Show when={item.text || item.images?.length}>
+              <Show when={(item.streamingText ?? item.text) || item.images?.length}>
                 <article class="rf-ai__message" data-role={item.role}>
                   <small>{item.role === 'user' ? 'you' : 'agent'}</small>
-                  <p>{item.text}</p>
+                  <p>{item.streamingText ?? item.text}</p>
                   <For each={item.images}>
                     {(image) => (
                       <img
@@ -665,42 +496,53 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
                   </For>
                 </article>
               </Show>
-            ) : (
+            ) : item.kind === 'tool' ? (
               <article
                 class="rf-ai__tool"
                 data-tool-name={item.name}
-                data-state={
-                  item.result === undefined
-                    ? item.running
-                      ? 'running'
-                      : 'pending'
-                    : item.isError
-                      ? 'error'
-                      : 'done'
-                }
+                data-state={item.state === 'success' ? 'done' : item.state}
               >
                 <div>
                   <strong>{item.name}</strong>
                   <small>
-                    {item.result === undefined
-                      ? item.running
+                    {item.state === 'success'
+                      ? 'done'
+                      : item.state === 'running'
                         ? 'running…'
-                        : 'pending'
-                      : item.isError
-                        ? 'error'
-                        : 'done'}
+                        : item.state}
                   </small>
                 </div>
                 <pre class="rf-ai__args">
                   {json(item.args).slice(0, 240)}
                   {json(item.args).length > 240 ? '…' : ''}
                 </pre>
+                <Show when={item.output.length > 0}>
+                  <pre data-testid="ai-tool-output">
+                    {item.output.map(({ chunk }) => chunk).join('')}
+                  </pre>
+                </Show>
                 <details>
                   <summary>Arguments and result</summary>
                   <pre>{json(item.args)}</pre>
-                  <pre data-testid="ai-tool-result">{item.result ?? 'Running…'}</pre>
+                  <pre data-testid="ai-tool-result">
+                    {item.result ? resultText(item.result) : 'Running…'}
+                  </pre>
                 </details>
               </article>
+            ) : item.kind === 'output' ? (
+              <pre data-testid="ai-tool-output">{item.chunk}</pre>
+            ) : (
+              <p
+                class="rf-ai__notice"
+                data-testid={
+                  (item.event.type === 'retry' && item.event.phase === 'start') ||
+                  (item.event.type === 'compaction' && item.event.phase === 'end')
+                    ? 'ai-continuation'
+                    : 'ai-transcript-notice'
+                }
+              >
+                {transcriptNotice(item.event)}
+              </p>
             )
           }
         </For>
