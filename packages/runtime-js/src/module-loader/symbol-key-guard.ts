@@ -144,14 +144,16 @@ export function objectMayContainFunctionKey(
 // The intrinsic is reachable two ways: the unshadowed `Symbol` identifier,
 // or `globalThis.Symbol` / `globalThis['Symbol']` — the global form names
 // the real intrinsic even when a local binding shadows the identifier
-// (Final+GREEN R2 F1).
+// (Final+GREEN R2 F1). Sequence/paren chains unwrap: `(0, Symbol).for`
+// reads the same intrinsic (R3 F2).
 function isSymbolReference(
   node: unknown,
   isShadowed: SymbolKeyShadowProbe,
   isGlobalObject: SymbolKeyGlobalProbe,
 ): boolean {
-  const n = node as GuardAstNode | undefined | null;
-  if (!n || typeof n.type !== 'string') return false;
+  if (!node || typeof node !== 'object') return false;
+  const n = unwrapGuardChain(node) as GuardAstNode;
+  if (typeof n.type !== 'string') return false;
   if (n.type === 'Identifier') {
     return (n as unknown as { name?: string }).name === 'Symbol' && !isShadowed('Symbol');
   }
@@ -173,7 +175,7 @@ export function isSymbolTamperTarget(
   isGlobalObject: SymbolKeyGlobalProbe,
 ): boolean {
   if (!target || typeof target !== 'object') return false;
-  const t = target as GuardAstNode;
+  const t = unwrapGuardChain(target) as GuardAstNode;
   if (t.type === 'Identifier') {
     return (t as unknown as { name?: string }).name === 'Symbol' && !isShadowed('Symbol');
   }
@@ -219,6 +221,15 @@ export function isSymbolIntrinsicMutationCall(
   }
   const isBuiltinObject = objectName === 'Object' && !isShadowed('Object');
   const isBuiltinReflect = objectName === 'Reflect' && !isShadowed('Reflect');
+  // Prototype injection (R3 F4): `Object.setPrototypeOf(Symbol, {for: …})`
+  // installs an inherited 'for' that a later `delete Symbol.for` opens.
+  if (
+    propertyName === 'setPrototypeOf' &&
+    (isBuiltinObject || isBuiltinReflect) &&
+    isSymbolReference(args[0], isShadowed, isGlobalObject)
+  ) {
+    return true;
+  }
   const isDefineFamily =
     (isBuiltinObject &&
       (propertyName === 'assign' ||
@@ -235,47 +246,6 @@ export function isSymbolIntrinsicMutationCall(
     return args.slice(1).some(hasLiteralSymbolKey);
   }
   return literalString(args[1]) === 'Symbol';
-}
-
-// F2 (Final+GREEN R2): a mutation key evaluates BEFORE the write/call
-// completes, so a tamper carrier nested anywhere inside the key expression
-// (`globalThis[(Symbol.for = …, Symbol.for('x'))] = v`, the Reflect.set /
-// defineProperty key arg, an Object.assign literal computed key) runs first
-// — the sequence unwrap must not discard it. Scan the key interior and flip
-// the tamper flag before the proof is consulted. Assignment and
-// defineProperty-family calls suffice: UpdateExpression/delete on Symbol
-// cannot substitute the intrinsic (NaN/TypeError, no evasion).
-export function commitKeyExpressionTamper(
-  node: unknown,
-  isShadowed: SymbolKeyShadowProbe,
-  isGlobalObject: SymbolKeyGlobalProbe,
-  markTampered: () => void,
-): void {
-  const visit = (n: unknown): void => {
-    if (!n || typeof n !== 'object') return;
-    const current = n as GuardAstNode & Record<string, unknown>;
-    if (typeof current.type !== 'string') return;
-    if (
-      (current.type === 'AssignmentExpression' &&
-        isSymbolTamperTarget(
-          (current as unknown as { left?: unknown }).left,
-          isShadowed,
-          isGlobalObject,
-        )) ||
-      (current.type === 'CallExpression' &&
-        isSymbolIntrinsicMutationCall(current, isShadowed, isGlobalObject))
-    ) {
-      markTampered();
-    }
-    for (const value of Object.values(current)) {
-      if (Array.isArray(value)) {
-        for (const child of value) visit(child);
-      } else {
-        visit(value);
-      }
-    }
-  };
-  visit(node);
 }
 
 // Only literal `Symbol:` keys count — a non-literal/unknown key on the

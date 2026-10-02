@@ -22,7 +22,6 @@ import type { Resolver } from './resolver.ts';
 import {
   type SymbolKeyGlobalProbe,
   type SymbolKeyShadowProbe,
-  commitKeyExpressionTamper,
   isProvablySymbolKey,
   isSymbolIntrinsicMutationCall,
   isSymbolTamperTarget,
@@ -160,6 +159,10 @@ interface FunctionRewriteCtx {
   hasRoutedFunctionReference: boolean;
   hasFunctionEvalText: boolean;
   symbolIntrinsicTampered: boolean;
+  /** Depth of WithStatement bodies currently walked — inside `with`, a
+   *  dynamic scope may shadow `Symbol`, so no Symbol key is provable (R3
+   *  F5; CJS scripts are non-strict, so `with` is reachable here). */
+  withDepth: number;
 }
 
 // TODO(backlog: runtime-js/function-constructor-exhaustive-metaprogramming-ceiling):
@@ -268,6 +271,7 @@ function rewriteCjsFunctionConstructorReferences(
     hasRoutedFunctionReference: false,
     hasFunctionEvalText: false,
     symbolIntrinsicTampered: false,
+    withDepth: 0,
   };
   walkFunctionReferences(program as unknown as AnyNodeShape, ctx);
   if (ctx.hasDerivedHostFunctionConstructor) {
@@ -463,21 +467,25 @@ function isMaybeEvalAlias(ctx: FunctionRewriteCtx, name: string): boolean {
 
 function shadowProbe(ctx: FunctionRewriteCtx): SymbolKeyShadowProbe {
   // Once the module observably substitutes the Symbol intrinsic, 'Symbol'
-  // reports as shadowed: every provable-key pattern goes loud (F1).
-  return (name) => isShadowed(ctx, name) || (name === 'Symbol' && ctx.symbolIntrinsicTampered);
+  // reports as shadowed: every provable-key pattern goes loud (F1). Inside
+  // a `with` body the same holds — a dynamic scope may shadow Symbol (F5).
+  return (name) =>
+    isShadowed(ctx, name) ||
+    (name === 'Symbol' && (ctx.symbolIntrinsicTampered || ctx.withDepth > 0));
 }
 
 function globalObjectProbe(ctx: FunctionRewriteCtx): SymbolKeyGlobalProbe {
   return (node) => isGlobalObjectExpression(node, ctx);
 }
 
-// A mutation key evaluates before the write/call completes: scan its
-// interior for a nested tamper carrier before consulting the provable-key
-// proof (F2 — the sequence unwrap must not discard the mutation).
+// A mutation key evaluates before the write/call completes: walk its
+// interior with the full guard machinery (scopes, destructuring patterns,
+// delete, mutation calls) BEFORE consulting the provable-key proof, so a
+// nested tamper carrier flips the flag first (R2 F2, R3 F1/F3/F4 — the
+// sequence unwrap must not discard the mutation). Flag sets are
+// idempotent, so the later in-order re-walk of the same subtree is a no-op.
 function scanKeyTamper(ctx: FunctionRewriteCtx, key: unknown): void {
-  commitKeyExpressionTamper(key, shadowProbe(ctx), globalObjectProbe(ctx), () => {
-    ctx.symbolIntrinsicTampered = true;
-  });
+  walkFunctionReferences(key as AnyNodeShape, ctx);
 }
 
 function declarePattern(scope: Scope, pattern: unknown): void {
@@ -732,7 +740,9 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
       ctx.hasDynamicFunctionScope = true;
       ctx.hasWithDynamicFunctionScope = true;
       walkFunctionReferences(n.object, ctx);
+      ctx.withDepth += 1;
       walkFunctionReferences(n.body, ctx);
+      ctx.withDepth -= 1;
       return;
 
     case 'CallExpression': {

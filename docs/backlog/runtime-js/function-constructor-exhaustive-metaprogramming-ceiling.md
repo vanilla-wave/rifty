@@ -25,7 +25,11 @@ constructors, or dynamically composed derived-constructor bodies are outside the
 current claim. Dynamically composed `eval(...)` text is also outside the static
 guard claim. Import-time guards must not reject modules merely because such a
 dynamic evaluator is defined; doing so breaks real packages like Vite before the
-path executes.
+path executes. One concrete instance (found 2026-10-02, symbol-key
+global-write-guard-precision Final+GREEN R3 C3): eval text that substitutes the
+`Symbol` intrinsic (`Symbol.for = …`) rather than naming `Function` slips the
+Symbol-key write-guard precision analysis — the finite eval-text check only
+matches Function-touching text.
 
 ## Options or Next
 

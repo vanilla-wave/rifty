@@ -49,17 +49,27 @@ F1 — lexical unshadowed ≠ unchanged intrinsic): bare/member/global-target
 assignment or delete on unshadowed `Symbol` (`Symbol = …`, `Symbol.for = …`,
 `globalThis.Symbol = …`), the same member forms THROUGH the global object
 (`globalThis.Symbol.for = …` names the real intrinsic even when a local
-binding shadows the identifier — R2 F1), a defineProperty-family call on
-`Symbol`/`globalThis.Symbol`, a literal `'Symbol'` key through the global
-object, or `__defineGetter__/__defineSetter__` on either — detected
-source-ordered like the existing alias trackers, then `Symbol` reports as
-shadowed for the rest of the walk. A tamper carrier nested INSIDE a
-mutation key expression runs before the write/call completes, so the key
-interior is scanned before the proof is consulted (R2 F2 — the sequence
-unwrap must not discard the mutation); a genuine Symbol-key write BEFORE
-any tamper stays exempt (source order, R2 C1). A shadowed-local `Symbol`
-mutation (function parameter) is NOT tamper; `Symbol++`-class updates yield
-NaN and cannot mint a 'Function' key, so they stay untracked.
+binding shadows the identifier — R2 F1), sequence/paren-wrapped references
+(`(0, Symbol).for = …` — R3 F2), destructuring targets
+(`[Symbol.for] = […]`, `({for: Symbol.for} = …)` — R3 F1), a
+defineProperty-family call on `Symbol`/`globalThis.Symbol`,
+`Object.setPrototypeOf`/`Reflect.setPrototypeOf` on the intrinsic
+(prototype injection + own-property delete — R3 F4), a literal `'Symbol'`
+key through the global object, or `__defineGetter__/__defineSetter__` on
+either — detected source-ordered like the existing alias trackers, then
+`Symbol` reports as shadowed for the rest of the walk. A tamper carrier
+nested INSIDE a mutation key expression runs before the write/call
+completes, so the key interior is walked with the full guard machinery
+(scopes, patterns, delete) before the proof is consulted (R2 F2, R3
+F1/F3/F4 — the sequence unwrap must not discard the mutation, and a
+tamper-shaped assignment scoped to a nested function's OWN Symbol binding
+is a local mutation, never tamper). Inside a `with` body no Symbol key is
+provable — a dynamic scope may shadow Symbol (R3 F5, CJS-only: ESM modules
+are strict). A genuine Symbol-key write BEFORE any tamper stays exempt
+(source order, R2 C1); `Symbol++`-class updates yield NaN and cannot mint
+a 'Function' key, so they stay untracked. eval-text Symbol substitution is
+out of scope here — owned by
+`function-constructor-exhaustive-metaprogramming-ceiling` (R3 C3).
 
 ## Challenge
 
@@ -141,22 +151,22 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
    and full key cleanup → I6
 
 Unit REDs (guard precision): `tests/conformance/modules/symbol-key-global-write.test.ts`
-— 20 positive carriers (Acceptance 1/2/4 patterns compile and run in both
+— 22 positive carriers (Acceptance 1/2/4 patterns compile and run in both
 loaders, incl. an export-wrapped `export const K = Symbol.for(…)` alias,
-a CJS stash method call, a shadowed-local scope control, and a
-write-before-tamper source-order control — RED today — plus the
+a CJS stash method call, a shadowed-local scope control, a
+write-before-tamper source-order control, and a key-interior
+nested-function local-Symbol control — RED today — plus the
 export-wrapped `globalThis`-alias ceiling hole, see Decisions) +
-37 boundary pins (Acceptance 3 in BOTH loaders:
+52 boundary pins (Acceptance 3 in BOTH loaders:
 string-literal, concatenated, unknown-identifier, `let`-bound-symbol,
 shadowed-`Symbol`, `Symbol.keyFor` keys stay loud, called
 `Reflect.get(globalThis, K)` results stay loud, and the intrinsic-tamper
-carriers stay loud — five R1 forms plus per loader the three R2 F1
-global-mediated forms (`globalThis.Symbol.for = …`,
-`Object.defineProperty(globalThis.Symbol, 'for', …)`,
-`globalThis.__defineGetter__('Symbol', …)`) and the four R2 F2
-key-interior sequence forms (computed assignment, Reflect.set key,
-defineProperty key, Object.assign literal computed key) — tamper pins RED
-at Final+GREEN R1/R2, the rest green today, regression-only).
+carriers stay loud — five R1 forms; per loader the R2 global-mediated
+trio, the R2 key-sequence quartet plus defineProperties/__defineGetter__
+key-interior pins (R3 C1), the R3 destructuring pair, the R3
+wrapped-reference pair, the R3 prototype-injection form; CJS-only the R3
+`with`-shadowed form — tamper pins RED at their introducing round, the
+rest green today, regression-only).
 
 ## Out of scope
 
@@ -244,6 +254,26 @@ at Final+GREEN R1/R2, the rest green today, regression-only).
   now walks the key interior before every proof consultation at all five
   mutation-site families in both twins. C1 — source order was unpinned: a
   whole-module pre-scan mutant passed all tests; the write-before-tamper
-  positive (both loaders) kills it. RED-pinned: 7 stillLoud carriers per
+  positive (both loaders) kills it.   RED-pinned: 7 stillLoud carriers per
   loader + 1 positive per loader (14 failed / 43 passed pre-fix, 57/57
   post-fix).
+- 2026-10-02 — reception (REV-12) of Final+GREEN R3 (blocker, F1–F5 +
+  concerns C1–C3): F1 — key-interior DESTRUCTURING targets
+  (`[Symbol.for] = […]`) slipped the assignment-arm check. F2 —
+  sequence/paren-wrapped intrinsic references (`(0, Symbol).for = …`)
+  slipped isSymbolReference. F3 — the parallel key scanner used the
+  enclosing scope probe inside nested functions, rejecting legitimate keys
+  (false positive). F4 — `Object.setPrototypeOf(Symbol, {for})` + a
+  key-interior `delete Symbol.for` opened an inherited fake. F5 — a CJS
+  `with` scope can shadow Symbol dynamically, but the exemption ignored
+  dynamic scope. Fix: the R2 parallel scanner is REPLACED by an early walk
+  of the key subtree through the twins' own guard walk (scopes, patterns,
+  delete, mutation calls — idempotent flags, in-order re-walk is a no-op),
+  isSymbolReference/isSymbolTamperTarget unwrapGuardChain, a setPrototypeOf
+  arm, and ctx.withDepth (both twins; ESM unreachable, twin symmetry).
+  C1 — defineProperties/__defineGetter__ key-interior pins added per
+  loader. C2 — defineProperty-key carriers made configurable so RED-state
+  cleanup works. C3 — eval-text Symbol substitution routed to
+  `function-constructor-exhaustive-metaprogramming-ceiling` (noted there).
+  RED-pinned: 13 failed / 61 passed pre-fix (F1×4, F2×4, F3×2, F4×2,
+  F5×1; the C1 pins are green-today regression pins), 74/74 post-fix.

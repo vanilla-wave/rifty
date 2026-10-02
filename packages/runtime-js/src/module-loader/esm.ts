@@ -14,7 +14,6 @@ import {
 import {
   type SymbolKeyGlobalProbe,
   type SymbolKeyShadowProbe,
-  commitKeyExpressionTamper,
   isProvablySymbolKey,
   isSymbolIntrinsicMutationCall,
   isSymbolTamperTarget,
@@ -48,6 +47,8 @@ interface EsmFunctionGuardCtx {
   hasRoutedFunctionReference: boolean;
   hasFunctionEvalText: boolean;
   symbolIntrinsicTampered: boolean;
+  /** WithStatement body depth — inside `with` no Symbol key is provable (R3 F5; ESM-unreachable, twin symmetry). */
+  withDepth: number;
 }
 
 // TODO(backlog: runtime-js/function-constructor-exhaustive-metaprogramming-ceiling):
@@ -83,6 +84,7 @@ export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): v
     hasRoutedFunctionReference: false,
     hasFunctionEvalText: false,
     symbolIntrinsicTampered: false,
+    withDepth: 0,
   };
   walkEsmFunctionGuard(program as unknown as GuardNodeShape, ctx);
 
@@ -274,22 +276,23 @@ function isGuardMaybeEvalAlias(ctx: EsmFunctionGuardCtx, name: string): boolean 
 }
 
 function guardShadowProbe(ctx: EsmFunctionGuardCtx): SymbolKeyShadowProbe {
-  // Once the module observably substitutes the Symbol intrinsic, 'Symbol'
-  // reports as shadowed: every provable-key pattern goes loud (F1).
-  return (name) => isGuardShadowed(ctx, name) || (name === 'Symbol' && ctx.symbolIntrinsicTampered);
+  // Tampered intrinsic or a `with` body (dynamic scope may shadow Symbol):
+  // 'Symbol' reports as shadowed, every provable-key pattern goes loud.
+  return (name) =>
+    isGuardShadowed(ctx, name) ||
+    (name === 'Symbol' && (ctx.symbolIntrinsicTampered || ctx.withDepth > 0));
 }
 
 function globalObjectProbe(ctx: EsmFunctionGuardCtx): SymbolKeyGlobalProbe {
   return (node) => isGlobalObjectExpression(node, ctx);
 }
 
-// A mutation key evaluates before the write/call completes: scan its
-// interior for a nested tamper carrier before consulting the provable-key
-// proof (F2 — the sequence unwrap must not discard the mutation).
+// A mutation key evaluates before the write/call completes: walk its
+// interior with the full guard machinery BEFORE the provable-key proof, so
+// a nested tamper carrier flips the flag first (R2 F2, R3 F1/F3/F4). Flag
+// sets are idempotent — the later in-order re-walk is a no-op.
 function scanGuardKeyTamper(ctx: EsmFunctionGuardCtx, key: unknown): void {
-  commitKeyExpressionTamper(key, guardShadowProbe(ctx), globalObjectProbe(ctx), () => {
-    ctx.symbolIntrinsicTampered = true;
-  });
+  walkEsmFunctionGuard(key as GuardNodeShape, ctx);
 }
 
 function declareGuardPattern(scope: GuardScope, pattern: unknown): void {
@@ -494,7 +497,9 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
       ctx.hasDynamicFunctionScope = true;
       ctx.hasWithDynamicFunctionScope = true;
       walkEsmFunctionGuard(n.object, ctx);
+      ctx.withDepth += 1;
       walkEsmFunctionGuard(n.body, ctx);
+      ctx.withDepth -= 1;
       return;
     case 'MemberExpression':
       if (isGlobalFunctionReadMember(n, ctx)) {

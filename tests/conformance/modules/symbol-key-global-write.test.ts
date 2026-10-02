@@ -100,6 +100,16 @@ describe('provably-Symbol computed keys bypass the Function guard', () => {
       export const r = globalThis[K];
       delete globalThis[K];
     `,
+    // Nested-scope control (Final+GREEN R3 F3): a tamper-shaped assignment
+    // inside a KEY expression but scoped to a nested function's OWN Symbol
+    // binding is a local mutation — the real intrinsic is untouched and the
+    // key stays provable. Kills a scope-insensitive key-scan mutant.
+    '/key-nested-local-symbol.mjs': `
+      const K = Symbol.for('key.nested.local');
+      globalThis[((Symbol) => { Symbol.for = () => 'tampered-sentinel'; })({ for: () => 'z' }), K] = 13;
+      export const r = globalThis[K];
+      delete globalThis[K];
+    `,
   };
 
   for (const [path, source] of Object.entries(allowedEsm)) {
@@ -166,6 +176,18 @@ describe('provably-Symbol computed keys bypass the Function guard', () => {
       `,
     });
     expect(loader.require('./write-before-tamper.cjs', '/entry.cjs')).toBe('wbt-ok');
+  });
+
+  it('CJS allows a nested-function local-Symbol mutation inside the key (R3 F3)', () => {
+    const loader = setup({
+      '/key-nested-local.cjs': `
+        const K = Symbol.for('cjs.key.nested.local');
+        globalThis[((Symbol) => { Symbol.for = () => 'tampered-sentinel'; })({ for: () => 'z' }), K] = 'nested-ok';
+        module.exports = globalThis[K];
+        delete globalThis[K];
+      `,
+    });
+    expect(loader.require('./key-nested-local.cjs', '/entry.cjs')).toBe('nested-ok');
   });
 
   it('CJS runs the Reflect.set / Object.assign / Object.defineProperties mutation shapes', () => {
@@ -312,7 +334,7 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
     `,
     '/tamper-define-property-key-sequence.mjs': `
       const originalFor = Symbol.for;
-      Object.defineProperty(globalThis, (Symbol.for = () => 'tampered-sentinel', Symbol.for('x')), { value: 1 });
+      Object.defineProperty(globalThis, (Symbol.for = () => 'tampered-sentinel', Symbol.for('x')), { value: 1, configurable: true });
       Symbol.for = originalFor;
       delete globalThis['tampered-sentinel'];
       export const r = 1;
@@ -321,6 +343,70 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       const originalFor = Symbol.for;
       Object.assign(globalThis, { [(Symbol.for = () => 'tampered-sentinel', Symbol.for('x'))]: 1 });
       Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    // Final+GREEN R3 C1: the remaining two mutation-site families need
+    // their own key-interior pins — defineProperties descriptor map and
+    // globalThis.__defineGetter__ name argument.
+    '/tamper-define-properties-key-sequence.mjs': `
+      const originalFor = Symbol.for;
+      Object.defineProperties(globalThis, { [(Symbol.for = () => 'tampered-sentinel', Symbol.for('x'))]: { value: 1, configurable: true } });
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    '/tamper-define-getter-key-sequence.mjs': `
+      const originalFor = Symbol.for;
+      globalThis.__defineGetter__((Symbol.for = () => 'tampered-sentinel', Symbol.for('x')), () => 1);
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    // Final+GREEN R3 F1: a DESTRUCTURING target nested in the key —
+    // AssignmentExpression.left is a pattern, not a plain member/identifier.
+    '/tamper-key-destructure-array.mjs': `
+      const originalFor = Symbol.for;
+      globalThis[([Symbol.for] = [() => 'tampered-sentinel'], Symbol.for('x'))] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    '/tamper-key-destructure-object.mjs': `
+      const originalFor = Symbol.for;
+      globalThis[(({ for: Symbol.for } = { for: () => 'tampered-sentinel' }), Symbol.for('x'))] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    // Final+GREEN R3 F2: the intrinsic reference itself may be
+    // sequence/paren-wrapped — (0, Symbol).for = … substitutes the same
+    // intrinsic.
+    '/tamper-wrapped-member-for.mjs': `
+      const originalFor = Symbol.for;
+      (0, Symbol).for = () => 'tampered-sentinel';
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    '/tamper-wrapped-define-property.mjs': `
+      const originalFor = Symbol.for;
+      Object.defineProperty((0, Symbol), 'for', { value: () => 'tampered-sentinel' });
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    // Final+GREEN R3 F4: prototype injection + own-property delete —
+    // setPrototypeOf installs an inherited 'for', the delete then opens it.
+    '/tamper-prototype-inject.mjs': `
+      const originalFor = Symbol.for;
+      const originalProto = Object.getPrototypeOf(Symbol);
+      Object.setPrototypeOf(Symbol, { for: () => 'tampered-sentinel' });
+      globalThis[(delete Symbol.for, Symbol.for('x'))] = 1;
+      Object.setPrototypeOf(Symbol, originalProto);
+      Object.defineProperty(Symbol, 'for', { value: originalFor, writable: true, configurable: true });
       delete globalThis['tampered-sentinel'];
       export const r = 1;
     `,
@@ -452,7 +538,7 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
     `,
     '/cjs-tamper-define-property-key-sequence.cjs': `
       const originalFor = Symbol.for;
-      Object.defineProperty(globalThis, (Symbol.for = () => 'tampered-sentinel', Symbol.for('x')), { value: 1 });
+      Object.defineProperty(globalThis, (Symbol.for = () => 'tampered-sentinel', Symbol.for('x')), { value: 1, configurable: true });
       Symbol.for = originalFor;
       delete globalThis['tampered-sentinel'];
       module.exports = 1;
@@ -461,6 +547,71 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       const originalFor = Symbol.for;
       Object.assign(globalThis, { [(Symbol.for = () => 'tampered-sentinel', Symbol.for('x'))]: 1 });
       Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    // Final+GREEN R3 C1/F1/F2/F4, ESM twins above.
+    '/cjs-tamper-define-properties-key-sequence.cjs': `
+      const originalFor = Symbol.for;
+      Object.defineProperties(globalThis, { [(Symbol.for = () => 'tampered-sentinel', Symbol.for('x'))]: { value: 1, configurable: true } });
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-define-getter-key-sequence.cjs': `
+      const originalFor = Symbol.for;
+      globalThis.__defineGetter__((Symbol.for = () => 'tampered-sentinel', Symbol.for('x')), () => 1);
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-key-destructure-array.cjs': `
+      const originalFor = Symbol.for;
+      globalThis[([Symbol.for] = [() => 'tampered-sentinel'], Symbol.for('x'))] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-key-destructure-object.cjs': `
+      const originalFor = Symbol.for;
+      globalThis[(({ for: Symbol.for } = { for: () => 'tampered-sentinel' }), Symbol.for('x'))] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-wrapped-member-for.cjs': `
+      const originalFor = Symbol.for;
+      (0, Symbol).for = () => 'tampered-sentinel';
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-wrapped-define-property.cjs': `
+      const originalFor = Symbol.for;
+      Object.defineProperty((0, Symbol), 'for', { value: () => 'tampered-sentinel' });
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-prototype-inject.cjs': `
+      const originalFor = Symbol.for;
+      const originalProto = Object.getPrototypeOf(Symbol);
+      Object.setPrototypeOf(Symbol, { for: () => 'tampered-sentinel' });
+      globalThis[(delete Symbol.for, Symbol.for('x'))] = 1;
+      Object.setPrototypeOf(Symbol, originalProto);
+      Object.defineProperty(Symbol, 'for', { value: originalFor, writable: true, configurable: true });
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    // Final+GREEN R3 F5 (CJS only — ESM modules are strict, `with` never
+    // parses): a `with` scope can shadow Symbol dynamically, so inside a
+    // with body no Symbol key is provable.
+    '/cjs-tamper-with-symbol.cjs': `
+      with ({ Symbol: { for: () => 'tampered-sentinel' } }) {
+        globalThis[Symbol.for('x')] = 1;
+      }
       delete globalThis['tampered-sentinel'];
       module.exports = 1;
     `,
