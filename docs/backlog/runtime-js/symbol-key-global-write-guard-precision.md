@@ -154,13 +154,15 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
    and full key cleanup → I6
 
 Unit REDs (guard precision): `tests/conformance/modules/symbol-key-global-write.test.ts`
-— 22 positive carriers (Acceptance 1/2/4 patterns compile and run in both
+— 28 positive carriers (Acceptance 1/2/4 patterns compile and run in both
 loaders, incl. an export-wrapped `export const K = Symbol.for(…)` alias,
 a CJS stash method call, a shadowed-local scope control, a
 write-before-tamper source-order control, and a key-interior
 nested-function local-Symbol control — RED today — plus the
-export-wrapped `globalThis`-alias ceiling hole, see Decisions) +
-56 boundary pins (Acceptance 3 in BOTH loaders:
+export-wrapped `globalThis`-alias ceiling hole, see Decisions; R4 adds the
+early-walk scope control with a FRESH Symbol.call (C1), the alias-replay
+pair (F2), and the CJS key-interior edit-producer sweep (F1)) +
+67 boundary pins (Acceptance 3 in BOTH loaders:
 string-literal, concatenated, unknown-identifier, `let`-bound-symbol,
 shadowed-`Symbol`, `Symbol.keyFor` keys stay loud, called
 `Reflect.get(globalThis, K)` results stay loud, and the intrinsic-tamper
@@ -168,7 +170,9 @@ carriers stay loud — five R1 forms; per loader the R2 global-mediated
 trio, the R2 key-sequence quartet plus defineProperties/__defineGetter__
 key-interior pins (R3 C1), the R3 destructuring pair, the R3
 wrapped-reference pair, the R3 prototype-injection form, the R3
-const-intrinsic-alias pair; CJS-only the R3 `with`-shadowed form — tamper
+const-intrinsic-alias pair, the R4 pure-setPrototypeOf / wrapped-global /
+wrapped-define-callee / alias-callee forms; CJS-only the R3 `with`-shadowed
+form and the R4 `with`-shadowed key-alias form — tamper
 pins RED at their introducing round, the rest green today,
 regression-only).
 
@@ -292,3 +296,31 @@ regression-only).
   withDepth was removed as dead machinery (REV-7): the ESM loader parses
   strict (`sourceType: 'module'`), so `with` never reaches the guard.
   RED-pinned 4 failed / 74 passed pre-fix, 78/78 post-fix.
+  Correction (2026-10-02, R4 F1/F2): the R3 "idempotent flags, in-order
+  re-walk is a no-op" claim held only for the flag itself — the walk's
+  alias marks and (CJS) pushed edits are NOT idempotent; see the R4 entry.
+- 2026-10-02 — reception (REV-12) of Final+GREEN R4 (blocker, F1–F4):
+  the early key walk became a true PROBE — `snapshotGuardScopeAliases` /
+  `restoreGuardScopeAliases` around it restore every alias set (F2:
+  a leaked `g = globalThis` mark turned an earlier-in-key local write into
+  a host Function write on replay) and, in CJS, truncate `ctx.edits` back
+  (F1: key-interior Function/WebAssembly references were rewritten twice —
+  `__riftyFunction__riftyFunction` ReferenceError in real CJS execution).
+  Only the monotonic tamper flag survives the probe. F3 — the global
+  probes and the define-family callee/object positions unwrap
+  sequence/chains: `(0, globalThis).Symbol.for = …` and
+  `(0, Object).defineProperty(Symbol, …)` flag tamper. F4 — CJS threads
+  `ctx.withDepth` into the proof: inside `with` NO key is provable (the
+  const-key alias may be shadowed by a string). C1 — fresh-Symbol.call
+  scope-control pins per loader; C2 — pure setPrototypeOf pins (the
+  existing pin paired it with a key-interior delete, which flags
+  independently); C4 — shadow/export RED carriers made host-safe (benign
+  sentinels / write the real Function back); C5 — alias-callee still-loud
+  pins (the proof keeps rejecting alias callees). C3 — the
+  wrapped-callee/initializer closure is stated here: wrapped simple and
+  transitive const initializers ARE tracked; Proxy-mediated globals,
+  let/var/parameter/arguments alias flows stay beyond the declared
+  provenance model (the exhaustive metaprogramming ceiling's).
+  RED-pinned 8 failed / 87 passed pre-fix (F1×1 CJS multi-site, F2×2,
+  F3×4, F4×1; the C1/C2/C5 pins are green-today mutant killers),
+  95/95 post-fix.

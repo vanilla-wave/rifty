@@ -27,6 +27,8 @@ import {
   isSymbolTamperTarget,
   mutationKeyMayBeFunction,
   objectMayContainFunctionKey,
+  restoreGuardScopeAliases,
+  snapshotGuardScopeAliases,
   updateSymbolAliasesFromPatternValue,
 } from './symbol-key-guard.ts';
 
@@ -478,17 +480,21 @@ function shadowProbe(ctx: FunctionRewriteCtx): SymbolKeyShadowProbe {
 }
 
 function globalObjectProbe(ctx: FunctionRewriteCtx): SymbolKeyGlobalProbe {
-  return (node) => isGlobalObjectExpression(node, ctx);
+  return (node) => isGlobalObjectExpression(unwrapChain(node), ctx);
 }
 
-// A mutation key evaluates before the write/call completes: walk its
-// interior with the full guard machinery (scopes, destructuring patterns,
-// delete, mutation calls) BEFORE consulting the provable-key proof, so a
-// nested tamper carrier flips the flag first (R2 F2, R3 F1/F3/F4 — the
-// sequence unwrap must not discard the mutation). Flag sets are
-// idempotent, so the later in-order re-walk of the same subtree is a no-op.
+// Walk a mutation key's interior BEFORE the provable-key proof, so a nested
+// tamper carrier flips the flag first (R2 F2, R3 — the sequence unwrap must
+// not discard the mutation). Probe only: pushed edits and alias marks
+// restore after — the in-order re-walk must replay identically, or edits
+// land twice and replayed alias state rewrites earlier-in-key writes (R4
+// F1/F2). The monotonic tamper flag stays.
 function scanKeyTamper(ctx: FunctionRewriteCtx, key: unknown): void {
+  const editsLength = ctx.edits.length;
+  const snapshot = snapshotGuardScopeAliases(ctx.scopes);
   walkFunctionReferences(key as AnyNodeShape, ctx);
+  ctx.edits.length = editsLength;
+  restoreGuardScopeAliases(snapshot);
 }
 
 function declarePattern(scope: Scope, pattern: unknown): void {
@@ -1526,7 +1532,7 @@ function isGlobalFunctionWriteMember(node: AnyNodeShape, ctx: FunctionRewriteCtx
   if (propertyName !== undefined) return propertyName === 'Function';
   if (!isComputedMember(node)) return false;
   scanKeyTamper(ctx, node.property);
-  return !isProvablySymbolKey(node.property, ctx.scopes, shadowProbe(ctx));
+  return !isProvablySymbolKey(node.property, ctx.scopes, shadowProbe(ctx), ctx.withDepth);
 }
 
 function expressionMayBeHostFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
@@ -1727,7 +1733,7 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
   if (isBuiltinObject && propertyName === 'assign' && isGlobalObjectExpression(args[0], ctx)) {
     return args.slice(1).some((arg) => {
       scanKeyTamper(ctx, arg);
-      return objectMayContainFunctionKey(arg, ctx.scopes, shadowProbe(ctx));
+      return objectMayContainFunctionKey(arg, ctx.scopes, shadowProbe(ctx), ctx.withDepth);
     });
   }
 
@@ -1741,10 +1747,10 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
   if ((isObjectDefine || isReflectMutation) && isGlobalObjectExpression(args[0], ctx)) {
     if (propertyName === 'defineProperties') {
       scanKeyTamper(ctx, args[1]);
-      return objectMayContainFunctionKey(args[1], ctx.scopes, shadowProbe(ctx));
+      return objectMayContainFunctionKey(args[1], ctx.scopes, shadowProbe(ctx), ctx.withDepth);
     }
     scanKeyTamper(ctx, args[1]);
-    return mutationKeyMayBeFunction(args[1], ctx.scopes, shadowProbe(ctx));
+    return mutationKeyMayBeFunction(args[1], ctx.scopes, shadowProbe(ctx), ctx.withDepth);
   }
 
   if (
@@ -1752,7 +1758,7 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
     scanKeyTamper(ctx, args[0]);
-    return mutationKeyMayBeFunction(args[0], ctx.scopes, shadowProbe(ctx));
+    return mutationKeyMayBeFunction(args[0], ctx.scopes, shadowProbe(ctx), ctx.withDepth);
   }
 
   return false;

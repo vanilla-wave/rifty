@@ -110,6 +110,31 @@ describe('provably-Symbol computed keys bypass the Function guard', () => {
       export const r = globalThis[K];
       delete globalThis[K];
     `,
+    // Early-walk scope control (Final+GREEN R4 C1): same nested local
+    // mutation, but the provable key is a FRESH Symbol.for call after it —
+    // a scope-insensitive early walk would flag tamper and fail this proof.
+    '/key-fresh-after-nested-local.mjs': `
+      globalThis[((Symbol) => { Symbol.for = () => 'inner'; })({ for: () => 'z' }), Symbol.for('c1.fresh')] = 14;
+      export const r = globalThis[Symbol.for('c1.fresh')];
+      delete globalThis[Symbol.for('c1.fresh')];
+    `,
+    // Replay control (Final+GREEN R4 F2): the early key walk must not leak
+    // alias marks into the in-order re-walk — `g.Function = 1` runs while g
+    // is a LOCAL object (Node: 22); a leaked `g = globalThis` mark would
+    // wrongly turn it into a host Function write on replay.
+    '/key-alias-replay.mjs': `
+      let g = {};
+      globalThis[Symbol.for((g.Function = 1, g = globalThis, 'f2.esm'))] = 22;
+      export const r = globalThis[Symbol.for('f2.esm')];
+      delete globalThis[Symbol.for('f2.esm')];
+    `,
+    // Edit-free twin of the CJS R4 F1 pin: a key-interior Function
+    // reference stays routed, the write runs (ESM pushes no edits).
+    '/key-function-reference.mjs': `
+      globalThis[Symbol.for((void Function, 'f1.esm'))] = 17;
+      export const r = globalThis[Symbol.for('f1.esm')];
+      delete globalThis[Symbol.for('f1.esm')];
+    `,
   };
 
   for (const [path, source] of Object.entries(allowedEsm)) {
@@ -204,6 +229,62 @@ describe('provably-Symbol computed keys bypass the Function guard', () => {
     });
     expect(loader.require('./mutations.cjs', '/entry.cjs')).toBe('rs as ps');
   });
+
+  // R4 F1: the early key walk is a probe — its Function/WebAssembly edits
+  // must NOT survive into applyEdits, or the in-order re-walk pushes them
+  // again and the rewritten source references `__riftyFunction__riftyFunction`.
+  // One carrier per mutation site, producers alternated.
+  it('CJS key-interior Function/WebAssembly references rewrite exactly once (R4 F1)', () => {
+    const loader = setup({
+      '/key-edits.cjs': `
+        globalThis[Symbol.for((void Function, 'f1.assign'))] = 17;
+        Object.defineProperty(globalThis, Symbol.for((void WebAssembly, 'f1.dp')), { value: 18, configurable: true });
+        Reflect.set(globalThis, Symbol.for((void Function, 'f1.rs')), 19);
+        globalThis[Symbol.for((void WebAssembly, 'f1.rd'))] = 0;
+        Reflect.deleteProperty(globalThis, Symbol.for((void WebAssembly, 'f1.rd')));
+        globalThis.__defineGetter__(Symbol.for((void Function, 'f1.g')), () => 20);
+        Object.defineProperties(globalThis, { [Symbol.for((void Function, 'f1.dps'))]: { value: 21, configurable: true } });
+        Object.assign(globalThis, { [Symbol.for((void WebAssembly, 'f1.as'))]: 22 });
+        module.exports = [
+          globalThis[Symbol.for('f1.assign')],
+          globalThis[Symbol.for('f1.dp')],
+          globalThis[Symbol.for('f1.rs')],
+          typeof globalThis[Symbol.for('f1.rd')],
+          globalThis[Symbol.for('f1.g')],
+          globalThis[Symbol.for('f1.dps')],
+          globalThis[Symbol.for('f1.as')],
+        ].join(' ');
+      `,
+    });
+    expect(loader.require('./key-edits.cjs', '/entry.cjs')).toBe('17 18 19 undefined 20 21 22');
+  });
+
+  // R4 F2 (CJS twin of the ESM pin): the early walk's alias marks must not
+  // leak into the in-order re-walk (Node: 22 — `g.Function = 1` is a LOCAL
+  // write; `g` becomes globalThis only after).
+  it('CJS key-interior local write before a global-alias mark replays identically (R4 F2)', () => {
+    const loader = setup({
+      '/key-alias-replay.cjs': `
+        let g = {};
+        globalThis[Symbol.for((g.Function = 1, g = globalThis, 'f2.cjs'))] = 22;
+        module.exports = globalThis[Symbol.for('f2.cjs')];
+      `,
+    });
+    expect(loader.require('./key-alias-replay.cjs', '/entry.cjs')).toBe(22);
+  });
+
+  // R4 C1 (CJS twin): a nested-function OWN Symbol mutation inside the key
+  // is not tamper; a FRESH Symbol.for after it stays provable — kills a
+  // scope-insensitive early-walk mutant.
+  it('CJS fresh Symbol.for after a key-interior nested local mutation stays exempt (R4 C1)', () => {
+    const loader = setup({
+      '/key-fresh-after-nested-local.cjs': `
+        globalThis[((Symbol) => { Symbol.for = () => 'inner'; })({ for: () => 'z' }), Symbol.for('c1.cjs.fresh')] = 14;
+        module.exports = globalThis[Symbol.for('c1.cjs.fresh')];
+      `,
+    });
+    expect(loader.require('./key-fresh-after-nested-local.cjs', '/entry.cjs')).toBe(14);
+  });
 });
 
 describe('the ceiling is unchanged for keys that may be Function', () => {
@@ -220,11 +301,15 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       globalThis[K] = 1;
       export const r = 1;
     `,
+    // The fake returns a benign sentinel (not 'Function'): the pin
+    // discriminates identically, but a wrongly-silent RED run writes a
+    // throwaway key instead of clobbering the shared host Function (R4 C4).
     '/shadowed-symbol.mjs': `
       function f(Symbol) {
         globalThis[Symbol.for('shadowed')] = 1;
       }
-      f({ for: () => 'Function' });
+      f({ for: () => 'shadowed.sentinel' });
+      delete globalThis['shadowed.sentinel'];
       export const r = 1;
     `,
     '/symbol-keyfor.mjs': `
@@ -442,6 +527,48 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       delete globalThis['tampered-sentinel'];
       export const r = 1;
     `,
+    // Final+GREEN R4 C2: setPrototypeOf ALONE must flag — the existing pin
+    // pairs it with a key-interior delete, which flags independently and
+    // cannot kill a drop-setPrototypeOf-arm mutant. Symbol keeps its own
+    // 'for', so the RED-state run writes the real symbol key (harmless).
+    '/tamper-set-prototype-of-pure.mjs': `
+      const originalProto = Object.getPrototypeOf(Symbol);
+      Object.setPrototypeOf(Symbol, { for: () => 'tampered-sentinel' });
+      globalThis[Symbol.for('setproto.pure')] = 1;
+      Object.setPrototypeOf(Symbol, originalProto);
+      delete globalThis[Symbol.for('setproto.pure')];
+      export const r = 1;
+    `,
+    // Final+GREEN R4 F3: the WRAPPED global names the same intrinsic —
+    // `(0, globalThis).Symbol.for = …` substitutes Symbol.for observably.
+    '/tamper-wrapped-global-symbol.mjs': `
+      const originalFor = Symbol.for;
+      (0, globalThis).Symbol.for = () => 'tampered-sentinel';
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    // Final+GREEN R4 F3/C3: a wrapped define-family callee —
+    // `(0, Object).defineProperty` IS Object.defineProperty.
+    '/tamper-wrapped-define-callee.mjs': `
+      const originalFor = Symbol.for;
+      (0, Object).defineProperty(Symbol, 'for', { value: () => 'tampered-sentinel', configurable: true });
+      globalThis[Symbol.for('x')] = 1;
+      Object.defineProperty(Symbol, 'for', { value: originalFor, writable: true, configurable: true });
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
+    // Final+GREEN R4 C5: the proof never accepts ALIAS callees — only the
+    // bare unshadowed `Symbol.for(…)`/`Symbol(…)` forms are provable. The
+    // RED-state run writes a real symbol key (S IS the intrinsic), so the
+    // wrongly-silent guard leaves the host untouched.
+    '/alias-callee-stays-loud.mjs': `
+      const S = Symbol;
+      globalThis[S.for('alias.callee')] = 1;
+      delete globalThis[S.for('alias.callee')];
+      export const r = 1;
+    `,
   };
 
   for (const [path, source] of Object.entries(stillLoudEsm)) {
@@ -470,7 +597,8 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       function f(Symbol) {
         globalThis[Symbol.for('cjs.shadowed')] = 1;
       }
-      f({ for: () => 'Function' });
+      f({ for: () => 'cjs.shadowed.sentinel' });
+      delete globalThis['cjs.shadowed.sentinel'];
       module.exports = 1;
     `,
     // Mutation-only exemption boundary (ESM twin above): the Reflect.get
@@ -675,6 +803,49 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       delete globalThis['tampered-sentinel'];
       module.exports = 1;
     `,
+    // Final+GREEN R4 F4: `with` may shadow the const-marked KEY ALIAS
+    // itself — the marker no longer proves the lookup value. The shadow is
+    // a benign sentinel (not 'Function'), so the wrongly-silent RED run
+    // leaves the host Function untouched (R4 C4).
+    '/cjs-with-shadows-key-alias.cjs': `
+      const K = Symbol.for('r4.with.alias');
+      with ({ K: 'with.sentinel' }) {
+        globalThis[K] = 17;
+      }
+      delete globalThis['with.sentinel'];
+      module.exports = 1;
+    `,
+    // R4 C2/C3/F3 CJS twins of the ESM pins (same rationales).
+    '/cjs-tamper-set-prototype-of-pure.cjs': `
+      const originalProto = Object.getPrototypeOf(Symbol);
+      Object.setPrototypeOf(Symbol, { for: () => 'tampered-sentinel' });
+      globalThis[Symbol.for('cjs.setproto.pure')] = 1;
+      Object.setPrototypeOf(Symbol, originalProto);
+      delete globalThis[Symbol.for('cjs.setproto.pure')];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-wrapped-global-symbol.cjs': `
+      const originalFor = Symbol.for;
+      (0, globalThis).Symbol.for = () => 'tampered-sentinel';
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-wrapped-define-callee.cjs': `
+      const originalFor = Symbol.for;
+      (0, Object).defineProperty(Symbol, 'for', { value: () => 'tampered-sentinel', configurable: true });
+      globalThis[Symbol.for('x')] = 1;
+      Object.defineProperty(Symbol, 'for', { value: originalFor, writable: true, configurable: true });
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-alias-callee-stays-loud.cjs': `
+      const S = Symbol;
+      globalThis[S.for('cjs.alias.callee')] = 1;
+      delete globalThis[S.for('cjs.alias.callee')];
+      module.exports = 1;
+    `,
   };
 
   for (const [path, source] of Object.entries(stillLoudCjs)) {
@@ -695,10 +866,12 @@ describe('export-wrapped declarations enter guard bindings', () => {
   // Symbol-alias carrier) closes the hole — pinned here, declared in the
   // contract Decisions.
   it('ESM export-wrapped globalThis alias write throws like its non-export twin', async () => {
+    // The write puts the REAL Function back: a wrongly-silent RED run leaves
+    // the shared host Function intact (R4 C4) and still fails this pin.
     const loader = setup({
       '/export-global-alias.mjs': `
         export const g = globalThis;
-        g.Function = function F() {};
+        g.Function = globalThis.Function;
         export const r = 1;
       `,
     });

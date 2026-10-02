@@ -19,6 +19,8 @@ import {
   isSymbolTamperTarget,
   mutationKeyMayBeFunction,
   objectMayContainFunctionKey,
+  restoreGuardScopeAliases,
+  snapshotGuardScopeAliases,
   updateSymbolAliasesFromPatternValue,
 } from './symbol-key-guard.ts';
 
@@ -276,21 +278,20 @@ function isGuardMaybeEvalAlias(ctx: EsmFunctionGuardCtx, name: string): boolean 
 }
 
 function guardShadowProbe(ctx: EsmFunctionGuardCtx): SymbolKeyShadowProbe {
-  // Once the module observably substitutes the Symbol intrinsic, 'Symbol'
-  // reports as shadowed: every provable-key pattern goes loud (F1).
+  // An observed Symbol-intrinsic substitution reports 'Symbol' as shadowed (F1).
   return (name) => isGuardShadowed(ctx, name) || (name === 'Symbol' && ctx.symbolIntrinsicTampered);
 }
 
 function globalObjectProbe(ctx: EsmFunctionGuardCtx): SymbolKeyGlobalProbe {
-  return (node) => isGlobalObjectExpression(node, ctx);
+  return (node) => isGlobalObjectExpression(unwrapGuardChain(node), ctx);
 }
 
-// A mutation key evaluates before the write/call completes: walk its
-// interior with the full guard machinery BEFORE the provable-key proof, so
-// a nested tamper carrier flips the flag first (R2 F2, R3 F1/F3/F4). Flag
-// sets are idempotent — the later in-order re-walk is a no-op.
+// Walk a mutation key's interior BEFORE the provable-key proof, so a nested
+// tamper carrier flips the flag first. Probe only: alias marks restore after (R4 F2).
 function scanGuardKeyTamper(ctx: EsmFunctionGuardCtx, key: unknown): void {
+  const snapshot = snapshotGuardScopeAliases(ctx.scopes);
   walkEsmFunctionGuard(key as GuardNodeShape, ctx);
+  restoreGuardScopeAliases(snapshot);
 }
 
 function declareGuardPattern(scope: GuardScope, pattern: unknown): void {
@@ -388,9 +389,8 @@ function predeclareGuardLexicalScope(body: readonly GuardNodeShape[], scope: Gua
       declareGuardImport(scope, node);
       continue;
     }
-    // Export wrappers expose their inner declaration's bindings; without the
-    // unwrap an `export const K = …` never enters `bindings` and every alias
-    // marking silently no-ops (probed 2026-10-01).
+    // Export wrappers expose the inner declaration's bindings, or an
+    // `export const K = …` never enters `bindings` and alias marking no-ops.
     const target =
       node.type === 'ExportNamedDeclaration' || node.type === 'ExportDefaultDeclaration'
         ? ((node as unknown as { declaration?: GuardNodeShape | null }).declaration ?? undefined)

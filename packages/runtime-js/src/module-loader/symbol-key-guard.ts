@@ -27,6 +27,46 @@ export interface SymbolKeyScope {
   readonly symbolIntrinsicAliases: Set<string>;
 }
 
+/** The twins' full scope shape — every alias set a guard walk may mark. */
+export interface GuardAliasScope extends SymbolKeyScope {
+  readonly globalAliases: Set<string>;
+  readonly maybeFunctionAliases: Set<string>;
+  readonly maybeDerivedFunctionAliases: Set<string>;
+  readonly maybeEvalAliases: Set<string>;
+}
+
+// R4 F1/F2: the early key walk is a PROBE — the in-order walk re-walks the
+// same subtree and must see identical starting state, or alias marks from
+// the first pass rewrite earlier-in-key writes on replay and (cjs) edits
+// land twice. Snapshot every set the walk may mark; restore after; only the
+// monotonic tamper flag stays set.
+export function snapshotGuardScopeAliases(
+  scopes: readonly GuardAliasScope[],
+): [Set<string>, string[]][] {
+  const snapshot: [Set<string>, string[]][] = [];
+  for (const scope of scopes) {
+    for (const set of [
+      scope.bindings,
+      scope.globalAliases,
+      scope.maybeFunctionAliases,
+      scope.maybeDerivedFunctionAliases,
+      scope.maybeEvalAliases,
+      scope.symbolKeyAliases,
+      scope.symbolIntrinsicAliases,
+    ]) {
+      snapshot.push([set, [...set]]);
+    }
+  }
+  return snapshot;
+}
+
+export function restoreGuardScopeAliases(snapshot: readonly [Set<string>, string[]][]): void {
+  for (const [set, values] of snapshot) {
+    set.clear();
+    for (const value of values) set.add(value);
+  }
+}
+
 /**
  * Same shape as the twins' isGuardShadowed/isShadowed, bound to their ctx —
  * plus one disjunct the twins add: once the module observably tampers the
@@ -126,12 +166,16 @@ export function isSymbolIntrinsicAlias(scopes: readonly SymbolKeyScope[], name: 
 // A computed key is provably Symbol-valued when it is a
 // Symbol(...)/Symbol.for(...) call on an unshadowed Symbol, or an Identifier
 // const-bound to one. Symbol.keyFor returns a string — NOT accepted; a
-// shadowed Symbol keeps every pattern loud.
+// shadowed Symbol keeps every pattern loud. Inside a CJS `with` body NO key
+// is provable: the dynamic scope may shadow the alias or Symbol itself with
+// a string (R4 F4); ESM is strict-parsed, so it never passes withDepth.
 export function isProvablySymbolKey(
   node: unknown,
   scopes: readonly SymbolKeyScope[],
   isShadowed: SymbolKeyShadowProbe,
+  withDepth = 0,
 ): boolean {
+  if (withDepth > 0) return false;
   if (!node || typeof node !== 'object') return false;
   const n = unwrapGuardChain(node) as GuardAstNode;
   if (n.type === 'Identifier') {
@@ -162,8 +206,9 @@ export function mutationKeyMayBeFunction(
   node: unknown,
   scopes: readonly SymbolKeyScope[],
   isShadowed: SymbolKeyShadowProbe,
+  withDepth = 0,
 ): boolean {
-  return propertyMayBeFunction(node) && !isProvablySymbolKey(node, scopes, isShadowed);
+  return propertyMayBeFunction(node) && !isProvablySymbolKey(node, scopes, isShadowed, withDepth);
 }
 
 // defineProperties / Object.assign literal keys.
@@ -171,6 +216,7 @@ export function objectMayContainFunctionKey(
   node: unknown,
   scopes: readonly SymbolKeyScope[],
   isShadowed: SymbolKeyShadowProbe,
+  withDepth = 0,
 ): boolean {
   if (!node || typeof node !== 'object') return true;
   const object = node as GuardAstNode;
@@ -181,7 +227,7 @@ export function objectMayContainFunctionKey(
     const key = staticPropertyKeyName(property);
     if (key !== undefined) return key === 'Function';
     const p = property as unknown as { computed?: boolean; key?: unknown };
-    return !(p.computed && isProvablySymbolKey(p.key, scopes, isShadowed));
+    return !(p.computed && isProvablySymbolKey(p.key, scopes, isShadowed, withDepth));
   });
 }
 
@@ -253,10 +299,14 @@ export function isSymbolIntrinsicMutationCall(
   isGlobalObject: SymbolKeyGlobalProbe,
 ): boolean {
   const call = node as unknown as { callee?: GuardAstNode; arguments?: unknown[] };
-  const callee = call.callee;
+  // Wrapped callees name the same builtin: `(0, Object).defineProperty` IS
+  // Object.defineProperty (R4 F3 — the unwrap must reach callee AND object).
+  const callee = unwrapGuardChain(call.callee) as GuardAstNode | undefined;
   const args = call.arguments ?? [];
   if (!callee || callee.type !== 'MemberExpression') return false;
-  const object = (callee as unknown as { object?: GuardAstNode }).object;
+  const object = unwrapGuardChain((callee as unknown as { object?: GuardAstNode }).object) as
+    | GuardAstNode
+    | undefined;
   const objectName =
     object?.type === 'Identifier' ? (object as unknown as { name?: string }).name : undefined;
   const propertyName = staticPropertyName(callee);
