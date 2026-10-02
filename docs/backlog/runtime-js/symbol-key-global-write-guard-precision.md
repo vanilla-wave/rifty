@@ -154,15 +154,17 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
    and full key cleanup → I6
 
 Unit REDs (guard precision): `tests/conformance/modules/symbol-key-global-write.test.ts`
-— 28 positive carriers (Acceptance 1/2/4 patterns compile and run in both
+— 40 positive carriers (Acceptance 1/2/4 patterns compile and run in both
 loaders, incl. an export-wrapped `export const K = Symbol.for(…)` alias,
 a CJS stash method call, a shadowed-local scope control, a
 write-before-tamper source-order control, and a key-interior
 nested-function local-Symbol control — RED today — plus the
 export-wrapped `globalThis`-alias ceiling hole, see Decisions; R4 adds the
 early-walk scope control with a FRESH Symbol.call (C1), the alias-replay
-pair (F2), and the CJS key-interior edit-producer sweep (F1)) +
-67 boundary pins (Acceptance 3 in BOTH loaders:
+pair (F2), and the CJS key-interior edit-producer sweep (F1); R5 adds the
+twelve-carrier key-interior write-then-tamper source-order matrix — six
+mutation sites × both loaders) +
+69 boundary pins (Acceptance 3 in BOTH loaders:
 string-literal, concatenated, unknown-identifier, `let`-bound-symbol,
 shadowed-`Symbol`, `Symbol.keyFor` keys stay loud, called
 `Reflect.get(globalThis, K)` results stay loud, and the intrinsic-tamper
@@ -172,7 +174,8 @@ key-interior pins (R3 C1), the R3 destructuring pair, the R3
 wrapped-reference pair, the R3 prototype-injection form, the R3
 const-intrinsic-alias pair, the R4 pure-setPrototypeOf / wrapped-global /
 wrapped-define-callee / alias-callee forms; CJS-only the R3 `with`-shadowed
-form and the R4 `with`-shadowed key-alias form — tamper
+form, the R4 `with`-shadowed key-alias form, and the R5 with-interior
+tamper-detection pair — tamper
 pins RED at their introducing round, the rest green today,
 regression-only).
 
@@ -324,3 +327,21 @@ regression-only).
   RED-pinned 8 failed / 87 passed pre-fix (F1×1 CJS multi-site, F2×2,
   F3×4, F4×1; the C1/C2/C5 pins are green-today mutant killers),
   95/95 post-fix.
+- 2026-10-02 — Final+GREEN R5 (reviewer probe, run died to an infra
+  content-filter after reproducing the defect; finding taken from its
+  evidence log): the probe-pass design is UNFIXABLE — the tamper flag
+  must survive the probe for the outer proof (R2 F2) yet poisons the
+  key's own in-order re-walk (a nested Symbol-key write whose fresh key
+  precedes the tamper is legitimate — Node evaluates
+  `(globalThis[Symbol.for('i')] = 1, Symbol.for = f, Symbol.for = saved, K)`
+  to a clean write — but the leaked flag rejects it at all six mutation
+  sites in both twins). REDESIGN: walk-first-then-decide — each mutation
+  site walks the key subtree in source order BEFORE consulting the proof;
+  the probe pass, snapshot/restore helpers, and edit truncation are
+  DELETED (REV-7: one walk, no parallel state). Tamper DETECTION switches
+  to the lexical shadow probe: the augmented probe's flag disjunct masked
+  repeat tamper sites and its withDepth disjunct excused real
+  substitution inside `with({})` (CJS — flagged now, post-with keys stay
+  loud). RED-pinned 14 failed / 95 passed pre-fix (12 replay-matrix
+  positives — six sites × two loaders — + 2 with-interior tamper
+  carriers), 109/109 post-fix (40 positives + 69 boundary).

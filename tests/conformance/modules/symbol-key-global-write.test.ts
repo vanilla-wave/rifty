@@ -815,6 +815,26 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       delete globalThis['with.sentinel'];
       module.exports = 1;
     `,
+    // Final+GREEN R5: tamper INSIDE a with body with a non-shadowing
+    // with-object hits the REAL intrinsic — detection uses the lexical
+    // probe, so post-with keys stay loud (the augmented probe's withDepth
+    // disjunct would excuse it).
+    '/cjs-tamper-member-in-with.cjs': `
+      const originalFor = Symbol.for;
+      with ({}) { Symbol.for = () => 'tampered-sentinel'; }
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-define-property-in-with.cjs': `
+      const originalFor = Symbol.for;
+      with ({}) { Object.defineProperty(Symbol, 'for', { value: () => 'tampered-sentinel', configurable: true }); }
+      globalThis[Symbol.for('x')] = 1;
+      Object.defineProperty(Symbol, 'for', { value: originalFor, writable: true, configurable: true });
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
     // R4 C2/C3/F3 CJS twins of the ESM pins (same rationales).
     '/cjs-tamper-set-prototype-of-pure.cjs': `
       const originalProto = Object.getPrototypeOf(Symbol);
@@ -854,6 +874,51 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       expect(() => loader.require(`.${path}`, '/entry.cjs')).toThrowError(
         /module-loader\.cjs-global-function-assignment/,
       );
+    });
+  }
+});
+
+describe('key-interior evaluation order is source order (R5)', () => {
+  // Final+GREEN R5 (reviewer probe): the key interior runs BEFORE the outer
+  // write, in source order — a nested Symbol-key write whose fresh key
+  // PRECEDES the tamper is legitimate (write-before-tamper, R2 C1), the
+  // tamper is flagged for what follows, and the outer alias key (a real
+  // Symbol regardless) stays exempt. Node evaluates every site to 2.
+  // A probe-pass design that lets the tamper flag leak into the key's own
+  // re-walk wrongly rejects the nested write at ALL six sites.
+  const keyInterior =
+    "(globalThis[Symbol.for('r5.inner')] = 1, Symbol.for = () => 'r5.sentinel', Symbol.for = saved, K)";
+  const sites: Record<string, string> = {
+    write: `globalThis[${keyInterior}] = 2;`,
+    defineProperty: `Object.defineProperty(globalThis, ${keyInterior}, { value: 2, configurable: true });`,
+    reflectSet: `Reflect.set(globalThis, ${keyInterior}, 2);`,
+    defineProperties: `Object.defineProperties(globalThis, { [${keyInterior}]: { value: 2, configurable: true } });`,
+    assign: `Object.assign(globalThis, { [${keyInterior}]: 2 });`,
+    defineGetter: `globalThis.__defineGetter__(${keyInterior}, () => 2);`,
+  };
+  const prelude = `
+    const saved = Symbol.for;
+    const K = Symbol.for('r5.outer');
+    const I = Symbol.for('r5.inner');
+  `;
+  const cleanup = `
+    const r = globalThis[K];
+    delete globalThis[K];
+    delete globalThis[I];
+  `;
+  for (const [site, mutation] of Object.entries(sites)) {
+    it(`ESM runs key-interior write-then-tamper at the ${site} site`, async () => {
+      const loader = setup({
+        [`/r5-order-${site}.mjs`]: `${prelude}${mutation}${cleanup} export { r };`,
+      });
+      const ns = await loader.import(`/r5-order-${site}.mjs`, '/entry.mjs');
+      expect(ns.r).toBe(2);
+    });
+    it(`CJS runs key-interior write-then-tamper at the ${site} site`, () => {
+      const loader = setup({
+        [`/r5-order-${site}.cjs`]: `${prelude}${mutation}${cleanup} module.exports = r;`,
+      });
+      expect(loader.require(`./r5-order-${site}.cjs`, '/entry.cjs')).toBe(2);
     });
   }
 });

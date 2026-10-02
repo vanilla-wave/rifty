@@ -27,8 +27,6 @@ import {
   isSymbolTamperTarget,
   mutationKeyMayBeFunction,
   objectMayContainFunctionKey,
-  restoreGuardScopeAliases,
-  snapshotGuardScopeAliases,
   updateSymbolAliasesFromPatternValue,
 } from './symbol-key-guard.ts';
 
@@ -483,18 +481,12 @@ function globalObjectProbe(ctx: FunctionRewriteCtx): SymbolKeyGlobalProbe {
   return (node) => isGlobalObjectExpression(unwrapChain(node), ctx);
 }
 
-// Walk a mutation key's interior BEFORE the provable-key proof, so a nested
-// tamper carrier flips the flag first (R2 F2, R3 — the sequence unwrap must
-// not discard the mutation). Probe only: pushed edits and alias marks
-// restore after — the in-order re-walk must replay identically, or edits
-// land twice and replayed alias state rewrites earlier-in-key writes (R4
-// F1/F2). The monotonic tamper flag stays.
-function scanKeyTamper(ctx: FunctionRewriteCtx, key: unknown): void {
-  const editsLength = ctx.edits.length;
-  const snapshot = snapshotGuardScopeAliases(ctx.scopes);
-  walkFunctionReferences(key as AnyNodeShape, ctx);
-  ctx.edits.length = editsLength;
-  restoreGuardScopeAliases(snapshot);
+// Tamper DETECTION uses the lexical probe: the tamper-flag disjunct would
+// mask a second tamper site, and the withDepth disjunct would excuse a real
+// substitution inside `with({})` (R5). Provability keeps the augmented
+// probe; detection only asks "does this name the intrinsic?".
+function lexicalShadowProbe(ctx: FunctionRewriteCtx): SymbolKeyShadowProbe {
+  return (name) => isShadowed(ctx, name);
 }
 
 function declarePattern(scope: Scope, pattern: unknown): void {
@@ -763,12 +755,6 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
     case 'CallExpression': {
       const callee = n.callee as AnyNodeShape | undefined;
       const args = (n as unknown as { arguments?: unknown[] }).arguments ?? [];
-      if (isGlobalFunctionMutationCall(n, ctx)) {
-        ctx.hasGlobalFunctionWrite = true;
-      }
-      if (isSymbolIntrinsicMutationCall(n, ctx.scopes, shadowProbe(ctx), globalObjectProbe(ctx))) {
-        ctx.symbolIntrinsicTampered = true;
-      }
       if (calleeMayBeHostFunction(callee, ctx)) {
         ctx.hasGlobalFunctionWrite = true;
       }
@@ -790,8 +776,25 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
           ctx.hasFunctionEvalText ||
           (directEvalImportEdit === null && evalArgumentMayTouchFunction(args[0]));
       }
+      // Key-consulting checks run AFTER the in-order child walk: a mutation
+      // key's interior (incl. nested writes and Symbol tamper) has fully
+      // evaluated before the write/call completes, so the proof must see
+      // the post-key state — one walk, source order, no probe pass (R5).
       walkFunctionReferences(callee, ctx);
       for (const arg of args) walkFunctionReferences(arg, ctx);
+      if (isGlobalFunctionMutationCall(n, ctx)) {
+        ctx.hasGlobalFunctionWrite = true;
+      }
+      if (
+        isSymbolIntrinsicMutationCall(
+          n,
+          ctx.scopes,
+          lexicalShadowProbe(ctx),
+          globalObjectProbe(ctx),
+        )
+      ) {
+        ctx.symbolIntrinsicTampered = true;
+      }
       return;
     }
 
@@ -960,7 +963,7 @@ function walkPatternExpressions(pattern: unknown, ctx: FunctionRewriteCtx): void
 function walkAssignmentTarget(target: unknown, ctx: FunctionRewriteCtx): void {
   if (!target || typeof target !== 'object') return;
   const t = target as AnyNodeShape;
-  if (isSymbolTamperTarget(t, ctx.scopes, shadowProbe(ctx), globalObjectProbe(ctx))) {
+  if (isSymbolTamperTarget(t, ctx.scopes, lexicalShadowProbe(ctx), globalObjectProbe(ctx))) {
     ctx.symbolIntrinsicTampered = true;
   }
   if (t.type === 'Identifier') {
@@ -968,11 +971,13 @@ function walkAssignmentTarget(target: unknown, ctx: FunctionRewriteCtx): void {
     return;
   }
   if (t.type === 'MemberExpression') {
+    // Object and computed key evaluate before the write — walk them FIRST,
+    // so the proof sees key-interior tamper in source order (R5).
+    walkFunctionReferences(t.object, ctx);
+    if ((t as unknown as { computed?: boolean }).computed) walkFunctionReferences(t.property, ctx);
     if (isGlobalFunctionWriteMember(t, ctx)) {
       ctx.hasGlobalFunctionWrite = true;
     }
-    walkFunctionReferences(t.object, ctx);
-    if ((t as unknown as { computed?: boolean }).computed) walkFunctionReferences(t.property, ctx);
     return;
   }
   walkAssignmentPatternTarget(t, ctx);
@@ -984,7 +989,7 @@ function walkAssignmentPatternTarget(pattern: unknown, ctx: FunctionRewriteCtx):
   switch (pat.type) {
     case 'Identifier':
       markGlobalFunctionWrite(pat, ctx);
-      if (isSymbolTamperTarget(pat, ctx.scopes, shadowProbe(ctx), globalObjectProbe(ctx))) {
+      if (isSymbolTamperTarget(pat, ctx.scopes, lexicalShadowProbe(ctx), globalObjectProbe(ctx))) {
         ctx.symbolIntrinsicTampered = true;
       }
       return;
@@ -1531,7 +1536,6 @@ function isGlobalFunctionWriteMember(node: AnyNodeShape, ctx: FunctionRewriteCtx
   const propertyName = staticPropertyName(node);
   if (propertyName !== undefined) return propertyName === 'Function';
   if (!isComputedMember(node)) return false;
-  scanKeyTamper(ctx, node.property);
   return !isProvablySymbolKey(node.property, ctx.scopes, shadowProbe(ctx), ctx.withDepth);
 }
 
@@ -1731,10 +1735,9 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
   const isBuiltinReflect = objectName === 'Reflect' && !isShadowed(ctx, 'Reflect');
 
   if (isBuiltinObject && propertyName === 'assign' && isGlobalObjectExpression(args[0], ctx)) {
-    return args.slice(1).some((arg) => {
-      scanKeyTamper(ctx, arg);
-      return objectMayContainFunctionKey(arg, ctx.scopes, shadowProbe(ctx), ctx.withDepth);
-    });
+    return args
+      .slice(1)
+      .some((arg) => objectMayContainFunctionKey(arg, ctx.scopes, shadowProbe(ctx), ctx.withDepth));
   }
 
   const isObjectDefine =
@@ -1746,10 +1749,8 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
       propertyName === 'deleteProperty');
   if ((isObjectDefine || isReflectMutation) && isGlobalObjectExpression(args[0], ctx)) {
     if (propertyName === 'defineProperties') {
-      scanKeyTamper(ctx, args[1]);
       return objectMayContainFunctionKey(args[1], ctx.scopes, shadowProbe(ctx), ctx.withDepth);
     }
-    scanKeyTamper(ctx, args[1]);
     return mutationKeyMayBeFunction(args[1], ctx.scopes, shadowProbe(ctx), ctx.withDepth);
   }
 
@@ -1757,7 +1758,6 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
-    scanKeyTamper(ctx, args[0]);
     return mutationKeyMayBeFunction(args[0], ctx.scopes, shadowProbe(ctx), ctx.withDepth);
   }
 

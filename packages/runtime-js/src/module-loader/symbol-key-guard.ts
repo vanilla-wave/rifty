@@ -27,46 +27,6 @@ export interface SymbolKeyScope {
   readonly symbolIntrinsicAliases: Set<string>;
 }
 
-/** The twins' full scope shape — every alias set a guard walk may mark. */
-export interface GuardAliasScope extends SymbolKeyScope {
-  readonly globalAliases: Set<string>;
-  readonly maybeFunctionAliases: Set<string>;
-  readonly maybeDerivedFunctionAliases: Set<string>;
-  readonly maybeEvalAliases: Set<string>;
-}
-
-// R4 F1/F2: the early key walk is a PROBE — the in-order walk re-walks the
-// same subtree and must see identical starting state, or alias marks from
-// the first pass rewrite earlier-in-key writes on replay and (cjs) edits
-// land twice. Snapshot every set the walk may mark; restore after; only the
-// monotonic tamper flag stays set.
-export function snapshotGuardScopeAliases(
-  scopes: readonly GuardAliasScope[],
-): [Set<string>, string[]][] {
-  const snapshot: [Set<string>, string[]][] = [];
-  for (const scope of scopes) {
-    for (const set of [
-      scope.bindings,
-      scope.globalAliases,
-      scope.maybeFunctionAliases,
-      scope.maybeDerivedFunctionAliases,
-      scope.maybeEvalAliases,
-      scope.symbolKeyAliases,
-      scope.symbolIntrinsicAliases,
-    ]) {
-      snapshot.push([set, [...set]]);
-    }
-  }
-  return snapshot;
-}
-
-export function restoreGuardScopeAliases(snapshot: readonly [Set<string>, string[]][]): void {
-  for (const [set, values] of snapshot) {
-    set.clear();
-    for (const value of values) set.add(value);
-  }
-}
-
 /**
  * Same shape as the twins' isGuardShadowed/isShadowed, bound to their ctx —
  * plus one disjunct the twins add: once the module observably tampers the
