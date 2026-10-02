@@ -422,6 +422,16 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       delete globalThis['tampered-sentinel'];
       export const r = 1;
     `,
+    '/tamper-chained-alias.mjs': `
+      const originalFor = Symbol.for;
+      const S = Symbol;
+      const S2 = S;
+      S2.for = () => 'tampered-sentinel';
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      export const r = 1;
+    `,
     '/tamper-prototype-inject.mjs': `
       const originalFor = Symbol.for;
       const originalProto = Object.getPrototypeOf(Symbol);
@@ -630,6 +640,16 @@ describe('the ceiling is unchanged for keys that may be Function', () => {
       const originalFor = Symbol.for;
       const S = Symbol;
       Object.defineProperty(S, 'for', { value: () => 'tampered-sentinel' });
+      globalThis[Symbol.for('x')] = 1;
+      Symbol.for = originalFor;
+      delete globalThis['tampered-sentinel'];
+      module.exports = 1;
+    `,
+    '/cjs-tamper-chained-alias.cjs': `
+      const originalFor = Symbol.for;
+      const S = Symbol;
+      const S2 = S;
+      S2.for = () => 'tampered-sentinel';
       globalThis[Symbol.for('x')] = 1;
       Symbol.for = originalFor;
       delete globalThis['tampered-sentinel'];

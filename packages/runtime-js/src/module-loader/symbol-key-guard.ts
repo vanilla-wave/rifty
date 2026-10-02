@@ -87,8 +87,8 @@ export function updateSymbolAliasesFromPatternValue(
   const v = unwrapGuardChain(value) as GuardAstNode;
   const isIntrinsic =
     (v.type === 'Identifier' &&
-      (v as unknown as { name?: string }).name === 'Symbol' &&
-      !isShadowed('Symbol')) ||
+      (((v as unknown as { name?: string }).name === 'Symbol' && !isShadowed('Symbol')) ||
+        isSymbolIntrinsicAlias(scopes, (v as unknown as { name?: string }).name as string))) ||
     (v.type === 'MemberExpression' &&
       isGlobalObject((v as unknown as { object?: unknown }).object) &&
       staticPropertyName(v) === 'Symbol');
