@@ -87,3 +87,20 @@ Native npm sequence ms@2.0.0 → ms@2.0.0 with the same test registry requests
 vendored package manifest at that external HTTP boundary; catalog quota and
 permission injection, mutation outcome and reload assertions are untouched.
 Isolated post-change suite2/2 GREEN: /tmp/pr357-repair-catalog-green.log.
+
+Second full gate on1b58f3595: test:run GREEN238.8s, all static/build lanes GREEN;
+parity aborted natively with exit134. /tmp/pr357-repair-pr-check-final.log:
+
+```
+✓ worker_threads/handle-reference-api.case.ts
+FATAL ERROR: v8::ToLocalChecked Empty MaybeLocal
+node::cjs_lexer::Parse
+cjsPreparseModuleExports (node:internal/modules/esm/translators:397:44)
+```
+
+Node24.16.0/macOS. Last printed PASS does not identify the crashing case.
+Same-tree `pnpm test:parity worker_threads` passed all cases;
+/tmp/pr357-repair-parity-worker-isolated.log. Prior full parity passed125.3s.
+Cause unproven; no speculative runtime/test change. Question captured in
+`docs/backlog/toolchain-build/parity-native-cjs-lexer-crash.md`; final independent
+review also checks this factual capture. Full gate repeated once after isolation.
