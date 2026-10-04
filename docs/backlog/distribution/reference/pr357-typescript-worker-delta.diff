@@ -1,0 +1,42 @@
+--- /tmp/pr357-compiler/45067718eeea8fe8f026e94540f33473c4587660.js	2026-10-05 01:15:31
++++ /tmp/pr357-compiler/87c370fa7.js	2026-10-05 01:15:31
+@@ -2,11 +2,11 @@
+   installBundleLocalBuffer,
+   installNodeWorkerRuntimeConfig,
+   readNodeWorkerRuntimeConfigFromProcess
+-} from "./chunk-I4Q273LT.js";
++} from "./chunk-IOPIDSKO.js";
+ import {
+   SyncRpcFsSync
+-} from "./chunk-PWB4PBD3.js";
+-import "./chunk-26QKCSRU.js";
++} from "./chunk-SYXDYTF6.js";
++import "./chunk-FIDI47KT.js";
+ import {
+   fs_exports,
+   init_fs,
+@@ -18,12 +18,11 @@
+   path_exports,
+   perf_hooks_exports,
+   readKernelSyncApi
+-} from "./chunk-6R5BMC7I.js";
+-import "./chunk-RK6FOR7C.js";
++} from "./chunk-GAHVUNSA.js";
+ import "./chunk-4MZL3E4C.js";
+-import "./chunk-Q36YJA7P.js";
+-import "./chunk-XIQ55Y4O.js";
+ import "./chunk-NUPSJVUU.js";
++import "./chunk-VOBMKHFX.js";
++import "./chunk-XIQ55Y4O.js";
+ import {
+   __commonJS,
+   __require,
+@@ -211000,7 +210999,7 @@
+   }
+ }
+ async function resolveWorkspaceTypeScriptEntry(fsSync, projectRoot) {
+-  const { createModuleLoader } = await import("./module-loader-HVVQ6WGH.js");
++  const { createModuleLoader } = await import("./module-loader-F5IUE4OG.js");
+   const { resolver } = createModuleLoader(fsSync);
+   try {
+     const resolved = resolver.resolve("typescript", { fromFile: projectRoot, esm: false });

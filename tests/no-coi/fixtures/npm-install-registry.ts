@@ -171,40 +171,49 @@ export async function installRegistry() {
         server.close((error) => (error ? reject(error) : resolve())),
       );
     },
-    async native(args: readonly string[], initial: object = {}) {
+    async native(
+      args: readonly string[],
+      initial: object = {},
+      before: readonly (readonly string[])[] = [],
+    ) {
       const cwd = await mkdtemp(join(tmpdir(), 'rifty-kit-npm-'));
       try {
         await writeFile(
           join(cwd, 'package.json'),
           JSON.stringify({ ...initialManifest, ...initial }),
         );
-        await exec(
-          'npm',
-          [
-            'install',
-            ...args,
-            '--ignore-scripts',
-            '--no-audit',
-            '--no-fund',
-            '--prefer-online',
-            '--registry',
-            origin,
-            '--cache',
-            join(cwd, 'cache'),
-          ],
-          { cwd },
-        );
+        for (const step of [...before, args])
+          await exec(
+            'npm',
+            [
+              'install',
+              ...step,
+              '--ignore-scripts',
+              '--fetch-retries=0',
+              '--no-audit',
+              '--no-fund',
+              '--prefer-online',
+              '--registry',
+              origin,
+              '--cache',
+              join(cwd, 'cache'),
+            ],
+            { cwd },
+          );
         const pkg = JSON.parse(await readFile(join(cwd, 'package.json'), 'utf8'));
         const lock = JSON.parse(await readFile(join(cwd, 'package-lock.json'), 'utf8'));
         const installed = JSON.parse(
-          await readFile(join(cwd, 'node_modules/ms/package.json'), 'utf8'),
+          await readFile(join(cwd, 'node_modules/ms/package.json'), 'utf8').catch((error) => {
+            if (error.code === 'ENOENT') return 'null';
+            throw error;
+          }),
         );
         return {
           pkg,
           lockDependencies: lock.packages[''].dependencies,
           lockDevDependencies: lock.packages[''].devDependencies,
           lockOptionalDependencies: lock.packages[''].optionalDependencies,
-          installedVersion: installed.version,
+          installedVersion: installed?.version,
         };
       } finally {
         await rm(cwd, { recursive: true, force: true });

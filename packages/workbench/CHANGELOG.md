@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Named npm installs refresh selected roots while retaining unrelated pins; skipped optional dependencies no longer fail save or shell continuation (ADR-0504).
+
 - Missing-registry diagnostics follow the final executed command; recovered npm failures no longer relabel later errors or cancellation.
 
 - Preserve optional declarations during npm save-dev; match native section inference, wildcard reuse and intersecting optional save ranges in shared shell installs.

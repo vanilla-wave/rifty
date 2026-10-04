@@ -94,6 +94,7 @@ function createIncrementalSource(
   const registry = createRegistrySource(opts, substitutions);
   let metadataUsed = false;
   const useRegistry = (name: string, range: string | null, ctx: ResolveContext): boolean => {
+    if (ctx.parentOrigin === 'root' && opts.updateNames?.includes(name)) return true;
     const decision = lockfileReuseDecision(lockfile, shadowPlan, name, range, ctx, opts.overrides);
     return decision.kind === 'miss' && registryOwnsIncrementalMiss(decision, ctx);
   };

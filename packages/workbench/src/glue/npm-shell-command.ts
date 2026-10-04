@@ -711,6 +711,7 @@ export async function executeNpmInstallOperation(
       vfs: deps.vfs,
       cwd: ctx.cwd,
       registry: deps.registry,
+      ...(additions.length ? { updateNames: additions.map(({ name }) => name) } : {}),
       ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
       ...(deps.assertPortablePaths ? { assertPortablePaths: deps.assertPortablePaths } : {}),
       ...(deps.resolverUrl ? { resolverUrl: deps.resolverUrl } : {}),
@@ -737,10 +738,13 @@ export async function executeNpmInstallOperation(
       (await deps.vfs.readFileText(packageJsonPath).catch(() => null)) === packageJsonTextAtInstall
     ) {
       for (const { name, range, section } of additions) {
-        const version = result.lockfile.packages[`node_modules/${name}`]?.version;
-        if (typeof version !== 'string' || version.length === 0)
+        const skipped = result.skippedOptionalDependencies?.[name];
+        const version =
+          result.lockfile.packages[`node_modules/${name}`]?.version ?? skipped?.version;
+        if (!version && skipped !== null)
           throw new Error(`Installed package ${name} has no top-level lock version`);
-        const saved = installedSaveRange(range, version, request.saveExact);
+        const savedRange = installedSaveRange(range, version, request.saveExact);
+        const saved = skipped === null ? `npm:null@${savedRange}` : savedRange;
         maps[section][name] = saved;
         if (
           target !== 'devDependencies' &&

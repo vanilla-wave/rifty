@@ -737,3 +737,32 @@ for (const baseline of [null, 'sha256-prior'] as const) {
     }
   });
 }
+
+it('named update after real Eddy install refreshes only the requested root', async () => {
+  const vfs = new MemoryVfs();
+  await vfs.mkdir('/proj', { recursive: true });
+  await vfs.writeFile('/proj/package.json', '{"name":"update-eddy","version":"1.0.0"}');
+  const shell = new Shell({ cwd: '/proj' });
+  shell.registerCommand(
+    'npm',
+    createIntegrationNpmShellCommand({ vfs, registry: makeRegistry(), resolverUrl: eddyUrl }),
+  );
+  try {
+    const initial = await runShell(shell, 'npm install ms@2.0.0 kleur@4.1.5');
+    expect(initial.exitCode).toBe(0);
+    expect(initial.out).toContain('via eddy (fast)');
+    const updated = await runShell(shell, 'npm install ms');
+    expect(updated.exitCode).toBe(0);
+    expect(updated.out).not.toContain('via eddy (fast)');
+    expect(JSON.parse(await vfs.readFileText('/proj/node_modules/ms/package.json')).version).toBe(
+      '2.1.3',
+    );
+    expect(
+      JSON.parse(await vfs.readFileText('/proj/node_modules/kleur/package.json')).version,
+    ).toBe('4.1.5');
+    const pkg = JSON.parse(await vfs.readFileText('/proj/package.json'));
+    expect(pkg.dependencies).toEqual({ ms: '^2.1.3', kleur: '^4.1.5' });
+  } finally {
+    await shell.dispose();
+  }
+});

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve named root update intent across lock reuse; expose actual skipped optional resolution facts for native saves (ADR-0504).
+
 - Match native npm root dev/optional/prod precedence in direct and Eddy installs; normalize optional duplicates in root lock dependency maps.
 
 - A deferred tarball fetch that rejects while the placement walk is still resolving no longer escapes as an unhandled rejection (owner exit 1); the install reports the failure itself (was: intermittent `Workbench owner exited unexpectedly` when a required tarball failed early).

@@ -31,6 +31,18 @@ throws `NotImplementedError`; configured Eddy without a registry rejects before
 prefetch or callbacks. Optional-dependency warning/skip behavior remains. This
 capability is independent of npm CLI `--offline` semantics (ADR-0398).
 
+For a named update, pass `updateNames: ['ms']`: those root requests consult
+registry metadata even when their locked version still satisfies the range.
+Other roots and covered descendants retain pins. Omit it for ordinary manifest
+install/replay. Updating an existing lock uses incremental resolution; fresh
+installs still support Eddy (ADR-0504).
+
+`skippedOptionalDependencies`, when present on the result, reports root optional
+requests that were skipped: selected name/version, or null if resolution failed.
+It describes resolution, never successful installation. Shell saves use these
+facts; npm11.17 can produce a null-name alias for unresolved optionals. Reusing
+npm aliases remains the explicit unsupported-spec ceiling above.
+
 ## Why none of this hits the live registry in tests
 
 We pin a mock fetcher in the test harness. Real-network installs are exercised manually; CI uses fixtures. This matches D-004's contract.

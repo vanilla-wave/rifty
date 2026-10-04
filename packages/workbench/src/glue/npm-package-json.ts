@@ -5,8 +5,12 @@ import subset from 'semver/ranges/subset.js';
 import validRange from 'semver/ranges/valid.js';
 
 /** npm Arborist preserves a requested range when the default save would widen it. */
-export function installedSaveRange(requested: string, version: string, exact = false): string {
-  const candidate = exact ? version : `^${version}`;
+export function installedSaveRange(
+  requested: string,
+  version: string | undefined,
+  exact = false,
+): string {
+  const candidate = version === undefined ? '*' : exact ? version : `^${version}`;
   return valid(requested, true) ||
     !validRange(requested, true) ||
     subset(candidate, requested, { loose: true })
