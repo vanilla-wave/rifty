@@ -76,3 +76,14 @@ Chromium14/14 GREEN:11 native npm cases, original package-generic bounded-cause
 carrier, both occupied deadlines. /tmp/pr357-repair-browser-green.log.
 Npm-client/Workbench typechecks, lint and build:libs pass. Rebuilt compiler remains
 exactly10022664/ffeebf6f…; retirement gate verifies the unchanged PR pin.
+
+First full pr:check26/27: test:run had2 failures in the catalog fault fixture,
+0 timeouts; both reproduced in its automatic isolated rerun. Other lanes,
+including parity, passed. /tmp/pr357-repair-pr-check.log.
+PR-4 criterion inspection: that fixture admitted snapshot and tarball HTTP only;
+new named intent reaches packument metadata before its intended catalog fault.
+Native npm sequence ms@2.0.0 → ms@2.0.0 with the same test registry requests
+/ms again (even though the selected version remains2.0.0). Added the genuine
+vendored package manifest at that external HTTP boundary; catalog quota and
+permission injection, mutation outcome and reload assertions are untouched.
+Isolated post-change suite2/2 GREEN: /tmp/pr357-repair-catalog-green.log.
