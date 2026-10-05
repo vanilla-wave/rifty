@@ -25,7 +25,7 @@ import { cluster, punycode, repl, sys, async_hooks, inspector, v8 } from './misc
 import moduleModule from './module.ts';
 import { dgram, dns, readline, tls, http2 } from './null-net-stubs.ts';
 import osModule from './os.ts';
-import pathModule from './path.ts';
+import pathModule, { posix as pathPosix, win32 as pathWin32 } from './path.ts';
 import perfHooksModule from './perf_hooks.ts';
 import { readActiveNodeProcessBootstrap } from './process-bootstrap-identity.ts';
 import { NodeProcess, riftyProcess } from './process.ts';
@@ -71,6 +71,9 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
   runtimeJsBuiltinsRegistered = true;
 
   registerBuiltin('path', () => pathModule);
+  // Node: `require('path/posix') === require('path').posix` (same objects).
+  registerBuiltin('path/posix', () => pathPosix);
+  registerBuiltin('path/win32', () => pathWin32);
   registerBuiltin('events', () => {
     const exports = EventEmitter as unknown as Record<string, unknown>;
     exports.EventEmitter = EventEmitter;

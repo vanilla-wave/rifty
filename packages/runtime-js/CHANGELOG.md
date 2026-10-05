@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Register `node:path/posix` and `node:path/win32` builtins (`win32 === posix`, POSIX-only posture).
+
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).
