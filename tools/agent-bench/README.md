@@ -53,9 +53,9 @@ known credentials are masked in payload strings and dictionary keys. Metrics
 use live events before masking in every lane. Default
 playground port5289; override `playgroundPort` in config.
 
-`--lane all|rifty|rifty-no-coi|local-reference`, `--task <slug>`, `--runs N`.
+`--lane all|rifty|rifty-no-coi|local-reference|native-codex`, `--task <slug>`, `--runs N`.
 Tasks: fix-date-sort, add-search, url-filters, new-issue-form, node-endpoint.
-New series retain the selected no-COI Node control as an unsupported setup failure; full selected smoke matrix45 trials. Historical42-run reports retain their original exclusions.
+New series retain the selected no-COI Node control as an unsupported setup failure; full selected smoke matrix60 trials (four lanes; unconfigured Codex retains setup failures). Historical42-run reports retain their original exclusions.
 
 - rifty: real launcher/+chat/settings/prompt entry, visible Agent terminal,
   editor/SCM/preview. Benchmark hooks only seed/task metadata/export. Ordinary
@@ -143,3 +143,31 @@ report after abrupt process death is visibly partial, never completed. No resume
 Before live execution, record selected matrix size, budgets and expected cost in
 campaign protocol. Scripted model controls test plumbing, not coding quality.
 Native Codex is a separate participant; the operating Codex session is not scored.
+
+## Native Codex reference
+
+Explicit config `"codex":{"model":"gpt-6.1-sol","reasoning":"low"}` enables native
+execution; no paid default. `all` always selects four lanes; absent Codex config
+retains each native-codex setup failure. `--mock-model` scripts only Pi's model
+boundary; it never fabricates a Codex agent. Configure a real Codex reference
+only for on-demand experiments, not scripted CI.
+
+Native Pi/Codex share fresh native project/npm/git/server preparation and common
+judges. Codex uses `exec --json`, fresh ephemeral session, ignored user config/rules,
+project-doc byte limit0, workspace-write/automatic approval; actual CLI version,
+model/reasoning, argv/events, initial source and final diff retained. Judge artifacts,
+operator config/history and answers are outside the seeded project. Existing-task
+real acceptance: `pnpm exec tsx tools/agent-bench/tests/codex-reference.ts` (paid,
+on-demand, plus real1s deadline).
+
+Completion needs exit0 and exactly one successful turn.completed/usage, no failed
+turn or malformed JSONL. Incomplete streams remain unsuccessful with raw captured
+text. Codex budgets cancel with SIGINT; live probe proves tool termination.
+Tool limits cancel after an observed excess item, can overshoot; actual counts
+remain untruncated. This differs from Pi's pre-dispatch admission. Native Codex
+counters the CLI does not emit are marked unavailable/unknown; incomplete token
+usage unknown. Before/after comparisons preserve unknown totals/deltas, never0.
+Codex pass rates are separate references, never Pi model deltas.
+
+Native capture uses Node streaming UTF-8 decoding; server logs append original
+buffers, preserving multibyte boundaries. No separate process/evidence coordinator.

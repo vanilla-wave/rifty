@@ -59,6 +59,8 @@ No replacement agent loop, Codex resume or live-model CI default.
 
 ## Decisions
 
+ready-verdict: 2026-10-05 — Contract+RED @ cb895686897ff09d9b8ec38e4088c086ee12b147
+
 - 2026-10-05 — SIGTERM exits0 but leaves the Node tool alive; full-EOF SIGINT exits1 and terminates it. Use SIGINT for Codex, captured in `reference/agent-eval-codex-sigint-settlement-probe.json`; prefix-only earlier cancellation evidence annotated.
 - 2026-10-05 — `all` selects four registered lanes; absent explicit Codex config is a retained setup failure, never an implicit paid default. Legacy scripted CI still executes only its configured Pi agents; selected Codex failures visible. Same-matrix tests strengthened before code.
 - 2026-10-05 — observed native reader corruption: valid Ж split at1 byte becomes ��. Class corrupt-input/provenance-lie at native stdio; runToCompletion, native Pi collector, logged-server writer share this boundary. Real Node pipe RED before fix; preserve via Node streaming UTF-8 decoding/raw log bytes.

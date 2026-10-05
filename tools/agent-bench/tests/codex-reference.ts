@@ -3,6 +3,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { runToCompletion } from '../src/proc.ts';
+import { loadTasks } from '../src/tasks.ts';
 
 // On-demand real native participant. No scripted/fake Codex, no paid CI lane.
 const root = await mkdtemp(join(tmpdir(), 'rifty-codex-reference-'));
@@ -58,7 +59,7 @@ const report = JSON.parse(await readFile(join(output, 'report.json'), 'utf8')) a
     outputTokens: number;
     judge: { probes: unknown[] };
     finalDiff: unknown[];
-    artifacts: { trace: string; workspace: string };
+    artifacts: { trace: string; workspace: string; before: string };
   }[];
 };
 assert.equal(report.header.series.status, 'completed');
@@ -73,6 +74,18 @@ assert.deepEqual(report.header.codex.isolation, {
 });
 assert.equal(report.runs.length, 1);
 const attempt = report.runs[0]!;
+const seeded = JSON.parse(await readFile(join(output, attempt.artifacts.before), 'utf8')) as Record<
+  string,
+  string
+>;
+const expected = (await loadTasks()).find((task) => task.id === 'fix-date-sort')!.files;
+for (const [path, text] of Object.entries(expected))
+  assert.equal(seeded[path], text, `Unexpected seeded bytes: ${path}`);
+assert.ok(
+  Object.keys(seeded).every((path) => path in expected || path === 'package-lock.json'),
+  'operator history/config/judge artifacts were seeded',
+);
+
 assert.equal(attempt.lane, 'native-codex');
 assert.equal(attempt.agentStatus, 'done');
 assert.ok(attempt.inputTokens > 0);

@@ -32,7 +32,7 @@ if (command === 'report') {
   const config = await loadConfig(parsed.values.config);
   if (parsed.values.runs) config.runsPerTask = positive(Number(parsed.values.runs), 'runs');
   const lane = parsed.values.lane ?? 'all';
-  const valid: Lane[] = ['rifty', 'rifty-no-coi', 'local-reference'];
+  const valid: Lane[] = ['rifty', 'rifty-no-coi', 'local-reference', 'native-codex'];
   if (lane !== 'all' && !valid.includes(lane as Lane)) throw new Error(`Unknown lane ${lane}`);
   const all = await loadTasks();
   const tasks = parsed.values.task ? all.filter((task) => task.id === parsed.values.task) : all;

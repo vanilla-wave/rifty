@@ -17,6 +17,7 @@ export interface Limits {
 }
 export interface Config {
   endpoint?: Endpoint;
+  codex?: { model: string; reasoning: 'low' | 'medium' | 'high' | 'xhigh' };
   noCoiPolicies?: SandboxAgentHostOptions['policies'];
   limits: Limits;
   runsPerTask: number;
@@ -44,7 +45,7 @@ function text(value: unknown, name: string): string {
 }
 export async function loadConfig(path?: string): Promise<Config> {
   const raw = record(path ? JSON.parse(await readFile(path, 'utf8')) : {}, 'config');
-  keys(raw, ['endpoint', 'noCoiPolicies', 'limits', 'runsPerTask', 'playgroundPort']);
+  keys(raw, ['endpoint', 'codex', 'noCoiPolicies', 'limits', 'runsPerTask', 'playgroundPort']);
   const limits = raw.limits === undefined ? {} : record(raw.limits, 'limits');
   keys(limits, ['maxToolCalls', 'runTimeoutMs']);
   let endpoint: Endpoint | undefined;
@@ -123,8 +124,20 @@ export async function loadConfig(path?: string): Promise<Config> {
     } as Endpoint;
     createOpenAIProvider({ id: endpoint.provider, models: [endpoint] });
   }
+  let codex: Config['codex'];
+  if (raw.codex !== undefined) {
+    const value = record(raw.codex, 'codex');
+    keys(value, ['model', 'reasoning']);
+    if (!['low', 'medium', 'high', 'xhigh'].includes(String(value.reasoning)))
+      throw new Error('codex.reasoning must be low/medium/high/xhigh');
+    codex = {
+      model: text(value.model, 'codex.model'),
+      reasoning: value.reasoning as NonNullable<Config['codex']>['reasoning'],
+    };
+  }
   return {
     endpoint,
+    ...(codex === undefined ? {} : { codex }),
     ...(raw.noCoiPolicies === undefined
       ? {}
       : { noCoiPolicies: raw.noCoiPolicies as SandboxAgentHostOptions['policies'] }),
@@ -204,6 +217,19 @@ export function redactJson(
       'toolcall_start',
       'toolcall_delta',
       'toolcall_end',
+      'thread.started',
+      'turn.started',
+      'turn.completed',
+      'turn.failed',
+      'item.started',
+      'item.updated',
+      'item.completed',
+      'command_execution',
+      'file_change',
+      'agent_message',
+      'reasoning',
+      'mcp_tool_call',
+      'web_search',
       'text',
       'thinking',
       'toolCall',
@@ -233,7 +259,7 @@ export function redactJson(
       'failed',
     ],
     outcome: ['pass', 'fail', 'budget-exceeded', 'context-exceeded'],
-    lane: ['rifty', 'rifty-no-coi', 'local-reference'],
+    lane: ['rifty', 'rifty-no-coi', 'local-reference', 'native-codex'],
     stage: ['setup', 'agent', 'judge', 'snapshot'],
     budget: ['maxToolCalls', 'runTimeoutMs'],
     phase: ['start', 'end'],

@@ -139,7 +139,7 @@ export async function services(lanes: Lane[], port: number, output: string) {
     await killProcessGroup(playground);
   };
   try {
-    if (lanes.some((lane) => lane !== 'local-reference')) {
+    if (lanes.some((lane) => lane === 'rifty' || lane === 'rifty-no-coi')) {
       if (!(await isHttpUp(playgroundUrl))) {
         playground = spawnLoggedServer('pnpm', ['exec', 'vite', '--force'], {
           cwd: resolve('apps/playground'),

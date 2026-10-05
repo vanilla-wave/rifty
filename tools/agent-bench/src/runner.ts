@@ -6,6 +6,7 @@ import { getAgentPromptProfile } from '@riftydev/agent';
 import { type Config, readKey, redact, redactJson, secretValues, taskSet } from './config.ts';
 import { diffTrees } from './files.ts';
 import { prepareLocal } from './lanes/local-reference.ts';
+import { codexIsolation } from './lanes/native-codex.ts';
 import { prepareNoCoi } from './lanes/rifty-no-coi.ts';
 import { prepareRifty } from './lanes/rifty.ts';
 import type { Lane, Prepared } from './lanes/types.ts';
@@ -53,6 +54,17 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
       profile,
       taskSet,
       endpoint,
+      ...(config.codex === undefined
+        ? {}
+        : {
+            codex: {
+              ...config.codex,
+              isolation: codexIsolation,
+              sandbox: 'workspace-write',
+              approval: 'automatic review',
+              budgetAdmission: 'observed tool-event cancellation; may overshoot',
+            },
+          }),
       limits: config.limits,
       ...(config.noCoiPolicies === undefined ? {} : { noCoiPolicies: config.noCoiPolicies }),
       runsPerTask: config.runsPerTask,
@@ -94,7 +106,7 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
         task: task.id,
         lane,
         runIndex: index,
-        profile,
+        profile: lane === 'native-codex' ? 'codex-default/unconfigured' : profile,
         agentStatus: 'error',
         outcome: 'fail',
         elapsedMs: 0,
@@ -120,8 +132,13 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
           ? prepareRifty(input)
           : lane === 'rifty-no-coi'
             ? prepareNoCoi(input)
-            : prepareLocal(input));
+            : prepareLocal(input, lane === 'native-codex' ? 'codex' : 'pi'));
         active = prepared;
+        if (prepared.codexVersion && report.header.codex) {
+          report.header.codex.cliVersion = prepared.codexVersion;
+          report.header.versions.codexCli = prepared.codexVersion;
+          record.profile = `codex-default/${prepared.codexVersion}`;
+        }
         if (stop.signal.aborted) throw new Error('Series interrupted during setup');
         await writeFile(
           join(dir, 'before.json'),

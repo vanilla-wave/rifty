@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add real isolated native Codex reference, explicit settings/version, terminal protocol validation, SIGINT budgets, retained raw errors and unknown telemetry; all selected lanes remain visible. Preserve native UTF-8 across chunks and raw log bytes.
+
 - Resolve full selected series before setup; reject occupied outputs, retain partial/missing trials on interruption and atomically persist completed records before cleanup. Report regeneration is read-only over JSON; unsupported selected trials remain failures (ADR-0505).
 
 - Shared reference host uses explicit preparation/open, with no snapshot deployment policy (ADR-0490).

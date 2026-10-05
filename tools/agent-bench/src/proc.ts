@@ -3,6 +3,12 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 
+/** Let Node retain partial UTF-8 sequences across pipe chunks. */
+export function decodeProcessOutput(child: ChildProcess): void {
+  child.stdout?.setEncoding('utf8');
+  child.stderr?.setEncoding('utf8');
+}
+
 export function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const srv = createServer();
@@ -38,6 +44,7 @@ export function runToCompletion(
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,
     });
+    decodeProcessOutput(child);
     const abort = () => {
       void killProcessGroup(child);
     };
@@ -45,11 +52,11 @@ export function runToCompletion(
     if (opts.signal?.aborted) abort();
     let stdout = '';
     let stderr = '';
-    child.stdout.on('data', (d: Buffer) => {
-      stdout += d.toString();
+    child.stdout.on('data', (d: string) => {
+      stdout += d;
     });
-    child.stderr.on('data', (d: Buffer) => {
-      stderr += d.toString();
+    child.stderr.on('data', (d: string) => {
+      stderr += d;
     });
     const timer = setTimeout(() => {
       void killProcessGroup(child);
@@ -126,14 +133,17 @@ export function spawnLoggedServer(
     // (pnpm run wrappers would otherwise orphan the actual server).
     detached: opts.detached ?? false,
   });
-  const append = (d: Buffer): void => appendFileSync(opts.logPath, d.toString(), 'utf8');
+  const append = (d: Buffer): void => appendFileSync(opts.logPath, d);
   child.stdout?.on('data', append);
   child.stderr?.on('data', append);
   return child;
 }
 
 /** Kill a `detached` child's whole process group (falls back to the child). */
-export function killProcessGroup(child: ChildProcess | null): Promise<void> {
+export function killProcessGroup(
+  child: ChildProcess | null,
+  firstSignal: NodeJS.Signals = 'SIGTERM',
+): Promise<void> {
   if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
   const signal = (sig: NodeJS.Signals): void => {
     if (child.pid !== undefined) {
@@ -148,7 +158,7 @@ export function killProcessGroup(child: ChildProcess | null): Promise<void> {
   };
   return new Promise((resolve) => {
     child.once('exit', () => resolve());
-    signal('SIGTERM');
+    signal(firstSignal);
     setTimeout(() => {
       if (child.exitCode === null && child.signalCode === null) signal('SIGKILL');
     }, 2000).unref();

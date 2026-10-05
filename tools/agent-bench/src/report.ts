@@ -9,7 +9,7 @@ import type { JudgeVerdict } from './judge/context.ts';
 import type { Lane, Observation } from './lanes/types.ts';
 import type { Plan, Trial } from './plan.ts';
 export const caveat =
-  'Tool/context non-equivalence: shared model, Pi version and common policy do not isolate an environment-only effect. Native CLI has read/bash/edit/write and native shell; browser hosts expose their real capabilities. Full provider prompts and tool schemas are retained per run.';
+  'Tool/context non-equivalence: shared model, Pi version and common policy do not isolate an environment-only effect. Native CLI has read/bash/edit/write and native shell; browser hosts expose their real capabilities. Full provider prompts/tool schemas are retained for Pi runs. Native Codex JSONL does not expose its assembled prompt/tool schema; that context remains unobserved.';
 export interface Run extends Omit<Observation, 'trace'> {
   task: string;
   lane: Lane;
@@ -37,7 +37,7 @@ export interface Report {
     createdAt: string;
     sourceRevision: string;
     sourceDirty: boolean;
-    versions: { node: string; piCli: string; chromium?: string };
+    versions: { node: string; piCli: string; chromium?: string; codexCli?: string };
     model: string;
     profile: string;
     taskSet: string;
@@ -47,6 +47,20 @@ export interface Report {
     runsPerTask: number;
     toolContextCaveat: string;
     unsupported: string[];
+    codex?: {
+      model: string;
+      reasoning: string;
+      cliVersion?: string;
+      sandbox: 'workspace-write';
+      approval: 'automatic review';
+      isolation: {
+        ephemeral: boolean;
+        ignoreUserConfig: boolean;
+        ignoreRules: boolean;
+        projectDocMaxBytes: number;
+      };
+      budgetAdmission: string;
+    };
     plan?: Plan;
     series?: {
       status: 'running' | 'completed' | 'interrupted' | 'failed';
@@ -82,6 +96,9 @@ export function privateReport(report: Report, secrets: readonly string[]): Repor
             },
           }),
       model: text(report.header.model),
+      ...(report.header.codex === undefined
+        ? {}
+        : { codex: { ...report.header.codex, model: text(report.header.codex.model) } }),
       endpoint: JSON.parse(redactJson(report.header.endpoint, secrets)) as Endpoint,
       ...(report.header.noCoiPolicies === undefined
         ? {}
@@ -160,6 +177,11 @@ export async function writeReport(dir: string, report: Report, persist = true) {
     '',
   ];
   const cell = (value: string | null) => value?.replaceAll('|', '\\|').replaceAll('\n', ' ') ?? '—';
+  if (report.header.codex)
+    lines.push(
+      `Native Codex reference: ${JSON.stringify(report.header.codex)}. Separate model/context; no Pi delta.`,
+      'Native Codex counters not emitted by CLI are unknown; tokens absent on incomplete turns are unknown.',
+    );
   if (report.header.series) {
     const series = report.header.series;
     lines.push(
@@ -190,7 +212,7 @@ export async function writeReport(dir: string, report: Report, persist = true) {
   }
   for (const run of report.runs)
     lines.push(
-      `| ${run.task} | ${run.lane} | ${run.runIndex} | ${run.outcome} | ${run.agentStatus} | ${(run.elapsedMs / 1000).toFixed(1)} | ${run.toolCalls} | ${run.inputTokens ?? '—'} | ${run.outputTokens ?? '—'} | ${run.retries ?? '—'} | ${run.compactions ?? '—'} | ${run.repeatedCallNotices ?? '—'} | ${run.editFailures ?? '—'} | ${run.malformedToolCalls ?? '—'} | ${cell(run.failureClass)} | ${cell(run.note)} |`,
+      `| ${run.task} | ${run.lane} | ${run.runIndex} | ${run.outcome} | ${run.agentStatus} | ${(run.elapsedMs / 1000).toFixed(1)} | ${run.toolCalls} | ${metric(run, 'inputTokens')} | ${metric(run, 'outputTokens')} | ${metric(run, 'retries')} | ${metric(run, 'compactions')} | ${metric(run, 'repeatedCallNotices')} | ${metric(run, 'editFailures')} | ${metric(run, 'malformedToolCalls')} | ${cell(run.failureClass)} | ${cell(run.note)} |`,
     );
   lines.push(
     '',
@@ -204,12 +226,12 @@ export async function writeReport(dir: string, report: Report, persist = true) {
     const reference = native.length
       ? native.filter((run) => run.outcome === 'pass').length / native.length
       : null;
-    for (const lane of ['rifty', 'rifty-no-coi', 'local-reference']) {
+    for (const lane of ['rifty', 'rifty-no-coi', 'local-reference', 'native-codex']) {
       const rows = report.runs.filter((run) => run.task === task && run.lane === lane);
       if (!rows.length) continue;
       const pass = rows.filter((run) => run.outcome === 'pass').length;
       lines.push(
-        `| ${task} | ${lane} | ${pass}/${rows.length} | ${rows.filter((run) => run.outcome === 'budget-exceeded').length} | ${rows.filter((run) => run.outcome === 'context-exceeded').length} | ${reference === null ? 'unavailable' : (pass / rows.length - reference).toFixed(3)} |`,
+        `| ${task} | ${lane} | ${pass}/${rows.length} | ${rows.filter((run) => run.outcome === 'budget-exceeded').length} | ${rows.filter((run) => run.outcome === 'context-exceeded').length} | ${lane === 'native-codex' ? 'separate reference' : reference === null ? 'unavailable' : (pass / rows.length - reference).toFixed(3)} |`,
       );
     }
   }
@@ -228,16 +250,14 @@ const metricKeys = [
   'editFailures',
   'malformedToolCalls',
 ] as const;
-type Summary = Record<
-  | (typeof metricKeys)[number]
-  | 'runs'
-  | 'passes'
-  | 'budgetExceeded'
-  | 'contextExceeded'
-  | 'medianSeconds'
-  | 'medianTools',
-  number
->;
+function metric(run: Run, key: (typeof metricKeys)[number]): number | string {
+  return run.unavailableMetrics?.includes(key) ? 'unknown' : (run[key] ?? '—');
+}
+type Summary = Record<(typeof metricKeys)[number], number | null> &
+  Record<
+    'runs' | 'passes' | 'budgetExceeded' | 'contextExceeded' | 'medianSeconds' | 'medianTools',
+    number
+  >;
 function summarize(runs: Run[]): Summary {
   const median = (values: number[]) => {
     values.sort((a, b) => a - b);
@@ -252,8 +272,13 @@ function summarize(runs: Run[]): Summary {
     medianSeconds: median(runs.map((run) => run.elapsedMs / 1000)),
     medianTools: median(runs.map((run) => run.toolCalls)),
     ...(Object.fromEntries(
-      metricKeys.map((key) => [key, runs.reduce((sum, run) => sum + run[key], 0)]),
-    ) as Record<(typeof metricKeys)[number], number>),
+      metricKeys.map((key) => [
+        key,
+        runs.some((run) => run.unavailableMetrics?.includes(key))
+          ? null
+          : runs.reduce((sum, run) => sum + run[key], 0),
+      ]),
+    ) as Record<(typeof metricKeys)[number], number | null>),
   };
 }
 function comparisonGroups(report: Report) {
@@ -268,7 +293,7 @@ function comparisonGroups(report: Report) {
   for (const run of report.runs) {
     if (
       !run.task ||
-      !['rifty', 'rifty-no-coi', 'local-reference'].includes(run.lane) ||
+      !['rifty', 'rifty-no-coi', 'local-reference', 'native-codex'].includes(run.lane) ||
       !Number.isInteger(run.runIndex) ||
       run.runIndex < 1 ||
       run.runIndex > report.header.runsPerTask
@@ -293,7 +318,14 @@ function comparisonGroups(report: Report) {
   return { groups, identities };
 }
 export function compareReports(before: Report, after: Report) {
-  for (const key of ['endpoint', 'limits', 'noCoiPolicies', 'taskSet', 'runsPerTask'] as const)
+  for (const key of [
+    'endpoint',
+    'codex',
+    'limits',
+    'noCoiPolicies',
+    'taskSet',
+    'runsPerTask',
+  ] as const)
     if (!isDeepStrictEqual(before.header[key], after.header[key]))
       throw new Error(`Incompatible comparison configuration: ${key}`);
   const previous = comparisonGroups(before);
@@ -304,7 +336,10 @@ export function compareReports(before: Report, after: Report) {
     const old = summarize(runs);
     const next = summarize(current.groups.get(key)!);
     const delta = Object.fromEntries(
-      (Object.keys(old) as (keyof Summary)[]).map((key) => [key, next[key] - old[key]]),
+      (Object.keys(old) as (keyof Summary)[]).map((key) => [
+        key,
+        next[key] === null || old[key] === null ? null : next[key] - old[key],
+      ]),
     ) as Summary;
     return {
       task: runs[0]!.task,
@@ -351,7 +386,9 @@ export async function writeComparison(current: string, baseline: string) {
       '|---|---:|---:|---:|',
     );
     for (const key of Object.keys(row.before) as (keyof Summary)[])
-      lines.push(`| ${key} | ${row.before[key]} | ${row.after[key]} | ${row.delta[key]} |`);
+      lines.push(
+        `| ${key} | ${row.before[key] ?? 'unknown'} | ${row.after[key] ?? 'unknown'} | ${row.delta[key] ?? 'unknown'} |`,
+      );
     lines.push('');
   }
   await writeJson(current, 'comparison.json', comparison);
