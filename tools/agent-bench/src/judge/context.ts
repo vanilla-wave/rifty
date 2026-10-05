@@ -51,3 +51,32 @@ export function field({ view }: JudgeContext, name: string | RegExp) {
     .or(view.getByRole('searchbox', { name }))
     .or(view.getByRole('combobox', { name }));
 }
+
+const escapeCaption = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export function caption(name: string): RegExp {
+  return new RegExp(`\\b${escapeCaption(name)}\\b`, 'i');
+}
+
+/** Primary domain purpose distinguishes source/search descriptions from row/editor fields. */
+export function describedField(
+  ctx: JudgeContext,
+  name: string,
+  namespace: Readonly<Record<string, readonly string[]>>,
+) {
+  const own = namespace[name];
+  if (!own?.length) throw new Error(`Unknown field purpose: ${name}`);
+  const others = Object.entries(namespace)
+    .filter(([key]) => key !== name)
+    .flatMap(([, words]) => words)
+    .map(escapeCaption);
+  const prefix = others.length ? `^(?:(?!\\b(?:${others.join('|')})\\b).)*` : '';
+  const token = own.map(escapeCaption).join('|');
+  return field(ctx, new RegExp(`${prefix}\\b(?:${token})\\b`, 'i')).and(
+    ctx.view.locator(':read-write'),
+  );
+}
+
+export function savedEntry({ view }: JudgeContext, title: string) {
+  const name = new RegExp(`^(?!.*\\b(?:delete|remove)\\b).*\\b${escapeCaption(title)}\\b`, 'i');
+  return view.getByRole('button', { name }).or(view.getByRole('link', { name }));
+}

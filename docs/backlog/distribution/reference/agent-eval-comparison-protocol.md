@@ -46,3 +46,7 @@ cost before frozen expansion with its own campaign. Diagnostics separate.
 ## Transport interruption
 
 First actual series on clean eac88e897:15/72 retained,3 nativeCodex passes,3 nativePi connection errors,9 browser setup failures; SIGINT,57 missing. Preserved as2026-10-05-pilot-provider-interrupted. Proxy10539 absent; existing user codex-proxy.mjs started with explicit PORT10539, actual Luna transport replied OK (10input/5output). No env/credentials inspected. Fresh full72 series follows same frozen cases/settings/order; earlier evidence unchanged. Proxy source SHA/version retained with new campaign; no model-derived exclusions.
+
+## Verified oracle correction
+
+Second source-frozen pilot-v1 stopped56/72 on independent HOLDS I6/I3. Ordinary captions were rejected; raw scores/history retained, no quality conclusion or re-scoring. Corrected pilot-v2 clones only the two app case paths/IDs, same project/prompt/families/controls, semantic discovery and opaque accessible output. Native7 controls3PASS/4functionalFAIL; all-origin caption8PASS; original actualCSV2 own-COI7probesPASS with equal after-tree. Shared support fingerprint changes explicitly. Fresh full72 same100tools/600s/order/models; fullselected primary; compatible-app secondary still bothsamefamilies predeclared, never remove library failures. Expected90–140min/coldsetup crude prior estimate retained; extra calibration/correction cost separately retained in earlierpartial series.

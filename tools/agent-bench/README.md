@@ -220,3 +220,12 @@ Attempt timestamps and before-tree/lock hashes expose actual preparation/agent/
 judging; legacy absent timestamps unobserved. Artifact links resolve to actual
 files or retained bundles. Recorded elapsed is agent time when started, preparation
 time on setup failure; not total campaign wall.
+
+Corrected comparative suite: `--suite pilot-v2`. Same six families/project inputs;
+new `csv-workflow-v2`/`markdown-notes-v2` case IDs preserve the originalv1 files.
+Pilot-v1 has a verified generic-caption oracle defect; historical scores retained,
+not valid full coding-quality evidence. Semantic role/name discovery accepts
+descriptions/common domain synonyms, separates editable source from readonly
+output; functional data assertions unchanged. `caption-controls.fault.spec.ts`
+checks real variants/negatives and four-origin captions plus unchanged actual
+programme2 in its original COI. Corpus and shared-support fingerprints visible.
