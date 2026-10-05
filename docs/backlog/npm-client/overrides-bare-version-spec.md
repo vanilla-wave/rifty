@@ -60,11 +60,15 @@ registry (vitest + one vite version) asserting one vite@8.0.16 link and exit 0.
 
 | Axis | Operation | Outcome |
 |---|---|---|
-| malformed manifest | override value that is neither range nor name@spec (e.g. `$ref`) | loud: parsed as a package name → registry 404 surfaces (unchanged baseline) |
+| malformed manifest | override value that is neither range nor name@spec (e.g. `$ref`) | loud: parsed as a package name → registry 404 surfaces (unchanged baseline) (`→ I1` npm spelling only; §Fidelity loud gaps) |
+
+## Challenge
+
+challenge: 2026-10-02 — clear — inherited goal §Challenge (2026-09-15, 6 problems resolved at FIT); unit premise re-verified by Contract+RED @ 24a8a854 (npm 11.17.0 oracle re-run)
 
 ## Decisions
 
-- ready-verdict: 2026-10-02 — Contract+RED @ <pending>
+- ready-verdict: 2026-10-02 — Contract+RED @ 24a8a8546976c82de76e4f4ef1a6d2dfad6cd9e7
 - 2026-09-15 — user (goal Decisions): npm route = overrides pin; fix npm's
   bare-version spelling (one line, this unit); lock replay is the second
   documented path; no resolver/hoisting work.

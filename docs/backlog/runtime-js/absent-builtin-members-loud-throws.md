@@ -8,7 +8,6 @@ user_story: As a real npm package running in the browser shell, I want named imp
 epic: vitest-run-in-browser
 sources: [docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/backlog/runtime-js/node-builtins-loud-stub-capability-gaps.md]
 code: [packages/runtime-js/src/builtins/fs.ts, packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/builtins/process.ts]
-ready-verdict: 2026-10-02 — Contract+RED @ <pending>
 ---
 
 ## User scenario
@@ -73,11 +72,15 @@ NotImplementedError; pinned by unit fault tests (Acceptance 3).
 
 | Axis | Operation | Outcome |
 |---|---|---|
-| absent capability | call `statfsSync()` / `spawnSync(...)` / `memoryUsage()` | loud `NotImplementedError('<member>')`, feature named, no fabricated data |
+| absent capability | call `statfsSync()` / `spawnSync(...)` / `memoryUsage()` | loud `NotImplementedError('<member>')`, feature named, no fabricated data (`→ I6` §Fidelity named-loud) |
+
+## Challenge
+
+challenge: 2026-10-02 — clear — inherited goal §Challenge (2026-09-15, 6 problems resolved at FIT); unit premise re-verified by Contract+RED @ 24a8a854 (Node v24.16.0 typeof oracle)
 
 ## Decisions
 
-- ready-verdict: 2026-10-02 — Contract+RED @ <pending>
+- ready-verdict: 2026-10-02 — Contract+RED @ 24a8a8546976c82de76e4f4ef1a6d2dfad6cd9e7
 - 2026-10-02 — agent (PICKUP): all three members are named-loud functions.
   `execSync`'s SAB child path exists but `spawnSync`'s full Node contract
   (result object, options matrix) is a separate honest-npm/goal-fog item — a

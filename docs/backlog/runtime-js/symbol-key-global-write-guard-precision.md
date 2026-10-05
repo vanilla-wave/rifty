@@ -8,7 +8,6 @@ user_story: As a real npm package running in the browser shell, I want symbol-ke
 epic: vitest-run-in-browser
 sources: [docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/backlog/runtime-js/cjs-global-function-assignment.md, docs/backlog/runtime-js/function-constructor-exhaustive-metaprogramming-ceiling.md]
 code: [packages/runtime-js/src/module-loader/esm.ts, packages/runtime-js/src/module-loader/cjs.ts]
-ready-verdict: 2026-10-02 — Contract+RED @ <pending>
 ---
 
 ## User scenario
@@ -40,12 +39,12 @@ ceiling for string-typed or unknown keys is unchanged.
 2. CJS: `Object.defineProperty(globalThis, <Symbol-keyed ident>, descriptor)`
    loads (`→ I6`, undici shape).
 3. The ceiling stays for keys that may be `'Function'`: a computed key bound
-   to a non-Symbol value (e.g. from a variable that may hold `'Function'`)
-   still throws `module-loader.{esm,cjs}-global-function-assignment` (`→
-   baseline ceiling item; guard precision must not weaken the guard`).
+    to a non-Symbol value (e.g. from a variable that may hold `'Function'`)
+    still throws `module-loader.{esm,cjs}-global-function-assignment` (`→
+    ADR-0171`; guard precision must not weaken the guard).
 4. Literal string writes keep today's behavior: `globalThis.Function = …`
-   throws; other literal keys (e.g. `globalThis.foo = …`) pass unchanged
-   (`→ baseline`).
+    throws; other literal keys (e.g. `globalThis.foo = …`) pass unchanged
+    (`→ ADR-0171` named baseline).
 
 ## Parity cases
 
@@ -70,11 +69,15 @@ functions (esm.ts/cjs.ts analyzers run on source text; fault tests).
 
 | Axis | Operation | Outcome |
 |---|---|---|
-| metaprogramming ceiling | `globalThis[mayBeFunctionKey] = …` / `defineProperty` with a possibly-`'Function'` key | loud `module-loader.{esm,cjs}-global-function-assignment` (unchanged) |
+| metaprogramming ceiling | `globalThis[mayBeFunctionKey] = …` / `defineProperty` with a possibly-`'Function'` key | loud `module-loader.{esm,cjs}-global-function-assignment` (unchanged) (`→ ADR-0171`) |
+
+## Challenge
+
+challenge: 2026-10-02 — clear — inherited goal §Challenge (2026-09-15, 6 problems resolved at FIT); unit premise re-verified by Contract+RED @ 24a8a854 (Node v24.16.0 symbol-key oracle)
 
 ## Decisions
 
-- ready-verdict: 2026-10-02 — Contract+RED @ <pending>
+- ready-verdict: 2026-10-02 — Contract+RED @ 24a8a8546976c82de76e4f4ef1a6d2dfad6cd9e7
 - 2026-10-02 — agent (PICKUP): carrier = precision in the two existing guard
   analyzers, not a new mechanism: track identifiers initialized (const
   declarator, same scope) with `Symbol(...)`/`Symbol.for(...)` calls or Symbol

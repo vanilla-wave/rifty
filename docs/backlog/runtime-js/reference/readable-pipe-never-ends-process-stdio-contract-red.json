@@ -1,0 +1,109 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Proceed — promise certified by executed artifacts; carry the two concerns (stdio-path cleanup discrimination; stderr fault test due at Final+GREEN) into IMPLEMENT.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md (status: ready; epic vitest-run-in-browser, invariant I4); BASE 0c4c1b070042a7a3079888cae92f25f15db24cdf",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: `Readable.from(['a\\n']).pipe(process.stdout)` inside a physical node-entry eval completes — stdout carries `a` and `after-pipe`, exit 0, no `dest.end is not a function`",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/node-eval-pipe-into-process-stdout.case.ts:9",
+      "note": "Executed RED: `pnpm test:parity stream/node-eval-pipe-into-process-stdout` fails NOW — rifty stdout `a\\n` (missing `after-pipe`), stderr `TypeError: dest.end is not a function\\n at publishedConstructor.onEnd (.../packages/io/src/streams/readable.ts:768:29)`, code 1 vs node code 0 — exactly the declared failure mode. Physical eval (expectedPhysicalWorkers:1) avoids the trivial-pass trap the contract names. Dies at the declared site; passes once the exemption exists."
+    },
+    {
+      "row": "Acceptance 2: same exemption holds for `pipe(process.stderr)` (unit fault test — stderr has no byte-identical Node oracle in the harness)",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "weak",
+      "citation": "docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md:31",
+      "note": "No committed carrier yet — contract declares the carrier a unit fault test written during IMPLEMENT (grep: no stderr-pipe test in packages/io/src/streams/*.test.ts, no other stdio parity case). At Contract+RED the promise covers the clause with a named carrier; the fault test must exist and discriminate by Final+GREEN. Premise independently verified on host: `node -e \"const {Readable}=require('node:stream'); const r=Readable.from(['a\\n']); r.pipe(process.stderr); r.on('end',()=>console.log('after-pipe'))\"` → `a` + `after-pipe` on stderr, exit 0 (Node v24.16.0)."
+    },
+    {
+      "row": "Acceptance 3: `opts.end === false` keeps skipping the end call for ordinary destinations; ordinary destinations still get `end()` on source end (baseline unchanged)",
+      "source": "acceptance",
+      "trace": "baseline",
+      "status": "pass",
+      "citation": "packages/io/src/streams/readable.pipe.test.ts:116",
+      "note": "Committed carriers: readable.pipe.test.ts:116 `pipe(dest, {end:false}) does not call dest.end()` (end-spy) and :138 `default pipe(dest) DOES call dest.end()` (finish spy); parity stream/pipe-unpipe.case.ts and stream/backpressure.case.ts keep ordinary-dest behavior pinned against real Node. No source change in boundary, so these hold by construction."
+    },
+    {
+      "row": "Fault matrix — ordinary dest: `src.pipe(dest)`; source ends → `dest.end()` called (baseline, unchanged)",
+      "source": "fault-matrix",
+      "trace": "baseline",
+      "status": "pass",
+      "citation": "packages/io/src/streams/readable.pipe.test.ts:138",
+      "note": "Same carrier as Acceptance 3: default-pipe end() spy test plus pipe-unpipe/backpressure parity cases."
+    },
+    {
+      "row": "Fault matrix — stdio dest: `src.pipe(process.stdout|stderr)`; source ends → no end call; pipe cleanup still runs (no leak: listeners detached)",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/stream/node-eval-pipe-into-process-stdout.case.ts:20",
+      "note": "The RED carrier discriminates 'no end call' but not the 'cleanup still runs / listeners detached' half: an exemption implementation that also skips listener cleanup would pass the physical-eval case (guest exits either way) while violating the row as declared. Cleanup should be discriminated by the planned unit fault test / listener-count contract (readable.pipe.test.ts pattern) on the stdio path by Final+GREEN."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md:63",
+          "evidence": "",
+          "summary": "Fault-matrix stdio row's 'pipe cleanup still runs (no leak: listeners detached)' half is not discriminated by the RED carrier — a physical-eval guest exits regardless of listener leaks, so an exemption that also skips cleanup passes. Discriminate it in the IMPLEMENT-phase unit fault test (listener-count contract à la readable.pipe.test.ts on the stdio path).",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md:71",
+          "evidence": "",
+          "summary": "File ends without trailing newline.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "24a8a8546976c82de76e4f4ef1a6d2dfad6cd9e7"
+}

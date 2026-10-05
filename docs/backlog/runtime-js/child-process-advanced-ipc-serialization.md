@@ -8,7 +8,6 @@ user_story: As a real test runner running in the browser shell, I want to fork m
 epic: vitest-run-in-browser
 sources: [docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/public/compat/process.md]
 code: [packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/internal/node-ipc-serialization.ts, packages/runtime-js/src/builtins/process.ts]
-ready-verdict: 2026-10-02 — Contract+RED @ <pending>
 ---
 
 ## User scenario
@@ -68,8 +67,12 @@ bigint; parent `Map`→child→parent keeps `Date(5)` inside), `fnSend`
 
 | Axis | Operation | Outcome |
 |---|---|---|
-| unsupported value over channel | `child.send(() => {})` under `'advanced'` | loud `TypeError/ERR_INVALID_ARG_TYPE` — carried by the parity case |
-| JSON path regression | default fork round-trip incl. circular-send rejection | unchanged — carried by `child_process/public-ipc-json.case.ts` |
+| unsupported value over channel | `child.send(() => {})` under `'advanced'` | loud `TypeError/ERR_INVALID_ARG_TYPE` — carried by the parity case (`→ scenario`) |
+| JSON path regression | default fork round-trip incl. circular-send rejection | unchanged — carried by `child_process/public-ipc-json.case.ts` (`→ REV-2` named baseline) |
+
+## Challenge
+
+challenge: 2026-10-02 — clear — inherited goal §Challenge (2026-09-15, 6 problems resolved at FIT); unit premise checked by host oracle run 2026-10-02 (Node v24.16.0 round-trip probe)
 
 ## Decisions
 

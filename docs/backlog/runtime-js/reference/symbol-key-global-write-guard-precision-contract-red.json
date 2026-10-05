@@ -1,0 +1,108 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Proceed to IMPLEMENT: contract premise verified against code and real Node v24.16.0, both REDs fail now with the exact NotImplementedError, ceiling and literal-key baselines are carried by existing green tests.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md (ready contract, goal epic docs/backlog/epics/vitest-run-in-browser invariant I6); BASE 0c4c1b070042a7a3079888cae92f25f15db24cdf",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "vitest-run-in-browser goal: remaining invariant deliveries (I1-I5, e2e vitest run) after this unit",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md",
+      "summary": "This unit delivers only the I6 guard-precision slice; the epic's other invariant obligations remain open and linked."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: ESM module whose globalThis[<ident>] = value has <ident> const-bound to a Symbol/Symbol.for value loads and the write lands",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/esm-symbol-key-global-write.case.ts:5-13",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: CJS Object.defineProperty(globalThis, <Symbol-keyed ident>, descriptor) loads",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/cjs-symbol-key-global-define.case.ts:4-13",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: computed key bound to a non-Symbol value still throws module-loader.{esm,cjs}-global-function-assignment (guard precision must not weaken the guard)",
+      "source": "acceptance",
+      "trace": "baseline ceiling item (function-constructor-exhaustive-metaprogramming-ceiling)",
+      "status": "pass",
+      "citation": "tests/conformance/modules/resolver.test.ts:1606-1614 (ESM global-computed-dynamic-write-no-function-token.mjs), tests/conformance/modules/resolver.test.ts:3222 (CJS sibling in ceiling list)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: literal string writes keep today's behavior — globalThis.Function = ... throws; other literal keys (e.g. globalThis.foo = ...) pass unchanged",
+      "source": "acceptance",
+      "trace": "baseline",
+      "status": "pass",
+      "citation": "tests/conformance/modules/resolver.test.ts:1567-1571 + :3104 (throwing half, both sides); tools/node-parity-runner/cases/modules/require-esm-interop.case.ts:8 (facade.mjs ESM benign write) + tools/node-parity-runner/cases/modules/require-esm-tla.case.ts:35 (CJS benign write) (benign half)",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: globalThis[mayBeFunctionKey] = ... / defineProperty with a possibly-'Function' key stays loud module-loader.{esm,cjs}-global-function-assignment (unchanged)",
+      "source": "fault-matrix",
+      "trace": "baseline ceiling item (function-constructor-exhaustive-metaprogramming-ceiling)",
+      "status": "pass",
+      "citation": "tests/conformance/modules/resolver.test.ts:1554-1731 (ESM ceiling suite incl. computed, define-property, reflect-set, object-assign variants) and :3120-3247 (CJS ceiling suite)",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md:20 vs tools/node-parity-runner/cases/modules/cjs-symbol-key-global-define.case.ts:5",
+          "evidence": "",
+          "summary": "Contract scenario cites Symbol.for('undici.globalDispatcher.2'); the RED case uses 'undici.globalDispatcher.1'. Same guard shape (Symbol.for key), no discrimination impact.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "24a8a8546976c82de76e4f4ef1a6d2dfad6cd9e7"
+}

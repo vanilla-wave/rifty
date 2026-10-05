@@ -8,7 +8,6 @@ user_story: As a developer running a real Node CLI in the browser shell, I want 
 epic: vitest-run-in-browser
 sources: [docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md]
 code: [packages/runtime-js/src/builtins/index.ts, packages/runtime-js/src/builtins/path.ts]
-ready-verdict: 2026-10-02 — Contract+RED @ <pending>
 ---
 
 ## User scenario
@@ -51,11 +50,15 @@ parity case `path/subpath-posix-win32` fails today on the rifty side with
 
 | Axis | Operation | Outcome |
 |---|---|---|
-| absent builtin | `import 'node:path/foo'` (unregistered subpath) | loud `ModuleLoadError: Built-in 'node:path/foo' is not implemented` (unchanged) |
+| absent builtin | `import 'node:path/foo'` (unregistered subpath) | loud `ModuleLoadError: Built-in 'node:path/foo' is not implemented` (unchanged) (`→ I6` named baseline) |
+
+## Challenge
+
+challenge: 2026-10-02 — clear — inherited goal §Challenge (2026-09-15, 6 problems resolved at FIT); unit premise re-verified by Contract+RED @ 24a8a854 (Node v24.16.0 oracle re-run)
 
 ## Decisions
 
-- ready-verdict: 2026-10-02 — Contract+RED @ <pending>
+- ready-verdict: 2026-10-02 — Contract+RED @ 24a8a8546976c82de76e4f4ef1a6d2dfad6cd9e7
 - 2026-10-02 — agent (PICKUP): registration-only unit; the `posix`/`win32`
   namespaces already exist in `path.ts` and are the single carrier (ADR-0035
   registry). No new mechanism.

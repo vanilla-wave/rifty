@@ -8,7 +8,6 @@ user_story: As a real npm package running in the browser shell, I want `import {
 epic: vitest-run-in-browser
 sources: [docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md]
 code: [packages/runtime-js/src/module-loader/cjs-interop-authority.ts, packages/runtime-js/src/builtins/process.ts]
-ready-verdict: 2026-10-02 — Contract+RED @ <pending>
 ---
 
 ## User scenario
@@ -54,6 +53,10 @@ with the link-time SyntaxError.
 | Axis | Operation | Outcome |
 |---|---|---|
 | absent member | `import { statfsSync } from 'node:fs'` (name still absent from the builtin) | loud link-time SyntaxError — carried by `runtime-js/absent-builtin-members-loud-throws` (→ I6) |
+
+## Challenge
+
+challenge: 2026-10-02 — clear — inherited goal §Challenge (2026-09-15, 6 problems resolved at FIT); unit premise (Node own-property vs prototype shape) checked by host probe 2026-10-02
 
 ## Decisions
 

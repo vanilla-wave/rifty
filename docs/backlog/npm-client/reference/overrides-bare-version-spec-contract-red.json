@@ -1,0 +1,173 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Proceed to implementation; the promise and REDs hold (executed RED fails for the right reason, 2 baseline tests green). Advisory: pin the fault-matrix `$ref`-shaped value with one assertion before Final+GREEN; the second ready contract in the tree needs its own Contract+RED checkpoint.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/npm-client/overrides-bare-version-spec.md (status: ready) vs BASE 0c4c1b070042a7a3079888cae92f25f15db24cdf; goal epic docs/backlog/epics/vitest-run-in-browser/goal.md (scenario step 2, I1, user Decision 2026-09-15); oracle docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md §Oracle/§I1",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2 — worker_threads keepalive (parent receives worker messages/exit while alive)",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:57-62",
+      "summary": "Open goal invariant; this slice only repairs I1's overrides parse."
+    },
+    {
+      "clause": "I3 — uncaughtException/unhandledRejection/exit/process.exit semantics",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:63-69",
+      "summary": "Open goal invariant."
+    },
+    {
+      "clause": "I4 — vitest run loads vitest.config.ts, collects .ts tests, reports and exits correctly",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:70-76,104-111",
+      "summary": "Open goal invariant; depends on this slice's install plus I6 walls."
+    },
+    {
+      "clause": "I5 — --pool=threads same results/exit as --pool=forks",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:112-114",
+      "summary": "Open goal invariant."
+    },
+    {
+      "clause": "I6 — vitest tree loads as under Node 24 (incl. node:path/posix builtin, separate ready unit path-posix-win32-builtins)",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:115-121",
+      "summary": "Open goal invariant; node:path/posix unit compiled ready in this tree but has no RED carriers here."
+    },
+    {
+      "clause": "I7 — compat page vitest.md claiming exactly vitest 4.1.11 + vite 8.0.16 with I1–I6 ✅ rows",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:122-128",
+      "summary": "Open goal invariant; end-of-goal acceptance proof."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: resolveOverride('vite', undefined, {vite:'8.0.16'}) → {name:'vite', range:'8.0.16', source:'user'}",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:79-87",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2 (shapes): bare values '8.0.16', '^8.0.0', '2.x', '*' parse as same-name ranges",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:89-96",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2 (install): install() with the goal manifest resolves one vite@8.0.16 from the registry, exit 0",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:98-129",
+      "note": "RED executed: fails today with `fake registry: no packument for 8.0.16` (today's misparse path); success path = no throw + one vite@8.0.16 link assertion."
+    },
+    {
+      "row": "Acceptance 3: rifty spellings 'vite@8.0.16' and 'npm:vite@8.0.16' parse unchanged",
+      "source": "acceptance",
+      "trace": "scenario step 2",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:130-140",
+      "note": "Baseline carrier, green today."
+    },
+    {
+      "row": "Acceptance 3: bare-name redirect (bcrypt:'bcryptjs', source:'baked') and alias target ('esbuild-wasm@0.28.0') parse unchanged",
+      "source": "acceptance",
+      "trace": "baseline",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:142-154",
+      "note": "Baseline carrier, green today."
+    },
+    {
+      "row": "Acceptance 3: parent>child keys in both spellings parse unchanged",
+      "source": "acceptance",
+      "trace": "scenario step 2 + baseline",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:157-169",
+      "note": "First assertion ('bar@2.0.0') is baseline-green; second ('2.0.0' bare value) is the new same-name-range behavior (RED now), covered by Acceptance 2 generalized to parent>child keys per the contract Decision."
+    },
+    {
+      "row": "Fault matrix: override value that is neither range nor name@spec (e.g. $ref) stays loud — parsed as a package name → registry 404 surfaces (unchanged baseline)",
+      "source": "fault-matrix",
+      "trace": "unchanged baseline (named baseline behavior)",
+      "status": "weak",
+      "citation": "packages/npm-client/src/overrides.test.ts:146-148",
+      "note": "Carrier exists only for the 'bare non-range value keeps name parse' half (bcrypt test); no assertion pins a $ref-shaped value ('$baz' → {name:'$baz', range:null}). Named plausible wrong implementation passes all six tests while violating the row as declared: an npa-faithful classifier that treats every no-name-part value as the key package's spec (host probe: npm 11.17.0 resolves value 'chalk' as supports-color@chalk → notarget). Advisory; add one resolveOverride('$baz') assertion before Final+GREEN. See Completeness finding."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/npm-client/overrides-bare-version-spec.md:60-62",
+          "evidence": "RED run: `pnpm vitest run packages/npm-client/src/overrides.test.ts` → `Tests 4 failed | 2 passed (6)`; no test matches /\\$ref|\\$baz/ in packages/npm-client. Mutant plausibility probe: npm 11.17.0, package.json {\"devDependencies\":{\"chalk\":\"4.1.2\"},\"overrides\":{\"supports-color\":\"chalk\"}} + `npm install --package-lock-only --ignore-scripts` → `npm error notarget No matching version found for supports-color@chalk` — npm classifies a bare non-range value as the key package's spec, so an npa-faithful rifty classifier would parse '$baz' as a same-name range, silently violating the loud 404 posture while passing every committed test.",
+          "summary": "Fault-matrix row weak: no carrier for a $ref-shaped override value; the row's example ('$ref') is exactly the value class the new range-shape classifier must reject.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/npm-client/overrides-bare-version-spec.md:22-31",
+          "evidence": "Oracle probe executed: npm 11.17.0 treats a bare-name override value as the key package's spec (`notarget No matching version found for supports-color@chalk`), matching the contract Context/Decision claim ('npm npa treats a value with no name part as the key package's spec'); the rifty bare-name redirect is a knowingly kept extension (Decision, baked overrides ADR-0051).",
+          "summary": "Promise anchored to verified oracle; no false oracle fact. Nit only: the Context sentence 'a bare package name is not [npm's own value form]' is true (npm does not redirect) but understates that npm still resolves it as a bogus range — same-name range for ALL no-name-part values — which is what makes the weak fault row worth pinning.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/path-posix-win32-builtins.md:1-23",
+          "evidence": "Executed: `git diff 0c4c1b07 --stat` → `.../npm-client/overrides-bare-version-spec.md | 52 ++++...`, `.../runtime-js/path-posix-win32-builtins.md | 46 ++++...`, `?? packages/npm-client/src/overrides.test.ts`. The path-posix file flips draft→ready (+user_story, Acceptance, Parity, fault matrix, Decisions) but has no RED test file in this tree.",
+          "summary": "A second unit's contract was compiled ready in this working tree. It is outside this unit's REV-1 boundary and outside the checkpoint's stated contents ('only the two files above plus possibly goal/ledger docs'); it must pass its own Contract+RED with its own RED carriers before implementation.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/npm-client/src/overrides.test.ts:157",
+          "evidence": "RED run: test 'keeps parent>child keys in both spellings (baseline)' fails — `expected { name: '2.0.0', range: null, … } to deeply equal { name: 'foo', range: '2.0.0', … }` at overrides.test.ts:165 — i.e. its second assertion is new behavior (Acceptance 2 generalized), not baseline.",
+          "summary": "Test labeled '(baseline)' embeds a RED (new-behavior) assertion; label is misleading, assertion itself is in-contract and fails for the right reason.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "24a8a8546976c82de76e4f4ef1a6d2dfad6cd9e7"
+}

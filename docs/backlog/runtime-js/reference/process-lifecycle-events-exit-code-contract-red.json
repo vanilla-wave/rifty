@@ -1,0 +1,146 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS — promise sound; all four Node oracles verified on host (Node v24.16.0); all four RED invocations fail now exactly as declared with real behavioral divergences; proceed to IMPLEMENT (deliver the promised Acceptance 5/6 fault tests with the dispatcher).",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md (status: ready; goal epic docs/backlog/epics/vitest-run-in-browser, invariant I3); BASE 0c4c1b070042a7a3079888cae92f25f15db24cdf",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "vitest-main silent-exit (I4: process.exit(0) while cac action pending) — owned by worker-threads-handle-keepalive; the drain must wait on a live Worker",
+      "location": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md:69-72 (## Out of scope)",
+      "summary": "Explicitly out of scope for this unit; remains an open obligation on the goal map, visible in the contract."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: timer throw with an uncaughtException handler — handler receives the Error, loop continues (later timers run), exit 0, no stderr crash text",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/node-eval-process-lifecycle.case.ts:15-21",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: detached rejected promise with an unhandledRejection handler — handler receives the reason, loop continues, exit 0",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/node-eval-process-lifecycle.case.ts:22-28",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: process.on('exit', cb) fires exactly once with the final code on natural exit (EXIT 0)",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/node-eval-process-lifecycle.case.ts:29-35",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: process.exitCode = 3; process.exit() exits 3",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/node-eval-process-lifecycle.case.ts:36-39",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: no-handler programs keep today's loud default — uncaught error → stderr stack + exit 1 (ADR-0152 loud-fail unchanged); rejection with no handler still rejects the drain loudly",
+      "source": "acceptance",
+      "trace": "I3 baseline + ADR-0152",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/internal/event-loop-keepalive.test.ts:645-694 (loud uncaught: print → terminate exit 1), :71-79/:104-112/:542-556 (rejection: drain rejects loudly)",
+      "note": "Committed carriers discriminate the loud-path MECHANISM (a swallow-all dispatcher impl fails: terminateUnhandled/drain-rejection assertions). But no committed test in the two declared carrier files asserts the stderr stack CONTENT — a message-only crash print passes while violating the clause as declared ('stderr stack'). No executed mutant artifact executed (tracked files not editable by review), so per REV-4 the doubt is reported advisory; current behavior verified correct by the RED run (rifty loud stderr carries stack frames). See axis-1 concern; verify the promised fault test asserts stack text at Final+GREEN."
+    },
+    {
+      "row": "Acceptance 6: exit emission happens at most once per process, including the explicit exit() path (unit test)",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/internal/event-loop-keepalive.test.ts:557-604 (adjacent exactly-once lifecycle tests) + contract :53-55",
+      "note": "No committed carrier discriminates exit-EVENT at-most-once emission — the event is introduced by this unit, so its declared carrier (the promised unit fault test in event-loop-keepalive.test.ts + process-globals.test.ts) can only land with the implementation; process-globals.test.ts currently contains only global-alias/bootstrap-identity tests. Adjacent exactly-once carriers (print/terminate lifecycle, incl. explicit-exit path, keepalive.test.ts:199-232, :297-303, :557-604) exist but a double-emitting exit impl passes them. Advisory at this checkpoint per contract-red.md (blockers are the four REV-5 classes only); verify the promised test discriminates double emission at Final+GREEN. See axis-1 concern."
+    },
+    {
+      "row": "Fault matrix: uncaught, no handler → realm error event with no uncaughtException listeners → loud stderr + exit 1 (ADR-0152, unchanged)",
+      "source": "fault-matrix",
+      "trace": "ADR-0152",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/internal/event-loop-keepalive.test.ts:645-694",
+      "note": "Same carrier set as Acceptance 5: loud mechanism (print once → terminate exit 1) discriminated; stderr stack content unasserted by any committed test in the two carrier files."
+    },
+    {
+      "row": "Fault matrix: rejection, no handler → unhandledrejection with no listeners → drain rejects loudly (unchanged)",
+      "source": "fault-matrix",
+      "trace": "ADR-0152",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/event-loop-keepalive.test.ts:71-79, :104-112, :542-556",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/internal/event-loop-keepalive.test.ts:645-694",
+          "evidence": "Executed RED (`pnpm test:parity process/node-eval-process-lifecycle`): rifty loud stderr for the uncaught timer throw currently carries stack frames — `\"text\": \"Error: boom\\n\"`, `\"text\": \"    at eval ([eval]:1:100)\\n\"` — so today's loud path satisfies 'stderr stack'; the gap is that no committed test pins it post-change.",
+          "summary": "No committed test in the two declared carrier files asserts the loud default's stderr stack content; a plausible message-only crash print survives all committed tests while violating Acceptance 5 as declared ('stderr stack + exit 1'). Report-only per REV-4 (no executed mutant artifact); the promised ADR-0152 fault test should assert stack text.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md:53-55",
+          "evidence": "",
+          "summary": "Acceptance 6 (exit emitted at most once, incl. explicit exit() path) has no discriminating committed carrier yet — its declared unit-test carrier can only be written with the implementation. Verify at Final+GREEN that the promised test discriminates a double-emitting exit impl, including on the explicit exit() path.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md:83",
+          "evidence": "",
+          "summary": "Fault-matrix row 'throw inside handler → loud default handling with the new error' carries no trace token (no I#/ADR/scenario id), so it raises no coverage row per REV-4; consider giving it a trace or an explicit deferral note before Final+GREEN.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "24a8a8546976c82de76e4f4ef1a6d2dfad6cd9e7"
+}

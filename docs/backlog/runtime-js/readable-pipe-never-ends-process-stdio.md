@@ -8,7 +8,6 @@ user_story: As a real CLI running in the browser shell, I want `childStdout.pipe
 epic: vitest-run-in-browser
 sources: [docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md]
 code: [packages/io/src/streams/readable.ts, packages/runtime-js/src/builtins/process.ts]
-ready-verdict: 2026-10-02 — Contract+RED @ <pending>
 ---
 
 ## User scenario
@@ -35,8 +34,9 @@ attaches `onEnd` unconditionally (guarded only by `opts.end !== false`).
    fault test — stderr has no byte-identical Node oracle in the harness)
    (`→ I4`).
 3. `opts.end === false` keeps skipping the end call for ordinary destinations,
-   and ordinary destinations still get `end()` on source end (baseline;
-   existing `pipe-unpipe`/backpressure parity cases keep passing) (`→ baseline`).
+    and ordinary destinations still get `end()` on source end (baseline;
+    existing `pipe-unpipe`/backpressure parity cases keep passing) (`→ REV-2`
+    named baseline).
 
 ## Parity cases
 
@@ -57,12 +57,16 @@ trivially). Fails today with the `TypeError` and exit 1.
 
 | Axis | Operation | Outcome |
 |---|---|---|
-| ordinary dest | `src.pipe(dest)`; source ends | `dest.end()` called (baseline, unchanged) |
-| stdio dest | `src.pipe(process.stdout|stderr)`; source ends | no end call; pipe cleanup still runs (no leak: listeners detached) |
+| ordinary dest | `src.pipe(dest)`; source ends | `dest.end()` called (`→ REV-2` named baseline, unchanged) |
+| stdio dest | `src.pipe(process.stdout|stderr)`; source ends | no end call; pipe cleanup still runs (no leak: listeners detached) (`→ I4`) |
+
+## Challenge
+
+challenge: 2026-10-02 — clear — inherited goal §Challenge (2026-09-15, 6 problems resolved at FIT); unit premise re-verified by Contract+RED @ 24a8a854 (Node v24.16.0 `-e` pipe oracle)
 
 ## Decisions
 
-- ready-verdict: 2026-10-02 — Contract+RED @ <pending>
+- ready-verdict: 2026-10-02 — Contract+RED @ 24a8a8546976c82de76e4f4ef1a6d2dfad6cd9e7
 - 2026-10-02 — agent (PICKUP): carrier = the Node exemption inside
   `readable.ts` `pipe()`. The io layer cannot import the process builtin
   (layering, `check:arch`), so the stdio destination is recognized by the

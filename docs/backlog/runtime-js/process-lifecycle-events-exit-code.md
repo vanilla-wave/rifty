@@ -8,7 +8,6 @@ user_story: As a real CLI running in the browser shell, I want the process lifec
 epic: vitest-run-in-browser
 sources: [docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/adr/runtime-js/0152-child-realm-event-loop-drain-loud-fail-exit-contract.md, docs/backlog/runtime-js/late-unhandled-rejection-drain.md, docs/backlog/runtime-js/invocation-scoped-unhandled-rejection.md]
 code: [packages/runtime-js/src/builtins/process.ts, packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/workbench/src/workers/node-program-lifecycle.ts]
-ready-verdict: 2026-10-02 — Contract+RED @ <pending>
 ---
 
 ## User scenario
@@ -74,16 +73,20 @@ fault tests in `event-loop-keepalive.test.ts` + `process-globals.test.ts`.
 
 | Axis | Operation | Outcome |
 |---|---|---|
-| uncaught, no handler | realm `error` event, no `uncaughtException` listeners | loud stderr + exit 1 (ADR-0152, unchanged) |
-| uncaught, handler | handler receives error, loop continues | no crash text, exit per program |
-| rejection, no handler | `unhandledrejection`, no listeners | drain rejects loudly (unchanged) |
-| rejection, handler | handler receives reason, loop continues | exit per program |
-| throw inside handler | `uncaughtException` listener throws | loud default handling with the new error (Node: exception in handler is fatal) |
-| double exit | `exit()` after natural-drain exit emission started | `exit` event emitted at most once |
+| uncaught, no handler | realm `error` event, no `uncaughtException` listeners | loud stderr + exit 1 (`→ ADR-0152`, unchanged) |
+| uncaught, handler | handler receives error, loop continues | no crash text, exit per program (`→ I3`) |
+| rejection, no handler | `unhandledrejection`, no listeners | drain rejects loudly (`→ ADR-0152`, unchanged) |
+| rejection, handler | handler receives reason, loop continues | exit per program (`→ I3`) |
+| throw inside handler | `uncaughtException` listener throws | loud default handling with the new error (Node: exception in handler is fatal) (`→ I3`) |
+| double exit | `exit()` after natural-drain exit emission started | `exit` event emitted at most once (`→ I3`) |
+
+## Challenge
+
+challenge: 2026-10-02 — clear — inherited goal §Challenge (2026-09-15, 6 problems resolved at FIT); unit premise re-verified by Contract+RED @ 24a8a854 (Node v24.16.0 four-script oracle)
 
 ## Decisions
 
-- ready-verdict: 2026-10-02 — Contract+RED @ <pending>
+- ready-verdict: 2026-10-02 — Contract+RED @ 24a8a8546976c82de76e4f4ef1a6d2dfad6cd9e7
 - 2026-10-02 — agent (PICKUP, `DEC-2` pending final shape): carrier = a
   process-lifecycle dispatcher registered into the existing keepalive traps
   (late binding, no keepalive→process import — `process.ts` already imports

@@ -1,0 +1,102 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Land as ready — promise certified against host Node v24.16.0; both REDs fail now for the declared reasons and would pass once the members exist; one advisory contract-pointer fix (stale RED filename) at convenience.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md (status: ready; epic docs/backlog/epics/vitest-run-in-browser, invariants I4/I6); BASE 0c4c1b070042a7a3079888cae92f25f15db24cdf; working tree vs BASE in this boundary: the contract + tools/node-parity-runner/cases/fs/esm-named-absent-members.case.ts + tools/node-parity-runner/cases/process/node-eval-memory-usage-member.case.ts",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: `import { statfsSync } from 'node:fs'` and `import { spawnSync } from 'node:child_process'` link in ESM with typeof === 'function'",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/fs/esm-named-absent-members.case.ts:5-12",
+      "note": "RED fails NOW for the declared reason — executed: `pnpm test:parity fs/esm-named-absent-members` → `error: SyntaxError: The requested module 'node:fs' does not provide an export named 'statfsSync' (imported by /work/main.mjs)` (rifty VFS path; exit 1). Node side passes (oracle probe executed, same code shape: `function function`, Node v24.16.0). Would pass once both members exist as functions (both typeofs printed, stdout diff)."
+    },
+    {
+      "row": "Acceptance 2: typeof process.memoryUsage === 'function' and process.memoryUsage.bind(process) does not throw",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/node-eval-memory-usage-member.case.ts:12-22",
+      "note": "RED fails NOW for the declared reason — executed: `pnpm test:parity process/node-eval-memory-usage-member` → rifty stderr `TypeError: Cannot read properties of undefined (reading 'bind') at [eval]:1:35`, exit code 1; node side `\"stdout\": \"function function\\n\"`, code 0. Matches evidence §I4 raw-fork exactly. kind 'node-cli-eval' + expectedPhysicalWorkers: 1 asserted by the runner (run-in-rifty.ts:773, :1772-1778) → exercises the spec-seeded guest process, not the trivially-passing host Node process."
+    },
+    {
+      "row": "Acceptance 3 (≡ Fault-matrix row): CALLING statfsSync() / spawnSync(...) / memoryUsage() throws a named NotImplementedError ('fs.statfsSync' / 'child_process.spawnSync' / 'process.memoryUsage') — never a fabricated result",
+      "source": "fault-matrix",
+      "trace": "I6 + AGENTS.md §Fidelity named-loud",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md:49-51,76",
+      "note": "Browser-only, no Node oracle for NotImplementedError — a Node-side RED is impossible, so no committed RED carrier exists in this tree BY CHECKPOINT DESIGN. The contract honestly commits the carrier class and location (Parity cases clause, :62-63: 'pinned by unit fault tests (Acceptance 3)') and the fault-matrix row traces it to I6 + named-loud. Trace and plan judged honest; the executable carrier (unit fault tests) lands at IMPLEMENT and is required at Final+GREEN (REV-9 current-contract proof)."
+    },
+    {
+      "row": "Parity-cases clause: RED targets fs/esm-named-absent-members.case.ts (link + typeof) and node-eval-memory-usage-member.case.ts (typeof + bind)",
+      "source": "acceptance",
+      "trace": "I6 + I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/fs/esm-named-absent-members.case.ts:5, tools/node-parity-runner/cases/process/node-eval-memory-usage-member.case.ts:12",
+      "note": "Both declared RED targets exist and behave as declared (see rows above). Contract text at :59 names the second target `process/memory-usage-member.case.ts` — stale filename pointer, see finding."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md:59",
+          "evidence": "grep: line 59 reads `... and \\`process/memory-usage-member.case.ts\\` (typeof + bind)`; actual untracked file is tools/node-parity-runner/cases/process/node-eval-memory-usage-member.case.ts",
+          "summary": "Parity-cases clause names the second RED target as `process/memory-usage-member.case.ts`; the committed carrier is `process/node-eval-memory-usage-member.case.ts`. Stale pointer in a ready contract — could misroute a future reader hunting the carrier. Advisory: the declared RED behavior (typeof + bind) is accurate; only the filename drifted.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md:86",
+          "evidence": "git diff shows `\\ No newline at end of file` on the contract",
+          "summary": "Contract file lacks a trailing newline.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "24a8a8546976c82de76e4f4ef1a6d2dfad6cd9e7"
+}
