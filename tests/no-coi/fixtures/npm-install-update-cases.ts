@@ -1,3 +1,4 @@
+export const nativeOptionalPackageName = `@esbuild/${process.platform}-${process.arch}`;
 export const updateCases = [
   { name: 'bare name refreshes retained pin', args: ['ms'], before: [['ms@2.0.0']], initial: {} },
   {
@@ -49,6 +50,20 @@ export const updateCases = [
     args: ['ms'],
     before: [],
     initial: { optionalDependencies: { ms: '2.0.0' } },
+    tarballFailure: true,
+  },
+  {
+    name: 'optional native admission retains selected version',
+    args: [nativeOptionalPackageName],
+    before: [],
+    initial: { optionalDependencies: { [nativeOptionalPackageName]: 'latest' } },
+    tarballFailure: true,
+  },
+  {
+    name: 'optional lifecycle admission retains selected version',
+    args: ['@biomejs/biome'],
+    before: [],
+    initial: { optionalDependencies: { '@biomejs/biome': 'latest' } },
     tarballFailure: true,
   },
 ] as const;

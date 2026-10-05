@@ -2,10 +2,12 @@ import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { nativeOptionalPackageName } from './npm-install-update-cases.ts';
 
 const exec = promisify(execFile);
 const fixtureRoot = new URL('../../integration/fixtures/registry/', import.meta.url);
@@ -92,6 +94,14 @@ export async function installRegistry() {
   const kleurManifest = JSON.parse(
     execFileSync('tar', ['-xOf', kleurPath, 'package/package.json'], { encoding: 'utf8' }),
   );
+  const rootRequire = createRequire(new URL('../../../package.json', import.meta.url));
+  const esbuildRequire = createRequire(rootRequire.resolve('esbuild/package.json'));
+  const admissionManifests = [
+    JSON.parse(
+      await readFile(esbuildRequire.resolve(`${nativeOptionalPackageName}/package.json`), 'utf8'),
+    ),
+    JSON.parse(await readFile(rootRequire.resolve('@biomejs/biome/package.json'), 'utf8')),
+  ] as { name: string; version: string }[];
   let origin = '';
   const requests: string[] = [];
   let beforeResponse: ((path: string) => Promise<void>) | undefined;
@@ -101,6 +111,25 @@ export async function installRegistry() {
     response.setHeader('access-control-allow-origin', '*');
     try {
       await beforeResponse?.(path);
+      const admission = admissionManifests.find(
+        (manifest) => `/${manifest.name}` === decodeURIComponent(path),
+      );
+      if (admission) {
+        response.setHeader('content-type', 'application/json');
+        response.end(
+          JSON.stringify({
+            name: admission.name,
+            'dist-tags': { latest: admission.version },
+            versions: {
+              [admission.version]: {
+                ...admission,
+                dist: { tarball: `${origin}/admission/${admission.name}.tgz` },
+              },
+            },
+          }),
+        );
+        return;
+      }
       if (path === '/kleur') {
         response.setHeader('content-type', 'application/json');
         response.end(

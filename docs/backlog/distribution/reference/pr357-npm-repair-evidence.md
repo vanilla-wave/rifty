@@ -104,3 +104,32 @@ Same-tree `pnpm test:parity worker_threads` passed all cases;
 Cause unproven; no speculative runtime/test change. Question captured in
 `docs/backlog/toolchain-build/parity-native-cjs-lexer-crash.md`; final independent
 review also checks this factual capture. Full gate repeated once after isolation.
+
+## Independent review correction
+
+Independent reviewer pr357_final_review accepted the other repair/evidence and
+found a sibling F1 defect at7cdc15abc: native admission can reject after version
+selection, before source.resolve returns. The catch marked such a package
+unresolved. Actual @esbuild/darwin-arm640.28.0: native saves^0.28.0, rifty saved
+npm:null@*. Original BLOCK preserved: pr357-npm-repair-review-block.json;
+independent probe /tmp/pr357-review-native-optional.{mts,log}.
+
+Sweep: registry native/lifecycle/shadow admission and lockfile admission can
+reject after a version is selected. ResolutionSource's existing resolve seam now
+reports selection to the optional root's local catch before admission; required
+error policy and acquisition remain unchanged. Synthetic selection reports its
+actual identity too. No second resolver or error-message parser.
+
+Genuine host-platform esbuild and Biome metadata, controlled failed HTTP tarball,
+actual npm11.17: shared2 RED and Chromium2 RED; fixed shared save/update/Eddy67/67
+GREEN. Revert2 RED, source restored. Logs /tmp/pr357-review-admission-{red,
+browser-red,green,revert}.log. HTTP metadata comes from installed pinned package
+manifests; no fabricated package behavior or resolver/installer double.
+
+Full packed baseline on7cdc15abc passed16 first-party+178 external tarballs,
+separate consumer TS/build, all reference/archive/snapshot/preview journeys and
+mandatory shared-host benchmark: /tmp/pr357-repair-packed.log. This is pre-seam
+repair evidence; final gates/packed are repeated on the corrected implementation.
+
+Corrected Chromium suite13/13 GREEN, including both admission failures:
+/tmp/pr357-review-admission-browser-green.log.

@@ -145,7 +145,12 @@ export interface ResolveContext {
  * walkAndPin}).
  */
 export interface ResolutionSource {
-  resolve(name: string, range: string | null, ctx: ResolveContext): Promise<ResolvedPin>;
+  resolve(
+    name: string,
+    range: string | null,
+    ctx: ResolveContext,
+    onSelection?: (selected: Pick<ResolvedPin, 'name' | 'version'>) => void,
+  ): Promise<ResolvedPin>;
   prefetch?(name: string, range: string | null, ctx: ResolveContext): void;
   hasLockEntry?(name: string, ctx: ResolveContext): boolean;
 }
@@ -565,9 +570,11 @@ export async function walkAndPin(
     const optionalRoots: PreparedRoot[] = [];
     for (const [name, range] of Object.entries(topLevelOptionalDependencies)) {
       const desc = { depName: name, depRange: range, parentName: rootName };
-      let selected: ResolvedPin | undefined;
+      let selected: Pick<ResolvedPin, 'name' | 'version'> | undefined;
       try {
-        const pin = await source.resolve(name, range, rootContext);
+        const pin = await source.resolve(name, range, rootContext, (identity) => {
+          selected = identity;
+        });
         selected = pin;
         assertShimSupported(pin.name, pin.version);
         const result = await acquirePin(pin);
