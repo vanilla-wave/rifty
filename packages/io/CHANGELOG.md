@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `Readable.pipe` never ends an fd 1/2 stdio writer (Node's process.stdout/stderr exemption, duck-typed shape) and auto-detaches every pipe wiring when the source ends.
+
 - Retire completed command listener scopes without guest meta-events; preserve surviving host listeners (ADR-0422).
 
 - Canonical configurable preview paths: `normalizePreviewPrefix`, `previewPrefixPattern`,

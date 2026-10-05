@@ -262,6 +262,17 @@ interface PipeableWritable extends EventEmitter {
   emit: EventEmitter['emit'];
 }
 
+/**
+ * Guest `process.stdout`/`process.stderr` writer shape: fd 1/2 + write. Node's
+ * `pipe` never ends the process's own stdio (the process owns their lifetime);
+ * recognizing the shape here keeps the io layer free of a process-builtin
+ * import (one-way layering). No other rifty writer carries `fd: 1|2`.
+ */
+function isProcessStdioDest(dest: PipeableWritable): boolean {
+  const fd = (dest as unknown as { fd?: unknown }).fd;
+  return (fd === 1 || fd === 2) && typeof dest.write === 'function';
+}
+
 /** Node's `AbortError` shape (`name`/`code`), used when a web cancel carries no
  *  reason and to wrap a premature source close — mirrors `Readable.toWeb`. */
 function abortError(cause?: unknown): Error {
@@ -765,7 +776,14 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
       this.resume();
     };
     const onEnd = (): void => {
-      if (endOnFinish) dest.end();
+      // Node exempts process.stdout/stderr from pipe's end call — the process
+      // owns their lifetime. The io layer cannot import the process builtin
+      // (layering), so recognize the guest fd 1/2 writer shape instead.
+      if (endOnFinish && !isProcessStdioDest(dest)) dest.end();
+      // Node auto-unpipes every destination when the source ends — the wiring
+      // must not outlive the source, and the stdio end-exemption must never
+      // skip this cleanup.
+      cleanup();
     };
     const onSourceError = (err: unknown): void => {
       dest.emit('error', err);

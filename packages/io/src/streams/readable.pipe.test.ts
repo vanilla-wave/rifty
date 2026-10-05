@@ -184,3 +184,94 @@ describe('Readable.pipe / Readable.unpipe', () => {
     expect(seen).toEqual(['a', 'b', 'c']);
   });
 });
+
+describe('Readable.pipe into process stdio (Node end-exemption)', () => {
+  // Guest process.stdout/stderr duck-type: fd 1/2 writer (EventEmitter + write,
+  // no end — readable-pipe-never-ends-process-stdio).
+  function makeStdioWriter(fd: number): EventEmitter & { fd: number; write(): boolean } {
+    return Object.assign(new EventEmitter(), {
+      fd,
+      write: () => true,
+    }) as EventEmitter & { fd: number; write(): boolean };
+  }
+
+  it('stdout: source end does NOT call dest.end; pipe cleanup still detaches listeners', () => {
+    const r = new Readable({ read() {} });
+    const dest = makeStdioWriter(1);
+    const srcBefore = r.listenerCount('data') + r.listenerCount('end') + r.listenerCount('error');
+    const destBefore = dest.listenerCount('drain') + dest.listenerCount('error') + dest.listenerCount('close');
+
+    r.pipe(dest as never);
+    const srcDuring = r.listenerCount('data') + r.listenerCount('end') + r.listenerCount('error');
+    const destDuring =
+      dest.listenerCount('drain') + dest.listenerCount('error') + dest.listenerCount('close');
+    expect(srcDuring).toBeGreaterThan(srcBefore);
+    expect(destDuring).toBeGreaterThan(destBefore);
+
+    r.push('a');
+    r.push(null);
+
+    return new Promise<void>((resolve) => {
+      r.on('end', () => {
+        expect(dest.listenerCount('drain') + dest.listenerCount('error') + dest.listenerCount('close')).toBe(
+          destBefore,
+        );
+        resolve();
+      });
+    });
+  });
+
+  it('stderr: same exemption by the fd 2 writer shape', () => {
+    const r = new Readable({ read() {} });
+    const dest = makeStdioWriter(2);
+    r.pipe(dest as never);
+    r.push('x');
+    r.push(null);
+    return new Promise<void>((resolve) => {
+      r.on('end', () => {
+        // No end was called (nothing threw) and cleanup ran.
+        expect(
+          dest.listenerCount('drain') + dest.listenerCount('error') + dest.listenerCount('close'),
+        ).toBe(0);
+        resolve();
+      });
+    });
+  });
+
+  it('a stdio-shaped writer WITH an end() method is still exempt — shape, not absence of end, drives the exemption', () => {
+    const r = new Readable({ read() {} });
+    const ends: string[] = [];
+    const dest = Object.assign(new EventEmitter(), {
+      fd: 1,
+      write: () => true,
+      end: () => ends.push('end'),
+    });
+    r.pipe(dest as never);
+    r.push('a');
+    r.push(null);
+    return new Promise<void>((resolve) => {
+      r.on('end', () => {
+        expect(ends).toEqual([]);
+        resolve();
+      });
+    });
+  });
+
+  it('an ordinary Writable (no fd) still gets end() on source end (baseline)', () => {
+    const r = new Readable({ read() {} });
+    const ends: string[] = [];
+    const dest = Object.assign(new EventEmitter(), {
+      write: () => true,
+      end: () => ends.push('end'),
+    }) as unknown as { write(): boolean; end(): void };
+    r.pipe(dest as never);
+    r.push('a');
+    r.push(null);
+    return new Promise<void>((resolve) => {
+      r.on('end', () => {
+        expect(ends).toEqual(['end']);
+        resolve();
+      });
+    });
+  });
+});
