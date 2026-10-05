@@ -42,3 +42,7 @@ Reports/statistics are deterministic views of unchanged retained JSON; regenerat
 after model/service teardown, compare score/view hashes and authoritative JSON
 bytes; no new calls. Review pilot trajectories, controls, coverage and per-case
 cost before frozen expansion with its own campaign. Diagnostics separate.
+
+## Transport interruption
+
+First actual series on clean eac88e897:15/72 retained,3 nativeCodex passes,3 nativePi connection errors,9 browser setup failures; SIGINT,57 missing. Preserved as2026-10-05-pilot-provider-interrupted. Proxy10539 absent; existing user codex-proxy.mjs started with explicit PORT10539, actual Luna transport replied OK (10input/5output). No env/credentials inspected. Fresh full72 series follows same frozen cases/settings/order; earlier evidence unchanged. Proxy source SHA/version retained with new campaign; no model-derived exclusions.
