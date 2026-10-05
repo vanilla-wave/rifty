@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Derive fixed-matrix statistics/uncertainty, task/family/workload counts and failure stages from unchanged JSON; separate Codex and non-model evidence, reject identity drift, preserve legacy gzip outputs. Record actual attempt phases/installed-input hashes and artifact links (ADR-0507).
+
 - Accept valid app controls/links/searchboxes, preview wrappers/bold tags and text/download CSV exports; exercise declared quoted-field/empty-name/literal-HTML behavior; await the existing real preview readiness before acquiring frames.
 
 - Load frozen real-project/app corpora; validate hashes/v3 locks/family split; run private command judges in each origin and retain non-model controls separately (ADR-0506).

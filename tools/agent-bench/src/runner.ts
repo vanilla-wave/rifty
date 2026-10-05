@@ -11,7 +11,7 @@ import { prepareNoCoi } from './lanes/rifty-no-coi.ts';
 import { prepareRifty } from './lanes/rifty.ts';
 import type { Lane, Prepared } from './lanes/types.ts';
 import { emptyMetrics } from './metrics.ts';
-import { resolvePlan } from './plan.ts';
+import { digest, resolvePlan } from './plan.ts';
 import { type Report, type Run, caveat, privateReport, writeReport } from './report.ts';
 import { services } from './services.ts';
 import type { Task } from './tasks.ts';
@@ -41,7 +41,7 @@ export async function run(
   process.on('SIGTERM', interrupt);
   const report: Report = {
     header: {
-      purpose: control ? 'controls' : 'quality',
+      purpose: control ? 'controls' : endpoint.id === 'scripted' ? 'smoke' : 'quality',
       control,
       createdAt: new Date().toISOString(),
       sourceRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
@@ -114,6 +114,7 @@ export async function run(
         task: task.id,
         lane,
         runIndex: index,
+        attemptStartedAt: new Date().toISOString(),
         profile: lane === 'native-codex' ? 'codex-default/unconfigured' : profile,
         agentStatus: control ? 'not-run' : 'error',
         outcome: 'fail',
@@ -153,6 +154,13 @@ export async function run(
           redactJson(prepared.before, secrets, 2, 'payload'),
         );
         record.artifacts.before = `${name}/before.json`;
+        record.initialFilesSha256 = digest(
+          JSON.stringify(Object.entries(prepared.before).sort(([a], [b]) => a.localeCompare(b))),
+        );
+        record.initialLockfileSha256 =
+          prepared.before['package-lock.json'] === undefined
+            ? null
+            : digest(prepared.before['package-lock.json']);
         if (prepared.workspace) record.artifacts.workspace = relative(output, prepared.workspace);
         if (!secrets.length) {
           await prepared.context.tracing.start({
@@ -169,6 +177,7 @@ export async function run(
           if (!patch) throw new Error('Control unavailable');
           await prepared.apply(patch);
         }
+        if (!control) record.agentStartedAt = new Date().toISOString();
         const observation = control
           ? {
               ...emptyMetrics(),
@@ -181,6 +190,7 @@ export async function run(
             }
           : await prepared.run();
         record.elapsedMs = Date.now() - started;
+        if (!control) record.agentFinishedAt = new Date().toISOString();
         const { trace, ...metrics } = observation;
         Object.assign(record, metrics);
         await writeFile(join(dir, 'trace.json'), redactJson(trace, secrets, 2));
@@ -191,6 +201,7 @@ export async function run(
           record.finalDiff = diffTrees(prepared.before, after);
         }
         record.stage = 'judge';
+        record.judgeStartedAt = new Date().toISOString();
         try {
           if (tracing) await prepared.context.tracing.group(`judge:${task.id}`);
           if (task.commandJudge) {
@@ -215,6 +226,7 @@ export async function run(
           }
         } finally {
           if (tracing) await prepared.context.tracing.groupEnd();
+          record.judgeFinishedAt = new Date().toISOString();
         }
         record.outcome =
           record.agentStatus === 'budget-exceeded'
@@ -262,6 +274,7 @@ export async function run(
           record.artifacts.browserTrace = `${name}/browser.zip`;
         }
         await prepared?.close();
+        record.completedAt = new Date().toISOString();
         active = undefined;
       }
       if (stop.signal.aborted) break;
@@ -291,6 +304,7 @@ export async function run(
         report.header.series!.error = redact(`Cleanup failed: ${String(error)}`, secrets);
       }
     }
+    report.header.series!.finishedAt = new Date().toISOString();
     try {
       await persist();
     } catch (error) {

@@ -202,3 +202,21 @@ Real altered programs use saved-note links/section, searchbox, article/bold tag
 and CSV output; correct alternatives pass, lost public requirements fail.
 Historical controls retain their old judge hashes/outcomes; pilot grading
 corrections happen before any comparative quality campaign.
+
+## Fixed-corpus report
+
+Current series write `statistics.json` (gzip in committed summaries) plus Markdown
+from unchanged authoritative JSON. Legacy reports without a resolved matrix keep
+their file set; selected matrix/input compatibility unknown, no new quality estimate.
+Per-task CP95% intervals assume iid repeats conditional on fixed settings;
+Bonferroni finite-cell bands bound equal-task groups/Pi deltas. Provider/cache
+correlation may violate iid. Wide intervals/small finite corpus never equality or
+general task-population proof. Native Codex separate; unavailable counters unknown.
+Calibration/evaluation/smoke/control evidence separated; repeats do not add families.
+Missing attempts point unavailable, retained setup/provider/judge/budget/context
+failures stay selected. `--compare` rejects changed input/lock/prompt/judge/selection
+identity or partial series; intentional source versions remain visible.
+Attempt timestamps and before-tree/lock hashes expose actual preparation/agent/
+judging; legacy absent timestamps unobserved. Artifact links resolve to actual
+files or retained bundles. Recorded elapsed is agent time when started, preparation
+time on setup failure; not total campaign wall.

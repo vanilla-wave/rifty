@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { expect, it } from 'vitest';
 import { emptyMetrics } from './metrics.ts';
 import type { Plan } from './plan.ts';
@@ -110,6 +111,22 @@ async function generate(report: Report) {
     summary: await readFile(join(dir, 'summary.md'), 'utf8'),
   };
 }
+it('regenerates the actual oldest report without inventing absent telemetry or rewriting evidence', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'rifty-statistics-legacy-'));
+  const original = gunzipSync(
+    await readFile('tools/agent-bench/reports/summaries/2026-09-13-gpt-5.6-sol/report.json.gz'),
+  );
+  await writeFile(join(dir, 'report.json'), original);
+  const result = spawnSync(
+    process.execPath,
+    ['--import', 'tsx', resolve('tools/agent-bench/src/cli.ts'), 'report', dir],
+    { encoding: 'utf8', timeout: 30000 },
+  );
+  expect(result.status, result.stderr).toBe(0);
+  expect(await readFile(join(dir, 'report.json'))).toEqual(original);
+  expect(await readdir(dir)).not.toContain('statistics.json');
+  expect(await readFile(join(dir, 'summary.md'), 'utf8')).toMatch(/unknown|unavailable/i);
+});
 it('reports fixed matrix uncertainty, separate groups/Codex and honest selected/missing accounting', async () => {
   const report = fixture();
   const { statistics, summary } = await generate(report);
@@ -127,6 +144,24 @@ it('reports fixed matrix uncertainty, separate groups/Codex and honest selected/
   );
   expect(failed.passRate).toBe(0);
   expect(failed.interval.upper).toBeCloseTo(1 - 0.025 ** (1 / 3), 12);
+  const macro = statistics.groups.find(
+    (row: { split: string; group: string; lane: string }) =>
+      row.split === 'evaluation' && row.group === 'all' && row.lane === 'local-reference',
+  );
+  expect(macro.taskCount).toBe(2);
+  expect(macro.familyCount).toBe(2);
+  expect(macro.selectedTrials).toBe(6);
+  const simultaneousLower = (0.05 / (2 * 16)) ** (1 / 3);
+  expect(macro.interval.lower).toBeCloseTo(simultaneousLower, 12);
+  expect(macro.interval.upper).toBe(1);
+  const browserMacro = statistics.groups.find(
+    (row: { split: string; group: string; lane: string }) =>
+      row.split === 'evaluation' && row.group === 'all' && row.lane === 'rifty',
+  );
+  expect(browserMacro.piDelta).toBe(-1);
+  expect(browserMacro.piDeltaInterval.lower).toBe(-1);
+  expect(browserMacro.piDeltaInterval.upper).toBeCloseTo(1 - 2 * simultaneousLower, 12);
+
   expect(
     statistics.groups.some(
       (row: { split: string; group: string }) =>
@@ -243,3 +278,25 @@ it.each(['filesSha256', 'lockfileSha256', 'promptSha256', 'judgeSha256', 'split'
   },
   60000,
 );
+
+it('separates retained failed stages/causes from missing and budget outcomes', async () => {
+  const report = fixture();
+  const rows = report.runs.filter((row) => row.task === 'stat-bug' && row.lane === 'rifty');
+  rows[0]!.stage = 'setup';
+  rows[0]!.agentStatus = 'error';
+  rows[1]!.stage = 'agent';
+  rows[1]!.agentStatus = 'error';
+  rows[1]!.failureClass = 'provider';
+  rows[2]!.outcome = 'budget-exceeded';
+  rows[2]!.agentStatus = 'budget-exceeded';
+  const { statistics } = await generate(report);
+  const cell = statistics.cells.find(
+    (row: { task: string; lane: string }) => row.task === 'stat-bug' && row.lane === 'rifty',
+  );
+  expect(cell.selectedTrials).toBe(3);
+  expect(cell.retainedTrials).toBe(3);
+  expect(cell.ordinaryFailures).toBe(2);
+  expect(cell.budgetExceeded).toBe(1);
+  expect(cell.stages).toEqual({ setup: 1, agent: 2 });
+  expect(cell.causes).toEqual({ unknown: 2, provider: 1 });
+}, 60000);

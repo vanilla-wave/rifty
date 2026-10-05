@@ -8,6 +8,7 @@ import type { diffTrees } from './files.ts';
 import type { JudgeVerdict } from './judge/context.ts';
 import type { Lane, Observation } from './lanes/types.ts';
 import type { Plan, Trial } from './plan.ts';
+import { assertComparablePlans, deriveStatistics, statisticsLines } from './statistics.ts';
 export const caveat =
   'Tool/context non-equivalence: shared model, Pi version and common policy do not isolate an environment-only effect. Native CLI has read/bash/edit/write and native shell; browser hosts expose their real capabilities. Full provider prompts/tool schemas are retained for Pi runs. Native Codex JSONL does not expose its assembled prompt/tool schema; that context remains unobserved.';
 export interface Run extends Omit<Observation, 'trace'> {
@@ -15,6 +16,14 @@ export interface Run extends Omit<Observation, 'trace'> {
   lane: Lane;
   runIndex: number;
   profile: string;
+  initialFilesSha256?: string;
+  initialLockfileSha256?: string | null;
+  attemptStartedAt?: string;
+  agentStartedAt?: string;
+  agentFinishedAt?: string;
+  judgeStartedAt?: string;
+  judgeFinishedAt?: string;
+  completedAt?: string;
   outcome: 'pass' | 'fail' | 'budget-exceeded' | 'context-exceeded';
   elapsedMs: number;
   judge: JudgeVerdict;
@@ -34,7 +43,7 @@ export interface Run extends Omit<Observation, 'trace'> {
 }
 export interface Report {
   header: {
-    purpose?: 'quality' | 'controls';
+    purpose?: 'quality' | 'controls' | 'smoke' | 'diagnostic';
     control?: string;
     createdAt: string;
     sourceRevision: string;
@@ -69,6 +78,7 @@ export interface Report {
       trials: Trial[];
       active?: Trial;
       error?: string;
+      finishedAt?: string;
     };
   };
   runs: Run[];
@@ -160,7 +170,10 @@ async function writeJson(dir: string, name: string, value: unknown) {
   await rename(join(dir, `${name}.gz.tmp`), join(dir, `${name}.gz`));
 }
 export async function writeReport(dir: string, report: Report, persist = true) {
+  const statistics = deriveStatistics(report);
   if (persist) await writeJson(dir, 'report.json', report);
+  if (report.header.plan || report.header.series)
+    await writeJson(dir, 'statistics.json', statistics);
   const lines = [
     `# Agent benchmark: ${report.header.model}`,
     '',
@@ -216,31 +229,39 @@ export async function writeReport(dir: string, report: Report, persist = true) {
     lines.push(
       `| ${run.task} | ${run.lane} | ${run.runIndex} | ${run.outcome} | ${run.agentStatus} | ${(run.elapsedMs / 1000).toFixed(1)} | ${run.toolCalls} | ${metric(run, 'inputTokens')} | ${metric(run, 'outputTokens')} | ${metric(run, 'retries')} | ${metric(run, 'compactions')} | ${metric(run, 'repeatedCallNotices')} | ${metric(run, 'editFailures')} | ${metric(run, 'malformedToolCalls')} | ${cell(run.failureClass)} | ${cell(run.note)} |`,
     );
+  if (report.header.plan) {
+    lines.push(
+      '',
+      'Frozen inputs (installed before-tree hashes per attempt below):',
+      '',
+      '| Case | Split/family | Input files | Lock | Prompt | Judge/support |',
+      '|---|---|---|---|---|---|',
+    );
+    for (const task of report.header.plan.tasks)
+      lines.push(
+        `| ${task.id} | ${task.split ?? 'smoke'}/${task.family} | ${task.filesSha256} | ${task.lockfileSha256 ?? 'unavailable'} | ${task.promptSha256} | ${task.judgeSha256} |`,
+      );
+  }
   lines.push(
     '',
-    report.header.purpose === 'controls'
-      ? 'Control evidence; no agent quality rates.'
-      : 'Per-task pass-rate delta versus local-reference (budget/context counts remain visible):',
+    'Retained attempts/artifacts; timestamps record actual phases (legacy absent = unobserved). Recorded elapsed is agent time when started, preparation time on setup failure; no campaign-wall interpretation.',
     '',
-    '| Task | Lane | Pass / runs | Budget | Context | Delta |',
-    '|---|---|---:|---:|---:|---:|',
+    '| Case/lane/run | Initial files/lock | Trace | Before/after | Timing |',
+    '|---|---|---|---|---|',
   );
-  for (const task of report.header.purpose === 'controls'
-    ? []
-    : [...new Set(report.runs.map((run) => run.task))]) {
-    const native = report.runs.filter((run) => run.task === task && run.lane === 'local-reference');
-    const reference = native.length
-      ? native.filter((run) => run.outcome === 'pass').length / native.length
-      : null;
-    for (const lane of ['rifty', 'rifty-no-coi', 'local-reference', 'native-codex']) {
-      const rows = report.runs.filter((run) => run.task === task && run.lane === lane);
-      if (!rows.length) continue;
-      const pass = rows.filter((run) => run.outcome === 'pass').length;
-      lines.push(
-        `| ${task} | ${lane} | ${pass}/${rows.length} | ${rows.filter((run) => run.outcome === 'budget-exceeded').length} | ${rows.filter((run) => run.outcome === 'context-exceeded').length} | ${lane === 'native-codex' ? 'separate reference' : reference === null ? 'unavailable' : (pass / rows.length - reference).toFixed(3)} |`,
-      );
-    }
-  }
+  const artifact = (path: string | undefined) =>
+    path === undefined
+      ? 'unavailable'
+      : existsSync(join(dir, path))
+        ? `[${cell(path)}](${path})`
+        : existsSync(join(dir, 'source-artifacts.json.gz'))
+          ? `[bundle](source-artifacts.json.gz): ${cell(path)}`
+          : `${cell(path)} (not local)`;
+  for (const run of report.runs)
+    lines.push(
+      `| ${run.task}/${run.lane}/${run.runIndex} | ${run.initialFilesSha256 ?? 'unobserved'}/${run.initialLockfileSha256 ?? 'unobserved'} | ${artifact(run.artifacts.trace)} | ${artifact(run.artifacts.before)} / ${artifact(run.artifacts.after)} | ${cell(JSON.stringify({ start: run.attemptStartedAt, agentStart: run.agentStartedAt, agentEnd: run.agentFinishedAt, judgeStart: run.judgeStartedAt, judgeEnd: run.judgeFinishedAt, complete: run.completedAt }))} |`,
+    );
+  lines.push(...statisticsLines(statistics));
   await writeFile(join(dir, 'summary.md'), `${lines.join('\n')}\n`);
 }
 export async function regenerate(dir: string) {
@@ -324,6 +345,7 @@ function comparisonGroups(report: Report) {
   return { groups, identities };
 }
 export function compareReports(before: Report, after: Report) {
+  assertComparablePlans(before, after);
   for (const key of [
     'endpoint',
     'purpose',
