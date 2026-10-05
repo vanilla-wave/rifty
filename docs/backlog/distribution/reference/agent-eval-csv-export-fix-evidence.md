@@ -80,3 +80,9 @@ After accepted header blocker: fullcurrent `pnpm pr:check`27/27PASS,
 test228.4s/parity117.8s; lint/typecheck/build/docsPASS.
 [Current gate log](agent-eval-csv-semantic-header-pr-check.log.gz).
 Independent verification next; v3 comparativecalls0, goal stillopen.
+
+Independent verification PASS @7dd4190196027f10f32903b610e79c69055ef24b:
+25/25coverage/all8axesPASS,0findings/unitresiduals,validator0. Executedunit5,
+native14/adversarial9; newownorigin8raw/physicalsnapshots independentlychecked.
+[Accepted verdict](agent-eval-csv-export-fix-final-green.json); originalBLOCK
+retained. CSVfixclosed; freshpilot72/report/expansion/boundaries stillopen.
