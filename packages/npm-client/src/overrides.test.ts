@@ -6,11 +6,17 @@
  */
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
+import {
+  TAR_TRAILER,
+  buildHeader,
+  concat,
+  gzip,
+  padToBlock,
+} from './_test-fixtures/tar-builder.ts';
 import { install } from './installer.ts';
 import { resolveOverride } from './overrides.ts';
 import type { Packument, VersionManifest } from './registry.ts';
 import { RegistryClient } from './registry.ts';
-import { TAR_TRAILER, buildHeader, concat, gzip, padToBlock } from './_test-fixtures/tar-builder.ts';
 
 interface FakeRegistryEntry {
   manifest: VersionManifest;
@@ -52,7 +58,7 @@ async function makeEntry(
   const chunks: Uint8Array[] = [];
   const packageJson = JSON.stringify({ name, version, dependencies });
   const bytes = new TextEncoder().encode(packageJson);
-  chunks.push(buildHeader(`package/package.json`, bytes.length), padToBlock(bytes));
+  chunks.push(buildHeader('package/package.json', bytes.length), padToBlock(bytes));
   return {
     manifest: {
       name,
@@ -64,7 +70,9 @@ async function makeEntry(
   };
 }
 
-function db(...entries: [string, FakeRegistryEntry][]): Map<string, Map<string, FakeRegistryEntry>> {
+function db(
+  ...entries: [string, FakeRegistryEntry][]
+): Map<string, Map<string, FakeRegistryEntry>> {
   const map = new Map<string, Map<string, FakeRegistryEntry>>();
   for (const [name, entry] of entries) {
     const versions = map.get(name) ?? new Map<string, FakeRegistryEntry>();
@@ -98,7 +106,10 @@ describe('override target parsing — npm bare-version spelling (→ I1)', () =>
 
   it('resolves the bare range through install(): one vite@8.0.16 for vitest (→ I1)', async () => {
     const registry = new FakeRegistry(
-      db(['vite', await makeEntry('vite', '8.0.16')], ['vitest', await makeEntry('vitest', '4.1.11', { vite: '^8.0.0' })]),
+      db(
+        ['vite', await makeEntry('vite', '8.0.16')],
+        ['vitest', await makeEntry('vitest', '4.1.11', { vite: '^8.0.0' })],
+      ),
     );
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
@@ -111,17 +122,22 @@ describe('override target parsing — npm bare-version spelling (→ I1)', () =>
         overrides: { vite: '8.0.16' },
       }),
     );
-    const result = await install('root', '1.0.0', { vitest: '4.1.11' }, {
-      vfs,
-      cwd: '/proj',
-      registry,
-      overrides: { vite: '8.0.16' },
-    });
+    const result = await install(
+      'root',
+      '1.0.0',
+      { vitest: '4.1.11' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry,
+        overrides: { vite: '8.0.16' },
+      },
+    );
     const vitePkgs = result.packages.filter((p) => p.name === 'vite');
     expect(vitePkgs).toHaveLength(1);
     expect(vitePkgs[0]?.version).toBe('8.0.16');
     const linked = JSON.parse(
-      new TextDecoder().decode(await vfs.readFileBytes('/proj/node_modules/vite/package.json')),
+      new TextDecoder().decode(await vfs.readFile('/proj/node_modules/vite/package.json')),
     ) as { version: string };
     expect(linked.version).toBe('8.0.16');
     // No packument was requested for a package named "8.0.16" (today's 404 path).

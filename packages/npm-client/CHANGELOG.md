@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Overrides parse npm's bare-version spelling (`"vite": "8.0.16"`) as the key package at that range; range-shaped values only — name redirects, `name@range`, `npm:` aliases and `parent>child` keys unchanged.
+
 - Match npm tar root stripping for DefinitelyTyped and other named roots; preserve ordinary property-name files and traversal rejection.
 
 
