@@ -15,7 +15,7 @@ import { catalogEndpoint } from './catalog-endpoint.ts';
 test('packed benchmark boots the shared host with defaults and policy/text-only toggles', async ({
   browser,
 }) => {
-  const output = join(await mkdtemp(join(tmpdir(), 'rifty-reference-bench-')), 'series');
+  const output = await mkdtemp(join(tmpdir(), 'rifty-reference-bench-'));
   const servers = await services(['rifty-no-coi'], await freePort(), output);
   const registry = await startInstalledRegistry(await browserRegistryPackages(process.cwd()));
   const config = JSON.parse(

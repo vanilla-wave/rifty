@@ -158,8 +158,6 @@ export async function writeReport(dir: string, report: Report, persist = true) {
     'Outcomes: pass, fail, budget-exceeded, context-exceeded (separate; never counted as ordinary fail).',
     'Failure classes are manual: agent, rifty-runtime, rifty-tooling, ai-mode-ux, provider, task-bad. Unclassified stays null.',
     '',
-    '| Task | Lane | Run | Outcome | Agent | Seconds | Tools | Input tokens | Output tokens | Retries | Compactions | Repeated calls | Edit failures | Malformed calls | Class | Note |',
-    '|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|',
   ];
   const cell = (value: string | null) => value?.replaceAll('|', '\\|').replaceAll('\n', ' ') ?? '—';
   if (report.header.series) {
@@ -169,6 +167,14 @@ export async function writeReport(dir: string, report: Report, persist = true) {
       'Incomplete series is partial evidence; missing work is never success.',
     );
     if (series.error) lines.push(`Series error: ${cell(series.error)}`);
+  }
+  lines.push(
+    '',
+    '| Task | Lane | Run | Outcome | Agent | Seconds | Tools | Input tokens | Output tokens | Retries | Compactions | Repeated calls | Edit failures | Malformed calls | Class | Note |',
+    '|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|',
+  );
+  if (report.header.series) {
+    const series = report.header.series;
     for (const trial of series.trials) {
       if (
         report.runs.some(

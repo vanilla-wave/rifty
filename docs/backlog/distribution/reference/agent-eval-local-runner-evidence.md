@@ -17,3 +17,11 @@ BASE `a28b37da31ca3ef128bbdcb6aa55d6109c5f7d16`; Node v24.16.0, Pi 0.85.1, Chrom
 - `pnpm pr:check`:27/27; lint/typecheck/builds/architecture/docs gates, test:run210.0s, test:parity114.7s. No isolated failures; required full lanes green.
 - `pnpm --filter @riftydev/agent-bench typecheck`: pass, including added cleanup-fault acceptance.
 - `pnpm exec playwright test -c tools/agent-bench/playwright.config.ts series-interruption.spec.ts -g 'trace cleanup failure'`:1/1,9.6s; physical directory-at-browser.zip fault after START. Completed record persisted before failed tracing cleanup; next selected trial remains missing, series failed. Added after full gate; lint/typecheck + its real fault run green, production bytes unchanged.
+
+## Final review repair
+
+Independent Final+GREEN at9519a0b77 blocked only `reference-host.spec.ts`: direct services() needs existing output, while runner/CLI exclusively create output. Existing real test RED: ENOENT series/playground.log before boot. Class sibling-drift; sweep tools/tests found only runner and this direct-services caller. Restored this fixture's original mkdtemp; no weakening of checks.
+
+- `pnpm exec playwright test -c tools/agent-bench/playwright.config.ts reference-host.spec.ts`:1/1,1.3min; genuine packed host,167 installed dependency versions, both unrestricted/restricted policies/text-only and real Vite preview.
+- Advisory Markdown metadata moved before table header; `pnpm test:run tools/agent-bench/src/series.fault.test.ts tools/agent-bench/src/comparison.test.ts`:20/20. No result/score criterion changed.
+- Post-fix `pnpm pr:check`:27/27; test:run202.2s, test:parity114.2s. Independent verify pending on committed repair.

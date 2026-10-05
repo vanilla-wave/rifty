@@ -1,0 +1,182 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK: repair direct-services packed-host fixture and independently verify; continue goal after the slice passes.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "9519a0b773640f0074d6a97255b540b1f235ba10",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-local-runner.md @ 9519a0b773640f0074d6a97255b540b1f235ba10; goal docs/backlog/epics/agent-code-quality-evaluation/goal.md I8/I9 and selected-trial I3; BASE a28b37da31ca3ef128bbdcb6aa55d6109c5f7d16",
+  "unit_residuals": [
+    {
+      "clause": "Named BASE packed reference-host acceptance behavior; ADR-0434 decision 2",
+      "location": "tools/agent-bench/tests/reference-host.spec.ts:18",
+      "summary": "Direct services fixture regressed to absent output; real packed-host acceptance fails ENOENT before boot."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I1+I6+I7",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:77",
+      "summary": "Diverse pinned pilot/corpus, discriminating checks/reference controls and family-separated expansion remain."
+    },
+    {
+      "clause": "I2+I8 native Codex reference isolation",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:83",
+      "summary": "Real CLI probes/ADR are preparation; no native-codex adapter or four-environment run delivered yet."
+    },
+    {
+      "clause": "I3+I4",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:87",
+      "summary": "New-corpus own-environment checks, workload summaries, separate Codex reference and uncertainty remain."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:96",
+      "summary": "Real repeated reference campaign over both workload groups and all four environments remains; scripted plumbing is not coding-quality evidence."
+    },
+    {
+      "clause": "I10+I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Observed difference catalog and executed escalation/confirmation boundary study remain."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: full selected deterministic matrix and source/dependency/judge/config identity",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/series.fault.test.ts:20",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: exclusive output, pre-setup plan, progress and partial interruption/setup evidence",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/series-interruption.spec.ts:89",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: regeneration without model calls; fresh subsequent output/workspace",
+      "source": "acceptance",
+      "trace": "I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/series-interruption.spec.ts:107",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key × output creation: reject occupied target and preserve prior evidence",
+      "source": "fault-matrix",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/series.fault.test.ts:73",
+      "note": ""
+    },
+    {
+      "row": "torn-state × signal/setup/cleanup: completed records retained; unfinished matrix visible",
+      "source": "fault-matrix",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/series-interruption.spec.ts:68",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail × persistence: loud failure without retention claim",
+      "source": "fault-matrix",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/series.fault.test.ts:134",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × unsupported selected trial: retained setup failure",
+      "source": "fault-matrix",
+      "trace": "I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/series-interruption.spec.ts:129",
+      "note": ""
+    },
+    {
+      "row": "CLI plan: side-effect-free resolution of explicit experiment inputs",
+      "source": "public-api",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/series.fault.test.ts:20",
+      "note": ""
+    },
+    {
+      "row": "CLI run: fresh exclusive series and actual isolated lane execution",
+      "source": "public-api",
+      "trace": "I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/series-interruption.spec.ts:89",
+      "note": ""
+    },
+    {
+      "row": "CLI report: same summary; authoritative JSON unchanged",
+      "source": "public-api",
+      "trace": "I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/comparison.test.ts:265",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/tests/reference-host.spec.ts:18",
+          "summary": "Changed packed-host acceptance fixture passes an absent output directory to direct services(); it now fails before any host boot. Only runner/CLI callers require absent output; services still requires an existing directory. Fault class: sibling-drift at output ownership. Existing test is the executed RED; sweep distinguishes direct services callers from run callers.",
+          "authority": "Named baseline behavior: tools/agent-bench/tests/reference-host.spec.ts at BASE a28b37da31ca3ef128bbdcb6aa55d6109c5f7d16 creates an existing mkdtemp output before services(); ADR-0434 decision 2 retains the real packed no-COI shared host.",
+          "evidence": "pnpm exec playwright test -c tools/agent-bench/playwright.config.ts reference-host.spec.ts, unsandboxed: exit1, 1 failed in13ms; ENOENT .../rifty-reference-bench-HnjpCq/series/playground.log at proc.ts120/services.ts144/test19. First sandboxed attempt failed Chromium MachPort permissions; second executes fixture and proves the actual regression. BASE test read with git show; services unchanged."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/src/report.ts:165",
+          "summary": "Series/error prose is appended between the Markdown table separator and all attempt rows, interrupting GFM table rendering. Move series metadata before the table header; retained JSON and raw rows remain correct.",
+          "authority": "",
+          "evidence": ""
+        }
+      ]
+    }
+  ]
+}
