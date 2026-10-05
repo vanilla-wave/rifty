@@ -25,7 +25,52 @@ interface KeepaliveState {
   nodeEvalLifecycle: NodeEvalLifecycleRecord | null;
   nodeEvalDrainOwner: object | null;
   nodeEvalDirectTerminalPending: boolean;
+  processLifecycle: ProcessLifecycleDispatcher | null;
   readonly hostSetTimeout: typeof globalThis.setTimeout;
+}
+
+/**
+ * Process-lifecycle seam (late binding; the keepalive layer cannot import the
+ * process builtin). `dispatchUnhandled` runs BEFORE the loud terminal path: an
+ * active NodeProcess with `uncaughtException`/`unhandledRejection` listeners
+ * takes the error and the loop continues, exactly like Node. `emitNaturalExit`
+ * fires the process `exit` event on a loop-empty drain in realms the eval
+ * lifecycle does not own (its owner terminates via `process.exit`, which emits
+ * itself — Node order: flush, then `exit`).
+ */
+export interface ProcessLifecycleDispatcher {
+  /**
+   * Returns `handled: true` when a process listener took the error. A listener
+   * THROW surfaces as `{ handled: false, replacement }` — Node treats an
+   * exception inside `uncaughtException` as fatal with the new error.
+   */
+  dispatchUnhandled(
+    reason: unknown,
+    origin: NodeEvalUnhandledOrigin,
+  ): { readonly handled: boolean; readonly replacement?: unknown };
+  /** Natural drain resolved: emit `exit` with the process's final code. */
+  emitNaturalExit(): void;
+}
+
+export function setProcessLifecycleDispatcher(dispatcher: ProcessLifecycleDispatcher | null): void {
+  keepaliveState().processLifecycle = dispatcher;
+}
+
+/**
+ * One unhandled-error intake for every trap surface (browser `self` error /
+ * unhandledrejection events, host-process rejection forwarding): process
+ * listeners first (Node: handlers take the error, loop continues), then the
+ * eval terminal claim, then the drain record. Returns true when the caller
+ * should swallow/preventDefault the platform event.
+ */
+export function intakeUnhandledError(reason: unknown, origin: NodeEvalUnhandledOrigin): boolean {
+  const state = keepaliveState();
+  const dispatch = state.processLifecycle?.dispatchUnhandled(reason, origin);
+  if (dispatch?.handled) return true;
+  const terminalReason = dispatch?.replacement ?? reason;
+  if (beginNodeEvalUnhandled(terminalReason, origin)) return true;
+  if (origin === 'rejection') recordRejection(terminalReason, 'rejection');
+  return false;
 }
 
 export interface NodeEvalDrainLifecycle {
@@ -69,6 +114,7 @@ function keepaliveState(): KeepaliveState {
         nodeEvalLifecycle: null,
         nodeEvalDrainOwner: null,
         nodeEvalDirectTerminalPending: false,
+        processLifecycle: null,
         // awaitDrain MUST use the host timer, not installTimerGlobals' ref-counted
         // wrapper. Store the first bundle's capture on the realm so later
         // node-entry chunks share both the counter and the original timer.
@@ -290,7 +336,9 @@ export function beginNodeEvalUnhandled(reason: unknown, origin: NodeEvalUnhandle
   return true;
 }
 
-/** Test-only: reset module state between cases. */
+/** Test-only: reset module state between cases. The process-lifecycle
+ * dispatcher stays — it is registered at process.ts module load (realm-stable
+ * registration, not per-invocation run state). */
 export function resetKeepalive(): void {
   const state = keepaliveState();
   state.refCount = 0;
@@ -378,6 +426,13 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
       const record = state.nodeEvalLifecycle;
       if (record !== null) record.terminalClaimed = true;
       const lifecycle = record?.lifecycle;
+      // Realms the eval lifecycle does NOT own terminate at this drain-resolve
+      // (kernel reaps) — emit the process `exit` event HERE so listener output
+      // flushes before the worker is reaped. Eval-owned realms terminate via
+      // `process.exit`, which emits after the lifecycle flush (Node order).
+      if (record === null && outcome.kind === 'resolved') {
+        state.processLifecycle?.emitNaturalExit();
+      }
       const beforeExit = record === null ? undefined : flushNodeEvalDrainLifecycle(record);
       const settled = reflectApplyPrimordial(
         promiseResolvePrimordial,
@@ -481,8 +536,7 @@ export function installUnhandledErrorTrap(
         : typeof event.message === 'string'
           ? new Error(event.message)
           : new Error('Worker terminated by an uncaught error');
-    if (!beginNodeEvalUnhandled(reason, 'uncaught-error')) return;
-    event.preventDefault?.();
+    if (intakeUnhandledError(reason, 'uncaught-error')) event.preventDefault?.();
   });
 }
 
@@ -500,11 +554,7 @@ export function installUnhandledRejectionTrap(
   target: RejectionTarget = self as unknown as RejectionTarget,
 ): void {
   target.addEventListener('unhandledrejection', (ev: RejectionEventLike) => {
-    if (beginNodeEvalUnhandled(ev.reason, 'rejection')) {
-      ev.preventDefault?.();
-      return;
-    }
-    recordRejection(ev.reason);
+    if (intakeUnhandledError(ev.reason, 'rejection')) ev.preventDefault?.();
   });
 }
 

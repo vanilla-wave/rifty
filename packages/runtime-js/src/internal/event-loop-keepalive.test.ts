@@ -712,3 +712,81 @@ describe('uncaught error trap', () => {
     expect(reasons).toEqual([undefined]);
   });
 });
+
+describe('process lifecycle dispatcher (process-lifecycle-events-exit-code)', () => {
+  function withDispatcher(
+    listeners: Record<'uncaughtException' | 'unhandledRejection', Array<(e: unknown) => unknown>>,
+  ): { seen: unknown[] } {
+    const seen: unknown[] = [];
+    keepalive.setProcessLifecycleDispatcher({
+      dispatchUnhandled(reason, origin) {
+        seen.push(reason);
+        const handler =
+          listeners[origin === 'rejection' ? 'unhandledRejection' : 'uncaughtException'];
+        if (handler.length === 0) return { handled: false };
+        for (const fn of handler) {
+          try {
+            fn(reason);
+          } catch (replacement) {
+            return { handled: false, replacement };
+          }
+        }
+        return { handled: true };
+      },
+      emitNaturalExit() {},
+    });
+    return { seen };
+  }
+
+  it('an uncaughtException handler takes the error: no drain rejection, loop continues', async () => {
+    withDispatcher({
+      uncaughtException: [(e) => expect((e as Error).message).toBe('boom')],
+      unhandledRejection: [],
+    });
+    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toBe(true);
+    const queue: Array<() => void> = [];
+    const drain = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
+    queue.shift()!();
+    await expect(drain).resolves.toBeUndefined();
+  });
+
+  it('a throwing handler is fatal with the NEW error (loud default keeps its stderr stack)', async () => {
+    withDispatcher({
+      uncaughtException: [
+        () => {
+          throw new Error('handler-exploded');
+        },
+      ],
+      unhandledRejection: [],
+    });
+    const terminated: unknown[] = [];
+    registerNodeEvalDrainLifecycle({
+      beforeExit: () => {},
+      projectUnhandled: (reason) => reason,
+      terminateUnhandled: (reason) => {
+        terminated.push(reason);
+        return Object.assign(new Error('process.exit(1)'), {
+          code: 'RIFTY_PROCESS_EXIT',
+          exitCode: 1,
+        });
+      },
+    });
+    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    // The replacement error (not the original boom) reaches the loud terminal;
+    // its stack is what the eval terminator prints to stderr.
+    expect(terminated).toHaveLength(1);
+    expect((terminated[0] as Error).message).toBe('handler-exploded');
+    expect(String((terminated[0] as Error).stack)).toContain('handler-exploded');
+  });
+
+  it('no handler: the loud default stands (unhandled → drain rejection, exit 1 path)', async () => {
+    keepalive.setProcessLifecycleDispatcher(null);
+    expect(keepalive.intakeUnhandledError(new Error('boom'), 'rejection')).toBe(false);
+    const queue: Array<() => void> = [];
+    const drain = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
+    queue.shift()!();
+    await expect(drain).rejects.toThrow('boom');
+  });
+});

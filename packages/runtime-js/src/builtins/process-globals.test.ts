@@ -198,3 +198,52 @@ describe('process.memoryUsage named-loud member (absent-builtin-members-loud-thr
     expect(() => ns.memoryUsage()).toThrow('process.memoryUsage');
   });
 });
+
+describe('process exit lifecycle (process-lifecycle-events-exit-code, I3)', () => {
+  function freshProcess(): InstanceType<typeof NodeProcess> {
+    return new NodeProcess();
+  }
+
+  it('exit() without an argument exits with process.exitCode', () => {
+    const proc = freshProcess();
+    proc.exitCode = 3;
+    let caught: unknown;
+    try {
+      proc.exit();
+    } catch (err) {
+      caught = err;
+    }
+    expect((caught as { code?: string }).code).toBe('RIFTY_PROCESS_EXIT');
+    expect((caught as { exitCode?: number }).exitCode).toBe(3);
+  });
+
+  it("'exit' fires exactly once with the RAW code, on both natural and explicit paths", () => {
+    const proc = freshProcess();
+    proc.exitCode = 257; // OS wraps to 1; the event sees the raw value (Node oracle)
+    const codes: unknown[] = [];
+    proc.on('exit', (code) => codes.push(code));
+    proc.emitNaturalExitEvent();
+    let caught: unknown;
+    try {
+      proc.exit(1);
+    } catch (err) {
+      caught = err;
+    }
+    // Natural emission already claimed the once-slot; explicit exit() after it
+    // must not emit again.
+    expect(codes).toEqual([257]);
+    expect((caught as { exitCode?: number }).exitCode).toBe(1);
+  });
+
+  it('exit() emits the exit event with its code before the terminal throw', () => {
+    const proc = freshProcess();
+    const codes: unknown[] = [];
+    proc.on('exit', (code) => codes.push(code));
+    try {
+      proc.exit(2);
+    } catch {
+      /* RIFTY_PROCESS_EXIT expected */
+    }
+    expect(codes).toEqual([2]);
+  });
+});

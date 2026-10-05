@@ -27,8 +27,7 @@ import {
 } from '../../../packages/kernel/src/worker-stdio-drain.ts';
 import { runNodeEntry } from '../../../packages/runtime-js/src/builtins/node-entry.ts';
 import {
-  beginNodeEvalUnhandled,
-  recordRejection,
+  intakeUnhandledError,
   resetKeepalive,
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { runNodeProgramLifecycle } from '../../../packages/workbench/src/workers/node-program-lifecycle.ts';
@@ -126,14 +125,14 @@ setSyncMirror(vfs);
 resetKeepalive();
 installTimerGlobals();
 installNodeHostRejectionEvents(hostProcess, (reason) => {
-  if (!beginNodeEvalUnhandled(reason, 'rejection')) recordRejection(reason);
+  intakeUnhandledError(reason, 'rejection');
 });
 const onUncaughtException = (error: unknown): void => {
   if (
     (typeof error === 'object' &&
       error !== null &&
       (error as { readonly code?: unknown }).code === 'RIFTY_PROCESS_EXIT') ||
-    beginNodeEvalUnhandled(error, 'uncaught-error')
+    intakeUnhandledError(error, 'uncaught-error')
   ) {
     return;
   }
