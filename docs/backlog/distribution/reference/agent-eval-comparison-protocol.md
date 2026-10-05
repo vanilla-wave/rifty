@@ -50,3 +50,13 @@ First actual series on clean eac88e897:15/72 retained,3 nativeCodex passes,3 nat
 ## Verified oracle correction
 
 Second source-frozen pilot-v1 stopped56/72 on independent HOLDS I6/I3. Ordinary captions were rejected; raw scores/history retained, no quality conclusion or re-scoring. Corrected pilot-v2 clones only the two app case paths/IDs, same project/prompt/families/controls, semantic discovery and opaque accessible output. Native7 controls3PASS/4functionalFAIL; all-origin caption8PASS; original actualCSV2 own-COI7probesPASS with equal after-tree. Shared support fingerprint changes explicitly. Fresh full72 same100tools/600s/order/models; fullselected primary; compatible-app secondary still bothsamefamilies predeclared, never remove library failures. Expected90–140min/coldsetup crude prior estimate retained; extra calibration/correction cost separately retained in earlierpartial series.
+
+Pilot-v2 source0bed68b575 interrupted49/72 on actual CSV1 export encoding defect.
+Four valid native encoding/programme controls RED; original scores preserved in
+2026-10-05-pilot-csv-encoding-interrupted. RFC4180 permits every field quoted;
+public requirements do not impose optional header/serialization shape. New
+pilot-v3 clones only CSV path/ID; notes-v2, all inputs/prompts/controlcode unchanged.
+Shared judge support fingerprint changes. After semantic/output controls and
+independent Final+GREEN, fresh full72 same100tools/600s/order/models, fullselected
+primary and same predeclared compatible-app secondary. Prior90–140min estimate
+retained; correction/calibration costs separate, no resume/re-scoring.

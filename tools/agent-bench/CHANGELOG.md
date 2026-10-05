@@ -36,3 +36,5 @@
 - Verify smoke through an external HTTP observer and real browser trace actions; validate judges against native positive controls.
 
 - Corrected pilot-v2 semantic accessible captions/output; originalv1/results retained, real caption/functional-negative and own-origin programme replay proof.
+
+- Corrected pilot-v3 decodes CSV export values/visible output; optional quoting/header accepted, corrupt/extra records rejected; originalv1/v2 retained.

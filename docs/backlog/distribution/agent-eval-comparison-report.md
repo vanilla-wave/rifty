@@ -68,7 +68,7 @@ limited; provider/cache correlations may violate iid. Native Codex no Pi delta.
 Existing before/after ±1/3 noise label remains a descriptive legacy heuristic,
 not an equivalence/statistical proof. ADR-0507, primary NIST binomial/union sources.
 
-Corrected pilot-v2 six tasks (originalv1 oracle history retained); both ms calibration, other four evaluation families. Three
+Corrected pilot-v3 six tasks (originalv1 oracle history retained); both ms calibration, other four evaluation families. Three
 fresh repeats/four origins/task-lane-trial order:72 selected,48 expected agent
 calls/24 known browser library setup failures retained. Pi Luna same entry/medium,
 Codex gpt-6.1-sol/low separate;100 tools/600s nominal per agent, native Codex event

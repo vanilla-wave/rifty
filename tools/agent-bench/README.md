@@ -229,3 +229,10 @@ descriptions/common domain synonyms, separates editable source from readonly
 output; functional data assertions unchanged. `caption-controls.fault.spec.ts`
 checks real variants/negatives and four-origin captions plus unchanged actual
 programme2 in its original COI. Corpus and shared-support fingerprints visible.
+
+Corrected CSV export suite: `--suite pilot-v3`. Same six families/settings;
+new CSV case only, unchanged prompt/project/controls. Pilot-v2 first real CSV
+programme exposed serialization-oracle mismatch (proper quote-all CSV rejected);
+49/72 interrupted results retained, no valid quality conclusion. ADR0509: exact
+decoded records, optional header/quoting, visible live output/download.
+`csv-export-controls.ts` checks actual programme and encoding/functional controls.

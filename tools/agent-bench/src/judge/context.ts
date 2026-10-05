@@ -80,3 +80,68 @@ export function savedEntry({ view }: JudgeContext, title: string) {
   const name = new RegExp(`^(?!.*\\b(?:delete|remove)\\b).*\\b${escapeCaption(title)}\\b`, 'i');
   return view.getByRole('button', { name }).or(view.getByRole('link', { name }));
 }
+
+/** RFC4180 field decoding; exported LF/CRLF records, optional header/quoting. */
+export function csvExportMatches(text: string, expected: readonly (readonly string[])[]): boolean {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let value = '';
+  let quoted = false;
+  let closed = false;
+  for (let i = 0; i <= text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === undefined) return false;
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          value += '"';
+          i++;
+        } else {
+          quoted = false;
+          closed = true;
+        }
+      } else value += c;
+      continue;
+    }
+    if (closed && c !== ',' && c !== '\r' && c !== '\n' && c !== undefined) return false;
+    if (c === '"') {
+      if (value.length || closed) return false;
+      quoted = true;
+    } else if (c === ',') {
+      row.push(value);
+      value = '';
+      closed = false;
+    } else if (c === '\r' || c === '\n' || c === undefined) {
+      if (c === undefined && !row.length && !value.length && !closed) break;
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(value);
+      rows.push(row);
+      row = [];
+      value = '';
+      closed = false;
+    } else value += c;
+  }
+  if (rows[0]?.length === 2 && rows[0][0] === 'name' && rows[0][1] === 'email') rows.shift();
+  return JSON.stringify(rows) === JSON.stringify(expected);
+}
+
+/** Visible text and live field values cover accessible output without choosing a caption/DOM. */
+export async function outputTexts(ctx: JudgeContext): Promise<string[]> {
+  const { view } = ctx;
+  const values: string[] = [];
+  for (const candidate of await field(ctx, /.*/).all())
+    if (await candidate.isVisible()) values.push(await fieldValue(candidate));
+  const texts = await view.locator('*').evaluateAll((nodes) =>
+    nodes
+      .filter((node) => {
+        const style = getComputedStyle(node);
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          node.getClientRects().length > 0
+        );
+      })
+      .map((node) => (node instanceof HTMLElement ? node.innerText : (node.textContent ?? ''))),
+  );
+  return [...new Set([...values, ...texts])].filter(Boolean);
+}

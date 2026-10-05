@@ -401,6 +401,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0506 | Judge frozen project corpus in each originating environment |
 | 0507 | Report fixed corpus uncertainty without equality claims |
 | 0508 | Discover semantic captions in corrected pilot judges |
+| 0509 | Judge decoded CSV export values in a corrected pilot |
 
 ## Superseded (removed)
 
