@@ -48,17 +48,33 @@ export async function judge(ctx: JudgeContext) {
         restored.includes('empty@example.test'),
       evidence: restored,
     });
-    await field(ctx, /^Filter$/i).fill('BOB@');
-    const page = 'page' in view ? view.page() : view;
-    const download = page.waitForEvent('download', { timeout: 3000 }).catch(() => undefined);
-    await action(ctx, /^Export$/i).click();
-    const candidates = field(ctx, /Export/i).or(view.getByText(/^name,email\b/));
-    const outputs: string[] = [];
-    for (const candidate of await candidates.all())
-      if (await candidate.isVisible()) outputs.push(await fieldValue(candidate));
-    const file = await download;
-    const path = await file?.path();
-    if (path) outputs.push(await readFile(path, 'utf8'));
+    async function exportFor(query: string): Promise<string[]> {
+      await field(ctx, /^Filter$/i).fill(query);
+      const page = 'page' in view ? view.page() : view;
+      const download = page.waitForEvent('download', { timeout: 3000 }).catch(() => undefined);
+      await action(ctx, /^Export$/i).click();
+      const candidates = field(ctx, /Export/i).or(view.getByText(/^name,email\b/));
+      const outputs: string[] = [];
+      for (const candidate of await candidates.all())
+        if (await candidate.isVisible()) outputs.push(await fieldValue(candidate));
+      const file = await download;
+      const path = await file?.path();
+      if (path) outputs.push(await readFile(path, 'utf8'));
+      return outputs;
+    }
+    const byName = await exportFor('CORRECTED');
+    probes.push({
+      name: 'case-insensitive name filter',
+      pass: byName.some(
+        (exported) =>
+          exported.includes('Empty corrected,empty@example.test') &&
+          !exported.includes('alice@example.test') &&
+          !exported.includes('bob@example.test') &&
+          !exported.includes('cara@example.test'),
+      ),
+      evidence: byName,
+    });
+    const outputs = await exportFor('BOB@');
     probes.push({
       name: 'case-insensitive email filter and escaped CSV export',
       pass: outputs.some(

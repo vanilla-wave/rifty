@@ -60,19 +60,23 @@ try {
         .replaceAll('aria-label="Markdown preview"', 'aria-label="Rendered Markdown"')
         .replace('<strong>$1</strong>', '<b>$1</b>');
     const structural = source;
-    for (const variant of ['structure', 'weak']) {
+    for (const variant of ['structure', 'weak', 'search-only']) {
       source =
         variant === 'structure'
           ? structural
-          : task.id === 'csv-workflow'
-            ? reference[sourcePath]!.replace('row.name.length>0&&', '').replace(
-                "value+='\"';i++;",
-                'i++;',
-              )
-            : reference[sourcePath]!.replace(
-                'function markdown(text){return text.split',
-                "function markdown(text){return text.replace(/<[^>]*>/g,'').split",
-              );
+          : variant === 'search-only'
+            ? task.id === 'csv-workflow'
+              ? reference[sourcePath]!.replace('`${row.name} ${row.email}`', '`${row.email}`')
+              : reference[sourcePath]!.replace("(note.title+' '+note.body)", 'note.body')
+            : task.id === 'csv-workflow'
+              ? reference[sourcePath]!.replace('row.name.length>0&&', '').replace(
+                  "value+='\"';i++;",
+                  'i++;',
+                )
+              : reference[sourcePath]!.replace(
+                  'function markdown(text){return text.split',
+                  "function markdown(text){return text.replace(/<[^>]*>/g,'').split",
+                );
       assert.notEqual(source, reference[sourcePath]);
       await writeTree(dir, { ...reference, [sourcePath]: source });
       const port = await freePort();

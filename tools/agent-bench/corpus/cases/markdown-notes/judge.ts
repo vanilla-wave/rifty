@@ -43,6 +43,12 @@ export async function judge(ctx: JudgeContext) {
     await action(ctx, /^Save$/i).click();
     await view.goto(view.url());
     await action(ctx, /New note/i).click();
+    await field(ctx, /^Search$/i).fill('ALPHA');
+    probes.push({
+      name: 'case-insensitive title search',
+      pass: (await entry('Alpha').count()) >= 1 && (await entry('Beta').count()) === 0,
+      evidence: await view.locator('body').ariaSnapshot(),
+    });
     await field(ctx, /^Search$/i).fill('NEEDLE');
     probes.push({
       name: 'search includes body and preserves saved notes',
