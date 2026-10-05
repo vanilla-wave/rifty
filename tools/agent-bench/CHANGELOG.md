@@ -40,3 +40,6 @@
 - Corrected pilot-v3 decodes CSV export values/visible output; optional quoting/header accepted, corrupt/extra records rejected; originalv1/v2 retained.
 
 - CSV header purposes accept case/descriptions/order; extra fields and email data remain visible negatives.
+
+- Corrected pilot-v4 Markdown rendering/navigation projection; shared primary purposes, editor/hidden text excluded, duplicate previews allowed; original63 retained.
+- Retain large source traces as original-byte gzip plus index/manifest references; unchanged original JSON hashes, avoid V8 aggregate string limit.

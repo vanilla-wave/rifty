@@ -57,6 +57,12 @@ export function caption(name: string): RegExp {
   return new RegExp(`\\b${escapeCaption(name)}\\b`, 'i');
 }
 
+function primaryPurpose(words: readonly string[], others: readonly string[]): string {
+  const exclude = others.map(escapeCaption).join('|');
+  const prefix = exclude ? `^(?:(?!\\b(?:${exclude})\\b).)*` : '^.*';
+  return `${prefix}\\b(?:${words.map(escapeCaption).join('|')})\\b`;
+}
+
 /** Primary domain purpose distinguishes source/search descriptions from row/editor fields. */
 export function describedField(
   ctx: JudgeContext,
@@ -67,18 +73,58 @@ export function describedField(
   if (!own?.length) throw new Error(`Unknown field purpose: ${name}`);
   const others = Object.entries(namespace)
     .filter(([key]) => key !== name)
-    .flatMap(([, words]) => words)
-    .map(escapeCaption);
-  const prefix = others.length ? `^(?:(?!\\b(?:${others.join('|')})\\b).)*` : '';
-  const token = own.map(escapeCaption).join('|');
-  return field(ctx, new RegExp(`${prefix}\\b(?:${token})\\b`, 'i')).and(
+    .flatMap(([, words]) => words);
+  return field(ctx, new RegExp(primaryPurpose(own, others), 'i')).and(
     ctx.view.locator(':read-write'),
   );
 }
 
-export function savedEntry({ view }: JudgeContext, title: string) {
-  const name = new RegExp(`^(?!.*\\b(?:delete|remove)\\b).*\\b${escapeCaption(title)}\\b`, 'i');
+export function savedEntry(
+  { view }: JudgeContext,
+  title: string,
+  otherTitles: readonly string[] = [],
+) {
+  const name = new RegExp(
+    `^(?!.*\\b(?:delete|remove)\\b)${primaryPurpose([title], otherTitles).slice(1)}`,
+    'i',
+  );
   return view.getByRole('button', { name }).or(view.getByRole('link', { name }));
+}
+
+async function renderedCandidates(ctx: JudgeContext, text: string, exact: boolean) {
+  const candidates: Locator[] = [];
+  for (const node of await ctx.view.getByText(text, { exact }).all()) {
+    if (
+      (await node.isVisible()) &&
+      (await node.evaluate(
+        (element) =>
+          !element.closest(
+            'input,textarea,[contenteditable="true"],[role="textbox"],[role="searchbox"],[role="combobox"],script,style',
+          ),
+      ))
+    )
+      candidates.push(node);
+  }
+  return candidates;
+}
+
+/** Literal preview content may share a paragraph; editor source is not rendering proof. */
+export async function renderedText(ctx: JudgeContext, text: string): Promise<boolean> {
+  return (await renderedCandidates(ctx, text, false)).length > 0;
+}
+
+export async function renderedBold(ctx: JudgeContext, text: string): Promise<boolean> {
+  for (const node of await renderedCandidates(ctx, text, true))
+    if (
+      await node.evaluate((element) => Number.parseInt(getComputedStyle(element).fontWeight) >= 600)
+    )
+      return true;
+  return false;
+}
+
+/** Target caption before current title distinguishes Wiki actions from saved-entry excerpts. */
+export function noteTarget(ctx: JudgeContext, target: string, current: string) {
+  return savedEntry(ctx, target, current && current !== target ? [current] : []);
 }
 
 /** RFC4180 field decoding; exported LF/CRLF records, optional header/quoting. */

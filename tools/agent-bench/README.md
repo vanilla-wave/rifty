@@ -236,3 +236,12 @@ programme exposed serialization-oracle mismatch (proper quote-all CSV rejected);
 49/72 interrupted results retained, no valid quality conclusion. ADR0509: exact
 decoded records, optional header/quoting, visible live output/download.
 `csv-export-controls.ts` checks actual programme and encoding/functional controls.
+
+Corrected comparative suite: `--suite pilot-v4`; only notes case path changes,
+same six families/project/prompt/controls. Pilot-v3 interrupted63/72 on actual
+paragraph/Wiki-button/entry-excerpt projection errors; raw scores retained, no
+valid I5 claim. ADR0510 accepts visible rendering/primary named intents with
+real functional negatives; no model calls until controls/review.
+Large source trace gzip entries under `source-traces/` preserve original JSON
+bytes; main bundle is an index with `committed` references, manifest hashes both
+representations and original source bytes. Report regeneration remains offline.

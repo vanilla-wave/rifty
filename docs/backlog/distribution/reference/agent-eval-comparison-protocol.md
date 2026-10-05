@@ -60,3 +60,12 @@ Shared judge support fingerprint changes. After semantic/output controls and
 independent Final+GREEN, fresh full72 same100tools/600s/order/models, fullselected
 primary and same predeclared compatible-app secondary. Prior90–140min estimate
 retained; correction/calibration costs separate, no resume/re-scoring.
+
+Pilot-v3 source db494579e4 interrupted63/72: physically verified notes literal
+paragraph lookup and Wiki-button/entry-excerpt oracle defects. Originalscores
+retained2026-10-06-pilot-notes-render-interrupted (CSV12/12PASS, no I5 claim).
+Newpilot-v4 clones only notes path/ID; CSVv3/library cases andallinput/prompt/
+controlbytes unchanged. Sharedsupporthash changes explicitly. Freshfull72 same
+100tools/600s/order/models after functionalcontrols andindependentreview; full
+selectedprimary/samepredeclaredcompatibleappfamilies secondary. No resume/
+re-scoring. Calibration/correction overhead remains separate, estimates notbilling.
