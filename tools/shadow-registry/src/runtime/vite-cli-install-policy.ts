@@ -30,13 +30,16 @@ export function viteRootWatchPatchApplied(source: string): boolean {
   return source.includes(viteRootWatchPatchPolicy.replacement);
 }
 
-/** Exact Vite-bundled Chokidar transform; drift fails acquisition loudly. */
+/** Vite-bundled Chokidar transform shared by acquisition and artifact proof.
+ * Vite 8.0.16 ships the DirEntry.add shape in TWO chunks — every anchor gets
+ * the guard; zero anchors fails acquisition loudly. */
 export function applyViteRootWatchPatch(source: string): string {
-  if (viteRootWatchPatchApplied(source)) return source;
-  if (!source.includes(viteRootWatchPatchPolicy.needle)) {
+  const needle = viteRootWatchPatchPolicy.needle;
+  if (!source.includes(needle)) {
+    if (viteRootWatchPatchApplied(source)) return source;
     throw new Error('vite root watcher patch failed: Chokidar DirEntry.add shape not found');
   }
-  return source.replace(viteRootWatchPatchPolicy.needle, viteRootWatchPatchPolicy.replacement);
+  return source.replaceAll(needle, viteRootWatchPatchPolicy.replacement);
 }
 
 /** Vite strips the leading slash when its project root is the filesystem root. */
