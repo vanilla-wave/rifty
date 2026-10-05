@@ -133,3 +133,21 @@ repair evidence; final gates/packed are repeated on the corrected implementation
 
 Corrected Chromium suite13/13 GREEN, including both admission failures:
 /tmp/pr357-review-admission-browser-green.log.
+
+## Final validation
+
+Source1e7aa25e92f0ed1c27de4e1fc0187d1e3407112e, clean committed tree:
+- Full pr:check27/27 GREEN, no isolated reruns; test:run200.2s, parity127.6s.
+  /tmp/pr357-repair-pr-check-reviewed.log.
+- Full packed consumer GREEN16 first-party+178 external tarballs; separate
+  consumer TS/build, fresh Chromium reference host in both registry modes,
+  archive/snapshot/preview baselines and mandatory shared-host benchmark smoke.
+  /tmp/pr357-repair-packed-final.log, process exit0.
+- Independent original reviewer verified its exact native repro now saves
+  ^0.28.0 in both implementations, inspected all corrections and current gates;
+  PASS8/8 coverage, no findings or required unit residuals.
+  Verdict: pr357-npm-repair-final-green.json. The original BLOCK stays historical.
+
+No serializer or compiler implementation changed during this repair. Native
+crash remains an honestly scoped question, not a claimed diagnosed product bug;
+isolated20/20 and both later complete parity runs passed without source changes.

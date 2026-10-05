@@ -16,6 +16,14 @@ pr:check27/27 and the full packed consumer, including both registry configuratio
 saved open, unchanged SDK snapshot/archive proofs and shared-host benchmark smoke.
 Final verdict: `agent-host-explicit-open-final-green.json`; no required residuals.
 
+## Post-review repair — 2026-10-05
+
+Named npm updates and optional metadata/acquisition/admission saves repaired
+against native npm. Source1e7aa25e9: pr:check27/27 and full packed16+178 GREEN;
+independent verification passed. Evidence: `pr357-npm-repair-evidence.md`;
+verdict: `pr357-npm-repair-final-green.json`. Earlier verdicts retain their
+historical SHA; the repair introduces no required goal residual.
+
 ## Historical closure — 2026-09-30
 
 Delivered in PR #357. Implementation reviewed at
