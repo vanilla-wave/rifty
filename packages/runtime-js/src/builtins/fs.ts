@@ -1023,7 +1023,7 @@ export function writeSync(
 
 // Real statfs needs filesystem statistics the browser cannot supply — the
 // member exists (named import links, `typeof` is 'function') and stays loud.
-export function statfsSync(): never {
+export function statfsSync(_path: string, _options?: unknown): never {
   throw new NotImplementedError('fs.statfsSync');
 }
 

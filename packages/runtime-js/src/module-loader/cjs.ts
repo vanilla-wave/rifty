@@ -124,6 +124,9 @@ interface Scope {
   readonly maybeFunctionAliases: Set<string>;
   readonly maybeDerivedFunctionAliases: Set<string>;
   readonly maybeEvalAliases: Set<string>;
+  // Identifiers provably holding a Symbol value (const `Symbol()`/`Symbol.for()`
+  // init, same scope). A Symbol-valued computed key can never be 'Function'.
+  readonly symbolValueBindings: Set<string>;
 }
 
 interface FunctionRewriteCtx {
@@ -279,6 +282,7 @@ function createScope(): Scope {
     maybeFunctionAliases: new Set(),
     maybeDerivedFunctionAliases: new Set(),
     maybeEvalAliases: new Set(),
+    symbolValueBindings: new Set(),
   };
 }
 
@@ -297,6 +301,7 @@ function addBinding(scope: Scope, name: string | undefined): void {
   scope.maybeFunctionAliases.delete(name);
   scope.maybeDerivedFunctionAliases.delete(name);
   scope.maybeEvalAliases.delete(name);
+  scope.symbolValueBindings.delete(name);
 }
 
 function isShadowed(ctx: FunctionRewriteCtx, name: string): boolean {
@@ -561,6 +566,7 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
 
     case 'VariableDeclaration': {
       const declarations = (n as unknown as { declarations?: AnyNodeShape[] }).declarations ?? [];
+      const isConst = (n as unknown as { kind?: string }).kind === 'const';
       for (const decl of declarations) {
         const declId = decl.id as AnyNodeShape | undefined;
         walkPatternExpressions(declId, ctx);
@@ -570,6 +576,15 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
           updateMaybeFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateMaybeDerivedFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateMaybeEvalAliasesFromPatternValue(declId, decl.init, ctx);
+          if (
+            isConst &&
+            declId?.type === 'Identifier' &&
+            isProvablySymbolValueExpression(decl.init, ctx)
+          ) {
+            topScope(ctx).symbolValueBindings.add(
+              (declId as unknown as { name?: string }).name ?? '',
+            );
+          }
         }
       }
       return;
@@ -1446,7 +1461,70 @@ function isGlobalFunctionReadMember(node: AnyNodeShape, ctx: FunctionRewriteCtx)
 function isGlobalFunctionWriteMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
   if (!isGlobalObjectExpression(node.object, ctx)) return false;
   const propertyName = staticPropertyName(node);
-  return propertyName === 'Function' || (propertyName === undefined && isComputedMember(node));
+  return (
+    propertyName === 'Function' ||
+    (propertyName === undefined &&
+      isComputedMember(node) &&
+      !computedKeyProvablyNotFunction(node.property, ctx))
+  );
+}
+
+// Guard precision (undici shape): an identifier bound (const, same scope) to a
+// Symbol value, or a direct `Symbol()`/`Symbol.for()`/well-known `Symbol.<name>`
+// expression, is provably never the string 'Function'.
+function isProvablySymbolValueExpression(node: unknown, ctx: FunctionRewriteCtx): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const n = node as AnyNodeShape;
+  if (n.type === 'CallExpression') {
+    const callee = n.callee as AnyNodeShape | undefined;
+    if (callee?.type === 'Identifier') {
+      return (
+        (callee as unknown as { name?: string }).name === 'Symbol' && !isShadowed(ctx, 'Symbol')
+      );
+    }
+    if (callee?.type === 'MemberExpression') {
+      const object = callee.object;
+      return (
+        (object as unknown as { type?: string; name?: string }).type === 'Identifier' &&
+        (object as unknown as { name?: string }).name === 'Symbol' &&
+        !isShadowed(ctx, 'Symbol') &&
+        staticPropertyName(callee) === 'for'
+      );
+    }
+    return false;
+  }
+  if (n.type === 'MemberExpression') {
+    const object = n.object;
+    return (
+      (object as unknown as { type?: string; name?: string }).type === 'Identifier' &&
+      (object as unknown as { name?: string }).name === 'Symbol' &&
+      !isShadowed(ctx, 'Symbol') &&
+      staticPropertyName(n) !== undefined
+    );
+  }
+  return false;
+}
+
+function isSymbolValueIdentifier(ctx: FunctionRewriteCtx, node: unknown): boolean {
+  if (!node || typeof node !== 'object' || (node as AnyNodeShape).type !== 'Identifier') {
+    return false;
+  }
+  const name = (node as AnyNodeShape & { name?: string }).name;
+  if (typeof name !== 'string') return false;
+  for (let i = ctx.scopes.length - 1; i >= 0; i--) {
+    const scope = ctx.scopes[i];
+    if (!scope?.bindings.has(name)) continue;
+    return scope.symbolValueBindings.has(name);
+  }
+  return false;
+}
+
+function computedKeyProvablyNotFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
+  if (!node || typeof node !== 'object') return false;
+  if ((node as AnyNodeShape).type === 'Identifier') {
+    return isSymbolValueIdentifier(ctx, node);
+  }
+  return isProvablySymbolValueExpression(node, ctx);
 }
 
 function expressionMayBeHostFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
@@ -1659,17 +1737,21 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
     if (propertyName === 'defineProperties') {
       return objectMayContainFunctionKey(args[1]);
     }
-    return propertyMayBeFunction(args[1]);
+    return mutationPropertyMayBeFunction(args[1], ctx);
   }
 
   if (
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
-    return propertyMayBeFunction(args[0]);
+    return mutationPropertyMayBeFunction(args[0], ctx);
   }
 
   return false;
+}
+
+function mutationPropertyMayBeFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
+  return !computedKeyProvablyNotFunction(node, ctx) && propertyMayBeFunction(node);
 }
 
 function propertyMayBeFunction(node: unknown): boolean {

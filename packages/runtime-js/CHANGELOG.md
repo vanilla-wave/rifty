@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- ESM/CJS Function write guards accept computed keys provably bound to Symbol values (`const K = Symbol.for(...)`; direct `Symbol()` expressions) — @vitest/undici global registration loads; possibly-`'Function'` keys keep the loud ceiling.
+
 - `fs.statfsSync`, `child_process.spawnSync`, `process.memoryUsage` exist as named members that throw `NotImplementedError` when called — named imports link instead of dying link-time.
 
 - Builtin static export names include prototype-chain methods (excluding `constructor`/`Object.prototype`) so `import { cwd } from 'node:process'` links and binds the live member.

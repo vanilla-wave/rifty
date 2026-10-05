@@ -16,6 +16,9 @@ interface GuardScope {
   readonly maybeFunctionAliases: Set<string>;
   readonly maybeDerivedFunctionAliases: Set<string>;
   readonly maybeEvalAliases: Set<string>;
+  // Identifiers provably holding a Symbol value (const `Symbol()`/`Symbol.for()`
+  // init, same scope). A Symbol-valued computed key can never be 'Function'.
+  readonly symbolValueBindings: Set<string>;
 }
 
 interface EsmFunctionGuardCtx {
@@ -93,6 +96,7 @@ function createGuardScope(): GuardScope {
     maybeFunctionAliases: new Set(),
     maybeDerivedFunctionAliases: new Set(),
     maybeEvalAliases: new Set(),
+    symbolValueBindings: new Set(),
   };
 }
 
@@ -117,6 +121,7 @@ function addGuardBinding(scope: GuardScope, name: string | undefined): void {
   scope.maybeFunctionAliases.delete(name);
   scope.maybeDerivedFunctionAliases.delete(name);
   scope.maybeEvalAliases.delete(name);
+  scope.symbolValueBindings.delete(name);
 }
 
 function isGuardShadowed(ctx: EsmFunctionGuardCtx, name: string): boolean {
@@ -377,6 +382,7 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
       return;
     case 'VariableDeclaration': {
       const declarations = (n as unknown as { declarations?: GuardNodeShape[] }).declarations ?? [];
+      const isConst = (n as unknown as { kind?: string }).kind === 'const';
       for (const decl of declarations) {
         const declId = decl.id as GuardNodeShape | undefined;
         walkGuardPatternExpressions(declId, ctx);
@@ -386,6 +392,15 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
           updateGuardMaybeFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateGuardMaybeDerivedFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateGuardMaybeEvalAliasesFromPatternValue(declId, decl.init, ctx);
+          if (
+            isConst &&
+            declId?.type === 'Identifier' &&
+            isProvablySymbolValueExpression(decl.init, ctx)
+          ) {
+            topGuardScope(ctx).symbolValueBindings.add(
+              (declId as unknown as { name?: string }).name ?? '',
+            );
+          }
         }
       }
       return;
@@ -1258,7 +1273,71 @@ function isGlobalFunctionReadMember(node: GuardNodeShape, ctx: EsmFunctionGuardC
 function isGlobalFunctionWriteMember(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {
   if (!isGlobalObjectExpression(node.object, ctx)) return false;
   const propertyName = staticPropertyName(node);
-  return propertyName === 'Function' || (propertyName === undefined && isComputedMember(node));
+  return (
+    propertyName === 'Function' ||
+    (propertyName === undefined &&
+      isComputedMember(node) &&
+      !computedKeyProvablyNotFunction(node.property, ctx))
+  );
+}
+
+// Guard precision (@vitest/utils shape): an identifier bound (const, same
+// scope) to a Symbol value, or a direct `Symbol()`/`Symbol.for()`/well-known
+// `Symbol.<name>` expression, is provably never the string 'Function'.
+function isProvablySymbolValueExpression(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const n = node as GuardNodeShape;
+  if (n.type === 'CallExpression') {
+    const callee = n.callee as GuardNodeShape | undefined;
+    if (callee?.type === 'Identifier') {
+      return (
+        (callee as unknown as { name?: string }).name === 'Symbol' &&
+        !isGuardShadowed(ctx, 'Symbol')
+      );
+    }
+    if (callee?.type === 'MemberExpression') {
+      const object = callee.object;
+      return (
+        (object as unknown as { type?: string; name?: string }).type === 'Identifier' &&
+        (object as unknown as { name?: string }).name === 'Symbol' &&
+        !isGuardShadowed(ctx, 'Symbol') &&
+        staticPropertyName(callee) === 'for'
+      );
+    }
+    return false;
+  }
+  if (n.type === 'MemberExpression') {
+    const object = n.object;
+    return (
+      (object as unknown as { type?: string; name?: string }).type === 'Identifier' &&
+      (object as unknown as { name?: string }).name === 'Symbol' &&
+      !isGuardShadowed(ctx, 'Symbol') &&
+      staticPropertyName(n) !== undefined
+    );
+  }
+  return false;
+}
+
+function isGuardSymbolValueIdentifier(ctx: EsmFunctionGuardCtx, node: unknown): boolean {
+  if (!node || typeof node !== 'object' || (node as GuardNodeShape).type !== 'Identifier') {
+    return false;
+  }
+  const name = (node as GuardNodeShape & { name?: string }).name;
+  if (typeof name !== 'string') return false;
+  for (let i = ctx.scopes.length - 1; i >= 0; i--) {
+    const scope = ctx.scopes[i];
+    if (!scope?.bindings.has(name)) continue;
+    return scope.symbolValueBindings.has(name);
+  }
+  return false;
+}
+
+function computedKeyProvablyNotFunction(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
+  if (!node || typeof node !== 'object') return false;
+  if ((node as GuardNodeShape).type === 'Identifier') {
+    return isGuardSymbolValueIdentifier(ctx, node);
+  }
+  return isProvablySymbolValueExpression(node, ctx);
 }
 
 function guardExpressionMayBeHostFunction(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
@@ -1466,17 +1545,21 @@ function isGlobalFunctionMutationCall(node: GuardNodeShape, ctx: EsmFunctionGuar
     if (propertyName === 'defineProperties') {
       return objectMayContainFunctionKey(args[1]);
     }
-    return propertyMayBeFunction(args[1]);
+    return mutationPropertyMayBeFunction(args[1], ctx);
   }
 
   if (
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
-    return propertyMayBeFunction(args[0]);
+    return mutationPropertyMayBeFunction(args[0], ctx);
   }
 
   return false;
+}
+
+function mutationPropertyMayBeFunction(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
+  return !computedKeyProvablyNotFunction(node, ctx) && propertyMayBeFunction(node);
 }
 
 function propertyMayBeFunction(node: unknown): boolean {

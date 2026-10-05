@@ -1,0 +1,106 @@
+/**
+ * Guard precision (symbol-key-global-write-guard-precision): the ESM/CJS
+ * Function write guards accept computed keys provably bound to Symbol values
+ * (@vitest/utils `globalThis[SAFE_TIMERS_SYMBOL]`, undici
+ * `Object.defineProperty(globalThis, Symbol.for(...), …)`) and keep rejecting
+ * keys that may be `'Function'`. A Symbol-valued key is never the string
+ * 'Function'; a `let`/non-Symbol-bound key keeps the loud ceiling.
+ */
+import { MemoryFsSync } from '@riftydev/vfs/internal';
+import { afterEach, describe, expect, it } from 'vitest';
+import { createModuleLoader } from './loader.ts';
+
+const CLEANUP: symbol[] = [];
+afterEach(() => {
+  for (const key of CLEANUP.splice(0)) {
+    Reflect.deleteProperty(globalThis, key);
+  }
+});
+
+function esmLoader(files: Record<string, string>) {
+  const vfs = new MemoryFsSync();
+  vfs.loadFixture({ '/work/package.json': '{"type":"module"}', ...files });
+  return createModuleLoader(vfs, { cwd: '/work' });
+}
+
+function cjsLoader(files: Record<string, string>) {
+  const vfs = new MemoryFsSync();
+  vfs.loadFixture({ '/work/package.json': '{"type":"commonjs"}', ...files });
+  return createModuleLoader(vfs, { cwd: '/work' });
+}
+
+describe('ESM guard accepts provably-Symbol computed keys', () => {
+  it('const Symbol.for key: globalThis[KEY] = value loads and the write lands', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "const KEY = Symbol.for('test.safe-timers'); globalThis[KEY] = { landed: true }; export const out = globalThis[KEY].landed;\n",
+    });
+    const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: boolean };
+    expect(ns.out).toBe(true);
+    expect((globalThis as Record<symbol, unknown>)[Symbol.for('test.safe-timers')]).toEqual({
+      landed: true,
+    });
+    CLEANUP.push(Symbol.for('test.safe-timers'));
+  });
+
+  it('direct Symbol() key expression loads', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs': "globalThis[Symbol('direct')] = 1; export const out = 'ok';\n",
+    });
+    const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: string };
+    expect(ns.out).toBe('ok');
+    for (const key of Object.getOwnPropertySymbols(globalThis)) {
+      const desc = key.toString();
+      if (desc.includes('direct')) {
+        Reflect.deleteProperty(globalThis, key);
+        CLEANUP.push(key);
+      }
+    }
+  });
+
+  it('non-Symbol-bound computed key keeps the loud ceiling (may hold Function)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "let KEY = 'Function'; globalThis[KEY] = function evil() {}; export const out = 'unreachable';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it("literal string writes keep today's behavior: 'Function' rejects, other literals pass", async () => {
+    const loud = esmLoader({
+      '/work/loud.mjs': 'globalThis.Function = function evil() {};\n',
+    });
+    await expect(loud.import('./loud.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+    const pass = esmLoader({
+      '/work/pass.mjs': "globalThis.someOrdinaryKey = 1; export const out = 'ok';\n",
+    });
+    const ns = (await pass.import('./pass.mjs', '/work/__entry__.ts')) as { out: string };
+    expect(ns.out).toBe('ok');
+    Reflect.deleteProperty(globalThis, 'someOrdinaryKey');
+  });
+});
+
+describe('CJS guard accepts provably-Symbol computed keys', () => {
+  it('undici shape: Object.defineProperty(globalThis, Symbol.for key, …) loads', () => {
+    const loader = cjsLoader({
+      '/work/main.js':
+        "const KEY = Symbol.for('test.global-dispatcher'); Object.defineProperty(globalThis, KEY, { value: 'set', configurable: true }); module.exports = Object.getOwnPropertyDescriptor(globalThis, KEY)?.value;\n",
+    });
+    expect(loader.require('./main.js', '/work/__entry__.js')).toBe('set');
+    CLEANUP.push(Symbol.for('test.global-dispatcher'));
+  });
+
+  it('non-Symbol-bound defineProperty key keeps the loud ceiling', () => {
+    const loader = cjsLoader({
+      '/work/main.js':
+        "let KEY = 'Function'; Object.defineProperty(globalThis, KEY, { value: function evil() {} }); module.exports = 'unreachable';\n",
+    });
+    expect(() => loader.require('./main.js', '/work/__entry__.js')).toThrow(
+      'module-loader.cjs-global-function-assignment',
+    );
+  });
+});
