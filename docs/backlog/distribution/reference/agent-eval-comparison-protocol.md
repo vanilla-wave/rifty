@@ -1,0 +1,44 @@
+# Pilot comparison protocol (pre-measurement)
+
+Suite pilot-v1; six cards:2bugs/2features/2apps; ms calibration, four evaluation
+families. Legacy five-task smoke and scripted plumbing outside quality estimate.
+Four actual origins; Luna same declared config in three Pi origins, native Codex
+gpt-6.1-sol/low as labelled separate reference.100 tools/600s;3 fresh repeats;
+existing task-lane-trial serial order (temporal/provider confounding acknowledged).
+72 selected trials;24 known browser library reference-setup failures remain,
+48 expected live agent attempts, never pruned by measured outcome. Each repeat
+prepares again; new series on interruption, no resume/overwrite.
+
+Expected cost before calls: Pi30 attempts × historical27.372s/23,538 input/808.5
+output; Codex18 × observed124.451s/206,619 input/2,076 output. App builds likely
+slower than old smoke. Planning estimate90–140min plus cold setup;~4.4M input/
+62k output as crude extrapolation, substantial unknown app/context growth.
+Not a charge estimate: native Codex price unobserved, proxy declared costs not
+billing evidence. Selected agent-budget total12h excludes setup/judging/cleanup;
+no hard wall limit asserted. Actual usage/time retained.
+
+Estimand: pass probability of this fixed task/pipeline under declared settings,
+not population of programming tasks or environment-only causal effect. Exact
+Clopper–Pearson95% per complete task/lane; conditional iid repeated trials.
+Provider/cache/state correlations may violate assumption. Simultaneous finite
+corpus bands via Bonferroni alpha0.05/(task×lane cells), task-macro equal weights;
+Pi difference interval subtracts simultaneous bounds. Codex no Pi delta.
+No equality/causal threshold. Few observations explicitly wide/inconclusive.
+
+Missing planned attempts visible, complete-cell point unavailable; descriptive
+selected-pass lower/upper counts distinct from probabilistic inference. Setup,
+unsupported/provider/judge/budget/context remain separate counts and failures.
+Separate calibration/evaluation/smoke, bug/feature/app, project-change versus app,
+task/family/trial counts. Controls no quality rates. Reference-compatible view
+optional and secondary, fixed before quality:csv-workflow/markdown-notes passed
+all4 reference controls; full selected matrix primary, no native rescue.
+
+Identity includes manifest/card/inputs/prompt/judge/control/lock hashes; actual
+agent/model/settings/tool-context/version/source/config; install changes/failures.
+Before/after comparisons reject changed suite/input/judge/config/purpose/control;
+source versions may change for intentional harness comparison and remain visible.
+
+Reports/statistics are deterministic views of unchanged retained JSON; regenerate
+after model/service teardown, compare score/view hashes and authoritative JSON
+bytes; no new calls. Review pilot trajectories, controls, coverage and per-case
+cost before frozen expansion with its own campaign. Diagnostics separate.

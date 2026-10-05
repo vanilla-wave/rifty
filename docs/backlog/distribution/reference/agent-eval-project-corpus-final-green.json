@@ -1,9 +1,9 @@
 {
-  "overall_verdict": "concern",
-  "merge_call": "PASS slice with advisory F4; current pr:check27/27 PASS reported by driver at exact reviewed SHA. Goal continues; no quality/campaign closure.",
+  "overall_verdict": "pass",
+  "merge_call": "PASS unit @baef89ee720a90128abd6b9d2105e3513dd4dac5; current full pnpm pr:check27/27PASS in this session (test:run204.4s, test:parity116.4s), driver confirmed HEAD clean/source unchanged. Goal remains active; no quality/I5/I11 closure claim.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "0ad58a28bbf067fe9b1b8d05f74835fd004d0501",
-  "unit_goal_source": "docs/backlog/distribution/agent-eval-project-corpus.md Acceptance1–4/Fault matrix; docs/backlog/epics/agent-code-quality-evaluation/goal.md; ADR-0506. BASE ff7ecbb90d51f3857f1b1b2cc054d23556ee5d56. Fresh depth1/max1 independent reviewer /root/corpus_verify_review; no children/source edits/model calls. Original Contract+RED bc1bcdb33; accepted Codex not reopened. Actual frozen diff/raw bundles/hashes reviewed. F1/F2/F3 corrected: independent structural4 expected outcomes/pageerrors0; current GREEN judge bytes exact; original15PASS9FAIL unchanged/new16PASS8FAIL including all8 app references. Independent focused27PASS. Driver subsequently reports current pr:check27/27PASS at exact SHA (test:run211.9s, test:parity116.6s); reviewer independently ran focused27 and structural4, not the full gate.",
+  "reviewed_sha": "baef89ee720a90128abd6b9d2105e3513dd4dac5",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-project-corpus.md Acceptance1–4/Fault matrix; docs/backlog/epics/agent-code-quality-evaluation/goal.md ready unchanged; ADR-0506. BASE0ad58a28bbf067fe9b1b8d05f74835fd004d0501 accepted corpus Final+GREEN; nativeCodex baselineff7ecbb90d51f3857f1b1b2cc054d23556ee5d56 not reopened. Fresh independent read-only depth1/max1 reviewer /root/corpus_final_search_verify, no children, repository changes or model calls. Scope actual current delta: added separate name/title search carriers, named mutant controls, preserved RED and current four-origin reference bundle. Raw source, historical BLOCK010862172 and prior concernF4 read. Independent physical six-control replay and10loader/corruptionPASS; accepted unchanged obligations reused only within REV-1.",
   "unit_residuals": [],
   "goal_residuals": [
     {
@@ -49,9 +49,9 @@
       "row": "Acceptance3: trusted stated requirements, negative/positive controls and working alternatives; all-origin references with failures retained",
       "source": "acceptance",
       "trace": "I6",
-      "status": "weak",
-      "citation": "tools/agent-bench/tests/app-structure-controls.ts:16; tools/agent-bench/corpus/cases/csv-workflow/judge.ts:51; tools/agent-bench/corpus/cases/markdown-notes/judge.ts:46",
-      "note": "F1 alternative structure constraints fixed and F2 empty-name/escapedquotes mutants now fail; F4 email-only/body-only search mutants still pass, advisory REV-4."
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/app-structure-controls.ts:16; tools/agent-bench/corpus/cases/csv-workflow/judge.ts:69; tools/agent-bench/corpus/cases/markdown-notes/judge.ts:47; docs/backlog/distribution/reference/agent-eval-corpus-search-carrier-green.json.gz:1",
+      "note": "Independent native Vite/Chromium replay six controls: structure2PASS, public-requirement2FAIL, search-only2FAIL, zero pageerrors. Raw /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-app-structure-controls-SrhDCG/evidence.json. Frozen working downloadable CSV alternative remains accepted baseline; current real four-origin references24 retained16PASS/8setupFAIL."
     },
     {
       "row": "Acceptance4: frozen related-family split before quality; smoke separate; original expansion obligations remain linked after pilot comparison",
@@ -82,8 +82,8 @@
       "source": "fault-matrix",
       "trace": "I3+I6",
       "status": "pass",
-      "citation": "tools/agent-bench/tests/corpus-controls.spec.ts:67; tools/agent-bench/reports/summaries/2026-10-05-pilot-controls/report.json.gz:1",
-      "note": ""
+      "citation": "tools/agent-bench/tests/corpus-controls.spec.ts:67; tools/agent-bench/reports/summaries/2026-10-05-pilot-controls-search-fixed/report.json.gz:1",
+      "note": "Independent current raw audit: native12PASS+browserapps4PASS; browserlibs8setupFAIL retained, source bundles78entries/78manifest; no model, agentStatus not-run."
     },
     {
       "row": "CLI plan/run --suite and controls --suite --control selects frozen corpus through existing owner",
@@ -107,7 +107,7 @@
       "trace": "Acceptance1+Acceptance4 → I1+I6+I7",
       "status": "pass",
       "citation": "tools/agent-bench/src/corpus-validation.fault.test.ts:7; tools/agent-bench/corpus/pilot-v1.json:1",
-      "note": ""
+      "note": "Independent plan CLI/current loader identities match measured source tasks and24trials exactly. Committed GREEN judges/script equal current bytes; current raw judge hashes match manifest. Focused loader/corruption10PASS1.32s."
     },
     {
       "row": "Frozen ms-negative judge: explicit task+mapped upstream regression requirements and control discrimination",
@@ -145,17 +145,17 @@
       "row": "Frozen csv-workflow judge: open structure linked workflow and controls",
       "source": "frozen-artifact",
       "trace": "Acceptance3 → I6",
-      "status": "weak",
-      "citation": "tools/agent-bench/corpus/cases/csv-workflow/judge.ts:51; tools/agent-bench/tests/app-structure-controls.ts:16",
-      "note": "F4 named email-only filter mutant passes despite declared name search; advisory weak."
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow/judge.ts:69; tools/agent-bench/tests/app-structure-controls.ts:68; docs/backlog/distribution/reference/agent-eval-corpus-search-carrier-red.json.gz:1",
+      "note": "Physical email-only mutant fails name-filter probe only (export name,email); original email/quote probe remains pass. Correct output/searchbox structure passes7probes. Separate CORRECTED marker absent every email."
     },
     {
       "row": "Frozen markdown-notes judge: open structure linked workflow and controls",
       "source": "frozen-artifact",
       "trace": "Acceptance3 → I6",
-      "status": "weak",
-      "citation": "tools/agent-bench/corpus/cases/markdown-notes/judge.ts:46; tools/agent-bench/tests/app-structure-controls.ts:16",
-      "note": "F4 named body-only search mutant passes despite declared title search; advisory weak."
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes/judge.ts:47; tools/agent-bench/tests/app-structure-controls.ts:71; docs/backlog/distribution/reference/agent-eval-corpus-search-carrier-red.json.gz:1",
+      "note": "Physical body-only mutant fails title-search probe only (ALPHA zero saved entries); original NEEDLE body probe remains pass. Correct links/section/searchbox/article/b structure passes7probes. ALPHA absent body."
     },
     {
       "row": "Retained 2026-10-05-pilot-controls-red original matrix/results/source bundles preserve failures and purpose",
@@ -190,12 +190,20 @@
       "note": ""
     },
     {
-      "row": "Retained current 2026-10-05-pilot-controls-ui-fixed matrix/results/source bundle; original judge histories unchanged",
+      "row": "Retained accepted previous 2026-10-05-pilot-controls-ui-fixed matrix/results/source bundle; original judge histories unchanged",
       "source": "frozen-artifact",
       "trace": "Acceptance2+Acceptance3 → I2+I3+I6",
       "status": "pass",
       "citation": "tools/agent-bench/reports/summaries/2026-10-05-pilot-controls-ui-fixed/report.json.gz:1; docs/backlog/distribution/reference/agent-eval-corpus-ui-constraints-green.json.gz:1",
-      "note": ""
+      "note": "Unchanged accepted base evidence; independent raw audit24retained16PASS/8FAIL. Revised grading uses separate search-fixed bundle; history preserved."
+    },
+    {
+      "row": "Retained 2026-10-05-pilot-controls-search-fixed current matrix/results/source bundle; previous versions preserved",
+      "source": "frozen-artifact",
+      "trace": "Acceptance2+Acceptance3 → I2+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-05-pilot-controls-search-fixed/report.json.gz:1; tools/agent-bench/reports/summaries/2026-10-05-pilot-controls-search-fixed/manifest.json.gz:1",
+      "note": "Independent decompression24retained16PASS/8setupFAIL, all8app rows7/7PASS;78entries and manifest identity verified, bundleSHA8f6187796e0b777c2ede6ad3dc1e04a2ec3477569725325c93121968d6403043. Available physical raw byte hashes verified; appafter files equal frozen reference patch. Current plan task/prompt/judge/lock/control/manifest identities exactly match measured plan. Old24record15PASS/9FAIL untouched."
     }
   ],
   "axes": [
@@ -226,16 +234,8 @@
     },
     {
       "axis": "Bugs",
-      "verdict": "concern",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "tools/agent-bench/corpus/cases/csv-workflow/judge.ts:51; tools/agent-bench/corpus/cases/markdown-notes/judge.ts:46",
-          "authority": "",
-          "summary": "F4: name/title search carrier weak. Email-only CSV filter and body-only notes search both satisfy all current six probes although explicit public prompts require both fields. Advisory weak under REV-4, no missing carrier or mandatory discrimination-mutant clause.",
-          "evidence": "Executed node --import tsx /tmp/rifty-review-search-mutants.mjs with real Vite/Chromium, no model; /tmp/rifty-review-search-mutants.json keeps sources/results. CSV replaces `${row.name} ${row.email}` with `${row.email}`: judge.pass=true, Filter Empty corrected exports only name,email despite saved matching contact. Notes replaces (note.title+space+note.body) with note.body: judge.pass=true, Search ALPHA yields0 savedAlpha entries despite persisted Alpha. Both pageerrors0. Independent unchanged app-structure-controls.ts run: correct alternatives2PASS, public-requirement mutants2FAIL; /private/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-app-structure-controls-wcaQKt/evidence.json. Focused corpus-plan/corrupt/comparison27PASS."
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     },
     {
       "axis": "Regressions",

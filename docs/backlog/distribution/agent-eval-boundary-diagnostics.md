@@ -5,7 +5,7 @@ title: Map observed environment differences and Rifty capability boundaries
 created: 2026-09-27
 why: Aggregate passes on the pilot cannot reveal recovered tool obstacles or where realistic coding workflows stop being reliable in Rifty.
 epic: agent-code-quality-evaluation
-blocked_by: [distribution/agent-eval-project-corpus, distribution/agent-eval-comparison-report]
+blocked_by: [distribution/agent-eval-comparison-report]
 sources: [ADR-0434, docs/backlog/distribution/reference/agent-eval-boundaries-refine-evidence.md]
 code: [tools/agent-bench/src/runner.ts, tools/agent-bench/src/report.ts, tools/agent-bench/tests/baseline-probes.ts, packages/agent/src/prompt.ts]
 ---
