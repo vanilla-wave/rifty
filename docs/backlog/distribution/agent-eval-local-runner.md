@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Run local eval series through deterministic repository scripts
 created: 2026-09-15
 why: Codex must invoke a reproducible execution protocol rather than invent the run sequence, and interruption must retain a partial report without resuming or overwriting a series.
@@ -50,3 +50,31 @@ bench `endpoint` as a model-catalog entry, the per-run metric columns and the
 `context-exceeded` outcome, one recorded weak-endpoint baseline, and the kit's
 no-COI lane composition (its reference host module), instead of being
 rewritten under them.
+
+## Challenge
+
+challenge: 2026-10-05 — clear; reuse goal's checked premise, unchanged I8/I9.
+
+## Acceptance
+
+1. `agent-bench plan` resolves task/lane/trial order, source/dependency/judge/config identity without model calls; selected unsupported trials remain in the matrix. `series.fault.test.ts`, real existing-task series. → I8
+2. `run` exclusively creates its output, persists the plan before setup, reports progress and retains completed attempts plus visible missing/unfinished trials after SIGINT/SIGTERM or setup failure. → I9
+3. `report` regenerates the same summary from retained evidence without agent calls; subsequent runs use new output and workspaces. Real native scripted existing-task interruption/new-series acceptance. → I8+I9
+
+## Fault matrix
+
+| axis × operation | honest outcome | artifact / fault target | trace |
+|---|---|---|---|
+| concurrent-same-key × output creation | EEXIST before setup; prior evidence intact | series.fault.test.ts occupied directory | → I9 |
+| torn-state × signal/setup/cleanup | persisted completed records remain; unfinished matrix visible | series-interruption.spec.ts real native process | → I9 |
+| quota-perm-fail × persistence | loud throw; no retention claim | series.fault.test.ts invalid output path | → I9 |
+| provenance-lie × unsupported selected trial | recorded setup failure, never silently omitted | series.fault.test.ts matrix; real no-COI node trial | → I8+I9 |
+
+## Out of scope
+
+Resume and occupied output throw; no crash-resume service, scheduler or scored retry.
+
+## Decisions
+
+- 2026-10-05 — prerequisite PRs #359/#357 merged; existing runner/report remain state owners; inherited endpoint, metrics, budgets and packed reference host.
+- 2026-10-05 — class sweep: runner only series writer; report writes JSON directly; proc owns cancellation; no existing series/lock/ledger to reuse. Exclusive mkdir + atomic file replacement, one serial loop; tier works does not promise crash-resume.
