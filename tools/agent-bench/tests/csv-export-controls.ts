@@ -35,10 +35,26 @@ const quotedHeader = quoteAll.replace(
   "['name,email',...matches.map",
   "[['name','email'].map(encode).join(','),...matches.map",
 );
+const titlecaseHeader = quoteAll.replace(
+  "['name,email',...matches.map",
+  "['Name,Email',...matches.map",
+);
+const semanticHeader = quoteAll
+  .replace("['name,email',...matches.map", "['E-mail address,Contact name',...matches.map")
+  .replace(
+    '`${encode(row.name)},${encode(row.email)}`',
+    '`${encode(row.email)},${encode(row.name)}`',
+  );
 const brokenEscape = quoteAll.replace("value.replaceAll('\"','\"\"')", 'value');
 const hiddenCsv =
   "['name,email',...matches.map(row=>`\"${row.name.replaceAll('\"','\"\"')}\",\"${row.email.replaceAll('\"','\"\"')}\"`)].join('\\n')";
 const variants = [
+  {
+    name: 'titlecase-header',
+    files: { ...reference, 'src/main.tsx': titlecaseHeader },
+    pass: true,
+  },
+  { name: 'semantic-header', files: { ...reference, 'src/main.tsx': semanticHeader }, pass: true },
   { name: 'actual-programme1', files: actual, pass: true },
   { name: 'quote-all', files: { ...reference, 'src/main.tsx': quoteAll }, pass: true },
   {

@@ -121,7 +121,19 @@ export function csvExportMatches(text: string, expected: readonly (readonly stri
       closed = false;
     } else value += c;
   }
-  if (rows[0]?.length === 2 && rows[0][0] === 'name' && rows[0][1] === 'email') rows.shift();
+  const headers = rows[0]?.map((label) => {
+    if (label.includes('@')) return undefined;
+    const name = /\bname\b/i.test(label);
+    const email = /\b(?:email|e-mail)\b/i.test(label);
+    return name && !email ? 'name' : email && !name ? 'email' : undefined;
+  });
+  if (headers?.length === 2 && headers.includes('name') && headers.includes('email')) {
+    rows.shift();
+    if (rows.some((record) => record.length !== 2)) return false;
+    const name = headers.indexOf('name');
+    const email = headers.indexOf('email');
+    for (let i = 0; i < rows.length; i++) rows[i] = [rows[i]![name]!, rows[i]![email]!];
+  }
   return JSON.stringify(rows) === JSON.stringify(expected);
 }
 

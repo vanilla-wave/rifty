@@ -36,3 +36,11 @@ Probe: `node --import tsx tools/agent-bench/tests/csv-export-controls.ts pilot-v
 Node24.16.0, Chromium real installed Vite. Raw/external decode and command/log
 proof: `docs/backlog/distribution/reference/agent-eval-csv-export-controls-data.json.gz`
 and `agent-eval-csv-export-revert-proof.json.gz`.
+
+## Header carrier
+
+Independent actual Name,Email reference5/7FAIL exposed leftover lowercase
+assumption (I6). Header fields use unambiguous English Name/Email purposes,
+including descriptions/E-mail, independent of case/order. Email data cannot
+be mistaken for a header; extra fields rejected before reordering. Field values
+remain exact. Same public task/frozen candidatev3; no comparativev3 calls yet.

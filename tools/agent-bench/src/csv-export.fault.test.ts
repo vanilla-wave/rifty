@@ -37,3 +37,18 @@ it('rejects text after a closing quote, quotes inside bare fields and unfinished
   expect(csvExportMatches('Bob "B",bob@example.test', [['Bob B', 'bob@example.test']])).toBe(false);
   expect(csvExportMatches('"unfinished', [])).toBe(false);
 });
+
+it('interprets semantic column headers independent of casing, descriptions and order', () => {
+  const rows = [['Bob "B"', 'bob@example.test']];
+  for (const text of [
+    'Name,Email\r\n"Bob ""B""",bob@example.test',
+    '"NAME","Email"\n"Bob ""B""","bob@example.test"',
+    'Email,Name\n"bob@example.test","Bob ""B"""',
+    '"E-mail address","Contact name"\n"bob@example.test","Bob ""B"""',
+  ])
+    expect(csvExportMatches(text, rows), text).toBe(true);
+  expect(csvExportMatches('Name,email@example.test\n"Bob ""B""",bob@example.test', rows)).toBe(
+    false,
+  );
+  expect(csvExportMatches('Name and Email,Email\n"Bob ""B""",bob@example.test', rows)).toBe(false);
+});

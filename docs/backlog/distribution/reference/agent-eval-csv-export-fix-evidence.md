@@ -60,3 +60,23 @@ No model calls; original49 unchanged. Fullgate/independentfinalreview pending.
 Fullcurrent `pnpm pr:check`27/27PASS: test230.3s/parity117.5s,lint/typecheck/docs
 gatesPASS. [Gate log](agent-eval-csv-export-pr-check.log.gz). Fix Final+GREEN
 next; report/I5/expansion/I10/I11 stillopen.
+
+Independent Final+GREEN4217af1e7 BLOCK: exact lowercase header remains hidden
+requirement. Accepted; [original verdict](agent-eval-csv-export-fix-final-green-blocked.json),
+[actual titlecase programme/unitRED](agent-eval-csv-semantic-header-red.json.gz).
+Correction uses semanticName/Email purposes/case/descriptions/order, preserves
+all fields and exact values; actual email data not a header, ambiguous purposes
+not silently guessed. Native14 controls8PASS/6FAIL/errors0,portable1/1PASS1.8min;
+unit5PASS; five added guard revertsRED/source restored.
+[New native/unit/revert proof](agent-eval-csv-semantic-header-green.json.gz).
+New own-origin8/fullgate/reviewerverification pending; v3 comparativecalls0.
+
+Fresh header own-origin8/8PASS/script exit0, fullafter=physicalbefore+patch all4:
+`2026-10-05-csv-titlecase-header-controls` and
+`2026-10-05-csv-semantic-header-controls` under retained report summaries.
+Native14/portable1/unit5/reverts5GREEN as above; fullcurrentgate next.
+
+After accepted header blocker: fullcurrent `pnpm pr:check`27/27PASS,
+test228.4s/parity117.8s; lint/typecheck/build/docsPASS.
+[Current gate log](agent-eval-csv-semantic-header-pr-check.log.gz).
+Independent verification next; v3 comparativecalls0, goal stillopen.

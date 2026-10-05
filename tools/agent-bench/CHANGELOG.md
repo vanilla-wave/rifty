@@ -38,3 +38,5 @@
 - Corrected pilot-v2 semantic accessible captions/output; originalv1/results retained, real caption/functional-negative and own-origin programme replay proof.
 
 - Corrected pilot-v3 decodes CSV export values/visible output; optional quoting/header accepted, corrupt/extra records rejected; originalv1/v2 retained.
+
+- CSV header purposes accept case/descriptions/order; extra fields and email data remain visible negatives.
