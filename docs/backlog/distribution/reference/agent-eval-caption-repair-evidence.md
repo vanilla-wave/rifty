@@ -43,4 +43,4 @@ Not universal natural-language parsing. Two new app case IDs/directories in
 pilot-v2 preserve originalv1 bytes/prompt/control/families. Shared context support
 bytes change in existing plan fingerprint; case manifest checksums remain valid.
 New corrected72 campaign required after source/control validation. I5/report and
-expansion/I10/I11 remain open. All six guards reverted independently: behavioral RED in actual Chromium; source restored. [Revert proof](agent-eval-caption-revert-proof.json.gz). Focused19 testsPASS; fullgate/fresh review pending.
+expansion/I10/I11 remain open. All six guards reverted independently: behavioral RED in actual Chromium; source restored. [Revert proof](agent-eval-caption-revert-proof.json.gz). Focused19 testsPASS; portable2/2 and fullprcheck27/27PASS. Fresh independent Final+GREEN accepted4b61c53e2,0blockers/26coveragePASS; goal remains open.
