@@ -26,7 +26,7 @@ function getAgentPromptProfile(): AgentPromptProfile {
 const tasks = ['fix-date-sort', 'add-search', 'url-filters', 'new-issue-form', 'node-endpoint'];
 interface RunRecord {
   task: string;
-  lane: 'rifty' | 'rifty-no-coi' | 'local-reference';
+  lane: 'rifty' | 'rifty-no-coi' | 'local-reference' | 'native-codex';
   runIndex: number;
   agentStatus: string;
   outcome: string;
@@ -145,22 +145,29 @@ test('all three real mock-model lanes run the entire task set with identical jud
   const report = JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as Report;
   expect(report.header.runsPerTask).toBe(1);
   expect(report.header.toolContextCaveat).toMatch(/not.*equivalent|non-equivalence/i);
-  expect(report.runs).toHaveLength(15);
+  expect(report.runs).toHaveLength(20);
   expect(report.header.profile).toBe(profile.id);
   for (const task of tasks) {
     const runs = report.runs.filter((run) => run.task === task);
     expect(runs.map((run) => run.lane).sort()).toEqual(
-      ['rifty', 'rifty-no-coi', 'local-reference'].sort(),
+      ['rifty', 'rifty-no-coi', 'local-reference', 'native-codex'].sort(),
     );
     expect(
       new Set(
         runs
-          .filter((run) => !(task === 'node-endpoint' && run.lane === 'rifty-no-coi'))
+          .filter(
+            (run) =>
+              !(task === 'node-endpoint' && run.lane === 'rifty-no-coi') &&
+              run.lane !== 'native-codex',
+          )
           .map((run) => JSON.stringify(run.judge)),
       ).size,
     ).toBe(1);
     for (const run of runs) {
-      if (task === 'node-endpoint' && run.lane === 'rifty-no-coi') {
+      if (
+        (task === 'node-endpoint' && run.lane === 'rifty-no-coi') ||
+        run.lane === 'native-codex'
+      ) {
         expect(run).toMatchObject({ outcome: 'fail', agentStatus: 'error', toolCalls: 0 });
         continue;
       }

@@ -37,5 +37,6 @@
     }
   ],
   "exitCode": 0,
-  "cancel": "SIGTERM process group after command_execution item.started; no turn.completed success"
+  "cancel": "SIGTERM process group after command_execution item.started; no turn.completed success",
+  "captureLimitation": "Captured prefix before signal; stdout after signal not drained. No claim about the full final stream. Full EOF SIGINT+physical settlement probe supersedes cancellation preparation."
 }

@@ -1,16 +1,10 @@
 {
-  "overall_verdict": "blocker",
-  "merge_call": "BLOCK: repair direct-services packed-host fixture and independently verify; continue goal after the slice passes.",
+  "overall_verdict": "pass",
+  "merge_call": "PASS slice: independently verified repairs; unit20/20 and real packed host1/1,1.3min. Continue whole goal; goal incomplete.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "9519a0b773640f0074d6a97255b540b1f235ba10",
-  "unit_goal_source": "docs/backlog/distribution/agent-eval-local-runner.md @ 9519a0b773640f0074d6a97255b540b1f235ba10; goal docs/backlog/epics/agent-code-quality-evaluation/goal.md I8/I9 and selected-trial I3; BASE a28b37da31ca3ef128bbdcb6aa55d6109c5f7d16",
-  "unit_residuals": [
-    {
-      "clause": "Named BASE packed reference-host acceptance behavior; ADR-0434 decision 2",
-      "location": "tools/agent-bench/tests/reference-host.spec.ts:18",
-      "summary": "Direct services fixture regressed to absent output; real packed-host acceptance fails ENOENT before boot."
-    }
-  ],
+  "reviewed_sha": "34f9058902f10d595bf7d8aa562de917e2dddee2",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-local-runner.md @ 34f9058902f10d595bf7d8aa562de917e2dddee2; goal docs/backlog/epics/agent-code-quality-evaluation/goal.md I8/I9 and selected-trial I3; BASE a28b37da31ca3ef128bbdcb6aa55d6109c5f7d16; independent verify of accepted repair after Final+GREEN BLOCK @ 9519a0b773640f0074d6a97255b540b1f235ba10",
+  "unit_residuals": [],
   "goal_residuals": [
     {
       "clause": "I1+I6+I7",
@@ -154,29 +148,13 @@
     },
     {
       "axis": "Regressions",
-      "verdict": "blocker",
-      "findings": [
-        {
-          "severity": "blocker",
-          "location": "tools/agent-bench/tests/reference-host.spec.ts:18",
-          "summary": "Changed packed-host acceptance fixture passes an absent output directory to direct services(); it now fails before any host boot. Only runner/CLI callers require absent output; services still requires an existing directory. Fault class: sibling-drift at output ownership. Existing test is the executed RED; sweep distinguishes direct services callers from run callers.",
-          "authority": "Named baseline behavior: tools/agent-bench/tests/reference-host.spec.ts at BASE a28b37da31ca3ef128bbdcb6aa55d6109c5f7d16 creates an existing mkdtemp output before services(); ADR-0434 decision 2 retains the real packed no-COI shared host.",
-          "evidence": "pnpm exec playwright test -c tools/agent-bench/playwright.config.ts reference-host.spec.ts, unsandboxed: exit1, 1 failed in13ms; ENOENT .../rifty-reference-bench-HnjpCq/series/playground.log at proc.ts120/services.ts144/test19. First sandboxed attempt failed Chromium MachPort permissions; second executes fixture and proves the actual regression. BASE test read with git show; services unchanged."
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     },
     {
       "axis": "Ecosystem UX",
-      "verdict": "concern",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "tools/agent-bench/src/report.ts:165",
-          "summary": "Series/error prose is appended between the Markdown table separator and all attempt rows, interrupting GFM table rendering. Move series metadata before the table header; retained JSON and raw rows remain correct.",
-          "authority": "",
-          "evidence": ""
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     }
   ]
 }

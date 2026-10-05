@@ -23,7 +23,7 @@ it('resolves the full selected matrix deterministically without services or mode
   expect(first.status, first.stderr).toBe(0);
   const plan = JSON.parse(first.stdout);
   expect(plan.trials).toEqual(
-    ['rifty', 'rifty-no-coi', 'local-reference'].flatMap((lane) =>
+    ['rifty', 'rifty-no-coi', 'local-reference', 'native-codex'].flatMap((lane) =>
       [1, 2].map((runIndex) => ({ task: 'node-endpoint', lane, runIndex })),
     ),
   );
