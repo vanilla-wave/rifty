@@ -36,8 +36,7 @@ it('rejects an occupied output before setup and preserves every old byte', async
     await writeFile(join(dir, 'report.json'), 'prior evidence');
     const result = invoke([
       'run',
-      '--config',
-      config,
+      '--mock-model',
       '--task',
       'fix-date-sort',
       '--lane',

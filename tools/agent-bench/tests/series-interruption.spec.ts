@@ -96,3 +96,53 @@ test('real native series retains pre-setup and completed interruption evidence, 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('selected unsupported no-COI Node trial remains a retained failure', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'rifty-series-unsupported-'));
+  const output = join(root, 'series');
+  try {
+    const child = spawn(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        resolve('tools/agent-bench/src/cli.ts'),
+        'run',
+        '--mock-model',
+        '--lane',
+        'rifty-no-coi',
+        '--task',
+        'node-endpoint',
+        '--runs',
+        '1',
+        '--output',
+        output,
+      ],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    let log = '';
+    child.stdout.on('data', (chunk: Buffer) => {
+      log += chunk;
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      log += chunk;
+    });
+    const code = await new Promise<number | null>((done, reject) => {
+      child.once('error', reject);
+      child.once('close', done);
+    });
+    expect(code, log).toBe(0);
+    const report = JSON.parse(await readFile(join(output, 'report.json'), 'utf8')) as Report;
+    expect(report.runs).toHaveLength(1);
+    expect(report.runs[0]).toMatchObject({
+      task: 'node-endpoint',
+      lane: 'rifty-no-coi',
+      outcome: 'fail',
+      stage: 'setup',
+      agentStatus: 'error',
+    });
+    expect(report.runs[0]!.error).toContain('unsupported');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
