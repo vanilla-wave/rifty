@@ -1,0 +1,19 @@
+{
+  "id": "queue-clear",
+  "group": "feature",
+  "family": "async-concurrency",
+  "split": "evaluation",
+  "origin": {
+    "repository": "sindresorhus/p-limit",
+    "commit": "923811344705a6604967540e19f7653752021438",
+    "issue": 25
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.mjs",
+  "regressionSources": ["test.js"],
+  "difficulty": "Locate foreign implementation and preserve interacting existing API behavior; public issue contamination possible. ms is calibration, not scored evidence of broad engineering capability.",
+  "upstreamRunner": "Original tooling retained, not claimed supported. Common trusted semantic assertions run directly in the origin; runner gaps reported separately.",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "Frozen pilot candidate before model measurement; related ms families confined to calibration."
+}

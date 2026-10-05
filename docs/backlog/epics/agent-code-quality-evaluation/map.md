@@ -1,9 +1,8 @@
 ## Items
 
-1. `distribution/agent-eval-codex-reference` — native Codex reference over one existing task; reuse completed local-runner contract and establish the adapter's real execution proof.
-2. `distribution/agent-eval-project-corpus` — judge-substrate probe first (which test runners install and run in COI/no-COI, how a test or CLI result is captured inside each lane), then six diverse pilot candidates, validated cards/reference solutions/judges, then an expanded frozen corpus; I1/I6/I7. Candidate curation can start independently; all-environment controls compose with completed runner/Codex adapter.
-3. `distribution/agent-eval-comparison-report` — expanded experiment identity, uncertainty and honest matrix accounting; then a real reference campaign and regeneration proof. Depends on native Codex and corpus; report arithmetic and I5 campaign reuse the runner's series/results owner. Absorbs agent-weak-models item 12's smallest `report --compare` (two summaries of one config, PR #359) instead of a second comparison design.
-4. `distribution/agent-eval-boundary-diagnostics` — observed environment/tool differences and executed escalation/confirmation beyond the pilot; I10/I11. Reuse the same runner, corpus and reporting owner; retained-trace research can start independently, final proof composes with runner, Codex, corpus and report.
+1. `distribution/agent-eval-project-corpus` — judge-substrate probe first (which test runners install and run in COI/no-COI, how a test or CLI result is captured inside each lane), then six diverse pilot candidates, validated cards/reference solutions/judges, then an expanded frozen corpus; I1/I6/I7. Candidate curation can start independently; all-environment controls compose with completed runner/Codex adapter.
+2. `distribution/agent-eval-comparison-report` — expanded experiment identity, uncertainty and honest matrix accounting; then a real reference campaign and regeneration proof. Depends on corpus; completed native Codex/runner reused; report arithmetic and I5 campaign reuse the runner's series/results owner. Absorbs agent-weak-models item 12's smallest `report --compare` (two summaries of one config, PR #359) instead of a second comparison design.
+3. `distribution/agent-eval-boundary-diagnostics` — observed environment/tool differences and executed escalation/confirmation beyond the pilot; I10/I11. Reuse the same runner, corpus and reporting owner; retained-trace research can start independently, final proof composes with runner, Codex, corpus and report.
 
 ## Open questions
 

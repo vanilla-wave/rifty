@@ -1,0 +1,19 @@
+{
+  "id": "ms-negative",
+  "group": "bug",
+  "family": "ms",
+  "split": "calibration",
+  "origin": {
+    "repository": "vercel/ms",
+    "commit": "9b88d1568a52ec9bb67ecc8d2aa224fa38fd41f4",
+    "issue": 103
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.cjs",
+  "regressionSources": ["tests.js"],
+  "difficulty": "Locate foreign implementation and preserve interacting existing API behavior; public issue contamination possible. ms is calibration, not scored evidence of broad engineering capability.",
+  "upstreamRunner": "Original tooling retained, not claimed supported. Common trusted semantic assertions run directly in the origin; runner gaps reported separately.",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "Frozen pilot candidate before model measurement; related ms families confined to calibration."
+}

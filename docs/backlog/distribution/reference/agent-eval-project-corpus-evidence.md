@@ -1,0 +1,11 @@
+# Corpus preparation — 2026-10-05
+
+BASEff7ecbb90, actual substrate first. Retained raw reports/traces/provider requests
+and native24 control outcomes: `agent-eval-corpus-substrate-controls.json.gz`.
+
+- Three actual lanes (COI+chat, packed noCOI/publicSDK, nativePi),13 directed operations each. No scored model inference; scripted network boundary only. Plain assert succeeds0 and fails1. Node --test browser badoption9. Tape5.9 installs, then pipe error (noCOI Worker replaced/unknown effects). Mocha10.8 installs, then getter/exports error. Native all runners succeed. These are capability observations, not fixed runtime or quality scores.
+- Fresh route critic `/root/corpus_judge_premise`: challenge clear; semantic plain-assert judges satisfy I1/I3/I6, original runner/tooling failures separate; original fixtures/licenses retained; native/reference/partial/alternative and4-origin reference proof required. Both ms cases calibration, stringify/p-limit/apps evaluation; no user fork. Eight estimated expanded cases permissible, counts never closure evidence.
+- Public snapshots: ms2.0 SHA9b88d156/issue103, ms0.7.1 SHA889c2218/issue57; stringify2.1 SHA49e230da/issue74; p-limit6.2 SHA92381134/issue25. Source files/tests/licenses unchanged; one native npm-generated lockfileVersion3 included, all original manifest dependencies retained.
+- Native16 library controls: baseline/partial FAIL, reference/alternative PASS. Mapped upstream semantic fixtures cover parsing/formatting/errors; serialization ordering/cycles/references/toJSON/boxedstrings; async queue/counts/concurrency changes/args/errors/ALS/clear. Original upstream timing/perf/lint wrappers not falsely claimed run by trusted semantic checks.
+- Native8 app controls: baseline/partial FAIL, reference/alternative PASS. Actual Chromium/Vite, persistence across reload +draft distinction, correction/filter/escaped export, Markdown safety/link/search/delete. CSV alternative downloadable export/different storage accepted. Initial judge used nonexistent allInputValues; corrected before admission. Page/Frame reload uses goto same URL; after correction native controls rerun before readiness.
+- `corpus-plan.test.ts` RED: CLI has no suite selector/loader; frozen6-case/48-trial/two-run matrix and source hashes not delivered yet. No import/typecheck failure.

@@ -1,0 +1,18 @@
+{
+  "id": "markdown-notes",
+  "group": "app",
+  "family": "linked-knowledge",
+  "split": "evaluation",
+  "origin": {
+    "type": "original-scenario",
+    "created": "2026-10-05",
+    "starter": "Vanilla JavaScript + Vite7.3.6"
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.ts",
+  "regressionSources": ["minimal starter build/boot"],
+  "difficulty": "Draft versus saved state, Markdown/link navigation and cross-note search/persistence",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "Frozen pilot candidate before model calls; distinct user workflow, not framework-swap diversity."
+}
