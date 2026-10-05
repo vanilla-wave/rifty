@@ -76,7 +76,10 @@ challenge: 2026-10-02 — clear — inherited goal §Challenge (2026-09-15, 6 pr
 
 ## Decisions
 
-- ready-verdict: 2026-10-02 — Contract+RED @ <pending>
+- ready-verdict: 2026-10-05 — Contract+RED @ 34ce5516af2dbca4c6d511bdb6ef224c01d1609f
+- 2026-10-05 — review NOTE (REV-4 weak): parent→child leg sends only
+  Map(Date); IMPLEMENT extends the case to all five claimed types both
+  directions before Final+GREEN.
 - 2026-10-02 — agent (PICKUP): same channel, `serialization: 'advanced'`
   means pass frames through structured clone instead of the JSON
   round-trip; child switches on launch kind (`#jsonIpc=false`), parent on

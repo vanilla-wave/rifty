@@ -52,7 +52,7 @@ with the link-time SyntaxError.
 
 | Axis | Operation | Outcome |
 |---|---|---|
-| absent member | `import { statfsSync } from 'node:fs'` (name still absent from the builtin) | loud link-time SyntaxError — carried by `runtime-js/absent-builtin-members-loud-throws` (→ I6) |
+| absent member | `import { statfsSync } from 'node:fs'` (name still absent from the builtin) | loud link-time SyntaxError until `runtime-js/absent-builtin-members-loud-throws` lands the member — negative carrier: `absent-builtin-members` RED stays red for names no unit adds (`→ I6`) |
 
 ## Challenge
 
@@ -60,7 +60,7 @@ challenge: 2026-10-02 — clear — inherited goal §Challenge (2026-09-15, 6 pr
 
 ## Decisions
 
-- ready-verdict: 2026-10-02 — Contract+RED @ <pending>
+- ready-verdict: 2026-10-05 — Contract+RED @ 34ce5516af2dbca4c6d511bdb6ef224c01d1609f
 - 2026-10-02 — agent (PICKUP): single authority — the builtin branch of
   `cjs-interop-authority.buildStaticNameNode` collects instance keys plus
   prototype-chain own property names (excluding `Object.prototype` and
