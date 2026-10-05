@@ -50,10 +50,9 @@ recorded as `blocked_by`; the other children are independent.
 
 ## Landed (2026-10-05, pending goal close)
 
-1–11 landed on the goal branch (Final+GREEN verdicts per unit in
-`docs/backlog/*/reference/<slug>-final-green.json`; re-chart lines in the
-ledger). Item 12 (acceptance) is implemented — e2e spec + compat page — and
-RED on item 13's wall; it closes when 13 lands.
+Items 1–11 landed on the goal branch (re-chart lines in the ledger). Item 12
+(acceptance) is implemented — e2e spec + compat page — and RED on item 13's
+wall; it closes when 13 lands.
 
 ## Open questions
 

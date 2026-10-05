@@ -222,7 +222,7 @@ describe('process exit lifecycle (process-lifecycle-events-exit-code, I3)', () =
     proc.exitCode = 257; // OS wraps to 1; the event sees the raw value (Node oracle)
     const codes: unknown[] = [];
     proc.on('exit', (code) => codes.push(code));
-    proc.emitNaturalExitEvent();
+    (proc as unknown as { emitNaturalExitEvent(): void }).emitNaturalExitEvent();
     let caught: unknown;
     try {
       proc.exit(1);

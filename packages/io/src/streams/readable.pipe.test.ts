@@ -199,7 +199,8 @@ describe('Readable.pipe into process stdio (Node end-exemption)', () => {
     const r = new Readable({ read() {} });
     const dest = makeStdioWriter(1);
     const srcBefore = r.listenerCount('data') + r.listenerCount('end') + r.listenerCount('error');
-    const destBefore = dest.listenerCount('drain') + dest.listenerCount('error') + dest.listenerCount('close');
+    const destBefore =
+      dest.listenerCount('drain') + dest.listenerCount('error') + dest.listenerCount('close');
 
     r.pipe(dest as never);
     const srcDuring = r.listenerCount('data') + r.listenerCount('end') + r.listenerCount('error');
@@ -213,9 +214,9 @@ describe('Readable.pipe into process stdio (Node end-exemption)', () => {
 
     return new Promise<void>((resolve) => {
       r.on('end', () => {
-        expect(dest.listenerCount('drain') + dest.listenerCount('error') + dest.listenerCount('close')).toBe(
-          destBefore,
-        );
+        expect(
+          dest.listenerCount('drain') + dest.listenerCount('error') + dest.listenerCount('close'),
+        ).toBe(destBefore);
         resolve();
       });
     });

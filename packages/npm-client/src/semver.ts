@@ -151,7 +151,10 @@ export function isRangeShaped(value: string): boolean {
     if (hyphen.length === 2) {
       return hyphen.every((side) => RANGE_COMPARATOR_RE.test(side.trim()));
     }
-    const comparators = branch.replace(/([<>=^~])\s+/g, '$1').split(/\s+/).filter(Boolean);
+    const comparators = branch
+      .replace(/([<>=^~])\s+/g, '$1')
+      .split(/\s+/)
+      .filter(Boolean);
     return comparators.length > 0 && comparators.every((cmp) => RANGE_COMPARATOR_RE.test(cmp));
   });
 }

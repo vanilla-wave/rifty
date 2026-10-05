@@ -31,6 +31,7 @@ import {
 } from './callable-constructor.ts';
 import { acquireReadableFromWeb } from './from-web-validation.ts';
 import { methodNotImplementedError } from './method-not-implemented.ts';
+import { isProcessStdioDest } from './pipe-stdio-exemption.ts';
 
 export interface ReadableOptions {
   highWaterMark?: number;
@@ -260,17 +261,6 @@ interface PipeableWritable extends EventEmitter {
   write(chunk: unknown): boolean | Promise<boolean>;
   end(): unknown;
   emit: EventEmitter['emit'];
-}
-
-/**
- * Guest `process.stdout`/`process.stderr` writer shape: fd 1/2 + write. Node's
- * `pipe` never ends the process's own stdio (the process owns their lifetime);
- * recognizing the shape here keeps the io layer free of a process-builtin
- * import (one-way layering). No other rifty writer carries `fd: 1|2`.
- */
-function isProcessStdioDest(dest: PipeableWritable): boolean {
-  const fd = (dest as unknown as { fd?: unknown }).fd;
-  return (fd === 1 || fd === 2) && typeof dest.write === 'function';
 }
 
 /** Node's `AbortError` shape (`name`/`code`), used when a web cancel carries no

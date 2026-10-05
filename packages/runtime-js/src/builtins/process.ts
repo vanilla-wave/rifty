@@ -27,14 +27,10 @@ import { NotImplementedError, isAbsolute, joinPath, normalizePath } from '@rifty
 import {
   beginNodeEvalExplicitExit,
   ref as refEventLoop,
-  setProcessLifecycleDispatcher,
   unref as unrefEventLoop,
 } from '../internal/event-loop-keepalive.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
-import {
-  serializeNodeIpcMessage,
-  validateCloneIpcMessage,
-} from '../internal/node-ipc-serialization.ts';
+import { serializeIpcPayload } from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -55,6 +51,7 @@ import {
   type NodeProcessRelease,
   createNodeProcessRelease,
 } from './process-identity.ts';
+import { emitProcessExitEvent } from './process-lifecycle-dispatcher.ts';
 
 const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
   'rifty.runtime-js.process-terminal-bootstrap.v1',
@@ -537,7 +534,6 @@ export class NodeProcess extends EventEmitter {
   // Node-faithful: assigning an invalid exit code throws at the SETTER (loud),
   // a numeric string coerces; reads return the validated integer.
   #exitCode = 0;
-  #exitEmitted = false;
   get exitCode(): number {
     return this.#exitCode;
   }
@@ -631,8 +627,7 @@ export class NodeProcess extends EventEmitter {
       this.argv = [...spec.argv];
       const launch = readNodeEntryBootstrapIfPresent()?.launch;
       this.execArgv = launch?.kind === 'eval' ? [...launch.execArgv] : [];
-      // Copy so per-process env mutation does not leak into the published
-      // Readonly spec (the kernel threads spec.env by reference).
+      // Copy: per-process env mutation must not leak into the shared spec.env.
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
       const terminal = processTerminalBootstrap(launch);
@@ -752,18 +747,10 @@ export class NodeProcess extends EventEmitter {
     return performance.now() / 1000;
   }
 
-  // Real heap statistics are not observable from the browser — the member
-  // exists (vitest's worker init binds it) and stays loud; `logHeapUsage`
-  // opt-in keeps failing honestly.
-  memoryUsage(): never {
-    throw new NotImplementedError('process.memoryUsage');
-  }
-
   exit(code?: unknown): never {
-    // process.exit() with no argument exits with process.exitCode (Node).
-    const c = coerceExitCode(code === undefined ? this.#exitCode : code);
+    const c = coerceExitCode(code === undefined ? this.#exitCode : code); // honours exitCode
     this.#exitCode = c;
-    this.#emitExitOnce(c);
+    emitProcessExitEvent(this, c);
     const exitCode = toUint8ExitCode(c);
     const exitError = Object.assign(new Error(`process.exit(${c})`), {
       code: RIFTY_PROCESS_EXIT,
@@ -775,22 +762,6 @@ export class NodeProcess extends EventEmitter {
     });
     if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(exitCode);
     throw exitError;
-  }
-
-  /**
-   * Keepalive drain seam: a loop-empty drain in a realm the eval lifecycle
-   * does not own terminates at the kernel reap — emit `exit` exactly once with
-   * the process's final `exitCode` so listeners flush before the reap.
-   */
-  emitNaturalExitEvent(): void {
-    this.#emitExitOnce(this.#exitCode);
-  }
-
-  /** Node emits `exit` at most once per process, with the RAW (unwrapped) code. */
-  #emitExitOnce(code: number): void {
-    if (this.#exitEmitted) return;
-    this.#exitEmitted = true;
-    this.emit('exit', code);
   }
 
   kill(pid: number, signal = 'SIGTERM'): boolean {
@@ -810,14 +781,13 @@ export class NodeProcess extends EventEmitter {
 
   #wireIpc(port: MessagePort): void {
     this.#ipcPort = port;
-    // Browsers auto-start a port only with `addEventListener('message')`; using
-    // `onmessage = …` requires an explicit `start()` (called below).
+    // `onmessage = …` does not auto-start the port; `start()` is called below.
     port.onmessage = (ev: MessageEvent): void => {
       const frame = this.#receiveControlFrame(ev.data);
       if (frame === null) return;
       if (frame.kind === 'ipc:message') {
         if (this.#ipcDisconnected) return;
-        const payload = this.#jsonIpc ? serializeNodeIpcMessage(frame.payload) : frame.payload;
+        const payload = this.#jsonIpc ? serializeIpcPayload(true, frame.payload) : frame.payload;
         if (this.listenerCount('message') === 0) {
           this.#ipcBacklog.push(payload);
         } else {
@@ -857,9 +827,7 @@ export class NodeProcess extends EventEmitter {
     this.send = (message: unknown, ...unsupported: unknown[]): boolean => {
       if (unsupported.length > 0) throw new NotImplementedError('process.send.arguments');
       if (this.#ipcDisconnected) return false;
-      const payload = this.#jsonIpc
-        ? serializeNodeIpcMessage(message)
-        : validateCloneIpcMessage(message);
+      const payload = serializeIpcPayload(this.#jsonIpc, message);
       try {
         const frame: IpcFrame = { kind: 'ipc:message', payload };
         port.postMessage(frame);
@@ -1209,55 +1177,7 @@ export function nodeProcessWorkerIpc(process: unknown): NodeProcessWorkerIpc {
 
 /** REPL/default singleton (no spec). Kernel children get their own seeded one. */
 export const riftyProcess = new NodeProcess();
-
-/**
- * Register the process-lifecycle dispatcher into the realm's keepalive traps
- * (late binding — this module already imports the keepalive; the reverse
- * import would cross layers). `uncaughtException`/`unhandledRejection`
- * listeners on the ACTIVE runtime-owned process take the error and the loop
- * continues, as in Node; with no listener the loud ADR-0152 path stands.
- */
-function activeLifecycleProcess(): NodeProcess | null {
-  const active = readActiveNodeProcessBootstrap()?.process;
-  if (active instanceof NodeProcess) return active;
-  const global = (globalThis as { process?: unknown }).process;
-  return global instanceof NodeProcess ? global : null;
-}
-
-setProcessLifecycleDispatcher({
-  dispatchUnhandled(reason, origin) {
-    const proc = activeLifecycleProcess();
-    if (proc === null) return { handled: false };
-    const emitFor = (event: 'uncaughtException' | 'unhandledRejection'): unknown => {
-      try {
-        if (event === 'unhandledRejection') proc.emit(event, reason, undefined);
-        else proc.emit(event, reason);
-        return null;
-      } catch (replacement) {
-        // Node: an exception inside an uncaughtException/unhandledRejection
-        // handler is fatal with the NEW error.
-        return replacement;
-      }
-    };
-    if (proc.listenerCount('uncaughtException') > 0) {
-      // Node default (--unhandled-rejections=throw): a rejection with no
-      // dedicated handler falls to uncaughtException.
-      const direct = origin === 'uncaught-error' || proc.listenerCount('unhandledRejection') === 0;
-      if (direct) {
-        const thrown = emitFor('uncaughtException');
-        return thrown === null ? { handled: true } : { handled: false, replacement: thrown };
-      }
-    }
-    if (proc.listenerCount('unhandledRejection') > 0) {
-      const thrown = emitFor('unhandledRejection');
-      return thrown === null ? { handled: true } : { handled: false, replacement: thrown };
-    }
-    return { handled: false };
-  },
-  emitNaturalExit() {
-    activeLifecycleProcess()?.emitNaturalExitEvent();
-  },
-});
+import('./absent-members.ts').then((m) => m.installProcessAbsentMembers(NodeProcess));
 
 /** Host bridge: deliver terminal/process stdin into the REPL Worker process. */
 export function writeProcessStdin(data: string | Uint8Array): void {

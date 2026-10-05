@@ -17,7 +17,6 @@ import {
   observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
 import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
-import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
 import { fileURLToPathPosix, isNodeUrl } from '../internal/posix-file-url.ts';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
@@ -33,6 +32,7 @@ import {
 } from './process-bootstrap-identity.ts';
 import { type NodeProcessContextSnapshot, snapshotNodeProcessContext } from './process-context.ts';
 import { getProcessCwd, nodeProcessWorkerIpc } from './process.ts';
+import { WorkerKeepaliveRef, pipeHandleStdioStream } from './worker-threads-lifecycle.ts';
 
 interface WorkerOptions {
   workerData?: unknown;
@@ -110,8 +110,7 @@ export class Worker extends EventEmitter {
   private exited = false;
   /** ADR-0152 handle class (goal I2): a live, ref'd Worker keeps the parent's
    * loop alive until it exits — Node parity; `unref()` releases the hold. */
-  private holdsKeepaliveRef = false;
-  private userUnrefd = false;
+  private readonly keepaliveRef = new WorkerKeepaliveRef();
   private sameRealmContext: WorkerThreadContext | null = null;
   private sameRealmParentPort: WorkerPort | null = null;
   private sameRealmGlobalOnMessage: WorkerMessageHandler | null = null;
@@ -163,7 +162,7 @@ export class Worker extends EventEmitter {
     // terminate() may have run on the queued microtask gap — never (re)acquire
     // the keepalive ref of an already-exited worker.
     if (this.exited) return;
-    this.acquireKeepaliveRef();
+    this.keepaliveRef.acquire();
     if (this.entry.kind === 'data-url') {
       // TODO(backlog: runtime-js/worker-eval-data-url-entry)
       this.emitWorkerError(
@@ -232,17 +231,12 @@ export class Worker extends EventEmitter {
       if (handle.kind === 'worker') {
         handle.stdout().on('data', (chunk) => this.emitToOwner('stdout', chunk));
         handle.stderr().on('data', (chunk) => this.emitToOwner('stderr', chunk));
-        // `stdout: true` / `stderr: true` (Node): pipe the child's console
-        // output into the construction-time wrapper streams (same object the
-        // user attached to). The wrappers end when the HANDLE streams end —
-        // kernel output is sealed and drains after the exit event, so ending
-        // at exit would drop trailing chunks; the wrapper holds a keepalive
-        // ref until its data ends, like an open pipe in Node.
+        // `stdout/stderr: true` (Node): pipe into the construction wrappers.
         if (this.stdout !== null) {
-          this.pipeHandleStream(handle.stdout(), this.stdout);
+          pipeHandleStdioStream(handle.stdout(), this.stdout);
         }
         if (this.stderr !== null) {
-          this.pipeHandleStream(handle.stderr(), this.stderr);
+          pipeHandleStdioStream(handle.stderr(), this.stderr);
         }
         handle.on('message', (msg) => this.emitWorkerMessage(msg));
         this.flushKernelMessages(handle);
@@ -369,49 +363,17 @@ export class Worker extends EventEmitter {
   }
 
   ref(): this {
-    // Node: ref() re-acquires the loop hold for a not-yet-exited worker.
-    this.userUnrefd = false;
-    if (!this.exited) this.acquireKeepaliveRef();
+    this.keepaliveRef.userRef(this.exited);
     return this;
   }
 
   unref(): this {
-    // Node: unref() lets the loop drain while this worker keeps running.
-    this.userUnrefd = true;
-    this.releaseKeepaliveRef();
+    this.keepaliveRef.userUnref();
     return this;
-  }
-
-  private acquireKeepaliveRef(): void {
-    if (this.holdsKeepaliveRef || this.userUnrefd) return;
-    this.holdsKeepaliveRef = true;
-    refEventLoop();
-  }
-
-  private releaseKeepaliveRef(): void {
-    if (!this.holdsKeepaliveRef) return;
-    this.holdsKeepaliveRef = false;
-    unrefEventLoop();
   }
 
   private emitWorkerMessage(msg: unknown): void {
     this.emitToOwner('message', msg);
-  }
-
-  /** Wrapper end follows the handle stream's sealed drain, holding a
-   * keepalive ref until then (an open pipe holds the loop in Node). */
-  private pipeHandleStream(source: Readable, wrapper: Readable): void {
-    refEventLoop();
-    let released = false;
-    const settle = (): void => {
-      wrapper.push(null);
-      if (released) return;
-      released = true;
-      unrefEventLoop();
-    };
-    source.on('data', (chunk) => wrapper.push(chunk));
-    source.once('end', settle);
-    source.once('close', settle);
   }
 
   private flushKernelMessages(handle: Extract<ProcessHandle, { kind: 'worker' }>): void {
@@ -451,7 +413,7 @@ export class Worker extends EventEmitter {
   private finish(code: number): void {
     if (this.exited) return;
     this.exited = true;
-    this.releaseKeepaliveRef();
+    this.keepaliveRef.release();
     // Same-realm piped wrappers end here; kernel-backed ones end with the
     // handle streams (sealed output drains after the exit event).
     if (this.workerHandle === null) {

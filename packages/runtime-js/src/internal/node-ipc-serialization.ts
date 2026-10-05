@@ -39,3 +39,9 @@ export function validateCloneIpcMessage(message: unknown): unknown {
   }
   return message;
 }
+
+/** One payload lane: JSON default round-trips; 'advanced' validates and passes
+ * the value to the channel's structured clone as-is. */
+export function serializeIpcPayload(jsonIpc: boolean, message: unknown): unknown {
+  return jsonIpc ? serializeNodeIpcMessage(message) : validateCloneIpcMessage(message);
+}

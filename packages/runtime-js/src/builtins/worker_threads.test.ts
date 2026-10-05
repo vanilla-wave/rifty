@@ -1069,10 +1069,7 @@ async function withProcessGlobal<T>(
 describe('Worker keepalive handle (worker-threads-handle-keepalive, I2)', () => {
   it('a live worker holds the keepalive count; unref releases; ref re-acquires; exit releases', async () => {
     const { activeRefs } = await import('../internal/event-loop-keepalive.ts');
-    writeFileSync(
-      '/w-keepalive-handle.js',
-      "require('node:worker_threads').parentPort.on('message', () => {});",
-    );
+    writeFileSync('/w-keepalive-handle.js', 'parentPort.on("message", () => {});');
     const before = activeRefs();
     const w = new Worker('/w-keepalive-handle.js');
     // start() runs on a microtask; the script load resolves after it.

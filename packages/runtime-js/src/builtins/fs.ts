@@ -15,6 +15,8 @@ import { Buffer, type Encoding } from './buffer.ts';
 import { fsError, withSyscall } from './fs-errors.ts';
 import { type PathLike, pathToString, resolvePath } from './fs-path.ts';
 import { Stats } from './fs-stats.ts';
+export { fsStatfsSync as statfsSync } from './absent-members.ts';
+import { fsStatfsSync } from './absent-members.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 
 type Callback<T> = (err: NodeJS.ErrnoException | null, value?: T) => void;
@@ -344,9 +346,8 @@ function parseOpenFlags(flags: OpenFlags): ParsedOpenFlags {
   const numeric = typeof flags === 'number' ? flags : openFlagsFromString(flags);
   if (!Number.isInteger(numeric) || numeric < 0) throw fsError('EINVAL', undefined, 'open');
 
-  // ADR-0153: classify flag bits. Behavioral flags rifty implements; inert flags are no-ops
-  // on a regular VFS file (accepted, like Node); durability flags can't be honored (OPFS flush
-  // is async/batched) → loud NotImplementedError at the syscall; anything else → EINVAL.
+  // ADR-0153 flag classes: behavioral implemented; inert accepted (Node); durability loud
+  // (async OPFS flush can't be honored); anything else EINVAL.
   const behavioral =
     constants.O_WRONLY |
     constants.O_RDWR |
@@ -1021,14 +1022,8 @@ export function writeSync(
   return writeBytesAt(record, data.subarray(offset, offset + length), pos);
 }
 
-// Real statfs needs filesystem statistics the browser cannot supply — the
-// member exists (named import links, `typeof` is 'function') and stays loud.
-export function statfsSync(_path: string, _options?: unknown): never {
-  throw new NotImplementedError('fs.statfsSync');
-}
-
 export function fstatSync(fd: number, options?: StatOptions): Stats {
-  // EBADF first — Node reports the bad fd before any bigint shaping.
+  // EBADF precedes bigint shaping (Node order).
   const record = getFd(fd, 'fstat');
   const vs = withSyscall('fstat', record.path, () => syncMirror().statSync(record.path));
   return shapeStats(vs, options, 'fs.fstatSync.bigint');
@@ -1100,9 +1095,8 @@ export function utimesSync(p: string, atime: number | Date, mtime: number | Date
   withSyscall('utime', p, () => syncMirror().utimes(resolvePath(p), toMs(atime), toMs(mtime)));
 }
 
-// `fs.lutimesSync` — under the no-symlink VFS model (ADR-0050) a path is never a
-// link, so setting "the link's" times is exactly setting the file's (same
-// precedent as `lstatSync === statSync`).
+// `fs.lutimesSync`: no-symlink VFS (ADR-0050) — "the link's" times ARE the file's
+// (precedent: `lstatSync === statSync`).
 export function lutimesSync(p: string, atime: number | Date, mtime: number | Date): void {
   utimesSync(p, atime, mtime);
 }
@@ -1604,7 +1598,7 @@ const fs = {
   readdirSync,
   mkdirSync,
   statSync,
-  statfsSync,
+  statfsSync: fsStatfsSync,
   existsSync,
   unlinkSync,
   rmSync,
@@ -1629,8 +1623,7 @@ const fs = {
   Dir,
   createReadStream,
   createWriteStream,
-  // Node-named stream classes: `destroy`/`send` probe `stream instanceof
-  // fs.ReadStream` on cleanup — an absent class makes that probe throw.
+  // `destroy`/`send` probe instanceof fs.ReadStream — the class must exist.
   ReadStream: FileReadStream,
   WriteStream: FileWriteStream,
   watch,

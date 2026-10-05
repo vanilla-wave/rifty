@@ -8,10 +8,8 @@ import {
 } from './launch.ts';
 import {
   applyViteCliActionPatch,
-  applyViteRootUrlPatch,
   applyViteRootWatchPatch,
   viteCliActionPatchApplied,
-  viteRootUrlPatchApplied,
   viteRootUrlPatchPolicy,
   viteRootWatchPatchApplied,
   viteRootWatchPatchPolicy,
@@ -96,7 +94,9 @@ function rootWatchPatchSites(
     if (count > 0) sites.push({ path, source });
   }
   if (sites.length === 0) {
-    throw new Error('vite root watcher patch failed: expected at least one Chokidar DirEntry.add anchor; found 0');
+    throw new Error(
+      'vite root watcher patch failed: expected at least one Chokidar DirEntry.add anchor; found 0',
+    );
   }
   return sites;
 }
@@ -115,19 +115,22 @@ function validateCliActionPatch(vitePackageRoot: string): void {
 
 function validateRootWatchPatch(vitePackageRoot: string): void {
   const sites = rootWatchPatchSites(vitePackageRoot);
-  let urlAnchors = 0;
   for (const site of sites) {
     if (!viteRootWatchPatchApplied(site.source)) {
       throw new Error(
         `vite root watcher/URL must be prepared by acquisition before promotion: ${site.path}`,
       );
     }
-    urlAnchors +=
+    // A site carrying the root slice must carry the PATCHED form — an
+    // unprepared tree never promotes.
+    const urlTouched =
       occurrences(site.source, viteRootUrlPatchPolicy.needle) +
       occurrences(site.source, viteRootUrlPatchPolicy.replacement);
-  }
-  if (urlAnchors === 0) {
-    throw new Error('vite root URL patch failed: no resolved-id root slice found');
+    if (urlTouched > 0 && !site.source.includes(viteRootUrlPatchPolicy.replacement)) {
+      throw new Error(
+        `vite root watcher/URL must be prepared by acquisition before promotion: ${site.path}`,
+      );
+    }
   }
 }
 
