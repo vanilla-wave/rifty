@@ -1,16 +1,10 @@
 {
-  "overall_verdict": "blocker",
-  "merge_call": "BLOCK @732bfe051: repair F1 app oracle constraints, then fresh independent Final+GREEN; goal remains active. Driver reported full pr:check27/27PASS; independent focused27/27PASS and physical UI alternatives executed.",
+  "overall_verdict": "concern",
+  "merge_call": "PASS slice with advisory F4; current pr:check27/27 PASS reported by driver at exact reviewed SHA. Goal continues; no quality/campaign closure.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "732bfe051e68c2f59e472ca7739939c875436a67",
-  "unit_goal_source": "docs/backlog/distribution/agent-eval-project-corpus.md (Acceptance1–4/Fault matrix); docs/backlog/epics/agent-code-quality-evaluation/goal.md unchanged; original refine/route authority; ADR-0506. BASE ff7ecbb90d51f3857f1b1b2cc054d23556ee5d56. Fresh depth1/max1 read-only reviewer /root/corpus_final_review; no child agents, repository edits or model calls. Scope pilot infrastructure/controls only; prior accepted Codex slice not reopened.",
-  "unit_residuals": [
-    {
-      "clause": "Acceptance3 → I6",
-      "location": "docs/backlog/distribution/agent-eval-project-corpus.md:112",
-      "summary": "F1: valid alternative UI structures rejected in both app judges; repair oracle selectors and execute alternative RED/GREEN before passing slice."
-    }
-  ],
+  "reviewed_sha": "0ad58a28bbf067fe9b1b8d05f74835fd004d0501",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-project-corpus.md Acceptance1–4/Fault matrix; docs/backlog/epics/agent-code-quality-evaluation/goal.md; ADR-0506. BASE ff7ecbb90d51f3857f1b1b2cc054d23556ee5d56. Fresh depth1/max1 independent reviewer /root/corpus_verify_review; no children/source edits/model calls. Original Contract+RED bc1bcdb33; accepted Codex not reopened. Actual frozen diff/raw bundles/hashes reviewed. F1/F2/F3 corrected: independent structural4 expected outcomes/pageerrors0; current GREEN judge bytes exact; original15PASS9FAIL unchanged/new16PASS8FAIL including all8 app references. Independent focused27PASS. Driver subsequently reports current pr:check27/27PASS at exact SHA (test:run211.9s, test:parity116.6s); reviewer independently ran focused27 and structural4, not the full gate.",
+  "unit_residuals": [],
   "goal_residuals": [
     {
       "clause": "I4",
@@ -56,8 +50,8 @@
       "source": "acceptance",
       "trace": "I6",
       "status": "weak",
-      "citation": "tools/agent-bench/corpus/cases/markdown-notes/judge.ts:40; tools/agent-bench/corpus/cases/csv-workflow/judge.ts:43; docs/backlog/distribution/reference/agent-eval-corpus-strengthened-library-controls.json.gz:1",
-      "note": "F1 valid alternatives wrongly rejected (blocker); F2 escapedquotes/emptyname wrong implementation passes existing carrier (advisory weak)."
+      "citation": "tools/agent-bench/tests/app-structure-controls.ts:16; tools/agent-bench/corpus/cases/csv-workflow/judge.ts:51; tools/agent-bench/corpus/cases/markdown-notes/judge.ts:46",
+      "note": "F1 alternative structure constraints fixed and F2 empty-name/escapedquotes mutants now fail; F4 email-only/body-only search mutants still pass, advisory REV-4."
     },
     {
       "row": "Acceptance4: frozen related-family split before quality; smoke separate; original expansion obligations remain linked after pilot comparison",
@@ -152,16 +146,16 @@
       "source": "frozen-artifact",
       "trace": "Acceptance3 → I6",
       "status": "weak",
-      "citation": "tools/agent-bench/corpus/cases/csv-workflow/judge.ts:1",
-      "note": "F1: declared valid alternative rejected. CSV F2 named wrong behavior passes existing carrier."
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow/judge.ts:51; tools/agent-bench/tests/app-structure-controls.ts:16",
+      "note": "F4 named email-only filter mutant passes despite declared name search; advisory weak."
     },
     {
       "row": "Frozen markdown-notes judge: open structure linked workflow and controls",
       "source": "frozen-artifact",
       "trace": "Acceptance3 → I6",
       "status": "weak",
-      "citation": "tools/agent-bench/corpus/cases/markdown-notes/judge.ts:1",
-      "note": "F1: declared valid alternative rejected. CSV F2 named wrong behavior passes existing carrier."
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes/judge.ts:46; tools/agent-bench/tests/app-structure-controls.ts:16",
+      "note": "F4 named body-only search mutant passes despite declared title search; advisory weak."
     },
     {
       "row": "Retained 2026-10-05-pilot-controls-red original matrix/results/source bundles preserve failures and purpose",
@@ -194,21 +188,21 @@
       "status": "pass",
       "citation": "tools/agent-bench/reports/summaries/2026-10-05-corpus-plumbing/README.md:3",
       "note": ""
+    },
+    {
+      "row": "Retained current 2026-10-05-pilot-controls-ui-fixed matrix/results/source bundle; original judge histories unchanged",
+      "source": "frozen-artifact",
+      "trace": "Acceptance2+Acceptance3 → I2+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-05-pilot-controls-ui-fixed/report.json.gz:1; docs/backlog/distribution/reference/agent-eval-corpus-ui-constraints-green.json.gz:1",
+      "note": ""
     }
   ],
   "axes": [
     {
       "axis": "Completeness",
-      "verdict": "blocker",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "docs/backlog/distribution/reference/agent-eval-project-corpus-evidence.md:18",
-          "authority": "",
-          "summary": "F3: narrative says browser apps4 pass, committed raw report has3 pass/1 fail (COI notes Frame detached). Retained fail is honest and allowed; correct narrative before continuation.",
-          "evidence": "Independent decompression of tools/agent-bench/reports/summaries/2026-10-05-pilot-controls/report.json.gz:24selected/retained, native12PASS, browserlibraries8setupFAIL, browserapps3PASS plus COImarkdown-notes FAIL(Frame detached)."
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     },
     {
       "axis": "Mission and architecture",
@@ -232,21 +226,14 @@
     },
     {
       "axis": "Bugs",
-      "verdict": "blocker",
+      "verdict": "concern",
       "findings": [
         {
-          "severity": "blocker",
-          "location": "tools/agent-bench/corpus/cases/markdown-notes/judge.ts:40; tools/agent-bench/corpus/cases/csv-workflow/judge.ts:43",
-          "authority": "I6; Acceptance3 → I6; app prompts explicitly keep DOM/layout open and permit accessible CSV output",
-          "summary": "F1: frozen app judges reject valid alternative UI structures. Notes require role=button saved entries and navigation wrapper; CSV requires exported text in textbox or download, rejecting labelled output. Fault class: behavioral-oracle-constraint. Missing RED: alternative controls exercising link entries/neutral wrapper and accessible output. Sibling sweep finds same class in both app judges; fix shared selection premise, preserve prompts.",
-          "evidence": "Executed node --import tsx /tmp/rifty-corpus-review-alt.mts and /tmp/rifty-corpus-review-csv.mts against real Vite+Chromium, no model. /tmp/rifty-corpus-review-note-alt.json: original judge FAIL navigation timeout, same requirement workflow with only structure-neutral selectors PASS6/6. /tmp/rifty-corpus-review-csv.json: original judge FAIL export empty, same workflow with labelled output text selector PASS5/5. Alternatives change only saved entries button→a with equivalent handler, nav→labelled section, and CSV textarea→labelled output; other code unchanged."
-        },
-        {
           "severity": "concern",
-          "location": "tools/agent-bench/corpus/cases/csv-workflow/judge.ts:8",
+          "location": "tools/agent-bench/corpus/cases/csv-workflow/judge.ts:51; tools/agent-bench/corpus/cases/markdown-notes/judge.ts:46",
           "authority": "",
-          "summary": "F2: CSV carrier weak for declared empty-name validation/escaped-quote parsing; named broken implementation passes existing5 probes. Advisory under REV4, no stronger unstated requirement.",
-          "evidence": "Executed /tmp/rifty-corpus-review-csv.mts; /tmp/rifty-corpus-review-csv.json weak.pass=true. Source removes row.name.length>0 guard and skips escapedquote character. Same physical page parses A\"\"B as AB rather than A\"B; empty-name valid-email row enables Save. Vite HMR stabilized before repeat."
+          "summary": "F4: name/title search carrier weak. Email-only CSV filter and body-only notes search both satisfy all current six probes although explicit public prompts require both fields. Advisory weak under REV-4, no missing carrier or mandatory discrimination-mutant clause.",
+          "evidence": "Executed node --import tsx /tmp/rifty-review-search-mutants.mjs with real Vite/Chromium, no model; /tmp/rifty-review-search-mutants.json keeps sources/results. CSV replaces `${row.name} ${row.email}` with `${row.email}`: judge.pass=true, Filter Empty corrected exports only name,email despite saved matching contact. Notes replaces (note.title+space+note.body) with note.body: judge.pass=true, Search ALPHA yields0 savedAlpha entries despite persisted Alpha. Both pageerrors0. Independent unchanged app-structure-controls.ts run: correct alternatives2PASS, public-requirement mutants2FAIL; /private/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-app-structure-controls-wcaQKt/evidence.json. Focused corpus-plan/corrupt/comparison27PASS."
         }
       ]
     },
@@ -257,7 +244,7 @@
     },
     {
       "axis": "Ecosystem UX",
-      "verdict": "blocker",
+      "verdict": "pass",
       "findings": []
     }
   ]
