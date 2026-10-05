@@ -17,6 +17,7 @@ import {
   observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
 import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
 import { fileURLToPathPosix, isNodeUrl } from '../internal/posix-file-url.ts';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
@@ -93,6 +94,10 @@ export class Worker extends EventEmitter {
   private readonly ownerProcess: unknown;
   private readonly ownerBootstrap: ReturnType<typeof readActiveNodeProcessBootstrap>;
   private exited = false;
+  /** ADR-0152 handle class (goal I2): a live, ref'd Worker keeps the parent's
+   * loop alive until it exits — Node parity; `unref()` releases the hold. */
+  private holdsKeepaliveRef = false;
+  private userUnrefd = false;
   private sameRealmContext: WorkerThreadContext | null = null;
   private sameRealmParentPort: WorkerPort | null = null;
   private sameRealmGlobalOnMessage: WorkerMessageHandler | null = null;
@@ -134,6 +139,7 @@ export class Worker extends EventEmitter {
   }
 
   private start(): void {
+    this.acquireKeepaliveRef();
     if (this.entry.kind === 'data-url') {
       // TODO(backlog: runtime-js/worker-eval-data-url-entry)
       this.emitWorkerError(
@@ -327,11 +333,29 @@ export class Worker extends EventEmitter {
   }
 
   ref(): this {
+    // Node: ref() re-acquires the loop hold for a not-yet-exited worker.
+    this.userUnrefd = false;
+    if (!this.exited) this.acquireKeepaliveRef();
     return this;
   }
 
   unref(): this {
+    // Node: unref() lets the loop drain while this worker keeps running.
+    this.userUnrefd = true;
+    this.releaseKeepaliveRef();
     return this;
+  }
+
+  private acquireKeepaliveRef(): void {
+    if (this.holdsKeepaliveRef || this.userUnrefd) return;
+    this.holdsKeepaliveRef = true;
+    refEventLoop();
+  }
+
+  private releaseKeepaliveRef(): void {
+    if (!this.holdsKeepaliveRef) return;
+    this.holdsKeepaliveRef = false;
+    unrefEventLoop();
   }
 
   private emitWorkerMessage(msg: unknown): void {
@@ -375,6 +399,7 @@ export class Worker extends EventEmitter {
   private finish(code: number): void {
     if (this.exited) return;
     this.exited = true;
+    this.releaseKeepaliveRef();
     this.emitToOwner('exit', code);
   }
 

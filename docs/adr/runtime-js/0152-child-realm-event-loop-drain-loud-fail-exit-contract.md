@@ -40,6 +40,8 @@ The Vite HMR client `setInterval` was injected by the bundler into the entry chu
 
 **Extended (2026-06-20):** both RESIDUAL gaps are now CLOSED by **ADR-0158** — Decision §1's counted set is extended to the global `fetch` (ref on dispatch, held until the body is consumed; gap-d), and the dispatcher backstop moved off the counted globals to a module-load host timer (gap-e). §1's shape (narrow, libuv-style refcount over a named set — NOT all handles) is unchanged; only the named set grew. Listed in README "Corrections (active)".
 
+**Extended (2026-10-05, goal vitest-run-in-browser I2):** the counted set gains a live `worker_threads.Worker` (ref at start, release at `finish()`, `Worker.ref()/unref()` flipping the same count) — same §1 shape, another named handle class. Also closes §Residual bullet 3 for Worker's own `unref()`.
+
 ## Consequences
 
 - (+) run-to-completion child exits on event-loop drain (over the counted handle set), much closer to real Node than the prior top-level-resolve reap — addresses the detached-async drop we attribute to the ADR-0150 P6a path.

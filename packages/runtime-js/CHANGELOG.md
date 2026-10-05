@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- A live `worker_threads.Worker` keeps the parent event loop alive (ADR-0152 handle-class extension): ref at start, release at exit; `Worker.ref()/unref()` hold the same count (goal I2).
+
 - `child_process.fork(..., {serialization: 'advanced'})` round-trips structured-clone values (Date/Map/[undefined]/Uint8Array/bigint) over the kernel channel on both legs; `child.send(fn)` throws `ERR_INVALID_ARG_TYPE`; the JSON default is unchanged.
 
 - Process lifecycle parity: `uncaughtException`/`unhandledRejection` handlers receive the error and the loop continues (dispatcher in the keepalive traps; handler throws stay fatal with the new error); `process.exit()` honours `exitCode`; the `exit` event fires exactly once with the raw final code on natural drain and explicit exit.
