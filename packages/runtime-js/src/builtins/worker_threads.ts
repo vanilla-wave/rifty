@@ -7,7 +7,7 @@
  * tests; it is not used for threaded WASI packages such as Rolldown in-browser.
  */
 
-import { NotImplementedError } from '@riftydev/io';
+import { NotImplementedError, Readable } from '@riftydev/io';
 import {
   type ProcessHandle,
   type SpawnWorkerSpec,
@@ -39,6 +39,10 @@ interface WorkerOptions {
   env?: Record<string, string | undefined>;
   eval?: boolean;
   execArgv?: readonly string[];
+  /** Pipe the worker's stdout into `worker.stdout` (Node: `stdout: true`). */
+  stdout?: boolean;
+  /** Pipe the worker's stderr into `worker.stderr` (Node: `stderr: true`). */
+  stderr?: boolean;
 }
 
 function snapshotWorkerEnvironment(
@@ -50,6 +54,12 @@ function snapshotWorkerEnvironment(
 }
 
 type WorkerScript = string | URL;
+
+/** `execArgv: []` is vitest's explicit-empty spelling — accepted (no flags to
+ * preserve). Any non-empty array stays the inherited-execArgv loud ceiling. */
+function isExplicitEmptyExecArgv(value: unknown): boolean {
+  return Array.isArray(value) && value.length === 0;
+}
 
 type WorkerEntry =
   | { readonly kind: 'path'; readonly path: string }
@@ -87,6 +97,10 @@ export function setSameRealmWorkerModuleImporter(importer: SameRealmWorkerModule
 export class Worker extends EventEmitter {
   static isMainThread = true;
   threadId: number;
+  /** Piped only with `stdout: true` (Node: `null` otherwise). */
+  stdout: Readable | null = null;
+  /** Piped only with `stderr: true` (Node: `null` otherwise). */
+  stderr: Readable | null = null;
   private readonly entry: WorkerEntry;
   private readonly workerData: unknown;
   private readonly env: Record<string, string>;
@@ -110,10 +124,17 @@ export class Worker extends EventEmitter {
     super();
     this.ownerProcess = (globalThis as { process?: unknown }).process;
     this.ownerBootstrap = readActiveNodeProcessBootstrap();
+    // Node exposes piped stdio streams SYNCHRONOUSLY at construction; the
+    // kernel handle only exists after the deferred start(). Late-attach
+    // wrappers keep the object identity stable for listeners attached right
+    // after `new Worker(...)`.
+    if (opts.stdout === true) this.stdout = new Readable({ read() {} });
+    if (opts.stderr === true) this.stderr = new Readable({ read() {} });
     const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
     const inheritedLaunch = readNodeEntryBootstrapIfPresent()?.launch;
     if (
-      Object.prototype.hasOwnProperty.call(opts, 'execArgv') ||
+      (Object.prototype.hasOwnProperty.call(opts, 'execArgv') &&
+        !isExplicitEmptyExecArgv(opts.execArgv)) ||
       (inheritedLaunch?.kind === 'eval' && inheritedLaunch.execArgv.length > 0)
     ) {
       // TODO(backlog: runtime-js/worker-threads-inherited-exec-argv)
@@ -139,6 +160,9 @@ export class Worker extends EventEmitter {
   }
 
   private start(): void {
+    // terminate() may have run on the queued microtask gap — never (re)acquire
+    // the keepalive ref of an already-exited worker.
+    if (this.exited) return;
     this.acquireKeepaliveRef();
     if (this.entry.kind === 'data-url') {
       // TODO(backlog: runtime-js/worker-eval-data-url-entry)
@@ -208,6 +232,18 @@ export class Worker extends EventEmitter {
       if (handle.kind === 'worker') {
         handle.stdout().on('data', (chunk) => this.emitToOwner('stdout', chunk));
         handle.stderr().on('data', (chunk) => this.emitToOwner('stderr', chunk));
+        // `stdout: true` / `stderr: true` (Node): pipe the child's console
+        // output into the construction-time wrapper streams (same object the
+        // user attached to). The wrappers end when the HANDLE streams end —
+        // kernel output is sealed and drains after the exit event, so ending
+        // at exit would drop trailing chunks; the wrapper holds a keepalive
+        // ref until its data ends, like an open pipe in Node.
+        if (this.stdout !== null) {
+          this.pipeHandleStream(handle.stdout(), this.stdout);
+        }
+        if (this.stderr !== null) {
+          this.pipeHandleStream(handle.stderr(), this.stderr);
+        }
         handle.on('message', (msg) => this.emitWorkerMessage(msg));
         this.flushKernelMessages(handle);
         // Node emits 'online' once the worker realm exists. Construction-start
@@ -362,6 +398,22 @@ export class Worker extends EventEmitter {
     this.emitToOwner('message', msg);
   }
 
+  /** Wrapper end follows the handle stream's sealed drain, holding a
+   * keepalive ref until then (an open pipe holds the loop in Node). */
+  private pipeHandleStream(source: Readable, wrapper: Readable): void {
+    refEventLoop();
+    let released = false;
+    const settle = (): void => {
+      wrapper.push(null);
+      if (released) return;
+      released = true;
+      unrefEventLoop();
+    };
+    source.on('data', (chunk) => wrapper.push(chunk));
+    source.once('end', settle);
+    source.once('close', settle);
+  }
+
   private flushKernelMessages(handle: Extract<ProcessHandle, { kind: 'worker' }>): void {
     while (this.pendingParentMessages.length > 0) {
       handle.send(this.pendingParentMessages.shift());
@@ -400,6 +452,12 @@ export class Worker extends EventEmitter {
     if (this.exited) return;
     this.exited = true;
     this.releaseKeepaliveRef();
+    // Same-realm piped wrappers end here; kernel-backed ones end with the
+    // handle streams (sealed output drains after the exit event).
+    if (this.workerHandle === null) {
+      this.stdout?.push(null);
+      this.stderr?.push(null);
+    }
     this.emitToOwner('exit', code);
   }
 

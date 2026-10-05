@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `worker_threads.Worker` accepts `execArgv: []` (explicit empty) and exposes `stdout`/`stderr` Readables with `stdout: true`/`stderr: true` (construction-time streams, ending at sealed output drain; non-empty execArgv stays loud).
+
 - `vm.runInThisContext` / `vm.Script` honour `lineOffset`/`columnOffset` (raw shift, no clamping; positive lines as a physical prefix, columns via a stack dispatcher; fractional → `ERR_OUT_OF_RANGE`); `vm.runInContext` with a column offset stays a named loud throw.
 
 - A live `worker_threads.Worker` keeps the parent event loop alive (ADR-0152 handle-class extension): ref at start, release at exit; `Worker.ref()/unref()` hold the same count (goal I2).

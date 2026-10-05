@@ -497,7 +497,9 @@ globalThis.onmessage = ({ data }) => {
       RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
     });
 
-    expect(() => new Worker('/workspace/worker.mjs', { execArgv: [] })).toThrow(
+    // Non-empty execArgv stays the loud ceiling; the explicit-empty spelling
+    // (`execArgv: []`) is accepted (worker-threads-stdio-streams-empty-exec-argv).
+    expect(() => new Worker('/workspace/worker.mjs', { execArgv: ['--experimental-foo'] })).toThrow(
       expect.objectContaining({
         name: 'NotImplementedError',
         feature: 'worker_threads.Worker.execArgv',

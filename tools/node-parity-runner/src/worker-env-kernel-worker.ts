@@ -2,7 +2,7 @@ import hostProcess from 'node:process';
 import { parentPort, workerData } from 'node:worker_threads';
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
-import { SyncRpcFsSync, awaitDrain } from '@riftydev/runtime-js';
+import { SyncRpcFsSync, awaitDrain, installConsole } from '@riftydev/runtime-js';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { postNodeProcessListeningControl } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
@@ -278,6 +278,25 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
   }
   const entryPath = spec.argv[1];
   if (entryPath === undefined) throw new Error('worker-env parity child has no argv[1]');
+  // Mirror node-entry-bootstrap's console wiring for worker-thread children
+  // (this lighter path skips the bootstrap): console output belongs on the
+  // child's stdio ports, not the harness realm's raw console.
+  if (launch.kind === 'worker-thread') {
+    const proc = (
+      globalThis as {
+        process?: {
+          stdout?: { write(c: unknown): unknown };
+          stderr?: { write(c: unknown): unknown };
+        };
+      }
+    ).process;
+    if (proc?.stdout && proc.stderr) {
+      installConsole({
+        stdout: (chunk) => proc.stdout?.write(chunk),
+        stderr: (chunk) => proc.stderr?.write(chunk),
+      });
+    }
+  }
   const runEntry = () =>
     runNodeEntry({
       vfs,
