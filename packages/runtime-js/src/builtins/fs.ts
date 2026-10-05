@@ -159,8 +159,7 @@ export const constants = {
 const fdTable = new Map<number, FdRecord>();
 let nextFd = 3;
 
-// fsError / withSyscall / FS_ERRNO live in fs-errors.ts (shared with
-// fs-streams.ts); pathToString / resolvePath in fs-path.ts.
+// fsError / withSyscall / FS_ERRNO live in fs-errors.ts (shared with fs-streams.ts); pathToString / resolvePath in fs-path.ts.
 
 /**
  * Strict preflight probe for open-semantics entry points (openSync + flagged
@@ -1555,6 +1554,7 @@ export function opendir(
 export { Stats, Dirent, Dir };
 export { createReadStream, createWriteStream } from './fs-streams.ts';
 export { watch, watchFile, unwatchFile, FSWatcher } from './fs-watch.ts';
+import { statfsSync } from './fs-statfs.ts';
 import {
   FileReadStream,
   FileWriteStream,
@@ -1598,6 +1598,7 @@ const fs = {
   readdirSync,
   mkdirSync,
   statSync,
+  statfsSync,
   existsSync,
   unlinkSync,
   rmSync,
@@ -1622,8 +1623,7 @@ const fs = {
   Dir,
   createReadStream,
   createWriteStream,
-  // Node-named stream classes: `destroy`/`send` probe `stream instanceof
-  // fs.ReadStream` on cleanup — an absent class makes that probe throw.
+  // Node-named stream classes: `destroy`/`send` probe `instanceof fs.ReadStream` on cleanup.
   ReadStream: FileReadStream,
   WriteStream: FileWriteStream,
   watch,

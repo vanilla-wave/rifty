@@ -1,0 +1,173 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Можно IMPLEMENT; блокеров нет, 1 NOTE и 1 nit. Parity: exit 1, оба ожидаемых module-loader.{esm,cjs}-global-function-assignment. Unit: 16 failed / 12 passed; оба Reflect.get pins зелёные, export-global-alias RED (promise resolved). MemoryFsSync probe: method/read-only Reflect.get PASS, called result ceiling; Context исправлен. Node v24.16.0: оба полных expected совпали. Shared-propertyMayBeFunction mutant: оба новых boundary FAIL (TypeError вместо ceiling). Только generic export unwrap: export/nonexport controls 2 PASS против baseline 1 FAIL / 1 PASS; forced consequence честен, REV-7 не нарушен. Resolver Function-пины: 106 passed. Tracked tree чист. Merge после IMPLEMENT + Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md; BASE 0c4c1b07; ROUND 3, дерево 5d0514ff; R1 ed1c3d77 → 4ac3b23f, R2 4ac3b23f → 5d0514ff",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:18",
+      "summary": "Item 8: Worker keepalive открыт."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:16",
+      "summary": "Item 7: lifecycle/exitCode открыт."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:14",
+      "summary": "Items 6/9/10/12: stdio, advanced IPC, offsets, browser acceptance открыты."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:26",
+      "summary": "Items 11/12: Worker stdio/execArgv и threads acceptance открыты."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:11",
+      "summary": "Item 5: IMPLEMENT/Final+GREEN впереди; полный claimed module tree ещё не доказан."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:29",
+      "summary": "Item 12: vitest.md и browser acceptance открыты."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: ESM timers stash, read-back, method call и direct Symbol.for defineProperty с Node-identical output.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-key-global-write-esm.case.ts:17; tests/conformance/modules/symbol-key-global-write.test.ts:21",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: CJS stash write/read и defineProperty с const alias и direct Symbol.for, Node-identical output.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-key-global-write-cjs.case.ts:16; tests/conformance/modules/symbol-key-global-write.test.ts:87; tests/conformance/modules/symbol-key-global-write.test.ts:109",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: оба loader сохраняют ceiling для string/concat/unknown/let/shadowed keys и called Reflect.get; существующие Function-пины зелёные.",
+      "source": "acceptance",
+      "trace": "I6 honesty",
+      "status": "pass",
+      "citation": "tests/conformance/modules/symbol-key-global-write.test.ts:135; tests/conformance/modules/symbol-key-global-write.test.ts:203; tests/conformance/modules/resolver.test.ts:1556; tests/conformance/modules/resolver.test.ts:3112; tests/conformance/modules/symbol-key-global-write.test.ts:228; packages/runtime-js/src/module-loader/esm.ts:1316; packages/runtime-js/src/module-loader/cjs.ts:1504",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: Reflect.set/Object.assign/Object.defineProperties/delete с provable Symbol keys в обоих loaders.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/conformance/modules/symbol-key-global-write.test.ts:45; tests/conformance/modules/symbol-key-global-write.test.ts:119; tools/node-parity-runner/cases/modules/symbol-key-global-write-esm.case.ts:26; tools/node-parity-runner/cases/modules/symbol-key-global-write-cjs.case.ts:29",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: compat note явно уточнит Symbol-key mutation exception, сохраняя read ceiling.",
+      "source": "acceptance",
+      "trace": "I6 honesty",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md:74; docs/public/compat/modules.md:76",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: ESM const alias, stash method, direct defineProperty, Symbol(local), delete и cleanup.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-key-global-write-esm.case.ts:16",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: CJS alias/direct defineProperty, stash, mutation calls и полная cleanup.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-key-global-write-cjs.case.ts:15",
+      "note": ""
+    },
+    {
+      "row": "Frozen ESM oracle, Node v24.16.0: stash pong / dp / 42 / undefined undefined undefined.",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-key-global-write-esm.case.ts:15",
+      "note": ""
+    },
+    {
+      "row": "Frozen CJS oracle, Node v24.16.0: cjs-ok dp / direct rs as ps / undefined undefined undefined.",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-key-global-write-cjs.case.ts:14",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md:59",
+          "evidence": "",
+          "summary": "NOTE: «same two shapes» можно прочитать как обещание CJS stash method call, но CJS carriers хранят scalar и метода не вызывают (parity:19–28, unit:98–106). Дополнительный carrier уточнит доказательство; read-site exemption из этого не следует. Без выполненного mutant coverage не понижен, REV-5.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md:119",
+          "evidence": "npx vitest run tests/conformance/modules/symbol-key-global-write.test.ts -t 'stays loud' --reporter=verbose: 12 passed = 7 ESM + 5 CJS. Symbol.keyFor только ESM; CJS concat находится в resolver.test.ts:3112.",
+          "summary": "Описание 12 pins с «in BOTH loaders» выглядит симметричным; фактически матрица 7/5. Counts 16/12 верны, список категорий стоит уточнить.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "5d0514ff479df3cf82041cb5ea67cf7bd39564d3"
+}

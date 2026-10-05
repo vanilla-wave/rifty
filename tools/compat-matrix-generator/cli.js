@@ -9,7 +9,6 @@ const matrixDir = new URL('../../docs/public/compat/', here);
 const rootDir = new URL('../../', here);
 const esbuildPolicyUrl = new URL('../shadow-registry/esbuild-runtime-policy.json', here);
 const sassPolicyUrl = new URL('../shadow-registry/sass-embedded-policy.json', here);
-
 const legend =
   'Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not implemented (throws `NotImplementedError` or `UNSUPPORTED_PROTOCOL`).';
 
@@ -409,6 +408,7 @@ const matrices = [
         '❌',
         "Throws `NotImplementedError('fs.<surface>.bigint')` AFTER Node-visible errors (missing target stays `ENOENT`, bad fd stays `EBADF`); number-shaped `Stats` are never returned for a BigIntStats request",
       ],
+      ['`fs.statfsSync`', '❌', "Named-loud: CALL throws `NotImplementedError('fs.statfsSync')`"],
       [
         'Durable `fsync` / inode-like open-unlink semantics',
         '❌',

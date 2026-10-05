@@ -1,0 +1,118 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Review допускает merge; полный pr:check здесь не запускался. npx vitest run packages/npm-client/src/overrides.test.ts → 50 passed (50); npx vitest run packages/npm-client/src → 800 passed (800). R5: node /Users/vanilla-wave/.cache/EdxyK7FDLaR8/ABlzqdrbOA31/node_modules/vitest/vitest.mjs run src/overrides.test.ts; cwd=/tmp/rifty-r5-verify-FTSht4/control → 50 passed; cwd=/tmp/rifty-r5-verify-FTSht4/drop-length (удалён length-check) → 2 failed | 48 passed; cwd=/tmp/rifty-r5-verify-FTSht4/count-build (считается build) → 1 failed | 49 passed. Blockers нет; tracked-файлы не изменены.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/npm-client/overrides-bare-version-spec.md; BASE 0c4c1b07",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: единственный vite@8.0.16, без 8.3.0 и literal-version fetch",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:221",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: ^8, 8.x, * связываются с keyed package",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:68",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: vite@8.0.16 сохраняет прежний результат",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:97",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: bare non-range сохраняет replacement-name semantics",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:110",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: npm и rifty получают один hoisted vite@8.0.16",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:221; docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md:225",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: npa version/range/tag/$ref discrimination, scoped rifty carriers",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:61; packages/npm-client/src/overrides.test.ts:110; packages/npm-client/src/overrides.test.ts:123; docs/backlog/npm-client/reference/overrides-bare-version-spec-evidence.md:14",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/npm-client/src/semver.ts:336",
+          "summary": "Унаследованный picker выбирает .9007199254740992 вместо exact prerelease .9007199254740993: lossy-aggregate в numeric comparison, нет npm exact-version shortcut. Owner: installer-sources.ts:425; sibling — обычные dependency ranges. RED отсутствует. Это глубже объявленного stable I1, resolver вне scope: NOTE по REV-2/3.",
+          "authority": "",
+          "evidence": "node /tmp/rifty-exact-pre-probe.mjs → {\"range\":\"8.0.16-beta.9007199254740993\",\"rangeLike\":true,\"type\":\"version\",\"rifty\":\"8.0.16-beta.9007199254740992\",\"npm\":\"8.0.16-beta.9007199254740993\"}; Node v24.16.0, npm-pick-manifest 11.0.3, npa 13.0.2. Picker/compare неизменны от BASE."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/npm-client/reference/overrides-bare-version-spec-evidence.md:70",
+          "summary": "MAX_SAFE_INTEGER допустим в полном version-core: утверждение об отклонении ≥MAX_SAFE_INTEGER слишком широкое (также contract:81 и semver.ts:296). Partial 9007199254740991 отвергается при вычислении upper bound; исключение полного core — дополнительная консервативная divergence. I1 не нарушен, NOTE по REV-2/3.",
+          "authority": "",
+          "evidence": "/Users/vanilla-wave/.nvm/versions/node/v24.16.0/bin/node /tmp/rifty-r5-verify-FTSht4/oracle.cjs → Node v24.16.0, npm 11.17.0, semver 7.8.4, npa 13.0.2; validRange('9007199254740991.0.0')='9007199254740991.0.0', npa type=version; validRange('>=9007199254740991.0.0')='>=9007199254740991.0.0', npa type=range; validRange('9007199254740991')=null."
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "c0c0e7731b32133a9fb985c9ebc564b2b4125564"
+}

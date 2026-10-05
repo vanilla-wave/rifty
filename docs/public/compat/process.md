@@ -75,6 +75,8 @@ Chromium covers the real supervisor → application Worker journey.
 | PID/PPID tree, `ps`, and signals | ⚠️ | One owner-root ledger covers recursive Workers. Bare `ps`, `ps -A -o ppid,pid`, `SIGUSR2` child kill, and `kill -USR2 <pid>` work for nodemon/pstree; arbitrary formats, other signals, process groups, job control, and `/proc` remain loud gaps. |
 | Real nodemon restart loop | ✅ | Express, Hono, and Koa execute pinned installed nodemon. Chromium proves same-port edit/restart; Express additionally proves fresh realm state, rapid-edit convergence, syntax-crash recovery, and Ctrl-C/session-close subtree teardown without resurrection. |
 | Public IPC vs private process control | ✅ | Plain spawn has no `process.send`; fork uses logical default-JSON IPC. Listening, port removal, physical exit, peer death, and subtree control stay private and remain live after public disconnect. |
+| `child_process.spawnSync()` | ❌ | Named-loud member: named imports link and `typeof`/arity (3) behave, but the CALL throws `NotImplementedError('child_process.spawnSync')` — an honest no-shell args-array spawnSync needs a sync handler plus Node's full result shape on the kernel sync-RPC transport; the claimed vitest path never calls it. |
+| `process.memoryUsage()` | ❌ | Named-loud member: `process.memoryUsage.bind(process)` (vitest worker init) works, but the CALL throws `NotImplementedError('process.memoryUsage')` — the browser realm cannot supply process-faithful heap statistics (`performance.memory` measures the whole host page, is non-standard, and is rounded), so rss/heapTotal/heapUsed numbers would be fabricated. |
 
 ## Known limitations
 

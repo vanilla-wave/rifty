@@ -666,6 +666,18 @@ export function fork(
   return spawn('node', [modulePath, ...args], { ...opts, __fork: true });
 }
 
+// Named-loud member (vitest-run-in-browser): an honest no-shell args-array
+// spawnSync needs a sync handler + Node's full result shape on the kernel
+// sync-RPC transport — machinery the claimed vitest path never calls. The
+// member links/binds (tinyexec imports it), the CALL is the loud gap.
+export function spawnSync(
+  command: string,
+  args?: readonly string[],
+  options?: SpawnOptions,
+): never {
+  throw new NotImplementedError('child_process.spawnSync');
+}
+
 // `execSync` lives in `./child_process-sync.ts` to keep the SAB-vs-fallback
 // branch with its helpers. Re-exported here for the public `child_process`
 // surface.
@@ -673,5 +685,13 @@ export { execSync };
 
 export const ChildProcess_ = ChildProcess;
 
-const child_process = { spawn, exec, execFile, fork, execSync, ChildProcess: ChildProcess_ };
+const child_process = {
+  spawn,
+  spawnSync,
+  exec,
+  execFile,
+  fork,
+  execSync,
+  ChildProcess: ChildProcess_,
+};
 export default child_process;

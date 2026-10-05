@@ -9,7 +9,9 @@
  * file is the thin consumer-side adapter that owns the lookup function and
  * target-string parsing.
  */
+import { NotImplementedError } from '@riftydev/io';
 import { bakedOverrides } from '@riftydev/shadow-registry';
+import { isRangeLike } from './semver.ts';
 
 export interface OverrideMap {
   /** Map from package name (or `parent>child`) to replacement target. */
@@ -31,20 +33,38 @@ export function resolveOverride(
 ): ResolvedOverrideTarget | null {
   const key = parent ? `${parent}>${name}` : name;
   const userMatch = userOverrides[key] ?? userOverrides[name];
-  if (userMatch) return { ...parseTarget(userMatch), source: 'user' };
+  if (userMatch) return { ...parseTarget(userMatch, name), source: 'user' };
   const builtin = bakedOverrides[name];
   if (builtin) return { ...parseTarget(builtin), source: 'baked' };
   return null;
 }
 
-function parseTarget(target: string): { name: string; range: string | null } {
+function parseTarget(target: string, keyName?: string): { name: string; range: string | null } {
   // Accept formats:
   //   "bcryptjs"             → name=bcryptjs, range=null (latest)
   //   "bcryptjs@2.x"         → name=bcryptjs, range="2.x"
   //   "npm:bcryptjs@2.x"     → npm alias form, same as above
+  //   "8.0.16" (user value)  → npm's bare-version spelling: the KEYED package
+  //                            at that range (npa.resolve(key, value)); only
+  //                            range-like values — a bare name keeps the
+  //                            replacement reading above.
+  if (target.startsWith('$')) {
+    throw new NotImplementedError(
+      'npm-client.overrides.dollar-ref',
+      `overrides value "${target}" is an npm $ref — not implemented`,
+    );
+  }
   let str = target;
-  if (str.startsWith('npm:')) str = str.slice(4);
+  const alias = str.startsWith('npm:');
+  if (alias) str = str.slice(4);
   const at = str.lastIndexOf('@');
-  if (at <= 0) return { name: str, range: null };
+  if (at <= 0) {
+    // The keyed-package range reading never applies to the `npm:` alias form:
+    // `npm:8` names the package "8", it is not a range on the keyed package.
+    if (!alias && keyName !== undefined && isRangeLike(str)) {
+      return { name: keyName, range: str };
+    }
+    return { name: str, range: null };
+  }
   return { name: str.slice(0, at), range: str.slice(at + 1) };
 }

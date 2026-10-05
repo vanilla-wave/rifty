@@ -339,6 +339,114 @@ describe('CJS static export link validation', () => {
     }
   });
 
+  it('links class-backed builtin prototype methods without gaining EventEmitter members', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/valid.mjs': `
+        import { cwd, nextTick, hrtime } from 'node:process';
+        export const result = [typeof cwd(), typeof nextTick, typeof hrtime].join(' ');
+      `,
+      '/work/emitter.mjs': `
+        import { on } from 'node:process';
+        export const result = on;
+      `,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+
+    expect(loader.require('./valid.mjs', '/work/entry.cjs')).toMatchObject({
+      result: 'string function function',
+    });
+    // Node's boundary: EventEmitter.prototype members are NOT named exports
+    // of node:process (real Node link-throws on `import { on }`).
+    expect(() => loader.require('./emitter.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
+  });
+
+  it('freezes the exact prototype-contributed name set of the process namespace', () => {
+    // The complete NodeProcess.prototype own-name set (minus constructor) is
+    // pinned: legit methods (cwd, chdir, exit, exitCode, hrtime, kill,
+    // memoryUsage, uptime) AND the recorded divergence — EventEmitter OVERRIDES plus the
+    // internal pushStdin, which real Node's node:process named-export set
+    // lacks (rifty links where Node link-throws; contract Out of scope).
+    // Any growth/shrink of NodeProcess.prototype breaks this test on purpose.
+    const proc = loadBuiltin('node:process');
+    if (proc === null) throw new Error('node:process builtin is not registered');
+    const proto: unknown = Object.getPrototypeOf(proc);
+    if (proto === null || typeof proto !== 'object') {
+      throw new Error('node:process builtin lost its class prototype');
+    }
+    expect(
+      Object.getOwnPropertyNames(proto)
+        .filter((n) => n !== 'constructor')
+        .sort(),
+    ).toEqual([
+      'addListener',
+      'chdir',
+      'cwd',
+      'exit',
+      'exitCode',
+      'hrtime',
+      'kill',
+      'memoryUsage',
+      'prependListener',
+      'pushStdin',
+      'removeAllListeners',
+      'removeListener',
+      'uptime',
+    ]);
+
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/probe.mjs': `
+        import * as ns from 'node:process';
+        export const result = [
+          'addListener',
+          'prependListener',
+          'removeListener',
+          'removeAllListeners',
+          'pushStdin',
+        ].map((name) => name in ns).join(' ');
+      `,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+    expect(loader.require('./probe.mjs', '/work/entry.cjs')).toMatchObject({
+      result: 'true true true true true',
+    });
+  });
+
+  it('never collects prototype names from function-valued builtins', () => {
+    // events/assert/stream export constructor FUNCTIONS: their prototype
+    // chain is Function.prototype / the parent constructor, whose names
+    // (call/apply/bind, EventEmitter statics) are not Node named exports —
+    // real Node link-throws on every one of these imports.
+    // listenerCount alone cannot discriminate the function gate: rifty's
+    // EventEmitter has no such static, so the name never appears either way.
+    // captureRejectionSymbol/defaultMaxListeners DO exist as rifty statics —
+    // deleting the gate makes exactly those imports link (mutant dies here).
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/events-call.mjs': `import { call } from 'node:events'; export const r = call;`,
+      '/work/assert-bind.mjs': `import { bind } from 'node:assert'; export const r = bind;`,
+      '/work/stream-lc.mjs': `import { listenerCount } from 'node:stream'; export const r = listenerCount;`,
+      '/work/stream-crs.mjs': `import { captureRejectionSymbol } from 'node:stream'; export const r = captureRejectionSymbol;`,
+      '/work/stream-dml.mjs': `import { defaultMaxListeners } from 'node:stream'; export const r = defaultMaxListeners;`,
+      '/work/events-on.mjs': `
+        import { EventEmitter, once } from 'node:events';
+        import { Readable } from 'node:stream';
+        import { strict } from 'node:assert';
+        export const result = [typeof EventEmitter, typeof once, typeof Readable, typeof strict].join(' ');
+      `,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+    expect(() => loader.require('./events-call.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
+    expect(() => loader.require('./assert-bind.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
+    expect(() => loader.require('./stream-lc.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
+    expect(() => loader.require('./stream-crs.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
+    expect(() => loader.require('./stream-dml.mjs', '/work/entry.cjs')).toThrow(SyntaxError);
+    expect(loader.require('./events-on.mjs', '/work/entry.cjs')).toMatchObject({
+      result: 'function function function function',
+    });
+  });
+
   it('re-lexes a repaired CJS surface after coherent invalidation', () => {
     withEffects((effects) => {
       const vfs = new MemoryFsSync();

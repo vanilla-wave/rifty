@@ -1,0 +1,86 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS; можно IMPLEMENT, merge после Final+GREEN. pnpm test:parity subpath-builtins → exit 1: CJS и ESM — ModuleLoadError: Built-in 'node:path/posix' is not implemented. Node v24.16.0: CJS \"true\\ntrue\\ntrue\\na/b\\n/\", ESM \"a/b\\ntrue\\ntrue\"; оба pinned expected совпали. backlog:check → exit 1: старый blocked_by vitest-run-acceptance.md; та же ошибка на 35e0a5d0^. Tracked-файлы не изменены.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/path-posix-win32-builtins.md; BASE 0c4c1b07",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: CJS subpath identity и bare path/posix.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpath-builtins-cjs.case.ts:12",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: ESM named join → a/b; default imports идентичны path.posix/path.win32.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpath-builtins-esm.case.ts:12",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: Node v24.16.0 CJS identity, bare form и posix.join; pinned expected.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpath-builtins-cjs.case.ts:10",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: Node v24.16.0 ESM named join и default-import identity обоих subpaths.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpath-builtins-esm.case.ts:9",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "35e0a5d0b7a29c35cb5843416afb19e097c6eefc"
+}

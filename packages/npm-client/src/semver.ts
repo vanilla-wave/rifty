@@ -271,6 +271,115 @@ function matchXRange(version: string, range: string): boolean {
   return true;
 }
 
+/**
+ * True iff `spec` is a version/range in the forms {@link matchesRange}
+ * evaluates: exact/partial versions, x-ranges, `^`/`~`/comparator sets,
+ * `||` unions. Tells npm's bare-range override spelling (`"vite": "8.0.16"`)
+ * from a package name; anything outside these forms stays a name (loud
+ * packument-404 path), never a silently mis-evaluated range.
+ */
+export function isRangeLike(spec: string): boolean {
+  const branches = spec
+    .trim()
+    .split('||')
+    .map((b) => b.trim());
+  // node-semver reads an empty `||` branch as `*`; rifty's evaluator drops it
+  // — refuse the spec instead of resolving a narrower range than npm's.
+  if (branches.some((b) => b === '')) return false;
+  return branches.every((branch) => {
+    const normalized = branch.replace(/([<>=^~])\s+/g, '$1');
+    const comparators = normalized.split(/\s+/).filter(Boolean);
+    return comparators.length > 0 && comparators.every(isRangeComparator);
+  });
+}
+
+// node-semver version-core component: no leading zeroes, ≤16 digits, and
+// strictly below Number.MAX_SAFE_INTEGER. npm's own bound is `>` (a FULL
+// version-core may equal MAX_SAFE_INTEGER: `9007199254740991.0.0` is valid);
+// the bare partial `9007199254740991` is rejected only because its x-range
+// upper-bound expansion overflows. rifty excludes == MAX_SAFE_INTEGER in
+// every form — an extra conservative divergence. Anything else outside is
+// not a range in npm — a name/tag.
+function isValidNumericComponent(part: string): boolean {
+  return /^(?:0|[1-9]\d{0,15})$/.test(part) && Number(part) < Number.MAX_SAFE_INTEGER;
+}
+
+/** semver §9: dot-separated non-empty identifiers; numeric ones without leading zeroes. */
+function isValidPrerelease(pre: string): boolean {
+  return pre.split('.').every((id) => {
+    if (!/^[0-9A-Za-z-]+$/.test(id)) return false;
+    if (/^\d+$/.test(id)) return id === '0' || !id.startsWith('0');
+    return true;
+  });
+}
+
+/** semver §10: dot-separated non-empty identifiers (leading zeroes allowed). */
+function isValidBuild(build: string): boolean {
+  return build.split('.').every((id) => id !== '' && /^[0-9A-Za-z-]+$/.test(id));
+}
+
+// node-semver MAX_LENGTH: the SemVer constructor rejects versions longer
+// than 256 chars. Range parsing strips build metadata BEFORE that check
+// (BUILDSTRIPRE in parseRange), so the bound applies to core+prerelease only.
+const MAX_VERSION_LENGTH = 256;
+
+/**
+ * Strict node-semver version grammar: `8`, `8.0`, `8.0.16` with optional
+ * prerelease/build on the FULL form only. Returns whether all three
+ * components are present, or null when the grammar is violated.
+ */
+function parseStrictVersion(base: string): { full: boolean } | null {
+  const m = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/.exec(
+    base,
+  );
+  if (!m) return null;
+  const core = [m[1], m[2], m[3]].filter((p): p is string => p !== undefined);
+  if (!core.every(isValidNumericComponent)) return null;
+  const full = m[3] !== undefined;
+  if ((m[4] !== undefined || m[5] !== undefined) && !full) return null;
+  if (m[4] !== undefined && !isValidPrerelease(m[4])) return null;
+  if (m[5] !== undefined && !isValidBuild(m[5])) return null;
+  const withoutBuild = m[5] !== undefined ? base.slice(0, -(m[5].length + 1)) : base;
+  if (withoutBuild.length > MAX_VERSION_LENGTH) return null;
+  return { full };
+}
+
+/** Bare terminal-wildcard x-range: `*`, `x`, `8.x`, `8.0.*` (valid core prefix). */
+function isTerminalXRange(base: string): boolean {
+  const m = /^[v=]?(?:(\d+)\.(?:(\d+)\.)?)?(?:x|X|\*)$/.exec(base);
+  if (!m) return false;
+  return [m[1], m[2]].every((p) => p === undefined || isValidNumericComponent(p));
+}
+
+function isRangeComparator(cmp: string): boolean {
+  const m = /^(>=|<=|>|<|=|\^|~)?(.*)$/.exec(cmp);
+  const op = m?.[1] ?? '';
+  const base = m?.[2] ?? '';
+  if (base === '') return false;
+  if (/[xX*]/.test(base)) {
+    // Bare terminal-wildcard x-ranges only: matchXRange evaluates those. An
+    // operator + wildcard base (`<8.x`, `^8.x`) is a valid npm range rifty
+    // mis-evaluates (string-compare fallback / null bounds) — not classified,
+    // loud packument-404 path. A non-terminal wildcard (`x.1`) is not a range
+    // in node-semver at all.
+    return op === '' && isTerminalXRange(base);
+  }
+  const version = parseStrictVersion(base);
+  if (version === null) return false;
+  if (op === '>' || op === '<=' || op === '=') {
+    // npm zero-fills partial bases UP for these (`>8` → `>=9.0.0`, `<=8` →
+    // `<9.0.0-0`, `=8` → `8.x`); rifty's coerce zero-fills DOWN (`>8.0.0`,
+    // exact `8.0.0`) — admit only full versions both compare exactly.
+    return version.full;
+  }
+  // Bare / `^` / `~` / `>=` / `<`: caret/tilde bounds and `>=`/`<` zero-fill
+  // partials per npm; a bare partial x-ranges. node-semver rejects a partial
+  // carrying a prerelease (`1.2-beta`, `>=1.2-beta` are tags); a partial with
+  // build (`1.2+build`) is a valid npm range rifty mis-evaluates — both stay
+  // names here (parseStrictVersion admits pre/build on the full form only).
+  return true;
+}
+
 export function pickBestVersion(
   versions: readonly string[],
   range: string | undefined | null,

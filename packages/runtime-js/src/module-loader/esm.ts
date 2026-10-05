@@ -2,6 +2,27 @@ import { NotImplementedError } from '@riftydev/io';
 import type { Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
 import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
+import {
+  isComputedMember,
+  literalString,
+  propertyMayBeConstructor,
+  propertyMayBeFunction,
+  staticPropertyKeyName,
+  staticPropertyName,
+  unwrapGuardChain,
+} from './guard-ast.ts';
+import {
+  type MemberObjectCapture,
+  type SymbolKeyGlobalProbe,
+  type SymbolKeyShadowProbe,
+  isGlobalFunctionMutationCall,
+  isGlobalFunctionWriteMember,
+  isSymbolIntrinsicMutationCall,
+  isSymbolTamperTarget,
+  recordMemberObjectCapture,
+  updateSymbolAliasesFromPatternValue,
+  walkMutationCallSite,
+} from './symbol-key-guard.ts';
 
 interface GuardNodeShape {
   readonly type: string;
@@ -16,6 +37,8 @@ interface GuardScope {
   readonly maybeFunctionAliases: Set<string>;
   readonly maybeDerivedFunctionAliases: Set<string>;
   readonly maybeEvalAliases: Set<string>;
+  readonly symbolKeyAliases: Set<string>;
+  readonly symbolIntrinsicAliases: Set<string>;
 }
 
 interface EsmFunctionGuardCtx {
@@ -26,6 +49,9 @@ interface EsmFunctionGuardCtx {
   hasDerivedHostFunctionConstructor: boolean;
   hasRoutedFunctionReference: boolean;
   hasFunctionEvalText: boolean;
+  symbolIntrinsicTampered: boolean;
+  // Member object classifications captured at each member's walk point (R6 F2).
+  readonly memberObjectCaptures: Map<unknown, MemberObjectCapture>;
 }
 
 // TODO(backlog: runtime-js/function-constructor-exhaustive-metaprogramming-ceiling):
@@ -60,6 +86,8 @@ export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): v
     hasDerivedHostFunctionConstructor: false,
     hasRoutedFunctionReference: false,
     hasFunctionEvalText: false,
+    symbolIntrinsicTampered: false,
+    memberObjectCaptures: new Map(),
   };
   walkEsmFunctionGuard(program as unknown as GuardNodeShape, ctx);
 
@@ -93,6 +121,8 @@ function createGuardScope(): GuardScope {
     maybeFunctionAliases: new Set(),
     maybeDerivedFunctionAliases: new Set(),
     maybeEvalAliases: new Set(),
+    symbolKeyAliases: new Set(),
+    symbolIntrinsicAliases: new Set(),
   };
 }
 
@@ -117,6 +147,8 @@ function addGuardBinding(scope: GuardScope, name: string | undefined): void {
   scope.maybeFunctionAliases.delete(name);
   scope.maybeDerivedFunctionAliases.delete(name);
   scope.maybeEvalAliases.delete(name);
+  scope.symbolKeyAliases.delete(name);
+  scope.symbolIntrinsicAliases.delete(name);
 }
 
 function isGuardShadowed(ctx: EsmFunctionGuardCtx, name: string): boolean {
@@ -248,6 +280,21 @@ function isGuardMaybeEvalAlias(ctx: EsmFunctionGuardCtx, name: string): boolean 
   return false;
 }
 
+function guardShadowProbe(ctx: EsmFunctionGuardCtx): SymbolKeyShadowProbe {
+  // An observed Symbol-intrinsic substitution reports 'Symbol' as shadowed (F1).
+  return (name) => isGuardShadowed(ctx, name) || (name === 'Symbol' && ctx.symbolIntrinsicTampered);
+}
+
+// Tamper DETECTION uses the lexical probe — the augmented probe's
+// flag/withDepth disjuncts would excuse real substitution (R5).
+function lexicalShadowProbe(ctx: EsmFunctionGuardCtx): SymbolKeyShadowProbe {
+  return (name) => isGuardShadowed(ctx, name);
+}
+
+function globalObjectProbe(ctx: EsmFunctionGuardCtx): SymbolKeyGlobalProbe {
+  return (node) => isGlobalObjectExpression(unwrapGuardChain(node), ctx);
+}
+
 function declareGuardPattern(scope: GuardScope, pattern: unknown): void {
   if (!pattern || typeof pattern !== 'object') return;
   const pat = pattern as GuardNodeShape;
@@ -341,13 +388,22 @@ function predeclareGuardLexicalScope(body: readonly GuardNodeShape[], scope: Gua
   for (const node of body) {
     if (node.type === 'ImportDeclaration') {
       declareGuardImport(scope, node);
-    } else if (
-      node.type === 'VariableDeclaration' &&
-      (node as unknown as { kind?: string }).kind !== 'var'
+      continue;
+    }
+    // Export wrappers expose the inner declaration's bindings, or an
+    // `export const K = …` never enters `bindings` and alias marking no-ops.
+    const target =
+      node.type === 'ExportNamedDeclaration' || node.type === 'ExportDefaultDeclaration'
+        ? ((node as unknown as { declaration?: GuardNodeShape | null }).declaration ?? undefined)
+        : node;
+    if (!target) continue;
+    if (
+      target.type === 'VariableDeclaration' &&
+      (target as unknown as { kind?: string }).kind !== 'var'
     ) {
-      declareGuardVariable(scope, node);
-    } else if (node.type === 'ClassDeclaration' || node.type === 'FunctionDeclaration') {
-      addGuardBinding(scope, (node.id as { name?: string } | undefined)?.name);
+      declareGuardVariable(scope, target);
+    } else if (target.type === 'ClassDeclaration' || target.type === 'FunctionDeclaration') {
+      addGuardBinding(scope, (target.id as { name?: string } | undefined)?.name);
     }
   }
 }
@@ -377,15 +433,28 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
       return;
     case 'VariableDeclaration': {
       const declarations = (n as unknown as { declarations?: GuardNodeShape[] }).declarations ?? [];
+      const isConst = (n as unknown as { kind?: string }).kind === 'const';
       for (const decl of declarations) {
         const declId = decl.id as GuardNodeShape | undefined;
-        walkGuardPatternExpressions(declId, ctx);
+        // The initializer evaluates before the pattern's defaults/keys (R6 F3).
         if (decl.init) walkEsmFunctionGuard(decl.init, ctx);
+        walkGuardPatternExpressions(declId, ctx);
         if (decl.init) {
           updateGuardGlobalAliasesFromPatternValue(declId, decl.init, ctx);
           updateGuardMaybeFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateGuardMaybeDerivedFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateGuardMaybeEvalAliasesFromPatternValue(declId, decl.init, ctx);
+          // let/var stay unmarked: reassignment keeps their keys unknown.
+          if (isConst) {
+            updateSymbolAliasesFromPatternValue(
+              ctx.scopes,
+              declId,
+              decl.init,
+              guardShadowProbe(ctx),
+              globalObjectProbe(ctx),
+              (member) => ctx.memberObjectCaptures.get(member),
+            );
+          }
         }
       }
       return;
@@ -427,6 +496,7 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
       return;
     }
     case 'WithStatement':
+      // Strict parse rejects `with` first — no withDepth here (R3 F5 is CJS-only).
       ctx.hasDynamicFunctionScope = true;
       ctx.hasWithDynamicFunctionScope = true;
       walkEsmFunctionGuard(n.object, ctx);
@@ -440,14 +510,18 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
         ctx.hasDynamicFunctionScope = true;
       }
       walkEsmFunctionGuard(n.object, ctx);
+      recordMemberObjectCapture(
+        ctx.memberObjectCaptures,
+        n,
+        n.object,
+        (node) => isGlobalObjectExpression(node, ctx),
+        globalObjectProbe(ctx),
+      );
       if ((n as unknown as { computed?: boolean }).computed) walkEsmFunctionGuard(n.property, ctx);
       return;
     case 'CallExpression': {
       const callee = n.callee as GuardNodeShape | undefined;
       const args = (n as unknown as { arguments?: unknown[] }).arguments ?? [];
-      if (isGlobalFunctionMutationCall(n, ctx)) {
-        ctx.hasGlobalFunctionWrite = true;
-      }
       if (guardCalleeMayBeHostFunction(callee, ctx)) {
         ctx.hasGlobalFunctionWrite = true;
       }
@@ -469,8 +543,21 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
           ctx.hasFunctionEvalText ||
           (!canRouteDirectEvalImport && evalArgumentMayTouchFunction(args[0]));
       }
-      walkEsmFunctionGuard(callee, ctx);
-      for (const arg of args) walkEsmFunctionGuard(arg, ctx);
+      // Key-consulting checks classify each reference at its OWN evaluation
+      // point; the call (and any tamper it performs) lands last (R5, R5b F1/F2).
+      const capture = walkMutationCallSite(n, (m) => walkEsmFunctionGuard(m, ctx), ctx.scopes, {
+        isShadowed: lexicalShadowProbe(ctx),
+        isShadowedProvability: guardShadowProbe(ctx),
+        isGlobalObject: globalObjectProbe(ctx),
+        isGlobalObjectRaw: (node) => isGlobalObjectExpression(node, ctx),
+        memberObjectCapture: (member) => ctx.memberObjectCaptures.get(member),
+      });
+      if (isGlobalFunctionMutationCall(n, capture, lexicalShadowProbe(ctx))) {
+        ctx.hasGlobalFunctionWrite = true;
+      }
+      if (isSymbolIntrinsicMutationCall(n, capture, lexicalShadowProbe(ctx))) {
+        ctx.symbolIntrinsicTampered = true;
+      }
       return;
     }
     case 'NewExpression': {
@@ -487,8 +574,17 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
       return;
     }
     case 'AssignmentExpression': {
-      walkGuardAssignmentTarget(n.left, ctx);
-      walkEsmFunctionGuard(n.right, ctx);
+      const left = n.left as GuardNodeShape | undefined;
+      if (left?.type === 'ObjectPattern' || left?.type === 'ArrayPattern') {
+        // Destructuring evaluates the right-hand side BEFORE the targets (R5b F1).
+        walkEsmFunctionGuard(n.right, ctx);
+        walkGuardAssignmentPatternTarget(left, ctx);
+      } else {
+        // The write lands after the right-hand side — so does its tamper.
+        const tamper = walkGuardAssignmentTarget(n.left, ctx);
+        walkEsmFunctionGuard(n.right, ctx);
+        if (tamper) ctx.symbolIntrinsicTampered = true;
+      }
       updateGuardGlobalAliasesFromPatternValue(n.left, n.right, ctx);
       updateGuardMaybeFunctionAliasesFromPatternValue(n.left, n.right, ctx);
       updateGuardMaybeDerivedFunctionAliasesFromPatternValue(n.left, n.right, ctx);
@@ -496,11 +592,15 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
       return;
     }
     case 'UpdateExpression':
+      // `x++` writes NaN — it cannot substitute the intrinsic, so updates
+      // stay untracked (the tamper return is deliberately dropped).
       walkGuardAssignmentTarget(n.argument, ctx);
       return;
     case 'UnaryExpression':
       if ((n as unknown as { operator?: string }).operator === 'delete') {
-        walkGuardAssignmentTarget(n.argument, ctx);
+        // No right-hand side: the delete lands right after the target
+        // reference evaluates.
+        if (walkGuardAssignmentTarget(n.argument, ctx)) ctx.symbolIntrinsicTampered = true;
         return;
       }
       walkGuardDefault(n, ctx);
@@ -605,9 +705,13 @@ function walkGuardForInOf(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): void 
   ) {
     declareGuardVariable(topGuardScope(ctx), left);
   }
-  if (left?.type === 'VariableDeclaration') walkEsmFunctionGuard(left, ctx);
-  else walkGuardAssignmentTarget(left, ctx);
+  // The iterated expression evaluates before any per-iteration target write
+  // (R5b F1); a PATTERN left routes to the pattern walker (R6 F1).
   walkEsmFunctionGuard(node.right, ctx);
+  if (left?.type === 'VariableDeclaration') walkEsmFunctionGuard(left, ctx);
+  else if (left?.type === 'ObjectPattern' || left?.type === 'ArrayPattern') {
+    walkGuardAssignmentPatternTarget(left, ctx);
+  } else if (walkGuardAssignmentTarget(left, ctx)) ctx.symbolIntrinsicTampered = true;
   walkEsmFunctionGuard(node.body, ctx);
   popGuardScope(ctx);
 }
@@ -662,25 +766,40 @@ function walkGuardPatternExpressions(pattern: unknown, ctx: EsmFunctionGuardCtx)
   }
 }
 
-function walkGuardAssignmentTarget(target: unknown, ctx: EsmFunctionGuardCtx): void {
-  if (!target || typeof target !== 'object') return;
+// Returns true when the target observably substitutes the Symbol intrinsic;
+// the caller applies ctx.symbolIntrinsicTampered at the point the WRITE
+// lands — after the right-hand side for assignments, immediately for
+// delete/update and pattern targets (R5b F1).
+function walkGuardAssignmentTarget(target: unknown, ctx: EsmFunctionGuardCtx): boolean {
+  if (!target || typeof target !== 'object') return false;
   const t = target as GuardNodeShape;
   if (t.type === 'Identifier') {
     const name = (t as unknown as { name?: string }).name;
     if (name === 'Function' && !isGuardShadowed(ctx, name)) {
       ctx.hasGlobalFunctionWrite = true;
     }
-    return;
+    return isSymbolTamperTarget(t, ctx.scopes, lexicalShadowProbe(ctx), globalObjectProbe(ctx));
   }
   if (t.type === 'MemberExpression') {
-    if (isGlobalFunctionWriteMember(t, ctx)) {
+    // Classify each reference at its own point — a key interior that
+    // rebinds the alias must not re-classify the captured object; a nested
+    // member object reads its recorded capture (R5b/R6 F2).
+    walkEsmFunctionGuard(t.object, ctx);
+    const objectIsGlobal = isGlobalObjectExpression(t.object, ctx);
+    const tamper = isSymbolTamperTarget(
+      t,
+      ctx.scopes,
+      lexicalShadowProbe(ctx),
+      globalObjectProbe(ctx),
+      (member) => ctx.memberObjectCaptures.get(member),
+    );
+    if ((t as unknown as { computed?: boolean }).computed) walkEsmFunctionGuard(t.property, ctx);
+    if (isGlobalFunctionWriteMember(t, objectIsGlobal, ctx.scopes, guardShadowProbe(ctx))) {
       ctx.hasGlobalFunctionWrite = true;
     }
-    walkEsmFunctionGuard(t.object, ctx);
-    if ((t as unknown as { computed?: boolean }).computed) walkEsmFunctionGuard(t.property, ctx);
-    return;
+    return tamper;
   }
-  walkGuardAssignmentPatternTarget(t, ctx);
+  return false;
 }
 
 function walkGuardAssignmentPatternTarget(pattern: unknown, ctx: EsmFunctionGuardCtx): void {
@@ -691,6 +810,9 @@ function walkGuardAssignmentPatternTarget(pattern: unknown, ctx: EsmFunctionGuar
       const name = (pat as unknown as { name?: string }).name;
       if (name === 'Function' && !isGuardShadowed(ctx, name)) {
         ctx.hasGlobalFunctionWrite = true;
+      }
+      if (isSymbolTamperTarget(pat, ctx.scopes, lexicalShadowProbe(ctx), globalObjectProbe(ctx))) {
+        ctx.symbolIntrinsicTampered = true;
       }
       return;
     }
@@ -714,12 +836,24 @@ function walkGuardAssignmentPatternTarget(pattern: unknown, ctx: EsmFunctionGuar
     case 'RestElement':
       walkGuardAssignmentPatternTarget(pat.argument, ctx);
       return;
-    case 'AssignmentPattern':
-      walkGuardAssignmentPatternTarget(pat.left, ctx);
-      walkEsmFunctionGuard(pat.right, ctx);
+    case 'AssignmentPattern': {
+      const left = pat.left as GuardNodeShape | undefined;
+      if (left?.type === 'ObjectPattern' || left?.type === 'ArrayPattern') {
+        // A nested pattern destructures AFTER its default initialiser.
+        walkEsmFunctionGuard(pat.right, ctx);
+        walkGuardAssignmentPatternTarget(left, ctx);
+      } else {
+        // The target reference evaluates first, the default next, the write
+        // lands last (R5b F1).
+        const tamper = walkGuardAssignmentTarget(left, ctx);
+        walkEsmFunctionGuard(pat.right, ctx);
+        if (tamper) ctx.symbolIntrinsicTampered = true;
+      }
       return;
+    }
     case 'MemberExpression':
-      walkGuardAssignmentTarget(pat, ctx);
+      // Pattern targets write as destructuring proceeds — apply at once.
+      if (walkGuardAssignmentTarget(pat, ctx)) ctx.symbolIntrinsicTampered = true;
       return;
     default:
       walkGuardPatternExpressions(pat, ctx);
@@ -1255,12 +1389,6 @@ function isGlobalFunctionReadMember(node: GuardNodeShape, ctx: EsmFunctionGuardC
   return isGlobalObjectExpression(node.object, ctx) && staticPropertyName(node) === 'Function';
 }
 
-function isGlobalFunctionWriteMember(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {
-  if (!isGlobalObjectExpression(node.object, ctx)) return false;
-  const propertyName = staticPropertyName(node);
-  return propertyName === 'Function' || (propertyName === undefined && isComputedMember(node));
-}
-
 function guardExpressionMayBeHostFunction(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
   if (!node || typeof node !== 'object') return false;
   const n = node as GuardNodeShape;
@@ -1436,129 +1564,4 @@ function isGlobalEvalCallMember(node: GuardNodeShape, ctx: EsmFunctionGuardCtx):
   if (!isGlobalObjectExpression(node.object, ctx)) return false;
   const propertyName = staticPropertyName(node);
   return propertyName === 'eval' || (propertyName === undefined && isComputedMember(node));
-}
-
-function isGlobalFunctionMutationCall(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {
-  const call = node as unknown as { callee?: GuardNodeShape; arguments?: unknown[] };
-  const callee = call.callee;
-  const args = call.arguments ?? [];
-  if (!callee || callee.type !== 'MemberExpression') return false;
-  const calleeMember = callee as unknown as { object?: GuardNodeShape };
-  const object = calleeMember.object;
-  const objectName =
-    object?.type === 'Identifier' ? (object as unknown as { name?: string }).name : undefined;
-  const propertyName = staticPropertyName(callee);
-  const isBuiltinObject = objectName === 'Object' && !isGuardShadowed(ctx, 'Object');
-  const isBuiltinReflect = objectName === 'Reflect' && !isGuardShadowed(ctx, 'Reflect');
-
-  if (isBuiltinObject && propertyName === 'assign' && isGlobalObjectExpression(args[0], ctx)) {
-    return args.slice(1).some((arg) => objectMayContainFunctionKey(arg));
-  }
-
-  const isObjectDefine =
-    isBuiltinObject && (propertyName === 'defineProperty' || propertyName === 'defineProperties');
-  const isReflectMutation =
-    isBuiltinReflect &&
-    (propertyName === 'defineProperty' ||
-      propertyName === 'set' ||
-      propertyName === 'deleteProperty');
-  if ((isObjectDefine || isReflectMutation) && isGlobalObjectExpression(args[0], ctx)) {
-    if (propertyName === 'defineProperties') {
-      return objectMayContainFunctionKey(args[1]);
-    }
-    return propertyMayBeFunction(args[1]);
-  }
-
-  if (
-    isGlobalObjectExpression(object, ctx) &&
-    (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
-  ) {
-    return propertyMayBeFunction(args[0]);
-  }
-
-  return false;
-}
-
-function propertyMayBeFunction(node: unknown): boolean {
-  const value = literalString(node);
-  return value === 'Function' || value === undefined;
-}
-
-function propertyMayBeConstructor(node: unknown): boolean {
-  const value = literalString(node);
-  return value === 'constructor' || value === undefined;
-}
-
-function objectMayContainFunctionKey(node: unknown): boolean {
-  if (!node || typeof node !== 'object') return true;
-  const object = node as GuardNodeShape;
-  if (object.type !== 'ObjectExpression') return true;
-  const properties = (object as unknown as { properties?: GuardNodeShape[] }).properties ?? [];
-  return properties.some((property) => {
-    if (property.type === 'SpreadElement') return true;
-    const key = staticPropertyKeyName(property);
-    return key === 'Function' || key === undefined;
-  });
-}
-
-function staticPropertyName(node: GuardNodeShape): string | undefined {
-  const n = unwrapGuardChain(node) as GuardNodeShape;
-  const member = n as unknown as { computed?: boolean; property?: GuardNodeShape };
-  const property = member.property;
-  if (!property) return undefined;
-  if (!member.computed && property.type === 'Identifier') {
-    return (property as unknown as { name?: string }).name;
-  }
-  return member.computed ? literalString(property) : undefined;
-}
-
-function isComputedMember(node: GuardNodeShape): boolean {
-  return Boolean((unwrapGuardChain(node) as unknown as { computed?: boolean }).computed);
-}
-
-function staticPropertyKeyName(node: GuardNodeShape): string | undefined {
-  const property = node as unknown as { computed?: boolean; key?: GuardNodeShape };
-  const key = property.key;
-  if (!key) return undefined;
-  if (!property.computed && key.type === 'Identifier') {
-    return (key as unknown as { name?: string }).name;
-  }
-  return literalString(key);
-}
-
-function literalString(node: unknown): string | undefined {
-  if (!node || typeof node !== 'object') return undefined;
-  const n = unwrapGuardChain(node) as GuardNodeShape;
-  if (n.type === 'Literal') {
-    const value = (n as unknown as { value?: unknown }).value;
-    return typeof value === 'string' ? value : undefined;
-  }
-  if (n.type === 'BinaryExpression' && (n as unknown as { operator?: string }).operator === '+') {
-    const left = literalString(n.left);
-    const right = literalString(n.right);
-    return left !== undefined && right !== undefined ? left + right : undefined;
-  }
-  if (n.type === 'TemplateLiteral') {
-    const expressions = (n as unknown as { expressions?: unknown[] }).expressions ?? [];
-    if (expressions.length > 0) return undefined;
-    const quasis = (n as unknown as { quasis?: GuardNodeShape[] }).quasis ?? [];
-    return quasis
-      .map((quasi) => {
-        const value = quasi.value as { cooked?: unknown } | undefined;
-        return typeof value?.cooked === 'string' ? value.cooked : '';
-      })
-      .join('');
-  }
-  return undefined;
-}
-
-function unwrapGuardChain(node: unknown): unknown {
-  if (!node || typeof node !== 'object') return node;
-  const n = node as GuardNodeShape;
-  if (n.type === 'ChainExpression') return unwrapGuardChain(n.expression);
-  if (n.type === 'SequenceExpression') {
-    const expressions = (n as unknown as { expressions?: unknown[] }).expressions ?? [];
-    return unwrapGuardChain(expressions[expressions.length - 1]);
-  }
-  return node;
 }

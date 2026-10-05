@@ -1,0 +1,110 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Можно merge; 3 NOTE. pnpm pr:check --all → pr:check passed (watchFile isolated rerun PASS); pnpm test:parity esm-named-prototype-imports → all cases match; npx vitest run packages/runtime-js/src/module-loader/cjs-static-export-link.test.ts → 19 passed (19). /tmp/rifty-prototype-mutant-4tjp3647, prototype block удалён: pnpm test:parity esm-named-prototype-imports → exit 1, SyntaxError: The requested module 'node:process' does not provide an export named 'cwd' (imported by /work/main.mjs). Console/exitCode/Symbols PASS; fingerprint повторно byte-identical. Tracked clean; goal продолжается.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md; BASE 0c4c1b07",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: cwd/nextTick/hrtime/uptime links; cwd() совпадает с process.cwd(), остальные функции",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-prototype-imports.case.ts:26",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: namespace исключает on/emit/once, включает cwd",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-prototype-imports.case.ts:33",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: require.cwd === ESM cwd; require(process) === namespace.default",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-prototype-imports.case.ts:35",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: Node v24.16.0 named imports и namespace boundary; pinned expected",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-prototype-imports.case.ts:15",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/module-loader/cjs-interop-authority.ts:80",
+          "summary": "ADR-0348:44–46 всё ещё задаёт enumerable-only builtin names; direct-prototype решение не отражено новым ADR. DEC-2 bookkeeping NOTE; I6 соблюдён.",
+          "authority": "",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/module-loader/cjs-interop-authority.ts:84",
+          "summary": "Новый named exit links, но exit(7) падает из-за receiver: interop.ts:59 сохраняет метод, process.ts:752 требует this.#exitCode. Вне четырёх A1-методов; вызов на claimed vitest path не доказан. Самостоятельный дефект, NOTE по REV-2.",
+          "authority": "",
+          "evidence": "node --import tsx /tmp/rifty-named-receiver-probe.ts → oracle v24.16.0 named exit(7): status 7 stderr \"\"; named exit TypeError Cannot write private member #exitCode to an object whose class did not declare it; default exit Error process.exit(7) code RIFTY_PROCESS_EXIT exitCode 7. Независимо воспроизведено вторым reviewer."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/module-loader/cjs-static-export-link.test.ts:435",
+          "summary": "stream/listenerCount не различает удаление function gate: такого static у rifty EventEmitter нет. Для Stream дискриминируют captureRejectionSymbol/defaultMaxListeners. Дополнительный regression NOTE, не traced mutant-dies obligation.",
+          "authority": "",
+          "evidence": "cwd=/tmp/rifty-gate-mutant-r495qd2w, удалён только typeof gate. npx vitest run packages/runtime-js/src/module-loader/cjs-static-export-link.test.ts → exit 1, 1 failed | 18 passed; :433 expected function to throw an error, but it didn't. npx vitest run packages/runtime-js/src/module-loader/function-builtin-gate-review-probe.test.ts --reporter=verbose → events.call/assert.bind FAILED, stream.listenerCount PASSED; Stream parent has listenerCount: false; stream.captureRejectionSymbol/defaultMaxListeners FAILED; own exports PASSED. Node v24.16.0, node --input-type=module probe → все три Stream imports SyntaxError. Gate восстановлен: оба файла → 27 passed (27)."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "a1fbd93cadf2edca7b6dcfc3b0fa6e602e1b472c"
+}
