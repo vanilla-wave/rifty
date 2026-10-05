@@ -31,6 +31,20 @@ export async function prepareNoCoi(input: Input): Promise<Prepared> {
       context,
       page,
       before,
+      apply: (files) =>
+        page.evaluate(
+          (files) => (Reflect.get(globalThis, 'bench') as NoCoiPage).apply(files),
+          files,
+        ),
+      async command(line) {
+        const receipt = await page.evaluate(
+          (line) => (Reflect.get(globalThis, 'bench') as NoCoiPage).command(line),
+          line,
+        );
+        if (receipt.status !== 'exited')
+          throw new Error(`Command did not complete: ${JSON.stringify(receipt)}`);
+        return { exitCode: receipt.exitCode, stdout: receipt.stdout, stderr: receipt.stderr };
+      },
       async run() {
         const { trace, events } = await page.evaluate(
           (prompt) => (Reflect.get(globalThis, 'bench') as NoCoiPage).run(prompt),
@@ -46,7 +60,7 @@ export async function prepareNoCoi(input: Input): Promise<Prepared> {
         const handle = await page.locator('iframe').elementHandle();
         const view = await handle?.contentFrame();
         if (!view) throw new Error('Packed no-COI preview frame missing');
-        await view.locator('#root').waitFor();
+        await view.locator('body').waitFor();
         return { view, previewUrl: view.url() };
       },
       snapshot: async () =>

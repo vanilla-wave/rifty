@@ -10,6 +10,7 @@ import {
   freePort,
   killProcessGroup,
   runOrThrow,
+  runToCompletion,
   spawnLoggedServer,
   waitHttpReady,
 } from '../proc.ts';
@@ -81,7 +82,7 @@ export async function prepareLocal(
         detached: true,
       },
     );
-  let server = start();
+  let server = task.commandJudge ? null : start();
   let context: Awaited<ReturnType<typeof input.browser.newContext>> | undefined;
   let agent: ChildProcess | undefined;
   let stopped = false;
@@ -92,7 +93,7 @@ export async function prepareLocal(
   };
   input.signal?.addEventListener('abort', stop, { once: true });
   try {
-    await waitHttpReady(previewUrl, 120000, 'native dev server');
+    if (server) await waitHttpReady(previewUrl, 120000, 'native dev server');
     context = await input.browser.newContext();
     const page = await context.newPage();
     const extension = join(dir, 'native-extension.ts');
@@ -142,6 +143,16 @@ export async function prepareLocal(
       before,
       workspace,
       codexVersion,
+      apply: (files) => writeTree(workspace, files),
+      async command(line) {
+        const result = await runToCompletion('/bin/sh', ['-c', line], {
+          cwd: workspace,
+          env: nativeEnv,
+          timeoutMs: 30000,
+          signal: input.signal,
+        });
+        return { exitCode: result.code, stdout: result.stdout, stderr: result.stderr };
+      },
       async run(): Promise<Observation> {
         if (participant === 'codex')
           return runCodex(
@@ -276,11 +287,9 @@ export async function prepareLocal(
         };
       },
       async preview() {
-        if (task.node) {
-          await killProcessGroup(server);
-          server = start();
-          await waitHttpReady(previewUrl, 120000, 'updated native server');
-        }
+        await killProcessGroup(server);
+        server = start();
+        await waitHttpReady(previewUrl, 120000, 'updated native server');
         await page.goto(previewUrl);
         return { view: page, previewUrl };
       },

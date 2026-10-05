@@ -21,6 +21,11 @@ export interface Plan {
     id: string;
     group: string;
     family: string;
+    split?: string;
+    corpus?: string;
+    corpusManifestSha256?: string;
+    caseCardSha256?: string;
+    controlsSha256?: Record<string, string>;
     filesSha256: string;
     lockfileSha256: string | null;
     promptSha256: string;
@@ -54,6 +59,20 @@ export async function resolvePlan(config: Config, tasks: Task[], lanes: Lane[]):
         id: task.id,
         group: task.group ?? 'smoke',
         family: task.family ?? (task.node ? 'hono-api' : 'trackline'),
+        split: task.split,
+        corpus: task.corpus,
+        corpusManifestSha256: task.corpusManifestSha256,
+        caseCardSha256: task.caseCardSha256,
+        controlsSha256: task.controls
+          ? Object.fromEntries(
+              Object.entries(task.controls).map(([name, files]) => [
+                name,
+                digest(
+                  JSON.stringify(Object.entries(files).sort(([a], [b]) => a.localeCompare(b))),
+                ),
+              ]),
+            )
+          : undefined,
         filesSha256: digest(
           JSON.stringify(Object.entries(task.files).sort(([a], [b]) => a.localeCompare(b))),
         ),

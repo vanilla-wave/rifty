@@ -5,6 +5,9 @@ import {
   openShellTerminal,
   pickStarter,
   runTerminalLine,
+  runTerminalLineSettled,
+  terminalBuffer,
+  terminalHistoryExitCode,
 } from '../../../../tests/e2e/helpers/playground.ts';
 import type { FileTree } from '../files.ts';
 import { coreObservation } from './core-observation.ts';
@@ -47,9 +50,43 @@ export async function prepareRifty(input: Input): Promise<Prepared> {
   try {
     await page.goto(`${playgroundUrl}?agentBench=1`);
     await pickStarter(page, task.preset);
-    await expect(
-      page.frameLocator('[data-testid="preview"] iframe').locator(task.node ? 'h1' : '#root'),
-    ).toContainText(task.node ? 'Hono' : 'Trackline', { timeout: 240000 });
+    if (task.corpus) {
+      await stopProject(page);
+      const chooser = page.waitForEvent('filechooser');
+      await page.locator('[data-action="open-palette"]').click();
+      await page
+        .getByTestId('command-palette')
+        .getByRole('button', { name: 'Import workspace archive', exact: true })
+        .click();
+      await (await chooser).setFiles({
+        name: 'corpus.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(
+          JSON.stringify({
+            version: 1,
+            root: '/',
+            files: Object.entries(task.files).map(([path, text]) => ({
+              path,
+              encoding: 'base64',
+              content: Buffer.from(text).toString('base64'),
+            })),
+          }),
+        ),
+      });
+      await expect(
+        page
+          .locator('.rf-toast[data-tone="success"]')
+          .filter({ hasText: 'Workspace archive imported' }),
+      ).toBeVisible({ timeout: 90000 });
+      await openShellTerminal(page);
+      await runTerminalLineSettled(page, 'npm install', 300000);
+      if ((await terminalHistoryExitCode(page, 'npm install')) !== 0)
+        throw new Error(`Corpus install failed: ${await terminalBuffer(page)}`);
+    } else {
+      await expect(
+        page.frameLocator('[data-testid="preview"] iframe').locator(task.node ? 'h1' : '#root'),
+      ).toContainText(task.node ? 'Hono' : 'Trackline', { timeout: 240000 });
+    }
     await page.getByRole('button', { name: '+chat', exact: true }).click();
     const panel = page.getByTestId('ai-panel');
     await expect(panel).toBeVisible();
@@ -71,10 +108,12 @@ export async function prepareRifty(input: Input): Promise<Prepared> {
     }, task.id);
     const before = await archive(page);
     const terminal = await openShellTerminal(page);
-    await runTerminalLine(page, 'npm run dev', terminal);
-    await expect(page.locator('.rf-livepill')).toHaveAttribute('data-state', 'running', {
-      timeout: 180000,
-    });
+    if (!task.commandJudge) {
+      await runTerminalLine(page, 'npm run dev', terminal);
+      await expect(page.locator('.rf-livepill')).toHaveAttribute('data-state', 'running', {
+        timeout: 180000,
+      });
+    }
     const requests: unknown[] = [];
     page.on('request', (request) => {
       if (request.method() === 'POST' && request.url().startsWith(endpoint.baseUrl)) {
@@ -86,6 +125,23 @@ export async function prepareRifty(input: Input): Promise<Prepared> {
       context,
       page,
       before,
+      async apply(files) {
+        await page.evaluate(async (files) => {
+          const hook = Reflect.get(globalThis, '__riftyAgentBench') as {
+            seed(input: { taskId: string; files: Record<string, string> }): Promise<void>;
+          };
+          await hook.seed({ taskId: 'trusted-control', files });
+        }, files);
+      },
+      async command(line) {
+        await openShellTerminal(page);
+        await runTerminalLineSettled(page, line, 30000);
+        return {
+          exitCode: await terminalHistoryExitCode(page, line),
+          stdout: await terminalBuffer(page),
+          stderr: '',
+        };
+      },
       async run() {
         const observation = await page.evaluateHandle(() => {
           const hook = Reflect.get(globalThis, '__riftyAgentBench') as {
@@ -123,6 +179,12 @@ export async function prepareRifty(input: Input): Promise<Prepared> {
         }
       },
       async preview() {
+        if ((await page.locator('.rf-livepill').getAttribute('data-state')) === 'stopped') {
+          await runTerminalLine(page, 'npm run dev', terminal);
+          await expect(page.locator('.rf-livepill')).toHaveAttribute('data-state', 'running', {
+            timeout: 180000,
+          });
+        }
         const element = await page.locator('[data-testid="preview"] iframe').elementHandle();
         const view = await element?.contentFrame();
         if (!view) throw new Error('No actual playground preview frame');

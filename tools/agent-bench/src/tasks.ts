@@ -15,7 +15,13 @@ export interface Task {
   files: FileTree;
   preset: string;
   port: number;
-  judge: TaskJudge;
+  judge?: TaskJudge;
+  commandJudge?: { path: string; text: string; marker: string };
+  corpus?: string;
+  corpusManifestSha256?: string;
+  caseCardSha256?: string;
+  split?: string;
+  controls?: Record<string, FileTree>;
   node: boolean;
   group?: string;
   family?: string;

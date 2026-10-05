@@ -56,8 +56,20 @@ assert.equal(limit.concurrency, 1);
 assert.throws(() => {
   limit.concurrency = 0;
 });
-const wrapped = limitFunction(async (value) => value * 2, { concurrency: 1 });
-assert.deepEqual(await Promise.all([2, 3].map(wrapped)), [4, 6]);
+let wrappedActive = 0;
+let wrappedPeak = 0;
+const wrapped = limitFunction(
+  async (value) => {
+    wrappedActive++;
+    wrappedPeak = Math.max(wrappedPeak, wrappedActive);
+    await tick();
+    wrappedActive--;
+    return value * 2;
+  },
+  { concurrency: 1 },
+);
+assert.deepEqual(await Promise.all([2, 3, 4].map(wrapped)), [4, 6, 8]);
+assert.equal(wrappedPeak, 1);
 let release;
 const legacy = pLimit(1);
 const running = legacy(

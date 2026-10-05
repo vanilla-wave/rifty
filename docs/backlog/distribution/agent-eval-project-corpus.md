@@ -110,7 +110,7 @@ challenge: 2026-10-05 — clear; fresh `/root/corpus_judge_premise` reads origin
 1. Frozen pilot-v1 has six distinct cards (2bugs/2features/2apps), real pinned project/issue provenance or original installed-minimal-starter scenario; one v3 lock per case in every lane. Input/judge/prompt/lock hashes visible; agent seeds contain no reference/partial/alternative/trusted judge files. `corpus-plan.test.ts`, source trees/cards. → I1+I6+I7
 2. Both workload kinds run through the same existing series owner in all four lanes, actual COI +chat/packed SDK/native Pi/native Codex; command judges run trusted checks only after agent work in the originating host, capture physical exit/output and never rescue via Node. Setup/judge/unsupported failures retain records. Real reference controls plus corpus series proof. → I2+I3
 3. Trusted checks preserve stated functional/regression requirements, reject baseline and plausible partial, accept reference and working alternative. Retained upstream fixture mapping; native24 control outcomes and every reference in all4 lanes, failures included. → I6
-4. Family split is frozen before quality measurement: both ms cases calibration, evaluation serialization/async queue/contact import/linked notes. After reviewed pilot, expand to a finite versioned evaluation corpus with selection/cost rationale; no result-selected exclusions, original smoke separate. → I1+I7
+4. Family split is frozen before quality measurement: both ms cases calibration, evaluation serialization/async queue/contact import/linked notes. No result-selected exclusions; original smoke separate. After reviewed pilot, the mandatory finite expansion/selection/cost/own-campaign obligation stays in `agent-eval-corpus-expansion.md` (original route6; same I1/I6/I7), after the pilot comparison. → I1+I7
 
 ## Fault matrix
 
@@ -132,3 +132,5 @@ No hidden requirements, patch hints, subjective UI/style score or generated succ
 - 2026-10-05 — cards source exact upstream tests; trusted semantic fixtures carry API obligations without mocking Tape/Mocha. p-limit timing-window perf assertions not a functional requirement; concurrency/order/args/errors/ALS remain checked.
 - 2026-10-05 — native library controls16/16 and app controls8/8: unmet/partial fail, reference/alternative pass. CSV alternative uses downloadable output/different storage, demonstrating accepted export choice; linked notes HTML safety/persistence/navigation checked.
 - 2026-10-05 — cold case authoring includes input lock/source, mapped regressions, at least4 controls and4-origin reference proof. Expansion estimate eight total/six evaluation (four app families) remains route until pilot review; counts do not close I11.
+
+- 2026-10-05 — agent-owned path split: pilot infrastructure/control proof first; original route6 expansion retained in agent-eval-corpus-expansion after pilot comparison (trajectory review precedes expansion). No goal/user scope change or dropped trace.

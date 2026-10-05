@@ -171,3 +171,27 @@ Codex pass rates are separate references, never Pi model deltas.
 
 Native capture uses Node streaming UTF-8 decoding; server logs append original
 buffers, preserving multibyte boundaries. No separate process/evidence coordinator.
+
+## Frozen project corpora
+
+`plan/run --suite pilot-v1` selects six pinned pilot cases:2bugs/2features/2apps.
+Both ms cases calibration; evaluation families disjoint. Legacy five-task smoke
+stays separate. Loader validates source/prompt/judge hashes, v3 lock, seed paths
+and card/split identity before execution. Full selected failures remain records.
+
+`controls --suite pilot-v1 --control baseline|reference|partial|alternative`
+uses the same four origins without model calls (`agentStatus:not-run`). Controls
+validate task/judge behavior, never agent quality. Native Codex controls use real
+native preparation/version, not a Codex turn. Reference patches/checks stay outside
+agent-visible seed; command checks injected after the turn and execute in the
+origin, no native rescue. Original upstream tests remain source evidence; common
+semantic assertions do not claim original Tape/Mocha/nyc wrappers ran.
+
+Directed physical receipt/judge-substitution proof:
+`pnpm exec playwright test -c tools/agent-bench/playwright.config.ts trusted-origin.fault.spec.ts`.
+Reference matrix:
+`pnpm exec playwright test -c tools/agent-bench/playwright.config.ts corpus-controls.spec.ts`.
+
+Native previews restart before judging updated programs; snapshots precede
+trusted checks/preview restrictions. Browser app checks use actual Page/Frame
+interactions with explicit accessible task behavior, including alternate export.

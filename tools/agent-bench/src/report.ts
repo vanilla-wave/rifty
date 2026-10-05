@@ -34,6 +34,8 @@ export interface Run extends Omit<Observation, 'trace'> {
 }
 export interface Report {
   header: {
+    purpose?: 'quality' | 'controls';
+    control?: string;
     createdAt: string;
     sourceRevision: string;
     sourceDirty: boolean;
@@ -170,7 +172,7 @@ export async function writeReport(dir: string, report: Report, persist = true) {
     '',
     report.header.toolContextCaveat,
     '',
-    `Excluded: ${report.header.unsupported.join('; ')}.`,
+    `Known constraints: ${report.header.unsupported.join('; ')}.`,
     '',
     'Outcomes: pass, fail, budget-exceeded, context-exceeded (separate; never counted as ordinary fail).',
     'Failure classes are manual: agent, rifty-runtime, rifty-tooling, ai-mode-ux, provider, task-bad. Unclassified stays null.',
@@ -216,12 +218,16 @@ export async function writeReport(dir: string, report: Report, persist = true) {
     );
   lines.push(
     '',
-    'Per-task pass-rate delta versus local-reference (budget/context counts remain visible):',
+    report.header.purpose === 'controls'
+      ? 'Control evidence; no agent quality rates.'
+      : 'Per-task pass-rate delta versus local-reference (budget/context counts remain visible):',
     '',
     '| Task | Lane | Pass / runs | Budget | Context | Delta |',
     '|---|---|---:|---:|---:|---:|',
   );
-  for (const task of [...new Set(report.runs.map((run) => run.task))]) {
+  for (const task of report.header.purpose === 'controls'
+    ? []
+    : [...new Set(report.runs.map((run) => run.task))]) {
     const native = report.runs.filter((run) => run.task === task && run.lane === 'local-reference');
     const reference = native.length
       ? native.filter((run) => run.outcome === 'pass').length / native.length
@@ -320,13 +326,20 @@ function comparisonGroups(report: Report) {
 export function compareReports(before: Report, after: Report) {
   for (const key of [
     'endpoint',
+    'purpose',
+    'control',
     'codex',
     'limits',
     'noCoiPolicies',
     'taskSet',
     'runsPerTask',
   ] as const)
-    if (!isDeepStrictEqual(before.header[key], after.header[key]))
+    if (
+      !isDeepStrictEqual(
+        key === 'purpose' ? (before.header.purpose ?? 'quality') : before.header[key],
+        key === 'purpose' ? (after.header.purpose ?? 'quality') : after.header[key],
+      )
+    )
       throw new Error(`Incompatible comparison configuration: ${key}`);
   const previous = comparisonGroups(before);
   const current = comparisonGroups(after);

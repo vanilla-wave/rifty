@@ -15,7 +15,13 @@ import { resolvePlan } from './plan.ts';
 import { type Report, type Run, caveat, privateReport, writeReport } from './report.ts';
 import { services } from './services.ts';
 import type { Task } from './tasks.ts';
-export async function run(config: Config, tasks: Task[], lanes: Lane[], output: string) {
+export async function run(
+  config: Config,
+  tasks: Task[],
+  lanes: Lane[],
+  output: string,
+  control?: string,
+) {
   if (!config.endpoint) throw new Error('Endpoint required: --config or --mock-model');
   const endpoint = config.endpoint;
   const key = readKey(endpoint);
@@ -35,6 +41,8 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
   process.on('SIGTERM', interrupt);
   const report: Report = {
     header: {
+      purpose: control ? 'controls' : 'quality',
+      control,
       createdAt: new Date().toISOString(),
       sourceRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
       sourceDirty:
@@ -52,7 +60,7 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
       },
       model: endpoint.id,
       profile,
-      taskSet,
+      taskSet: tasks[0]?.corpus ?? taskSet,
       endpoint,
       ...(config.codex === undefined
         ? {}
@@ -107,7 +115,7 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
         lane,
         runIndex: index,
         profile: lane === 'native-codex' ? 'codex-default/unconfigured' : profile,
-        agentStatus: 'error',
+        agentStatus: control ? 'not-run' : 'error',
         outcome: 'fail',
         elapsedMs: 0,
         turns: 0,
@@ -156,15 +164,51 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
         }
         record.stage = 'agent';
         started = Date.now();
-        const observation = await prepared.run();
+        if (control) {
+          const patch = task.controls?.[control];
+          if (!patch) throw new Error('Control unavailable');
+          await prepared.apply(patch);
+        }
+        const observation = control
+          ? {
+              ...emptyMetrics(),
+              agentStatus: 'not-run',
+              turns: 0,
+              toolCalls: 0,
+              usage: null,
+              trace: { control, noModelInvocation: true },
+              terminalTail: '',
+            }
+          : await prepared.run();
         record.elapsedMs = Date.now() - started;
         const { trace, ...metrics } = observation;
         Object.assign(record, metrics);
         await writeFile(join(dir, 'trace.json'), redactJson(trace, secrets, 2));
+        {
+          const after = await prepared.snapshot();
+          await writeFile(join(dir, 'after.json'), redactJson(after, secrets, 2, 'payload'));
+          record.artifacts.after = `${name}/after.json`;
+          record.finalDiff = diffTrees(prepared.before, after);
+        }
         record.stage = 'judge';
         try {
           if (tracing) await prepared.context.tracing.group(`judge:${task.id}`);
-          record.judge = await task.judge(await prepared.preview());
+          if (task.commandJudge) {
+            await prepared.apply({ [task.commandJudge.path]: task.commandJudge.text });
+            const receipt = await prepared.command(`node ${task.commandJudge.path}`);
+            const pass =
+              receipt.exitCode === 0 &&
+              receipt.stdout.split(/\r?\n/).includes(task.commandJudge.marker);
+            record.judge = {
+              pass,
+              probes: [
+                { name: 'trusted same-origin semantic regressions', pass, evidence: receipt },
+              ],
+            };
+          } else {
+            if (!task.judge) throw new Error('Task has no judge');
+            record.judge = await task.judge(await prepared.preview());
+          }
           if (!secrets.length) {
             await prepared.page.screenshot({ path: join(dir, 'screen.png') });
             record.artifacts.screen = `${name}/screen.png`;
@@ -172,17 +216,13 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
         } finally {
           if (tracing) await prepared.context.tracing.groupEnd();
         }
-        record.stage = 'snapshot';
-        const after = await prepared.snapshot();
-        await writeFile(join(dir, 'after.json'), redactJson(after, secrets, 2, 'payload'));
-        record.artifacts.after = `${name}/after.json`;
-        record.finalDiff = diffTrees(prepared.before, after);
         record.outcome =
           record.agentStatus === 'budget-exceeded'
             ? 'budget-exceeded'
             : record.contextExceeded
               ? 'context-exceeded'
-              : record.agentStatus === 'done' && record.judge.pass
+              : (record.agentStatus === 'done' || (control && record.agentStatus === 'not-run')) &&
+                  record.judge.pass
                 ? 'pass'
                 : 'fail';
         record.stage = undefined;

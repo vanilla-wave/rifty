@@ -21,6 +21,8 @@ export interface Prepared {
   before: FileTree;
   workspace?: string;
   codexVersion?: string;
+  apply(files: FileTree): Promise<void>;
+  command(line: string): Promise<{ exitCode: number | null; stdout: string; stderr: string }>;
   run(): Promise<Observation>;
   preview(): Promise<JudgeContext>;
   snapshot(): Promise<FileTree>;
