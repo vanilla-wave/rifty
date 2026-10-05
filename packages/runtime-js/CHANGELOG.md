@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Builtin static export names include prototype-chain methods (excluding `constructor`/`Object.prototype`) so `import { cwd } from 'node:process'` links and binds the live member.
+
 - Register `node:path/posix` and `node:path/win32` builtins (`win32 === posix`, POSIX-only posture).
 
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.

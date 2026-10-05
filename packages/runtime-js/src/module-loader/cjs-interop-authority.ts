@@ -66,7 +66,19 @@ export function createCjsInteropAuthority(options: {
     }
     node.names.add('default');
     if (resolved.kind === 'builtin') {
-      for (const name of Object.keys(loadBuiltin(resolved.id))) node.names.add(name);
+      // Node builtins expose prototype methods as named exports (process.cwd,
+      // fs.stat). Class-backed builtin instances keep them on the prototype;
+      // collect own keys plus the prototype chain's own property names so
+      // `import { cwd } from 'node:process'` links and binds the live member.
+      const outer = loadBuiltin(resolved.id);
+      for (const name of Object.keys(outer)) node.names.add(name);
+      let proto: object | null = Object.getPrototypeOf(outer);
+      while (proto !== null && proto !== Object.prototype) {
+        for (const name of Object.getOwnPropertyNames(proto)) {
+          if (name !== 'constructor') node.names.add(name);
+        }
+        proto = Object.getPrototypeOf(proto);
+      }
       return node;
     }
     if (resolved.kind === 'json') {
