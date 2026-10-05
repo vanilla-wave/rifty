@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `child_process.fork(..., {serialization: 'advanced'})` round-trips structured-clone values (Date/Map/[undefined]/Uint8Array/bigint) over the kernel channel on both legs; `child.send(fn)` throws `ERR_INVALID_ARG_TYPE`; the JSON default is unchanged.
+
 - Process lifecycle parity: `uncaughtException`/`unhandledRejection` handlers receive the error and the loop continues (dispatcher in the keepalive traps; handler throws stay fatal with the new error); `process.exit()` honours `exitCode`; the `exit` event fires exactly once with the raw final code on natural drain and explicit exit.
 
 - ESM/CJS Function write guards accept computed keys provably bound to Symbol values (`const K = Symbol.for(...)`; direct `Symbol()` expressions) — @vitest/undici global registration loads; possibly-`'Function'` keys keep the loud ceiling.

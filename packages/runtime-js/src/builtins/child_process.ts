@@ -29,7 +29,10 @@ import {
 import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
-import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import {
+  serializeNodeIpcMessage,
+  validateCloneIpcMessage,
+} from '../internal/node-ipc-serialization.ts';
 import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { SameRealmStdinPipe, execScript } from './child_process-exec.ts';
@@ -128,6 +131,7 @@ class ChildProcess extends EventEmitter {
   /** Bus the child's script subscribes to for parent-sent `'childMessage'`
    * events. Exposed to the spawner via `internalIpc()`. */
   readonly inboundIpc: EventEmitter = new EventEmitter();
+  readonly #ipcSerialization: 'json' | 'advanced';
 
   constructor(
     handle: ProcessHandle,
@@ -139,11 +143,13 @@ class ChildProcess extends EventEmitter {
       readonly expose: readonly [boolean, boolean, boolean];
       readonly slots: number;
     },
+    ipcSerialization: 'json' | 'advanced' = 'json',
   ) {
     super();
     this.handle = handle;
     this.ownerProcess = (globalThis as { process?: unknown }).process;
     this.ownerBootstrap = readActiveNodeProcessBootstrap();
+    this.#ipcSerialization = ipcSerialization;
     this.pid = handle.pid;
     this.stdin = (streams.expose[0] ? streams.stdin : null) as unknown as Writable;
     this.stdout = (streams.expose[1] ? streams.stdout : null) as unknown as Readable;
@@ -177,7 +183,12 @@ class ChildProcess extends EventEmitter {
           throw new NotImplementedError('child_process.send.arguments');
         }
         if (!this.connected) return false;
-        const serialized = serializeNodeIpcMessage(message);
+        // 'advanced' rides the kernel channel's structured clone as-is; the
+        // JSON default round-trips through stringify (today's behavior).
+        const serialized =
+          this.#ipcSerialization === 'advanced'
+            ? validateCloneIpcMessage(message)
+            : serializeNodeIpcMessage(message);
         if (handle.kind === 'worker') return handle.send(serialized);
         queueMicrotask(() => this.inboundIpc.emit('childMessage', serialized));
         return true;
@@ -189,7 +200,10 @@ class ChildProcess extends EventEmitter {
       };
       if (handle.kind === 'worker') {
         handle.on('message', (message) => {
-          this.emitToOwner('message', serializeNodeIpcMessage(message));
+          this.emitToOwner(
+            'message',
+            this.#ipcSerialization === 'advanced' ? message : serializeNodeIpcMessage(message),
+          );
         });
         handle.on('disconnect', () => this.finishIpc());
       }
@@ -321,12 +335,6 @@ function rejectedChildCwd(cwd: string): ChildProcess | null {
 }
 
 export function spawn(command: string, args: string[] = [], opts: SpawnOptions = {}): ChildProcess {
-  if (opts.serialization === 'advanced') {
-    throw new NotImplementedError(
-      'child_process.serialization.advanced',
-      "Node's advanced IPC serializer is not implemented; use default JSON",
-    );
-  }
   const stdio = resolveWorkerStdio(
     opts.stdio,
     activeProcessStdio(),
@@ -340,6 +348,7 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
     const rejected = rejectedChildCwd(requested);
     if (rejected !== null) return rejected;
   }
+  const serialization = opts.serialization === 'advanced' ? 'advanced' : 'json';
   const workerRoute =
     command === 'node' &&
     args[0] !== undefined &&
@@ -351,15 +360,21 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
       cwd: opts.cwd,
       env: opts.env,
       fork: opts.__fork === true,
+      ...(opts.__fork === true ? { serialization } : {}),
     });
     if (handle.kind !== 'worker') throw new Error('child_process.spawn: expected Worker handle');
-    const child = new ChildProcess(handle, stdio.ipc, {
-      stdin: handle.stdin(),
-      stdout: handle.stdout(),
-      stderr: handle.stderr(),
-      expose: stdio.expose,
-      slots: stdio.slots,
-    });
+    const child = new ChildProcess(
+      handle,
+      stdio.ipc,
+      {
+        stdin: handle.stdin(),
+        stdout: handle.stdout(),
+        stderr: handle.stderr(),
+        expose: stdio.expose,
+        slots: stdio.slots,
+      },
+      serialization,
+    );
     forwardWorkerStdio(handle, stdio);
     return child;
   }

@@ -55,12 +55,21 @@ const c: ParityCase = {
               b: message.b instanceof Uint8Array && message.b[1] === 2,
               g: typeof message.g === 'bigint' && message.g === 1n,
             };
-            child.send({ m: new Map([['k', new Date(5)]]) });
+            child.send({
+              d: new Date(7),
+              m: new Map([['k', new Date(5)]]),
+              u: [undefined],
+              b: new Uint8Array([9]),
+              g: 2n,
+            });
             return;
           }
           roundtrip = {
-            m: message.m instanceof Map,
-            k: message.m instanceof Map && message.m.get('k') instanceof Date && message.m.get('k').getTime() === 5,
+            d: message.d instanceof Date && message.d.getTime() === 7,
+            m: message.m instanceof Map && message.m.get('k') instanceof Date && message.m.get('k').getTime() === 5,
+            u: Array.isArray(message.u) && message.u.length === 1 && message.u[0] === undefined && '0' in message.u,
+            b: message.b instanceof Uint8Array && message.b[0] === 9,
+            g: typeof message.g === 'bigint' && message.g === 2n,
           };
           try {
             child.send(() => {});
@@ -81,7 +90,7 @@ const c: ParityCase = {
     });
   `,
   expected:
-    '{"probe":{"d":true,"m":true,"u":true,"b":true,"g":true},"roundtrip":{"m":true,"k":true},' +
+    '{"probe":{"d":true,"m":true,"u":true,"b":true,"g":true},"roundtrip":{"d":true,"m":true,"u":true,"b":true,"g":true},' +
     '"fnSend":"TypeError/ERR_INVALID_ARG_TYPE","killed":true,' +
     '"exit":{"code":null,"signal":"SIGUSR2"}}',
 };

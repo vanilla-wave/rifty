@@ -31,7 +31,10 @@ import {
   unref as unrefEventLoop,
 } from '../internal/event-loop-keepalive.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
-import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import {
+  serializeNodeIpcMessage,
+  validateCloneIpcMessage,
+} from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -648,7 +651,7 @@ export class NodeProcess extends EventEmitter {
         this.#wireWorkerIpc(spec.stdio.ipc);
       } else {
         this.#publicIpc = true;
-        this.#jsonIpc = launch?.kind === 'program';
+        this.#jsonIpc = launch?.kind === 'program' && (launch.ipc ?? 'json') !== 'advanced';
         this.connected = true;
         this.channel = nodeIpcChannel('process');
         this.#wireIpc(spec.stdio.ipc);
@@ -854,7 +857,9 @@ export class NodeProcess extends EventEmitter {
     this.send = (message: unknown, ...unsupported: unknown[]): boolean => {
       if (unsupported.length > 0) throw new NotImplementedError('process.send.arguments');
       if (this.#ipcDisconnected) return false;
-      const payload = this.#jsonIpc ? serializeNodeIpcMessage(message) : message;
+      const payload = this.#jsonIpc
+        ? serializeNodeIpcMessage(message)
+        : validateCloneIpcMessage(message);
       try {
         const frame: IpcFrame = { kind: 'ipc:message', payload };
         port.postMessage(frame);
