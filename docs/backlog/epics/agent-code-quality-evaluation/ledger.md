@@ -16,3 +16,5 @@
 - 2026-10-05 — corpus Contract+RED concern,0 blockers; frozen bc1bcdb33, independent /root/corpus_contract_review; both absent-suite REDs independently reproduced. limitFunction concurrency carrier strengthened (native16 rerun expected), corruption/private-origin probes required before final. ADR-0506 keeps existing runner/real origin owner.
 
 - 2026-10-05 — path split preserves corpus route6: pilot infrastructure/controls precede report/pilot trajectory review; mandatory finite expansion is linked agent-eval-corpus-expansion after pilot comparison. I1/I6/I7 and separate campaign unchanged; no user-owned goal amendment.
+
+- 2026-10-05 — corpus Final+GREEN BLOCK @732bfe051, independent /root/corpus_final_review: both app judges impose hidden UI constraints; accept fix under behavioral-oracle-constraint. Actual valid-alternative RED/semantic GREEN committed010862172. Raw reference result correction15PASS/9FAIL (COI notes Frame detached); old raw artifacts unchanged. Fix selectors/public-requirement carriers and await existing preview readiness; new proof/final review pending.

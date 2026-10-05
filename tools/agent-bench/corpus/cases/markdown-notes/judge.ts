@@ -1,71 +1,82 @@
 import type { JudgeContext } from '../../../src/judge/context.ts';
-import { verdict } from '../../../src/judge/context.ts';
-export async function judge({ view }: JudgeContext) {
+import { action, field, fieldValue, verdict } from '../../../src/judge/context.ts';
+export async function judge(ctx: JudgeContext) {
+  const { view } = ctx;
   const probes = [];
+  const entry = (name: string) =>
+    view
+      .getByRole('button', { name, exact: true })
+      .or(view.getByRole('link', { name, exact: true }));
   try {
-    const title = view.getByRole('textbox', { name: /^Title$/i });
-    const body = view.getByRole('textbox', { name: /^Markdown$/i });
-    const save = view.getByRole('button', { name: /^Save$/i });
-    await view.getByRole('button', { name: /New note/i }).click();
+    const title = field(ctx, /^Title$/i);
+    const body = field(ctx, /^Markdown$/i);
+    await action(ctx, /New note/i).click();
     await title.fill('Alpha');
     await body.fill('# First\n**Important**\n[[Beta]]\n<script>not code</script>');
-    await save.click();
-    const preview = view.getByRole('region', { name: /Markdown preview/i });
+    await action(ctx, /^Save$/i).click();
+    const bold = view.getByText('Important', { exact: true });
     probes.push({
-      name: 'markdown and HTML safety',
+      name: 'markdown headings/bold and literal HTML',
       pass:
-        (await preview.getByRole('heading', { name: 'First' }).count()) === 1 &&
-        (await preview.locator('strong').count()) === 1 &&
-        (await preview.locator('script').count()) === 0,
-      evidence: await preview.innerHTML(),
+        (await view.getByRole('heading', { name: 'First', exact: true }).count()) === 1 &&
+        (await bold.count()) === 1 &&
+        (await bold.evaluate(
+          (node) => Number.parseInt(getComputedStyle(node).fontWeight) >= 600,
+        )) &&
+        (await view.getByText('<script>not code</script>', { exact: true }).isVisible()),
+      evidence: await view.locator('body').innerText(),
     });
-    await preview.getByRole('link', { name: 'Beta', exact: true }).click();
+    const beforeMissing = await view.locator('body').ariaSnapshot();
+    await view.getByRole('link', { name: 'Beta', exact: true }).click();
+    const afterMissing = await view.locator('body').ariaSnapshot();
     probes.push({
       name: 'missing link reported without draft loss',
       pass:
-        (await body.inputValue()) ===
+        (await fieldValue(body)) ===
           '# First\n**Important**\n[[Beta]]\n<script>not code</script>' &&
-        /missing/i.test(await view.getByRole('status').innerText()),
-      evidence: await view.getByRole('status').innerText(),
+        afterMissing !== beforeMissing,
+      evidence: { before: beforeMissing, after: afterMissing },
     });
-    await view.getByRole('button', { name: /New note/i }).click();
+    await action(ctx, /New note/i).click();
     await title.fill('Beta');
     await body.fill('Unique body needle');
-    await save.click();
+    await action(ctx, /^Save$/i).click();
     await view.goto(view.url());
-    await view.getByRole('textbox', { name: /^Search$/i }).fill('NEEDLE');
+    await action(ctx, /New note/i).click();
+    await field(ctx, /^Search$/i).fill('NEEDLE');
     probes.push({
       name: 'search includes body and preserves saved notes',
-      pass:
-        (await view.getByRole('button', { name: 'Beta', exact: true }).count()) === 1 &&
-        (await view.getByRole('button', { name: 'Alpha', exact: true }).count()) === 0,
-      evidence: await view.getByRole('navigation').innerText(),
+      pass: (await entry('Beta').count()) >= 1 && (await entry('Alpha').count()) === 0,
+      evidence: await view.locator('body').ariaSnapshot(),
     });
-    await view.getByRole('textbox', { name: /^Search$/i }).fill('');
-    await view.getByRole('button', { name: 'Alpha', exact: true }).click();
-    await preview.getByRole('link', { name: 'Beta', exact: true }).click();
+    await field(ctx, /^Search$/i).fill('');
+    await entry('Alpha').first().click();
+    // First matches Alpha's body only: Beta's saved entry is filtered out.
+    await field(ctx, /^Search$/i).fill('First');
+    await view.getByRole('link', { name: 'Beta', exact: true }).first().click();
     probes.push({
       name: 'link navigates to saved body',
       pass:
-        (await title.inputValue()) === 'Beta' && (await body.inputValue()) === 'Unique body needle',
-      evidence: await body.inputValue(),
+        (await fieldValue(title)) === 'Beta' && (await fieldValue(body)) === 'Unique body needle',
+      evidence: await fieldValue(body),
     });
+    await field(ctx, /^Search$/i).fill('');
     await body.fill('unsaved overwrite');
     await view.goto(view.url());
-    await view.getByRole('button', { name: 'Beta', exact: true }).click();
+    await entry('Beta').first().click();
     probes.push({
       name: 'unsaved draft does not replace persisted body',
-      pass: (await body.inputValue()) === 'Unique body needle',
-      evidence: await body.inputValue(),
+      pass: (await fieldValue(body)) === 'Unique body needle',
+      evidence: await fieldValue(body),
     });
-    await view.getByRole('button', { name: /^Delete$/i }).click();
+    await action(ctx, /^Delete$/i).click();
     await view.goto(view.url());
+    await action(ctx, /New note/i).click();
+    await field(ctx, /^Search$/i).fill('');
     probes.push({
       name: 'delete persists without losing other notes',
-      pass:
-        (await view.getByRole('button', { name: 'Beta', exact: true }).count()) === 0 &&
-        (await view.getByRole('button', { name: 'Alpha', exact: true }).count()) === 1,
-      evidence: await view.getByRole('navigation').innerText(),
+      pass: (await entry('Beta').count()) === 0 && (await entry('Alpha').count()) >= 1,
+      evidence: await view.locator('body').ariaSnapshot(),
     });
   } catch (error) {
     probes.push({ name: 'workflow completed', pass: false, evidence: String(error) });

@@ -185,9 +185,15 @@ export async function prepareRifty(input: Input): Promise<Prepared> {
             timeout: 180000,
           });
         }
+        await expect(page.locator('[data-testid="preview"] .rf-preview__status')).toHaveAttribute(
+          'data-phase',
+          'live',
+          { timeout: 180000 },
+        );
         const element = await page.locator('[data-testid="preview"] iframe').elementHandle();
         const view = await element?.contentFrame();
         if (!view) throw new Error('No actual playground preview frame');
+        await view.waitForLoadState('domcontentloaded');
         return { view, previewUrl: view.url() };
       },
       async snapshot() {

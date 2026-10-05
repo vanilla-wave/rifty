@@ -1,4 +1,4 @@
-import type { Frame, Page } from '@playwright/test';
+import type { Frame, Locator, Page } from '@playwright/test';
 export interface JudgeContext {
   view: Frame | Page;
   previewUrl: string;
@@ -28,4 +28,26 @@ export async function ids({ view }: JudgeContext): Promise<number[]> {
         Number(node.querySelector('.issue-card__id')?.textContent?.replace('#', '')),
       ),
     );
+}
+
+/** Read an accessible editable control without prescribing input/textarea DOM. */
+export async function fieldValue(field: Locator): Promise<string> {
+  return field.evaluate((node) =>
+    node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement
+      ? node.value
+      : (node.textContent ?? ''),
+  );
+}
+export function action({ view }: JudgeContext, name: string | RegExp) {
+  return view
+    .getByRole('button', { name, exact: typeof name === 'string' })
+    .or(view.getByRole('link', { name, exact: typeof name === 'string' }))
+    .first();
+}
+
+export function field({ view }: JudgeContext, name: string | RegExp) {
+  return view
+    .getByRole('textbox', { name })
+    .or(view.getByRole('searchbox', { name }))
+    .or(view.getByRole('combobox', { name }));
 }

@@ -195,3 +195,10 @@ Reference matrix:
 Native previews restart before judging updated programs; snapshots precede
 trusted checks/preview restrictions. Browser app checks use actual Page/Frame
 interactions with explicit accessible task behavior, including alternate export.
+
+App oracle structure regression (no model):
+`pnpm exec tsx tools/agent-bench/tests/app-structure-controls.ts`.
+Real altered programs use saved-note links/section, searchbox, article/bold tag
+and CSV output; correct alternatives pass, lost public requirements fail.
+Historical controls retain their old judge hashes/outcomes; pilot grading
+corrections happen before any comparative quality campaign.

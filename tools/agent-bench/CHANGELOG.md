@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Accept valid app controls/links/searchboxes, preview wrappers/bold tags and text/download CSV exports; exercise declared quoted-field/empty-name/literal-HTML behavior; await the existing real preview readiness before acquiring frames.
+
 - Load frozen real-project/app corpora; validate hashes/v3 locks/family split; run private command judges in each origin and retain non-model controls separately (ADR-0506).
 
 - Add real isolated native Codex reference, explicit settings/version, terminal protocol validation, SIGINT budgets, retained raw errors and unknown telemetry; all selected lanes remain visible. Preserve native UTF-8 across chunks and raw log bytes.

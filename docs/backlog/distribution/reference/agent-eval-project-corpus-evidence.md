@@ -16,7 +16,7 @@ and native24 control outcomes: `agent-eval-corpus-substrate-controls.json.gz`.
 - Strengthened limitFunction concurrency assertion: actual native16 controls retain baseline/partial FAIL, reference/alternative PASS; old reviewed weak carrier evidence retained.
 - Loader faults:8 pass (hash/card/lock/path/family corruption + conflicting tree). Plan resolves48 selected trials/6 cards for2 repeats without model/service calls.
 - First all-origin controls RED: native CSV read old transformed starter after instantaneous patch; noCOI snapshot hit preview-mode restriction. Source bundle preserves original24 records. Fix: snapshots before private injection/preview, native updated preview restarts, actual COI preview starts after snapshot.
-- Fresh all-origin reference controls PASS:24 selected/retained, native12 + browser apps4 pass; browser library8 setup failures retained (ms/stringify SHA-1 integrity; queue aliases). No agent/model invoked. Actual Chromium+COIchat/packed publicSDK/native npm/Codex-version preparation. Original6fMEgg root and committed2026-10-05-pilot-controls summary.
+- Fresh all-origin reference controls PASS:24 selected/retained, native12 + browser apps3 pass; COI linked-notes judge Frame detached fail; browser library8 setup failures retained (ms/stringify SHA-1 integrity; queue aliases). No agent/model invoked. Actual Chromium+COIchat/packed publicSDK/native npm/Codex-version preparation. Original6fMEgg root and committed2026-10-05-pilot-controls summary.
 - Source suites33 focused checks PASS; expanded native Codex/protocol/UTF8 checks6 PASS. App judges included in package typecheck; PASS.
 
 Expansion remains mandatory linked goal work after pilot trajectory/campaign review, per original route6. Pilot controls are not quality/I5/I11 proof.
@@ -26,3 +26,26 @@ Expansion remains mandatory linked goal work after pilot trajectory/campaign rev
 
 - Actual corpus Pi plumbing:24 selected/retained,10 real Pi done turns/20 externally observed requests; planted baseline defects all fail private judges.8 browser library setup failures plus6 unconfigured native-Codex selected failures retained. Scripted external model only, no quality/I5 claim. Physical roots/bundle retain before/after/trace; original manifest text reconstructed and SHA-matched to measured plan before formatting.
 - Legacy packed host plus3 interruption/unsupported probes PASS (5 browser tests total with corpus smoke,9.2min). Focused31 corpus/report/summary checks + package typecheck PASS. New control/quality comparison separation first RED expected-to-throw failed; after purpose/control identity checks same17 comparison tests PASS.
+
+## Independent final BLOCK and accepted repairs
+
+732bfe051 independent review: behavioral-oracle-constraint, both appjudges reject
+correct UI not prohibited by prompt. Actual notes links/section and CSV output
+alternatives fail old judge; exact same behavioral workflow with selector-only
+adaptation passes. Evidence original scripts/results retained gzip; BLOCK committed.
+Root sweep: action/link controls, textbox/searchbox/accessible fields, preview
+wrapper/bold tag, saved-entry roles, accessible text/output/download. Prompts unchanged.
+Public CSV requirements escapedquotes/blanklines/emptyname and Markdown literal HTML
+now exercised too; original deeper-mutant result retained (advisory weak carrier).
+Fresh structural-alternative test RED: valid type=search Filter causes old textbox
+lookup timeout, independently executed; no pageerrors.
+
+Correction: old all-origin reference report24 rows actually15PASS/9FAIL; native12
+pass, browserapps3pass and COI notes Frame detached1fail, browserlibs8 setupfails.
+Earlier4-browser-pass prose was wrong; raw report/bundle never changed. COI adapter
+now awaits existing PreviewPanel live phase before acquiring the frame; no-COI
+awaits real committed preview URL. Fresh all-origin controls required.
+
+- New real structural controls4: both variants PASS (notes links/section/searchbox/article/b; CSV output/searchbox), both public-requirement mutants FAIL (CSV emptyname+quotes; Markdown stripped HTML). Actual Vite/Chromium, no pageerrors; wrPTd9 root/source/results retained green bundle. Same native baseline/reference/partial/alternative8 rerun expected outcomes, including downloadable CSV.31 focused checks/typecheck PASS. No prompt changes or quality calls; raw judge/combined context hashes identify revised grading.
+
+- Fresh current-judge four-origin references24 retained:16PASS (native12+browserapps4),8browser-library setup failures; both app references pass all4. Actual PhasePill/readiness guards, no retry/rescue; OZCsW9 rawroot and new ui-fixed bundle. Packed-host regression also PASS,2 browser tests6.4min. Earlier15PASS/9FAIL remains unchanged.

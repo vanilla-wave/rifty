@@ -56,7 +56,15 @@ export async function prepareNoCoi(input: Input): Promise<Prepared> {
         return coreObservation(trace, requests, events);
       },
       async preview() {
-        await page.evaluate(() => (Reflect.get(globalThis, 'bench') as NoCoiPage).preview());
+        const url = await page.evaluate(() =>
+          (Reflect.get(globalThis, 'bench') as NoCoiPage).preview(),
+        );
+        await page.waitForFunction(
+          (url) =>
+            (document.querySelector('iframe')?.contentWindow?.location.href ?? 'about:blank') ===
+            new URL(url, location.href).href,
+          url,
+        );
         const handle = await page.locator('iframe').elementHandle();
         const view = await handle?.contentFrame();
         if (!view) throw new Error('Packed no-COI preview frame missing');

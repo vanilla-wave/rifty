@@ -1,72 +1,82 @@
 import { readFile } from 'node:fs/promises';
 import type { JudgeContext } from '../../../src/judge/context.ts';
-import { verdict } from '../../../src/judge/context.ts';
-export async function judge({ view }: JudgeContext) {
+import { action, field, fieldValue, verdict } from '../../../src/judge/context.ts';
+export async function judge(ctx: JudgeContext) {
+  const { view } = ctx;
   const probes = [];
   try {
-    const source = view.getByRole('textbox', { name: /CSV data/i });
+    const source = field(ctx, /CSV data/i);
     await source.fill(
-      'name,email\r\n"Alice, A",alice@example.test\r\nBob,broken\r\nCara,cara@example.test\r\n',
+      'name,email\r\n"Alice, A",alice@example.test\r\n\r\n"Bob ""B""",broken\r\n,empty@example.test\r\nCara,cara@example.test\r\n',
     );
-    await view.getByRole('button', { name: /^Import$/i }).click();
-    const emails = view.getByRole('textbox', { name: /^Email\b/i });
+    await action(ctx, /^Import$/i).click();
+    const names = field(ctx, /^Name\b/i);
+    const emails = field(ctx, /^Email\b/i);
+    const initialNames = await Promise.all((await names.all()).map(fieldValue));
     probes.push({
-      name: 'invalid imported row retained/editable',
-      pass: (await emails.count()) === 3,
-      evidence: await Promise.all((await emails.all()).map((input) => input.inputValue())),
+      name: 'quoted fields/blank lines and invalid rows retained/editable',
+      pass:
+        (await emails.count()) === 4 &&
+        initialNames.includes('Bob "B"') &&
+        initialNames.includes(''),
+      evidence: initialNames,
     });
-    const save = view.getByRole('button', { name: /^Save$/i });
+    const save = action(ctx, /^Save$/i);
     probes.push({
-      name: 'save blocked for invalid rows',
+      name: 'save blocked for invalid email/name',
       pass: await save.isDisabled(),
       evidence: await save.isDisabled(),
     });
     for (let i = 0; i < (await emails.count()); i++)
-      if ((await emails.nth(i).inputValue()) === 'broken')
+      if ((await fieldValue(emails.nth(i))) === 'broken')
         await emails.nth(i).fill('bob@example.test');
+    probes.push({
+      name: 'empty name remains invalid after email correction',
+      pass: await save.isDisabled(),
+      evidence: await save.isDisabled(),
+    });
+    for (let i = 0; i < (await names.count()); i++)
+      if ((await fieldValue(names.nth(i))) === '') await names.nth(i).fill('Empty corrected');
     await save.click();
     await view.goto(view.url());
-    const restored = await Promise.all(
-      (await view.getByRole('textbox', { name: /^Email\b/i }).all()).map((input) =>
-        input.inputValue(),
-      ),
-    );
+    const restored = await Promise.all((await field(ctx, /^Email\b/i).all()).map(fieldValue));
     probes.push({
       name: 'corrected contacts persist',
-      pass: restored.length === 3 && restored.includes('bob@example.test'),
+      pass:
+        restored.length === 4 &&
+        restored.includes('bob@example.test') &&
+        restored.includes('empty@example.test'),
       evidence: restored,
     });
-    await view.getByRole('textbox', { name: /^Filter$/i }).fill('ALICE');
+    await field(ctx, /^Filter$/i).fill('BOB@');
     const page = 'page' in view ? view.page() : view;
     const download = page.waitForEvent('download', { timeout: 3000 }).catch(() => undefined);
-    await view.getByRole('button', { name: /^Export$/i }).click();
-    const output = view.getByRole('textbox', { name: /Export/i });
-    let exported: string;
-    if (await output.count()) exported = await output.inputValue();
-    else {
-      const file = await download;
-      const path = await file?.path();
-      exported = path ? await readFile(path, 'utf8') : '';
-    }
+    await action(ctx, /^Export$/i).click();
+    const candidates = field(ctx, /Export/i).or(view.getByText(/^name,email\b/));
+    const outputs: string[] = [];
+    for (const candidate of await candidates.all())
+      if (await candidate.isVisible()) outputs.push(await fieldValue(candidate));
+    const file = await download;
+    const path = await file?.path();
+    if (path) outputs.push(await readFile(path, 'utf8'));
     probes.push({
-      name: 'filtered escaped CSV export',
-      pass:
-        exported.includes('"Alice, A",alice@example.test') &&
-        !exported.includes('bob@example.test') &&
-        !exported.includes('cara@example.test'),
-      evidence: exported,
+      name: 'case-insensitive email filter and escaped CSV export',
+      pass: outputs.some(
+        (exported) =>
+          exported.includes('"Bob ""B""",bob@example.test') &&
+          !exported.includes('alice@example.test') &&
+          !exported.includes('cara@example.test') &&
+          !exported.includes('empty@example.test'),
+      ),
+      evidence: outputs,
     });
     await source.fill('name,email\nNew,new@example.test');
-    await view.getByRole('button', { name: /^Import$/i }).click();
+    await action(ctx, /^Import$/i).click();
     await view.goto(view.url());
-    const unsaved = await Promise.all(
-      (await view.getByRole('textbox', { name: /^Email\b/i }).all()).map((input) =>
-        input.inputValue(),
-      ),
-    );
+    const unsaved = await Promise.all((await field(ctx, /^Email\b/i).all()).map(fieldValue));
     probes.push({
       name: 'unsaved import leaves saved records intact',
-      pass: unsaved.length === 3 && unsaved.includes('bob@example.test'),
+      pass: unsaved.length === 4 && unsaved.includes('bob@example.test'),
       evidence: unsaved,
     });
   } catch (error) {
