@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `vm.runInThisContext` / `vm.Script` honour `lineOffset`/`columnOffset` (raw shift, no clamping; positive lines as a physical prefix, columns via a stack dispatcher; fractional → `ERR_OUT_OF_RANGE`); `vm.runInContext` with a column offset stays a named loud throw.
+
 - A live `worker_threads.Worker` keeps the parent event loop alive (ADR-0152 handle-class extension): ref at start, release at exit; `Worker.ref()/unref()` hold the same count (goal I2).
 
 - `child_process.fork(..., {serialization: 'advanced'})` round-trips structured-clone values (Date/Map/[undefined]/Uint8Array/bigint) over the kernel channel on both legs; `child.send(fn)` throws `ERR_INVALID_ARG_TYPE`; the JSON default is unchanged.

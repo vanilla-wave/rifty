@@ -796,3 +796,49 @@ describe('node:vm rewrite-engine loud opt-in + telemetry wiring (T15)', () => {
     expect(snapshotTelemetry()).toEqual([]);
   });
 });
+
+describe('node:vm runInThisContext offsets (vm-run-in-this-context-offsets)', () => {
+  it('columnOffset shifts raw (no clamp) and the dispatcher restores after the run', () => {
+    const vm = loadBuiltin('vm') as {
+      runInThisContext(code: string, options?: Record<string, unknown>): unknown;
+    };
+    const captured = vm.runInThisContext('new Error().stack', {
+      filename: '/virtual/off.js',
+      columnOffset: -20,
+    }) as string;
+    expect(captured.split('\n')[1]).toBe('    at /virtual/off.js:1:-19');
+    // No dispatcher leak: a fresh stack AFTER the run keeps host coordinates.
+    const after = new Error('later').stack ?? '';
+    expect(after).not.toContain('/virtual/off.js');
+    const prepare = Reflect.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
+    expect(prepare === undefined || typeof prepare.value).toBe('function');
+  });
+
+  it('lineOffset shifts lines and strips the eval marker; fractional offset RangeErrors', () => {
+    const vm = loadBuiltin('vm') as {
+      runInThisContext(code: string, options?: Record<string, unknown>): unknown;
+      Script: new (
+        code: string,
+        options?: Record<string, unknown>,
+      ) => {
+        runInThisContext(): unknown;
+      };
+    };
+    const shifted = vm.runInThisContext('new Error().stack', {
+      filename: '/virtual/line.js',
+      lineOffset: 3,
+    }) as string;
+    expect(shifted.split('\n')[1]).toBe('    at /virtual/line.js:4:1');
+    const script = new vm.Script('function f() { return new Error().stack; }\nf();', {
+      filename: '/virtual/mod2.js',
+      lineOffset: 10,
+      columnOffset: 5,
+    });
+    expect((script.runInThisContext() as string).split('\n')[1]).toBe(
+      '    at f (/virtual/mod2.js:11:28)',
+    );
+    expect(() => vm.runInThisContext('0;', { columnOffset: 1.5 })).toThrowError(
+      expect.objectContaining({ name: 'RangeError', code: 'ERR_OUT_OF_RANGE' }),
+    );
+  });
+});
