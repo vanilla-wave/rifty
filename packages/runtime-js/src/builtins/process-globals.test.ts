@@ -1,3 +1,4 @@
+import { NotImplementedError } from '@riftydev/vfs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadBuiltin, refreshRuntimeJsProcessBuiltin } from './index.ts';
 import {
@@ -184,5 +185,16 @@ describe('installProcessGlobals', () => {
       ipc.port1.close();
       ipc.port2.close();
     }
+  });
+});
+
+describe('process.memoryUsage named-loud member (absent-builtin-members-loud-throws)', () => {
+  it('binds without throwing and CALLS loud, never fabricates heap numbers', async () => {
+    const ns = (await loadBuiltin('process')) as { memoryUsage: () => never };
+    expect(typeof ns.memoryUsage).toBe('function');
+    const bound = ns.memoryUsage.bind({}) as () => never;
+    expect(typeof bound).toBe('function');
+    expect(() => ns.memoryUsage()).toThrow(NotImplementedError);
+    expect(() => ns.memoryUsage()).toThrow('process.memoryUsage');
   });
 });

@@ -671,7 +671,22 @@ export function fork(
 // surface.
 export { execSync };
 
+// Node's full spawnSync contract (result object, options matrix) is not
+// implementable here yet — the member exists so tinyexec's named import
+// links, and calling it fails loudly instead of faking a result.
+export function spawnSync(): never {
+  throw new NotImplementedError('child_process.spawnSync');
+}
+
 export const ChildProcess_ = ChildProcess;
 
-const child_process = { spawn, exec, execFile, fork, execSync, ChildProcess: ChildProcess_ };
+const child_process = {
+  spawn,
+  exec,
+  execFile,
+  fork,
+  execSync,
+  spawnSync,
+  ChildProcess: ChildProcess_,
+};
 export default child_process;

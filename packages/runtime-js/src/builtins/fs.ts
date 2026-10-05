@@ -1021,6 +1021,12 @@ export function writeSync(
   return writeBytesAt(record, data.subarray(offset, offset + length), pos);
 }
 
+// Real statfs needs filesystem statistics the browser cannot supply — the
+// member exists (named import links, `typeof` is 'function') and stays loud.
+export function statfsSync(): never {
+  throw new NotImplementedError('fs.statfsSync');
+}
+
 export function fstatSync(fd: number, options?: StatOptions): Stats {
   // EBADF first — Node reports the bad fd before any bigint shaping.
   const record = getFd(fd, 'fstat');
@@ -1598,6 +1604,7 @@ const fs = {
   readdirSync,
   mkdirSync,
   statSync,
+  statfsSync,
   existsSync,
   unlinkSync,
   rmSync,

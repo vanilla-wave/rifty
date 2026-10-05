@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `fs.statfsSync`, `child_process.spawnSync`, `process.memoryUsage` exist as named members that throw `NotImplementedError` when called — named imports link instead of dying link-time.
+
 - Builtin static export names include prototype-chain methods (excluding `constructor`/`Object.prototype`) so `import { cwd } from 'node:process'` links and binds the live member.
 
 - Register `node:path/posix` and `node:path/win32` builtins (`win32 === posix`, POSIX-only posture).

@@ -747,6 +747,13 @@ export class NodeProcess extends EventEmitter {
     return performance.now() / 1000;
   }
 
+  // Real heap statistics are not observable from the browser — the member
+  // exists (vitest's worker init binds it) and stays loud; `logHeapUsage`
+  // opt-in keeps failing honestly.
+  memoryUsage(): never {
+    throw new NotImplementedError('process.memoryUsage');
+  }
+
   exit(code: unknown = 0): never {
     const c = coerceExitCode(code); // coerce string / throw on invalid (Node parity)
     this.#exitCode = c;

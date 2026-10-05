@@ -30,6 +30,7 @@ import fs, {
   readlinkSync,
   realpathSync,
   statSync,
+  statfsSync,
   truncateSync,
   writeFileSync,
   writeSync,
@@ -526,5 +527,13 @@ describe('node:fs directory and temp APIs (M11 runtime-local surface)', () => {
     expect(codeOf(() => copyFileSync('/src.txt', '/dst.txt', constants.COPYFILE_EXCL))).toBe(
       'EEXIST',
     );
+  });
+});
+
+describe('node:fs.statfsSync named-loud member (absent-builtin-members-loud-throws)', () => {
+  it('exists as a function (named import links) and CALLS loud, never fakes data', () => {
+    expect(typeof statfsSync).toBe('function');
+    expect(() => statfsSync('/')).toThrow(NotImplementedError);
+    expect(() => statfsSync('/')).toThrow('fs.statfsSync');
   });
 });
