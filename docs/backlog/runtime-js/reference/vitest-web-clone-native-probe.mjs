@@ -1,0 +1,16 @@
+import { deserialize, serialize } from 'node:v8';
+console.log(process.version);
+let gets = 0;
+const value = new Blob(['x']);
+Object.defineProperty(value, 'own', {
+  enumerable: true,
+  get() {
+    gets++;
+    return 7;
+  },
+});
+const native = deserialize(serialize(value));
+console.log('v8', Object.getPrototypeOf(native) === Object.prototype, native, gets);
+gets = 0;
+const clone = structuredClone(value);
+console.log('clone', clone instanceof Blob, Object.keys(clone), gets);

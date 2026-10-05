@@ -34,3 +34,7 @@ absence contract. No new transport or asset mechanism.
 - Node/Vite deployments need no SQLite URL or asset; configured SQLite stays lazy.
 - Deploy matching Worker assets together; old bootstrap versions are rejected.
 - Engine, builtin removal, persistence and bytes API are outside this change.
+
+## Corrections (active)
+
+2026-10-01 — ADR-0497: v5 requires raw execArgv for every launch; supported require preloads share the entry loader. Other decisions remain.

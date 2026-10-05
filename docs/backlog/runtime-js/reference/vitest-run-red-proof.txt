@@ -1,0 +1,2051 @@
+=== lifecycle-red ===
+[2m[WebServer] [22m(node:91623) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m[2m$ pnpm --filter @riftydev/playground dev[22m
+[2m[WebServer] [22m(node:91644) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m[2m$ vite[22m
+[2m[WebServer] [22m(node:91668) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:93541) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:93541) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light] › tests/e2e/vitest-run-in-browser.spec.ts:73:1 › Node lifecycle and physical Worker contracts used by Vitest (5.1s)
+
+
+  1) [chromium-light] › tests/e2e/vitest-run-in-browser.spec.ts:73:1 › Node lifecycle and physical Worker contracts used by Vitest
+
+    Error: lifecycle.cjs
+
+    [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m3[39m
+    Received: [31m1[39m
+
+      85 |     const oracle = nativeOracle(file);
+      86 |     const result = await run(page, `node ${file}`);
+    > 87 |     expect(result.code, file).toBe(oracle.code);
+         |                               ^
+      88 |     for (const line of oracle.output.trim().split('\n'))
+      89 |       expect(result.output, file).toContain(line);
+      90 |     if (file === 'worker-unref.cjs') expect(result.output).not.toContain('worker-stdout');
+        at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/tests/e2e/vitest-run-in-browser.spec.ts:87:31
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/vitest-run-in-browser-Node-363f8-er-contracts-used-by-Vitest-chromium-light/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/vitest-run-in-browser-Node-363f8-er-contracts-used-by-Vitest-chromium-light/error-context.md
+
+  1 failed
+    [chromium-light] › tests/e2e/vitest-run-in-browser.spec.ts:73:1 › Node lifecycle and physical Worker contracts used by Vitest
+
+=== worker-red ===
+[2m[WebServer] [22m(node:19416) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m[2m$ pnpm --filter @riftydev/playground dev[22m
+[2m[WebServer] [22m(node:19443) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m[2m$ vite[22m
+[2m[WebServer] [22m(node:19474) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:20102) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:20102) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light] › tests/e2e/vitest-run-in-browser.spec.ts:73:1 › Node lifecycle and physical Worker contracts used by Vitest (8.1s)
+
+
+  1) [chromium-light] › tests/e2e/vitest-run-in-browser.spec.ts:73:1 › Node lifecycle and physical Worker contracts used by Vitest
+
+    Error: worker-parent.cjs
+
+    [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected substring: [32m"worker-stdout"[39m
+    Received string:    [31m"·[39m
+    [31mEXIT 0·[39m
+    [31m> "[39m
+
+      87 |     expect(result.code, file).toBe(oracle.code);
+      88 |     for (const line of oracle.output.trim().split('\n'))
+    > 89 |       expect(result.output, file).toContain(line);
+         |                                   ^
+      90 |     if (file === 'worker-unref.cjs') expect(result.output).not.toContain('worker-stdout');
+      91 |   }
+      92 | });
+        at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/tests/e2e/vitest-run-in-browser.spec.ts:89:35
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/vitest-run-in-browser-Node-363f8-er-contracts-used-by-Vitest-chromium-light/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/vitest-run-in-browser-Node-363f8-er-contracts-used-by-Vitest-chromium-light/error-context.md
+
+  1 failed
+    [chromium-light] › tests/e2e/vitest-run-in-browser.spec.ts:73:1 › Node lifecycle and physical Worker contracts used by Vitest
+
+=== mutation-red ===
+$ vitest run packages/runtime-js/src/module-loader/symbol-global-write.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/module-loader/symbol-global-write.test.ts (22 tests | 2 failed) 23ms
+   × cjs Symbol global writes > loads dormant global stubbing APIs and converts the key after argument evaluation 4ms
+     → Not implemented: module-loader.cjs-global-function-assignment (CJS module /work/main.cjs assigns the global Function binding; rifty cannot emulate that without mutating the host constructor, so this module is an explicit ceiling)
+   × esm Symbol global writes > loads dormant global stubbing APIs and converts the key after argument evaluation 2ms
+     → Not implemented: module-loader.esm-global-function-assignment (ESM module /work/main.mjs writes the Function binding/global property; rifty cannot emulate that without mutating the host constructor, so this module is an explicit ceiling)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/module-loader/symbol-global-write.test.ts > cjs Symbol global writes > loads dormant global stubbing APIs and converts the key after argument evaluation
+NotImplementedError: Not implemented: module-loader.cjs-global-function-assignment (CJS module /work/main.cjs assigns the global Function binding; rifty cannot emulate that without mutating the host constructor, so this module is an explicit ceiling)
+ ❯ rewriteCjsFunctionConstructorReferences packages/runtime-js/src/module-loader/cjs.ts:272:11
+    270|   }
+    271|   if (ctx.hasGlobalFunctionWrite) {
+    272|     throw new NotImplementedError(
+       |           ^
+    273|       'module-loader.cjs-global-function-assignment',
+    274|       `CJS module ${id} assigns the global Function binding; rifty can…
+ ❯ compileCjsSource packages/runtime-js/src/module-loader/cjs.ts:1801:18
+ ❯ Object.value packages/runtime-js/src/module-loader/cjs.ts:1890:7
+ ❯ Object.defaultJsExtension [as .js] packages/runtime-js/src/module-loader/loader.ts:429:12
+ ❯ Module.executeCjs packages/runtime-js/src/module-loader/cjs.ts:1997:5
+ ❯ Object.loadSync packages/runtime-js/src/module-loader/loader.ts:514:14
+ ❯ Object.require packages/runtime-js/src/module-loader/loader.ts:587:19
+ ❯ run packages/runtime-js/src/module-loader/symbol-global-write.test.ts:11:39
+ ❯ packages/runtime-js/src/module-loader/symbol-global-write.test.ts:39:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL |unit|  packages/runtime-js/src/module-loader/symbol-global-write.test.ts > esm Symbol global writes > loads dormant global stubbing APIs and converts the key after argument evaluation
+NotImplementedError: Not implemented: module-loader.esm-global-function-assignment (ESM module /work/main.mjs writes the Function binding/global property; rifty cannot emulate that without mutating the host constructor, so this module is an explicit ceiling)
+ ❯ Module.rewriteEsmGlobalWriteKeys packages/runtime-js/src/module-loader/esm.ts:98:11
+     96|   }
+     97|   if (ctx.hasGlobalFunctionWrite) {
+     98|     throw new NotImplementedError(
+       |           ^
+     99|       'module-loader.esm-global-function-assignment',
+    100|       `ESM module ${id} writes the Function binding/global property; r…
+ ❯ Module.finishPreparation packages/runtime-js/src/module-loader/esm-job-preparation.ts:46:19
+ ❯ runAsyncGraph packages/runtime-js/src/module-loader/esm-job.ts:210:21
+ ❯ Module.executeEsm packages/runtime-js/src/module-loader/esm-job.ts:288:8
+ ❯ Object.loadAsyncResolved packages/runtime-js/src/module-loader/loader.ts:549:16
+ ❯ Object.import packages/runtime-js/src/module-loader/loader.ts:593:27
+ ❯ run packages/runtime-js/src/module-loader/symbol-global-write.test.ts:12:19
+ ❯ packages/runtime-js/src/module-loader/symbol-global-write.test.ts:39:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 20 passed (22)
+   Start at  21:24:14
+   Duration  758ms (transform 410ms, setup 0ms, collect 555ms, tests 23ms, environment 0ms, prepare 32ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== startup-red ===
+$ vitest run packages/runtime-js/src/builtins/node-entry-startup.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/builtins/node-entry-startup.test.ts (2 tests | 2 failed) 15ms
+   × require preloads share the entry cache; conditions affect exports and imports 12ms
+     → expected [ 'base', 'base', 1, true ] to deeply equal [ 'custom', 'custom', 1, true ]
+   × experimental import-meta-resolve uses the second parent URL 3ms
+     → Cannot find module './missing.js' (imported from '/work/meta.mjs')
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/builtins/node-entry-startup.test.ts > require preloads share the entry cache; conditions affect exports and imports
+AssertionError: expected [ 'base', 'base', 1, true ] to deeply equal [ 'custom', 'custom', 1, true ]
+
+- Expected
++ Received
+
+  Array [
+-   "custom",
+-   "custom",
++   "base",
++   "base",
+    1,
+    true,
+  ]
+
+ ❯ packages/runtime-js/src/builtins/node-entry-startup.test.ts:26:45
+     24| it('require preloads share the entry cache; conditions affect exports …
+     25|   await runNodeEntry({vfs:files(),cwd:'/work',entryPath:'/work/entry.m…
+     26|   expect(Reflect.get(globalThis,resultKey)).toEqual(['custom','custom'…
+       |                                             ^
+     27| });
+     28| it('experimental import-meta-resolve uses the second parent URL', asyn…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL |unit|  packages/runtime-js/src/builtins/node-entry-startup.test.ts > experimental import-meta-resolve uses the second parent URL
+ModuleLoadError: Cannot find module './missing.js' (imported from '/work/meta.mjs')
+ ❯ moduleNotFound packages/runtime-js/src/module-loader/resolver.ts:318:10
+    316|     );
+    317|   }
+    318|   return new ModuleLoadError(
+       |          ^
+    319|     'MODULE_NOT_FOUND',
+    320|     specifier,
+ ❯ Object.resolve packages/runtime-js/src/module-loader/resolver.ts:223:15
+ ❯ Object.resolve packages/runtime-js/src/module-loader/loader.ts:490:23
+ ❯ Object.metaResolve [as resolve] packages/runtime-js/src/module-loader/esm-job-evaluation.ts:251:29
+ ❯ eval ../../../../../work/meta.mjs:6:48
+ ❯ packages/runtime-js/src/module-loader/esm-job-evaluation.ts:382:67
+ ❯ Module.withActiveEvaluation packages/runtime-js/src/module-loader/esm-job-state.ts:117:12
+ ❯ packages/runtime-js/src/module-loader/esm-job-evaluation.ts:382:26
+ ❯ Module.withStackRemapping packages/runtime-js/src/module-loader/source-maps.ts:141:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  22:07:49
+   Duration  872ms (transform 497ms, setup 0ms, collect 681ms, tests 15ms, environment 0ms, prepare 32ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== v5-red ===
+$ vitest run packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts (61 tests | 1 failed) 10ms
+   × node-entry host bootstrap config > uses the one atomic node-entry v5 wire contract 3ms
+     → expected 'rifty.node-entry/v4' to be 'rifty.node-entry/v5' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts > node-entry host bootstrap config > uses the one atomic node-entry v5 wire contract
+AssertionError: expected 'rifty.node-entry/v4' to be 'rifty.node-entry/v5' // Object.is equality
+
+Expected: "rifty.node-entry/v5"
+Received: "rifty.node-entry/v4"
+
+ ❯ packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts:64:43
+     62|
+     63|   it('uses the one atomic node-entry v5 wire contract', () => {
+     64|     expect(NODE_ENTRY_BOOTSTRAP_PROTOCOL).toBe('rifty.node-entry/v5');
+       |                                           ^
+     65|   });
+     66|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 60 passed (61)
+   Start at  22:19:26
+   Duration  378ms (transform 154ms, setup 0ms, collect 203ms, tests 10ms, environment 0ms, prepare 29ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== port-red ===
+
+Running 1 test using 1 worker
+
+(node:39445) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:39445) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light] › tests/e2e/vitest-run-in-browser.spec.ts:80:1 › Node lifecycle and physical Worker contracts used by Vitest (5.8s)
+
+
+  1) [chromium-light] › tests/e2e/vitest-run-in-browser.spec.ts:80:1 › Node lifecycle and physical Worker contracts used by Vitest
+
+    Error: port-ref.cjs
+
+    [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m0[39m
+    Received: [31m1[39m
+
+      92 |     const oracle = nativeOracle(file);
+      93 |     const result = await run(page, `node ${file}`);
+    > 94 |     expect(result.code, file).toBe(oracle.code);
+         |                               ^
+      95 |     for (const line of oracle.output.trim().split('\n'))
+      96 |       expect(result.output, file).toContain(line);
+      97 |     if (file === 'worker-unref.cjs') expect(result.output).not.toContain('worker-stdout');
+        at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/tests/e2e/vitest-run-in-browser.spec.ts:94:31
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/vitest-run-in-browser-Node-363f8-er-contracts-used-by-Vitest-chromium-light/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/vitest-run-in-browser-Node-363f8-er-contracts-used-by-Vitest-chromium-light/error-context.md
+
+  1 failed
+    [chromium-light] › tests/e2e/vitest-run-in-browser.spec.ts:80:1 › Node lifecycle and physical Worker contracts used by Vitest
+
+=== port-transition-red ===
+$ vitest run packages/runtime-js/src/builtins/message-port-globals.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/builtins/message-port-globals.test.ts (1 test | 1 failed) 10ms
+   × tracks guest port transitions without referencing native host channels 9ms
+     → expected true to be false // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/builtins/message-port-globals.test.ts > tracks guest port transitions without referencing native host channels
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ packages/runtime-js/src/builtins/message-port-globals.test.ts:23:24
+     21|     expect(activeRefs()).toBe(1);
+     22|     p.onmessage = () => {}; p.unref(); p.onmessage = () => {};
+     23|     expect(p.hasRef()).toBe(false);
+       |                        ^
+     24|     expect(activeRefs()).toBe(0);
+     25|     p.onmessage = null;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  21:44:53
+   Duration  941ms (transform 379ms, setup 0ms, collect 543ms, tests 10ms, environment 0ms, prepare 108ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== stdin-forward-red ===
+$ vitest run packages/runtime-js/src/builtins/process-stdin-forwarding.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/builtins/process-stdin-forwarding.test.ts (1 test | 1 failed) 4ms
+   × forwarded fd input leaves guest stdin flow/ref ownership intact 4ms
+     → expected 'undefined' to be 'function' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/builtins/process-stdin-forwarding.test.ts > forwarded fd input leaves guest stdin flow/ref ownership intact
+AssertionError: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ packages/runtime-js/src/builtins/process-stdin-forwarding.test.ts:11:26
+      9|  try {
+     10|   const forward = Reflect.get(proc.stdin, Symbol.for('rifty.runtime-js…
+     11|   expect(typeof forward).toBe('function');
+       |                          ^
+     12|   const input: unknown[] = [];
+     13|   const delivered = new Promise<void>(resolve => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:13:34
+   Duration  422ms (transform 185ms, setup 0ms, collect 246ms, tests 4ms, environment 0ms, prepare 32ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== startup-errors-red ===
+[2m[WebServer] [22m(node:5029) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m[2m$ pnpm --filter @riftydev/playground dev[22m
+[2m[WebServer] [22m(node:5046) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m[2m$ vite[22m
+[2m[WebServer] [22m(node:5069) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:5656) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:5656) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-heavy] › tests/e2e/vitest-run-in-browser.spec.ts:138:1 › Node lifecycle and physical Worker contracts used by Vitest (15.4s)
+
+
+  1) [chromium-heavy] › tests/e2e/vitest-run-in-browser.spec.ts:138:1 › Node lifecycle and physical Worker contracts used by Vitest
+
+    Error: flags-errors.cjs
+
+    [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected substring: [32m"ASYNC true ./missing.cjs MODULE_NOT_FOUND"[39m
+    Received string:    [31m"·[39m
+    [31mSYNC ERR_WORKER_INVALID_EXEC_ARGV·[39m
+    [31mSYNC ERR_WORKER_INVALID_EXEC_ARGV·[39m
+    [31mError: Cannot find module './missing.cjs'·[39m
+    [31mRequire stack:·[39m
+    [31m- //[preload].cjs·[39m
+    [31m{·[39m
+    [31m  code: 'MODULE_NOT_FOUND',·[39m
+    [31m  requireStack: [ '//[preload].cjs' ]·[39m
+    [31m}·[39m
+    [31mPRELOAD·[39m
+    [31mError: preload-boom·[39m
+    [31m    at Object.eval (/pre-throw.cjs:3:31)·[39m
+    [31m    at compileCjsSource (http://localhost:5395/@fs/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/cjs.ts:1450:6)·[39m
+    [31m    at Object.value (http://localhost:5395/@fs/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/cjs.ts:1493:7)·[39m
+    [31m    at Object.defaultJsExtension [as .js] (http://localhost:5395/@fs/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:265:12)·[39m
+    [31m    at executeCjs (http://localhost:5395/@fs/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/cjs.ts:1566:5)·[39m
+    [31m    at Object.loadSync (http://localhost:5395/@fs/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:329:14)·[39m
+    [31m    at Object.require (http://localhost:5395/@fs/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:387:19)·[39m
+    [31m    at runNodeEntry (http://localhost:5395/@fs/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/builtins/node-entry.ts:126:52)·[39m
+    [31m    at Object.runEntry (http://localhost:5395/@fs/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/workbench/src/workers/node-entry-bootstrap.ts?worker_file&type=module:88:6)·[39m
+    [31m    at runNodeProgramLifecycle (http://localhost:5395/@fs/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/workbench/src/workers/node-program-lifecycle.ts:32:13)·[39m
+    [31m> "[39m
+
+      177 |     expect(result.code, `${file}: ${result.output}`).toBe(oracle.code);
+      178 |     for (const line of new Set(oracle.output.trim().split('\n'))) {
+    > 179 |       expect(result.output, file).toContain(line);
+          |                                   ^
+      180 |       const count = oracle.output
+      181 |         .trim()
+      182 |         .split('\n')
+        at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/tests/e2e/vitest-run-in-browser.spec.ts:179:35
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../tmp/vitest-stdin-fixed-results/vitest-run-in-browser-Node-363f8-er-contracts-used-by-Vitest-chromium-heavy/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../tmp/vitest-stdin-fixed-results/vitest-run-in-browser-Node-363f8-er-contracts-used-by-Vitest-chromium-heavy/error-context.md
+
+  1 failed
+    [chromium-heavy] › tests/e2e/vitest-run-in-browser.spec.ts:138:1 › Node lifecycle and physical Worker contracts used by Vitest
+
+=== inspector-red ===
+$ vitest run packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+stderr | packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts > Vitest builtin imports > links process prototype methods without exporting EventEmitter members
+REF+ /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 1     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:594:7) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:15:45 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11 |     at runWithTimeout (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7) |     at runTest (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
+REF- /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 0     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:599:9) |     at processTicksAndRejections (node:internal/process/task_queues:104:5) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:15:16 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:5 |     at runTest (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:11) |     at runSuite (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+
+stderr | packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts > Vitest builtin imports > links node:fs.statfsSync and throws a named ceiling on call
+REF+ /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 1     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:594:7) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:28:45 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:629:21 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11 |     at runWithTimeout (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+REF- /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 0     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:599:9) |     at processTicksAndRejections (node:internal/process/task_queues:104:5) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:28:16 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:5 |     at runTest (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:11) |     at runSuite (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+
+stderr | packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts > Vitest builtin imports > links node:child_process.spawnSync and throws a named ceiling on call
+REF+ /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 1     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:594:7) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:28:45 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:629:21 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11 |     at runWithTimeout (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+REF- /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 0     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:599:9) |     at processTicksAndRejections (node:internal/process/task_queues:104:5) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:28:16 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:5 |     at runTest (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:11) |     at runSuite (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+
+stderr | packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts > Vitest builtin imports > links node:process.memoryUsage and throws a named ceiling on call
+REF+ /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 1     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:594:7) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:28:45 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:629:21 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11 |     at runWithTimeout (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+REF- /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 0     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:599:9) |     at processTicksAndRejections (node:internal/process/task_queues:104:5) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:28:16 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:5 |     at runTest (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:11) |     at runSuite (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+
+stderr | packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts > vm.constants.DONT_CONTEXTIFY has a named loud ceiling
+REF+ /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 1     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:594:7) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:41:45 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:633:57 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11 |     at runWithTimeout (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+REF- /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 0     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:599:9) |     at processTicksAndRejections (node:internal/process/task_queues:104:5) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:41:16 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:5 |     at runTest (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:11) |     at runSuite (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+
+stderr | packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts > vm.SourceTextModule has a named loud ceiling
+REF+ /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 1     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:594:7) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:41:45 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:633:57 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11 |     at runWithTimeout (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+REF- /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 0     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:599:9) |     at processTicksAndRejections (node:internal/process/task_queues:104:5) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:41:16 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:5 |     at runTest (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:11) |     at runSuite (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+
+stderr | packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts > vm.SyntheticModule has a named loud ceiling
+REF+ /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 1     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:594:7) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:41:45 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:633:57 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11 |     at runWithTimeout (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+REF- /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 0     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:599:9) |     at processTicksAndRejections (node:internal/process/task_queues:104:5) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:41:16 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:5 |     at runTest (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:11) |     at runSuite (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+
+stderr | packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts > coverage inspector promises is importable and throws its named Session ceiling
+REF+ /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 1     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:594:7) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:51:42 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11 |     at runWithTimeout (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7) |     at runTest (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
+REF- /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/tinypool@1.1.1/node_modules/tinypool/dist/entry/process.js 0     at Object.import (/Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/loader.ts:599:9) |     at processTicksAndRejections (node:internal/process/task_queues:104:5) |     at /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:51:13 |     at file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:5 |     at runTest (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:11) |     at runSuite (file:///Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+
+ ❯ |unit| packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts (8 tests | 1 failed) 15ms
+   × coverage inspector promises is importable and throws its named Session ceiling 2ms
+     → Built-in 'node:inspector/promises' is not implemented
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts > coverage inspector promises is importable and throws its named Session ceiling
+ModuleLoadError: Built-in 'node:inspector/promises' is not implemented
+ ❯ Object.resolve packages/runtime-js/src/module-loader/resolver.ts:133:17
+    131|         const name = specifier.startsWith('node:') ? specifier.slice(5…
+    132|         if (!isBuiltinSpecifier(name)) {
+    133|           throw new ModuleLoadError(
+       |                 ^
+    134|             'MODULE_NOT_FOUND',
+    135|             specifier,
+ ❯ Object.resolve packages/runtime-js/src/module-loader/loader.ts:494:23
+ ❯ packages/runtime-js/src/module-loader/esm-job-preparation.ts:55:20
+ ❯ Module.finishPreparation packages/runtime-js/src/module-loader/esm-job-preparation.ts:53:50
+ ❯ runAsyncGraph packages/runtime-js/src/module-loader/esm-job.ts:210:21
+ ❯ Module.executeEsm packages/runtime-js/src/module-loader/esm-job.ts:288:8
+ ❯ Object.loadAsyncResolved packages/runtime-js/src/module-loader/loader.ts:553:16
+ ❯ Object.import packages/runtime-js/src/module-loader/loader.ts:597:27
+ ❯ packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:51:42
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  23:07:53
+   Duration  797ms (transform 440ms, setup 0ms, collect 604ms, tests 15ms, environment 0ms, prepare 31ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== vm-gap-red ===
+$ vitest run packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts (7 tests | 3 failed) 13ms
+   × vm.constants.DONT_CONTEXTIFY has a named loud ceiling 3ms
+     → expected error to match asymmetric matcher
+   × vm.SourceTextModule has a named loud ceiling 1ms
+     → expected error to match asymmetric matcher
+   × vm.SyntheticModule has a named loud ceiling 1ms
+     → expected error to match asymmetric matcher
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts > vm.constants.DONT_CONTEXTIFY has a named loud ceiling
+ FAIL |unit|  packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts > vm.SourceTextModule has a named loud ceiling
+ FAIL |unit|  packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts > vm.SyntheticModule has a named loud ceiling
+AssertionError: expected error to match asymmetric matcher
+
+- Expected
++ Received
+
+- ObjectContaining {
+-   "feature": "vm.constants.DONT_CONTEXTIFY",
+- }
++ [TypeError: Cannot read properties of undefined (reading 'DONT_CONTEXTIFY')]
+
+ ❯ packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:39:44
+     37|  fs.loadFixture({'/work/main.mjs': `import vm from 'node:vm'; export f…
+     38|  const ns = await createModuleLoader(fs).import('/work/main.mjs');
+     39|  expect(() => (ns.run as () => unknown)()).toThrow(expect.objectContai…
+       |                                            ^
+     40| });
+     41|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 4 passed (7)
+   Start at  22:27:34
+   Duration  738ms (transform 416ms, setup 0ms, collect 563ms, tests 13ms, environment 0ms, prepare 32ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== cli-admission-red ===
+$ vitest run tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts (30 tests | 30 failed) 9ms
+   × installed CLI admission > [] 4ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--pool=threads"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--pool","threads"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--pool=forks","--reporter=verbose"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--reporter","watch"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["--watch"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["-w"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["watch"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["dev"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["watch","--run"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--watch"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--watch=true"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--watch=false"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--watch","false"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--no-watch"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","-w=false"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--","--watch"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["--run"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["--run=false"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--environment","jsdom"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--environment=happy-dom"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--coverage"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--browser.enabled"] 1ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--pool=vmThreads"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--pool=vmForks"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["run","--changed"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > ["list"] 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > checks declared bin identity; arbitrary user files keep generic execution 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+   × installed CLI admission > checks canonical direct entry too 0ms
+     → expected 'undefined' to be 'function' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 30 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > []
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["--watch"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["-w"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["watch"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["dev"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--watch"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--watch=true"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["--run=false"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--environment","jsdom"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--environment=happy-dom"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--coverage"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--browser.enabled"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--pool=vmThreads"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--pool=vmForks"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["list"]
+AssertionError: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ admit tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts:17:24
+     15| function admit():Admit {
+     16|  const method = Reflect.get(preparation,'admitInstalledCliEntry') as A…
+     17|  expect(typeof method).toBe('function');
+       |                        ^
+     18|  return method;
+     19| }
+ ❯ tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts:30:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/30]⎯
+
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--pool=threads"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--pool","threads"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--pool=forks","--reporter=verbose"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--reporter","watch"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["watch","--run"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--watch=false"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--watch","false"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--no-watch"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","-w=false"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--","--watch"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["--run"]
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > ["run","--changed"]
+AssertionError: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ admit tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts:17:24
+     15| function admit():Admit {
+     16|  const method = Reflect.get(preparation,'admitInstalledCliEntry') as A…
+     17|  expect(typeof method).toBe('function');
+       |                        ^
+     18|  return method;
+     19| }
+ ❯ tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts:29:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/30]⎯
+
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > checks declared bin identity; arbitrary user files keep generic execution
+AssertionError: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ admit tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts:17:24
+     15| function admit():Admit {
+     16|  const method = Reflect.get(preparation,'admitInstalledCliEntry') as A…
+     17|  expect(typeof method).toBe('function');
+       |                        ^
+     18|  return method;
+     19| }
+ ❯ tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts:35:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/30]⎯
+
+ FAIL |unit|  tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts > installed CLI admission > checks canonical direct entry too
+AssertionError: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ admit tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts:17:24
+     15| function admit():Admit {
+     16|  const method = Reflect.get(preparation,'admitInstalledCliEntry') as A…
+     17|  expect(typeof method).toBe('function');
+       |                        ^
+     18|  return method;
+     19| }
+ ❯ tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts:39:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/30]⎯
+
+ Test Files  1 failed (1)
+      Tests  30 failed (30)
+   Start at  00:05:17
+   Duration  356ms (transform 135ms, setup 0ms, collect 181ms, tests 9ms, environment 0ms, prepare 27ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== before-entry-red ===
+$ vitest run packages/runtime-js/src/builtins/node-entry-startup.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/builtins/node-entry-startup.test.ts (3 tests | 1 failed) 14ms
+   × entry admission follows preloads and shares their real loader/cache 4ms
+     → expected [] to deeply equal [ 'admitted' ]
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/builtins/node-entry-startup.test.ts > entry admission follows preloads and shares their real loader/cache
+AssertionError: expected [] to deeply equal [ 'admitted' ]
+
+- Expected
++ Received
+
+- Array [
+-   "admitted",
+- ]
++ Array []
+
+ ❯ packages/runtime-js/src/builtins/node-entry-startup.test.ts:74:16
+     72|  };
+     73|  await runNodeEntry(options);
+     74|  expect(order).toEqual(['admitted']);
+       |                ^
+     75|  expect(Reflect.get(globalThis,'__riftyPreloadCount')).toBe(1);
+     76| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  00:05:16
+   Duration  822ms (transform 455ms, setup 0ms, collect 623ms, tests 14ms, environment 0ms, prepare 32ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== exit-null-red; native Node v24.16.0 status 0, EXIT 0 ===
+$ vitest run packages/runtime-js/src/builtins/process-lifecycle.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/builtins/process-lifecycle.test.ts (4 tests | 1 failed) 5ms
+   × process lifecycle > exit(null) explicitly exits zero despite a prior exitCode 4ms
+     → expected error to match asymmetric matcher
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/builtins/process-lifecycle.test.ts > process lifecycle > exit(null) explicitly exits zero despite a prior exitCode
+AssertionError: expected error to match asymmetric matcher
+
+- Expected
++ Received
+
+- ObjectContaining {
+-   "exitCode": 0,
+- }
++ [Error: process.exit(7)]
+
+ ❯ packages/runtime-js/src/builtins/process-lifecycle.test.ts:25:35
+     23|     const codes: unknown[] = [];
+     24|     proc.once('exit', (code) => codes.push(code));
+     25|     expect(() => proc.exit(null)).toThrow(expect.objectContaining({ ex…
+       |                                   ^
+     26|     expect(codes).toEqual([0]);
+     27|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  00:55:36
+   Duration  476ms (transform 194ms, setup 0ms, collect 263ms, tests 5ms, environment 0ms, prepare 31ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== ipc-getter-red ===
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (1 test | 1 failed) 4ms
+   × reads enumerable accessors once and preserves their fresh Buffer value 3ms
+     → expected 2 to be 1 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > reads enumerable accessors once and preserves their fresh Buffer value
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:9:16
+      7|   const message = { get buffer() { return Buffer.from([++gets]); } };
+      8|   const result = decodeAdvancedIpc(encodeAdvancedIpc(message)) as { bu…
+      9|   expect(gets).toBe(1);
+       |                ^
+     10|   expect(Buffer.isBuffer(result.buffer)).toBe(true);
+     11|   expect(result.buffer[0]).toBe(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  00:57:21
+   Duration  264ms (transform 69ms, setup 0ms, collect 92ms, tests 4ms, environment 0ms, prepare 40ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== ipc-sweep-red ===
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (4 tests | 2 failed) 12ms
+   × uses native Map contents rather than a guest iterator override 5ms
+     → guest iterator
+   × retains native Blob clone semantics 2ms
+     → expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > uses native Map contents rather than a guest iterator override
+Error: guest iterator
+ ❯ Map.map.<computed> packages/runtime-js/src/internal/advanced-ipc-values.test.ts:20:47
+     18| it('uses native Map contents rather than a guest iterator override', (…
+     19|   const map = new Map([['buffer', Buffer.from([3])]]);
+     20|   map[Symbol.iterator] = function* () { throw new Error('guest iterato…
+       |                                               ^
+     21|   const result = decodeAdvancedIpc(encodeAdvancedIpc(map)) as Map<stri…
+     22|   expect(Buffer.isBuffer(result.get('buffer'))).toBe(true);
+ ❯ visit packages/runtime-js/src/internal/advanced-ipc-values.ts:24:28
+ ❯ Module.encodeAdvancedIpc packages/runtime-js/src/internal/advanced-ipc-values.ts:59:34
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:21:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > retains native Blob clone semantics
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:34:34
+     32| it('retains native Blob clone semantics', async () => {
+     33|   const result = decodeAdvancedIpc(encodeAdvancedIpc(new Blob(['bytes'…
+     34|   expect(result instanceof Blob).toBe(true);
+       |                                  ^
+     35|   expect(await result.text()).toBe('bytes');
+     36| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  01:00:22
+   Duration  621ms (transform 202ms, setup 0ms, collect 268ms, tests 12ms, environment 0ms, prepare 39ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== top-entry-handler-red ===
+$ vitest run packages/runtime-js/src/builtins/node-entry-unhandled.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/builtins/node-entry-unhandled.test.ts (2 tests | 2 failed) 12ms
+   × dispatches top-level cjs entry errors to the active handler 7ms
+     → promise rejected "Error: entry-boom" instead of resolving
+   × dispatches top-level mjs entry errors to the active handler 5ms
+     → promise rejected "Error: entry-boom" instead of resolving
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/builtins/node-entry-unhandled.test.ts > dispatches top-level cjs entry errors to the active handler
+ FAIL |unit|  packages/runtime-js/src/builtins/node-entry-unhandled.test.ts > dispatches top-level mjs entry errors to the active handler
+AssertionError: promise rejected "Error: entry-boom" instead of resolving
+ ❯ packages/runtime-js/src/builtins/node-entry-unhandled.test.ts:18:85
+     16|   proc.on('uncaughtException', (error, origin) => received.push([Refle…
+     17|   proc.on('unhandledRejection', () => { throw new Error('entry rejecti…
+     18|   await expect(runNodeEntry({ vfs: fs, cwd: '/', entryPath: `/entry.${…
+       |                                                                                     ^
+     19|   expect(received).toEqual([['entry-boom', extension === 'cjs' ? 'unca…
+     20| });
+
+Caused by: Error: entry-boom
+ ❯ Object.eval ../../../../../entry.cjs:3:7
+ ❯ compileCjsSource packages/runtime-js/src/module-loader/cjs.ts:1842:6
+ ❯ Object.value packages/runtime-js/src/module-loader/cjs.ts:1899:7
+ ❯ Object.defaultJsExtension [as .js] packages/runtime-js/src/module-loader/loader.ts:432:12
+ ❯ Module.executeCjs packages/runtime-js/src/module-loader/cjs.ts:2006:5
+ ❯ packages/runtime-js/src/module-loader/loader.ts:555:51
+ ❯ loadedNamespace packages/runtime-js/src/module-loader/cjs-interop-authority.ts:154:5
+ ❯ Object.importCjs packages/runtime-js/src/module-loader/cjs-interop-authority.ts:209:18
+ ❯ Object.loadAsyncResolved packages/runtime-js/src/module-loader/loader.ts:555:25
+ ❯ Object.import packages/runtime-js/src/module-loader/loader.ts:597:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  01:08:20
+   Duration  1.09s (transform 603ms, setup 0ms, collect 837ms, tests 12ms, environment 0ms, prepare 36ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== eval-handler-red ===
+$ vitest run packages/runtime-js/src/builtins/node-entry-unhandled.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/builtins/node-entry-unhandled.test.ts (3 tests | 1 failed) 11ms
+   × dispatches a synchronous eval failure to its active process handler 3ms
+     → promise rejected "Error: eval-boom" instead of resolving
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/builtins/node-entry-unhandled.test.ts > dispatches a synchronous eval failure to its active process handler
+AssertionError: promise rejected "Error: eval-boom" instead of resolving
+ ❯ packages/runtime-js/src/builtins/node-entry-unhandled.test.ts:57:3
+     55|       explicitCommonJs: true,
+     56|     }),
+     57|   ).resolves.toBeUndefined();
+       |   ^
+     58|   expect(errors).toHaveLength(1);
+     59|   expect(errors[0]).toMatchObject({ message: 'eval-boom' });
+
+Caused by: Error: eval-boom
+ ❯ [eval]:1:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  01:14:02
+   Duration  874ms (transform 476ms, setup 0ms, collect 666ms, tests 11ms, environment 0ms, prepare 31ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== proxy-snapshot-red ===
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (6 tests | 2 failed) 6ms
+   × rejects an uncloneable guest Proxy without observing its traps: new Proxy({ x: 1 }, {}) 4ms
+     → expected [Function] to throw an error
+   × rejects an uncloneable guest Proxy without observing its traps: Proxy.revocable({ x: 1 }, {}).proxy 0ms
+     → expected [Function] to throw an error
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects an uncloneable guest Proxy without observing its traps: new Proxy({ x: 1 }, {})
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects an uncloneable guest Proxy without observing its traps: Proxy.revocable({ x: 1 }, {}).proxy
+AssertionError: expected [Function] to throw an error
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:25:44
+     23|     fs.loadFixture({ '/proxy.cjs': `module.exports = ${source};` });
+     24|     const value = createModuleLoader(fs).require('/proxy.cjs');
+     25|     expect(() => encodeAdvancedIpc(value)).toThrow();
+       |                                            ^
+     26|   },
+     27| );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 4 passed (6)
+   Start at  01:25:42
+   Duration  854ms (transform 476ms, setup 0ms, collect 649ms, tests 6ms, environment 0ms, prepare 48ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== native-slot-brand-red ===
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (10 tests | 3 failed) 11ms
+   × preserves core internal slots when the sender changes its prototype 3ms
+     → expected false to be true // Object.is equality
+   × preserves core internal slots when the sender changes its prototype 0ms
+     → expected false to be true // Object.is equality
+   × preserves core internal slots when the sender changes its prototype 0ms
+     → expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > preserves core internal slots when the sender changes its prototype
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > preserves core internal slots when the sender changes its prototype
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > preserves core internal slots when the sender changes its prototype
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:17:75
+     15|   const native = deserialize(serialize(message)) as object;
+     16|   const result = decodeAdvancedIpc(encodeAdvancedIpc(message)) as obje…
+     17|   expect(Object.getPrototypeOf(result) === Object.getPrototypeOf(nativ…
+       |                                                                           ^
+     18|   expect(result).toEqual(native);
+     19| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 7 passed (10)
+   Start at  01:42:39
+   Duration  908ms (transform 473ms, setup 0ms, collect 663ms, tests 11ms, environment 0ms, prepare 34ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== owner-ipc-drain-red ===
+$ vitest run tests/integration/workbench-owner-ipc-drain.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |integration| tests/integration/workbench-owner-ipc-drain.test.ts (1 test | 1 failed) 5ms
+   × releases the owner control subscription before natural drain 4ms
+     → expected 'undefined' to be 'function' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |integration|  tests/integration/workbench-owner-ipc-drain.test.ts > releases the owner control subscription before natural drain
+AssertionError: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ tests/integration/workbench-owner-ipc-drain.test.ts:23:27
+     21|     const detach = ipc.onMessage!(() => {});
+     22|     expect(activeRefs()).toBe(1);
+     23|     expect(typeof detach).toBe('function');
+       |                           ^
+     24|     (detach as unknown as () => void)();
+     25|     expect(activeRefs()).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  01:57:32
+   Duration  465ms (transform 202ms, setup 0ms, collect 266ms, tests 5ms, environment 0ms, prepare 38ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== shared-memory-ipc-red ===
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (11 tests | 1 failed) 10ms
+   × rejects SharedArrayBuffer as native V8 IPC does 3ms
+     → expected [Function] to throw an error
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects SharedArrayBuffer as native V8 IPC does
+AssertionError: expected [Function] to throw an error
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:11:44
+      9|   const message = new SharedArrayBuffer(4);
+     10|   expect(() => serialize(message)).toThrow();
+     11|   expect(() => encodeAdvancedIpc(message)).toThrow();
+       |                                            ^
+     12| });
+     13|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 10 passed (11)
+   Start at  02:14:13
+   Duration  1.24s (transform 752ms, setup 0ms, collect 1.03s, tests 10ms, environment 0ms, prepare 57ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+=== named-exit-receiver-red ===
+$ vitest run packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts (9 tests | 1 failed) 24ms
+   × named process exit retains the active instance receiver 13ms
+     → expected error to match asymmetric matcher
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts > named process exit retains the active instance receiver
+AssertionError: expected error to match asymmetric matcher
+
+- Expected
++ Received
+
+- ObjectContaining {
+-   "code": "RIFTY_PROCESS_EXIT",
+-   "exitCode": 7,
+- }
++ [TypeError: Cannot write private member #exitCode to an object whose class did not declare it]
+
+ ❯ packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts:17:44
+     15|     fs.loadFixture({ '/main.mjs': "import {exit} from 'node:process'; …
+     16|     const ns = await createModuleLoader(fs).import('/main.mjs');
+     17|     expect(() => (ns.run as () => void)()).toThrow(expect.objectContai…
+       |                                            ^
+     18|     expect(codes).toEqual([7]);
+     19|   } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  03:10:35
+   Duration  2.85s (transform 1.68s, setup 0ms, collect 2.46s, tests 24ms, environment 0ms, prepare 50ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-ipc-opaque-red.log
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (15 tests | 4 failed) 11ms
+   × rejects opaque uncloneable brands before observing their properties 3ms
+     → expected [Function] to throw an error
+   × rejects opaque uncloneable brands before observing their properties 0ms
+     → expected [Function] to throw an error
+   × rejects opaque uncloneable brands before observing their properties 0ms
+     → expected [Function] to throw an error
+   × rejects a live MessagePort instead of replacing it with an empty record 1ms
+     → expected [Function] to throw an error
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects opaque uncloneable brands before observing their properties
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects opaque uncloneable brands before observing their properties
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects opaque uncloneable brands before observing their properties
+AssertionError: expected [Function] to throw an error
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:18:42
+     16|   expect(() => serialize(value)).toThrow();
+     17|   expect(gets).toBe(0);
+     18|   expect(() => encodeAdvancedIpc(value)).toThrow();
+       |                                          ^
+     19|   expect(gets).toBe(0);
+     20| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects a live MessagePort instead of replacing it with an empty record
+AssertionError: expected [Function] to throw an error
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:26:52
+     24|   try {
+     25|     expect(() => serialize(channel.port1)).toThrow();
+     26|     expect(() => encodeAdvancedIpc(channel.port1)).toThrow();
+       |                                                    ^
+     27|   } finally { channel.port1.close(); channel.port2.close(); }
+     28| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 11 passed (15)
+   Start at  05:11:57
+   Duration  700ms (transform 399ms, setup 0ms, collect 537ms, tests 11ms, environment 0ms, prepare 23ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-symbol-mutation-red.log
+$ vitest run packages/runtime-js/src/module-loader/symbol-global-write.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/module-loader/symbol-global-write.test.ts (26 tests | 4 failed) 50ms
+   × cjs Symbol global writes > rejects computed legacy __defineGetter__ keys with mutable global Symbol 10ms
+     → promise resolved "{}" instead of rejecting
+   × cjs Symbol global writes > rejects computed legacy __defineSetter__ keys with mutable global Symbol 1ms
+     → promise resolved "{}" instead of rejecting
+   × esm Symbol global writes > rejects computed legacy __defineGetter__ keys with mutable global Symbol 1ms
+     → Cannot use 'in' operator to search for 'description' in undefined
+   × esm Symbol global writes > rejects computed legacy __defineSetter__ keys with mutable global Symbol 1ms
+     → Cannot use 'in' operator to search for 'description' in undefined
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/module-loader/symbol-global-write.test.ts > cjs Symbol global writes > rejects computed legacy __defineGetter__ keys with mutable global Symbol
+ FAIL |unit|  packages/runtime-js/src/module-loader/symbol-global-write.test.ts > cjs Symbol global writes > rejects computed legacy __defineSetter__ keys with mutable global Symbol
+AssertionError: promise resolved "{}" instead of rejecting
+
+- Expected
++ Received
+
+- [Error: rejected promise]
++ Object {}
+
+ ❯ packages/runtime-js/src/module-loader/symbol-global-write.test.ts:49:123
+     47|     const fn = globalThis.Function;
+     48|     try {
+     49|       await expect(run(`globalThis.Symbol = () => "Function"; const ke…
+       |                                                                                                                           ^
+     50|       expect(globalThis.Function).toBe(fn);
+     51|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL |unit|  packages/runtime-js/src/module-loader/symbol-global-write.test.ts > esm Symbol global writes > rejects computed legacy __defineGetter__ keys with mutable global Symbol
+ FAIL |unit|  packages/runtime-js/src/module-loader/symbol-global-write.test.ts > esm Symbol global writes > rejects computed legacy __defineSetter__ keys with mutable global Symbol
+TypeError: Cannot use 'in' operator to search for 'description' in undefined
+ ❯ packages/runtime-js/src/module-loader/symbol-global-write.test.ts:49:7
+     47|     const fn = globalThis.Function;
+     48|     try {
+     49|       await expect(run(`globalThis.Symbol = () => "Function"; const ke…
+       |       ^
+     50|       expect(globalThis.Function).toBe(fn);
+     51|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 22 passed (26)
+   Start at  05:04:00
+   Duration  2.28s (transform 1.29s, setup 0ms, collect 2.00s, tests 50ms, environment 0ms, prepare 28ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-fatal-exit-red.log
+$ vitest run --project integration tests/integration/node-program-exit-events.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |integration| tests/integration/node-program-exit-events.test.ts (3 tests | 2 failed) 143ms
+   × entry failure emits the raw exit code once before kernel status wrapping 55ms
+     → expected [] to deeply equal [ 1 ]
+   × natural wide code emits the raw exit code once before kernel status wrapping 41ms
+     → expected [ 44 ] to deeply equal [ 300 ]
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > entry failure emits the raw exit code once before kernel status wrapping
+AssertionError: expected [] to deeply equal [ 1 ]
+
+- Expected
++ Received
+
+- Array [
+-   1,
+- ]
++ Array []
+
+ ❯ tests/integration/node-program-exit-events.test.ts:44:19
+     42|     });
+     43|     expect(outcome.code).toBe(native.status);
+     44|     expect(exits).toEqual([rawCode]);
+       |                   ^
+     45|     if (rawCode === 1) expect(diagnostics.join('')).toContain('boom');
+     46|     else expect(diagnostics).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > natural wide code emits the raw exit code once before kernel status wrapping
+AssertionError: expected [ 44 ] to deeply equal [ 300 ]
+
+- Expected
++ Received
+
+  Array [
+-   300,
++   44,
+  ]
+
+ ❯ tests/integration/node-program-exit-events.test.ts:44:19
+     42|     });
+     43|     expect(outcome.code).toBe(native.status);
+     44|     expect(exits).toEqual([rawCode]);
+       |                   ^
+     45|     if (rawCode === 1) expect(diagnostics.join('')).toContain('boom');
+     46|     else expect(diagnostics).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  05:05:20
+   Duration  2.39s (transform 1.39s, setup 0ms, collect 1.91s, tests 143ms, environment 0ms, prepare 74ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-fatal-exit-revert.log
+$ vitest run --project integration tests/integration/node-program-exit-events.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |integration| tests/integration/node-program-exit-events.test.ts (8 tests | 5 failed) 230ms
+   × entry failure emits the raw exit code once before kernel status wrapping 35ms
+     → expected [] to deeply equal [ 1 ]
+   × natural wide code emits the raw exit code once before kernel status wrapping 31ms
+     → expected [ 44 ] to deeply equal [ 300 ]
+   × captured fatal exit emits the raw exit code once before kernel status wrapping 28ms
+     → expected [] to deeply equal [ 1 ]
+   × drain failure emits the raw exit code once before kernel status wrapping 25ms
+     → expected [] to deeply equal [ 1 ]
+   × eval entry failure emits the raw exit code once before kernel status wrapping 28ms
+     → expected [] to deeply equal [ 1 ]
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > entry failure emits the raw exit code once before kernel status wrapping
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > captured fatal exit emits the raw exit code once before kernel status wrapping
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > drain failure emits the raw exit code once before kernel status wrapping
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > eval entry failure emits the raw exit code once before kernel status wrapping
+AssertionError: expected [] to deeply equal [ 1 ]
+
+- Expected
++ Received
+
+- Array [
+-   1,
+- ]
++ Array []
+
+ ❯ tests/integration/node-program-exit-events.test.ts:111:21
+    109|       });
+    110|       expect(outcome.code).toBe(native.status);
+    111|       expect(exits).toEqual([rawCode]);
+       |                     ^
+    112|       if (rawCode === 1) expect(diagnostics.join('')).toContain('boom'…
+    113|       else expect(diagnostics).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > natural wide code emits the raw exit code once before kernel status wrapping
+AssertionError: expected [ 44 ] to deeply equal [ 300 ]
+
+- Expected
++ Received
+
+  Array [
+-   300,
++   44,
+  ]
+
+ ❯ tests/integration/node-program-exit-events.test.ts:111:21
+    109|       });
+    110|       expect(outcome.code).toBe(native.status);
+    111|       expect(exits).toEqual([rawCode]);
+       |                     ^
+    112|       if (rawCode === 1) expect(diagnostics.join('')).toContain('boom'…
+    113|       else expect(diagnostics).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 3 passed (8)
+   Start at  05:08:24
+   Duration  964ms (transform 431ms, setup 0ms, collect 585ms, tests 230ms, environment 0ms, prepare 32ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+SAB Buffer byte snapshot
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (23 tests | 1 failed) 12ms
+   × snapshots SAB-backed Buffer bytes while preserving repeated aliases 3ms
+     → expected 2 to be 1 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > snapshots SAB-backed Buffer bytes while preserving repeated aliases
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:49:27
+     47|   buffer[0] = 2;
+     48|   const result = decodeAdvancedIpc(packet) as {first:Uint8Array; again…
+     49|   expect(result.first[0]).toBe(native[0]);
+       |                           ^
+     50|   expect(Buffer.isBuffer(result.first)).toBe(true);
+     51|   expect(result.first).toBe(result.again);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 22 passed (23)
+   Start at  05:24:19
+   Duration  726ms (transform 416ms, setup 0ms, collect 566ms, tests 12ms, environment 0ms, prepare 29ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+Async fatal owned trap
+$ vitest run --project integration tests/integration/node-process-unhandled-traps.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |integration| tests/integration/node-process-unhandled-traps.test.ts (2 tests | 2 failed) 59ms
+   × owned error reaches Node exit before kernel teardown 33ms
+     → expected +0 to be 1 // Object.is equality
+   × owned unhandledrejection reaches Node exit before kernel teardown 26ms
+     → expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned error reaches Node exit before kernel teardown
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/integration/node-process-unhandled-traps.test.ts:40:26
+     38|       }),
+     39|     });
+     40|     expect(outcome.code).toBe(1);
+       |                          ^
+     41|     expect(exits).toEqual([1]);
+     42|     expect(event.defaultPrevented).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned unhandledrejection reaches Node exit before kernel teardown
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/integration/node-process-unhandled-traps.test.ts:42:36
+     40|     expect(outcome.code).toBe(1);
+     41|     expect(exits).toEqual([1]);
+     42|     expect(event.defaultPrevented).toBe(true);
+       |                                    ^
+     43|     expect(diagnostics.join('')).toContain('boom');
+     44|   } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  05:24:29
+   Duration  444ms (transform 185ms, setup 0ms, collect 248ms, tests 59ms, environment 0ms, prepare 24ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+Nonserve/pending-entry drain
+$ vitest run --project integration tests/integration/node-program-exit-events.test.ts tests/integration/node-process-unhandled-traps.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |integration| tests/integration/node-program-exit-events.test.ts (9 tests | 1 failed) 214ms
+   × run-to-completion waits for referenced work before its exit event 13ms
+     → expected false to be true // Object.is equality
+ ❯ |integration| tests/integration/node-process-unhandled-traps.test.ts (8 tests | 2 failed) 3203ms
+   × owned error handled=false reaches Node exit before kernel teardown 1531ms
+     → Test timed out in 1500ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × owned unhandledrejection handled=false reaches Node exit before kernel teardown 1550ms
+     → Test timed out in 1500ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned error handled=false reaches Node exit before kernel teardown
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned unhandledrejection handled=false reaches Node exit before kernel teardown
+Error: Test timed out in 1500ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > run-to-completion waits for referenced work before its exit event
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/integration/node-program-exit-events.test.ts:145:25
+    143|       awaitDrain, readExitCode: () => proc.exitCode, exit: proc.exit.b…
+    144|     })).rejects.toMatchObject({ code: 'RIFTY_PROCESS_EXIT', exitCode: …
+    145|     expect(firedAtExit).toBe(true);
+       |                         ^
+    146|     expect(activeRefs()).toBe(0);
+    147|   } finally { await timerDone; resetKeepalive(); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 14 passed (17)
+   Start at  05:28:53
+   Duration  3.63s (transform 453ms, setup 0ms, collect 814ms, tests 3.42s, environment 0ms, prepare 64ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+Nonserve/pending-entry revert check
+$ vitest run --project integration tests/integration/node-program-exit-events.test.ts tests/integration/node-process-unhandled-traps.test.ts -t 'run-to-completion|pending=true'
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |integration| tests/integration/node-program-exit-events.test.ts (9 tests | 1 failed | 8 skipped) 53ms
+   × run-to-completion waits for referenced work before its exit event 53ms
+     → expected false to be true // Object.is equality
+ ❯ |integration| tests/integration/node-process-unhandled-traps.test.ts (8 tests | 2 failed | 6 skipped) 3084ms
+   × owned error handled=false pending=true reaches Node exit before kernel teardown 1535ms
+     → Test timed out in 1500ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × owned unhandledrejection handled=false pending=true reaches Node exit before kernel teardown 1549ms
+     → Test timed out in 1500ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned error handled=false pending=true reaches Node exit before kernel teardown
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned unhandledrejection handled=false pending=true reaches Node exit before kernel teardown
+Error: Test timed out in 1500ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL |integration|  tests/integration/node-program-exit-events.test.ts > run-to-completion waits for referenced work before its exit event
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/integration/node-program-exit-events.test.ts:176:25
+    174|       }),
+    175|     ).rejects.toMatchObject({ code: 'RIFTY_PROCESS_EXIT', exitCode: 0 …
+    176|     expect(firedAtExit).toBe(true);
+       |                         ^
+    177|     expect(activeRefs()).toBe(0);
+    178|   } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 14 skipped (17)
+   Start at  05:31:22
+   Duration  3.47s (transform 434ms, setup 0ms, collect 779ms, tests 3.14s, environment 0ms, prepare 52ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-ipc-sab-ceiling-red.log
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (25 tests | 1 failed) 14ms
+   × keeps SAB-backed Buffer out of advanced IPC with a named ceiling 3ms
+     → expected [Function] to throw an error
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > keeps SAB-backed Buffer out of advanced IPC with a named ceiling
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:54:44
+     52|   expect(gets).toBe(1);
+     53|   buffer[0] = 1; gets = 0;
+     54|   expect(() => encodeAdvancedIpc(message)).toThrow(/serialization.adva…
+       |                                            ^
+     55|   expect(gets).toBe(1);
+     56| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 24 passed (25)
+   Start at  05:40:56
+   Duration  2.40s (transform 1.51s, setup 0ms, collect 2.06s, tests 14ms, environment 0ms, prepare 40ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-nonserve-pending-red.log
+$ vitest run --project integration tests/integration/node-process-unhandled-traps.test.ts -t mode=completion
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |integration| tests/integration/node-process-unhandled-traps.test.ts (10 tests | 2 failed | 8 skipped) 1135ms
+   × owned error handled=false pending=true mode=completion reaches Node exit before kernel teardown 561ms
+     → owned fatal error left real ESM entry pending
+   × owned unhandledrejection handled=false pending=true mode=completion reaches Node exit before kernel teardown 573ms
+     → owned fatal error left real ESM entry pending
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned error handled=false pending=true mode=completion reaches Node exit before kernel teardown
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned unhandledrejection handled=false pending=true mode=completion reaches Node exit before kernel teardown
+Error: owned fatal error left real ESM entry pending
+ ❯ Timeout.<anonymous> tests/integration/node-process-unhandled-traps.test.ts:133:26
+    131|         new Promise<never>((_, reject) => {
+    132|           deadline.timer = setTimeout(
+    133|             () => reject(new Error('owned fatal error left real ESM en…
+       |                          ^
+    134|             500,
+    135|           );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 8 skipped (10)
+   Start at  05:39:56
+   Duration  3.44s (transform 1.35s, setup 0ms, collect 1.92s, tests 1.13s, environment 0ms, prepare 83ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-nonserve-pending-revert.log
+$ vitest run --project integration tests/integration/node-process-unhandled-traps.test.ts -t mode=completion
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |integration| tests/integration/node-process-unhandled-traps.test.ts (10 tests | 2 failed | 8 skipped) 1084ms
+   × owned error handled=false pending=true mode=completion reaches Node exit before kernel teardown 548ms
+     → owned fatal error left real ESM entry pending
+   × owned unhandledrejection handled=false pending=true mode=completion reaches Node exit before kernel teardown 536ms
+     → owned fatal error left real ESM entry pending
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned error handled=false pending=true mode=completion reaches Node exit before kernel teardown
+ FAIL |integration|  tests/integration/node-process-unhandled-traps.test.ts > owned unhandledrejection handled=false pending=true mode=completion reaches Node exit before kernel teardown
+Error: owned fatal error left real ESM entry pending
+ ❯ Timeout.<anonymous> tests/integration/node-process-unhandled-traps.test.ts:133:26
+    131|         new Promise<never>((_, reject) => {
+    132|           deadline.timer = setTimeout(
+    133|             () => reject(new Error('owned fatal error left real ESM en…
+       |                          ^
+    134|             500,
+    135|           );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 8 skipped (10)
+   Start at  05:41:18
+   Duration  3.30s (transform 1.33s, setup 0ms, collect 1.89s, tests 1.08s, environment 0ms, prepare 36ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+Full-gate unhandled Worker stdio failure, isolated reproduction
+$ vitest run packages/runtime-js/src/builtins/child_process-worker-identity.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+stderr | packages/runtime-js/src/builtins/child_process-worker-identity.test.ts > child_process Worker ancestry > restores the same-realm child process around worker parent callbacks
+[rifty:worker_threads] Falling back to same-realm execution: kernel.spawnWorker capability not available (SAB IPC unsupported or kernelWorkerUrl not configured). workerData and parentPort still propagate, but this Worker shares the parent event loop — no real parallelism. To enable real Workers: ensure cross-origin isolation (SharedArrayBuffer) and call kernel.setKernelWorkerUrl(...) at host boot (ADR-0011 phase 2).
+
+ ✓ |unit| packages/runtime-js/src/builtins/child_process-worker-identity.test.ts (10 tests) 61ms
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+TypeError: dest.end is not a function
+ ❯ publishedConstructor.onEnd packages/io/src/streams/readable.ts:749:29
+ ❯ publishedConstructor.emit packages/io/src/event-emitter.ts:150:22
+ ❯ packages/io/src/streams/readable.ts:653:14
+
+This error originated in "packages/runtime-js/src/builtins/child_process-worker-identity.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "uses the same-realm child identity when it constructs a kernel worker thread". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+     Errors  1 error
+   Start at  06:01:20
+   Duration  849ms (transform 433ms, setup 0ms, collect 600ms, tests 61ms, environment 0ms, prepare 31ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+Worker parent stdio guard revert
+$ vitest run packages/runtime-js/src/builtins/child_process-worker-identity.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+stderr | packages/runtime-js/src/builtins/child_process-worker-identity.test.ts > child_process Worker ancestry > restores the same-realm child process around worker parent callbacks
+[rifty:worker_threads] Falling back to same-realm execution: kernel.spawnWorker capability not available (SAB IPC unsupported or kernelWorkerUrl not configured). workerData and parentPort still propagate, but this Worker shares the parent event loop — no real parallelism. To enable real Workers: ensure cross-origin isolation (SharedArrayBuffer) and call kernel.setKernelWorkerUrl(...) at host boot (ADR-0011 phase 2).
+
+ ✓ |unit| packages/runtime-js/src/builtins/child_process-worker-identity.test.ts (10 tests) 63ms
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+TypeError: dest.end is not a function
+ ❯ publishedConstructor.onEnd packages/io/src/streams/readable.ts:749:29
+ ❯ publishedConstructor.emit packages/io/src/event-emitter.ts:150:22
+ ❯ packages/io/src/streams/readable.ts:653:14
+
+This error originated in "packages/runtime-js/src/builtins/child_process-worker-identity.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "uses the same-realm child identity when it constructs a kernel worker thread". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+     Errors  1 error
+   Start at  06:03:49
+   Duration  768ms (transform 376ms, setup 0ms, collect 527ms, tests 63ms, environment 0ms, prepare 28ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-ipc-error-cause-red.log
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (27 tests | 2 failed) 13ms
+   × preserves a Buffer in nonenumerable Error.cause and its outer alias 3ms
+     → expected false to be true // Object.is equality
+   × rejects shared and web objects reached through nonenumerable Error.cause 1ms
+     → expected [Function] to throw an error
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > preserves a Buffer in nonenumerable Error.cause and its outer alias
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:54:58
+     52|   const buffer = Buffer.from([3]);
+     53|   const result = decodeAdvancedIpc(encodeAdvancedIpc({buffer,error:new…
+     54|   expect(Buffer.isBuffer(result.error.cause.get('key'))).toBe(true);
+       |                                                          ^
+     55|   expect(result.error.cause.get('key')).toBe(result.buffer);
+     56|   expect(result.buffer[0]).toBe(3);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects shared and web objects reached through nonenumerable Error.cause
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:63:43
+     61|   const shared = new Error('outer',{cause:new SharedArrayBuffer(1)});
+     62|   expect(() => serialize(shared)).toThrow();
+     63|   expect(() => encodeAdvancedIpc(shared)).toThrow(/serialization.advan…
+       |                                           ^
+     64|   expect(() => encodeAdvancedIpc(new Error('outer',{cause:new Blob(['b…
+     65| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 25 passed (27)
+   Start at  06:38:44
+   Duration  688ms (transform 391ms, setup 0ms, collect 525ms, tests 13ms, environment 0ms, prepare 23ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-ipc-native-edges-red.log
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (28 tests | 3 failed) 14ms
+   × round-trips boxed core primitives without writing readonly String indexes 2ms
+     → Cannot assign to read only property '0' of object '[object String]'
+   × preserves a Buffer in nonenumerable Error.cause and its outer alias 2ms
+     → expected false to be true // Object.is equality
+   × rejects shared and web objects reached through nonenumerable Error.cause 1ms
+     → expected [Function] to throw an error
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > round-trips boxed core primitives without writing readonly String indexes
+TypeError: Cannot assign to read only property '0' of object '[object String]'
+ ❯ visit packages/runtime-js/src/internal/advanced-ipc-values.ts:124:56
+    122|     } else if (!nativeIsView(value)) {
+    123|       const record = value as Record<string, unknown>;
+    124|       for (const key of Object.keys(record)) record[key] = visit(recor…
+       |                                                        ^
+    125|     }
+    126|     return value;
+ ❯ Module.decodeAdvancedIpc packages/runtime-js/src/internal/advanced-ipc-values.ts:128:10
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:50:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > preserves a Buffer in nonenumerable Error.cause and its outer alias
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:62:58
+     60|   const buffer = Buffer.from([3]);
+     61|   const result = decodeAdvancedIpc(encodeAdvancedIpc({buffer,error:new…
+     62|   expect(Buffer.isBuffer(result.error.cause.get('key'))).toBe(true);
+       |                                                          ^
+     63|   expect(result.error.cause.get('key')).toBe(result.buffer);
+     64|   expect(result.buffer[0]).toBe(3);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects shared and web objects reached through nonenumerable Error.cause
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:71:43
+     69|   const shared = new Error('outer',{cause:new SharedArrayBuffer(1)});
+     70|   expect(() => serialize(shared)).toThrow();
+     71|   expect(() => encodeAdvancedIpc(shared)).toThrow(/serialization.advan…
+       |                                           ^
+     72|   expect(() => encodeAdvancedIpc(new Error('outer',{cause:new Blob(['b…
+     73| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 25 passed (28)
+   Start at  06:41:16
+   Duration  691ms (transform 390ms, setup 0ms, collect 524ms, tests 14ms, environment 0ms, prepare 23ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+/tmp/vitest-ipc-native-edges-revert.log
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (29 tests | 4 failed) 14ms
+   × round-trips boxed core primitives without writing readonly String indexes 2ms
+     → Cannot assign to read only property '0' of object '[object String]'
+   × preserves a Buffer in nonenumerable Error.cause and its outer alias 2ms
+     → expected false to be true // Object.is equality
+   × reads a nonenumerable Error.cause getter once and preserves its fresh Buffer 0ms
+     → expected +0 to be 1 // Object.is equality
+   × rejects shared and web objects reached through nonenumerable Error.cause 1ms
+     → expected [Function] to throw an error
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > round-trips boxed core primitives without writing readonly String indexes
+TypeError: Cannot assign to read only property '0' of object '[object String]'
+ ❯ visit packages/runtime-js/src/internal/advanced-ipc-values.ts:62:56
+     60|     } else if (!nativeIsView(value)) {
+     61|       const record = value as Record<string, unknown>;
+     62|       for (const key of Object.keys(record)) record[key] = visit(recor…
+       |                                                        ^
+     63|     }
+     64|     return value;
+ ❯ mapClonedGraph packages/runtime-js/src/internal/advanced-ipc-values.ts:66:10
+ ❯ Module.encodeAdvancedIpc packages/runtime-js/src/internal/advanced-ipc-values.ts:77:3
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:50:38
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > preserves a Buffer in nonenumerable Error.cause and its outer alias
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:69:58
+     67|     encodeAdvancedIpc({ buffer, error: new Error('outer', { cause: new…
+     68|   ) as { buffer: Uint8Array; error: Error & { cause: Map<string, unkno…
+     69|   expect(Buffer.isBuffer(result.error.cause.get('key'))).toBe(true);
+       |                                                          ^
+     70|   expect(result.error.cause.get('key')).toBe(result.buffer);
+     71|   expect(result.buffer[0]).toBe(3);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > reads a nonenumerable Error.cause getter once and preserves its fresh Buffer
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:85:16
+     83|   });
+     84|   const result = decodeAdvancedIpc(encodeAdvancedIpc(error)) as Error …
+     85|   expect(gets).toBe(1);
+       |                ^
+     86|   expect(Buffer.isBuffer(result.cause)).toBe(true);
+     87|   expect(result.cause[0]).toBe(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects shared and web objects reached through nonenumerable Error.cause
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:93:43
+     91|   const shared = new Error('outer', { cause: new SharedArrayBuffer(1) …
+     92|   expect(() => serialize(shared)).toThrow();
+     93|   expect(() => encodeAdvancedIpc(shared)).toThrow(/serialization.advan…
+       |                                           ^
+     94|   expect(() => encodeAdvancedIpc(new Error('outer', { cause: new Blob(…
+     95|     /serialization.advanced.WebObject/,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 25 passed (29)
+   Start at  06:49:58
+   Duration  694ms (transform 391ms, setup 0ms, collect 524ms, tests 14ms, environment 0ms, prepare 23ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+Valid native-edge revert (getter premise corrected)
+$ vitest run packages/runtime-js/src/internal/advanced-ipc-values.test.ts
+
+ RUN  v2.1.9 /Users/vanilla-wave/.cache/9MppecRL7Hm1/rECJh7q4Epj1
+
+ ❯ |unit| packages/runtime-js/src/internal/advanced-ipc-values.test.ts (29 tests | 3 failed) 14ms
+   × round-trips boxed core primitives without writing readonly String indexes 2ms
+     → Cannot assign to read only property '0' of object '[object String]'
+   × preserves a Buffer in nonenumerable Error.cause and its outer alias 2ms
+     → expected false to be true // Object.is equality
+   × rejects shared and web objects reached through nonenumerable Error.cause 1ms
+     → expected [Function] to throw an error
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > round-trips boxed core primitives without writing readonly String indexes
+TypeError: Cannot assign to read only property '0' of object '[object String]'
+ ❯ visit packages/runtime-js/src/internal/advanced-ipc-values.ts:62:56
+     60|     } else if (!nativeIsView(value)) {
+     61|       const record = value as Record<string, unknown>;
+     62|       for (const key of Object.keys(record)) record[key] = visit(recor…
+       |                                                        ^
+     63|     }
+     64|     return value;
+ ❯ mapClonedGraph packages/runtime-js/src/internal/advanced-ipc-values.ts:66:10
+ ❯ Module.encodeAdvancedIpc packages/runtime-js/src/internal/advanced-ipc-values.ts:77:3
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:50:38
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > preserves a Buffer in nonenumerable Error.cause and its outer alias
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:69:58
+     67|     encodeAdvancedIpc({ buffer, error: new Error('outer', { cause: new…
+     68|   ) as { buffer: Uint8Array; error: Error & { cause: Map<string, unkno…
+     69|   expect(Buffer.isBuffer(result.error.cause.get('key'))).toBe(true);
+       |                                                          ^
+     70|   expect(result.error.cause.get('key')).toBe(result.buffer);
+     71|   expect(result.buffer[0]).toBe(3);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL |unit|  packages/runtime-js/src/internal/advanced-ipc-values.test.ts > rejects shared and web objects reached through nonenumerable Error.cause
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ packages/runtime-js/src/internal/advanced-ipc-values.test.ts:96:43
+     94|   const shared = new Error('outer', { cause: new SharedArrayBuffer(1) …
+     95|   expect(() => serialize(shared)).toThrow();
+     96|   expect(() => encodeAdvancedIpc(shared)).toThrow(/serialization.advan…
+       |                                           ^
+     97|   expect(() => encodeAdvancedIpc(new Error('outer', { cause: new Blob(…
+     98|     /serialization.advanced.WebObject/,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 26 passed (29)
+   Start at  06:57:42
+   Duration  695ms (transform 391ms, setup 0ms, collect 527ms, tests 14ms, environment 0ms, prepare 23ms)
+
+[ELIFECYCLE] Command failed with exit code 1.

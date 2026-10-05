@@ -39,14 +39,16 @@ import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import {
   adoptNodeProcessBootstrap,
+  nodeProcessWorkerIpc,
   postNodeProcessListeningControl,
 } from '@riftydev/runtime-js/builtins/process';
+import { admitInstalledCliEntry } from '@riftydev/shadow-registry/runtime';
 import { syncMirror } from '@riftydev/vfs';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { installNodeEntryRemoteFs } from './node-entry-remote-fs.ts';
 import { prepareNodeEntryRuntime } from './node-entry-runtime-preparation.ts';
-import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
+import { runNodeProgramLifecycle, runNodeProgramToCompletion } from './node-program-lifecycle.ts';
 import {
   installNodeWorkerRuntimeConfig,
   readNodeWorkerRuntimeConfig,
@@ -63,7 +65,7 @@ const nodeWorkerRuntimeConfig = readNodeWorkerRuntimeConfig(
 );
 installNodeWorkerRuntimeConfig(nodeWorkerRuntimeConfig);
 const bin = launch.kind === 'program' && launch.bin;
-const nodeServe = launch.kind === 'eval' || (launch.kind === 'program' && launch.nodeServe);
+const nodeServe = launch.kind !== 'program' || launch.nodeServe;
 const previewScope = launch.kind === 'worker-thread' ? undefined : launch.previewScope;
 const entryPath = launch.kind === 'eval' ? undefined : proc.argv[1];
 function requiredEntryPath(value: unknown): string {
@@ -133,7 +135,7 @@ if (launch.kind === 'eval') {
   });
 }
 
-const runEntry = (): Promise<void> =>
+const runRawEntry = (): Promise<void> =>
   launch.kind === 'eval'
     ? runNodeEntry({
         kind: 'eval',
@@ -141,14 +143,42 @@ const runEntry = (): Promise<void> =>
         cwd: proc.cwd(),
         source: launch.source,
         print: launch.print,
-        explicitCommonJs: launch.execArgv[0] === '--input-type=commonjs',
+        explicitCommonJs: launch.execArgv.includes('--input-type=commonjs'),
+        execArgv: launch.execArgv,
       })
     : runNodeEntry({
         vfs: syncMirror(),
         entryPath: requiredEntryPath(entryPath),
         cwd: proc.cwd(),
         bin,
+        execArgv: launch.execArgv,
+        beforeEntry: (loader, specifier, fromFile) =>
+          admitInstalledCliEntry({
+            fs: syncMirror(),
+            specifier,
+            fromFile,
+            args: proc.argv.slice(2),
+            importModule: (name, parent) => loader.import(name, parent),
+          }),
       });
+
+const terminateWorker = proc.exit.bind(proc);
+const writeStderr = proc.stderr.write.bind(proc.stderr);
+const runEntry = async (): Promise<void> => {
+  try {
+    await runRawEntry();
+  } catch (error) {
+    if (
+      launch.kind !== 'worker-thread' ||
+      (typeof error === 'object' &&
+        error !== null &&
+        Reflect.get(error, 'code') === 'RIFTY_PROCESS_EXIT')
+    )
+      throw error;
+    nodeProcessWorkerIpc(proc).reportEntryError(error);
+    terminateWorker(1);
+  }
+};
 
 // `node <file>` server-capable path (ADR-0155): the child spawns serve:true, so
 // the bootstrap (not the kernel drain hook) owns the run-vs-serve decision. Net
@@ -177,8 +207,11 @@ if (nodeServe) {
     // A serve-capable foreground process may be a real long-lived supervisor
     // (nodemon) whose referenced watcher/timer handles are its Node lifetime.
     // The owner signal/peer boundary remains the physical stop authority.
-    awaitDrain: () =>
-      awaitDrain({ capMs: Number.POSITIVE_INFINITY, hasRef: () => listPorts().length > 0 }),
+    awaitDrain: (hasPendingEntry) =>
+      awaitDrain({
+        capMs: Number.POSITIVE_INFINITY,
+        hasRef: () => (hasPendingEntry?.() ?? false) || listPorts().length > 0,
+      }),
     servePreview: (port) =>
       serveCrossRealmPreview(
         port,
@@ -187,13 +220,15 @@ if (nodeServe) {
       ),
     postListening: (ports) => postNodeProcessListeningControl(proc, ports, previewScope),
     readExitCode: () => proc.exitCode,
-    exit: (code) => proc.exit(code),
+    exit: terminateWorker,
+    writeStderr,
   });
 } else {
-  await runEntry();
-  // Honor process.exitCode on a clean return (Node parity, ADR-0157 D4): the kernel
-  // reaps a no-throw return as exit 0, so a `.bin`/execSync CLI that set a non-zero
-  // process.exitCode must surface it (proc.exit throws RIFTY_PROCESS_EXIT → kernel
-  // maps the code). exitCode 0 stays a clean exit 0.
-  if (proc.exitCode) proc.exit(proc.exitCode);
+  await runNodeProgramToCompletion({
+    runEntry,
+    awaitDrain: (hasPendingEntry) => awaitDrain({ hasRef: () => hasPendingEntry?.() ?? false }),
+    readExitCode: () => proc.exitCode,
+    exit: terminateWorker,
+    writeStderr,
+  });
 }

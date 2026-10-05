@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Admit exact Vitest/Vite canonical run/info through installed native parser; unsupported modes stay named (ADR-0500).
+
 - Include npm tar path layout in materialized install identity; retire authority of package-prefix-only extracted trees.
 
 

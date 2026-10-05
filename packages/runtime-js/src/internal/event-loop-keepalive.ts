@@ -13,6 +13,8 @@
  */
 
 import { setKernelDrainHook } from '@riftydev/kernel';
+import { readActiveNodeProcessBootstrap } from '../builtins/process-bootstrap-identity.ts';
+import { dispatchProcessUnhandled } from './process-unhandled.ts';
 
 const PromiseConstructorPrimordial = Promise;
 const promiseResolvePrimordial = Promise.resolve;
@@ -442,6 +444,7 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
 
 interface RejectionEventLike {
   reason: unknown;
+  promise?: unknown;
   preventDefault?(): void;
 }
 interface RejectionTarget {
@@ -481,7 +484,14 @@ export function installUnhandledErrorTrap(
         : typeof event.message === 'string'
           ? new Error(event.message)
           : new Error('Worker terminated by an uncaught error');
-    if (!beginNodeEvalUnhandled(reason, 'uncaught-error')) return;
+    if (dispatchProcessUnhandled(reason, 'uncaught-error')) {
+      event.preventDefault?.();
+      return;
+    }
+    if (!beginNodeEvalUnhandled(reason, 'uncaught-error')) {
+      if (readActiveNodeProcessBootstrap() === null) return;
+      recordRejection(reason, 'uncaught-error');
+    }
     event.preventDefault?.();
   });
 }
@@ -493,18 +503,22 @@ export function installUnhandledErrorTrap(
  * LOUDLY.
  *
  * Eval claims are controlled terminal paths: print flushes before the drain or
- * served-worker fallback emits the diagnostic and exit. Other realms retain
- * default reporting while their run-to-completion drain records the reason.
+ * served-worker fallback emits the diagnostic and exit. Owned Node programs
+ * terminate through their drain; foreign realms retain browser reporting.
  */
 export function installUnhandledRejectionTrap(
   target: RejectionTarget = self as unknown as RejectionTarget,
 ): void {
   target.addEventListener('unhandledrejection', (ev: RejectionEventLike) => {
-    if (beginNodeEvalUnhandled(ev.reason, 'rejection')) {
+    if (
+      dispatchProcessUnhandled(ev.reason, 'rejection', ev.promise) ||
+      beginNodeEvalUnhandled(ev.reason, 'rejection')
+    ) {
       ev.preventDefault?.();
       return;
     }
     recordRejection(ev.reason);
+    if (readActiveNodeProcessBootstrap() !== null) ev.preventDefault?.();
   });
 }
 
@@ -514,7 +528,37 @@ export function installUnhandledRejectionTrap(
  * run-to-completion children only). Call once during the worker bootstrap,
  * alongside the process-shim install.
  */
+function installWebAssemblyJobKeepalive(): void {
+  const installed = Symbol.for('rifty.runtime-js.wasm-keepalive.v1');
+  if (Reflect.get(WebAssembly, installed) === true) return;
+  for (const name of ['compile', 'instantiate'] as const) {
+    const original = WebAssembly[name];
+    Reflect.set(WebAssembly, name, (...args: unknown[]) => {
+      ref();
+      let job: Promise<unknown>;
+      try {
+        job = reflectApplyPrimordial(original, WebAssembly, args) as Promise<unknown>;
+      } catch (error) {
+        unref();
+        throw error;
+      }
+      return reflectApplyPrimordial(promiseThenPrimordial, job, [
+        (value: unknown) => {
+          unref();
+          return value;
+        },
+        (error: unknown) => {
+          unref();
+          throw error;
+        },
+      ]);
+    });
+  }
+  Object.defineProperty(WebAssembly, installed, { value: true, configurable: true });
+}
+
 export function installEventLoopKeepalive(): void {
+  installWebAssemblyJobKeepalive();
   installUnhandledRejectionTrap();
   installUnhandledErrorTrap();
   setKernelDrainHook(() => awaitDrain());

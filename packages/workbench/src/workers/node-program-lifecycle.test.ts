@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  type NodeLifecycleDeps,
-  normalizeExitCode,
-  runNodeProgramLifecycle,
-} from './node-program-lifecycle.ts';
+import { type NodeLifecycleDeps, runNodeProgramLifecycle } from './node-program-lifecycle.ts';
 
 /** Fake net registry: a mutable port set + change events (onRegistryChange shape). */
 function fakeRegistry(initial: number[] = []) {
@@ -36,6 +32,7 @@ function deps(over: Partial<NodeLifecycleDeps> = {}, reg = fakeRegistry()) {
     postListening: vi.fn(),
     readExitCode: vi.fn(() => 0),
     exit: vi.fn(),
+    writeStderr: vi.fn(),
     ...over,
   };
   return { d, reg };
@@ -77,7 +74,7 @@ describe('runNodeProgramLifecycle', () => {
     await settle();
     expect(d.servePreview).toHaveBeenCalledWith(5174);
     expect(d.postListening).toHaveBeenCalledWith([5174]);
-    expect(d.awaitDrain).not.toHaveBeenCalled();
+    expect(d.awaitDrain).toHaveBeenCalledOnce();
     expect(d.exit).not.toHaveBeenCalled();
   });
 
@@ -132,14 +129,15 @@ describe('runNodeProgramLifecycle', () => {
     expect(d.awaitDrain).not.toHaveBeenCalled();
   });
 
-  it('a non-exit throw propagates (surfaced by kernel worker-entry)', async () => {
+  it('a non-exit throw reports its diagnostic and terminates with 1', async () => {
     const { d } = deps({
       runEntry: vi.fn(async () => {
         throw new Error('boom');
       }),
     });
     await expect(runNodeProgramLifecycle(d)).rejects.toThrow('boom');
-    expect(d.exit).not.toHaveBeenCalled();
+    expect(d.exit).toHaveBeenCalledWith(1);
+    expect(d.writeStderr).toHaveBeenCalledWith(expect.stringContaining('boom'));
   });
 
   // D3 (ADR-0157 review): a server that listen()s THEN throws must NOT post a
@@ -157,7 +155,7 @@ describe('runNodeProgramLifecycle', () => {
     await expect(runNodeProgramLifecycle(d)).rejects.toThrow('late');
     expect(d.servePreview).not.toHaveBeenCalled();
     expect(d.postListening).not.toHaveBeenCalled();
-    expect(d.exit).not.toHaveBeenCalled();
+    expect(d.exit).toHaveBeenCalledWith(1);
   });
 
   // D4 (ADR-0157 review): natural exit honours process.exitCode (Node parity).
@@ -173,27 +171,5 @@ describe('runNodeProgramLifecycle', () => {
     void runNodeProgramLifecycle(d);
     await settle();
     expect(d.exit).not.toHaveBeenCalled();
-  });
-});
-
-describe('normalizeExitCode (Node uint8 coercion)', () => {
-  it('passes through an in-range integer', () => {
-    expect(normalizeExitCode(7)).toBe(7);
-    expect(normalizeExitCode(0)).toBe(0);
-    expect(normalizeExitCode(255)).toBe(255);
-  });
-  it('wraps out-of-range integers to 8 bits like Node', () => {
-    expect(normalizeExitCode(256)).toBe(0);
-    expect(normalizeExitCode(257)).toBe(1);
-    expect(normalizeExitCode(-1)).toBe(255);
-  });
-  // normalizeExitCode is ONLY the final uint8 wrap — Node's string coercion +
-  // loud validation lives in the process.exitCode SETTER (see install-process-gate
-  // test). A raw non-number here is a defensive default to 0, NOT a parity claim
-  // that this function coerces strings (the setter turns '7' into 7 first).
-  it('defensively defaults a non-number to 0 (strings are coerced by the setter, not here)', () => {
-    expect(normalizeExitCode(undefined)).toBe(0);
-    expect(normalizeExitCode(Number.NaN)).toBe(0);
-    expect(normalizeExitCode(null)).toBe(0);
   });
 });

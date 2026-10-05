@@ -114,6 +114,7 @@ export function makeRecursiveRunner(): NodeEntryRunner {
     const env = buildRecursiveWorkerEnv(spec.env);
     const entry = buildConfiguredNodeEntryWorkerEntry({
       kind: 'program',
+      execArgv: [],
       bin: false,
       remoteFs: true,
       nodeServe: false,

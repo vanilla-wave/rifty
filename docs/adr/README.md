@@ -98,6 +98,16 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0383 | No COI VM default and preboot worker selection |
 | 0385 | Keep one foreground drain across HTTP server close |
 | 0422 | Retire callbacks with completed command invocations |
+| 0491 | Node lifecycle handlers and referenced Worker handles |
+| 0492 | Advanced fork IPC over the structured-clone channel |
+| 0493 | Host vm script offsets in shared stack mapping |
+| 0494 | Async WebAssembly jobs hold the Node event loop |
+| 0495 | Check dynamic global write keys at execution |
+| 0496 | Guest MessagePort references with native host channels |
+| 0497 | Node entry v5 startup execArgv semantics |
+| 0499 | Worker startup errors over existing private control |
+| 0502 | Clone the original IPC graph with weak Buffer side references |
+| 0503 | Reject shared-backed advanced IPC values before send |
 
 ### runtime-wasi
 
@@ -178,6 +188,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0399 | Preserve declared companion policy through retained-lock acquisition |
 | 0433 | Preserve Vite module URLs at the filesystem root |
 | 0435 | Follow npm tar root stripping for materialized installs |
+| 0500 | Installed CLI capability admission before native execution |
 
 ### playground
 
@@ -376,6 +387,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0044 | 0316 | swc/WASIp1 discovery retained; product carrier retired |
 | 0047 | 0316 | real WASIp1 proof becomes package-sourced; vendored M8/M10 carrier removed |
 | 0046 | 0125 | owner-binding seam; microtask invariant dropped, context grafted |
+| 0501 | 0502 | native IPC graph replaces snapshots; Buffer weak side references |
 | 0055 | n/a | retired opencode facade ADR; integration cancelled |
 | 0074 | 0077 | SW preview-nav routing; ported into ADR-0077 |
 | 0092 | n/a | retired opencode facade ADR; integration cancelled |
@@ -413,6 +425,7 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0502 SAB-backed Buffer exemption | 0503 / note 2026-10-02 | named shared-backed view ceiling; native graph/nonshared Buffer retained |
 | 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
 | 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |

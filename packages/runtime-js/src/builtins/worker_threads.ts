@@ -7,7 +7,7 @@
  * tests; it is not used for threaded WASI packages such as Rolldown in-browser.
  */
 
-import { NotImplementedError } from '@riftydev/io';
+import { NotImplementedError, Readable } from '@riftydev/io';
 import {
   type ProcessHandle,
   type SpawnWorkerSpec,
@@ -17,6 +17,8 @@ import {
   observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
 import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
+import { parseNodeStartup, snapshotExecArgv } from '../internal/node-startup.ts';
 import { fileURLToPathPosix, isNodeUrl } from '../internal/posix-file-url.ts';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
@@ -32,12 +34,15 @@ import {
 } from './process-bootstrap-identity.ts';
 import { type NodeProcessContextSnapshot, snapshotNodeProcessContext } from './process-context.ts';
 import { getProcessCwd, nodeProcessWorkerIpc } from './process.ts';
+import { WorkerThreadPort } from './worker-thread-port.ts';
 
 interface WorkerOptions {
   workerData?: unknown;
   env?: Record<string, string | undefined>;
   eval?: boolean;
   execArgv?: readonly string[];
+  stdout?: boolean;
+  stderr?: boolean;
 }
 
 function snapshotWorkerEnvironment(
@@ -60,14 +65,7 @@ interface WorkerMessageEvent {
 
 type WorkerMessageHandler = (event: WorkerMessageEvent) => void;
 
-interface WorkerPort extends EventEmitter {
-  onmessage: WorkerMessageHandler | null;
-  postMessage(msg: unknown): void;
-  ref(): WorkerPort;
-  unref(): WorkerPort;
-  start(): void;
-  close(): void;
-}
+type WorkerPort = WorkerThreadPort;
 
 interface WorkerThreadContext {
   readonly parentPort: WorkerPort;
@@ -86,6 +84,7 @@ export function setSameRealmWorkerModuleImporter(importer: SameRealmWorkerModule
 export class Worker extends EventEmitter {
   static isMainThread = true;
   threadId: number;
+  private readonly execArgv: readonly string[];
   private readonly entry: WorkerEntry;
   private readonly workerData: unknown;
   private readonly env: Record<string, string>;
@@ -93,6 +92,26 @@ export class Worker extends EventEmitter {
   private readonly ownerProcess: unknown;
   private readonly ownerBootstrap: ReturnType<typeof readActiveNodeProcessBootstrap>;
   private exited = false;
+  #keepaliveHeld = false;
+  private readonly stdoutStream = new Readable({ read() {} });
+  private readonly stderrStream = new Readable({ read() {} });
+  private readonly captureStdout: boolean;
+  private readonly captureStderr: boolean;
+
+  get stdout(): Readable {
+    this.assertKernelStdio();
+    return this.stdoutStream;
+  }
+  get stderr(): Readable {
+    this.assertKernelStdio();
+    return this.stderrStream;
+  }
+  private assertKernelStdio(): void {
+    if (!isSabIpcSupported() || getKernelWorkerUrl() === null || getNodeEntryWorkerUrl() === null) {
+      throw new NotImplementedError('worker_threads.Worker.stdio.same-realm');
+    }
+  }
+
   private sameRealmContext: WorkerThreadContext | null = null;
   private sameRealmParentPort: WorkerPort | null = null;
   private sameRealmGlobalOnMessage: WorkerMessageHandler | null = null;
@@ -107,21 +126,21 @@ export class Worker extends EventEmitter {
     this.ownerBootstrap = readActiveNodeProcessBootstrap();
     const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
     const inheritedLaunch = readNodeEntryBootstrapIfPresent()?.launch;
+    this.execArgv = snapshotExecArgv(opts.execArgv ?? inheritedLaunch?.execArgv ?? []);
+    const startup = parseNodeStartup(this.execArgv, 'worker_threads.Worker.execArgv');
     if (
-      Object.prototype.hasOwnProperty.call(opts, 'execArgv') ||
-      (inheritedLaunch?.kind === 'eval' && inheritedLaunch.execArgv.length > 0)
+      (!isSabIpcSupported() || getKernelWorkerUrl() === null || getNodeEntryWorkerUrl() === null) &&
+      (startup.preloads.length || startup.conditions.length || startup.resolveParent)
     ) {
-      // TODO(backlog: runtime-js/worker-threads-inherited-exec-argv)
-      throw new NotImplementedError(
-        'worker_threads.Worker.execArgv',
-        'node-entry v3 cannot preserve worker-thread execArgv identity',
-      );
+      throw new NotImplementedError('worker_threads.Worker.execArgv.same-realm');
     }
     const processContext = snapshotNodeProcessContext();
     const env =
       opts.env === undefined
         ? { ...(processContext?.env ?? {}) }
         : snapshotWorkerEnvironment(opts.env);
+    this.captureStdout = opts.stdout === true;
+    this.captureStderr = opts.stderr === true;
     this.threadId = nextThreadId++;
     this.entry = entry;
     this.workerData = opts.workerData;
@@ -130,10 +149,12 @@ export class Worker extends EventEmitter {
     // TODO(backlog: runtime-js/worker-threads-prompt-start-atomics-wait):
     // synchronous allocation cannot close prompt-start while entry loading
     // still needs parent-serviced remote FS.
+    this.ref();
     queueMicrotask(() => this.start());
   }
 
   private start(): void {
+    if (this.exited) return;
     if (this.entry.kind === 'data-url') {
       // TODO(backlog: runtime-js/worker-eval-data-url-entry)
       this.emitWorkerError(
@@ -172,6 +193,7 @@ export class Worker extends EventEmitter {
       const encodedWorkerData = encodeWorkerData(this.workerData);
       const entry = buildConfiguredNodeEntryWorkerEntry({
         kind: 'worker-thread',
+        execArgv: this.execArgv,
         remoteFs: true,
         threadId: this.threadId,
         ...(encodedWorkerData === undefined ? {} : { workerDataJson: encodedWorkerData }),
@@ -184,13 +206,7 @@ export class Worker extends EventEmitter {
         argv: ['rifty', script],
         env,
         cwd: this.processContext.cwd,
-        // serve:true keeps a message-driven Worker alive (Node parity, and the
-        // shape Rolldown's pthread pool needs) — the kernel never drain-reaps a
-        // serve child. Cost: a run-to-completion Worker (no live handle after the
-        // entry resolves) does NOT auto-emit 'exit' here like Node; the
-        // same-realm path does (keepsAlive -> terminate(0)). Explicit, tracked
-        // divergence (not a silent hang):
-        // TODO(backlog: runtime-js/worker-threads-kernel-run-to-completion-exit).
+        // The node-entry lifecycle drains timers and referenced parentPort listeners.
         serve: true,
       };
       const handle = globalProcessManager.spawnWorkerThread(
@@ -200,9 +216,28 @@ export class Worker extends EventEmitter {
       );
       this.workerHandle = handle;
       if (handle.kind === 'worker') {
-        handle.stdout().on('data', (chunk) => this.emitToOwner('stdout', chunk));
-        handle.stderr().on('data', (chunk) => this.emitToOwner('stderr', chunk));
+        const owner = (this.ownerBootstrap?.process ?? this.ownerProcess) as {
+          stdout: Parameters<Readable['pipe']>[0];
+          stderr: Parameters<Readable['pipe']>[0];
+        };
+        if (!this.captureStdout) this.stdoutStream.pipe(owner.stdout, { end: false });
+        if (!this.captureStderr) this.stderrStream.pipe(owner.stderr, { end: false });
+        handle.stdout().on('data', (chunk) => {
+          this.stdoutStream.push(chunk);
+          this.emitToOwner('stdout', chunk);
+        });
+        handle.stderr().on('data', (chunk) => {
+          this.stderrStream.push(chunk);
+          this.emitToOwner('stderr', chunk);
+        });
         handle.on('message', (msg) => this.emitWorkerMessage(msg));
+        handle.on('entryerror', (payload) => {
+          if (typeof payload !== 'object' || payload === null)
+            throw new TypeError('Invalid Worker entry error');
+          const value = Reflect.get(payload, 'value') as unknown;
+          const properties = Reflect.get(payload, 'properties') as object;
+          this.emitWorkerError(value instanceof Error ? Object.assign(value, properties) : value);
+        });
         this.flushKernelMessages(handle);
         // Node emits 'online' once the worker realm exists. Construction-start
         // is already deferred at the shared entry above.
@@ -217,11 +252,8 @@ export class Worker extends EventEmitter {
           }
           return;
         }
-        // TODO(backlog: runtime-js/worker-threads-kernel-error-event): a
-        // worker-runtime uncaught throw exits 1 here with the stack on stderr,
-        // but Node also emits 'error' (the real Error) first. Needs a child-side
-        // uncaught handler posting an IPC error frame; faking an Error from the
-        // exit code would lie. Same-realm path already emits 'error'.
+        // TODO(backlog: runtime-js/worker-threads-kernel-error-event): detached
+        // browser failures still need error projection; entry failures use control.
         this.finish(typeof outcome.code === 'number' ? outcome.code : 1);
       });
     } catch (err) {
@@ -318,7 +350,7 @@ export class Worker extends EventEmitter {
       // pthread code run after its creator has destroyed shared N-API state.
       this.workerHandle.kill('SIGKILL');
     }
-    this.sameRealmParentPort?.removeAllListeners();
+    this.sameRealmParentPort?.close();
     this.sameRealmContext = null;
     this.sameRealmParentPort = null;
     this.sameRealmGlobalOnMessage = null;
@@ -327,10 +359,18 @@ export class Worker extends EventEmitter {
   }
 
   ref(): this {
+    if (!this.exited && !this.#keepaliveHeld) {
+      this.#keepaliveHeld = true;
+      refEventLoop();
+    }
     return this;
   }
 
   unref(): this {
+    if (this.#keepaliveHeld) {
+      this.#keepaliveHeld = false;
+      unrefEventLoop();
+    }
     return this;
   }
 
@@ -375,7 +415,13 @@ export class Worker extends EventEmitter {
   private finish(code: number): void {
     if (this.exited) return;
     this.exited = true;
-    this.emitToOwner('exit', code);
+    this.stdoutStream.push(null);
+    this.stderrStream.push(null);
+    try {
+      this.emitToOwner('exit', code);
+    } finally {
+      this.unref();
+    }
   }
 
   private emitToOwner(event: string, ...args: unknown[]): boolean {
@@ -558,17 +604,7 @@ function shouldLoadWithModuleLoader(script: string, source: string): boolean {
 }
 
 function createWorkerPort(postMessage: (msg: unknown) => void): WorkerPort {
-  const port = new EventEmitter() as WorkerPort;
-  port.onmessage = null;
-  port.postMessage = postMessage;
-  port.ref = () => port;
-  port.unref = () => port;
-  port.start = () => {};
-  port.close = () => {
-    port.removeAllListeners();
-    port.onmessage = null;
-  };
-  return port;
+  return new WorkerThreadPort(postMessage);
 }
 
 function deliverToPort(port: WorkerPort, msg: unknown): void {
@@ -703,7 +739,10 @@ function decodeWorkerData(encoded: string | undefined): unknown {
 
 const worker_threads: Record<string, unknown> = {
   Worker,
-  MessageChannel: globalThis.MessageChannel,
+  get MessageChannel() {
+    return globalThis.MessageChannel;
+  },
+  MessagePort: globalThis.MessagePort,
   markAsUntransferable,
   isMarkedAsUntransferable,
   markAsUncloneable,

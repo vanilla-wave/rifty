@@ -1,6 +1,12 @@
 # Changelog
 
+
 ## [Unreleased]
+
+- Weak live Buffer clone references preserve native IPC graph identity, including constructor/prototype adoption (ADR-0502).
+
+- Keep process stdout/stderr open when a piped Readable ends.
+- Capture native host MessageChannels separately from guest ref tracking (ADR-0496).
 
 - Retire completed command listener scopes without guest meta-events; preserve surviving host listeners (ADR-0422).
 

@@ -62,3 +62,5 @@ export async function preparePackageEntryRuntime(
   }
   await integration.complete();
 }
+
+export { admitInstalledCliEntry } from './vitest-cli-admission.ts';

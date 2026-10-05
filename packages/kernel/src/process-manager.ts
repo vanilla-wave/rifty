@@ -37,16 +37,6 @@ export interface ProcessIO {
   signal: AbortSignal;
 }
 
-/**
- * Discriminator tagging which spawn path produced the handle. Callers MUST
- * branch on this field rather than reaching for `handle.ports`:
- *
- *   - `'same-realm'` — produced by `ProcessManager.spawn(...)`. Runs the
- *     supplied handler in the parent realm; `ports` is always `undefined`.
- *   - `'worker'` — produced by `ProcessManager.spawnWorker(...)`. Backed by
- *     a real `kernel.spawnWorker` Worker realm (ADR-0011 phase 2); `ports`
- *     carries the parent-side stdio `MessagePort`s.
- */
 export type ProcessHandleKind = 'same-realm' | 'worker';
 
 /**
@@ -56,6 +46,7 @@ export type ProcessHandleKind = 'same-realm' | 'worker';
  */
 export type IpcFrame =
   | { readonly kind: 'ipc:message'; readonly payload: unknown }
+  | { readonly kind: 'control:entry-error'; readonly payload: unknown }
   | { readonly kind: 'ipc:tty-resize'; readonly cols: number; readonly rows: number }
   | { readonly kind: 'ipc:disconnect' }
   | { readonly kind: 'control:signal'; readonly signal: string }
@@ -379,6 +370,7 @@ export function decodeIpcFrame(value: unknown): IpcFrame {
   const fields = (names: readonly string[]): Record<string, unknown> =>
     rpcRecord(value, ['kind', ...names], 'process control frame');
   switch (kind) {
+    case 'control:entry-error':
     case 'ipc:message': {
       const record = fields(['payload']);
       return { kind, payload: record.payload };
@@ -862,6 +854,8 @@ export class ProcessManager {
           }
           if (frame.kind === 'control:stdio-order') {
             this.#outputReceiver.acceptOrderFrame(frame);
+          } else if (frame.kind === 'control:entry-error') {
+            this.emit('entryerror', frame.payload);
           } else if (frame.kind === 'ipc:message') {
             if (this.#ipcDisconnected) return;
             this.emit('message', frame.payload);

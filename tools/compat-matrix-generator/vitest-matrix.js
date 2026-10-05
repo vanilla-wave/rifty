@@ -1,0 +1,79 @@
+export const vitestMatrix = {
+  file: 'vitest.md',
+  title: 'Vitest in the browser shell',
+  intro:
+    'Exact Vitest **4.1.11** / Vite **8.0.16**, Node environment. Manifest: `devDependencies: {"vitest":"4.1.11"}`, `overrides: {"vite":"8.0.16"}`, `scripts: {"test":"vitest run"}`. An npm-authored lock pinning the same pair is the existing replay alternative. The organic unpinned manifest alone resolves newer Vite and remains a loud `lightningcss.version` install failure. Run `npm install`, then `npm test` or canonical `vitest run`.',
+  rows: [
+    [
+      'npm bare-version override; one Vite 8.0.16',
+      '✅',
+      'Real tarballs; legacy `vite@8.0.16` override remains supported',
+    ],
+    [
+      'Referenced Workers; unref and captured stdio',
+      '✅',
+      'Physical Worker lifetime, messages and exit ordering match Node',
+    ],
+    [
+      'Process handlers, exit event and inherited exitCode',
+      '✅',
+      'Handled uncaught exceptions/rejections continue; exit fires once',
+    ],
+    [
+      'vitest.config.ts and TypeScript tests',
+      '✅',
+      'Project include glob honoured; real failing assertion/diff exits 1, repaired tests exit 0',
+    ],
+    [
+      'Default forks and explicit threads pools',
+      '✅',
+      'Same reporter counts and exit codes; npm test and verbose reporter covered',
+    ],
+    [
+      'Claimed module tree, advanced IPC and vm offsets',
+      '✅',
+      'Real loader, structured clone, builtin names and Symbol global writes; unavailable members throw on call',
+    ],
+    [
+      'Watch, bare vitest, watch/dev commands',
+      '❌',
+      '`NotImplementedError(vitest.watch)`; canonical run overrides config-only watch as native Vitest does',
+    ],
+    [
+      'Other command/argument entry shapes',
+      '❌',
+      '`vitest.cli-shape`; only raw-first run and root single help/version admitted',
+    ],
+    [
+      'jsdom / happy-dom environments',
+      '❌',
+      'CLI: vitest.environment.*; config: vm.constants.DONT_CONTEXTIFY / named happy-dom runtime ceiling',
+    ],
+    ['Coverage', '❌', 'CLI: vitest.coverage; config: inspector/promises.Session'],
+    ['Browser mode', '❌', 'vitest.browser'],
+    ['vmThreads / vmForks', '❌', 'vitest.pool.vmThreads / vitest.pool.vmForks'],
+    ['Typechecking mode', '❌', 'vitest.typecheck'],
+    [
+      'Other Vitest / Vite versions',
+      '❌',
+      'vitest.version / vitest.vite-version; install recipes retain their own version ceilings',
+    ],
+  ],
+  tests: [
+    '`tests/e2e/vitest-run-in-browser.spec.ts`',
+    '`tests/e2e-prod/vitest-run-in-browser.spec.ts`',
+    '`tools/shadow-registry/src/runtime/vitest-cli-admission.test.ts`',
+    '`packages/runtime-js/src/module-loader/vitest-builtin-surface.test.ts`',
+    '`tools/node-parity-runner/cases/child_process/advanced-ipc.case.ts`',
+    '`tools/node-parity-runner/cases/modules/global-define-loop.case.ts`',
+    '`tools/node-parity-runner/cases/modules/vm-script-offsets.case.ts`',
+  ],
+  limitations: [
+    'Exact package pair and Node environment only. No Vitest source patches or substitute runner. Native public parseCLI performs finite CLI admission; actual CLI owns the admitted action.',
+    'Canonical raw-first `vitest run` may take supported flags. Root single `--help`, `-h`, `--version`, `-v` and run help retain native output. Other command/argument entry shapes fail loudly.',
+    'Pass/fail lines, counts and exit codes are claimed; timing/ANSI bytes are not. Heap statistics, sandbox VM offsets, import preloads and same-realm Worker startup effects retain named ceilings.',
+    'Advanced fork browser-only clone brands (Blob/File/DOMException etc) fail with child_process.serialization.advanced.WebObject; Node-core values and nonshared Buffer API allocations are the supported path.',
+    'Advanced fork SharedArrayBuffer and all shared-backed views (including Buffer) fail with child_process.serialization.advanced.SharedArrayBuffer. Native V8 accepts shared-backed views; this is an explicit browser gap. Worker-thread structured clone remains separate.',
+    'Config-only DOM and coverage reach real dependencies and named runtime ceilings. Negative CLI modes fail before starting a run.',
+  ],
+};

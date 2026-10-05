@@ -1,0 +1,14 @@
+node v24.16.0
+normal Buffer {"gets":1,"oldAlias":true,"freshAlias":true,"oldBuffer":true,"freshBuffer":true,"bytes":[7,8]}
+Promise v8 Error getter-calls 0
+Promise rifty DataCloneError getter-calls 0
+async Promise v8 Error getter-calls 0
+async Promise rifty DataCloneError getter-calls 0
+custom newTarget Promise v8 Error getter-calls 0
+custom newTarget Promise rifty DataCloneError getter-calls 0
+WeakRef v8 Error getter-calls 0
+WeakRef rifty DataCloneError getter-calls 0
+FinalizationRegistry v8 Error getter-calls 0
+FinalizationRegistry rifty DataCloneError getter-calls 0
+MessagePort v8 Error getter-calls 0
+MessagePort rifty DataCloneError getter-calls 0

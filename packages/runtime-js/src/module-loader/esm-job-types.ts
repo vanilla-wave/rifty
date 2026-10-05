@@ -1,4 +1,5 @@
 import type { TransformResult } from './esm-ast.ts';
+import type { GlobalWriteGuard } from './global-write-key.ts';
 import type { ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule, Resolver } from './resolver.ts';
 import type { SourceMapRegistry } from './source-maps.ts';
@@ -28,6 +29,7 @@ export interface EsmLoaderDeps {
   readonly transformSource?: TransformSourceHook;
   readonly transformEsm?: (source: string, id: string) => TransformResult;
   readonly WebAssembly: typeof WebAssembly;
+  readonly resolveParent?: boolean;
 }
 
 export interface EsmEvaluationIterator {
@@ -47,6 +49,7 @@ export type EsmFactory = (
   metaResolve: (s: string) => string,
   Function: FunctionConstructor,
   webAssembly: typeof WebAssembly,
+  globalWriteKey: GlobalWriteGuard,
 ) => EsmEvaluationIterator;
 
 export type EsmDirectFactory = (...args: Parameters<EsmFactory>) => Promise<void>;
@@ -57,6 +60,7 @@ export interface PreparedDependency {
 }
 
 export interface PreparedEsm {
+  readonly globalWriteKeyHelper: string;
   readonly resolved: ResolvedModule;
   readonly transformed: TransformResult;
   readonly dependencies: readonly PreparedDependency[];

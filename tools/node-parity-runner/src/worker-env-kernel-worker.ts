@@ -31,7 +31,10 @@ import {
   recordRejection,
   resetKeepalive,
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
-import { runNodeProgramLifecycle } from '../../../packages/workbench/src/workers/node-program-lifecycle.ts';
+import {
+  runNodeProgramLifecycle,
+  runNodeProgramToCompletion,
+} from '../../../packages/workbench/src/workers/node-program-lifecycle.ts';
 import {
   NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT,
   NODE_CLI_EVAL_TRANSIENT_DECODER_BYTES,
@@ -284,30 +287,44 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
       vfs,
       entryPath,
       cwd: spec.cwd,
+      execArgv: launch.execArgv,
       ...(launch.kind === 'program' && launch.bin ? { bin: true } : {}),
     });
-  if (launch.kind !== 'program' || !launch.nodeServe) {
-    await runEntry();
+  const proc = globalThis.process;
+  const terminateWorker = proc.exit.bind(proc);
+  const writeStderr = proc.stderr.write.bind(proc.stderr);
+  if (launch.kind === 'program' && !launch.nodeServe) {
+    await runNodeProgramToCompletion({
+      runEntry,
+      awaitDrain: (hasPendingEntry) => awaitDrain({ hasRef: () => hasPendingEntry?.() ?? false }),
+      readExitCode: () => proc.exitCode,
+      exit: terminateWorker,
+      writeStderr,
+    });
     return;
   }
 
   registerNetBuiltins();
-  const proc = globalThis.process;
+  const previewScope = launch.kind === 'worker-thread' ? undefined : launch.previewScope;
   await runNodeProgramLifecycle({
     runEntry,
     listPorts,
     onPortsChange: onRegistryChange,
-    awaitDrain: () =>
-      awaitDrain({ capMs: Number.POSITIVE_INFINITY, hasRef: () => listPorts().length > 0 }),
+    awaitDrain: (hasPendingEntry) =>
+      awaitDrain({
+        capMs: Number.POSITIVE_INFINITY,
+        hasRef: () => (hasPendingEntry?.() ?? false) || listPorts().length > 0,
+      }),
     servePreview: (port) =>
       serveCrossRealmPreview(
         port,
         async (request) => dispatchToPort(port, request),
-        launch.previewScope === undefined ? {} : { scope: launch.previewScope },
+        previewScope === undefined ? {} : { scope: previewScope },
       ),
-    postListening: (ports) => postNodeProcessListeningControl(proc, ports, launch.previewScope),
+    postListening: (ports) => postNodeProcessListeningControl(proc, ports, previewScope),
     readExitCode: () => proc.exitCode,
-    exit: (code) => proc.exit(code),
+    exit: terminateWorker,
+    writeStderr,
   });
 }
 

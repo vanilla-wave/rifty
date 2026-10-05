@@ -1,0 +1,221 @@
+{
+  "node": "v24.16.0",
+  "vitest": "4.1.11",
+  "vite": "8.0.16",
+  "command": "node /tmp/rifty-vitest-cli-oracle.mjs",
+  "rows": [
+    {
+      "args": [],
+      "options": {},
+      "filter": []
+    },
+    {
+      "args": ["run"],
+      "options": {
+        "run": true
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--pool=threads"],
+      "options": {
+        "run": true,
+        "pool": "threads"
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--pool", "threads"],
+      "options": {
+        "run": true,
+        "pool": "threads"
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--pool=forks", "--reporter=verbose"],
+      "options": {
+        "run": true,
+        "pool": "forks",
+        "reporter": ["verbose"]
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--reporter", "watch"],
+      "options": {
+        "run": true,
+        "reporter": ["watch"]
+      },
+      "filter": []
+    },
+    {
+      "args": ["--watch"],
+      "options": {
+        "watch": true
+      },
+      "filter": []
+    },
+    {
+      "args": ["-w"],
+      "options": {
+        "watch": true
+      },
+      "filter": []
+    },
+    {
+      "args": ["watch"],
+      "options": {
+        "watch": true
+      },
+      "filter": []
+    },
+    {
+      "args": ["dev"],
+      "options": {
+        "watch": true
+      },
+      "filter": []
+    },
+    {
+      "args": ["watch", "--run"],
+      "options": {
+        "run": true,
+        "watch": true
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--watch"],
+      "options": {
+        "watch": true
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--watch=true"],
+      "options": {
+        "watch": true
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--watch=false"],
+      "options": {
+        "run": true,
+        "watch": false
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--watch", "false"],
+      "options": {
+        "run": true,
+        "watch": false
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--no-watch"],
+      "options": {
+        "run": true,
+        "watch": false
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "-w=false"],
+      "options": {
+        "run": true,
+        "watch": false
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--", "--watch"],
+      "options": {
+        "run": true
+      },
+      "filter": []
+    },
+    {
+      "args": ["--run"],
+      "options": {
+        "run": true
+      },
+      "filter": []
+    },
+    {
+      "args": ["--run=false"],
+      "options": {
+        "run": false
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--environment", "jsdom"],
+      "options": {
+        "run": true,
+        "environment": "jsdom"
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--environment=happy-dom"],
+      "options": {
+        "run": true,
+        "environment": "happy-dom"
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--coverage"],
+      "options": {
+        "run": true,
+        "coverage": {
+          "enabled": true
+        }
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--browser.enabled"],
+      "options": {
+        "run": true,
+        "browser": {
+          "enabled": true
+        }
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--pool=vmThreads"],
+      "options": {
+        "run": true,
+        "pool": "vmThreads"
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--pool=vmForks"],
+      "options": {
+        "run": true,
+        "pool": "vmForks"
+      },
+      "filter": []
+    },
+    {
+      "args": ["run", "--changed"],
+      "options": {
+        "run": true,
+        "changed": true
+      },
+      "filter": []
+    },
+    {
+      "args": ["list"],
+      "options": {},
+      "filter": []
+    }
+  ]
+}

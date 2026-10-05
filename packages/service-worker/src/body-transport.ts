@@ -1,3 +1,4 @@
+import { createHostMessageChannel } from '@riftydev/io';
 /**
  * Body-carrier helpers for the preview bridge: transfer a response body as a
  * `ReadableStream` over `postMessage` (modern Chromium/Firefox/Safari 16.4+),
@@ -30,7 +31,7 @@ export function canTransferReadableStream(): boolean {
         controller.close();
       },
     });
-    const channel = new MessageChannel();
+    const channel = createHostMessageChannel();
     channel.port1.postMessage(stream, [stream as unknown as Transferable]);
     channel.port1.close();
     channel.port2.close();

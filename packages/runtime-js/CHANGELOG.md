@@ -1,6 +1,36 @@
 # Changelog
 
+
 ## [Unreleased]
+
+- Close vitest-run-in-browser: exact Vitest4.1.11/Vite8.0.16 TS config/tests on forks and threads; real fail→fix, npm/verbose, Node lifecycle and finite compatibility ceilings verified.
+
+- Advanced IPC walks native Error.cause edges for Buffer identity and finite ceilings; boxed String leaves retain readonly indexes.
+
+- Worker default stdout/stderr pipes never end the captured parent streams, including same-realm child ownership.
+
+- Shared-backed advanced fork views fail with an explicit ceiling; native V8 snapshot observation remains outside the Vitest scenario (ADR-0503).
+
+- Route owned uncaught browser errors/rejections through Node drain and exit; suppress racing browser peer teardown.
+
+- Named exit/kill exports retain their process receiver and native function names.
+
+- Native advanced IPC rejects opaque brands before getters; weak Buffer references preserve single-read accessors (ADR-0502).
+
+- Dispatch handled CJS/ESM entry exceptions before lifecycle termination; preserve native exception origin.
+
+- Keep explicit exit(null) at zero; browser-only advanced IPC clone brands have named ceilings (ADR-0502).
+
+- Generic beforeEntry shares startup cache; handled native info preserves natural drain (ADR-0500).
+
+- Forward inherited stdin privately; child close does not leave guest stdin flowing or referenced.
+- Missing inspector/promises imports and constructor calls now reach a named Session ceiling.
+
+- Dispatch process error handlers and exit events; inherit exitCode; reference live Workers and native WASM jobs (ADR-0491/0494).
+- Preserve advanced fork clone values/Buffer identity; expose Worker stdio (ADR-0492).
+- Apply host vm offsets and live global write-key guards (ADR-0493/0495).
+- Guest MessagePorts hold the Node loop; host channels remain independent (ADR-0496).
+- Migrate every launch to v5 raw execArgv; shared preload cache, custom conditions and resolve-parent support (ADR-0497).
 
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 

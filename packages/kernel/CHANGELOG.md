@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Forward opaque entry-error metadata on existing private controls (ADR-0499); settlement remains exit-owned.
+
+- Use native marked host channels for worker stdio/control (ADR-0496).
+
 ### Added
 
 - **SyncRpc v5 binary requests (ADR-0366).** One claimed ring now carries

@@ -10,6 +10,11 @@
  * avoiding a runtime circular dep that `pnpm check:arch` would flag.
  */
 
+import {
+  installBufferCloneAdmission,
+  liveBufferCloneRefs,
+  rememberBuffer,
+} from './buffer-clone-refs.ts';
 import { type Encoding, compareSlices, encode } from './buffer-codec.ts';
 import { installCoreMethods, installExtraMethods, installIntMethods } from './buffer-prototype.ts';
 
@@ -29,6 +34,15 @@ export type { Encoding };
 const BUFFER_BRAND = Symbol.for('@riftydev/io.Buffer');
 
 class BufferImplementation extends Uint8Array {
+  constructor(...args: unknown[]);
+  constructor(length: number);
+  constructor(array: ArrayLike<number>);
+  constructor(buffer: ArrayBufferLike, byteOffset?: number, length?: number);
+  constructor(input: unknown = 0, byteOffset?: unknown, length?: unknown) {
+    super(input as ArrayBuffer, byteOffset as number, length as number);
+    rememberBuffer(this);
+  }
+
   /**
    * Ensure `subarray()` / `slice()` and similar typed-array operations that
    * use `Symbol.species` return a `Buffer`, not a plain `Uint8Array`.
@@ -407,6 +421,7 @@ export const Buffer = /* @__PURE__ */ (() => {
   installExtraMethods(BufferImplementation);
   Object.defineProperty(BufferImplementation.prototype, BUFFER_BRAND, { value: true });
   Object.defineProperty(BufferImplementation, 'name', { configurable: true, value: 'Buffer' });
+  installBufferCloneAdmission();
   return BufferImplementation;
 })();
 
@@ -485,3 +500,38 @@ export function isAscii(input: unknown): boolean {
 }
 
 export default { Buffer };
+
+/** Native IPC side references; weak allocation registry shared by bundled copies. */
+export function getLiveBufferCloneRefs(): object[] {
+  return liveBufferCloneRefs(hasCloneBufferBrand);
+}
+
+const cloneViewBuffer = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype),
+  'buffer',
+)!.get!;
+const typedArrayTag = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype),
+  Symbol.toStringTag,
+)!.get!;
+const nativeApply = Reflect.apply;
+const getPrototype = Object.getPrototypeOf;
+const getDescriptor = Object.getOwnPropertyDescriptor;
+function hasCloneBufferBrand(value: unknown): boolean {
+  if (nativeApply(typedArrayTag, value, []) !== 'Uint8Array') return false;
+  if (sharedArrayBufferByteLength) {
+    try {
+      nativeApply(sharedArrayBufferByteLength, nativeApply(cloneViewBuffer, value, []), []);
+      return false;
+    } catch {
+      /* Nonshared view. */
+    }
+  }
+  let current = value as object | null;
+  while (current !== null) {
+    const descriptor = getDescriptor(current, BUFFER_BRAND);
+    if (descriptor) return descriptor.value === true;
+    current = getPrototype(current);
+  }
+  return false;
+}

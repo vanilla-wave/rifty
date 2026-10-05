@@ -1,3 +1,5 @@
+import { parseNodeStartup } from '../internal/node-startup.ts';
+import { dispatchProcessUnhandled } from '../internal/process-unhandled.ts';
 /**
  * Run a VFS Node entry through the rifty module loader (ADR-0137).
  *
@@ -155,6 +157,12 @@ export function parseBinLauncherTarget(source: string): string | null {
 
 export interface RunNodeProgramEntryOptions {
   readonly kind?: 'program';
+  readonly execArgv?: readonly string[];
+  readonly beforeEntry?: (
+    loader: ModuleLoader,
+    specifier: string,
+    fromFile: string,
+  ) => void | 'handled' | Promise<void> | Promise<undefined | 'handled'>;
   readonly vfs: FsSync;
   /** Absolute VFS path: a `.bin` launcher shim when `bin`, else a Node script. */
   readonly entryPath: string;
@@ -162,11 +170,15 @@ export interface RunNodeProgramEntryOptions {
   /** `entryPath` is a `node_modules/.bin/<name>` launcher — run its target. */
   readonly bin?: boolean;
   /** Loader factory seam (tests inject; production uses the real loader). */
-  readonly createLoader?: (vfs: FsSync, opts: { cwd: string }) => ModuleLoader;
+  readonly createLoader?: (
+    vfs: FsSync,
+    opts: { cwd: string; execArgv?: readonly string[] },
+  ) => ModuleLoader;
 }
 
 export interface RunNodeEvalEntryOptions {
   readonly kind: 'eval';
+  readonly execArgv?: readonly string[];
   readonly vfs: FsSync;
   readonly cwd: string;
   readonly source: string;
@@ -206,9 +218,15 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
         cwd: opts.cwd,
         explicitCommonJs: opts.explicitCommonJs,
         compiler,
+        execArgv: opts.execArgv,
       }).run(opts.source);
     } catch (error) {
-      throw projectNodeEvalError(error, opts.source, 'sync', compiler);
+      const projected = projectNodeEvalError(error, opts.source, 'sync', compiler);
+      const origin = opts.execArgv?.includes('--input-type=module')
+        ? 'entry-esm'
+        : 'uncaught-error';
+      if (!isRiftyProcessExit(error) && dispatchProcessUnhandled(projected, origin)) return;
+      throw projected;
     }
     registerNodeEvalDrainLifecycle({
       beforeExit: async () => {
@@ -240,8 +258,14 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
     });
     return;
   }
-  const loader = (opts.createLoader ?? createModuleLoader)(opts.vfs, { cwd: opts.cwd });
+  const startup = parseNodeStartup(opts.execArgv ?? []);
+  const loader = (opts.createLoader ?? createModuleLoader)(opts.vfs, {
+    cwd: opts.cwd,
+    execArgv: opts.execArgv,
+  });
+  let entryEsm = false;
   try {
+    for (const preload of startup.preloads) loader.require(preload, `${opts.cwd}/[preload].cjs`);
     if (opts.bin) {
       const shim = utf8.decode(opts.vfs.readFileBytesSync(opts.entryPath));
       const target = parseBinLauncherTarget(shim);
@@ -253,11 +277,18 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
         );
       }
       // Resolve the launcher target against the shim's own path, then run it.
+      if ((await opts.beforeEntry?.(loader, target, opts.entryPath)) === 'handled') return;
+      entryEsm =
+        loader.resolver.resolve(target, { fromFile: opts.entryPath, esm: true }).kind === 'esm';
       const ns = await loader.import(target, opts.entryPath);
       const pending = exportedPromise(ns);
       if (pending) await pending;
       return;
     }
+    if ((await opts.beforeEntry?.(loader, opts.entryPath, opts.entryPath)) === 'handled') return;
+    entryEsm =
+      loader.resolver.resolve(opts.entryPath, { fromFile: opts.entryPath, esm: true }).kind ===
+      'esm';
     await loader.import(opts.entryPath, opts.entryPath);
   } catch (err) {
     // A missing entry (`node ./nope.js`) or an uncaught nested-require miss
@@ -265,6 +296,12 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
     // on the child stderr instead of rifty's ModuleLoadError name + frames
     // (backlog/runtime-js/node-entry-miss-node-shape). All other throws are
     // re-raised unchanged.
-    throw asNodePrintedError(err);
+    const projected = asNodePrintedError(err);
+    if (
+      !isRiftyProcessExit(err) &&
+      dispatchProcessUnhandled(projected, entryEsm ? 'entry-esm' : 'uncaught-error')
+    )
+      return;
+    throw projected;
   }
 }

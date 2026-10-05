@@ -11,6 +11,7 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
+import { registerVmStackOffsets } from '../../module-loader/source-maps.ts';
 import { recordDivergence } from '../../telemetry/divergence-sink.ts';
 import { selectEngine } from './engine-config.ts';
 import {
@@ -191,12 +192,16 @@ function assertSupportedRunOptions(options: RunningScriptOptions, feature: strin
   }
 }
 
-function assertSupportedScriptOptions(options: ScriptOptions, feature: string): void {
+function assertSupportedScriptOptions(
+  options: ScriptOptions,
+  feature: string,
+  allowOffsets = false,
+): void {
   assertSupportedRunOptions(options, feature);
-  if (options.lineOffset !== undefined && options.lineOffset !== 0) {
+  if (!allowOffsets && options.lineOffset !== undefined && options.lineOffset !== 0) {
     throw new NotImplementedError(`${feature}.lineOffset`);
   }
-  if (options.columnOffset !== undefined && options.columnOffset !== 0) {
+  if (!allowOffsets && options.columnOffset !== undefined && options.columnOffset !== 0) {
     throw new NotImplementedError(`${feature}.columnOffset`);
   }
   if (options.cachedData !== undefined) {
@@ -333,8 +338,22 @@ export function isContext(value: unknown): boolean {
 
 export function runInThisContext(code: string, options?: VmOptions): unknown {
   const normalized = normalizeOptions(options);
-  assertSupportedScriptOptions(normalized, 'vm.runInThisContext');
-  return runGlobalScript(withSourceURL(asSource(code), normalized.filename));
+  assertSupportedScriptOptions(normalized, 'vm.runInThisContext', true);
+  for (const key of ['lineOffset', 'columnOffset'] as const) {
+    const value = normalized[key];
+    if (value !== undefined && (typeof value !== 'number' || !Number.isInteger(value))) {
+      throw new TypeError(`The "options.${key}" argument must be an integer`);
+    }
+  }
+  const filename =
+    normalized.lineOffset || normalized.columnOffset
+      ? registerVmStackOffsets(
+          normalized.filename ?? 'evalmachine.<anonymous>',
+          normalized.lineOffset ?? 0,
+          normalized.columnOffset ?? 0,
+        )
+      : normalized.filename;
+  return runGlobalScript(withSourceURL(asSource(code), filename));
 }
 
 export function runInContext(
@@ -367,6 +386,7 @@ export function runInNewContext(
 export class Script {
   readonly #code: string;
   readonly #filename?: string;
+  readonly #options: ScriptOptions;
   // Memoised compiled payload — compile once, reuse across every run of this
   // Script instance. The engine keys its own per-script state (the rewrite, a
   // quickjs handle, …) on this stable CompiledScript identity, so reuse here is
@@ -375,7 +395,8 @@ export class Script {
 
   constructor(code: string, options?: VmOptions) {
     const normalized = normalizeOptions(options);
-    assertSupportedScriptOptions(normalized, 'vm.Script');
+    assertSupportedScriptOptions(normalized, 'vm.Script', true);
+    this.#options = { ...normalized };
     this.#code = asSource(code);
     this.#filename = normalized.filename;
   }
@@ -386,11 +407,11 @@ export class Script {
   }
 
   runInThisContext(options?: VmOptions): unknown {
-    return runInThisContext(this.#code, { ...normalizeOptions(options), filename: this.#filename });
+    return runInThisContext(this.#code, { ...normalizeOptions(options), ...this.#options });
   }
 
   runInContext(contextifiedObject: Record<string, unknown>, options?: VmOptions): unknown {
-    const normalized = { ...normalizeOptions(options), filename: this.#filename };
+    const normalized = { ...normalizeOptions(options), ...this.#options };
     assertSupportedScriptOptions(normalized, 'vm.Script');
     assertContextified(contextifiedObject);
     return selectEngineForRun().runCompiled(
@@ -403,7 +424,7 @@ export class Script {
     if (contextObject === null) {
       throw new TypeError('The "object" argument must be of type object. Received null');
     }
-    const normalized = { ...normalizeOptions(options), filename: this.#filename };
+    const normalized = { ...normalizeOptions(options), ...this.#options };
     assertSupportedScriptOptions(normalized, 'vm.Script');
     const context = createContext(contextObject === undefined ? {} : contextObject);
     return selectEngineForRun().runCompiled(this.#getCompiled(), context as ContextObject);
@@ -424,7 +445,27 @@ export function compileFunction(
   return new Function(...params, asSource(code)) as (...args: unknown[]) => unknown;
 }
 
+export const constants = Object.freeze({
+  get DONT_CONTEXTIFY(): never {
+    throw new NotImplementedError('vm.constants.DONT_CONTEXTIFY', 'jsdom-environment-in-browser');
+  },
+});
+
+export class SourceTextModule {
+  constructor(..._args: unknown[]) {
+    throw new NotImplementedError('vm.SourceTextModule');
+  }
+}
+export class SyntheticModule {
+  constructor(..._args: unknown[]) {
+    throw new NotImplementedError('vm.SyntheticModule');
+  }
+}
+
 const vmModule = {
+  constants,
+  SourceTextModule,
+  SyntheticModule,
   Script,
   compileFunction,
   createContext,

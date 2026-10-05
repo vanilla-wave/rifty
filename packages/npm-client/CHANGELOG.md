@@ -1,5 +1,7 @@
 # Changelog
 
+- Honour npm bare-version/range overrides without changing package identity.
+
 ## [Unreleased]
 
 - Match npm tar root stripping for DefinitelyTyped and other named roots; preserve ordinary property-name files and traversal rejection.

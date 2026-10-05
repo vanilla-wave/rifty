@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Keep preview/body host channels outside guest Node references (ADR-0496).
+
 - Static SW captures `__rifty_preview_prefix` from its script URL for routing and PONG;
   public URL helpers preserve opaque host query bytes. Omission keeps `/preview/`;
   routing version 7, frame version 1 (ADR-0409).

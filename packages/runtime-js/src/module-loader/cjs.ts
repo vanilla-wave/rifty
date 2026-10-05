@@ -7,6 +7,13 @@ import { type Edit, applyEdits, uniqueHelperName } from './cjs-source-rewrite.ts
 import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
+import {
+  type GlobalWriteGuard,
+  globalWriteKeyGuard,
+  guardComputedWrite,
+  guardMutationCallee,
+} from './global-write-key.ts';
+import { isSymbolKey, literalString, markConstSymbolKey } from './property-keys.ts';
 import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
@@ -120,6 +127,7 @@ interface AnyNodeShape {
 
 interface Scope {
   readonly bindings: Set<string>;
+  readonly symbolKeys: Set<string>;
   readonly globalAliases: Set<string>;
   readonly maybeFunctionAliases: Set<string>;
   readonly maybeDerivedFunctionAliases: Set<string>;
@@ -132,6 +140,7 @@ interface FunctionRewriteCtx {
   readonly functionHelperName: string;
   readonly webAssemblyHelperName: string;
   readonly dynamicImportHelperName: string;
+  readonly globalWriteKeyHelperName: string;
   hasGlobalFunctionWrite: boolean;
   hasDynamicFunctionScope: boolean;
   hasWithDynamicFunctionScope: boolean;
@@ -208,6 +217,7 @@ function rewriteCjsFunctionConstructorReferences(
   functionHelperName: string,
   webAssemblyHelperName: string,
   dynamicImportHelperName: string,
+  globalWriteKeyHelperName: string,
 ): string {
   if (!functionRoutingAnalysisToken.test(source)) return source;
   let program: Program;
@@ -239,6 +249,7 @@ function rewriteCjsFunctionConstructorReferences(
     functionHelperName,
     webAssemblyHelperName,
     dynamicImportHelperName,
+    globalWriteKeyHelperName,
     hasGlobalFunctionWrite: false,
     hasDynamicFunctionScope: false,
     hasWithDynamicFunctionScope: false,
@@ -275,6 +286,7 @@ function rewriteCjsFunctionConstructorReferences(
 function createScope(): Scope {
   return {
     bindings: new Set(),
+    symbolKeys: new Set(),
     globalAliases: new Set(),
     maybeFunctionAliases: new Set(),
     maybeDerivedFunctionAliases: new Set(),
@@ -293,6 +305,7 @@ function popScope(ctx: FunctionRewriteCtx): void {
 function addBinding(scope: Scope, name: string | undefined): void {
   if (!name) return;
   scope.bindings.add(name);
+  scope.symbolKeys.delete(name);
   scope.globalAliases.delete(name);
   scope.maybeFunctionAliases.delete(name);
   scope.maybeDerivedFunctionAliases.delete(name);
@@ -565,6 +578,7 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
         const declId = decl.id as AnyNodeShape | undefined;
         walkPatternExpressions(declId, ctx);
         if (decl.init) walkFunctionReferences(decl.init, ctx);
+        markConstSymbolKey(decl, n.kind, ctx.scopes);
         if (decl.init) {
           updateGlobalAliasesFromPatternValue(declId, decl.init, ctx);
           updateMaybeFunctionAliasesFromPatternValue(declId, decl.init, ctx);
@@ -1446,7 +1460,9 @@ function isGlobalFunctionReadMember(node: AnyNodeShape, ctx: FunctionRewriteCtx)
 function isGlobalFunctionWriteMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
   if (!isGlobalObjectExpression(node.object, ctx)) return false;
   const propertyName = staticPropertyName(node);
-  return propertyName === 'Function' || (propertyName === undefined && isComputedMember(node));
+  if (propertyName === undefined && isComputedMember(node))
+    guardComputedWrite(ctx.edits, node.property, ctx.globalWriteKeyHelperName);
+  return propertyName === 'Function';
 }
 
 function expressionMayBeHostFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
@@ -1501,7 +1517,7 @@ function isReflectGetFunctionCall(node: AnyNodeShape, ctx: FunctionRewriteCtx): 
     return false;
   }
   if (!isGlobalObjectExpression(args[0], ctx)) return false;
-  return propertyMayBeFunction(args[1]);
+  return propertyMayBeFunction(args[1], ctx);
 }
 
 function isReflectGetDerivedFunctionConstructorCall(
@@ -1659,22 +1675,27 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
     if (propertyName === 'defineProperties') {
       return objectMayContainFunctionKey(args[1]);
     }
-    return propertyMayBeFunction(args[1]);
+    if (literalString(args[1]) === undefined) {
+      guardMutationCallee(ctx.edits, callee, ctx.globalWriteKeyHelperName);
+      return false;
+    }
+    return propertyMayBeFunction(args[1], ctx);
   }
 
   if (
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
-    return propertyMayBeFunction(args[0]);
+    const key = literalString(args[0]);
+    return key === 'Function' || key === undefined;
   }
 
   return false;
 }
 
-function propertyMayBeFunction(node: unknown): boolean {
+function propertyMayBeFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
   const value = literalString(node);
-  return value === 'Function' || value === undefined;
+  return value === 'Function' || (value === undefined && !isSymbolKey(node, ctx.scopes));
 }
 
 function propertyMayBeConstructor(node: unknown): boolean {
@@ -1717,32 +1738,6 @@ function staticPropertyKeyName(node: AnyNodeShape): string | undefined {
     return (key as unknown as { name?: string }).name;
   }
   return literalString(key);
-}
-
-function literalString(node: unknown): string | undefined {
-  if (!node || typeof node !== 'object') return undefined;
-  const n = unwrapChain(node) as AnyNodeShape;
-  if (n.type === 'Literal') {
-    const value = (n as unknown as { value?: unknown }).value;
-    return typeof value === 'string' ? value : undefined;
-  }
-  if (n.type === 'BinaryExpression' && (n as unknown as { operator?: string }).operator === '+') {
-    const left = literalString(n.left);
-    const right = literalString(n.right);
-    return left !== undefined && right !== undefined ? left + right : undefined;
-  }
-  if (n.type === 'TemplateLiteral') {
-    const expressions = (n as unknown as { expressions?: unknown[] }).expressions ?? [];
-    if (expressions.length > 0) return undefined;
-    const quasis = (n as unknown as { quasis?: AnyNodeShape[] }).quasis ?? [];
-    return quasis
-      .map((quasi) => {
-        const value = quasi.value as { cooked?: unknown } | undefined;
-        return typeof value?.cooked === 'string' ? value.cooked : '';
-      })
-      .join('');
-  }
-  return undefined;
 }
 
 function unwrapChain(node: unknown): unknown {
@@ -1797,6 +1792,7 @@ function compileCjsSource(
     __riftyDynamicImport: (specifier: unknown) => Promise<Record<string, unknown>>,
     __riftyFunction: FunctionConstructor,
     __riftyWebAssembly: typeof WebAssembly,
+    __riftyGlobalWriteKey: GlobalWriteGuard,
   ) => void;
 
   const routedConstructors = createFunctionImportRouting(dynamicImport, filename);
@@ -1811,12 +1807,14 @@ function compileCjsSource(
     '__riftyWebAssembly',
     new Set([dynamicImportHelperName, functionHelperName]),
   );
+  const globalWriteKeyHelperName = uniqueHelperName(sourceText, '__riftyGlobalWriteKey');
   const source = rewriteCjsFunctionConstructorReferences(
     rewriteDynamicImports(sourceText, filename, dynamicImportHelperName),
     filename,
     functionHelperName,
     webAssemblyHelperName,
     dynamicImportHelperName,
+    globalWriteKeyHelperName,
   );
   let fn: CjsFactory;
   try {
@@ -1829,11 +1827,10 @@ function compileCjsSource(
       dynamicImportHelperName,
       functionHelperName,
       webAssemblyHelperName,
+      globalWriteKeyHelperName,
       `${source}\n//# sourceURL=${filename}`,
     ) as CjsFactory;
   } catch (error) {
-    // `new Function` SyntaxError has no file context — surface a directed
-    // error naming the module (mirrors the ESM path in esm.ts).
     const message = (error as Error).message ?? String(error);
     throw new ModuleLoadError(
       'SYNTAX_ERROR',
@@ -1853,6 +1850,7 @@ function compileCjsSource(
     dynamicImport,
     routedConstructors.Function,
     deps.WebAssembly,
+    globalWriteKeyGuard('cjs'),
   );
 }
 

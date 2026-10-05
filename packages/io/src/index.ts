@@ -22,6 +22,7 @@ export { NotImplementedError } from './errors.ts';
 export { EventEmitter, once, captureEventEmitterListenerScope } from './event-emitter.ts';
 export {
   Buffer,
+  getLiveBufferCloneRefs,
   getInspectMaxBytes,
   setInspectMaxBytes,
   isUtf8,
@@ -75,3 +76,9 @@ export {
   synthesizePreviewUrl,
   parsePreviewPath,
 } from './preview-protocol.ts';
+
+export {
+  createHostMessageChannel,
+  markHostMessagePort,
+  HOST_MESSAGE_PORT,
+} from './host-message-channel.ts';
