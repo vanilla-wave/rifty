@@ -32,4 +32,5 @@ export interface Input {
   dir: string;
   playgroundUrl: string;
   noCoiUrl?: string;
+  signal?: AbortSignal;
 }

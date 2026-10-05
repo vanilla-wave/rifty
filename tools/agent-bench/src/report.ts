@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { gunzipSync, gzipSync } from 'node:zlib';
@@ -7,6 +7,7 @@ import { type Config, type Endpoint, redact, redactJson } from './config.ts';
 import type { diffTrees } from './files.ts';
 import type { JudgeVerdict } from './judge/context.ts';
 import type { Lane, Observation } from './lanes/types.ts';
+import type { Plan, Trial } from './plan.ts';
 export const caveat =
   'Tool/context non-equivalence: shared model, Pi version and common policy do not isolate an environment-only effect. Native CLI has read/bash/edit/write and native shell; browser hosts expose their real capabilities. Full provider prompts and tool schemas are retained per run.';
 export interface Run extends Omit<Observation, 'trace'> {
@@ -46,6 +47,13 @@ export interface Report {
     runsPerTask: number;
     toolContextCaveat: string;
     unsupported: string[];
+    plan?: Plan;
+    series?: {
+      status: 'running' | 'completed' | 'interrupted' | 'failed';
+      trials: Trial[];
+      active?: Trial;
+      error?: string;
+    };
   };
   runs: Run[];
 }
@@ -55,6 +63,24 @@ export function privateReport(report: Report, secrets: readonly string[]): Repor
   return {
     header: {
       ...report.header,
+      ...(report.header.plan === undefined
+        ? {}
+        : {
+            plan: {
+              ...report.header.plan,
+              config: JSON.parse(redactJson(report.header.plan.config, secrets)) as Config,
+            },
+          }),
+      ...(report.header.series === undefined
+        ? {}
+        : {
+            series: {
+              ...report.header.series,
+              ...(report.header.series.error === undefined
+                ? {}
+                : { error: text(report.header.series.error) }),
+            },
+          }),
       model: text(report.header.model),
       endpoint: JSON.parse(redactJson(report.header.endpoint, secrets)) as Endpoint,
       ...(report.header.noCoiPolicies === undefined
@@ -105,13 +131,17 @@ export async function readJson<T>(dir: string, name: string): Promise<T> {
 async function writeJson(dir: string, name: string, value: unknown) {
   const text = `${JSON.stringify(value, null, 2)}\n`;
   const gzip = !existsSync(join(dir, 'report.json')) && existsSync(join(dir, 'report.json.gz'));
-  if (!gzip) return writeFile(join(dir, name), text);
+  if (!gzip) {
+    await writeFile(join(dir, `${name}.tmp`), text);
+    return rename(join(dir, `${name}.tmp`), join(dir, name));
+  }
   const bytes = gzipSync(text);
   bytes[9] = 0x03; // RFC 1952 OS byte: zlib writes host OS (macOS 0x13); pin Unix. Deflate stream: per zlib build.
-  await writeFile(join(dir, `${name}.gz`), bytes);
+  await writeFile(join(dir, `${name}.gz.tmp`), bytes);
+  await rename(join(dir, `${name}.gz.tmp`), join(dir, `${name}.gz`));
 }
-export async function writeReport(dir: string, report: Report) {
-  await writeJson(dir, 'report.json', report);
+export async function writeReport(dir: string, report: Report, persist = true) {
+  if (persist) await writeJson(dir, 'report.json', report);
   const lines = [
     `# Agent benchmark: ${report.header.model}`,
     '',
@@ -132,6 +162,26 @@ export async function writeReport(dir: string, report: Report) {
     '|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|',
   ];
   const cell = (value: string | null) => value?.replaceAll('|', '\\|').replaceAll('\n', ' ') ?? '—';
+  if (report.header.series) {
+    const series = report.header.series;
+    lines.push(
+      `Series: ${series.status}; selected ${series.trials.length}; retained ${report.runs.length}.`,
+      'Incomplete series is partial evidence; missing work is never success.',
+    );
+    if (series.error) lines.push(`Series error: ${cell(series.error)}`);
+    for (const trial of series.trials) {
+      if (
+        report.runs.some(
+          (run) =>
+            run.task === trial.task && run.lane === trial.lane && run.runIndex === trial.runIndex,
+        )
+      )
+        continue;
+      lines.push(
+        `| ${trial.task} | ${trial.lane} | ${trial.runIndex} | missing | ${series.active?.task === trial.task && series.active.lane === trial.lane && series.active.runIndex === trial.runIndex ? 'unfinished' : 'not started'} |`,
+      );
+    }
+  }
   for (const run of report.runs)
     lines.push(
       `| ${run.task} | ${run.lane} | ${run.runIndex} | ${run.outcome} | ${run.agentStatus} | ${(run.elapsedMs / 1000).toFixed(1)} | ${run.toolCalls} | ${run.inputTokens ?? '—'} | ${run.outputTokens ?? '—'} | ${run.retries ?? '—'} | ${run.compactions ?? '—'} | ${run.repeatedCallNotices ?? '—'} | ${run.editFailures ?? '—'} | ${run.malformedToolCalls ?? '—'} | ${cell(run.failureClass)} | ${cell(run.note)} |`,
@@ -160,7 +210,7 @@ export async function writeReport(dir: string, report: Report) {
   await writeFile(join(dir, 'summary.md'), `${lines.join('\n')}\n`);
 }
 export async function regenerate(dir: string) {
-  await writeReport(dir, await readJson<Report>(dir, 'report.json'));
+  await writeReport(dir, await readJson<Report>(dir, 'report.json'), false);
 }
 
 const metricKeys = [

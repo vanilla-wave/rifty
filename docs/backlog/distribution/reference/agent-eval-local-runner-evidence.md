@@ -8,3 +8,12 @@ BASE `a28b37da31ca3ef128bbdcb6aa55d6109c5f7d16`; Node v24.16.0, Pi 0.85.1, Chrom
 - Class sweep `rg` under tools/agent-bench, tools/review, tools/checks, packages/agent, packages/rifty: no series persistence mechanism; runner is sole writer, report direct JSON writes, proc owns process teardown. No separate ledger or coordinator.
 - Corrected collision RED, same isolated file: scripted native runner exits 0 on occupied directory (expected refusal), no timeout. Three expected REDs, one persistence-failure check green.
 - Selected unsupported RED: `pnpm exec playwright test -c tools/agent-bench/playwright.config.ts series-interruption.spec.ts -g 'selected unsupported'`, CLI exits 0 but report absent (ENOENT); 1.3 min packed preparation, selected trial silently skipped.
+
+## GREEN
+
+- `pnpm test:run tools/agent-bench/src/series.fault.test.ts tools/agent-bench/src/comparison.test.ts tools/agent-bench/src/redaction.test.ts tools/agent-bench/src/metrics-privacy.test.ts`: 36/36. Plan assertions now exact task/lane/index/order, config override and source/prompt/judge hashes. A new assertion initially compared --runs2 to config's3; corrected oracle to explicit CLI override, isolated rerun green.
+- `pnpm exec playwright test -c tools/agent-bench/playwright.config.ts series-interruption.spec.ts`: native interruption/fresh-series and unsupported-trial journeys 2/2,21.7s.
+- `pnpm exec playwright test -c tools/agent-bench/playwright.config.ts contract.spec.ts -g 'all three real mock-model lanes'`: 1/1,5.1min;14 actual supported runs/28 external requests,15 selected records (one explicit no-COI Node setup failure), real tracing/common judges unchanged. Fixtures now use absent output paths; historical42-run measurements unchanged.
+- `pnpm pr:check`:27/27; lint/typecheck/builds/architecture/docs gates, test:run210.0s, test:parity114.7s. No isolated failures; required full lanes green.
+- `pnpm --filter @riftydev/agent-bench typecheck`: pass, including added cleanup-fault acceptance.
+- `pnpm exec playwright test -c tools/agent-bench/playwright.config.ts series-interruption.spec.ts -g 'trace cleanup failure'`:1/1,9.6s; physical directory-at-browser.zip fault after START. Completed record persisted before failed tracing cleanup; next selected trial remains missing, series failed. Added after full gate; lint/typecheck + its real fault run green, production bytes unchanged.

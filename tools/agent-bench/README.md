@@ -5,6 +5,7 @@ policy, three cold runs per supported lane by default. Tool/context differences
 remain explicit; a delta is not automatically a runtime defect.
 
 ```sh
+pnpm agent-bench plan --config tools/agent-bench/configs/gpt-6-luna.json
 pnpm agent-bench run --mock-model --runs 1 --output /tmp/agent-smoke
 pnpm agent-bench run --config /tmp/agent-endpoint.json --output /tmp/agent-live
 pnpm agent-bench report /tmp/agent-live
@@ -54,7 +55,7 @@ playground port5289; override `playgroundPort` in config.
 
 `--lane all|rifty|rifty-no-coi|local-reference`, `--task <slug>`, `--runs N`.
 Tasks: fix-date-sort, add-search, url-filters, new-issue-form, node-endpoint.
-Node control is explicitly excluded from rifty-no-coi; full default matrix42 runs.
+New series retain the selected no-COI Node control as an unsupported setup failure; full selected smoke matrix45 trials. Historical42-run reports retain their original exclusions.
 
 - rifty: real launcher/+chat/settings/prompt entry, visible Agent terminal,
   editor/SCM/preview. Benchmark hooks only seed/task metadata/export. Ordinary
@@ -118,3 +119,27 @@ Scripted packed-host smoke (no model account):
 The default full packed-consumer CI lane runs this smoke too, including genuine
 Vite iframe preview. SW registration occurs only when the benchmark requests
 preview after the agent turn; the shared commands host remains SW-free.
+
+## Local series through Codex
+
+Codex operates the scripts: inspect `plan`, choose explicit config/task/lane/runs,
+invoke `run`, follow START/END, inspect report/trace/diff/judge evidence, invoke
+`report` to regenerate. The scripts own ordering/scoring; operator prose changes
+neither judge nor score. `plan` validates without starting services or calling a
+model. It records ordered identities, config, source revision/dirty-diff digest,
+starting file/prompt/judge hashes and lockfile hash (null for legacy smoke starters).
+The corpus pins its own installed lockfiles; legacy smoke is a separate control.
+
+Output must be absent. An occupied directory throws before setup; config files
+live outside that directory. Each run creates a new series and cold workspaces.
+The initial report contains the entire resolved plan before service/browser
+setup. SIGINT/SIGTERM stops the current work and keeps completed records; its
+unfinished trial and unstarted work remain missing. Setup/cleanup failures retain
+partial evidence and a series error. Completed records persist before teardown.
+JSON is atomically replaced by the serial runner; `report` only regenerates the
+Markdown view and never rewrites authoritative JSON or calls agents. A running
+report after abrupt process death is visibly partial, never completed. No resume.
+
+Before live execution, record selected matrix size, budgets and expected cost in
+campaign protocol. Scripted model controls test plumbing, not coding quality.
+Native Codex is a separate participant; the operating Codex session is not scored.

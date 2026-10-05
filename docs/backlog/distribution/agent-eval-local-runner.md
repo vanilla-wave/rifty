@@ -76,5 +76,7 @@ Resume and occupied output throw; no crash-resume service, scheduler or scored r
 
 ## Decisions
 
+ready-verdict: 2026-10-05 — Contract+RED @ f4761b3ca0f997c39841cdbfcc4b1f750ee3a02c
+
 - 2026-10-05 — prerequisite PRs #359/#357 merged; existing runner/report remain state owners; inherited endpoint, metrics, budgets and packed reference host.
 - 2026-10-05 — class sweep: runner only series writer; report writes JSON directly; proc owns cancellation; no existing series/lock/ledger to reuse. Exclusive mkdir + atomic file replacement, one serial loop; tier works does not promise crash-resume.

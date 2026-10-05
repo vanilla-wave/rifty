@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { type ChildProcess, spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -28,6 +28,7 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
     cwd: workspace,
     env: nativeEnv,
     timeoutMs: 300000,
+    signal: input.signal,
   });
   await writeFile(
     join(dir, 'install.log'),
@@ -64,6 +65,11 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
     );
   let server = start();
   let context: Awaited<ReturnType<typeof input.browser.newContext>> | undefined;
+  let agent: ChildProcess | undefined;
+  const stop = () => {
+    void killProcessGroup(agent ?? null);
+  };
+  input.signal?.addEventListener('abort', stop, { once: true });
   try {
     await waitHttpReady(previewUrl, 120000, 'native dev server');
     context = await input.browser.newContext();
@@ -149,8 +155,11 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
               RIFTY_BENCH_MODEL_HEADERS: JSON.stringify(endpoint.headers ?? {}),
             },
             stdio: ['ignore', 'pipe', 'pipe'],
+            detached: true,
           },
         );
+        agent = child;
+        if (input.signal?.aborted) stop();
         let stdout = '';
         let stderr = '';
         child.stdout.on('data', (chunk: Buffer) => {
@@ -242,11 +251,15 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
       },
       snapshot: () => readTree(workspace),
       async close() {
+        input.signal?.removeEventListener('abort', stop);
+        await killProcessGroup(agent ?? null);
         await context!.close();
         await killProcessGroup(server);
       },
     };
   } catch (error) {
+    input.signal?.removeEventListener('abort', stop);
+    await killProcessGroup(agent ?? null);
     await context?.close();
     await killProcessGroup(server);
     throw error;

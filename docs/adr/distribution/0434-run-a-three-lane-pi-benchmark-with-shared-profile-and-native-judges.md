@@ -69,3 +69,6 @@ Native CLI/schema/header/budget probes and source→scope record:
 2026-09-18 — ADR-0440 supersedes decision 3's unchanged assembled-prompt
 clause. Shared profile id/paragraphs remain unchanged; resource blocks and
 custom-prompt tail order now apply to every consumer.
+
+2026-10-05 — ADR-0505 supersedes only decision6's unsupported node-endpoint/no-COI
+exclusion for new selected series. Historical reports and the42-run baseline remain.

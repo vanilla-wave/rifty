@@ -125,7 +125,7 @@ const controls = selected.flatMap((task) => {
     },
   ];
 });
-const out = await mkdtemp(join(tmpdir(), 'rifty-bench-native-judges-'));
+const out = join(await mkdtemp(join(tmpdir(), 'rifty-bench-native-judges-')), 'series');
 try {
   const report = await run(config, controls, ['local-reference'], out);
   console.log(

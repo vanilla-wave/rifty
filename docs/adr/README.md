@@ -397,6 +397,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0488 | Use npm semver subset rules for installed dependency saves |
 | 0489 | Keep reference host deployment policy outside the SDK |
 | 0490 | Keep reference host snapshot preparation explicit |
+| 0505 | Local evaluation series evidence and native Codex reference |
 
 ## Superseded (removed)
 

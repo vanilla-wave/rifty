@@ -29,14 +29,20 @@ export interface RunResult {
 export function runToCompletion(
   cmd: string,
   args: string[],
-  opts: { cwd: string; env?: NodeJS.ProcessEnv; timeoutMs: number },
+  opts: { cwd: string; env?: NodeJS.ProcessEnv; timeoutMs: number; signal?: AbortSignal },
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, {
       cwd: opts.cwd,
       env: opts.env ?? process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
     });
+    const abort = () => {
+      void killProcessGroup(child);
+    };
+    opts.signal?.addEventListener('abort', abort, { once: true });
+    if (opts.signal?.aborted) abort();
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (d: Buffer) => {
@@ -46,7 +52,7 @@ export function runToCompletion(
       stderr += d.toString();
     });
     const timer = setTimeout(() => {
-      child.kill('SIGKILL');
+      void killProcessGroup(child);
       reject(
         new Error(
           `agent-bench: \`${cmd} ${args.join(' ')}\` timed out after ${opts.timeoutMs}ms\n${stderr.slice(-2000)}`,
@@ -55,10 +61,12 @@ export function runToCompletion(
     }, opts.timeoutMs);
     child.once('error', (err) => {
       clearTimeout(timer);
+      opts.signal?.removeEventListener('abort', abort);
       reject(err);
     });
-    child.once('exit', (code) => {
+    child.once('close', (code) => {
       clearTimeout(timer);
+      opts.signal?.removeEventListener('abort', abort);
       resolve({ code: code ?? -1, stdout, stderr });
     });
   });
@@ -67,7 +75,7 @@ export function runToCompletion(
 export async function runOrThrow(
   cmd: string,
   args: string[],
-  opts: { cwd: string; env?: NodeJS.ProcessEnv; timeoutMs: number },
+  opts: { cwd: string; env?: NodeJS.ProcessEnv; timeoutMs: number; signal?: AbortSignal },
 ): Promise<RunResult> {
   const result = await runToCompletion(cmd, args, opts);
   if (result.code !== 0) {

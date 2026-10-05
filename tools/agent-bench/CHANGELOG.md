@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Resolve full selected series before setup; reject occupied outputs, retain partial/missing trials on interruption and atomically persist completed records before cleanup. Report regeneration is read-only over JSON; unsupported selected trials remain failures (ADR-0505).
+
 - Shared reference host uses explicit preparation/open, with no snapshot deployment policy (ADR-0490).
 
 - Keep existing benchmark preview by registering its SW only on preview; default packed CI runs the shared-host smoke with real Vite.
