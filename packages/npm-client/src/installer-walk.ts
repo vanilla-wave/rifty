@@ -71,6 +71,9 @@ export type PinnedPackage = NormalizedResolvedPackage & {
 
 export interface WalkAndPinResult {
   readonly packages: Map<string, PinnedPackage>;
+  readonly skippedOptionalDependencies: Readonly<
+    Record<string, { readonly name: string; readonly version: string } | null>
+  >;
   readonly companionOnlyBinInstallPaths: ReadonlySet<string>;
   readonly replayAccounting: LockfileReplayAccounting;
 }
@@ -142,7 +145,12 @@ export interface ResolveContext {
  * walkAndPin}).
  */
 export interface ResolutionSource {
-  resolve(name: string, range: string | null, ctx: ResolveContext): Promise<ResolvedPin>;
+  resolve(
+    name: string,
+    range: string | null,
+    ctx: ResolveContext,
+    onSelection?: (selected: Pick<ResolvedPin, 'name' | 'version'>) => void,
+  ): Promise<ResolvedPin>;
   prefetch?(name: string, range: string | null, ctx: ResolveContext): void;
   hasLockEntry?(name: string, ctx: ResolveContext): boolean;
 }
@@ -278,6 +286,8 @@ export async function walkAndPin(
   const flatByName = new Map<string, Readonly<{ version: string; identity: string }>>();
   /** Every installed copy, keyed by install path. */
   const pinned = new Map<string, PinnedPackage>();
+  const skippedOptionalDependencies: Record<string, { name: string; version: string } | null> =
+    Object.create(null);
   const replayAccounting = createLockfileReplayAccounting();
   /** Install paths already scheduled this walk (synchronous path-level dedup,
    * replaces `pinned.has` since `pinned` is now populated at the await site). */
@@ -560,8 +570,12 @@ export async function walkAndPin(
     const optionalRoots: PreparedRoot[] = [];
     for (const [name, range] of Object.entries(topLevelOptionalDependencies)) {
       const desc = { depName: name, depRange: range, parentName: rootName };
+      let selected: Pick<ResolvedPin, 'name' | 'version'> | undefined;
       try {
-        const pin = await source.resolve(name, range, rootContext);
+        const pin = await source.resolve(name, range, rootContext, (identity) => {
+          selected = identity;
+        });
+        selected = pin;
         assertShimSupported(pin.name, pin.version);
         const result = await acquirePin(pin);
         const installPath = `node_modules/${pin.name}`;
@@ -572,6 +586,9 @@ export async function walkAndPin(
         optionalRoots.push({ name, range, pin, optional: desc });
       } catch (error) {
         throwIfAborted(fetchCtx.signal);
+        skippedOptionalDependencies[name] = selected
+          ? { name: selected.name, version: selected.version }
+          : null;
         recordReplaySkippedError(replayAccounting, error);
         warnOptional(desc, error);
       }
@@ -645,6 +662,7 @@ export async function walkAndPin(
   }
   return {
     packages: pinned,
+    skippedOptionalDependencies,
     companionOnlyBinInstallPaths,
     replayAccounting,
   };

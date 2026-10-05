@@ -327,9 +327,11 @@ export function standardTools(
         'Run a command in the host project shell. Errors and nonzero exit codes are reported; Stop cancels the active command.',
         Type.Object({ command: Type.String() }),
         async (args, signal) => {
-          const outcome = await shell(args.command, signal, (chunk, stream) =>
-            emit({ type: 'output', command: args.command, chunk, stream }),
-          );
+          const output: string[] = [];
+          const outcome = await shell(args.command, signal, (chunk, stream) => {
+            output.push(chunk);
+            emit({ type: 'output', command: args.command, chunk, stream });
+          });
           const makeResult =
             outcome.status !== 'exited' || outcome.exitCode !== 0 ? failedResult : result;
           const details = {
@@ -350,7 +352,7 @@ export function standardTools(
                         outcome.error instanceof Error ? hostError(outcome.error) : outcome.error,
                     }),
               },
-              `${outcome.stdout}${outcome.stderr}`,
+              output.length ? output.join('') : `${outcome.stdout}${outcome.stderr}`,
             ),
             details,
           );

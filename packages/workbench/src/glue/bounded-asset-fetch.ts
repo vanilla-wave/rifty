@@ -8,6 +8,8 @@ export interface ByteStreamBounds {
   readonly label: string;
   readonly stallTimeoutMs?: number;
   readonly maxBytes?: number;
+  readonly onProgress?: (bytes: number, total?: number) => void;
+  readonly totalBytes?: number;
 }
 
 export interface AssetFetchOptions extends ByteStreamBounds {
@@ -85,6 +87,7 @@ export async function drainByteStreamBounded(
         throw new Error(`${bounds.label}: body exceeded ${maxBytes} bytes`);
       }
       chunks.push(next.value);
+      bounds.onProgress?.(total, bounds.totalBytes);
     }
   } catch (error) {
     void reader.cancel().catch(() => {});
@@ -112,13 +115,22 @@ export async function fetchAssetBytesBounded(
     void response.body?.cancel().catch(() => {});
     throw new Error(`${options.label}: HTTP ${response.status}`);
   }
-  const declared = Number(response.headers.get('content-length'));
+  const length = response.headers.get('content-length');
+  const declared = length !== null && /^\d+$/.test(length) ? Number(length) : Number.NaN;
+  const encoding = response.headers.get('content-encoding');
+  // CORS can hide Content-Encoding even while exposing compressed Content-Length.
+  const sameByteDomain = encoding === 'identity' || (encoding === null && response.type !== 'cors');
   if (Number.isFinite(declared) && declared > maxBytes) {
     void response.body?.cancel().catch(() => {});
     throw new Error(`${options.label}: body exceeded ${maxBytes} bytes`);
   }
   try {
-    return await drainByteStreamBounded(response.body, { ...options, maxBytes });
+    return await drainByteStreamBounded(response.body, {
+      ...options,
+      maxBytes,
+      totalBytes:
+        Number.isSafeInteger(declared) && declared >= 0 && sameByteDomain ? declared : undefined,
+    });
   } catch (error) {
     controller.abort();
     throw error;

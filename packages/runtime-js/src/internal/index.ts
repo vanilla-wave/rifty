@@ -54,3 +54,5 @@ export type {
   ToolchainCommandResult,
   RuntimeEffects,
 } from '../protocol.ts';
+
+export type { RuntimeProgressEvent, SnapshotProgress } from '../protocol.ts';

@@ -94,6 +94,7 @@ function createIncrementalSource(
   const registry = createRegistrySource(opts, substitutions);
   let metadataUsed = false;
   const useRegistry = (name: string, range: string | null, ctx: ResolveContext): boolean => {
+    if (ctx.parentOrigin === 'root' && opts.updateNames?.includes(name)) return true;
     const decision = lockfileReuseDecision(lockfile, shadowPlan, name, range, ctx, opts.overrides);
     return decision.kind === 'miss' && registryOwnsIncrementalMiss(decision, ctx);
   };
@@ -115,12 +116,12 @@ function createIncrementalSource(
           /* resolve re-raises in the correct error-order slot */
         }
       },
-      async resolve(name, range, ctx): Promise<ResolvedPin> {
+      async resolve(name, range, ctx, onSelection): Promise<ResolvedPin> {
         if (useRegistry(name, range, ctx)) {
           metadataUsed = true;
-          return await registry.resolve(name, range, ctx);
+          return await registry.resolve(name, range, ctx, onSelection);
         }
-        return await locked.resolve(name, range, ctx);
+        return await locked.resolve(name, range, ctx, onSelection);
       },
     },
     resolution: () => (metadataUsed ? 'metadata' : 'lockfile'),
@@ -147,7 +148,7 @@ function createLockfileSource(
     hasLockEntry(name, ctx): boolean {
       return pinnedEntryForParent(lockfile, name, ctx.parentLockfilePath) !== undefined;
     },
-    async resolve(name, range, ctx): Promise<ResolvedPin> {
+    async resolve(name, range, ctx, onSelection): Promise<ResolvedPin> {
       // Apply the same retained redirect/user override as live resolution
       // before lookup. Synthetic catalog recipes keep their source identity
       // and are validated separately against the lockfile recipe trace.
@@ -158,6 +159,8 @@ function createLockfileSource(
         opts.overrides,
       );
       const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+      if (hit && typeof hit.entry.version === 'string')
+        onSelection?.({ name: effectiveName, version: hit.entry.version });
       // Recorded-pin admission fact (ADR-0361); absent entry keeps the
       // request-shape throw ahead of the missing-entry EBROKENLOCK below.
       const recipe = builtinRecipeForRequest(
@@ -382,11 +385,15 @@ function createRegistrySource(
       }
     },
 
-    async resolve(name, range, ctx): Promise<ResolvedPin> {
+    async resolve(name, range, ctx, onSelection): Promise<ResolvedPin> {
       const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
       const synthetic = recipe?.acquisition.kind === 'synthetic' ? recipe : null;
       if (synthetic) {
         const manifest = syntheticManifest(synthetic);
+        onSelection?.({
+          name: synthetic.materialization.name,
+          version: synthetic.materialization.version,
+        });
         substitutions.line(
           `npm: ${name}@${range ?? '*'} materialized from shadow registry (${synthetic.id})`,
         );
@@ -431,6 +438,9 @@ function createRegistrySource(
       if (!manifest) {
         throw new Error(`Packument missing version manifest ${effectiveName}@${pick}`);
       }
+      // Selection precedes native/lifecycle/shadow admission; a skipped optional
+      // still has this version, even if resolve cannot return an admitted pin.
+      onSelection?.({ name: effectiveName, version: pick });
       const shadowRecipe = registryRecipeForResolution(recipe, effectiveName, pick);
       const shadowProjection = shadowRecipe
         ? assertRegistryShadowProjection(shadowRecipe, manifest)

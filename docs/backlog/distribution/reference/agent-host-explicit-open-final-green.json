@@ -1,0 +1,134 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS на 8cd595116: amended PR357 и F1/F2/F3 проверены; записать verdict, завершить docs/PR bookkeeping и pass-binding. Merge не выполнен.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "8cd595116fcb8b5ad71f999ea3d9126a60306829",
+  "unit_goal_source": "PR #357; observed BASE 45bc326ab4e3221c6e2beea61d35ab0b221771f7; user amendment 2026-10-01 «давай явно выпилим ее из этого ПРа» (identity → force → reconciliation); ADR-0490, superseding ADR-0489 D1–D2; retained no-COI host-kit scenario1–9/I1–I10 accepted at2534d1e97ef838c07c0c4caa6c464877347dc7a4, with amended scenario4/9/I8. Fresh independent reviewer /root/removal_final_green read raw BASE diff, original goal, amended closure, ADR, current PR body and tests. Main45067718e additions remain accepted baseline; examined changed merge seams, preserving archive and reference-host packed proofs, one immediate rejection observer, and actual emitted NoticeEvent variants. Required preparation inspected: independent explicit-open Contract+RED and real Chromium failure without snapshot storage; F1/F2 native Node24.16.0/npm11.17.0 matrix56+9, shared/direct17 RED, Eddy2 RED, Chromium2 RED and revert artifacts; F3 Chromium3 RED/revert/GREEN. PR-4: old Eddy expectation prod-over-dev contradicted executed native oracle; corrected criterion has live native differential and real Eddy carriers. Deleted deployment proof follows explicit user scope change; saved-open assertions retain source/manifest/lock bytes, execution and no-refetch. Independent exact-HEAD focused run60/60 (shared/direct native npm35, Eddy-request6, installer-concurrency12, transcript7): /private/tmp/rifty-pr357-final-independent-tests.log. Additional native/rifty tag/loose-range probe3 agreed: /private/tmp/rifty-pr357-final-tags-probe.log. Independent source Chromium4 used 0af30a61c plus the three cleanup diffs committed unchanged in8cd595116 (arch reviewer session81428/chunkf877ba); source equivalence checked afterward. Same clean HEAD full pnpm pr:check27/27, no isolated reruns, test:run192.8s/parity122.6s: /private/tmp/rifty-pr357-final-pr-check-green.log. Earlier pre-fix gate typecheck failure remains recorded; the clean full rerun passed. Full default packed consumer16 first-party+178 external tarballs, both registry journeys, saved open/occupied retry, archive and existing SDK/preview/HMR/sqlite baselines plus mandatory shared-host benchmark smoke passed: /private/tmp/rifty-pr357-final-packed.log. Driver session28195 exit0 confirms gate, packed run and cleanup. Final git HEAD exact and status clean. Unchanged prior library obligations reuse accepted evidence; current end-to-end amended scenario and all three arch findings are satisfied. No required unit/goal residual remains; broader quality/visual-debug work remains outside this accepted goal.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Explicit initial prepare applies before supplied files, without applied-ID state or automatic force.",
+      "source": "acceptance",
+      "trace": "ADR-0490 D1 + amended scenario4/I8",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/host.ts:126; tests/no-coi/reference-host-open.spec.ts:61",
+      "note": ""
+    },
+    {
+      "row": "Explicit saved open preserves edited sources, manifest, lock and executable dependency without fetching the initial snapshot again.",
+      "source": "acceptance",
+      "trace": "ADR-0490 D2 + amended scenario4/I8",
+      "status": "pass",
+      "citation": "tests/no-coi/reference-host-open.spec.ts:68; tests/integration/reference-host-browser-proof.mjs:292",
+      "note": ""
+    },
+    {
+      "row": "Explicit conflicting snapshot fails through SDK default conflict behavior before overwriting saved sources.",
+      "source": "acceptance",
+      "trace": "ADR-0490 D1 + I2 + amended scenario4",
+      "status": "pass",
+      "citation": "tests/no-coi/reference-host-open.spec.ts:79; tests/integration/fixtures/workbench-vite-consumer/src/host.ts:128",
+      "note": ""
+    },
+    {
+      "row": "SDK validation and explicit apply/open/force behavior remain available and proven.",
+      "source": "acceptance",
+      "trace": "ADR-0490 D3 + I2/I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:118; tests/no-coi/no-coi-snapshot-application.spec.ts:201; tests/integration/workbench-packed-consumer.mjs:660",
+      "note": ""
+    },
+    {
+      "row": "F1: named npm saves retain native optional/dev sections, wildcard reuse and range intersection; manifest/root-lock maps match native npm.",
+      "source": "acceptance",
+      "trace": "I9 + scenario6",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/npm-install-registry.ts:30; tests/integration/npm-shell-save-parity.test.ts:20; tests/no-coi/agent-npm-install.spec.ts:18",
+      "note": ""
+    },
+    {
+      "row": "F2: shared/direct install and Eddy prefetch/install select native dev > optional > prod roots, with native optional normalization in root lock maps.",
+      "source": "acceptance",
+      "trace": "I9 + scenario6",
+      "status": "pass",
+      "citation": "tests/integration/npm-shell-save-parity.test.ts:113; tests/integration/npm-shell-eddy-glue.test.ts:102; packages/npm-client/src/installer-request.ts:97",
+      "note": ""
+    },
+    {
+      "row": "Changed Eddy expected dependency version follows executed native npm precedence, replacing the old incorrect prod-over-dev oracle.",
+      "source": "frozen-artifact",
+      "trace": "I9 + scenario6",
+      "status": "pass",
+      "citation": "packages/npm-client/src/eddy-request.test.ts:9; tests/integration/npm-shell-save-parity.test.ts:115; tests/integration/npm-shell-eddy-glue.test.ts:117",
+      "note": ""
+    },
+    {
+      "row": "F3: registry-missing provenance follows the final executed command through recovery, short-circuits, nested scripts, pipelines and Stop.",
+      "source": "acceptance",
+      "trace": "I9 + scenario6 + existing project command outcome baseline",
+      "status": "pass",
+      "citation": "tests/no-coi/registry-error-control-flow.spec.ts:7; tests/no-coi/registry-error-control-flow.spec.ts:54; tests/no-coi/registry-error-control-flow.spec.ts:131",
+      "note": ""
+    },
+    {
+      "row": "Packed reference host retains both registry journeys: support/boot/progress, agent edits/model-switch/install, ordered build/busy retry, saved reopen and occupied retry; benchmark boots the same module.",
+      "source": "acceptance",
+      "trace": "I8 + amended scenario1–9 + ADR-0489 D3–D4",
+      "status": "pass",
+      "citation": "tests/integration/reference-host-browser-proof.mjs:140; tests/integration/reference-host-browser-proof.mjs:292; tests/integration/reference-host-browser-proof.mjs:311; tests/integration/workbench-packed-consumer.mjs:1234",
+      "note": ""
+    },
+    {
+      "row": "Merge-dependent transcript notice type describes the six emitted notice variants; existing transcript behavior and packed archive/reference compositions remain valid.",
+      "source": "public-api",
+      "trace": "I7 + I8 + ADR-0482",
+      "status": "pass",
+      "citation": "packages/agent/src/transcript.ts:6; packages/agent/src/transcript.ts:154; packages/agent/src/transcript.test.ts:132; tests/integration/workbench-packed-consumer.mjs:696",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

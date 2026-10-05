@@ -1,0 +1,208 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED \u043f\u0440\u0438\u043d\u044f\u0442 \u0441 NOTE; \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u0438\u0442\u044c \u043a \u0440\u0435\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u0438. Merge \u0442\u043e\u043b\u044c\u043a\u043e \u043f\u043e\u0441\u043b\u0435 Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/sdk-sandbox-lifecycle.md @ 1024adea2133a39684462bdf571e1234870dfb69; goal docs/backlog/epics/no-coi-agent-host-kit/goal.md I1\u2013I3; BASE c4830dc642cefcef3ab1f60495b841126a14b75c (accepted I7)",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I9",
+      "location": "docs/backlog/distribution/no-coi-agent-npm-install.md:1",
+      "summary": "Agent shell install through configured registry; typed no-registry and truthful instructions."
+    },
+    {
+      "clause": "I8 + scenario 1\u20139",
+      "location": "docs/backlog/distribution/no-coi-agent-reference-host.md:1",
+      "summary": "Connections-only packed reference host, both registry modes, shared benchmark composition and whole-goal proof."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: early root opening subscription; awaited readiness, async rejection, restart and detach",
+      "source": "acceptance",
+      "trace": "I2/I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:5; packages/rifty/src/sandbox-startup.contract.test.ts:20",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: native boot and pre-ready contention phases",
+      "source": "acceptance",
+      "trace": "I1/I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:41; tests/no-coi/sdk-lifecycle.spec.ts:106",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: both deadlines, native cause, guard identity, no fallback, release/retry and negative controls",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:49; tests/no-coi/sdk-lifecycle.spec.ts:232",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: actual busy/resident/restart/conflict/mismatch/persistence outcomes and unknown controls; retry policy promised",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:147; tests/no-coi/sdk-lifecycle.spec.ts:311; tests/no-coi/sdk-snapshot-progress.spec.ts:126",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: operation-scoped fetch/write/flush counts, optional totals, no failed completion or prior-operation replay",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-snapshot-progress.spec.ts:72; tests/no-coi/sdk-snapshot-progress.spec.ts:187",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: identical bytes allowed; force preserves unrelated files",
+      "source": "acceptance",
+      "trace": "I2/ADR-0420",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-snapshot-progress.spec.ts:113; tests/no-coi/no-coi-snapshot-application.spec.ts:120",
+      "note": ""
+    },
+    {
+      "row": "Fault: provenance-lie \u00d7 boot deadline",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:49; tests/no-coi/sdk-lifecycle.spec.ts:232",
+      "note": ""
+    },
+    {
+      "row": "Fault: lossy-aggregate \u00d7 Worker error",
+      "source": "fault-matrix",
+      "trace": "I1/I2",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:114; tests/no-coi/sdk-lifecycle.spec.ts:311",
+      "note": ""
+    },
+    {
+      "row": "Fault: sibling-drift \u00d7 live/restarted subscription",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Fault: provenance-lie \u00d7 snapshot counts",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-snapshot-progress.spec.ts:72",
+      "note": ""
+    },
+    {
+      "row": "Fault: stale-result \u00d7 snapshot operation",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-snapshot-progress.spec.ts:111",
+      "note": ""
+    },
+    {
+      "row": "Fault: provenance-lie \u00d7 failed persistence",
+      "source": "fault-matrix",
+      "trace": "I2/I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-snapshot-progress.spec.ts:192; tests/no-coi/sdk-lifecycle.spec.ts:311",
+      "note": ""
+    },
+    {
+      "row": "Public promise: SandboxOpening<T> with early runtime.on",
+      "source": "public-api",
+      "trace": "ADR-0486 D1 + I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Public promise: sandboxErrorKind and SandboxErrorKind from SDK root",
+      "source": "public-api",
+      "trace": "ADR-0486 D3 + I2",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:151; tests/no-coi/sdk-snapshot-progress.spec.ts:170",
+      "note": ""
+    },
+    {
+      "row": "Public promise: RuntimeEvent boot progress union",
+      "source": "public-api",
+      "trace": "ADR-0486 D2 + I1/I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-lifecycle.spec.ts:41; tests/no-coi/sdk-lifecycle.spec.ts:106",
+      "note": ""
+    },
+    {
+      "row": "Public promise: RuntimeEvent snapshot progress union",
+      "source": "public-api",
+      "trace": "ADR-0486 D4 + I3",
+      "status": "pass",
+      "citation": "tests/no-coi/sdk-snapshot-progress.spec.ts:94",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/no-coi/sdk-snapshot-progress.spec.ts:105",
+          "summary": "Flush assertions require only persisted===total>0; an independent native watermark/count comparison would better discriminate fabricated counts. No executed mutant: advisory only, coverage remains pass under REV-4/REV-5.",
+          "authority": "",
+          "evidence": "Reading of lines 105\u2013109; no mutant executed. Real browser RED artifacts /tmp/rifty-pr357-sdk-red.log fail on missing progress, not on a proven count mutant. Independent rerun at the frozen HEAD: RIFTY_NO_COI_PORT=5541 RIFTY_NO_COI_ORACLE_PORT=5542 RIFTY_NO_COI_RESOURCE_PORT=5543 pnpm test:no-coi sdk-lifecycle.spec.ts sdk-snapshot-progress.spec.ts no-coi-snapshot-application.spec.ts; /tmp/rifty-pr357-sdk-review-run.log: 16 behavioral RED, 16 GREEN (12 existing snapshot controls + 4 negative controls), 1.2m; no import/typecheck failure."
+        },
+        {
+          "severity": "concern",
+          "location": "tests/no-coi/sdk-snapshot-progress.spec.ts:113",
+          "summary": "Repeated apply distinguishes operation ids/zero writes, but does not actively inject a delayed frame after settlement or Worker replacement. Add a native held-fetch/restart control and direct pending-request control when implementing; no executed surviving mutant, advisory only under REV-4/REV-5.",
+          "authority": "",
+          "evidence": "Reading of lines 111\u2013120 and existing host-startup.fault.test.ts:145. Native restart subscription is covered at sdk-lifecycle.spec.ts:5; no snapshot delayed-frame mutant was executed."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "1024adea2133a39684462bdf571e1234870dfb69"
+}

@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+- Keep transcript notice types aligned with emitted notice events when archive receipts are enabled.
+
+- Describe connected/unconnected SDK registry accurately in prompt notes; remove the host-only dependency instruction. Ordinary shell npm install uses SDK admission and policy (ADR-0487).
+
+- Export a pure native-event transcript reducer with stable rows, streaming/final messages, cancelled tools, output and continuation notices; budget terminals preserve prior history (ADR-0485).
+
+- Sandbox agent hosts accept distinct files/shell policies over one root, enforced by SDK project handles; reference README defaults unrestricted (ADR-0484).
+
+- Built-in OpenAI catalog entries support `textOnlyContent`; native transport sends strings and refuses image prompts/history before network (ADR-0483).
+
+- Shell results preserve streamed stdout/stderr order after the status header.
 - Optional shared OPFS conversation archive: original messages survive reset/compaction/reload; read-only cross-project search and pagination, durable receipts and visible storage errors; host-restored `initialMessages` are counted (`restoredMessageCount`), not re-archived; `archive_search` lists newest first, skips image bytes and reports bounded `corrupt` entries (`corruptCount` total) without hiding healthy conversations; files written before `restoredMessageCount` read as 0 restored (ADR-0482).
 
 - Repeated-call detection ignores mutation host-diagnostics timing (pending vs settled); README/ADR-0475 note state exactly which consumer results get budget receipts.

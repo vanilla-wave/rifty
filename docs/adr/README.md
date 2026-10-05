@@ -192,6 +192,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0433 | Preserve Vite module URLs at the filesystem root |
 | 0435 | Follow npm tar root stripping for materialized installs |
 | 0451 | User override values follow npm's version/range reading |
+| 0504 | Preserve named install intent and optional resolution outcomes |
 
 ### playground
 
@@ -388,6 +389,14 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0478 | Compare fixed-config agent benchmark runs |
 | 0479 | Scrub declared secrets at the provider ingress |
 | 0482 | Shared durable agent conversation archive |
+| 0483 | Text-only message content on OpenAI catalog entries |
+| 0484 | Separate agent file and shell project policies |
+| 0485 | Project agent events into a headless transcript |
+| 0486 | Observable sandbox startup and snapshot lifecycle |
+| 0487 | Connect agent npm installation to the sandbox registry |
+| 0488 | Use npm semver subset rules for installed dependency saves |
+| 0489 | Keep reference host deployment policy outside the SDK |
+| 0490 | Keep reference host snapshot preparation explicit |
 
 ## Superseded (removed)
 
@@ -684,3 +693,10 @@ here.
 | Hidden restart/recovery queue | 2026-09-04 | concurrent restart rejects; queueing adds order/cancellation state outside the tier. Record: ADR-0377 |
 | Crash-proof no-COI workspace durability | 2026-09-04 | termination before flush may cross generations; only the dirty marker is promised. Record: ADR-0377 |
 | Vite-specific build-only installed-tree finalizer | 2026-09-04 | generic installed-tree finalization must follow package bytes, not Vite identity. Record: ADR-0375 |
+| Published embedder conformance / test-fixture package (`@riftydev/verify`, `@webcontainer/test`-style) | 2026-09-17 | public probe page + version matrix + support contract for test infrastructure is a standing theme, not a bounded goal; the no-COI and packed-consumer lanes plus the in-repo reference host carry upgrade confidence. Record: issue #345 triage; `docs/backlog/distribution/reference/no-coi-agent-host-kit-close.md` |
+| `page-locks` required for the sdk-toolchain support mode | 2026-09-17 | requiredness follows composition operations; the SDK path takes no Web Lock; a host with its own lease composes it from `checks`. Record: ADR-0437 D3, ADR-0438, `docs/public/sandbox-support.md` |
+| Headless ANSI / line-assembly / severity helpers in `@riftydev/terminal` | 2026-09-17 | the terminal owns none of them (ADR-0198 display plane); severity-from-text is a heuristic; chunk→line is ~10 host lines carried by the reference host. Record: issue #345 triage |
+| `downloadTrace()` package export | 2026-09-17 | 12-line DOM helper on the consumer side of D-002; not a public API entry. Record: issue #345 triage |
+| Fast second-opener rejection through a namespace-keyed lease / heartbeat | 2026-09-27 | a terminated Worker holds the replica guard ~2 s with the same native error as a live competitor; a cross-page lock overturns ADR-0428 and ADR-0402 D6 and re-opens the `page-locks` row; user chose typed occupied + visible wait. Record: `docs/backlog/distribution/reference/no-coi-agent-host-kit-close.md` Decisions |
+| SDK-held applied-snapshot identity / `ensureSnapshot` / producer metadata sidecar | 2026-09-27 | an install stamp by another name (ADR-0417); apply into an empty target or a typed conflict, the host manages the rest — «никакой проверки идентичности не нужно». Record: `docs/backlog/distribution/reference/no-coi-agent-host-kit-close.md` Decisions |
+| Legacy OPFS layout migration or read path for a 0.x major | 2026-09-27 | «не нужно продумывать механизма миграции для 0 мажора»; ADR-0425 D8 and ADR-0432 stand. Record: `docs/backlog/distribution/reference/no-coi-agent-host-kit-close.md` Decisions |

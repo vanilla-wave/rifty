@@ -98,6 +98,23 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
     ).toBeVisible({ timeout: 15_000 });
     await runTerminalLineSettled(page, 'npm install cowsay', 200_000);
     await expectTerminalContains(page, /npm: installed \d+ package\(s\)/, 200_000);
+    // ADR-0487: bare npm install saves ^resolved-version, then restore preserves it.
+    await runTerminalLineSettled(
+      page,
+      `node -e "console.log('cowsay-'+'saved:'+JSON.stringify({range:require('./package.json').dependencies.cowsay,version:require('cowsay/package.json').version}))"`,
+      30_000,
+    );
+    const savedMatch = /cowsay-saved:(\{[^\r\n]+\})/u.exec(await terminalBuffer(page));
+    expect(savedMatch).not.toBeNull();
+    const savedCowsay = JSON.parse(savedMatch![1]!) as { range: string; version: string };
+    const expectedCowsayRange = `^${savedCowsay.version}`;
+    expect(savedCowsay.range).toBe(expectedCowsayRange);
+    const expectSavedCowsay = () =>
+      expect
+        .poll(async () => /"cowsay"\s*:\s*"([^"]+)"/u.exec(await terminalBuffer(page))?.[1], {
+          timeout: 15_000,
+        })
+        .toBe(expectedCowsayRange);
     // EXEC pre-teardown: the installed CLI runs in-realm and draws the cow.
     await runTerminalLineSettled(page, 'cowsay before-switch', 30_000);
     await expectTerminalContains(page, '< before-switch >', 20_000);
@@ -114,7 +131,7 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
     await runTerminalLineSettled(page, 'cat data.txt', 30_000);
     await expectTerminalContains(page, marker, 15_000);
     await runTerminalLineSettled(page, 'cat package.json', 30_000);
-    await expectTerminalContains(page, /"cowsay"\s*:\s*"latest"/u, 15_000);
+    await expectSavedCowsay();
     await runTerminalLineSettled(page, 'cowsay after-switch', 30_000);
     await expectTerminalContains(page, '< after-switch >', 20_000);
 
@@ -135,7 +152,7 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
 
     // The restored dependency intent and executable capability must agree.
     await runTerminalLineSettled(page, 'cat package.json', 30_000);
-    await expectTerminalContains(page, /"cowsay"\s*:\s*"latest"/u, 15_000);
+    await expectSavedCowsay();
     await runTerminalLineSettled(page, 'cowsay after-reload', 30_000);
     await expectTerminalContains(page, '< after-reload >', 30_000);
     expect(await terminalBuffer(page)).toContain('^__^');
@@ -152,7 +169,7 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
       await expectTerminalContains(page, /npm: installed \d+ package\(s\)/, 200_000);
       const before = await observation.reload();
       expect(before.marker).toBe(`${marker}\n`);
-      expect(JSON.parse(before.manifest).dependencies.cowsay).toBe('latest');
+      expect(JSON.parse(before.manifest).dependencies.cowsay).toBe(expectedCowsayRange);
       const trusted = hasMatchingDurableClaim(before, observation.reference);
       console.log(
         '[fast-reload-claim]',

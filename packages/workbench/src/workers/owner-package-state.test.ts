@@ -1,4 +1,9 @@
-import { type InstallOptions, type InstallResult, RegistryClient } from '@riftydev/npm-client';
+import {
+  type InstallOptions,
+  type InstallResult,
+  RegistryClient,
+  install as realInstall,
+} from '@riftydev/npm-client';
 import { type CommandContext, Shell } from '@riftydev/shell';
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -16,6 +21,7 @@ import {
   createPlaygroundNpmObserver,
   playgroundInitialInstallFinalizer,
 } from './playground-package-mutations.ts';
+import { vendoredRegistry } from './vendored-registry.test-fixture.ts';
 
 const ROOT = '/project';
 const BASE_PACKAGE_JSON = `${JSON.stringify({
@@ -59,6 +65,7 @@ afterEach(resetSyncMirror);
 async function packageMutationHarness(
   ownerEpoch: string,
   options: {
+    readonly realInstall?: boolean;
     readonly declineFinalize?: boolean;
     readonly failInstallAttempts?: number;
     readonly failFinalizeAttempts?: number;
@@ -73,9 +80,23 @@ async function packageMutationHarness(
   });
   setSyncMirror(authority, { async: pair.vfs });
   authority.mkdirSync(ROOT, { recursive: true });
-  authority.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(BASE_PACKAGE_JSON));
+  const selectedConfig = options.realInstall
+    ? {
+        ...config,
+        installDeps: { kleur: '4.1.5' },
+        packageJson: JSON.stringify({
+          name: 'app',
+          version: '1.0.0',
+          dependencies: { kleur: '4.1.5' },
+        }),
+      }
+    : config;
+  authority.writeFileSync(
+    `${ROOT}/package.json`,
+    new TextEncoder().encode(selectedConfig.packageJson),
+  );
   const firstConfig: FirstMaterializationOwnerPackageConfig = {
-    cfg: config,
+    cfg: selectedConfig,
     templateId: 'vite',
     slug: 'scratch',
     fromScratch: true,
@@ -101,13 +122,11 @@ async function packageMutationHarness(
     finalizeFirstInstall: playgroundInitialInstallFinalizer(amendGeneratedBaseline),
     nodeWorkerRuntimeEnv: {},
     log: () => {},
-    registry: new RegistryClient({
-      baseUrl: '/unused',
-      fetch: async () => new Response('', { status: 599 }),
-    }),
+    registry: vendoredRegistry(),
     install: async (arg1) => {
       const opts = arg1 as InstallOptions;
       installInvocation += 1;
+      if (options.realInstall) return await realInstall(opts);
       authority.mkdirSync(`${opts.cwd}/node_modules/user-pkg`, { recursive: true });
       authority.writeFileSync(
         `${opts.cwd}/node_modules/user-pkg/index.js`,
@@ -284,6 +303,7 @@ it('does not fall through a known nested root after production empty proof fails
 it('classifies first dependency arrival separately from user package manifest/lock edits', async () => {
   const { authority, amendGeneratedBaseline, recordMutation, shell } = await packageMutationHarness(
     'owner-package-mutation-classification-test',
+    { realInstall: true },
   );
 
   expect((await shell.run('npm install')).exitCode).toBe(0);
@@ -294,7 +314,7 @@ it('classifies first dependency arrival separately from user package manifest/lo
   );
 
   recordMutation.mockClear();
-  expect((await shell.run('npm install user-pkg@1.0.0')).exitCode).toBe(0);
+  expect((await shell.run('npm install ms@2.0.0 --save-exact')).exitCode).toBe(0);
   expect(recordMutation.mock.calls.map(([kind]) => kind)).toEqual([
     'package-manifest',
     'package-lock',
@@ -524,9 +544,10 @@ it.each(['install', 'i', 'add'] as const)(
   async (subcommand) => {
     const { amendGeneratedBaseline, recordMutation, shell } = await packageMutationHarness(
       `owner-package-first-user-${subcommand}-classification-test`,
+      { realInstall: true },
     );
 
-    expect((await shell.run(`npm ${subcommand} user-pkg@1.0.0`)).exitCode).toBe(0);
+    expect((await shell.run(`npm ${subcommand} ms@2.0.0 --save-exact`)).exitCode).toBe(0);
     expect(recordMutation.mock.calls.map(([kind]) => kind)).toEqual([
       'package-manifest',
       'package-lock',
@@ -693,6 +714,15 @@ it('reasserts template node_modules inside the package authority; extraneous see
 });
 
 it('uses exact session project identity while a full install enters during promotion', async () => {
+  const realConfig = {
+    ...config,
+    installDeps: { kleur: '4.1.5' },
+    packageJson: JSON.stringify({
+      name: 'app',
+      version: '1.0.0',
+      dependencies: { kleur: '4.1.5' },
+    }),
+  };
   const pair = createMemoryFs();
   const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
     ownerEpoch: 'owner-package-state-test',
@@ -700,7 +730,7 @@ it('uses exact session project identity while a full install enters during promo
   });
   setSyncMirror(authority, { async: pair.vfs });
   authority.mkdirSync(ROOT, { recursive: true });
-  authority.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(BASE_PACKAGE_JSON));
+  authority.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(realConfig.packageJson));
 
   let releasePromotion!: () => void;
   const promotionGate = new Promise<void>((resolve) => {
@@ -716,7 +746,7 @@ it('uses exact session project identity while a full install enters during promo
   let switchedInstallSawPriorTree = false;
   let switchedInstallSawPriorManifest = false;
   const state = createOwnerPackageState({
-    initial: { cfg: config, templateId: 'vite', slug: 'scratch', fromScratch: true },
+    initial: { cfg: realConfig, templateId: 'vite', slug: 'scratch', fromScratch: true },
     primeInitialPrefetch: false,
     vfs: new SyncMirrorVfs(),
     fsSync: authority,
@@ -727,35 +757,23 @@ it('uses exact session project identity while a full install enters during promo
     },
     nodeWorkerRuntimeEnv: {},
     log: () => {},
-    registry: new RegistryClient({
-      baseUrl: '/unused',
-      fetch: async () => new Response('', { status: 599 }),
-    }),
+    registry: vendoredRegistry(),
     install: async (arg1) => {
       const opts = arg1 as InstallOptions;
       calls += 1;
       if (calls === 2) {
-        secondSawInstalledTree = authority.existsSync(`${ROOT}/node_modules/user-pkg/keep.js`);
+        secondSawInstalledTree = authority.existsSync(`${ROOT}/node_modules/ms/index.js`);
         secondSawExactManifest =
           JSON.parse(new TextDecoder().decode(authority.readFileBytesSync(`${ROOT}/package.json`)))
-            .dependencies['user-pkg'] === '1.0.0';
+            .dependencies.ms === '2.0.0';
       }
       if (calls === 3) {
-        switchedInstallSawPriorTree = authority.existsSync(`${ROOT}/node_modules/user-pkg/keep.js`);
+        switchedInstallSawPriorTree = authority.existsSync(`${ROOT}/node_modules/ms/index.js`);
         switchedInstallSawPriorManifest =
           JSON.parse(new TextDecoder().decode(authority.readFileBytesSync(`${ROOT}/package.json`)))
-            .dependencies['user-pkg'] === '1.0.0';
+            .dependencies.ms === '2.0.0';
       }
-      authority.mkdirSync(`${ROOT}/node_modules/user-pkg`, { recursive: true });
-      authority.writeFileSync(
-        `${ROOT}/node_modules/user-pkg/keep.js`,
-        new TextEncoder().encode('installed'),
-      );
-      await opts.vfs.writeFile(
-        `${ROOT}/package-lock.json`,
-        '{"lockfileVersion":3,"packages":{}}\n',
-      );
-      return installResult();
+      return await realInstall(opts);
     },
     resolverUrl: () => undefined,
     resolverBundleBaseUrl: () => undefined,
@@ -767,7 +785,7 @@ it('uses exact session project identity while a full install enters during promo
     state.createNpmCommand(async () => 0),
   );
 
-  const firstInstall = shell.run('npm install user-pkg@1.0.0');
+  const firstInstall = shell.run('npm install ms@2.0.0 --save-exact');
   await promotionStarted;
   const secondInstall = shell.run('npm install');
   await Promise.resolve();
@@ -782,12 +800,12 @@ it('uses exact session project identity while a full install enters during promo
 
   const switched = {
     cfg: {
-      ...config,
+      ...realConfig,
       packageName: 'other',
       packageJson: `${JSON.stringify({
         name: 'other',
         version: '1.0.0',
-        dependencies: { vite: '5.4.21' },
+        dependencies: { kleur: '4.1.5' },
       })}\n`,
     },
     templateId: 'other',

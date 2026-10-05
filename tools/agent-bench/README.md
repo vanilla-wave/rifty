@@ -102,3 +102,19 @@ judges, including link entry and native required textarea variants.
 
 [Live42-run diagnostic](reports/summaries/2026-09-13-gpt-5.6-sol/README.md):
 original measurements, classified judge repairs, retained-source rechecks and traces.
+
+
+The no-COI lane imports the packed Vite consumer's `src/host.ts`; packing preserves
+that relative import and resolves SDK/agent/Workbench from installed tarballs.
+Defaults100 calls/600s match the reference host; explicit `limits` remain measured
+inputs. Set `endpoint.textOnlyContent` for string-only message content. Optional
+`noCoiPolicies` passes `{files,shell}` policy values to this same host (only the
+no-COI lane); omitted means unrestricted. Reports record these values and comparison
+rejects differing policy settings. Historical reports keep their original limits.
+
+Scripted packed-host smoke (no model account):
+`pnpm exec playwright test -c tools/agent-bench/playwright.config.ts reference-host.spec.ts`.
+
+The default full packed-consumer CI lane runs this smoke too, including genuine
+Vite iframe preview. SW registration occurs only when the benchmark requests
+preview after the agent turn; the shared commands host remains SW-free.

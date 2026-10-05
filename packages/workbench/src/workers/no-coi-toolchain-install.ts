@@ -1,11 +1,16 @@
-import { RegistryClient, install } from '@riftydev/npm-client';
+import { type InstallResult, RegistryClient, install } from '@riftydev/npm-client';
 import {
   planShadowSubstitutionsFromLockfile,
   shadowSubstitutionPlanForInstallResult,
 } from '@riftydev/npm-client/internal';
 import type { ToolchainInstallRequest } from '@riftydev/runtime-js/internal';
 import { preparePackageEntryRuntime } from '@riftydev/shadow-registry/runtime';
+import type { CommandContext } from '@riftydev/shell';
 import { type Vfs, normalizePath, syncMirror } from '@riftydev/vfs';
+import {
+  type ParsedNpmInstallRequest,
+  executeNpmInstallOperation,
+} from '../glue/npm-shell-command.ts';
 import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
 import {
   type WorkbenchRuntimeBinding,
@@ -49,13 +54,23 @@ export async function prepareSavedToolchain(cwd: string) {
 export async function installToolchainPackages(
   input: ToolchainInstallRequest,
   vfs: Vfs,
-): Promise<{ readonly bindings: readonly WorkbenchRuntimeBinding[]; readonly packages: number }> {
+  npm?: { readonly request: ParsedNpmInstallRequest; readonly context: CommandContext },
+): Promise<{
+  readonly bindings: readonly WorkbenchRuntimeBinding[];
+  readonly packages: number;
+  readonly packageJsonText?: string;
+}> {
   const registry = new RegistryClient({ baseUrl: input.registryUrl });
-  const result = await install({
-    vfs,
-    cwd: input.cwd,
-    registry,
-  });
+  let result: InstallResult;
+  let packageJsonText: string | undefined;
+  if (npm === undefined) result = await install({ vfs, cwd: input.cwd, registry });
+  else {
+    const installed = await executeNpmInstallOperation(npm.request, npm.context, { vfs, registry });
+    if ('status' in installed || installed.packageJsonText === null)
+      throw new Error('Toolchain installation requires a project package.json');
+    result = installed.result;
+    packageJsonText = installed.packageJsonText;
+  }
   await finalizePackageInstallFiles({ root: input.cwd });
   const bindings: readonly WorkbenchRuntimeBinding[] = Object.freeze(
     shadowSubstitutionPlanForInstallResult(result).bindings.map((binding) =>
@@ -66,5 +81,9 @@ export async function installToolchainPackages(
     ),
   );
   await activateWorkbenchRuntimeAdapters({ bindings, fs: syncMirror(), cwd: input.cwd });
-  return { bindings, packages: result.packages.length };
+  return {
+    bindings,
+    packages: result.packages.length,
+    ...(packageJsonText === undefined ? {} : { packageJsonText }),
+  };
 }

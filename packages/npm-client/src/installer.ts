@@ -96,6 +96,8 @@ export interface InstallOptions {
   registry?: RegistryClient;
   /** Caller-owned lifecycle cancellation, forwarded through every network wait. */
   signal?: AbortSignal;
+  /** Named root requests to refresh; omitted keeps ordinary lockfile replay. */
+  updateNames?: readonly string[];
   overrides?: OverrideMap;
   /** Cache of already-loaded packuments (lets multiple installs share). */
   packumentCache?: PackumentCacheLike;
@@ -214,6 +216,10 @@ export interface InstallAcquisitionProvenance {
 export interface InstallResult {
   packages: NormalizedResolvedPackage[];
   lockfile: Lockfile;
+  /** Skipped root optionals: selected metadata, or null when resolution failed. */
+  skippedOptionalDependencies?: Readonly<
+    Record<string, { readonly name: string; readonly version: string } | null>
+  >;
   /** Retained for shape compat; always empty since M11 nests conflicts (ADR-0042). */
   conflicts: { name: string; firstVersion: string; secondVersion: string }[];
   /** Exact acquisition facts; ADR-0258. Never infer these from `source`. */
@@ -338,6 +344,7 @@ export async function install(
   let eddyFallbackCause: Error | undefined;
   if (
     opts.resolverUrl &&
+    !(priorLockfile && opts.updateNames?.length) &&
     !directEffectiveNameCollision &&
     !existingLockfilePreemptsEddy(
       existingLockfile,
@@ -373,7 +380,7 @@ export async function install(
     existingShadowPlan,
     dependencies,
     optionalDependencies,
-    opts,
+    source === 'eddy' ? { ...opts, updateNames: undefined } : opts,
     substitutions,
   );
 
@@ -526,6 +533,9 @@ export async function install(
     packages,
     lockfile,
     conflicts: [],
+    ...(Object.keys(resolved.skippedOptionalDependencies).length === 0
+      ? {}
+      : { skippedOptionalDependencies: resolved.skippedOptionalDependencies }),
     provenance: {
       resolution: plan.resolution(),
       packages: provenancePackages,

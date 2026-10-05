@@ -17,3 +17,6 @@ export { createSandboxAgentHost } from './sandbox-host.ts';
 export { createBrowserAgentPreview } from './browser-preview.ts';
 
 export { getAgentPromptProfile, type AgentPromptProfile } from './prompt-profile.ts';
+
+export { createAgentTranscript, reduceAgentTranscript } from './transcript.ts';
+export type { AgentTranscript, AgentTranscriptItem, AgentTranscriptResult } from './transcript.ts';

@@ -1,3 +1,12 @@
+import {
+  type ProjectPackageJson,
+  installedSaveRange,
+  parseSpec,
+  readPackageJson,
+  readPackageJsonScripts,
+  serializeProjectPackageJson,
+  writePackageJson,
+} from './npm-package-json.ts';
 /**
  * Shell npm commands use the existing installer and package mutation authority.
  * Without a registry, explicit install retains local replay; network misses fail.
@@ -28,6 +37,7 @@ import {
   shellCommandExitCode,
 } from '@riftydev/shell';
 import { type PersistFailureReport, type Vfs, normalizePath } from '@riftydev/vfs';
+import intersects from 'semver/ranges/intersects.js';
 import {
   type PackageAcquisitionAuthority,
   PackageAcquisitionError,
@@ -162,19 +172,6 @@ export interface LearnedPinLookup {
   readonly stale: boolean;
 }
 
-interface ProjectPackageJson {
-  readonly raw: Record<string, unknown>;
-  readonly name: string;
-  readonly version: string;
-  readonly scripts: Record<string, string>;
-  readonly dependencies: Record<string, string>;
-  readonly devDependencies: Record<string, string>;
-  readonly optionalDependencies: Record<string, string>;
-}
-
-const DEFAULT_PROJECT_NAME = 'rifty-project';
-const DEFAULT_PROJECT_VERSION = '0.0.0';
-
 function npmPrefixInvocation(
   args: readonly string[],
   context: CommandContext,
@@ -284,10 +281,17 @@ export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
 type NpmScriptCommandDeps = Pick<NpmShellCommandDeps, 'vfs' | 'runScript' | 'mapInvocationContext'>;
 
 /** Existing npm parsing/lifecycles for hosts whose installation has a separate owner. */
-export function createNpmScriptShellCommand(deps: NpmScriptCommandDeps): ShellCommand {
-  return npmCommand(deps, () => {
-    throw new NotImplementedError('sandbox.project.npm-install', 'use toolchain.install');
-  });
+export function createNpmScriptShellCommand(
+  deps: NpmScriptCommandDeps,
+  install?: ShellCommand,
+): ShellCommand {
+  return npmCommand(
+    deps,
+    install ??
+      (() => {
+        throw new NotImplementedError('sandbox.project.npm-install', 'use toolchain.install');
+      }),
+  );
 }
 
 function npmCommand(deps: NpmScriptCommandDeps, install: ShellCommand): ShellCommand {
@@ -365,94 +369,6 @@ export function formatInstallDuration(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
 }
 
-/**
- * Parse `name`, `name@range`, `@scope/name`, or `@scope/name@range`. A scope's
- * leading `@` isn't a version separator, so look for the *second* `@`.
- */
-function parseSpec(spec: string): { name: string; range: string } {
-  const directUnsupported = unsupportedDependencySpec(spec);
-  if (directUnsupported) throwUnsupportedDependencySpec(spec, directUnsupported);
-  if (spec.startsWith('@')) {
-    const at = spec.indexOf('@', 1);
-    if (at < 0) return { name: spec, range: 'latest' };
-    const range = spec.slice(at + 1) || 'latest';
-    const unsupported = unsupportedDependencySpec(range);
-    if (unsupported) throwUnsupportedDependencySpec(spec, unsupported);
-    return { name: spec.slice(0, at), range };
-  }
-  const at = spec.indexOf('@');
-  if (at < 0) return { name: spec, range: 'latest' };
-  const range = spec.slice(at + 1) || 'latest';
-  const unsupported = unsupportedDependencySpec(range);
-  if (unsupported) throwUnsupportedDependencySpec(spec, unsupported);
-  return { name: spec.slice(0, at), range };
-}
-
-function unsupportedDependencySpec(range: string): string | null {
-  const trimmed = range.trim();
-  if (trimmed === '.' || trimmed === '..') return 'file';
-  if (/^(?:\.{0,2}\/|\/)/.test(trimmed)) return 'file';
-  if (/^(file|link):/.test(trimmed)) return 'file';
-  if (trimmed.startsWith('workspace:')) return 'workspace';
-  if (/^(git\+|git:|github:|gitlab:|bitbucket:)/.test(trimmed) || /\.git(?:#|$)/.test(trimmed)) {
-    return 'git';
-  }
-  if (/^https?:/.test(trimmed)) return 'http-tarball';
-  if (trimmed.startsWith('npm:')) return 'npm-alias';
-  if (isGithubShorthand(trimmed)) return 'git';
-  return null;
-}
-
-function isGithubShorthand(spec: string): boolean {
-  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:[#@].+)?$/.test(spec);
-}
-
-function throwUnsupportedDependencySpec(spec: string, feature: string): never {
-  throw new NotImplementedError(
-    `npm-client.dependency-spec.${feature}`,
-    `${spec} is outside registry semver/tag installs`,
-  );
-}
-
-async function readPackageJson(vfs: Vfs, cwd: string): Promise<ProjectPackageJson> {
-  const path = `${cwd}/package.json`;
-  if (!(await vfs.exists(path))) {
-    return {
-      raw: { name: DEFAULT_PROJECT_NAME, version: DEFAULT_PROJECT_VERSION, private: true },
-      name: DEFAULT_PROJECT_NAME,
-      version: DEFAULT_PROJECT_VERSION,
-      scripts: {},
-      dependencies: {},
-      devDependencies: {},
-      optionalDependencies: {},
-    };
-  }
-  const text = await vfs.readFileText(path);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text) as unknown;
-  } catch (err) {
-    throw new Error(`npm: package.json at ${path} is not valid JSON: ${(err as Error).message}`);
-  }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`npm: package.json at ${path} must be an object`);
-  }
-  const raw = parsed as Record<string, unknown>;
-  const dependencies = readPackageJsonStringMap(raw, 'dependencies');
-  const scripts = readPackageJsonScripts(raw);
-  const devDependencies = readPackageJsonStringMap(raw, 'devDependencies');
-  const optionalDependencies = readPackageJsonStringMap(raw, 'optionalDependencies');
-  return {
-    raw,
-    name: typeof raw.name === 'string' ? raw.name : DEFAULT_PROJECT_NAME,
-    version: typeof raw.version === 'string' ? raw.version : DEFAULT_PROJECT_VERSION,
-    scripts,
-    dependencies,
-    devDependencies,
-    optionalDependencies,
-  };
-}
-
 async function readPackageScripts(vfs: Vfs, cwd: string): Promise<Record<string, string>> {
   const path = `${cwd}/package.json`;
   if (!(await vfs.exists(path))) return {};
@@ -467,44 +383,6 @@ async function readPackageScripts(vfs: Vfs, cwd: string): Promise<Record<string,
     throw new Error(`npm: package.json at ${path} must be an object`);
   }
   return readPackageJsonScripts(parsed as Record<string, unknown>);
-}
-
-function readPackageJsonStringMap(
-  raw: Record<string, unknown>,
-  field: string,
-): Record<string, string> {
-  const value = raw[field];
-  if (value === undefined) return {};
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    // TODO(backlog: npm-client/tar-symlink-and-nonregistry-dep-tracking)
-    throw new NotImplementedError(`npm-client.package-json.${field}`);
-  }
-  const out: Record<string, string> = {};
-  for (const [name, range] of Object.entries(value)) {
-    if (typeof range !== 'string') {
-      // TODO(backlog: npm-client/tar-symlink-and-nonregistry-dep-tracking)
-      throw new NotImplementedError(`npm-client.package-json.${field}`);
-    }
-    out[name] = range;
-  }
-  return out;
-}
-
-function readPackageJsonScripts(raw: Record<string, unknown>): Record<string, string> {
-  return raw.scripts && typeof raw.scripts === 'object' && !Array.isArray(raw.scripts)
-    ? Object.fromEntries(
-        Object.entries(raw.scripts).filter(
-          (entry): entry is [string, string] => typeof entry[1] === 'string',
-        ),
-      )
-    : {};
-}
-
-async function writePackageJson(vfs: Vfs, cwd: string, pkg: ProjectPackageJson): Promise<void> {
-  const path = `${cwd}/package.json`;
-  // Stable formatting: re-installs with an unchanged dep set produce
-  // byte-identical output, so the shell's diff-before-write keeps mtimes stable.
-  await vfs.writeFile(path, `${JSON.stringify(pkg.raw, null, 2)}\n`);
 }
 
 async function runPackageScript(
@@ -563,9 +441,12 @@ function quoteShellWord(value: string): string {
 
 /** Classify a leading-`-` install flag: which dep map it targets (or global),
  *  or the freshness escape hatch. */
-function installFlagKind(flag: string): 'dev' | 'prod' | 'global' | 'prefer-online' | 'unknown' {
+function installFlagKind(
+  flag: string,
+): 'dev' | 'prod' | 'exact' | 'global' | 'prefer-online' | 'unknown' {
   if (flag === '-D' || flag === '--save-dev') return 'dev';
-  if (flag === '-S' || flag === '--save' || flag === '-E' || flag === '--save-exact') return 'prod';
+  if (flag === '-S' || flag === '--save') return 'prod';
+  if (flag === '-E' || flag === '--save-exact') return 'exact';
   if (flag === '-g' || flag === '--global') return 'global';
   // The stale-window escape hatch (ADR-0216): forces a fresh server-side
   // recompute AND bypasses pins/prefetch client-side (installer semantics).
@@ -575,6 +456,7 @@ function installFlagKind(flag: string): 'dev' | 'prod' | 'global' | 'prefer-onli
 
 export interface ParsedNpmInstallRequest {
   readonly target: 'dependencies' | 'devDependencies';
+  readonly saveExact?: boolean;
   readonly prefer?: 'online';
   readonly packageSpecs: readonly string[];
 }
@@ -586,6 +468,7 @@ export type ParsedNpmInstallResult =
 export function parseNpmInstallRequest(specs: readonly string[]): ParsedNpmInstallResult {
   let target: 'dependencies' | 'devDependencies' = 'dependencies';
   let prefer: 'online' | undefined;
+  let saveExact = false;
   const pkgSpecs: string[] = [];
   for (const spec of specs) {
     if (spec.startsWith('-')) {
@@ -599,13 +482,15 @@ export function parseNpmInstallRequest(specs: readonly string[]): ParsedNpmInsta
       }
       if (kind === 'dev') target = 'devDependencies';
       else if (kind === 'prefer-online') prefer = 'online';
+      else if (kind === 'exact') saveExact = true;
       else if (kind === 'unknown') {
         return {
           status: 'rejected',
           message: `npm: flag '${spec}' not supported (M9 scope)\n`,
         };
       }
-      // `prod` (-S/--save default, -E/--save-exact) is otherwise a no-op.
+      // -S/--save keeps npm's existing dependency section.
+
       continue;
     }
     pkgSpecs.push(spec);
@@ -614,6 +499,7 @@ export function parseNpmInstallRequest(specs: readonly string[]): ParsedNpmInsta
     status: 'ready',
     request: {
       target,
+      ...(saveExact ? { saveExact } : {}),
       ...(prefer ? { prefer } : {}),
       packageSpecs: pkgSpecs,
     },
@@ -676,7 +562,7 @@ export async function executeNpmInstallOperation(
   request: ParsedNpmInstallRequest,
   ctx: CommandContext,
   deps: NpmInstallOperationDeps,
-  execution: PackageInstallExecution,
+  execution?: PackageInstallExecution,
 ): Promise<
   | {
       readonly status: 'noop';
@@ -701,6 +587,8 @@ export async function executeNpmInstallOperation(
   // lock it could also raze the tree under another terminal's in-flight
   // exclusive install (see the seam doc).
   if (deps.prepareInstall) {
+    if (execution === undefined)
+      throw new Error('Install preparation requires its acquisition context');
     await deps.prepareInstall(ctx, {
       fullInstall: pkgSpecs.length === 0,
       sessionInstallActivity: execution.sessionInstallActivity,
@@ -718,15 +606,39 @@ export async function executeNpmInstallOperation(
   const previousPackageJson = hadPackageJson ? await deps.vfs.readFile(packageJsonPath) : null;
   const dependencies = { ...pkg.dependencies };
   const devDependencies = { ...pkg.devDependencies };
-  const targetMap = target === 'devDependencies' ? devDependencies : dependencies;
-
-  for (const spec of pkgSpecs) {
-    const { name, range } = parseSpec(spec);
-    if (!name) {
-      throw new Error(`malformed package spec '${spec}'`);
-    }
-    targetMap[name] = range;
+  const optionalDependencies = { ...pkg.optionalDependencies };
+  const maps = { dependencies, devDependencies, optionalDependencies };
+  const additions: { name: string; range: string; section: keyof typeof maps }[] = [];
+  // npm normalizes optional/prod duplicates when saving, never on a no-args install.
+  if (pkgSpecs.length > 0) {
+    for (const name of Object.keys(optionalDependencies)) delete dependencies[name];
   }
+  for (const spec of pkgSpecs) {
+    const parsed = parseSpec(spec);
+    const { name } = parsed;
+    if (!name) throw new Error(`malformed package spec '${spec}'`);
+    const section =
+      target === 'devDependencies' || Object.hasOwn(devDependencies, name)
+        ? 'devDependencies'
+        : Object.hasOwn(optionalDependencies, name)
+          ? 'optionalDependencies'
+          : 'dependencies';
+    const range =
+      parsed.explicit && parsed.range !== '*'
+        ? parsed.range
+        : (maps[section][name] ?? parsed.range);
+    if (section === 'devDependencies') delete dependencies[name];
+    maps[section][name] = range;
+    additions.push({ name, range, section });
+  }
+  const changedPackage = (): ProjectPackageJson => {
+    const raw = { ...pkg.raw };
+    for (const [section, values] of Object.entries(maps)) {
+      if (Object.keys(values).length > 0) raw[section] = values;
+      else delete raw[section];
+    }
+    return { ...pkg, raw, ...maps };
+  };
 
   const nothingToInstall =
     pkgSpecs.length === 0 &&
@@ -747,35 +659,17 @@ export async function executeNpmInstallOperation(
     await deps.prepareEmptyInstall?.(ctx);
   }
 
-  if (pkgSpecs.length > 0) {
-    // Emit a dep map only when it has entries OR was already present (no spurious `{}`).
-    const nextRaw: Record<string, unknown> = { ...pkg.raw };
-    if (Object.keys(dependencies).length > 0 || 'dependencies' in pkg.raw) {
-      nextRaw.dependencies = dependencies;
-    }
-    if (Object.keys(devDependencies).length > 0 || 'devDependencies' in pkg.raw) {
-      nextRaw.devDependencies = devDependencies;
-    }
-    const next: ProjectPackageJson = {
-      raw: nextRaw,
-      name: pkg.name,
-      version: pkg.version,
-      scripts: pkg.scripts,
-      dependencies,
-      devDependencies,
-      optionalDependencies: pkg.optionalDependencies,
-    };
-    await writePackageJson(deps.vfs, ctx.cwd, next);
-  }
+  if (pkgSpecs.length > 0) await writePackageJson(deps.vfs, ctx.cwd, changedPackage());
 
   // The BYTE-EXACT identity of the request this install is fed — the stamp
   // guard compares text, never the flattened dep map: a section move
   // (dependencies↔devDependencies) or an `overrides` edit changes the real
   // installer request while the flat map stays identical.
-  const packageJsonTextAtInstall = (await deps.vfs.exists(packageJsonPath))
+  let packageJsonTextAtInstall = (await deps.vfs.exists(packageJsonPath))
     ? await deps.vfs.readFileText(packageJsonPath)
     : null;
 
+  let intendedSave: string | undefined;
   const requested = pkgSpecs.length > 0 ? pkgSpecs.join(' ') : 'all from package.json';
   ctx.stdout.write(`npm: installing ${requested}…\n`);
   const start = performance.now();
@@ -817,6 +711,7 @@ export async function executeNpmInstallOperation(
       vfs: deps.vfs,
       cwd: ctx.cwd,
       registry: deps.registry,
+      ...(additions.length ? { updateNames: additions.map(({ name }) => name) } : {}),
       ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
       ...(deps.assertPortablePaths ? { assertPortablePaths: deps.assertPortablePaths } : {}),
       ...(deps.resolverUrl ? { resolverUrl: deps.resolverUrl } : {}),
@@ -838,6 +733,49 @@ export async function executeNpmInstallOperation(
     const elapsedMs = Math.round(performance.now() - start);
 
     if (ctx.signal?.aborted) throw ctx.signal.reason;
+    if (
+      additions.length > 0 &&
+      (await deps.vfs.readFileText(packageJsonPath).catch(() => null)) === packageJsonTextAtInstall
+    ) {
+      for (const { name, range, section } of additions) {
+        const skipped = result.skippedOptionalDependencies?.[name];
+        const version =
+          result.lockfile.packages[`node_modules/${name}`]?.version ?? skipped?.version;
+        if (!version && skipped !== null)
+          throw new Error(`Installed package ${name} has no top-level lock version`);
+        const savedRange = installedSaveRange(range, version, request.saveExact);
+        const saved = skipped === null ? `npm:null@${savedRange}` : savedRange;
+        maps[section][name] = saved;
+        if (
+          target !== 'devDependencies' &&
+          section === 'devDependencies' &&
+          Object.hasOwn(optionalDependencies, name) &&
+          !intersects(saved, optionalDependencies[name]!)
+        ) {
+          optionalDependencies[name] = saved;
+        }
+      }
+      const savedPackage = changedPackage();
+      intendedSave = serializeProjectPackageJson(savedPackage);
+      await writePackageJson(deps.vfs, ctx.cwd, savedPackage);
+      const root = result.lockfile.packages[''];
+      if (root === undefined) throw new Error('Installed lock has no project root');
+      const lockMaps = { ...maps, dependencies: { ...dependencies } };
+      // npm retains the compatibility prod edge only for named optional additions.
+      for (const { name, section } of additions) {
+        if (section === 'optionalDependencies')
+          lockMaps.dependencies[name] = optionalDependencies[name]!;
+      }
+      for (const section of ['dependencies', 'devDependencies', 'optionalDependencies'] as const) {
+        if (Object.keys(lockMaps[section]).length > 0) root[section] = { ...lockMaps[section] };
+        else delete root[section];
+      }
+      await deps.vfs.writeFile(
+        `${ctx.cwd}/package-lock.json`,
+        `${JSON.stringify(result.lockfile, null, 2)}\n`,
+      );
+      packageJsonTextAtInstall = intendedSave;
+    }
     // A STALE pin actually served this install (SWR): the tree came from a
     // ≤24h-old cached resolution — say so loudly (`as-of` = the SERVED
     // manifest's resolvedAt, never the pin file's age) and refresh in
@@ -896,7 +834,11 @@ export async function executeNpmInstallOperation(
     );
     return { result, packageJsonText: packageJsonTextAtInstall };
   } catch (err) {
-    if (pkgSpecs.length > 0) {
+    const currentManifest = await deps.vfs.readFileText(packageJsonPath).catch(() => null);
+    if (
+      pkgSpecs.length > 0 &&
+      (currentManifest === packageJsonTextAtInstall || currentManifest === intendedSave)
+    ) {
       if (previousPackageJson) {
         await deps.vfs.writeFile(packageJsonPath, previousPackageJson);
       } else {

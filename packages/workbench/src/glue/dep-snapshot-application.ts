@@ -24,6 +24,7 @@ export async function prepareDepSnapshotApplication(
   snapshot: DepSnapshotV3,
   options: {
     readonly conflict: 'error' | 'overwrite';
+    readonly onProgress?: (written: number, total: number) => void;
     readonly preflightRoot?: string;
     readonly flush: () => Promise<PersistFailureReport | undefined>;
   },

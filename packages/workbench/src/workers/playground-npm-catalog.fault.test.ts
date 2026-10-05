@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import type { VersionManifest } from '@riftydev/npm-client';
 import { Shell } from '@riftydev/shell';
 import { resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeAll, expect, it, vi } from 'vitest';
@@ -16,15 +17,22 @@ const decoder = new TextDecoder();
 let snapshot: SavedSnapshotFixture;
 let packageTarball: Uint8Array<ArrayBuffer>;
 let packageTarballUrl: string;
+let packageManifest: VersionManifest;
 
 beforeAll(async () => {
   snapshot = await bakeSavedSnapshotFixture();
   const registry = new URL('../../../../tests/integration/fixtures/registry/', import.meta.url);
   packageTarball = new Uint8Array(await readFile(new URL('ms-2.0.0.tgz', registry)));
-  const metadata = JSON.parse(await readFile(new URL('ms-2.0.0.json', registry), 'utf8')) as {
-    readonly dist: { readonly upstreamTarball: string };
+  const metadata = JSON.parse(
+    await readFile(new URL('ms-2.0.0.json', registry), 'utf8'),
+  ) as VersionManifest & {
+    readonly dist: { readonly upstreamTarball: string; readonly upstreamIntegrity: string };
   };
   packageTarballUrl = metadata.dist.upstreamTarball;
+  packageManifest = {
+    ...metadata,
+    dist: { tarball: packageTarballUrl, integrity: metadata.dist.upstreamIntegrity },
+  };
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -41,6 +49,14 @@ it.each(['quota-report', 'permission-rejection'] as const)(
       async fetch(input: string | URL | Request): Promise<Response> {
         const url =
           typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url === 'https://registry.test/ms') {
+          network.requests.push(url);
+          return Response.json({
+            name: packageManifest.name,
+            'dist-tags': { latest: packageManifest.version },
+            versions: { [packageManifest.version]: packageManifest },
+          });
+        }
         if (url !== packageTarballUrl) return snapshotNetwork.fetch(input);
         network.requests.push(url);
         return new Response(packageTarball.slice());
@@ -104,7 +120,7 @@ it.each(['quota-report', 'permission-rejection'] as const)(
           failed.authority.readFileBytesSync(`${failed.project.projectRoot}/package.json`),
         ),
       );
-      expect(manifest.devDependencies).toEqual({ ms: '2.0.0' });
+      expect(manifest.devDependencies).toEqual({ ms: '^2.0.0' });
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toMatch(/quota|permission/);
       expect(failed.catalog.snapshot()).toEqual(before);

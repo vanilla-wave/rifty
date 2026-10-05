@@ -102,9 +102,13 @@
     "@riftydev/npm-client": "workspace:*",
     "@riftydev/runtime-js": "workspace:*",
     "@riftydev/service-worker": "workspace:*",
+    "@riftydev/shadow-registry": "workspace:*",
     "@riftydev/shell": "workspace:*",
     "@riftydev/ts-language-service": "workspace:*",
     "@riftydev/vfs": "workspace:*",
-    "@riftydev/shadow-registry": "workspace:*"
+    "semver": "7.8.4"
+  },
+  "devDependencies": {
+    "@types/semver": "7.7.1"
   }
 }

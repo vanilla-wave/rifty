@@ -1,0 +1,212 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: I9 unit принят; продолжить I8 reference host. Полный goal/PR пока не закрыт.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/distribution/no-coi-agent-npm-install.md @ becdaddfb1b35484a4c183a18556d7abe5a8d47f; BASE 8f5516e070d7fd918309f0a9de5379c51351b462; docs/backlog/epics/no-coi-agent-host-kit/goal.md I9/scenario6 + baseline I1–I3/I4; ADR-0487/0488. Read raw goal, contract, PR357, all diff and changed checking criteria against BASE. Initial BLOCK at b3e3b4547 independently reproduced npm install ms@~2: native ^2.1.3 versus rifty ~2.1.3. Accepted repair replaces prefix heuristic with npm semver subset rule; committed partial/union/bounded/wildcard differential RED5/control12 → GREEN17. Independent original repro rerun GREEN: /tmp/rifty-pr357-install-review-range-verify.log. Legacy success doubles in affected save/stamp/FIFO carriers replaced by actual vendored installs; BASE root-selection, mutation-classification, demotion, slug/byte guards, FIFO, bin/marker/reopen assertions preserved. Three fake pin cases replaced by two actual-Eddy merged-key/CAS-baseline cases. SDK cause accessor/prototype repair has real RED, removal mutants and unchanged bounded-cause runBin GREEN; native occupied causes retained. Focused221/221; real Chromium I9 21/21; unchanged build-loop21/21; packed surface15 first-party+73 external PASS. Full pr:check27/27 GREEN without isolated reruns on reviewed SHA (/tmp/rifty-pr357-install-pr-check-final.log). TypeScript frozen-emit update independently inspected against exact BASE overlay hash: only chunk/dynamic import references and side-effect import order change, same10022664 bytes (/tmp/rifty-pr357-install-compiler-pin-diff.log). Existing project-metadata capture remains explicit outside dependency-state claim; full lock byte identity is not required. PR current-status prose awaits driver rechart; this unit does not close I8.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I8 + scenario1–9",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:170",
+      "summary": "Connections-only packed reference host, both registry configurations and benchmark shared composition remain for next unit; whole-goal acceptance not proven."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Captured registryUrl, readonly registryConnected, restart and host override isolation",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:148; tests/no-coi/agent-npm-install.spec.ts:292",
+      "note": ""
+    },
+    {
+      "row": "Real agent shell uses installer; installed module executes and survives restart",
+      "source": "acceptance",
+      "trace": "I9 + scenario6",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:19; tests/no-coi/agent-npm-install.spec.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Native dependency save semantics; shared COI owner; unsupported inputs remain loud",
+      "source": "acceptance",
+      "trace": "I9 + ADR-0487 + ADR-0488",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/npm-install-registry.ts:14; tests/integration/npm-shell-save-parity.test.ts:21; tests/no-coi/agent-npm-install.spec.ts:19; tests/integration/npm-shell-command.test.ts:928",
+      "note": ""
+    },
+    {
+      "row": "SDK registry-missing, no mutation, shell recovery, truthful prompt without URL",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:85; tests/no-coi/agent-npm-install.spec.ts:148",
+      "note": ""
+    },
+    {
+      "row": "Held install rejects overlap; Stop aborts and settles before reuse",
+      "source": "acceptance",
+      "trace": "I9 + ADR-0376",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:209",
+      "note": ""
+    },
+    {
+      "row": "Readonly preflight, failed registry rollback, native quota and explicit retry",
+      "source": "acceptance",
+      "trace": "I9 + I4",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:292; tests/no-coi/agent-npm-install.spec.ts:353",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × npm argument save",
+      "source": "fault-matrix",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tests/integration/npm-shell-save-parity.test.ts:21; tests/no-coi/agent-npm-install.spec.ts:19",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × missing registry",
+      "source": "fault-matrix",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:148",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key × install",
+      "source": "fault-matrix",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:209",
+      "note": ""
+    },
+    {
+      "row": "torn-state × aborted/failed install",
+      "source": "fault-matrix",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:209; tests/no-coi/agent-npm-install.spec.ts:292; tests/no-coi/agent-npm-install.spec.ts:353",
+      "note": ""
+    },
+    {
+      "row": "observable-order × readonly install",
+      "source": "fault-matrix",
+      "trace": "I4 + I9",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:292",
+      "note": ""
+    },
+    {
+      "row": "Fresh bare/exact/caret/tilde and save-exact/dev: full manifest, lock maps, installed versions",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:19",
+      "note": ""
+    },
+    {
+      "row": "Explicit dev move, existing dev/tilde bare names, no-args manifest preservation",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/npm-install-registry.ts:20; tests/integration/npm-shell-save-parity.test.ts:21",
+      "note": ""
+    },
+    {
+      "row": "Live installed ms matches native result, restart and real Pi shell",
+      "source": "acceptance",
+      "trace": "I9 + scenario6",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:51; tests/no-coi/agent-npm-install.spec.ts:85",
+      "note": ""
+    },
+    {
+      "row": "createSandbox toolchain.registryUrl and readonly registryConnected",
+      "source": "public-api",
+      "trace": "I9 + ADR-0487",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:56; tests/no-coi/agent-npm-install.spec.ts:148; tests/no-coi/agent-npm-install.spec.ts:309",
+      "note": ""
+    },
+    {
+      "row": "SDK root sandboxErrorKind registry-missing discriminator",
+      "source": "public-api",
+      "trace": "I9 + ADR-0487",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-npm-install.spec.ts:184",
+      "note": ""
+    },
+    {
+      "row": "Protocol v6 rejects mismatch; captured registry field crosses real Worker",
+      "source": "public-api",
+      "trace": "ADR-0487",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:1537; tests/no-coi/agent-npm-install.spec.ts:19",
+      "note": ""
+    },
+    {
+      "row": "Baseline bounded cause projection retains original gap receipt without evaluating accessors; native occupied cause retained",
+      "source": "acceptance",
+      "trace": "I1 + I2 + ADR-0486",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-error-serialization.test.ts:5; tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2016",
+      "note": ""
+    },
+    {
+      "row": "Exact emitted TypeScript-worker inventory retains the existing compiler, no retired carrier exception",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:102; tools/checks/esbuild-legacy-retirement.test.ts:51; tests/integration/workbench-packed-consumer.mjs:842",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "becdaddfb1b35484a4c183a18556d7abe5a8d47f"
+}

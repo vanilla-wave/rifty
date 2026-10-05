@@ -2,7 +2,7 @@ import type { ChildProcess } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { installedRegistry } from './installed-registry.ts';
 import type { Lane } from './lanes/types.ts';
 import {
@@ -94,14 +94,19 @@ async function packedPage(root: string) {
   } finally {
     await registry.close();
   }
-  await cp(resolve('tools/agent-bench/src/no-coi-page.ts'), join(consumer, 'main.ts'));
+  const benchEntry = 'tools/agent-bench/src/no-coi-page.ts';
+  const referenceHost = 'tests/integration/fixtures/workbench-vite-consumer/src/host.ts';
+  for (const path of [benchEntry, referenceHost]) {
+    await mkdir(dirname(join(consumer, path)), { recursive: true });
+    await cp(resolve(path), join(consumer, path));
+  }
   // Type-only local FileTree import erases during bundling; imports of SDK/agent resolve in consumer/node_modules.
   await runOrThrow(
     'pnpm',
     [
       'exec',
       'esbuild',
-      join(consumer, 'main.ts'),
+      join(consumer, benchEntry),
       '--bundle',
       '--format=esm',
       '--platform=browser',

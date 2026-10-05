@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+- Named npm installs refresh selected roots while retaining unrelated pins; skipped optional dependencies no longer fail save or shell continuation (ADR-0504).
+
+- Missing-registry diagnostics follow the final executed command; recovered npm failures no longer relabel later errors or cancellation.
+
+- Preserve optional declarations during npm save-dev; match native section inference, wildcard reuse and intersecting optional save ranges in shared shell installs.
+
+- Preserve native npm bounded/partial/union save ranges using semver subset rules (ADR-0488).
+
+- Run no-COI shell npm install through the existing installer/claim owner with Stop and readonly policy. Shared npm save logic matches resolved ranges/sections and preserves concurrent manifest edits; successful acquisition tests use real tarballs/Eddy (ADR-0487).
+
+- No-COI snapshot apply reports fetched bytes, changed entries and native flush counts; discriminate snapshot mismatches and persistence failures (ADR-0486).
 - Core project deletion/stage cleanup clears owned install claims through the existing managed-tree boundary; installed projects no longer fail deletion with EPERM.
 
 - No-COI runBin ends its process like a project command (ADR-0445): after any terminal, natural exit included, none of the invocation's timers (an `'exit'` listener's, an unref'd one) runs and its process/stdio listeners are retired (was: an extra `L|timer-in-exit`, an unref'd interval kept ticking, and the next runBin ran the prior one's `'exit'`/`uncaughtException` listeners — status 5 for Node's 1). Both hosts share `openNoCoiInvocationScope`.

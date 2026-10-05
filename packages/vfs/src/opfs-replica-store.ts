@@ -19,6 +19,7 @@ import {
 } from './opfs-replica-codec.ts';
 import type {
   OpfsLayoutIssue,
+  ReplicaAdmissionEvent,
   ReplicaImage,
   ReplicaPersistence,
   ReplicaRecord,
@@ -36,6 +37,7 @@ const MAX_SEGMENTS = 64;
 async function acquireGuard(
   directory: FileSystemDirectoryHandle,
   timeoutMs: number,
+  onAdmission?: (event: ReplicaAdmissionEvent) => void,
 ): Promise<FileSystemSyncAccessHandle> {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
     throw new RangeError('OPFS replica admission timeout must be positive and finite');
@@ -43,9 +45,12 @@ async function acquireGuard(
   let expired = false;
   let lastContention: unknown;
   const timeoutError = () =>
-    new Error(`OPFS replica writer admission timed out after ${timeoutMs}ms`, {
-      cause: lastContention,
-    });
+    Object.assign(
+      new Error(`OPFS replica writer admission timed out after ${timeoutMs}ms`, {
+        cause: lastContention,
+      }),
+      lastContention === undefined ? {} : { code: 'ERR_STORAGE_OCCUPIED' },
+    );
   let timer!: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
@@ -62,6 +67,13 @@ async function acquireGuard(
         handle = await file.createSyncAccessHandle();
       } catch (cause) {
         if ((cause as { name?: string } | null)?.name !== 'NoModificationAllowedError') throw cause;
+        if (lastContention === undefined) {
+          const native = cause as DOMException;
+          onAdmission?.({
+            phase: 'waiting-for-storage-writer',
+            cause: { name: native.name, message: native.message },
+          });
+        }
         lastContention = cause;
         await new Promise<void>((resolve) => setTimeout(resolve, 25));
         continue;
@@ -70,6 +82,7 @@ async function acquireGuard(
         handle.close();
         throw timeoutError();
       }
+      onAdmission?.({ phase: 'storage-admitted' });
       return handle;
     }
   })();
@@ -166,6 +179,7 @@ export class OpfsReplicaStore implements ReplicaPersistence {
   static async open(
     root: FileSystemDirectoryHandle,
     timeoutMs = PERSIST_OPERATION_REPORT_TIMEOUT_MS,
+    onAdmission?: (event: ReplicaAdmissionEvent) => void,
   ): Promise<{
     readonly store: OpfsReplicaStore;
     readonly images: readonly ReplicaImage[];
@@ -173,12 +187,16 @@ export class OpfsReplicaStore implements ReplicaPersistence {
     const directory = await root.getDirectoryHandle(DIRECTORY, { create: true });
     let guard: FileSystemSyncAccessHandle;
     try {
-      guard = await acquireGuard(directory, timeoutMs);
+      guard = await acquireGuard(directory, timeoutMs, onAdmission);
     } catch (cause) {
       // A competing owner must not become an apparently successful memory owner.
-      throw new OpfsPreloadError(
+      const occupied = (cause as { code?: unknown } | null)?.code === 'ERR_STORAGE_OCCUPIED';
+      const error = new OpfsPreloadError(
         new Error('OPFS replica writer is unavailable or already occupied', { cause }),
       );
+      if (occupied)
+        Object.assign(error, { code: 'ERR_STORAGE_OCCUPIED', cause: (cause as Error).cause });
+      throw error;
     }
     try {
       let loaded: LoadedReplica;

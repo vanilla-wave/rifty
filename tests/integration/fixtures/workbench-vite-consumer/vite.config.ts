@@ -70,6 +70,7 @@ export default defineConfig({
         sandbox: resolve('sandbox/index.html'),
         noCoiProject: resolve('src/no-coi-project-proof.ts'),
         noCoiAgent: resolve('src/sandbox-agent-packed-proof.ts'),
+        referenceHost: resolve('src/reference-host-proof.ts'),
       },
     },
   },

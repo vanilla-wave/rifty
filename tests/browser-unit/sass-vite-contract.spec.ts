@@ -22,6 +22,7 @@ import {
   sealedWorkbenchFixtureUrl,
   writeOwnerFile,
 } from './fixtures.ts';
+import { serveSassClosure } from './sass-registry-fixture.ts';
 
 interface HostEsbuild {
   build(options: Readonly<Record<string, unknown>>): Promise<{
@@ -603,6 +604,7 @@ test('sass-embedded exact facade matches Node and powers Vite 7.3.6 SCSS dev/HMR
   page,
 }) => {
   test.setTimeout(300_000);
+  await serveSassClosure(context);
   const requests: string[] = [];
   context.on('request', (request) => requests.push(request.url()));
   const probeBundle = await bundleContractProbe();

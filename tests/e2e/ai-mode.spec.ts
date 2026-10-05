@@ -1174,3 +1174,69 @@ test('Continue with another model sends a pending attachment without the auto-re
     await second.close();
   }
 });
+
+test('headless transcript keeps completed and cancelled tools after budget exhaustion', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const model = await agentModelServer([
+    [
+      { name: 'write_file', args: { path: 'transcript-one.txt', content: 'written' } },
+      { name: 'write_file', args: { path: 'transcript-two.txt', content: 'must not write' } },
+    ],
+    'Unused.',
+  ]);
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await openChat(page);
+    await settings(page, model.baseUrl, { calls: 1 });
+    await send(page, 'Write both transcript files.');
+    const panel = page.getByTestId('ai-panel');
+    await expect(panel).toHaveAttribute('data-status', 'budget-exceeded');
+    await expect(panel.getByTestId('ai-messages')).toContainText('Write both transcript files.');
+    const tools = panel.locator('[data-tool-name="write_file"]');
+    await expect(tools).toHaveCount(2);
+    await expect(tools.nth(0)).toHaveAttribute('data-state', 'done');
+    await expect(tools.nth(1)).toHaveAttribute('data-state', 'cancelled');
+    await expect(panel.getByTestId('ai-messages')).toContainText('Maximum tool calls reached (1)');
+    const trace = await exported(page);
+    expect(toolResults(trace).map((message) => message.isError)).toEqual([false, true]);
+    const bounds = await panel.boundingBox();
+    expect(bounds?.width).toBeGreaterThan(200);
+    expect(bounds?.height).toBeGreaterThan(200);
+    await panel.screenshot({ path: testInfo.outputPath('transcript-budget.png') });
+  } finally {
+    await model.close();
+  }
+});
+
+test('headless transcript renders live command output and explicit cancelled state', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  const model = await agentModelServer([
+    [{ name: 'shell', args: { command: 'echo TRANSCRIPT_LIVE_OUTPUT && sleep 20' } }],
+    'Unused.',
+  ]);
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await openChat(page);
+    await settings(page, model.baseUrl);
+    await send(page, 'Run a command until Stop.');
+    const panel = page.getByTestId('ai-panel');
+    await expect.poll(() => terminalBuffer(page)).toContain('TRANSCRIPT_LIVE_OUTPUT');
+    const command = panel.locator('[data-tool-name="shell"]');
+    await expect(command).toHaveAttribute('data-state', 'running');
+    await expect(command.getByTestId('ai-tool-output')).toContainText('TRANSCRIPT_LIVE_OUTPUT');
+    await panel.getByRole('button', { name: 'Stop', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-status', 'aborted');
+    await expect(command).toHaveAttribute('data-state', 'cancelled');
+    await expect(command.getByTestId('ai-tool-output')).toContainText('TRANSCRIPT_LIVE_OUTPUT');
+    await panel.screenshot({ path: testInfo.outputPath('transcript-cancelled.png') });
+  } finally {
+    await model.close();
+  }
+});
