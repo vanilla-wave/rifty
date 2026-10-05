@@ -1,0 +1,264 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK @732bfe051: repair F1 app oracle constraints, then fresh independent Final+GREEN; goal remains active. Driver reported full pr:check27/27PASS; independent focused27/27PASS and physical UI alternatives executed.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "732bfe051e68c2f59e472ca7739939c875436a67",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-project-corpus.md (Acceptance1–4/Fault matrix); docs/backlog/epics/agent-code-quality-evaluation/goal.md unchanged; original refine/route authority; ADR-0506. BASE ff7ecbb90d51f3857f1b1b2cc054d23556ee5d56. Fresh depth1/max1 read-only reviewer /root/corpus_final_review; no child agents, repository edits or model calls. Scope pilot infrastructure/controls only; prior accepted Codex slice not reopened.",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance3 → I6",
+      "location": "docs/backlog/distribution/agent-eval-project-corpus.md:112",
+      "summary": "F1: valid alternative UI structures rejected in both app judges; repair oracle selectors and execute alternative RED/GREEN before passing slice."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I4",
+      "location": "docs/backlog/distribution/agent-eval-comparison-report.md",
+      "summary": "Experiment identity/uncertainty/report arithmetic remains linked report work."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/distribution/agent-eval-comparison-report.md",
+      "summary": "Real repeated four-origin pilot campaign + regeneration proof remain; deterministic controls/scripted model boundary are not quality/I5 proof."
+    },
+    {
+      "clause": "I1+I6+I7",
+      "location": "docs/backlog/distribution/agent-eval-corpus-expansion.md",
+      "summary": "Pilot trajectory/check/cost review then finite separately frozen expanded evaluation version + own campaign mandatory; original route6 carried, no scope weakening."
+    },
+    {
+      "clause": "I10+I11",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md",
+      "summary": "Observed difference catalog and executed escalation/confirmation beyond pilot remain mandatory; counts/pilot passes do not close search."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: six pinned distinct cards, v3 locks/hashes, private artifacts excluded from seeds",
+      "source": "acceptance",
+      "trace": "I1+I6+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-plan.test.ts:5; tools/agent-bench/src/corpus-validation.fault.test.ts:7",
+      "note": ""
+    },
+    {
+      "row": "Acceptance2: both workload kinds via existing four actual origins, trusted post-agent checks, physical receipts, retained failures",
+      "source": "acceptance",
+      "trace": "I2+I3",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/corpus-controls.spec.ts:7; tools/agent-bench/tests/corpus-smoke.ts:29; tools/agent-bench/tests/trusted-origin.ts:47",
+      "note": ""
+    },
+    {
+      "row": "Acceptance3: trusted stated requirements, negative/positive controls and working alternatives; all-origin references with failures retained",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes/judge.ts:40; tools/agent-bench/corpus/cases/csv-workflow/judge.ts:43; docs/backlog/distribution/reference/agent-eval-corpus-strengthened-library-controls.json.gz:1",
+      "note": "F1 valid alternatives wrongly rejected (blocker); F2 escapedquotes/emptyname wrong implementation passes existing carrier (advisory weak)."
+    },
+    {
+      "row": "Acceptance4: frozen related-family split before quality; smoke separate; original expansion obligations remain linked after pilot comparison",
+      "source": "acceptance",
+      "trace": "I1+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-plan.test.ts:43; tools/agent-bench/corpus/pilot-v1.json:1; docs/backlog/distribution/agent-eval-corpus-expansion.md:13",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × corpus/card/lock/hash: reject before series, preserve source",
+      "source": "fault-matrix",
+      "trace": "I1+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-validation.fault.test.ts:7",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × trusted judge: inject private bytes after agent, reject agent-edited replacement",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/trusted-origin.ts:31; tools/agent-bench/src/runner.ts:196; tools/agent-bench/tests/corpus-smoke.ts:41",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × control/origin: same checks/control across four adapters; failures retained",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/corpus-controls.spec.ts:67; tools/agent-bench/reports/summaries/2026-10-05-pilot-controls/report.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "CLI plan/run --suite and controls --suite --control selects frozen corpus through existing owner",
+      "source": "public-api",
+      "trace": "Acceptance1+Acceptance2 → I1+I2+I3",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-plan.test.ts:5; tools/agent-bench/tests/corpus-controls.spec.ts:16",
+      "note": ""
+    },
+    {
+      "row": "Control evidence distinct from quality and different variants cannot compare",
+      "source": "public-api",
+      "trace": "ADR-0506; I3+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/comparison.test.ts:319",
+      "note": ""
+    },
+    {
+      "row": "pilot-v1 input/card/prompt/judge/lock hashes and family identity frozen",
+      "source": "frozen-artifact",
+      "trace": "Acceptance1+Acceptance4 → I1+I6+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-validation.fault.test.ts:7; tools/agent-bench/corpus/pilot-v1.json:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen ms-negative judge: explicit task+mapped upstream regression requirements and control discrimination",
+      "source": "frozen-artifact",
+      "trace": "Acceptance3 → I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/ms-negative/judge.cjs:1; docs/backlog/distribution/reference/agent-eval-corpus-strengthened-library-controls.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen ms-weeks judge: explicit task+mapped upstream regression requirements and control discrimination",
+      "source": "frozen-artifact",
+      "trace": "Acceptance3 → I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/ms-weeks/judge.cjs:1; docs/backlog/distribution/reference/agent-eval-corpus-strengthened-library-controls.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen stringify-boxed judge: explicit task+mapped upstream regression requirements and control discrimination",
+      "source": "frozen-artifact",
+      "trace": "Acceptance3 → I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/stringify-boxed/judge.cjs:1; docs/backlog/distribution/reference/agent-eval-corpus-strengthened-library-controls.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen queue-clear judge: explicit task+mapped upstream regression requirements and control discrimination",
+      "source": "frozen-artifact",
+      "trace": "Acceptance3 → I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/queue-clear/judge.mjs:1; docs/backlog/distribution/reference/agent-eval-corpus-strengthened-library-controls.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen csv-workflow judge: open structure linked workflow and controls",
+      "source": "frozen-artifact",
+      "trace": "Acceptance3 → I6",
+      "status": "weak",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow/judge.ts:1",
+      "note": "F1: declared valid alternative rejected. CSV F2 named wrong behavior passes existing carrier."
+    },
+    {
+      "row": "Frozen markdown-notes judge: open structure linked workflow and controls",
+      "source": "frozen-artifact",
+      "trace": "Acceptance3 → I6",
+      "status": "weak",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes/judge.ts:1",
+      "note": "F1: declared valid alternative rejected. CSV F2 named wrong behavior passes existing carrier."
+    },
+    {
+      "row": "Retained 2026-10-05-pilot-controls-red original matrix/results/source bundles preserve failures and purpose",
+      "source": "frozen-artifact",
+      "trace": "Acceptance2+Acceptance3 → I2+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-05-pilot-controls-red/README.md:3",
+      "note": ""
+    },
+    {
+      "row": "Retained 2026-10-05-pilot-controls original matrix/results/source bundles preserve failures and purpose",
+      "source": "frozen-artifact",
+      "trace": "Acceptance2+Acceptance3 → I2+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-05-pilot-controls/README.md:3",
+      "note": ""
+    },
+    {
+      "row": "Retained 2026-10-05-trusted-origin-controls original matrix/results/source bundles preserve failures and purpose",
+      "source": "frozen-artifact",
+      "trace": "Acceptance2+Acceptance3 → I2+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-05-trusted-origin-controls/README.md:3",
+      "note": ""
+    },
+    {
+      "row": "Retained 2026-10-05-corpus-plumbing original matrix/results/source bundles preserve failures and purpose",
+      "source": "frozen-artifact",
+      "trace": "Acceptance2+Acceptance3 → I2+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-05-corpus-plumbing/README.md:3",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/distribution/reference/agent-eval-project-corpus-evidence.md:18",
+          "authority": "",
+          "summary": "F3: narrative says browser apps4 pass, committed raw report has3 pass/1 fail (COI notes Frame detached). Retained fail is honest and allowed; correct narrative before continuation.",
+          "evidence": "Independent decompression of tools/agent-bench/reports/summaries/2026-10-05-pilot-controls/report.json.gz:24selected/retained, native12PASS, browserlibraries8setupFAIL, browserapps3PASS plus COImarkdown-notes FAIL(Frame detached)."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/corpus/cases/markdown-notes/judge.ts:40; tools/agent-bench/corpus/cases/csv-workflow/judge.ts:43",
+          "authority": "I6; Acceptance3 → I6; app prompts explicitly keep DOM/layout open and permit accessible CSV output",
+          "summary": "F1: frozen app judges reject valid alternative UI structures. Notes require role=button saved entries and navigation wrapper; CSV requires exported text in textbox or download, rejecting labelled output. Fault class: behavioral-oracle-constraint. Missing RED: alternative controls exercising link entries/neutral wrapper and accessible output. Sibling sweep finds same class in both app judges; fix shared selection premise, preserve prompts.",
+          "evidence": "Executed node --import tsx /tmp/rifty-corpus-review-alt.mts and /tmp/rifty-corpus-review-csv.mts against real Vite+Chromium, no model. /tmp/rifty-corpus-review-note-alt.json: original judge FAIL navigation timeout, same requirement workflow with only structure-neutral selectors PASS6/6. /tmp/rifty-corpus-review-csv.json: original judge FAIL export empty, same workflow with labelled output text selector PASS5/5. Alternatives change only saved entries button→a with equivalent handler, nav→labelled section, and CSV textarea→labelled output; other code unchanged."
+        },
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/corpus/cases/csv-workflow/judge.ts:8",
+          "authority": "",
+          "summary": "F2: CSV carrier weak for declared empty-name validation/escaped-quote parsing; named broken implementation passes existing5 probes. Advisory under REV4, no stronger unstated requirement.",
+          "evidence": "Executed /tmp/rifty-corpus-review-csv.mts; /tmp/rifty-corpus-review-csv.json weak.pass=true. Source removes row.name.length>0 guard and skips escapedquote character. Same physical page parses A\"\"B as AB rather than A\"B; empty-name valid-email row enables Save. Vite HMR stabilized before repeat."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "blocker",
+      "findings": []
+    }
+  ]
+}
