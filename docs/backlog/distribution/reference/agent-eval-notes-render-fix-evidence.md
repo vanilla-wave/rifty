@@ -97,3 +97,12 @@ Repeatedcurrentfullgate27/27PASS,unit194.5s/noisolatedrerun,parity114.9s.
 [FullGREENlog](agent-eval-notes-hidden-pr-check-green.log.gz). Source unchanged
 aftergate; only evidence/status retained. Commit/push/independent changed-tree
 verification next. v4comparativecalls0; report/I5/expansion/I10/I11 open.
+
+Independent changed-tree Final+GREEN PASS @1cf5ed5f1ca7d4f16d7bd68c2f42de638044d69c:
+8axes/23coveragePASS,0findings/unitresiduals,validator0. Independently executed
+native14controls5PASS9FAIL/errors0; original fulljudgeBLOCKmutant nowfirstprobeFAIL
+withother6PASS; helper siblinghiddenliteral/boldfalse, validparagraph/splitboldtrue.
+16unit/policyPASS;119records/28physicaltrees exact,6offline regenerations identical,
+current supportfingerprints/gate verified.
+[Accepted verdict](agent-eval-notes-render-fix-final-green.json). Repairclosed;
+freshpilot-v4 full72 required, expansion/I10/I11 remain goalobligations.
