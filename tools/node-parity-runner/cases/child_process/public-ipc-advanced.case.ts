@@ -19,8 +19,9 @@ const advancedChild = `
     b: new Uint8Array([1, 2]),
     g: 1n,
   });
+  // No own timers: the public IPC hold (message listener) keeps this child
+  // alive awaiting the parent's later rich send.
   onMessage((message) => p.send(message));
-  setInterval(() => {}, 1000);
 `;
 
 const c: ParityCase = {

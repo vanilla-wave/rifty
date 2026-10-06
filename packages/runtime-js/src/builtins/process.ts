@@ -1,3 +1,4 @@
+import { registerProcessStdioStream } from '@riftydev/io';
 /**
  * Node-compatible `process` global — the ONE `NodeProcess` class (ADR-0157).
  *
@@ -262,6 +263,7 @@ function makeStdioWriter(
       return true;
     },
   }) as NodeStdioWriter;
+  registerProcessStdioStream(stream);
   return isTTY ? attachTtyControls(stream, size) : stream;
 }
 
@@ -1047,7 +1049,8 @@ export class NodeProcess extends EventEmitter {
   }
 
   #syncIpcKeepalive(): void {
-    const shouldHold = this.#jsonIpc && !this.#ipcDisconnected && this.listenerCount('message') > 0;
+    const shouldHold =
+      this.#publicIpc && !this.#ipcDisconnected && this.listenerCount('message') > 0;
     if (shouldHold === this.#ipcKeepaliveHeld) return;
     this.#ipcKeepaliveHeld = shouldHold;
     if (shouldHold) refEventLoop();

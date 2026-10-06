@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EventEmitter } from '../event-emitter.ts';
+import { registerProcessStdioStream } from './pipe-stdio-exemption.ts';
 import { Readable } from './readable.ts';
 import { Writable } from './writable.ts';
 
@@ -186,13 +187,15 @@ describe('Readable.pipe / Readable.unpipe', () => {
 });
 
 describe('Readable.pipe into process stdio (Node end-exemption)', () => {
-  // Guest process.stdout/stderr duck-type: fd 1/2 writer (EventEmitter + write,
-  // no end — readable-pipe-never-ends-process-stdio).
+  // Guest process.stdout/stderr shape, REGISTERED through the real identity
+  // seam (the process builtin registers its writers the same way).
   function makeStdioWriter(fd: number): EventEmitter & { fd: number; write(): boolean } {
-    return Object.assign(new EventEmitter(), {
+    const writer = Object.assign(new EventEmitter(), {
       fd,
       write: () => true,
     }) as EventEmitter & { fd: number; write(): boolean };
+    registerProcessStdioStream(writer);
+    return writer;
   }
 
   it('stdout: source end does NOT call dest.end; pipe cleanup still detaches listeners', () => {
@@ -239,7 +242,7 @@ describe('Readable.pipe into process stdio (Node end-exemption)', () => {
     });
   });
 
-  it('a stdio-shaped writer WITH an end() method is still exempt — shape, not absence of end, drives the exemption', () => {
+  it('an UNREGISTERED fd 1/2 writer is ordinary: end() still runs (identity, not fd duck-typing)', () => {
     const r = new Readable({ read() {} });
     const ends: string[] = [];
     const dest = Object.assign(new EventEmitter(), {
@@ -247,6 +250,26 @@ describe('Readable.pipe into process stdio (Node end-exemption)', () => {
       write: () => true,
       end: () => ends.push('end'),
     });
+    r.pipe(dest as never);
+    r.push('a');
+    r.push(null);
+    return new Promise<void>((resolve) => {
+      r.on('end', () => {
+        expect(ends).toEqual(['end']);
+        resolve();
+      });
+    });
+  });
+
+  it('a REGISTERED writer WITH an end() method is still exempt — identity drives the exemption', () => {
+    const r = new Readable({ read() {} });
+    const ends: string[] = [];
+    const dest = Object.assign(new EventEmitter(), {
+      fd: 1,
+      write: () => true,
+      end: () => ends.push('end'),
+    });
+    registerProcessStdioStream(dest);
     r.pipe(dest as never);
     r.push('a');
     r.push(null);

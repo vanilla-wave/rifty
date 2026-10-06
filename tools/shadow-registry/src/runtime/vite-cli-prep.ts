@@ -115,6 +115,7 @@ function validateCliActionPatch(vitePackageRoot: string): void {
 
 function validateRootWatchPatch(vitePackageRoot: string): void {
   const sites = rootWatchPatchSites(vitePackageRoot);
+  let urlAnchors = 0;
   for (const site of sites) {
     if (!viteRootWatchPatchApplied(site.source)) {
       throw new Error(
@@ -122,16 +123,26 @@ function validateRootWatchPatch(vitePackageRoot: string): void {
       );
     }
     // A site carrying the root slice must carry the PATCHED form — an
-    // unprepared tree never promotes.
-    const urlTouched =
+    // unprepared tree never promotes; a tree with NO root slice at all is
+    // equally unprepared (fail-closed, ADR-0433).
+    urlAnchors +=
       occurrences(site.source, viteRootUrlPatchPolicy.needle) +
       occurrences(site.source, viteRootUrlPatchPolicy.replacement);
-    if (urlTouched > 0 && !site.source.includes(viteRootUrlPatchPolicy.replacement)) {
+    if (!site.source.includes(viteRootUrlPatchPolicy.replacement) && urlTouchedSite(site)) {
       throw new Error(
         `vite root watcher/URL must be prepared by acquisition before promotion: ${site.path}`,
       );
     }
   }
+  if (urlAnchors === 0) {
+    throw new Error(
+      'vite root watcher/URL must be prepared by acquisition before promotion: no resolved-id root slice',
+    );
+  }
+}
+
+function urlTouchedSite(site: { readonly source: string }): boolean {
+  return site.source.includes(viteRootUrlPatchPolicy.needle);
 }
 
 function vitePackageRoot(root: string, executedBinPath?: string): string {

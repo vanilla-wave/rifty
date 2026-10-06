@@ -388,6 +388,14 @@ function spawnViaSameRealm(
   stdio: ReturnType<typeof resolveWorkerStdio>,
 ): ChildProcess {
   warnSameRealmFallbackOnce();
+  if (opts.serialization === 'advanced') {
+    // The same-realm fallback and exec lanes have no structured-clone channel;
+    // silently degrading to JSON would lie about rich-value round-trips.
+    throw new NotImplementedError(
+      'child_process.serialization.advanced',
+      'advanced IPC serialization requires the kernel Worker route; the same-realm fallback owns only the JSON lane',
+    );
+  }
   // The handler needs the `ProcessHandle` and `ChildProcess`, both built AFTER
   // it's registered. A mutable container lets the handler read them on the next
   // microtask without an extra `await` boundary, which would delay the script
