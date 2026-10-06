@@ -219,13 +219,17 @@ export async function savedNoteEntry(
   const actions = namedActions(ctx, new RegExp(escapeCaption(title), 'i'));
   const exact = namedActions(ctx, new RegExp(`^${escapeCaption(title)}$`, 'i'));
   const legacy = savedEntry(ctx, title, otherTitles);
-  const identities = [title, ...otherTitles, 'Delete', 'Remove'];
+  const identities = [title, ...otherTitles];
+  const boundary = `(?:\\b|(?:${identities.map(escapeCaption).join('|')}))`;
+  const destructive = namedActions(ctx, new RegExp(`${boundary}(?:delete|remove)${boundary}`, 'i'));
   let result = actions.and(ctx.view.locator(':not(*)'));
   for (const candidate of await actions.all()) {
     if ((await candidate.and(exact).count()) > 0) {
       result = result.or(candidate);
       continue;
     }
+    // Role names preserve descendant ARIA/image captions that innerText omits.
+    if ((await candidate.and(destructive).count()) > 0) continue;
     const identity = await candidate.evaluate((node, identities) => {
       const explicitLabel = (node.getAttribute('aria-label') ?? '').trim().toLocaleLowerCase();
       const explicit = identities.findIndex((name) => name.toLocaleLowerCase() === explicitLabel);
@@ -235,7 +239,6 @@ export async function savedNoteEntry(
         NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
       );
       let primary = -1;
-      let deletion = false;
       let current: Node | null = node;
       while (current) {
         const element = current instanceof HTMLElement ? current : current.parentElement;
@@ -259,13 +262,12 @@ export async function savedNoteEntry(
             const found = identities.findIndex(
               (name) => name.toLocaleLowerCase() === text.trim().toLocaleLowerCase(),
             );
-            if (found >= identities.length - 2) deletion = true;
-            else if (found >= 0 && primary < 0) primary = found;
+            if (found >= 0 && primary < 0) primary = found;
           }
         }
         current = walker.nextNode();
       }
-      return deletion ? identities.length - 1 : primary;
+      return primary;
     }, identities);
     if (identity === 0 || (identity < 0 && (await candidate.and(legacy).count()) > 0))
       result = result.or(candidate);

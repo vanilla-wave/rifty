@@ -16,9 +16,11 @@ realNode24.16/Vite7.3.6/Chromium public7PASS, privateoldFAIL, errors0.
 
 Partially supersede ADR0510's single matcher for fields/entry/Wiki. Field
 purposes retain their matcher; current note entry/Wiki identity share one
-observation owner. Exact accessible title takes precedence; otherwise inspect
-visible caption components, keeping other-note excerpts and delete actions
-out of the identity. Anonymous/hidden title payload is not a named entry.
+observation owner. Exact accessible title takes precedence; otherwise exclude destructive purposes using the computed button/link name,
+then inspect visible caption components for the primary title. Known-title
+adjacency covers fused AlphaDelete/DeleteAlpha; retain word boundaries for
+ordinary captions. This uses the existing role engine, not a custom ARIA-name
+implementation. Other-note excerpts and delete actions stay out of identity. Anonymous/hidden title payload is not a named entry.
 Legacy flat captions retain existing discrimination where no component matches.
 No universal UI parser, application repair, coordinator or source-code scoring.
 
@@ -46,3 +48,10 @@ Proofs: agent-eval-notes-composed-entry-{native-red,native-green}.json.gz,
 notes-entry-controls.ts and notes-entry-controls.fault.spec.ts. Original65
 scores remain interrupted history. Full comparison and mandatory I10/I11
 remain goal obligations.
+
+B1 Final @57337576e reproduced a working alternative: descendant aria-label
+Delete icon hidden from innerText; current observer clicked AlphaDelete before
+OpenAlpha. Public7/oldprivate7PASS/newFAIL. Permanent label/labelledby/image-alt
+RED, SVG previously covered; computed-role purpose exclusion8faultsGREEN,
+unchangedprogramme public7/old7/new7PASS, fresh32controls16PASS16FAIL. Earlier
+60/65 outcomes remain history; no quality calls before changed-tree Final.

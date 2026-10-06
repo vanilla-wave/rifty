@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Exclude note delete actions through computed accessible role names, including descendant ARIA/image labels; shared entry/Wiki regression proof, prior outcomes unchanged.
+
 - Observe composed saved-note identities through accessible titles and visible components; freeze notes-v4/eval-v4, preserve prior inputs/results (ADR-0514).
 
 - Observe CSV saved records through public export, preserving multiplicity without editor/order constraints; freeze CSVv4/eval-v3, old criteria/results unchanged (ADR-0513).

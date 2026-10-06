@@ -68,7 +68,7 @@ programme in reference/agent-eval-notes-composed-entry-native-red.json.gz.
 | axis × operation | honest outcome | proof | trace |
 |---|---|---|---|
 | frozen-assumption × saved-entry/Wiki identity | observable title identity, no separator assumption | captured full-public RED→GREEN | → I3+I6 |
-| lossy-aggregate × caption composition | primary title retained, other-note excerpt not an identity | composition/ambiguity/hidden fault controls | → I3+I6 |
+| lossy-aggregate × caption composition | primary title retained, other-note excerpt not an identity | composition/ambiguity/hidden/ARIA/image fault controls | → I3+I6 |
 | sibling-drift × search/reload/delete/navigation | same corrected observation owner for current case | operation sweep, guard reversions | → I3+I6 |
 | provenance-lie × version/run/report | original criteria/65scores immutable, fresh nextseries | version binding/archives/two offline regenerations | → I3+I7+I8+I9 |
 
@@ -86,3 +86,5 @@ rescore. Full comparison and I10/I11 remain linked goal obligations.
 - re-cut: 2026-10-06 — required I3/I6 correction before expanded-comparison, samePR341 and originalfull96/I10/I11 scope — trace: none
 
 - 2026-10-06 — capturedprogramme full7/private7PASS/errors0; guarded native14/14 expected,3reversionsRED/restored4GREEN; actual60own-origin controls23PASS37FAIL/60expected/60physicalpairs. Genuine original programme3 COI viewport failure retained, captured/ref/alternative all4PASS. Fullgate/independentFinal still required.
+
+- 2026-10-06 — independent Final @57337576e BLOCK B1: accessible descendant Delete icon selected instead of Open; actualpublic7/oldprivate7PASS/currentFAIL. Accepted required repair; permanent3reachableARIA-label/labelledby/image-alt RED, SVG already covered. Shared computed-role destructive-purpose predicate replaces lossy innerText-only exclusion, old helpers unchanged. Actual8faultsGREEN, immutableprogramme public7/old7/new7PASS, captured/inherited14GREEN; fresh32controls16PASS16FAIL/32physicalpairs/2offlineGREEN. ENOSPC25/32/headerFAILED/one missingtrace and7missing retained separately; verifiedcompletednoModel generatedcleanup source/assets/Git/lock/tarball/loghashes preserved. Guardreversions/fullgate/independentchanged-treeverify pending, full96/I10/I11 unchanged.
