@@ -96,3 +96,19 @@ inheritedcorpus/CSV17tests/typecheck/biomePASS.
 No newapp/project/control/manifest implemented; missingeval3RED remainsexpected.
 Newhelper bytes enter accepted supporthash, oldseries scores remain immutable.
 Independent changed-tree preparationverification next, no modelcalls/new96 yet.
+
+Changed-tree BLOCK @2c0c53f780: priorfour corrected; named Save links still
+rejected by button-only preselection; hidden receiver/amount accepted in cards
+andtables. Accepted FIX, scope/premise CLEAR.
+[Originalverdict](agent-eval-corpus-expansion-role-visibility-contract-block.json),
+[actualChromiumRED](agent-eval-expansion-role-visibility-red.json.gz).
+
+Shared namedActions owns button/link collection for both discovery/execution;
+allnew action preselectors swept, participant pressed-button remains semantic
+control. Existing action first-match behavior preserved. Shared renderedValue
+reads visible read-only innerText/live read-only controls; balance/card/table
+readers swept, hidden descendants cannot supply values. No publicprompt narrowed.
+PermanentChromium conformance adds realbutton/link save/edit/new/delete and
+visible/hidden financial cards/tables/balances. Bothguard reverts RED, restored.
+Missingeval-v1 positiveRED remains expected, no apps/models implemented.
+[Conformance/guard reverts/physical wrong controls/source](agent-eval-expansion-role-visibility-green.json.gz): conformanceexit0; eachnewguard revert exit1 and source restored; oldworkflow8FAIL/errors0. Actual inherited14PASS, typecheck/biome/docs PASS. Three expected missing-manifest RED, no claimed blanket fullgateGREEN. Independent changed-tree verification next.

@@ -1,8 +1,14 @@
-import { actionCaption, caption, fieldValue, verdict } from '../../src/judge/context.ts';
+import {
+  actionCaption,
+  caption,
+  namedActions,
+  renderedValue,
+  verdict,
+} from '../../src/judge/context.ts';
 import type { JudgeContext, JudgeProbe, TaskJudge } from '../../src/judge/context.ts';
 
 async function click(ctx: JudgeContext, name: RegExp) {
-  const matches = ctx.view.getByRole('button', { name }).or(ctx.view.getByRole('link', { name }));
+  const matches = namedActions(ctx, name);
   for (const node of await matches.all())
     if (await node.isVisible()) {
       await node.click();
@@ -70,7 +76,7 @@ async function participants(ctx: JudgeContext, names: string[]) {
 }
 async function save(ctx: JudgeContext) {
   const update = actionCaption('save|update', 'expense');
-  if (await ctx.view.getByRole('button', { name: update }).count()) await click(ctx, update);
+  if (await namedActions(ctx, update).count()) await click(ctx, update);
   else await click(ctx, actionCaption('add|create', 'expense'));
 }
 async function expense(
@@ -80,7 +86,7 @@ async function expense(
   amount: string,
   selected: string[],
 ) {
-  const fresh = ctx.view.getByRole('button', { name: actionCaption('new', 'expense') });
+  const fresh = namedActions(ctx, actionCaption('new', 'expense'));
   if (await fresh.count()) await fresh.first().click();
   if (!(await input(ctx, /\bdescription\b/i).isVisible()))
     await click(ctx, actionCaption('new|add|create', 'expense'));
@@ -97,16 +103,18 @@ async function balances(ctx: JudgeContext) {
     for (const key of ['Paid', 'Owed', 'Net']) {
       const label = new RegExp(`(?=.*${caption(name).source})(?=.*${caption(key).source})`, 'i');
       const named = ctx.view.getByLabel(label);
-      if (await named.count()) amounts[key] = cents(await fieldValue(named.first()));
+      if (await named.count()) amounts[key] = cents(await renderedValue(named.first()));
       else {
         let found = false;
         for (const table of await ctx.view.getByRole('table').all()) {
-          const headings = await table.getByRole('columnheader').allTextContents();
+          const headings = await Promise.all(
+            (await table.getByRole('columnheader').all()).map(renderedValue),
+          );
           const column = headings.findIndex((text) => caption(key).test(text));
           if (column < 0) continue;
           for (const row of await table.getByRole('row').all()) {
             const cells = row.getByRole('cell').or(row.getByRole('rowheader'));
-            const texts = await cells.allTextContents();
+            const texts = await Promise.all((await cells.all()).map(renderedValue));
             if (texts.some((text) => text.trim() === name)) {
               amounts[key] = cents(texts[column]!);
               found = true;
@@ -126,13 +134,17 @@ async function transfers(ctx: JudgeContext, totals: Awaited<ReturnType<typeof ba
   const remaining = new Map(totals.map((row) => [row.name, row.net]));
   const rows = [];
   for (const table of await ctx.view.getByRole('table').all()) {
-    const headings = await table.getByRole('columnheader').allTextContents();
+    const headings = await Promise.all(
+      (await table.getByRole('columnheader').all()).map(renderedValue),
+    );
     const from = headings.findIndex((text) => /\b(?:from|payer|debtor)\b/i.test(text));
     const to = headings.findIndex((text) => /\b(?:to|receiver|creditor)\b/i.test(text));
     const amount = headings.findIndex((text) => /\bamount\b/i.test(text));
     if (from < 0 || to < 0 || amount < 0) continue;
     for (const row of await table.getByRole('row').all()) {
-      const cells = await row.getByRole('cell').or(row.getByRole('rowheader')).allTextContents();
+      const cells = await Promise.all(
+        (await row.getByRole('cell').or(row.getByRole('rowheader')).all()).map(renderedValue),
+      );
       if (cells.length !== headings.length) continue;
       const a = cells[from]!.trim();
       const b = cells[to]!.trim();
@@ -157,9 +169,9 @@ async function transfers(ctx: JudgeContext, totals: Awaited<ReturnType<typeof ba
         const amount = container.getByLabel(/\bamount\b/i);
         if ((await target.count()) === 1 && (await amount.count()) === 1) {
           rows.push({
-            from: (await fieldValue(from)).trim(),
-            to: (await fieldValue(target)).trim(),
-            cents: cents(await fieldValue(amount)),
+            from: (await renderedValue(from)).trim(),
+            to: (await renderedValue(target)).trim(),
+            cents: cents(await renderedValue(amount)),
           });
           break;
         }

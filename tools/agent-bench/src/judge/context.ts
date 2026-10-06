@@ -38,11 +38,29 @@ export async function fieldValue(field: Locator): Promise<string> {
       : (node.textContent ?? ''),
   );
 }
-export function action({ view }: JudgeContext, name: string | RegExp) {
+export function namedActions({ view }: JudgeContext, name: string | RegExp) {
   return view
     .getByRole('button', { name, exact: typeof name === 'string' })
-    .or(view.getByRole('link', { name, exact: typeof name === 'string' }))
-    .first();
+    .or(view.getByRole('link', { name, exact: typeof name === 'string' }));
+}
+export function action(ctx: JudgeContext, name: string | RegExp) {
+  return namedActions(ctx, name).first();
+}
+
+/** Read rendered output; hidden descendants and editable source are not proof. */
+export async function renderedValue(output: Locator): Promise<string> {
+  if (!(await output.isVisible())) throw new Error('Output is hidden');
+  return output.evaluate((node) => {
+    if (
+      !(node instanceof HTMLElement) ||
+      node.matches(':read-write') ||
+      node instanceof HTMLSelectElement
+    )
+      throw new Error('Missing read-only rendered output');
+    return node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement
+      ? node.value
+      : node.innerText;
+  });
 }
 
 export function field({ view }: JudgeContext, name: string | RegExp) {

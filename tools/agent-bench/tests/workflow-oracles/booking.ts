@@ -1,4 +1,4 @@
-import { actionCaption, fieldValue, verdict } from '../../src/judge/context.ts';
+import { actionCaption, fieldValue, namedActions, verdict } from '../../src/judge/context.ts';
 import type { JudgeContext, JudgeProbe, TaskJudge } from '../../src/judge/context.ts';
 
 const controls = {
@@ -13,7 +13,7 @@ const controls = {
 const input = (ctx: JudgeContext, name: keyof typeof controls) =>
   ctx.view.getByLabel(controls[name]);
 async function click(ctx: JudgeContext, name: RegExp) {
-  const matches = ctx.view.getByRole('button', { name }).or(ctx.view.getByRole('link', { name }));
+  const matches = namedActions(ctx, name);
   for (const node of await matches.all())
     if (await node.isVisible()) {
       await node.click();
@@ -22,7 +22,7 @@ async function click(ctx: JudgeContext, name: RegExp) {
   throw new Error(`Missing named action ${name}`);
 }
 async function saveRoom(ctx: JudgeContext) {
-  const update = ctx.view.getByRole('button', { name: actionCaption('save|update', 'room') });
+  const update = namedActions(ctx, actionCaption('save|update', 'room'));
   if (await update.count()) await click(ctx, actionCaption('save|update', 'room'));
   else await click(ctx, actionCaption('add|create', 'room'));
 }
@@ -45,7 +45,7 @@ async function chooseRoom(ctx: JudgeContext, name: string) {
 }
 async function saveBooking(ctx: JudgeContext) {
   const update = actionCaption('save|update', 'reservation|booking');
-  if (await ctx.view.getByRole('button', { name: update }).count()) await click(ctx, update);
+  if (await namedActions(ctx, update).count()) await click(ctx, update);
   else await click(ctx, actionCaption('add|create', 'reservation|booking'));
 }
 async function book(
@@ -56,7 +56,7 @@ async function book(
   end: string,
   seats: number,
 ) {
-  const fresh = ctx.view.getByRole('button', { name: actionCaption('new', 'reservation|booking') });
+  const fresh = namedActions(ctx, actionCaption('new', 'reservation|booking'));
   if (await fresh.count()) await fresh.first().click();
   if (!(await input(ctx, 'date').isVisible()))
     await click(ctx, actionCaption('add|create|new', 'reservation|booking'));
@@ -68,7 +68,7 @@ async function book(
   await saveBooking(ctx);
 }
 function edits(ctx: JudgeContext) {
-  return ctx.view.getByRole('button', { name: actionCaption('edit', 'reservation|booking') });
+  return namedActions(ctx, actionCaption('edit', 'reservation|booking'));
 }
 async function snapshot(ctx: JudgeContext) {
   const rows = [];
@@ -168,9 +168,7 @@ export const judge: TaskJudge = async (ctx) => {
       pass: same(valid, await snapshot(ctx)),
       evidence: await snapshot(ctx),
     });
-    const deletion = ctx.view.getByRole('button', {
-      name: actionCaption('delete', 'reservation|booking'),
-    });
+    const deletion = namedActions(ctx, actionCaption('delete', 'reservation|booking'));
     await deletion.first().click();
     await ctx.view.goto(ctx.view.url());
     probes.push({
@@ -182,12 +180,7 @@ export const judge: TaskJudge = async (ctx) => {
     await click(ctx, actionCaption('delete', 'room', 'Unused'));
     probes.push({
       name: 'unreferenced room deletion',
-      pass:
-        (await ctx.view
-          .getByRole('button', {
-            name: actionCaption('edit', 'room', 'Unused'),
-          })
-          .count()) === 0,
+      pass: (await namedActions(ctx, actionCaption('edit', 'room', 'Unused')).count()) === 0,
       evidence: await ctx.view.locator('body').innerText(),
     });
   } catch (error) {

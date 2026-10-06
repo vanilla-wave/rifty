@@ -1,0 +1,193 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK preparation: all four prior defects corrected, but sibling action-role restriction and unreadable-settlement false-PASS remain. Fix in this unit, retain prompts/scope, independently verify before application implementation. Whole goal open.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "2c0c53f780bed86f7d3bb5148af9076c4d320609",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-corpus-expansion.md, changed-tree Contract+RED verification @clean2c0c53f780bed86f7d3bb5148af9076c4d320609 against BASE4db652200789456c597bb8a38a95d7bb12df7aae; fresh independent reviewer /root/expansion_contract_review, read-only/nochildren/no modelcalls. Raw goal docs/backlog/epics/agent-code-quality-evaluation/goal.md scenario1-8/I1-I11/Decisions, original user source docs/backlog/distribution/reference/agent-code-quality-refine-evidence.md Original request/answers and Corpus discussion, unchanged public booking/expense prompts, ADR0511/0506/0507, full diff/previous blocker/raw artifacts inspected. RDY6 source/related-set scope check and premise remain CLEAR: exact finite8/two independent workflow families are curator-owned, original20-30 estimate not quota; no weakened user scope, ledger append-only; expansion96 and I10/I11 mandatory. Reuses loader/runner/report and smallest action-purpose helper; no new coordinator/dependency. Original absent-workflow substitution now rejected by intended independent oracle; prior action order/region-caption/source-export/precision defects independently corrected: real current permanent conformance exit0 (/tmp/rifty-pr341-expansion-final-conformance.log, actual root/T/rifty-workflow-oracle-conformance-xaZVkX); current exact source through real unchanged loadCorpus both named/default/loadedjudge functions (/tmp/rifty-pr341-expansion-final-export-evidence.json); typecheck PASS; CSV-correction/fault10tests PASS; three current expansion REDs are exactly missingeval-v1, no import/type failure (/tmp/rifty-pr341-expansion-final-unit.log). Producer current raw wrong-workflow8FAIL/errors0 and four restored guard-revertRED records read in reference/agent-eval-expansion-oracle-conformance-green.json.gz; no blanket new-app GREEN inferred. Final sibling probes settle two remaining public clauses (B6/B7). Backlog/refs/diffcheck independently PASS; exact tree remained clean. Coverage pass cells are preparation carriers or accepted unchanged baseline carriers; new case positive/corruption/alternatives/all-origin/freeze96 campaign still mandatory implementation acceptance, never claimed delivered.",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance2+3+5 -> I1+I3+I6; named action/DOM alternatives",
+      "location": "tools/agent-bench/tests/workflow-oracles/booking.ts:25",
+      "summary": "Use the same semantic action role owner for action preselection and execution across room/reservation/person/expense save/edit/delete; real named save links must not be rejected by an unstated button-only gate."
+    },
+    {
+      "clause": "Acceptance3+5 -> I1+I3+I6; public readable transfer/balance output",
+      "location": "tools/agent-bench/tests/workflow-oracles/expense.ts:161",
+      "summary": "Reject hidden receiver/amount projection in card and table outputs while accepting visible valid alternatives; sweep shared raw-value readers in balances/table/cards. Actual visible/hidden negatives and guard reversion prove the semantic boundary."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I1+I6+I7; expansion acceptance1-7",
+      "location": "docs/backlog/distribution/agent-eval-corpus-expansion.md:43",
+      "summary": "After preparation repair: deliver pinned new cases/semantic judges, actual positive/corruption/valid-alternative/guard-revert proof, fresh32reference+32newcase all-origin controls, freeze and separate complete96trial campaign/offline regeneration; preserve all selected outcomes. Current semantics/source binding preparation does not close any of this."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md:1",
+      "summary": "Evidence-backed command/tool/API/behavior/policy difference catalog, including recovered obstacles and effect/unknown, remains mandatory."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md:1",
+      "summary": "Executed substantive finite escalation, justified stopping bounds and fresh repeated boundary confirmation/controls remain mandatory; pilot/expanded comparison alone cannot close goal."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: separately frozen eight-case/seven-family suite; installed Vue/Svelte starters, public prompts and frozen provenance; unchanged pilot.",
+      "source": "acceptance",
+      "trace": "I1+I6+I7+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-expansion.test.ts:46",
+      "note": ""
+    },
+    {
+      "row": "Acceptance2: room/reservation guards, interval/capacity independence, atomicity/filter/order/reload and four real control outcomes.",
+      "source": "acceptance",
+      "trace": "I1+I3+I6",
+      "status": "missing",
+      "citation": "tools/agent-bench/tests/workflow-oracles/booking.ts:24",
+      "note": "Prior four blockers now independently corrected. Executed new sibling probes show continuing hidden action-role criterion (B6) and unreadable output false-PASS (B7) under the same declared public oracle clauses. Repair semantic owner and verify real allowed-action/hidden-output controls before app implementation; future positive/fault/all-origin/campaign acceptance is not demanded now."
+    },
+    {
+      "row": "Acceptance3: exact cents/creation-order allocation/conservation/any-clearing-settlement and mutation/reference/persistence guards.",
+      "source": "acceptance",
+      "trace": "I1+I3+I6",
+      "status": "missing",
+      "citation": "tools/agent-bench/tests/workflow-oracles/expense.ts:113",
+      "note": "Prior four blockers now independently corrected. Executed new sibling probes show continuing hidden action-role criterion (B6) and unreadable output false-PASS (B7) under the same declared public oracle clauses. Repair semantic owner and verify real allowed-action/hidden-output controls before app implementation; future positive/fault/all-origin/campaign acceptance is not demanded now."
+    },
+    {
+      "row": "Acceptance4: real locked native new-case controls, same own-origin requirements, full32 references/32 new controls; all failures retained.",
+      "source": "acceptance",
+      "trace": "I2+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-controls.ts:68",
+      "note": ""
+    },
+    {
+      "row": "Acceptance5: corrupted/valid-alternative controls and each guarded requirement negative/revert; public requirements only, honest authoring evidence before calls.",
+      "source": "acceptance",
+      "trace": "I6+I7",
+      "status": "missing",
+      "citation": "tools/agent-bench/tests/workflow-oracle-conformance.ts:33",
+      "note": "Prior four blockers now independently corrected. Executed new sibling probes show continuing hidden action-role criterion (B6) and unreadable output false-PASS (B7) under the same declared public oracle clauses. Repair semantic owner and verify real allowed-action/hidden-output controls before app implementation; future positive/fault/all-origin/campaign acceptance is not demanded now."
+    },
+    {
+      "row": "Acceptance6: fresh fixed96 trial campaign plan with all4 origins/3 repeats/declared config and no adaptive exclusions.",
+      "source": "acceptance",
+      "trace": "I1+I2+I3+I4+I7+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-expansion.test.ts:23",
+      "note": ""
+    },
+    {
+      "row": "Acceptance7: separate complete campaign, retained own-origin evidence, conditional fixed-matrix report/offline regeneration, no equality/causal claim.",
+      "source": "acceptance",
+      "trace": "I3+I4+I7+I8+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-comparison-report-final-green.json:5",
+      "note": ""
+    },
+    {
+      "row": "Fault frozen-assumption/sibling-drift x judge: valid alternatives PASS, unmet public requirements FAIL.",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "missing",
+      "citation": "tools/agent-bench/tests/workflow-oracles/expense.ts:161",
+      "note": "Prior four blockers now independently corrected. Executed new sibling probes show continuing hidden action-role criterion (B6) and unreadable output false-PASS (B7) under the same declared public oracle clauses. Repair semantic owner and verify real allowed-action/hidden-output controls before app implementation; future positive/fault/all-origin/campaign acceptance is not demanded now."
+    },
+    {
+      "row": "Fault torn-state x invalid app mutation: prior rooms/expenses/persistence preserved.",
+      "source": "fault-matrix",
+      "trace": "I1+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracles/booking.ts:124",
+      "note": ""
+    },
+    {
+      "row": "Fault corrupt-input x amount/interval/selection: visible rejection without retained mutation.",
+      "source": "fault-matrix",
+      "trace": "I1+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracles/expense.ts:184",
+      "note": ""
+    },
+    {
+      "row": "Fault input/provenance drift x frozen version: reject mismatch/private-check leakage.",
+      "source": "fault-matrix",
+      "trace": "I6+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus.ts:96",
+      "note": ""
+    },
+    {
+      "row": "Fault setup/unsupported/interruption x matrix: retain failed/partial/missing, fresh next series.",
+      "source": "fault-matrix",
+      "trace": "I3+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-comparison-report-final-green.json:5",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/tests/workflow-oracles/booking.ts:25",
+          "summary": "Action word-order fix still restricts save/edit/delete discovery to button roles; a public-permitted named Room save link is rejected although the action executor accepts links.",
+          "authority": "I6; Acceptance2+3+5 -> I1+I3+I6; booking public prompt20-24 and expense21-26 leave named actions/DOM open; ADR0511:20-23 forbids undisclosed semantic/appearance requirements.",
+          "evidence": "node --import tsx /tmp/rifty-pr341-expansion-final-role-probe.mjs, Nodev24.16.0, realChromium, exit0. /tmp/rifty-pr341-expansion-final-role-evidence.json: unchanged actual saveRoom helper from current source; button Room save clicked=yes, same link Room save clicked=null/Missing named action(add|create room), button/link Room add both clicked=yes. No full-app claim. Selector preselection counts only buttons and thus chooses add rather than the available save link. Same button-only preselection in saveBooking and expense save; booking edits/deletion also button-only. Fault frozen-assumption/sibling-drift at owned action-purpose projection. Executed false oracle premise under REV5; source is unchanged in the probe."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/tests/workflow-oracles/expense.ts:161",
+          "summary": "Settlement proof accepts hidden receiver/amount text as readable output in both related named cards and table cells.",
+          "authority": "I6; Acceptance3+5 -> I1+I3+I6; public expense prompt17 makes each transfer payer/receiver/amount readable and named; I6 checks reject unmet public requirements.",
+          "evidence": "node --import tsx /tmp/rifty-pr341-expansion-final-visibility-probe.mjs, Nodev24.16.0, realChromium, exit0; /tmp/rifty-pr341-expansion-final-visibility-evidence.json. Unchanged current transfers helper, same nets967/-434/-533: visible card receiverZed/amount4.34+5.33 => validtrue; hidden receiver/amount => body.innerText Ada\\nCara yet validtrue rowsAda->Zed434/Cara->Zed533. Table sibling also validtrue when body.innerText only Payer Receiver Amount headers plus Ada/Cara and blank receiver/amount cells; hidden descendant text read via allTextContents. Visible controls remain validtrue. No full-app implementation claim. Fault lossy-aggregate/frozen-assumption at readable-value projection; named fieldValue/textContent and table allTextContents bypass rendered output. Balance readers at93-118 use the same raw projection and need the sibling sweep, not a narrowed prompt."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

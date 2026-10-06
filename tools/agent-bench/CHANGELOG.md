@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Share button/link discovery for workflow actions; financial proof reads visible output, rejecting hidden values in cards and tables.
+
 - Match named workflow actions by semantic words independent of caption order; shared owner keeps open app captions consistent.
 
 - Reject hidden descendants in visible Markdown literal/bold proof; compare rendered innerText in the shared candidate owner (ADR-0510).
