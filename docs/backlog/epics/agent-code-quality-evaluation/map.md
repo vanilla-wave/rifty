@@ -1,6 +1,6 @@
 ## Items
 
-1. `distribution/agent-eval-expanded-comparison` — original expansion6+7: after acceptedADR0512 and requiredADR0513CSVsaved-state/SIGINT repair/control/Final, fresh eval-v3 fixed96/all4/three repeats, retained failures, uncertainty/offline report; after independently accepted source/control unit; I1/I2/I3/I4/I7/I8/I9.
+1. `distribution/agent-eval-expanded-comparison` — original expansion6+7: after acceptedADR0512/0513sourceFinal76b046b1a+controls, fresh eval-v3 fixed96/all4/three repeats, retained failures, uncertainty/offline report; after independently accepted source/control unit; I1/I2/I3/I4/I7/I8/I9.
 2. `distribution/agent-eval-boundary-diagnostics` — observed environment/tool differences and executed substantive escalation/confirmation beyond pilot; I10/I11. Existing scripts, report and corpus reused.
 
 ## Open questions

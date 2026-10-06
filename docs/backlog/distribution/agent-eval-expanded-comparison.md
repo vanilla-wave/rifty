@@ -72,3 +72,5 @@ Original mandatory I10/I11 diagnostics follows; comparison never closes goal alo
 - 2026-10-06 — corrected source/control Final+GREEN f32cf65be accepted15/15; fresh56 controls/fullgate27PASS; eval-v2 protocol reference/agent-eval-expanded-comparison-v2-protocol.md frozen before fresh96; originalv1protocol/history untouched.
 
 - re-cut: 2026-10-06 — ADR0513 saved-state CSV judge correction CSVv4/eval-v3, identical public inputs/other7cases/96selection; eval-v2/54partial and originalcriteria unchanged, no scope reduction — trace: none
+
+- 2026-10-06 — ADR0513CSV/SIGINT sourceFinal76b046b1a accepted15/15;actual40/fullgate27PASS; reference/agent-eval-expanded-comparison-v3-protocol.md frozen before NEWfull96, oldv1/v2history immutable.
