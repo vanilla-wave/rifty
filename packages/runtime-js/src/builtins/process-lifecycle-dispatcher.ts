@@ -72,13 +72,31 @@ export interface DispatchOutcome {
   readonly thrownValue?: unknown;
 }
 
+// Node: an exception inside a lifecycle handler is FATAL — the PROCESS is
+// dying; later dispatches must not re-enter its handlers. Realm-shared so a
+// dispatcher reinstall never resurrects a dead process.
+const DIED_KEY = Symbol.for('rifty.runtime-js.process-lifecycle-died.v1');
+
+function diedSet(): WeakSet<object> {
+  const realm = globalThis as { [DIED_KEY]?: WeakSet<object> };
+  if (realm[DIED_KEY] === undefined) {
+    Object.defineProperty(globalThis, DIED_KEY, {
+      value: new WeakSet<object>(),
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+  }
+  return realm[DIED_KEY] as WeakSet<object>;
+}
+
 export function installProcessLifecycleDispatcher(): void {
-  // Node: an exception inside a lifecycle handler is FATAL — the process is
-  // dying; later dispatches must not re-enter any handler.
-  const died = false;
   setProcessLifecycleDispatcher({
     dispatchUnhandled(reason, origin) {
-      if (died) return { handled: false, hasThrownValue: true, thrownValue: reason };
+      const active0 = activeLifecycleProcess();
+      if (active0 !== null && diedSet().has(active0)) {
+        return { handled: false, hasThrownValue: true, thrownValue: reason };
+      }
       const active = activeLifecycleProcess();
       if (!isNodeProcess(active)) return { handled: false };
       const proc = active as unknown as {
@@ -86,10 +104,14 @@ export function installProcessLifecycleDispatcher(): void {
         listenerCount(event: string): number;
       };
       const HANDLED = Symbol('handled');
-      const asOutcome = (result: typeof HANDLED | { readonly thrown: unknown }): DispatchOutcome =>
-        result === HANDLED
-          ? { handled: true }
-          : { handled: false, hasThrownValue: true, thrownValue: result.thrown };
+      const asOutcome = (
+        result: typeof HANDLED | { readonly thrown: unknown },
+      ): DispatchOutcome => {
+        if (result === HANDLED) return { handled: true };
+        // Fatal: the process is dying — no further handler reentry.
+        diedSet().add(proc as unknown as object);
+        return { handled: false, hasThrownValue: true, thrownValue: result.thrown };
+      };
       const emitFor = (
         event: 'uncaughtException' | 'unhandledRejection',
       ): typeof HANDLED | { readonly thrown: unknown } => {

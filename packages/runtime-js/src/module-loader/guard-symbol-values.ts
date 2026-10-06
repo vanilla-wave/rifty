@@ -80,3 +80,138 @@ export function computedKeyProvablyNotFunction(node: unknown, ctx: SymbolGuardCo
   }
   return isProvablySymbolValueExpression(node, ctx);
 }
+
+// ---------------------------------------------------------------------------
+// Whole-program Symbol-mutation pre-scan. Runs BEFORE the exemption walk, so
+// a mutation ANYWHERE (later line, nested function) invalidates every
+// Symbol-key proof in the module — the ceiling stays whole (ADR-0171).
+// ---------------------------------------------------------------------------
+
+type PoisonNode = { readonly type?: string; readonly [key: string]: unknown };
+
+function nameOf(node: unknown): string | undefined {
+  if (!node || typeof node !== 'object') return undefined;
+  return (node as { name?: unknown }).name as string | undefined;
+}
+
+function isIdentifier(node: unknown, name: string): boolean {
+  return (
+    node !== null &&
+    typeof node === 'object' &&
+    (node as PoisonNode).type === 'Identifier' &&
+    nameOf(node) === name
+  );
+}
+
+/** `Symbol` / `Symbol.<p>` / `Symbol[...]` / `globalThis.Symbol` targets. */
+function isSymbolMutationTarget(node: unknown): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const n = node as PoisonNode;
+  if (n.type === 'Identifier') return nameOf(n) === 'Symbol';
+  if (n.type === 'MemberExpression') {
+    const object = n.object;
+    if (isIdentifier(object, 'Symbol')) return true;
+    // globalThis.Symbol = …
+    if (
+      isIdentifier(object, 'globalThis') &&
+      (n.property !== null && typeof n.property === 'object' ? nameOf(n.property) : undefined) ===
+        'Symbol'
+    ) {
+      return true;
+    }
+    return isSymbolMutationTarget(object);
+  }
+  return false;
+}
+
+function visitPoison(node: unknown, out: { poisoned: boolean }): void {
+  if (out.poisoned || node === null || typeof node !== 'object') return;
+  const n = node as PoisonNode;
+  if (typeof n.type !== 'string') return;
+  switch (n.type) {
+    case 'AssignmentExpression':
+    case 'UpdateExpression':
+      if (isSymbolMutationTarget(n.left ?? n.argument)) out.poisoned = true;
+      break;
+    case 'UnaryExpression':
+      if (n.operator === 'delete' && isSymbolMutationTarget(n.argument)) out.poisoned = true;
+      break;
+    case 'CallExpression': {
+      const callee = n.callee;
+      if (
+        callee !== null &&
+        typeof callee === 'object' &&
+        (callee as PoisonNode).type === 'MemberExpression'
+      ) {
+        const call = callee as PoisonNode;
+        const object = call.object;
+        const prop =
+          call.property !== null && typeof call.property === 'object'
+            ? nameOf(call.property)
+            : undefined;
+        const args = Array.isArray(n.arguments) ? (n.arguments as unknown[]) : [];
+        const first = args[0];
+        // Object.defineProperty/defineProperties/assign or Reflect.set/defineProperty
+        if (
+          (isIdentifier(object, 'Object') &&
+            (prop === 'defineProperty' || prop === 'defineProperties' || prop === 'assign')) ||
+          (isIdentifier(object, 'Reflect') && (prop === 'set' || prop === 'defineProperty'))
+        ) {
+          if (isIdentifier(first, 'Symbol')) out.poisoned = true;
+        }
+      }
+      break;
+    }
+    case 'ClassDeclaration':
+    case 'FunctionDeclaration':
+      // A top-level declaration named `Symbol` shadows the global identifier
+      // for module code (checked by the caller for top level only).
+      if (nameOf(n.id) === 'Symbol') out.poisoned = true;
+      break;
+    default:
+      break;
+  }
+  for (const key of Object.keys(n)) {
+    if (key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'range') {
+      continue;
+    }
+    const value = n[key];
+    if (Array.isArray(value)) {
+      for (const item of value) visitPoison(item, out);
+    } else if (value !== null && typeof value === 'object') {
+      visitPoison(value, out);
+    }
+  }
+}
+
+/**
+ * True when the program (or its top-level declarations named `Symbol`)
+ * contains ANY shape that can replace `Symbol.for`/`Symbol` — making every
+ * Symbol-key exemption unprovable in that module. Conservative by design:
+ * over-rejecting keeps the ADR-0171 ceiling whole; never silently weakens it.
+ * `topLevelBody` supplies the module-scope declaration check.
+ */
+export function programPoisonsSymbolProofs(
+  program: unknown,
+  topLevelBody: readonly unknown[],
+): boolean {
+  const out = { poisoned: false };
+  for (const child of topLevelBody) {
+    if (child !== null && typeof child === 'object') {
+      const c = child as PoisonNode;
+      let decl = c;
+      if (c.type === 'ExportNamedDeclaration' || c.type === 'ExportDefaultDeclaration') {
+        const inner = c.declaration;
+        if (inner !== null && typeof inner === 'object') decl = inner as PoisonNode;
+      }
+      if (
+        (decl.type === 'ClassDeclaration' || decl.type === 'FunctionDeclaration') &&
+        nameOf(decl.id) === 'Symbol'
+      ) {
+        out.poisoned = true;
+      }
+    }
+  }
+  if (!out.poisoned) visitPoison(program, out);
+  return out.poisoned;
+}

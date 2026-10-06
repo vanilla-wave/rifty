@@ -88,9 +88,11 @@ export function createCjsInteropAuthority(options: {
       // Projection = the builtin's OWN prototype level only (Node's process
       // methods are own props; rifty keeps them on the class prototype).
       // Inherited bases (EventEmitter/Function/Object prototypes) are NOT part
-      // of any Node builtin's export surface.
-      const proto: object | null = Object.getPrototypeOf(outer);
-      if (proto !== null && proto !== Object.prototype && proto !== Function.prototype) {
+      // of any Node builtin's export surface — and a CALLABLE builtin's
+      // immediate prototype is such a base, never a method carrier.
+      const proto: object | null =
+        typeof outer === 'function' ? null : Object.getPrototypeOf(outer);
+      if (proto !== null && proto !== Object.prototype) {
         for (const name of Object.getOwnPropertyNames(proto)) {
           if (name === 'constructor' || HOST_BRIDGE_EXCLUDED.has(name)) continue;
           node.names.add(name);

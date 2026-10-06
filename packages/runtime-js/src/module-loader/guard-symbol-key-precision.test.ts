@@ -149,6 +149,36 @@ describe('CJS guard accepts provably-Symbol computed keys', () => {
     CLEANUP.push(Symbol.for('test.global-dispatcher'));
   });
 
+  it('hoisted/later Symbol mutation anywhere poisons the whole module (order-free)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "function write() { const K = Symbol.for('x'); globalThis[K] = 1; }\nSymbol.for = () => 'Function';\nwrite(); export const out = 'unreachable';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('Object.assign(Symbol, …) poisons (unrecognized substitution shape)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "Object.assign(Symbol, { for: () => 'Function' }); const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('globalThis.Symbol reassignment poisons', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "globalThis.Symbol = { for: () => 'Function' }; const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
   it('CJS: defineProperty on Symbol itself poisons', () => {
     const loader = cjsLoader({
       '/work/main.js':

@@ -14,6 +14,7 @@ import {
 } from './function-guard-scopes.ts';
 import {
   type SymbolGuardContext,
+  programPoisonsSymbolProofs,
   computedKeyProvablyNotFunction as sharedComputedKeyNotFunction,
   isProvablySymbolValueExpression as sharedIsProvablySymbolExpression,
 } from './guard-symbol-values.ts';
@@ -61,7 +62,10 @@ export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): v
   const body = program.body as unknown as GuardNodeShape[];
   predeclareGuardFunctionScope(body, rootScope);
   predeclareGuardLexicalScope(body, rootScope, { imports: true });
-  guardSymbolMutation.symbolMutated = false;
+  guardSymbolMutation.symbolMutated = programPoisonsSymbolProofs(
+    program as unknown as GuardNodeShape,
+    (program.body as unknown as GuardNodeShape[]) ?? [],
+  );
   const ctx: EsmFunctionGuardCtx = {
     scopes: [rootScope],
     hasGlobalFunctionWrite: false,
@@ -367,9 +371,6 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
       if (isReflectDerivedFunctionConstructorCall(n, ctx)) {
         ctx.hasDerivedHostFunctionConstructor = true;
       }
-      if (mutatesSymbolBuiltin(n, ctx)) {
-        guardSymbolMutation.symbolMutated = true;
-      }
       if (guardCalleeMayBeDerivedHostFunction(callee, ctx) && constructorArgsMayImport(args)) {
         ctx.hasDerivedHostFunctionConstructor = true;
       }
@@ -586,21 +587,11 @@ function walkGuardAssignmentTarget(target: unknown, ctx: EsmFunctionGuardCtx): v
     if (name === 'Function' && !isGuardShadowed(ctx, name)) {
       ctx.hasGlobalFunctionWrite = true;
     }
-    // Reassigning `Symbol` itself poisons every Symbol-key exemption.
-    if (name === 'Symbol' && !isGuardShadowed(ctx, name)) {
-      guardSymbolMutation.symbolMutated = true;
-    }
     return;
   }
   if (t.type === 'MemberExpression') {
     if (isGlobalFunctionWriteMember(t, ctx)) {
       ctx.hasGlobalFunctionWrite = true;
-    }
-    if (
-      isSymbolRootedMember(t, ctx) ||
-      (isGlobalObjectExpression(t.object, ctx) && staticPropertyName(t) === 'Symbol')
-    ) {
-      guardSymbolMutation.symbolMutated = true;
     }
     walkEsmFunctionGuard(t.object, ctx);
     if ((t as unknown as { computed?: boolean }).computed) walkEsmFunctionGuard(t.property, ctx);

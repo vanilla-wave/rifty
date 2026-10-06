@@ -76,6 +76,9 @@ export function intakeUnhandledError(
   reason: unknown,
   origin: NodeEvalUnhandledOrigin,
 ): UnhandledIntakeOutcome {
+  // The internal exit control signal never reaches user handlers (baseline:
+  // beginNodeEvalUnhandled excludes it too).
+  if (isRiftyProcessExit(reason)) return { handled: true };
   const state = keepaliveState();
   const dispatch = state.processLifecycle?.dispatchUnhandled(reason, origin);
   if (dispatch?.handled) return { handled: true };

@@ -18,6 +18,7 @@ import {
 import { createFunctionImportRouting } from './function-import-routing.ts';
 import {
   type SymbolGuardContext,
+  programPoisonsSymbolProofs,
   computedKeyProvablyNotFunction as sharedComputedKeyNotFunction,
   isProvablySymbolValueExpression as sharedIsProvablySymbolExpression,
 } from './guard-symbol-values.ts';
@@ -241,7 +242,10 @@ function rewriteCjsFunctionConstructorReferences(
   const rootScope = createScope();
   predeclareFunctionScope(program.body as unknown as AnyNodeShape[], rootScope);
   predeclareLexicalScope(program.body as unknown as AnyNodeShape[], rootScope);
-  guardSymbolMutation.symbolMutated = false;
+  guardSymbolMutation.symbolMutated = programPoisonsSymbolProofs(
+    program as unknown as AnyNodeShape,
+    (program.body as unknown as AnyNodeShape[]) ?? [],
+  );
   const ctx: FunctionRewriteCtx = {
     ...{},
     edits: [],
@@ -433,20 +437,11 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
   if (typeof n.type !== 'string') return;
 
   switch (n.type) {
-    case 'Program': {
-      const body = (n as unknown as { body: AnyNodeShape[] }).body;
-      // PRE-PASS: a top-level class/function named `Symbol` shadows the global
-      // identifier for script code — nothing is provable.
-      for (const child of body) {
-        if (child.type === 'ClassDeclaration' || child.type === 'FunctionDeclaration') {
-          if ((child.id as { name?: string } | undefined)?.name === 'Symbol') {
-            guardSymbolMutation.symbolMutated = true;
-          }
-        }
+    case 'Program':
+      for (const child of (n as unknown as { body: AnyNodeShape[] }).body) {
+        walkFunctionReferences(child, ctx);
       }
-      for (const child of body) walkFunctionReferences(child, ctx);
       return;
-    }
 
     case 'Identifier': {
       const name = (n as unknown as { name?: string }).name;
@@ -611,9 +606,6 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
       }
       if (isReflectDerivedFunctionConstructorCall(n, ctx)) {
         ctx.hasDerivedHostFunctionConstructor = true;
-      }
-      if (mutatesSymbolBuiltin(n, ctx)) {
-        guardSymbolMutation.symbolMutated = true;
       }
       if (calleeMayBeDerivedHostFunction(callee, ctx) && constructorArgsMayImport(args)) {
         ctx.hasDerivedHostFunctionConstructor = true;
@@ -802,9 +794,6 @@ function walkAssignmentTarget(target: unknown, ctx: FunctionRewriteCtx): void {
   const t = target as AnyNodeShape;
   if (t.type === 'Identifier') {
     markGlobalFunctionWrite(t, ctx);
-    if ((t as unknown as { name?: string }).name === 'Symbol' && !isShadowed(ctx, 'Symbol')) {
-      guardSymbolMutation.symbolMutated = true;
-    }
     return;
   }
   if (t.type === 'MemberExpression') {
