@@ -22,15 +22,6 @@ export interface SymbolGuardContext {
   readonly symbolMutated?: boolean;
 }
 
-/** Conservative source pre-scan: any assignment/deletion of `Symbol` or
- * `Symbol.for` poisons the module's Symbol-key exemptions. */
-const SYMBOL_MUTATION_RE =
-  /(?:^|[^\w$.])Symbol(?:\s*\.\s*for)?\s*(?:[+\-*/%&|^]|\*\*|<<|>>>?)?=(?!=)|delete\s+Symbol|(?:^|[^\w$.])Object\.defineProperty\s*\(\s*Symbol/u;
-
-export function symbolGuardPoisoned(source: string): boolean {
-  return SYMBOL_MUTATION_RE.test(source);
-}
-
 function nodeName(node: unknown): string | undefined {
   if (!node || typeof node !== 'object') return undefined;
   return (node as { name?: unknown }).name as string | undefined;

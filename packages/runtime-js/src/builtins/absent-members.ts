@@ -15,10 +15,6 @@ export function fsStatfsSync(_path: string, _options?: unknown): never {
   throw new IoNotImplementedError('fs.statfsSync');
 }
 
-type NodeProcessShape = {
-  readonly exitCode: number;
-};
-
 /** Install the named-loud members. Call once at module init. */
 export function installProcessAbsentMembers(
   NodeProcess: abstract new (...args: never[]) => unknown,

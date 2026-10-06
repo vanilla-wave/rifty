@@ -1546,47 +1546,6 @@ function guardSymbolContext(ctx: FunctionRewriteCtx): SymbolGuardContext {
 
 const guardSymbolMutation = { symbolMutated: false };
 
-/** Object.defineProperty/Reflect.set-style calls targeting the `Symbol`
- * builtin itself — they can replace `Symbol.for`. */
-function mutatesSymbolBuiltin(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
-  const call = node as unknown as { callee?: AnyNodeShape; arguments?: unknown[] };
-  const callee = call.callee;
-  if (!callee || callee.type !== 'MemberExpression') return false;
-  const object = callee.object as AnyNodeShape | undefined;
-  const objectName =
-    object?.type === 'Identifier' ? (object as unknown as { name?: string }).name : undefined;
-  const prop = staticPropertyName(callee);
-  const isObject = objectName === 'Object' && !isShadowed(ctx, 'Object');
-  const isReflect = objectName === 'Reflect' && !isShadowed(ctx, 'Reflect');
-  if (
-    !(
-      (isObject && (prop === 'defineProperty' || prop === 'defineProperties')) ||
-      (isReflect && (prop === 'set' || prop === 'defineProperty'))
-    )
-  ) {
-    return false;
-  }
-  const target: unknown = (call.arguments ?? [])[0];
-  if (!target || typeof target !== 'object') return false;
-  const t = target as AnyNodeShape;
-  return (
-    t.type === 'Identifier' &&
-    (t as unknown as { name?: string }).name === 'Symbol' &&
-    !isShadowed(ctx, 'Symbol')
-  );
-}
-
-/** A member rooted at the (unshadowed) `Symbol` identifier — assignment/delete
- * through it can replace `Symbol.for`; no Symbol-key exemption is provable. */
-function isSymbolRootedMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
-  const object = node.object;
-  return (
-    (object as unknown as { type?: string; name?: string })?.type === 'Identifier' &&
-    (object as unknown as { name?: string }).name === 'Symbol' &&
-    !isShadowed(ctx, 'Symbol')
-  );
-}
-
 function isProvablySymbolValueExpression(node: unknown, ctx: FunctionRewriteCtx): boolean {
   return sharedIsProvablySymbolExpression(node, guardSymbolContext(ctx));
 }

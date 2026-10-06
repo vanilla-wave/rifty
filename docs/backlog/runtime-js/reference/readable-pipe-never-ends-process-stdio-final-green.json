@@ -1,0 +1,139 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Срез принять с NOTE: 15 unit + 15 harness, 3 parity GREEN; goal открыт. Tracked-файлы не изменены.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "1aa6c96db20bb9cbc1ca55980ab44cbb453adc45",
+  "unit_goal_source": "docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md @ 0f34cfdc2bda09d9aaf8ce651b534f045c198b84; goal: docs/backlog/epics/vitest-run-in-browser/goal.md; BASE 27054c2b; исходный дефект 51440931a, Node v24.16.0.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:106",
+      "summary": "Config, TS-тесты, reporter, exit 1/0, npm test/verbose требуют GREEN e2e; child 13 блокирует acceptance 12. E2e в этой сессии не запускался."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:115",
+      "summary": "Нужна полная acceptance обоих pools после устранения config-pipeline suspension."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "Полное выполнение дерева vitest CLI/pool workers остаётся частью закрывающего e2e."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:122",
+      "summary": "Compat-claim I1–I6 и loud-исключения требуют итоговой acceptance; текущая страница явно оставляет vitest run частичным."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: физический node-entry eval pipe(process.stdout) выводит a и after-pipe, exit 0.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/node-eval-pipe-into-process-stdout.case.ts:17",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: то же для pipe(process.stderr), unit fault carrier.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/builtins/pipe-process-stdio.test.ts:47",
+      "note": "C1: stderr-drop мутант проходит; carrier не наблюдает переданные байты."
+    },
+    {
+      "row": "Stdio fault: source EOF не вызывает end(); pipe listeners отсоединяются без утечки.",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "weak",
+      "citation": "packages/io/src/streams/readable.pipe.test.ts:201",
+      "note": "C2: destination-only cleanup мутант проходит, оставляя source data/end/error listeners."
+    },
+    {
+      "row": "Readable.pipe: stdio end-exemption; ordinary destinations и end:false сохраняют baseline.",
+      "source": "public-api",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/io/src/streams/readable.pipe.test.ts:245",
+      "note": ""
+    },
+    {
+      "row": "registerProcessStdioStream(stream): зарегистрированный writer exempt, даже при наличии end().",
+      "source": "public-api",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/io/src/streams/readable.pipe.test.ts:264",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/pipe-process-stdio.test.ts:47",
+          "evidence": "Scratch /tmp/rifty-stderr-mutant-jfwr5nnu: onData early return для isProcessStdioDest(dest) && dest.fd === 2. pnpm --config.verifyDepsBeforeRun=false vitest run packages/io/src/streams/readable.pipe.test.ts packages/runtime-js/src/builtins/pipe-process-stdio.test.ts → 15/15 pass, exit 0. pnpm --config.verifyDepsBeforeRun=false test:parity stream/node-eval-pipe-into-process-stdout → all cases match, exit 0. Дополнительный probe → {\"received\":[],\"sourceEnded\":true}.",
+          "summary": "C1: Acceptance 2 → I4 weak: потеря всех stderr-байтов не обнаруживается. Реальный HEAD пишет байты; NOTE по REV-4.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/io/src/streams/readable.pipe.test.ts:219",
+          "evidence": "Scratch /tmp/rifty-pipe-cleanup-mutant-t5lvp9: EOF cleanup удаляет Map entry и только dest drain/error/close hooks; обычный unpipe cleanup сохранён. node node_modules/vitest/vitest.mjs run --config /tmp/rifty-pipe-cleanup-mutant-t5lvp9/vitest.config.mts --root /tmp/rifty-pipe-cleanup-mutant-t5lvp9 → исходные pipe suites 15/15 pass. Дополнительный probe → {\"sourceListeners\":[1,1,1],\"destinationListeners\":[0,0,0]}.",
+          "summary": "C2: stdio fault row → I4 weak: после EOF проверяются только destination listeners. Реальный HEAD снимает обе стороны; NOTE по REV-4.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/io/src/streams/readable.ts:771",
+          "evidence": "",
+          "summary": "Комментарий и CHANGELOG описывают fd duck-typing; реализация использует identity registry.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

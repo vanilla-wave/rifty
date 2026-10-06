@@ -1137,48 +1137,6 @@ function guardSymbolContext(ctx: EsmFunctionGuardCtx): SymbolGuardContext {
 
 const guardSymbolMutation = { symbolMutated: false };
 
-/** Object.defineProperty/Reflect.set-style calls targeting the `Symbol`
- * builtin itself — they can replace `Symbol.for`. */
-function mutatesSymbolBuiltin(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {
-  const call = node as unknown as { callee?: GuardNodeShape; arguments?: unknown[] };
-  const callee = call.callee;
-  if (!callee || callee.type !== 'MemberExpression') return false;
-  const object = callee.object as GuardNodeShape | undefined;
-  const objectName =
-    object?.type === 'Identifier' ? (object as unknown as { name?: string }).name : undefined;
-  const prop = staticPropertyName(callee);
-  const isObject = objectName === 'Object' && !isGuardShadowed(ctx, 'Object');
-  const isReflect = objectName === 'Reflect' && !isGuardShadowed(ctx, 'Reflect');
-  if (
-    !(
-      (isObject && (prop === 'defineProperty' || prop === 'defineProperties')) ||
-      (isReflect && (prop === 'set' || prop === 'defineProperty'))
-    )
-  ) {
-    return false;
-  }
-  const target: unknown = (call.arguments ?? [])[0];
-  if (!target || typeof target !== 'object') return false;
-  const t = target as GuardNodeShape;
-  return (
-    t.type === 'Identifier' &&
-    (t as unknown as { name?: string }).name === 'Symbol' &&
-    !isGuardShadowed(ctx, 'Symbol')
-  );
-}
-
-/** A member expression rooted at the (unshadowed) `Symbol` identifier — an
- * assignment/delete through it (any property, computed or static) can replace
- * `Symbol.for`, so no Symbol-key exemption is provable. */
-function isSymbolRootedMember(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {
-  const object = node.object;
-  return (
-    (object as unknown as { type?: string; name?: string })?.type === 'Identifier' &&
-    (object as unknown as { name?: string }).name === 'Symbol' &&
-    !isGuardShadowed(ctx, 'Symbol')
-  );
-}
-
 function isProvablySymbolValueExpression(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
   return sharedIsProvablySymbolExpression(node, guardSymbolContext(ctx));
 }

@@ -1,0 +1,151 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Срез можно принять с NOTE: 116 тестов, 2 parity-кейса и check:arch PASS. Goal открыт; tracked-файлы не изменены.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "1aa6c96db20bb9cbc1ca55980ab44cbb453adc45",
+  "unit_goal_source": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md (ready, неизменён против BASE); goal: docs/backlog/epics/vitest-run-in-browser/goal.md; BASE 30d8342c75c1ca236a16a9ec27b15da3ebb30114.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4+I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:45",
+      "summary": "Child 13: config-pipeline suspension; затем child 12: config.ts, TS-тесты, reporter/counts/exit codes, npm test и verbose на обоих pools."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "Полный vitest/pool module path ещё не доказан; isolated member parity invariant не закрывает."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/public/compat/vitest.md:14",
+      "summary": "Финальные compat claims и loud out-of-scope acceptance остаются за child 12; текущая страница отмечает блокировку."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: statfsSync/spawnSync named ESM imports link; typeof === function.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/fs/esm-named-absent-members.case.ts:9",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: memoryUsage is function; memoryUsage.bind(process) не бросает.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/node-eval-memory-usage-member.case.ts:18",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: вызовы трёх members бросают named NotImplementedError, без fabricated result.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/builtins/child_process-ceiling.test.ts:118",
+      "note": "C1: spawnSync проверяется без команды; мутант с fabricated result при переданной команде проходит. Остальные carriers: fs.test.ts:536, process-globals.test.ts:197."
+    },
+    {
+      "row": "Fault matrix: absent capability calls → named NotImplementedError, без fabricated data.",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/builtins/child_process-ceiling.test.ts:118",
+      "note": "C1: тот же surviving valid-command mutant; carriers остальных members проходят."
+    },
+    {
+      "row": "Public API node:fs.statfsSync: named/default member function; call loud.",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/fs.test.ts:535",
+      "note": ""
+    },
+    {
+      "row": "Public API node:child_process.spawnSync: named/default member function; call loud.",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/builtins/child_process-ceiling.test.ts:117",
+      "note": "C1: ESM link/typeof защищены parity; call carrier пропускает fabricated result с командой."
+    },
+    {
+      "row": "Public API process.memoryUsage: function/bind member; call loud.",
+      "source": "public-api",
+      "trace": "I4+I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process-globals.test.ts:193",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/child_process-ceiling.test.ts:118",
+          "evidence": "Scratch /private/tmp/rifty-spawn-mutant-6a355b1e-gafvshlc: mutant spawnSync(command?: string) throws NotImplementedError('child_process.spawnSync') only for undefined command, otherwise returns {pid:1,output:[null,'',''],stdout:'',stderr:'',status:0,signal:null}. `pnpm --config.verifyDepsBeforeRun=false vitest run packages/runtime-js/src/builtins/child_process-ceiling.test.ts -t named-loud` → 1 passed, 4 skipped, exit 0. Valid-command witness ['git',['status']]: HEAD PASS; mutant FAIL 'expected function to throw an error, but it didn’t'. Raw artifacts: review-evidence/mutant-committed-carrier.txt and mutant-valid-command.txt in that scratch.",
+          "summary": "C1: carrier не различает fake spawnSync result с командой. Текущий runtime корректен: child_process.ts:701 бросает безусловно. REV-4 weak, NOTE.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/epics/vitest-run-in-browser/ledger.md:12",
+          "evidence": "",
+          "summary": "C2: новый re-chart заявляет final-green PASS @ <sha per unit>, map:53 — landed, без конкретной review-привязки. Placeholder не доказывает завершение. По PR-4 u4 contract, goal и parity-критерии против BASE не ослаблены.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/absent-members.ts:37",
+          "evidence": "`node --import tsx --input-type=module -e 'import hostProcess from \"node:process\"; import { MemoryFsSync } from \"./packages/vfs/src/sync-mirror.ts\"; import { createModuleLoader } from \"./packages/runtime-js/src/module-loader/loader.ts\"; const source = \"import { emitNaturalExitEvent } from \\\"node:process\\\"; export const type = typeof emitNaturalExitEvent;\"; const vfs = new MemoryFsSync(); vfs.loadFixture({\"/work/entry.mjs\": source}); const result = await createModuleLoader(vfs, {cwd:\"/work\"}).import(\"./entry.mjs\", \"/work/parent.mjs\"); console.log(JSON.stringify({riftyType:result.type})); try { await import(\"data:text/javascript,\" + encodeURIComponent(source)); } catch (error) { console.log(JSON.stringify({nodeVersion:hostProcess.version,nodeError:error.name,nodeMessage:error.message})); } hostProcess.exit(0);'` → riftyType:function; Node v24.16.0: SyntaxError, module 'node:process' does not provide export 'emitNaturalExitEvent'.",
+          "summary": "C3: новый lifecycle helper попадает в node:process ESM exports через prototype projection. Используется лишь тестом (:225); production drain вызывает emitProcessExitEvent напрямую. Вне трёх заявленных u4 members — NOTE соседнему срезу.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}
