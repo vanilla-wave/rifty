@@ -1,0 +1,190 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Report slice accepted at reviewed SHA; close pilot I5 and RECHART, continue mandatory expansion/campaign and I10/I11. Whole-goal PR remains draft.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "4db652200789456c597bb8a38a95d7bb12df7aae",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-comparison-report.md:82 Acceptance1\u20134/Fault111\u2013114; unchanged accepted docs/backlog/epics/agent-code-quality-evaluation/goal.md I2/I3/I4/I5/I7/I8/I9; ADR0507 and legitimate oracle corrections ADR0508/0509/0510. BASE baef89ee720a90128abd6b9d2105e3513dd4dac5 prior accepted corpus, current clean HEAD4db652200789456c597bb8a38a95d7bb12df7aae. Fresh independent reviewer /root/report_final_review, read-only/nochildren/no model calls. Raw process/readiness/review/PR rules, current contract/goal/map/Contract+RED, BASE criteria, source/config/CLI/report/statistics/runner/identity and campaign evidence inspected. Required Contract+RED @f620974430dc59dfc2a8bfc790227c6ac26dc779 retained. Independent statistics13/comparison17/series4/summarypolicy4 PASS; first series sandbox EPERM followed once by isolated unsandboxed4PASS,0timeouts. Full committed prcheck27PASS raw log unit200.1s/parity115.6s/noisolation read; no source/test/config changes since clean campaign3d01f21ba. Independent audits: /tmp/rifty-pr341-report-artifact-audit.json all285JSON/12largegzip/500authoritativehashes; /tmp/rifty-pr341-report-regeneration.json two offline CLI view regenerations identical/all16gzip unchanged/48 installed hashes; /tmp/rifty-pr341-report-numeric-audit.json Decimal60 verifies24cells/36groups; currentCLIplan equal precall task/control/input/judge/config/trials. No missing unit carrier or surviving correctness finding.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1+I6+I7",
+      "location": "docs/backlog/distribution/agent-eval-corpus-expansion.md:1",
+      "summary": "Mandatory finite expanded corpus selection/difficulty/control evidence plus its own frozen comparative campaign remain. PilotI5 proof does not close expanded breadth."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md:1",
+      "summary": "Observed command/tool/API/behavior/policy catalog including recovered obstacles, exact arguments/versions/lane/source and measured impact or unknown remains."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md:1",
+      "summary": "Executed substantive finite escalation beyond pilot, declared paths/pressure/stopping bounds and fresh frozen repeated boundary confirmation/reference controls remain; shared/allpass/unknown distinct."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: deterministic report/statistics views; split/workload task/family/trial accounting; failed/missing selected rows; controls distinct; authoritative evidence unchanged",
+      "source": "acceptance",
+      "trace": "I3+I4+I7+I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:114; tools/agent-bench/src/statistics-report.test.ts:131; tools/agent-bench/src/statistics-report.test.ts:199; tools/agent-bench/src/statistics-report.test.ts:280; tools/agent-bench/reports/summaries/2026-10-06-pilot-v4-quality/summary.md:184",
+      "note": "Independent statistics13/comparison17 PASS; two offline CLI regenerations preserve all16 gzip files and summary bytes in scratch. Committed v4 statistics equals current deriveStatistics; 24cells/36groups independently recomputed. /tmp/rifty-pr341-report-regeneration.json; /tmp/rifty-pr341-report-numeric-audit.json."
+    },
+    {
+      "row": "Acceptance2: exact conditional CP95; simultaneous task-macro/Pi bounds; incomplete unknown; small-sample/iid/provider assumptions; separate Codex and unknown counters",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics.ts:29; tools/agent-bench/src/statistics.ts:195; tools/agent-bench/src/statistics-report.test.ts:131; tools/agent-bench/src/statistics-report.test.ts:218; docs/adr/distribution/0507-report-fixed-corpus-uncertainty-without-equality-claims.md:14",
+      "note": "Independent Decimal60/binomial coefficient/220-bisection audit verifies all24 cells at alpha.05 and .05/24,36macro bands/counts/Pi differences to1e-12. N20k4 90% [.0713538843086181845892,.4010281173319746449859],95% [.0573339970500327577186,.4366140029966683693338]. Existing Contract+RED accepted primary NIST oracle. No equality/population/causal claim."
+    },
+    {
+      "row": "Acceptance3: complete frozen identity/version/settings/input/lock/prompt/judge/control hashes; installed inputs/phases; source links; incompatible/partial comparison rejection; deliberate source changes visible",
+      "source": "acceptance",
+      "trace": "I2+I3+I4+I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/plan.ts:41; tools/agent-bench/src/runner.ts:157; tools/agent-bench/src/report.ts:229; tools/agent-bench/src/report.ts:347; tools/agent-bench/src/statistics-report.test.ts:248; tools/agent-bench/src/comparison.test.ts:175",
+      "note": "Current CLI plan all6 task/card/corpus/control/seed/lock/prompt/judge hashes/config/72trials equal precall declaration. Independently verified48 installed before-tree/lock hashes and ordered phases. /tmp/rifty-pr341-report-current-plan.json; /tmp/rifty-pr341-report-regeneration.json."
+    },
+    {
+      "row": "Acceptance4: real frozen on-demand72 attempts, four origins/both workloads/repeats; failed/unevaluable retained; time/usage/cause or unknown; after teardown unchanged-evidence no-model regeneration",
+      "source": "acceptance",
+      "trace": "I3+I4+I5+I7+I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-06-pilot-v4-quality/report.json.gz:1; tools/agent-bench/reports/summaries/2026-10-06-pilot-v4-quality/README.md:3; docs/backlog/distribution/reference/agent-eval-pilot-v4-declared-plan.json.gz:1; docs/backlog/distribution/reference/agent-eval-pilot-v4-benchmark-stop-proof.json.gz:1; docs/backlog/distribution/reference/agent-eval-pilot-v4-regeneration-proof.json.gz:1",
+      "note": "Independent raw matrix set equality:72selected/72retained/0missing;48agentDone;43PASS;24browser-library setupFAIL/5appFAIL. Lane5/5/15/18 of18, all selected failures retained. Original285JSON/880831853B and500 authoritative file hashes verified. Recorded completed exit0/ownedproxy shutdown evidence precedes regeneration; current reviewer no live model calls. Aux native self-test process state explicitly outside port-check claim."
+    },
+    {
+      "row": "Missing/duplicate/out-of-plan aggregate: reject invalid identities; missing selected rows explicit",
+      "source": "fault-matrix",
+      "trace": "I3+I4+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:187; tools/agent-bench/src/statistics-report.test.ts:227; tools/agent-bench/src/statistics.ts:147",
+      "note": ""
+    },
+    {
+      "row": "Input/judge/config drift comparison: reject; preserve originals",
+      "source": "fault-matrix",
+      "trace": "I4+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:248; tools/agent-bench/src/comparison.test.ts:175; tools/agent-bench/src/comparison.test.ts:207; tools/agent-bench/src/report.ts:347",
+      "note": ""
+    },
+    {
+      "row": "Unknown telemetry totals: unavailable stays unknown, never fabricated zero",
+      "source": "fault-matrix",
+      "trace": "I2+I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:114; tools/agent-bench/src/statistics-report.test.ts:218; tools/agent-bench/src/comparison.test.ts:149; tools/agent-bench/src/statistics.ts:134",
+      "note": ""
+    },
+    {
+      "row": "Interrupted/setup/provider/judge campaign: retained failure/partial/missing matrix; fresh subsequent series",
+      "source": "fault-matrix",
+      "trace": "I3+I5+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/series.fault.test.ts:75; tools/agent-bench/src/series.fault.test.ts:94; tools/agent-bench/src/statistics-report.test.ts:280; tools/agent-bench/reports/summaries/2026-10-05-pilot-provider-interrupted/report.json.gz:1; tools/agent-bench/reports/summaries/2026-10-06-pilot-v4-quality/report.json.gz:1",
+      "note": "Independent series4 PASS after one isolated unsandboxed rerun: initial sandbox listen EPERM (not product regression), zero timeouts. Raw prior15/56/49/63 partials remain separate; no resume/re-score/native rescue."
+    },
+    {
+      "row": "report CLI deterministic derived statistics.json and Markdown from stored evidence",
+      "source": "public-api",
+      "trace": "Acceptance1 \u2192 I4+I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/cli.ts:30; tools/agent-bench/src/report.ts:172; tools/agent-bench/src/statistics-report.test.ts:96; tools/agent-bench/src/comparison.test.ts:265",
+      "note": ""
+    },
+    {
+      "row": "report --compare rejects incompatible finite identity/config/purpose/partial matrices and retains deliberate source before/after",
+      "source": "public-api",
+      "trace": "Acceptance3 \u2192 I4+I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/cli.ts:34; tools/agent-bench/src/report.ts:347; tools/agent-bench/src/statistics.ts:376; tools/agent-bench/src/comparison.test.ts:175",
+      "note": ""
+    },
+    {
+      "row": "Frozen exact-binomial numerical oracle and assumptions",
+      "source": "frozen-artifact",
+      "trace": "Acceptance2 \u2192 I4",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-comparison-report-evidence.md:9; tools/agent-bench/src/statistics-report.test.ts:199; docs/adr/distribution/0507-report-fixed-corpus-uncertainty-without-equality-claims.md:14",
+      "note": "Independent /tmp/rifty-pr341-report-numeric-audit.json confirms nonboundary N20k4, endpoints, all actual24finite cells/36groups."
+    },
+    {
+      "row": "Frozen precall v4 selection/settings/compatible-app rule/expected cost, six tasks/five families and calibration separation",
+      "source": "frozen-artifact",
+      "trace": "Acceptance4 \u2192 I3+I4+I5+I7+I8+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-comparison-protocol.md:3; docs/backlog/distribution/reference/agent-eval-pilot-v4-declared-plan.json.gz:1; tools/agent-bench/corpus/pilot-v4.json:1",
+      "note": "Plan/source clean3d01f21bac4d57895a6cee8be05f191284e739db; unchanged current fingerprints; bothms calibration1family; fourevaluation4families. Preflight explicitly outside matrix; optional compatible-app view cannot replace primary."
+    },
+    {
+      "row": "Frozen actual v4 report/source-index/manifest/statistics and large original JSON traces remain immutable and linked",
+      "source": "frozen-artifact",
+      "trace": "Acceptance3+Acceptance4 \u2192 I3+I4+I5+I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-06-pilot-v4-quality/manifest.json.gz:1; tools/agent-bench/reports/summaries/2026-10-06-pilot-v4-quality/source-artifacts.json.gz:1; tools/agent-bench/src/summaries-policy.test.ts:45",
+      "note": "Existing policy source hash equals BASEd0d502b80a99f724be327e17a5763ce0c9c92df51673d2ca751ee12142982eb8; independent4PASS. Independent all285 physical sourcehash/bytes +273parseddata match +12byte-identical gzip originals +500authoritative hashes pass (/tmp/rifty-pr341-report-artifact-audit.json)."
+    },
+    {
+      "row": "Frozen historical v1/v2/v3 attempts and original case bytes remain history; corrected criteria have real RED/current independent proof",
+      "source": "frozen-artifact",
+      "trace": "Acceptance4 \u2192 I3+I7+I9; ADR-0508+ADR-0509+ADR-0510",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-caption-fix-final-green.json:1; docs/backlog/distribution/reference/agent-eval-csv-export-fix-final-green.json:1; docs/backlog/distribution/reference/agent-eval-notes-render-fix-final-green.json:1; tools/agent-bench/corpus/cases/markdown-notes-v3/judge.ts:36",
+      "note": "PR-4 raw BASE original exact captions/text/link-role/substrings compared with semantic/current criteria and ADRs. Originalcasepaths unchanged; clones frozen before fresh calls. Accepted repair proof reused: caption26rows, CSV25rows, Notes23rows@1cf5ed5f1; current source unchanged after accepted Notes proof. Actual five v4 failed own-origin probes + afterfiles independently read, accessible-search requirement explicit; retained as failures, no new oracle defect evidence."
+    },
+    {
+      "row": "Frozen actual phase/usage/per-case trajectory cost and unknown billing/manual authoring duration",
+      "source": "frozen-artifact",
+      "trace": "Acceptance4 \u2192 I4+I5+I7",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-pilot-v4-campaign-cost.json.gz:1; docs/backlog/distribution/reference/agent-eval-pilot-v4-case-cost-trajectories.json.gz:1; docs/backlog/distribution/reference/agent-eval-comparison-pilot-evidence.md:33",
+      "note": "81.83min wall distinct from agent/setup/judge phases; provider counters4252864input150130output; absent Codex counters/billing/manual authoring unknown. Pilot review informs linked expansion, never implies goal closure."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -1,8 +1,7 @@
 ## Items
 
-1. `distribution/agent-eval-comparison-report` — expanded experiment identity, uncertainty and honest matrix accounting; real repeated pilot campaign/regeneration. Completed corpus/runner/Codex reused; shared report owner.
-2. `distribution/agent-eval-corpus-expansion` — original pilot route6: after pilot trajectories/campaign, finite expanded evaluation version, selection/cost rationale, controls and separate campaign; I1/I6/I7.
-3. `distribution/agent-eval-boundary-diagnostics` — observed environment/tool differences and executed substantive escalation/confirmation beyond pilot; I10/I11. Existing scripts, report and corpus reused.
+1. `distribution/agent-eval-corpus-expansion` — original pilot route6: after pilot trajectories/campaign, finite expanded evaluation version, selection/cost rationale, controls and separate campaign; I1/I6/I7.
+2. `distribution/agent-eval-boundary-diagnostics` — observed environment/tool differences and executed substantive escalation/confirmation beyond pilot; I10/I11. Existing scripts, report and corpus reused.
 
 ## Open questions
 

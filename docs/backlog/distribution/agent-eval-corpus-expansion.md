@@ -5,7 +5,7 @@ title: Expand reviewed pilot into a frozen evaluation corpus and campaign
 created: 2026-10-05
 why: Pilot controls alone do not cover the broader app workflows requested by I1/I7.
 epic: agent-code-quality-evaluation
-blocked_by: [distribution/agent-eval-comparison-report]
+blocked_by: []
 sources: [docs/backlog/distribution/agent-eval-project-corpus.md]
 code: [tools/agent-bench/corpus, tools/agent-bench/src/corpus.ts]
 ---
