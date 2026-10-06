@@ -13,7 +13,8 @@ code: [tools/agent-bench/src/runner.ts, tools/agent-bench/src/report.ts, tools/a
 
 Original expansion Acceptance6+7 carried unchanged below; source/control unit
 closes first, then this campaign executes existing accepted runner/report.
-No model outcomes yet for eval-v1; pilot-v4 remains separate immutable evidence.
+Eval-v1 interrupted on private judge-caption defect;74/96 retained immutable.
+Eval-v2 corrects two judges before fresh96; pilot-v4 stays separate evidence.
 Same user-owned goal/scenarios/I1-I11, same PR341. Negative/inconclusive valid.
 
 ## Challenge
@@ -24,7 +25,7 @@ No new user scope choice, model/estimator/selection policy or execution mechanis
 
 ## Acceptance
 
-1. Freeze complete eval-v1/config/selection/control/source identity before a fresh
+1. Freeze complete corrected eval-v2/config/selection/control/source identity before a fresh
   96trial campaign:8cases×4origins×3freshrepeats, task/lane/trial order, PiLuna/medium,
    nativeCodexgpt-6.1-sol/low separate,100tools/600s. Allselected failures retained;
    fullmatrixprimary. No adaptive compatible-subset pruning; no resume/overwrite.
@@ -64,3 +65,5 @@ Original mandatory I10/I11 diagnostics follows; comparison never closes goal alo
 
 - 2026-10-06 — RDY8 reuses accepted runner34f90589, Codexff7ecbb9, report4db65220 and source5a8ecf4e4 Final+GREEN; this unit executes existing certified mechanism, no new parity/stateful API or product RED.
 - 2026-10-06 — frozen selection/cost/estimator/limits in reference/agent-eval-expanded-comparison-protocol.md beforecalls; accepted source advisory NOTE retained, no private prompt/criteria change.
+
+- re-cut: 2026-10-06 — ADR0512 observed judge-caption repair versions two cases/eval-v2, same source/prompts/controls and complete96; old eval-v1/74partial retained; no observable scope reduction — trace: none

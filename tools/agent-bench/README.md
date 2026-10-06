@@ -245,3 +245,15 @@ real functional negatives; no model calls until controls/review.
 Large source trace gzip entries under `source-traces/` preserve original JSON
 bytes; main bundle is an index with `committed` references, manifest hashes both
 representations and original source bytes. Report regeneration remains offline.
+
+Eval-v1 expanded campaign stopped on an observed private choice-caption defect;
+74/96 retained,22missing, immutable interrupted history. Eval-v2 replaces only
+the two judges (newcase IDs); identical publicprompts/project/locks/controls,
+old six cases unchanged. No rescoring/resume. Real regressions:
+`node --import tsx tools/agent-bench/tests/workflow-choice-caption-controls.ts eval-v1`
+(expected RED), same command `eval-v2` (expected GREEN);
+`pnpm exec playwright test -c tools/agent-bench/playwright.config.ts choice-projection.fault.spec.ts`;
+`node --import tsx tools/agent-bench/tests/workflow-controls.ts --v2 --faults`;
+`node --import tsx tools/agent-bench/tests/workflow-choice-origin-controls.ts`.
+All-origin proof/independentFinal then fresh full96 remains required before
+comparison. I10/I11 remains mandatory.

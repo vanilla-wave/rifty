@@ -404,6 +404,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0509 | Judge decoded CSV export values in a corrected pilot |
 | 0510 | Judge visible Markdown and note navigation behavior |
 | 0511 | Freeze connected workflow evaluation corpus |
+| 0512 | Accept contextual choice captions in workflow judges |
 
 ## Superseded (removed)
 

@@ -13,7 +13,9 @@ import {
   spawnLoggedServer,
   waitHttpReady,
 } from '../src/proc.ts';
+import bookingV2Oracle from './workflow-oracles/booking-v2.ts';
 import bookingOracle from './workflow-oracles/booking.ts';
+import expenseV2Oracle from './workflow-oracles/expense-v2.ts';
 import expenseOracle from './workflow-oracles/expense.ts';
 
 const root = await mkdtemp(join(tmpdir(), 'rifty-workflow-controls-'));
@@ -27,22 +29,27 @@ const faults = faultMode
   : [];
 try {
   const wrongWorkflow = process.argv.includes('--wrong-workflow');
+  const v2 = process.argv.includes('--v2');
   const ids = wrongWorkflow
     ? ['csv-workflow-v3', 'markdown-notes-v3']
-    : ['booking-workflow', 'expense-settlement'];
-  const tasks = (await loadCorpus(wrongWorkflow ? 'pilot-v4' : 'eval-v1')).filter((task) =>
-    ids.includes(task.id),
+    : v2
+      ? ['booking-workflow-v2', 'expense-settlement-v2']
+      : ['booking-workflow', 'expense-settlement'];
+  const tasks = (await loadCorpus(wrongWorkflow ? 'pilot-v4' : v2 ? 'eval-v2' : 'eval-v1')).filter(
+    (task) => ids.includes(task.id),
   );
   assert.equal(tasks.length, 2);
   for (const task of tasks) {
     for (const variant of faultMode
-      ? faults.filter((f) => f.task === task.id).map((f) => f.variant)
+      ? faults.filter((f) => f.task === task.id.replace(/-v2$/, '')).map((f) => f.variant)
       : ['baseline', 'reference', 'partial', 'alternative']) {
       const startedAt = new Date().toISOString();
       const dir = join(root, task.id, variant);
       await mkdir(dir, { recursive: true });
       let patch = task.controls![variant]!;
-      const fault = faults.find((f) => f.task === task.id && f.variant === variant);
+      const fault = faults.find(
+        (f) => f.task === task.id.replace(/-v2$/, '') && f.variant === variant,
+      );
       if (fault) {
         patch = { ...task.controls!.reference! };
         let changes = 0;
@@ -86,10 +93,16 @@ try {
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.goto(url);
-        const oracle = task.id === ids[0] ? bookingOracle : expenseOracle;
+        const oracle = v2
+          ? task.id === ids[0]
+            ? bookingV2Oracle
+            : expenseV2Oracle
+          : task.id === ids[0]
+            ? bookingOracle
+            : expenseOracle;
         const result = await oracle({ view: page, previewUrl: url });
         const large = [];
-        if (task.id === 'expense-settlement' && result.pass) {
+        if (task.family === 'expense-conservation' && result.pass) {
           const ctx = { view: page, previewUrl: url };
           for (const [index, value, expected] of [
             [1, '90071992547409.90', '90071992547419.91'],

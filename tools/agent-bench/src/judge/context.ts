@@ -71,19 +71,41 @@ export function field({ view }: JudgeContext, name: string | RegExp) {
 }
 
 /** Editing selects controls, even when read-only outputs share their purpose. */
+const editableControls =
+  'input:not([readonly]):not([disabled]),textarea:not([readonly]):not([disabled]),select:not([disabled]),[contenteditable="true"],[role="combobox"]:not([aria-disabled="true"]):not([aria-readonly="true"])';
 export function editableControl({ view }: JudgeContext, name: string | RegExp) {
-  return view
-    .getByLabel(name)
-    .and(
-      view.locator(
-        'input:not([readonly]):not([disabled]),textarea:not([readonly]):not([disabled]),select:not([disabled]),[contenteditable="true"],[role="combobox"]:not([aria-disabled="true"]):not([aria-readonly="true"])',
-      ),
-    );
+  return view.getByLabel(name).and(view.locator(editableControls));
 }
 
 const escapeCaption = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export function caption(name: string): RegExp {
   return new RegExp(`\\b${escapeCaption(name)}\\b`, 'i');
+}
+
+/** Display context is open; missing or ambiguous semantic choices are errors. */
+export async function choiceOption(scope: JudgeContext['view'] | Locator, name: string) {
+  const options = scope.getByRole('option', { name: caption(name) });
+  if ((await options.count()) !== 1) throw new Error(`Missing/ambiguous choice: ${name}`);
+  return options;
+}
+
+export async function selectChoices(field: Locator, names: readonly string[]) {
+  const indices = [];
+  for (const name of names) {
+    const options = await choiceOption(field, name);
+    indices.push(await options.evaluate((node) => (node as HTMLOptionElement).index));
+  }
+  await field.selectOption(indices.map((index) => ({ index })));
+}
+
+export async function selectedChoice(field: Locator, identities: readonly string[]) {
+  const label = await field.evaluate((node) => {
+    const option = (node as HTMLSelectElement).selectedOptions[0];
+    return option?.getAttribute('aria-label') ?? option?.label ?? '';
+  });
+  const matches = identities.filter((name) => caption(name).test(label));
+  if (matches.length !== 1) throw new Error(`Missing/ambiguous selected identity: ${label}`);
+  return matches[0]!;
 }
 
 /** Named action meaning is independent of caption word order. */
@@ -102,19 +124,33 @@ function primaryPurpose(words: readonly string[], others: readonly string[]): st
 }
 
 /** Primary domain purpose distinguishes source/search descriptions from row/editor fields. */
-export function describedField(
-  ctx: JudgeContext,
-  name: string,
-  namespace: Readonly<Record<string, readonly string[]>>,
-) {
+function purposePattern(name: string, namespace: Readonly<Record<string, readonly string[]>>) {
   const own = namespace[name];
   if (!own?.length) throw new Error(`Unknown field purpose: ${name}`);
   const others = Object.entries(namespace)
     .filter(([key]) => key !== name)
     .flatMap(([, words]) => words);
-  return field(ctx, new RegExp(primaryPurpose(own, others), 'i')).and(
-    ctx.view.locator(':read-write'),
-  );
+  return new RegExp(primaryPurpose(own, others), 'i');
+}
+
+export function describedField(
+  ctx: JudgeContext,
+  name: string,
+  namespace: Readonly<Record<string, readonly string[]>>,
+) {
+  return field(ctx, purposePattern(name, namespace)).and(ctx.view.locator(':read-write'));
+}
+
+export function describedEditableControl(
+  ctx: JudgeContext,
+  name: string,
+  namespace: Readonly<Record<string, readonly string[]>>,
+) {
+  const purpose = purposePattern(name, namespace);
+  return field(ctx, purpose)
+    .or(ctx.view.getByRole('listbox', { name: purpose }))
+    .or(ctx.view.getByRole('spinbutton', { name: purpose }))
+    .and(ctx.view.locator(editableControls));
 }
 
 export function savedEntry(
