@@ -67,3 +67,5 @@ Original mandatory I10/I11 diagnostics follows; comparison never closes goal alo
 - 2026-10-06 — frozen selection/cost/estimator/limits in reference/agent-eval-expanded-comparison-protocol.md beforecalls; accepted source advisory NOTE retained, no private prompt/criteria change.
 
 - re-cut: 2026-10-06 — ADR0512 observed judge-caption repair versions two cases/eval-v2, same source/prompts/controls and complete96; old eval-v1/74partial retained; no observable scope reduction — trace: none
+
+- 2026-10-06 — corrected source/control Final+GREEN f32cf65be accepted15/15; fresh56 controls/fullgate27PASS; eval-v2 protocol reference/agent-eval-expanded-comparison-v2-protocol.md frozen before fresh96; originalv1protocol/history untouched.
