@@ -211,7 +211,11 @@ export function noteTarget(ctx: JudgeContext, target: string, current: string) {
 }
 
 /** RFC4180 field decoding; exported LF/CRLF records, optional header/quoting. */
-export function csvExportMatches(text: string, expected: readonly (readonly string[])[]): boolean {
+export function csvExportMatches(
+  text: string,
+  expected: readonly (readonly string[])[],
+  unordered = false,
+): boolean {
   const rows: string[][] = [];
   let row: string[] = [];
   let value = '';
@@ -262,6 +266,11 @@ export function csvExportMatches(text: string, expected: readonly (readonly stri
     const name = headers.indexOf('name');
     const email = headers.indexOf('email');
     for (let i = 0; i < rows.length; i++) rows[i] = [rows[i]![name]!, rows[i]![email]!];
+  }
+  if (unordered) {
+    const keys = (records: readonly (readonly string[])[]) =>
+      records.map((record) => JSON.stringify(record)).sort();
+    return JSON.stringify(keys(rows)) === JSON.stringify(keys(expected));
   }
   return JSON.stringify(rows) === JSON.stringify(expected);
 }

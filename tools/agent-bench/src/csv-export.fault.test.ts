@@ -52,3 +52,15 @@ it('interprets semantic column headers independent of casing, descriptions and o
   );
   expect(csvExportMatches('Name and Email,Email\n"Bob ""B""",bob@example.test', rows)).toBe(false);
 });
+
+it('compares saved records without imposing display order while preserving multiplicity', () => {
+  const rows = [
+    ['Alice, A', 'alice@example.test'],
+    ['Bob "B"', 'bob@example.test'],
+  ];
+  const reversed = 'email,name\nbob@example.test,"Bob ""B"""\nalice@example.test,"Alice, A"';
+  expect(csvExportMatches(reversed, rows)).toBe(false);
+  expect(csvExportMatches(reversed, rows, true)).toBe(true);
+  expect(csvExportMatches('name,email\n"Alice, A",alice@example.test', rows, true)).toBe(false);
+  expect(csvExportMatches(`${reversed}\nalice@example.test,"Alice, A"`, rows, true)).toBe(false);
+});

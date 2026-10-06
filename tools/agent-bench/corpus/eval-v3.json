@@ -1,0 +1,250 @@
+{
+  "version": "eval-v3",
+  "stage": "evaluation",
+  "purpose": "Corrected saved-state CSV observation; same eight cases/seven families/public prompts/projects/locks/controls, other seven cases unchanged. Fresh comparison required; eval-v2 history immutable.",
+  "cases": [
+    {
+      "id": "ms-negative",
+      "group": "bug",
+      "family": "ms",
+      "split": "calibration",
+      "origin": {
+        "repository": "vercel/ms",
+        "commit": "9b88d1568a52ec9bb67ecc8d2aa224fa38fd41f4",
+        "issue": 103
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.cjs",
+      "regressionSources": [
+        "tests.js"
+      ],
+      "difficulty": "Locate foreign implementation and preserve interacting existing API behavior; public issue contamination possible. ms is calibration, not scored evidence of broad engineering capability.",
+      "upstreamRunner": "Original tooling retained, not claimed supported. Common trusted semantic assertions run directly in the origin; runner gaps reported separately.",
+      "controls": [
+        "baseline",
+        "reference",
+        "partial",
+        "alternative"
+      ],
+      "selection": "Frozen pilot candidate before model measurement; related ms families confined to calibration.",
+      "inputsSha256": "8e6c3e45f53934852c5491d5c9235b74703fa2631bae6bcfc466bc3c13eeb662",
+      "lockSha256": "1e46dd699351e40e4f46fdc7cefb1508673721b56c8a4f932cce8ed9ed60b1b7",
+      "promptSha256": "b0fd9780f5bb3114e7c6ba69601b01e8773c2da4232abae556032c0fb551d5ba",
+      "judgeSha256": "6ef77b1b2278d1e9c4b1b2d11efeabd2c9b982f24d11535a9e40ef30466224c6"
+    },
+    {
+      "id": "ms-weeks",
+      "group": "feature",
+      "family": "ms",
+      "split": "calibration",
+      "origin": {
+        "repository": "vercel/ms",
+        "commit": "889c22189101ed41ef1452c4da934bfa2a41bb2b",
+        "issue": 57
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.cjs",
+      "regressionSources": [
+        "test/test.js"
+      ],
+      "difficulty": "Locate foreign implementation and preserve interacting existing API behavior; public issue contamination possible. ms is calibration, not scored evidence of broad engineering capability.",
+      "upstreamRunner": "Original tooling retained, not claimed supported. Common trusted semantic assertions run directly in the origin; runner gaps reported separately.",
+      "controls": [
+        "baseline",
+        "reference",
+        "partial",
+        "alternative"
+      ],
+      "selection": "Frozen pilot candidate before model measurement; related ms families confined to calibration.",
+      "inputsSha256": "511d5cffcc9d46f1878ba6e3c6ea1c762eb5e62a975a6ea7e3fc38e29530ee8c",
+      "lockSha256": "bfc2830bde76401aa9ca9ff96e16cd901fa171c3a7b89f26a1adff98561456ac",
+      "promptSha256": "aefef6a4cd710624706ba90c00bab18717cd9d3b9ec1df0a93b578b4fc239af6",
+      "judgeSha256": "b9e272fe477fd40d4c5e41730115326a9f4e8701c5bedd664804f37404ae74e9"
+    },
+    {
+      "id": "stringify-boxed",
+      "group": "bug",
+      "family": "stable-serialization",
+      "split": "evaluation",
+      "origin": {
+        "repository": "epoberezkin/fast-json-stable-stringify",
+        "commit": "49e230da2c84247b29ad4de02c9395793caefd15",
+        "issue": 74
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.cjs",
+      "regressionSources": [
+        "test/cmp.js",
+        "test/nested.js",
+        "test/str.js",
+        "test/to-json.js"
+      ],
+      "difficulty": "Locate foreign implementation and preserve interacting existing API behavior; public issue contamination possible. ms is calibration, not scored evidence of broad engineering capability.",
+      "upstreamRunner": "Original tooling retained, not claimed supported. Common trusted semantic assertions run directly in the origin; runner gaps reported separately.",
+      "controls": [
+        "baseline",
+        "reference",
+        "partial",
+        "alternative"
+      ],
+      "selection": "Frozen pilot candidate before model measurement; related ms families confined to calibration.",
+      "inputsSha256": "56435b258fa513f1b7a286e39bf859d10086c392ca63fdc96b1c2d96002c9c4f",
+      "lockSha256": "03463d2a82f5d04813fa72014df5441a87e07d783b81b712e05152065c4c64e8",
+      "promptSha256": "55568d62ef8234a2736cf2405ed28d5b2aa05c9524e75a313734c6dc228cc712",
+      "judgeSha256": "72f20e10b5a7d504ce135939ac1742a24a2717d748dd4299391cc75595669a5f"
+    },
+    {
+      "id": "queue-clear",
+      "group": "feature",
+      "family": "async-concurrency",
+      "split": "evaluation",
+      "origin": {
+        "repository": "sindresorhus/p-limit",
+        "commit": "923811344705a6604967540e19f7653752021438",
+        "issue": 25
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.mjs",
+      "regressionSources": [
+        "test.js"
+      ],
+      "difficulty": "Locate foreign implementation and preserve interacting existing API behavior; public issue contamination possible. ms is calibration, not scored evidence of broad engineering capability.",
+      "upstreamRunner": "Original tooling retained, not claimed supported. Common trusted semantic assertions run directly in the origin; runner gaps reported separately.",
+      "controls": [
+        "baseline",
+        "reference",
+        "partial",
+        "alternative"
+      ],
+      "selection": "Frozen pilot candidate before model measurement; related ms families confined to calibration.",
+      "inputsSha256": "12926c572f5533e146262093a307c39205a0353f885e0103fe38a31ec26cb6be",
+      "lockSha256": "352e318973cfea471c56575d2081d90ccec8d93d719379a000d7b54b94c3de15",
+      "promptSha256": "fc43f7d3d9ccb5b86eff5f23d4809b09ade8636883bc39105bd5b165133b3db5",
+      "judgeSha256": "2bc270495dce58c88649e5144d8ad61fbfe75fb0cdbd73428844d41e14ecdb24"
+    },
+    {
+      "id": "csv-workflow-v4",
+      "group": "app",
+      "family": "contact-import",
+      "split": "evaluation",
+      "origin": {
+        "type": "original-scenario",
+        "created": "2026-10-05",
+        "starter": "React19.1.1 + TypeScript5.9.2 + Vite7.3.6"
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.ts",
+      "regressionSources": [
+        "minimal starter build/boot"
+      ],
+      "difficulty": "Interacting validation/persistence/filter/export states",
+      "controls": [
+        "baseline",
+        "reference",
+        "partial",
+        "alternative"
+      ],
+      "selection": "Same public task; decode CSV export values and discover visible output after actual quote-all oracle RED. Original v1/v2 preserved; frozen before fresh calls.",
+      "correctionOf": "pilot-v2/csv-workflow-v2",
+      "inputsSha256": "47d757f705e07a8ff71b955e01a1b515fdb3186aba247d1dc417d84149166ba7",
+      "lockSha256": "b887c85b31ddd34ee923298490070079dc6904b8815380666d1b1f712f63b0a1",
+      "promptSha256": "16a570010f8489cbe18e908d586054251f46c54cea29fd1cf68039d7532500fb",
+      "judgeSha256": "8361f33bf82675c27d0635fad02074ea88bcf33ee0cb0bef894a546954e127ac"
+    },
+    {
+      "id": "markdown-notes-v3",
+      "group": "app",
+      "family": "linked-knowledge",
+      "split": "evaluation",
+      "origin": {
+        "type": "original-scenario",
+        "created": "2026-10-05",
+        "starter": "Vanilla JavaScript + Vite7.3.6"
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.ts",
+      "regressionSources": [
+        "minimal starter build/boot"
+      ],
+      "difficulty": "Draft versus saved state, Markdown/link navigation and cross-note search/persistence",
+      "controls": [
+        "baseline",
+        "reference",
+        "partial",
+        "alternative"
+      ],
+      "selection": "Same public task/project; visible rendered text and functional Wiki actions after actual paragraph/button/duplicate oracle RED; frozen before fresh calls.",
+      "correctionOf": "pilot-v3/markdown-notes-v2",
+      "inputsSha256": "c0e1cfcbc93efcd9859f716af641b5eaba8929bbb2fbb31341c4cb40c8fdd893",
+      "lockSha256": "342412adeb6b33ec3a754f53b1f70168b37ce9af9387bb8b82121bf282293bf4",
+      "promptSha256": "c7df4371922905c13e1456f3b67a2ec1983e66c073bb66600e3f4fe4c687783d",
+      "judgeSha256": "11ba7d7fc4f1f3c01e2b65c0d8acc424f7f0856f823b77829e6a1a1d8cc22361"
+    },
+    {
+      "id": "booking-workflow-v2",
+      "group": "app",
+      "family": "booking-constraints",
+      "split": "evaluation",
+      "origin": {
+        "type": "original-scenario",
+        "created": "2026-10-06",
+        "starter": "vue3.5.18 + @vitejs/plugin-vue + Vite7.3.6",
+        "registryEvidence": "docs/backlog/distribution/reference/agent-eval-expansion-starter-metadata.json.gz"
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.ts",
+      "regressionSources": [
+        "minimal installed starter build/boot"
+      ],
+      "difficulty": "Interacting exclusive half-open intervals, room capacity/reference guards, atomic editing and combined sorted filters",
+      "controls": [
+        "baseline",
+        "reference",
+        "partial",
+        "alternative"
+      ],
+      "selection": "Same frozen public workflow/source/lock/controls as eval-v1; ADR0512 repairs contextual choice-caption projection after retained interrupted96. Full matched selection retained, fresh96 after all-origin controls.",
+      "inputsSha256": "76471556c6a004bcca21d20433eb109a0196d1b535616edc6266bdd1030c33fe",
+      "lockSha256": "cd06957ac69920a59436a7b07834952a8c88fb4c2aa5407512e8d068c72f124b",
+      "promptSha256": "2795d993df1a8b6cf33ce6c36d904599f5e65ebc4578f6a0f1e2a448b02f27bb",
+      "judgeSha256": "f3d111988567c4d61dc3f5c921b6b7a8cea8b3846f53525332cbc57e93d9de60"
+    },
+    {
+      "id": "expense-settlement-v2",
+      "group": "app",
+      "family": "expense-conservation",
+      "split": "evaluation",
+      "origin": {
+        "type": "original-scenario",
+        "created": "2026-10-06",
+        "starter": "svelte5.38.7 + @sveltejs/vite-plugin-svelte + Vite7.3.6",
+        "registryEvidence": "docs/backlog/distribution/reference/agent-eval-expansion-starter-metadata.json.gz"
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.ts",
+      "regressionSources": [
+        "minimal installed starter build/boot"
+      ],
+      "difficulty": "Exact integer cents, creation-order remainder, payer outside participants, conservation/any-clearing settlement and atomic mutation/reference guards",
+      "controls": [
+        "baseline",
+        "reference",
+        "partial",
+        "alternative"
+      ],
+      "selection": "Same frozen public workflow/source/lock/controls as eval-v1; ADR0512 repairs contextual choice-caption projection after retained interrupted96. Full matched selection retained, fresh96 after all-origin controls.",
+      "inputsSha256": "2da4ba7a773f3586386a7ff8e636e0bbf83021bbea69fdcc2639dbf291e878d5",
+      "lockSha256": "6d70cd33514e7dafd48313e0c35cefae22101b471cf1ccec2f66e45a01b50e6d",
+      "promptSha256": "5dfed4426b8d38dc0ecda97a24414a9ebe2deba43cf1c6fd21b806429d3e6242",
+      "judgeSha256": "6d862b834f9be24ef9a2a2243f1a6e15fee8ab9afcdd9b1df66a2b86375b78b3"
+    }
+  ]
+}

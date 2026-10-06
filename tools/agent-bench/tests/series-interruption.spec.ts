@@ -10,6 +10,7 @@ async function series(
   runs: number,
   interruptAt?: 'START' | 'END',
   onStart?: () => Promise<void>,
+  signal: 'SIGINT' | 'SIGTERM' = 'SIGTERM',
 ) {
   const child = spawn(
     process.execPath,
@@ -42,7 +43,7 @@ async function series(
     if (onStart && !fault && stdout.includes('START fix-date-sort/')) fault = onStart();
     if (interruptAt && !interrupted && stdout.includes(`${interruptAt} fix-date-sort/`)) {
       interrupted = true;
-      process.kill(child.pid!, 'SIGTERM');
+      process.kill(child.pid!, signal);
     }
   });
   child.stderr.on('data', (chunk: Buffer) => {
@@ -64,6 +65,27 @@ async function series(
       process.kill(-child.pid, 'SIGKILL');
   }
 }
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const)
+  test(`${signal} persists interrupted state before browser teardown exits`, async () => {
+    const root = await mkdtemp(join(tmpdir(), 'rifty-series-signal-'));
+    const output = join(root, 'series');
+    try {
+      const result = await series(output, 2, 'START', undefined, signal);
+      expect(result.interrupted, result.stdout + result.stderr).toBe(true);
+      const report = JSON.parse(await readFile(join(output, 'report.json'), 'utf8')) as Report;
+      await test.info().attach('signal-series.json', {
+        body: Buffer.from(JSON.stringify({ signal, code: result.code, report }, null, 2)),
+        contentType: 'application/json',
+      });
+      expect(report.header.series!.status, result.stdout + result.stderr).toBe('interrupted');
+      expect(report.header.series!.trials).toHaveLength(2);
+      expect(report.runs).toHaveLength(0);
+      expect(await readFile(join(output, 'summary.md'), 'utf8')).toContain('missing');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 
 test('trace cleanup failure preserves the completed record and unstarted matrix', async () => {
   const root = await mkdtemp(join(tmpdir(), 'rifty-series-cleanup-'));

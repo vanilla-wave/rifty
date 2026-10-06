@@ -96,7 +96,8 @@ export async function run(
     );
     hosts = await services(supported, config.playgroundPort, output);
     if (stop.signal.aborted) throw new Error('Series interrupted');
-    browser = await chromium.launch();
+    // Persist partial evidence before Playwright's default SIGINT process exit.
+    browser = await chromium.launch({ handleSIGINT: false });
     report.header.versions.chromium = browser.version();
     for (const trial of plan.trials) {
       if (stop.signal.aborted) break;

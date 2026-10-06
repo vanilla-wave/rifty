@@ -14,7 +14,8 @@ code: [tools/agent-bench/src/runner.ts, tools/agent-bench/src/report.ts, tools/a
 Original expansion Acceptance6+7 carried unchanged below; source/control unit
 closes first, then this campaign executes existing accepted runner/report.
 Eval-v1 interrupted on private judge-caption defect;74/96 retained immutable.
-Eval-v2 corrects two judges before fresh96; pilot-v4 stays separate evidence.
+Eval-v2 stopped54/96 on independently confirmed saved-table CSV false-negative.
+Eval-v3 corrects CSV saved-state judging before fresh96; pilot-v4 stays history.
 Same user-owned goal/scenarios/I1-I11, same PR341. Negative/inconclusive valid.
 
 ## Challenge
@@ -25,7 +26,7 @@ No new user scope choice, model/estimator/selection policy or execution mechanis
 
 ## Acceptance
 
-1. Freeze complete corrected eval-v2/config/selection/control/source identity before a fresh
+1. Freeze complete corrected eval-v3/config/selection/control/source identity before a fresh
   96trial campaign:8cases×4origins×3freshrepeats, task/lane/trial order, PiLuna/medium,
    nativeCodexgpt-6.1-sol/low separate,100tools/600s. Allselected failures retained;
    fullmatrixprimary. No adaptive compatible-subset pruning; no resume/overwrite.
@@ -69,3 +70,5 @@ Original mandatory I10/I11 diagnostics follows; comparison never closes goal alo
 - re-cut: 2026-10-06 — ADR0512 observed judge-caption repair versions two cases/eval-v2, same source/prompts/controls and complete96; old eval-v1/74partial retained; no observable scope reduction — trace: none
 
 - 2026-10-06 — corrected source/control Final+GREEN f32cf65be accepted15/15; fresh56 controls/fullgate27PASS; eval-v2 protocol reference/agent-eval-expanded-comparison-v2-protocol.md frozen before fresh96; originalv1protocol/history untouched.
+
+- re-cut: 2026-10-06 — ADR0513 saved-state CSV judge correction CSVv4/eval-v3, identical public inputs/other7cases/96selection; eval-v2/54partial and originalcriteria unchanged, no scope reduction — trace: none

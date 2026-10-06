@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Observe CSV saved records through public export, preserving multiplicity without editor/order constraints; freeze CSVv4/eval-v3, old criteria/results unchanged (ADR-0513).
+- Keep SIGINT partial-series persistence under the runner owner; suppress Playwright default process exit and prove real SIGINT/TERM interruption.
+
 - Add finite eval-v1: eight real cases/seven families with locked Vue reservations and Svelte cent settlement workflows; public requirements, private semantic oracles and real positive/partial/alternative/guard controls.
 - Distinguish editable workflow fields from read-only outputs; preserve signed currency before symbols and verify invalid mutations through reload.
 
