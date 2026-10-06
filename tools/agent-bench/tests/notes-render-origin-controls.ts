@@ -17,6 +17,7 @@ assert.equal(refs.runs.length, 8);
 for (const row of refs.runs) assert.equal(row.judge.pass, true, JSON.stringify(row));
 const task = apps.find((t) => t.family === 'linked-knowledge')!;
 const judge = task.judge!;
+const canonical = task.controls!.reference!;
 for (const n of [1, 3, 'responsive3'] as const) {
   const original = n === 'responsive3' ? 3 : n;
   const files = JSON.parse(
@@ -70,5 +71,31 @@ for (const n of [1, 3, 'responsive3'] as const) {
     });
   }
   await writeFile(join(root, name, 'presentation.json'), JSON.stringify(presentation, null, 2));
+}
+task.judge = judge;
+for (const variant of ['hidden-literal-fragment', 'hidden-bold-fragment']) {
+  const source = canonical['src/main.js']!;
+  const mutated =
+    variant === 'hidden-literal-fragment'
+      ? source.replace(
+          'return`<p>${safe}</p>`;',
+          "return`<p>${safe.replace('not code','<span hidden>not code</span>')}</p>`;",
+        )
+      : source.replace("'<strong>$1</strong>'", "'<strong>Im<span hidden>portant</span></strong>'");
+  assert.notEqual(mutated, source);
+  const files = { ...canonical, 'src/main.js': mutated };
+  task.controls!.reference = files;
+  const report = await run(config, [task], [...lanes], join(root, variant), 'reference');
+  assert.equal(report.runs.length, 4);
+  for (const row of report.runs) {
+    assert.equal(row.agentStatus, 'not-run');
+    assert.equal(row.judge.pass, false, JSON.stringify(row));
+    const dir = join(root, variant, task.id, row.lane, '1');
+    const before = JSON.parse(await readFile(join(dir, 'before.json'), 'utf8')) as FileTree;
+    assert.deepEqual(JSON.parse(await readFile(join(dir, 'after.json'), 'utf8')), {
+      ...before,
+      ...files,
+    });
+  }
 }
 console.log(`NOTES_RENDER_ORIGIN_ARTIFACTS ${root}`);

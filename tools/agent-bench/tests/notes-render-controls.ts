@@ -87,6 +87,28 @@ try {
         pass: false,
       },
       {
+        name: 'hidden-literal-fragment',
+        files: {
+          ...reference,
+          [sourcePath]: original.replace(
+            'return`<p>${safe}</p>`;',
+            "return`<p>${safe.replace('not code','<span hidden>not code</span>')}</p>`;",
+          ),
+        },
+        pass: false,
+      },
+      {
+        name: 'hidden-bold-fragment',
+        files: {
+          ...reference,
+          [sourcePath]: original.replace(
+            "'<strong>$1</strong>'",
+            "'<strong>Im<span hidden>portant</span></strong>'",
+          ),
+        },
+        pass: false,
+      },
+      {
         name: 'missing-bold',
         files: {
           ...reference,
@@ -159,7 +181,7 @@ try {
   await writeFile(join(root, 'evidence.json'), JSON.stringify(evidence, null, 2));
   console.log(`NOTES_RENDER_CONTROL_ARTIFACTS ${root}`);
 }
-assert.equal(evidence.length, process.argv[3] ? 1 : 12);
+assert.equal(evidence.length, process.argv[3] ? 1 : 14);
 for (const row of evidence) {
   assert.equal(row.result.pass, row.expectedPass, `${row.id}/${row.variant}`);
   assert.deepEqual(row.errors, []);

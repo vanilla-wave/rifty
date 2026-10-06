@@ -53,3 +53,47 @@ Fullcurrentprcheck27/27PASS,parity118.2s; test508.9s after requiredisolated
 rerun:5npm/workbench files/7timeouts underload17.4/45.9/57.3,all5isolatedPASS.
 Primaryred/isolation preserved in [gate log](agent-eval-notes-render-pr-check.log.gz).
 No reproducing failure or gate bypass. Commit/push/independentFinal next.
+
+Independent Final BLOCK @a7513f863: parent visible/textContent included hidden
+descendant, literal `<script></script>` passed required full literalHTML; sibling
+bold accepted visible `Im` as `Important`. Actual fulljudge7/7PASS and original
+files retained in [baseline](agent-eval-notes-hidden-fragment-baseline.json.gz);
+[original verdict](agent-eval-notes-hidden-fragment-block.json).
+Authority ADR0510/I3/I6; required repair, no hidden UI constraint.
+
+Fault frozen-assumption/lossy-aggregate at owned rendered projection; both
+renderedText/renderedBold use one candidate owner. Repo sweep onlynotes-v3 callers.
+Transport loss/duplicate/reorder excluded here by ordinary owned call boundary;
+DOM visibility/editor/source discrimination still tested. Two fulljudge fragment
+controls expectedFAIL reproduce RED beforefix (actualPASS,exit1). Owner compares
+whitespace-normalized rendered innerText, literal substring/bold exact value,
+retains computed weight/state checks. First callback used nestedfunction which
+tsx serialized with unavailable __name; aborted run retained, function inlined.
+Frozen historicalv1/v2/v3 untouched; v4modelcalls0, helperhash changes visible.
+17unit/frozen/CSV tests andtypecheckPASS; fullcontrols/reverts/gates pending.
+
+Hidden-fragment repair native14 controls5PASS/9FAIL/errors0. Both actualprogrammes,
+reference/alternative/duplicate-preview remainPASS; both newfulljudge fragmentsFAIL.
+Guard reversion innerText→textContent independently turns both negativecontrols
+into dishonestPASS/exit1; source restored (SHA256 retained).
+[RED/intermediate/GREEN/programmes/reverts](agent-eval-notes-hidden-controls-data.json.gz).
+Own-origin28 andcurrentfullgate pending.
+
+Freshown-origin28 exit0:19PASS/9expectedFAIL, allphysicalafter=before+patch.
+Reference8PASS,actual1fourPASS,actual3threePASS/originalCOIlayoutFAIL,
+responsiveCSS fourPASS; hiddenliteral/bold eachfourFAIL, nevernative rescue.
+[Own-origin log/outcomes](agent-eval-notes-hidden-origin-proof.json.gz); complete
+reports/sourceJSON/manifests `2026-10-06-notes-hidden-{reference,programme1,
+programme3,responsive,literal,bold}-controls`. Currentfullgate next.
+
+Firstcurrentfullgate26/27PASS (parity115.7s); summarylinks gate RED andisolated
+RED: copiedraw Markdown stilllinked physicalJSON aftergzip bundling. Authoring
+packaging mistake; rawJSON/scores unchanged, shippedsourcefix unaffected.
+Existing CLI `report` regenerates eachof6 committed derivedviews tobundlelinks;
+unchangedsummarypolicy4/4PASS8.47s confirmsJSON/header/hash/link requirements.
+[OriginalgateRED](agent-eval-notes-hidden-pr-check-red.log.gz); fullgate repeatnext.
+
+Repeatedcurrentfullgate27/27PASS,unit194.5s/noisolatedrerun,parity114.9s.
+[FullGREENlog](agent-eval-notes-hidden-pr-check-green.log.gz). Source unchanged
+aftergate; only evidence/status retained. Commit/push/independent changed-tree
+verification next. v4comparativecalls0; report/I5/expansion/I10/I11 open.

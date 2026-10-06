@@ -97,10 +97,19 @@ async function renderedCandidates(ctx: JudgeContext, text: string, exact: boolea
     if (
       (await node.isVisible()) &&
       (await node.evaluate(
-        (element) =>
-          !element.closest(
-            'input,textarea,[contenteditable="true"],[role="textbox"],[role="searchbox"],[role="combobox"],script,style',
-          ),
+        (element, { text, exact }) => {
+          if (
+            !(element instanceof HTMLElement) ||
+            element.closest(
+              'input,textarea,[contenteditable="true"],[role="textbox"],[role="searchbox"],[role="combobox"],script,style',
+            )
+          )
+            return false;
+          const visible = element.innerText.replace(/\s+/g, ' ').trim();
+          const expected = text.replace(/\s+/g, ' ').trim();
+          return exact ? visible === expected : visible.includes(expected);
+        },
+        { text, exact },
       ))
     )
       candidates.push(node);
