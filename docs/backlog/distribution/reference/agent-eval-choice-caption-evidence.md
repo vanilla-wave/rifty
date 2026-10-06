@@ -51,3 +51,13 @@ Permanent --reversed-room-name regression beforefix4bookingFAIL/4expensePASS,
 afterfix8PASS/errors0. Real guard reintroduction RED, restored GREEN; corpus4
 tests/typecheck/Chromium semanticfaultPASS. Semanticnegative/currentownorigin
 proof, fullgate and independentchanged-tree Final follow beforecalls.
+
+B1 own-origin attempt c765 terminal1/failed:7/8persisted firstseries, full56
+unfinished; native npm and report.json.tmp ENOSPC corroborated by exactnpm log
+(rawsourceSHA/excerpts) and driverlog. No Rifty/model-boundary claim or resume.
+Failedroot/scores/rawinventory/twooffline40authoritativeunchanged+identicalviews
+retained in2026-10-06-choice-b1-storage-failed. Host163MiBfree atfailure.
+Cleanup only199own-generated completed-control dependencydirectories; source/
+locks/loghashes886preserved, git/tarballs/assets/JSON/screens/traces untouched.
+Disk13GiBfreeafter; cleanup/carrierproofs committed. Freshfull56nextroot; no
+source change, fullc765gate27PASS(unit200.1/parity114.8) stillsamecode.
