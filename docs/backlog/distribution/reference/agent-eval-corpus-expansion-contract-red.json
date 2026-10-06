@@ -1,0 +1,166 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS Contract+RED preparation at reviewed SHA; proceed IMPLEMENT on same unit/PR. New app/fixture/positive-fault-all-origin control/freeze96 campaign proof remains mandatory. Whole goal/PR not complete; I10/I11 still linked.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "cfa44f588f865fb3ed600fa4c04a60b79e472fa3",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-corpus-expansion.md, fresh independent changed-tree Contract+RED verification @clean cfa44f588f865fb3ed600fa4c04a60b79e472fa3 against BASE4db652200789456c597bb8a38a95d7bb12df7aae; reviewer /root/expansion_contract_review, read-only/nochildren/no modelcalls. Raw docs/backlog/epics/agent-code-quality-evaluation/goal.md scenario1-8/I1-I11/Decisions, original user source docs/backlog/distribution/reference/agent-code-quality-refine-evidence.md Original request/answers/Corpus discussion, final unit/public booking+expense prompts/ADR0511/0506/0507/map/ledger and full diff inspected. RDY6 final related-set scope/source/premise remains CLEAR: finite8 and exact public domain policies are curator-owned, original20-30/mix estimates not quotas; no weakened user scope or prompt narrowing, ledger append-only, all expansion and I10/I11 duties linked. Existing loader/runner/report plus small semantic helpers; no second scheduler/root framework dependency. All prior executed blockers repaired: current independent real Chromium permanent conformance exit0 (/tmp/rifty-pr341-expansion-current-conformance.log, physical root/T/rifty-workflow-oracle-conformance-t41Siz) accepts button/link word-order actions and varied named payment layouts; rejects hidden/read-only output violations in cards/tables/balances and invalid precision/wrong totals/zero. namedActions owns discovery/execution, action retains first-match baseline; renderedValue owns visible read-only innerText/live controls, both balance/settlement table/card siblings swept. Existing case/seed/prompt/control/score history unchanged; helper support hash/source remains visible. Certified oracle named/default exports and callable task.judge binding retain prior independently executed real-loader proof; exact source gate covers both cases. Independent actual native wrong-workflow8 controls realnpmci/build/Vite/Chromium all8FAIL/errors0, carrier exit0 with expected false outcomes (/tmp/rifty-pr341-expansion-current-wrong-workflow.log, physical root/T/rifty-workflow-controls-W2ZMtX). Current positive expansion tests3RED exactly absent eval-v1, not imports/types; unchanged corpus/CSV/fault11tests PASS (/tmp/rifty-pr341-expansion-current-unit.log). Typecheck/backlog/refs/diffcheck independently PASS. Committed reference/agent-eval-expansion-role-visibility-green.json.gz raw guard-reverts action-role/rendered-output both exit1 with discriminating errors, restoredSha matches actual source; all4 stored source bytes/hashes match reviewed tree. Original BLOCK and actual probe/revert evidence preserved; no critic ruling needed for accepted fixes. Coverage pass means required preparation carriers discriminate and supporting unchanged accepted baseline proof is reusable, not that future app/control/all-origin/campaign acceptance already passed. No new case manifest/project/app/control implementation or qualitycalls yet; native starter build/support and complete new positive/fault/alternative proof are explicit targets for IMPLEMENT/Final+GREEN. Current unit preparation residuals empty; mandatory delivered-unit and goal work remains below.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1+I2+I3+I4+I6+I7+I8+I9; expansion Acceptance1-7",
+      "location": "docs/backlog/distribution/agent-eval-corpus-expansion.md:43",
+      "summary": "Preparation accepted only. IMPLEMENT pinned new Vue/Svelte cases/semantic judges; actual reference/baseline/partial/alternative and public fault/guard-revert proofs; fresh32reference+32newcase all-origin controls retaining failures/physical snapshots; freeze complete source/config/identity; separate complete96quality campaign and offline regeneration. All old evidence unchanged."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md:1",
+      "summary": "Evidence-backed command/tool/API/behavior/policy difference catalog, including recovered obstacles and effect/unknown, remains mandatory."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md:1",
+      "summary": "Executed substantive finite escalation, justified stopping bounds and fresh repeated boundary confirmation/controls remain mandatory; pilot/expanded comparison alone cannot close goal."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: separately frozen eight-case/seven-family suite; installed Vue/Svelte starters, public prompts and frozen provenance; unchanged pilot.",
+      "source": "acceptance",
+      "trace": "I1+I6+I7+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-expansion.test.ts:46",
+      "note": ""
+    },
+    {
+      "row": "Acceptance2: room/reservation guards, interval/capacity independence, atomicity/filter/order/reload and four real control outcomes.",
+      "source": "acceptance",
+      "trace": "I1+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracles/booking.ts:92",
+      "note": ""
+    },
+    {
+      "row": "Acceptance3: exact cents/creation-order allocation/conservation/any-clearing-settlement and mutation/reference/persistence guards.",
+      "source": "acceptance",
+      "trace": "I1+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracles/expense.ts:196",
+      "note": ""
+    },
+    {
+      "row": "Acceptance4: real locked native new-case controls, same own-origin requirements, full32 references/32 new controls; all failures retained.",
+      "source": "acceptance",
+      "trace": "I2+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-controls.ts:68",
+      "note": ""
+    },
+    {
+      "row": "Acceptance5: corrupted/valid-alternative controls and each guarded requirement negative/revert; public requirements only, honest authoring evidence before calls.",
+      "source": "acceptance",
+      "trace": "I6+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracle-conformance.ts:40",
+      "note": ""
+    },
+    {
+      "row": "Acceptance6: fresh fixed96 trial campaign plan with all4 origins/3 repeats/declared config and no adaptive exclusions.",
+      "source": "acceptance",
+      "trace": "I1+I2+I3+I4+I7+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-expansion.test.ts:23",
+      "note": ""
+    },
+    {
+      "row": "Acceptance7: separate complete campaign, retained own-origin evidence, conditional fixed-matrix report/offline regeneration, no equality/causal claim.",
+      "source": "acceptance",
+      "trace": "I3+I4+I7+I8+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-comparison-report-final-green.json:5",
+      "note": ""
+    },
+    {
+      "row": "Fault frozen-assumption/sibling-drift x judge: valid alternatives PASS, unmet public requirements FAIL.",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracle-conformance.ts:116",
+      "note": ""
+    },
+    {
+      "row": "Fault torn-state x invalid app mutation: prior rooms/expenses/persistence preserved.",
+      "source": "fault-matrix",
+      "trace": "I1+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracles/booking.ts:124",
+      "note": ""
+    },
+    {
+      "row": "Fault corrupt-input x amount/interval/selection: visible rejection without retained mutation.",
+      "source": "fault-matrix",
+      "trace": "I1+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracles/expense.ts:224",
+      "note": ""
+    },
+    {
+      "row": "Fault input/provenance drift x frozen version: reject mismatch/private-check leakage.",
+      "source": "fault-matrix",
+      "trace": "I6+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus.ts:96",
+      "note": ""
+    },
+    {
+      "row": "Fault setup/unsupported/interruption x matrix: retain failed/partial/missing, fresh next series.",
+      "source": "fault-matrix",
+      "trace": "I3+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-comparison-report-final-green.json:5",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

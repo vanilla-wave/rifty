@@ -100,6 +100,8 @@ expanded corpus cannot close whole goal alone.
 
 ## Decisions
 
+- ready-verdict: 2026-10-06 — Contract+RED @ cfa44f588f865fb3ed600fa4c04a60b79e472fa3
+
 - 2026-10-06 — accepted Contract+RED blocker repaired with trusted public workflow test oracles, starter/prompt/source binding and actual renamed-workflow RED; frozen case judges copy certified test bytes, only import depth differs.
 
 - 2026-10-06 — ADR0511 records separately frozen connected-workflow selection; prototype/registry/RED evidence in reference/agent-eval-corpus-expansion-evidence.md.
