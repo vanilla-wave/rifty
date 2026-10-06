@@ -57,6 +57,15 @@ export function caption(name: string): RegExp {
   return new RegExp(`\\b${escapeCaption(name)}\\b`, 'i');
 }
 
+/** Named action meaning is independent of caption word order. */
+export function actionCaption(verbs: string, subjects: string, identity?: string): RegExp {
+  const words = [verbs.split('|'), subjects.split('|'), ...(identity ? [[identity]] : [])];
+  return new RegExp(
+    words.map((group) => `(?=.*\\b(?:${group.map(escapeCaption).join('|')})\\b)`).join(''),
+    'i',
+  );
+}
+
 function primaryPurpose(words: readonly string[], others: readonly string[]): string {
   const exclude = others.map(escapeCaption).join('|');
   const prefix = exclude ? `^(?:(?!\\b(?:${exclude})\\b).)*` : '^.*';

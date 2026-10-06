@@ -1,4 +1,4 @@
-import { caption, fieldValue, verdict } from '../../src/judge/context.ts';
+import { actionCaption, caption, fieldValue, verdict } from '../../src/judge/context.ts';
 import type { JudgeContext, JudgeProbe, TaskJudge } from '../../src/judge/context.ts';
 
 async function click(ctx: JudgeContext, name: RegExp) {
@@ -12,18 +12,30 @@ async function click(ctx: JudgeContext, name: RegExp) {
 }
 const input = (ctx: JudgeContext, name: RegExp) => ctx.view.getByLabel(name);
 function cents(text: string) {
-  const normalized = text.replaceAll('−', '-').replaceAll(',', '');
-  const value = /[+-]?\d+(?:\.\d{1,2})?/.exec(normalized)?.[0];
-  if (!value) throw new Error(`Missing readable amount: ${text}`);
-  const negative = value.startsWith('-') || /^\s*\(/.test(normalized);
-  const [whole, fraction = ''] = value.replace(/^[+-]/, '').split('.');
-  return (Number(whole) * 100 + Number(fraction.padEnd(2, '0'))) * (negative ? -1 : 1);
+  const normalized = text.trim().replaceAll('−', '-');
+  const tokens = normalized.match(/[+-]?\d[\d.,]*/g);
+  if (tokens?.length !== 1) throw new Error(`Ambiguous/missing amount: ${text}`);
+  const value = tokens[0]!;
+  const unsigned = value.replace(/^[+-]/, '');
+  const separator = Math.max(unsigned.lastIndexOf('.'), unsigned.lastIndexOf(','));
+  let whole = unsigned;
+  let fraction = '';
+  if (separator >= 0) {
+    fraction = unsigned.slice(separator + 1);
+    if (!/^\d{1,2}$/.test(fraction)) throw new Error(`Non-cent precision: ${text}`);
+    whole = unsigned.slice(0, separator).replaceAll(',', '').replaceAll('.', '');
+  }
+  if (!/^\d+$/.test(whole)) throw new Error(`Invalid amount: ${text}`);
+  const result = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
+  if (!Number.isSafeInteger(result)) throw new Error(`Unsafe cent amount: ${text}`);
+  return result * (value.startsWith('-') || /^\s*\(/.test(normalized) ? -1 : 1);
 }
+
 async function person(ctx: JudgeContext, name: string) {
   const field = input(ctx, /(?=.*\bperson\b)(?=.*\bname\b)/i);
-  if (!(await field.isVisible())) await click(ctx, /\b(?:new|add|create)\b.*\bperson\b/i);
+  if (!(await field.isVisible())) await click(ctx, actionCaption('new|add|create', 'person'));
   await field.fill(name);
-  await click(ctx, /\b(?:add|create|save)\b.*\bperson\b/i);
+  await click(ctx, actionCaption('add|create|save', 'person'));
 }
 async function payer(ctx: JudgeContext, name: string) {
   const field = input(ctx, /\bpayer\b/i);
@@ -57,9 +69,9 @@ async function participants(ctx: JudgeContext, names: string[]) {
   }
 }
 async function save(ctx: JudgeContext) {
-  const update = /\b(?:save|update)\b.*\bexpense\b/i;
+  const update = actionCaption('save|update', 'expense');
   if (await ctx.view.getByRole('button', { name: update }).count()) await click(ctx, update);
-  else await click(ctx, /\b(?:add|create)\b.*\bexpense\b/i);
+  else await click(ctx, actionCaption('add|create', 'expense'));
 }
 async function expense(
   ctx: JudgeContext,
@@ -68,10 +80,10 @@ async function expense(
   amount: string,
   selected: string[],
 ) {
-  const fresh = ctx.view.getByRole('button', { name: /\bnew\b.*\bexpense\b/i });
+  const fresh = ctx.view.getByRole('button', { name: actionCaption('new', 'expense') });
   if (await fresh.count()) await fresh.first().click();
   if (!(await input(ctx, /\bdescription\b/i).isVisible()))
-    await click(ctx, /\b(?:new|add|create)\b.*\bexpense\b/i);
+    await click(ctx, actionCaption('new|add|create', 'expense'));
   await input(ctx, /\bdescription\b/i).fill(description);
   await payer(ctx, paidBy);
   await input(ctx, /\bamount\b/i).fill(amount);
@@ -129,18 +141,34 @@ async function transfers(ctx: JudgeContext, totals: Awaited<ReturnType<typeof ba
       rows.push({ from: a, to: b, cents: value });
     }
   }
-  // Named transfer regions also permit cards rather than table DOM.
-  if (!rows.length)
-    for (const region of await ctx.view.getByRole('region', { name: /\btransfer\b/i }).all()) {
-      const a = (await region.getByLabel(/\b(?:from|payer|debtor)\b/i).textContent())?.trim();
-      const b = (await region.getByLabel(/\b(?:to|receiver|creditor)\b/i).textContent())?.trim();
-      if (a && b)
-        rows.push({
-          from: a,
-          to: b,
-          cents: cents(await region.getByLabel(/\bamount\b/i).innerText()),
-        });
+  // Related named outputs permit cards/groups without prescribing a region caption.
+  if (!rows.length) {
+    for (const from of await ctx.view.getByLabel(/\b(?:from|payer|debtor)\b/i).all()) {
+      if (
+        !(await from.isVisible()) ||
+        (await from.evaluate(
+          (node) => node.matches(':read-write') || node instanceof HTMLSelectElement,
+        ))
+      )
+        continue;
+      let container = from.locator('..');
+      while (await container.count()) {
+        const target = container.getByLabel(/\b(?:to|receiver|creditor)\b/i);
+        const amount = container.getByLabel(/\bamount\b/i);
+        if ((await target.count()) === 1 && (await amount.count()) === 1) {
+          rows.push({
+            from: (await fieldValue(from)).trim(),
+            to: (await fieldValue(target)).trim(),
+            cents: cents(await fieldValue(amount)),
+          });
+          break;
+        }
+        if ((await container.evaluate((node) => node.tagName)) === 'HTML') break;
+        container = container.locator('..');
+      }
     }
+  }
+
   let valid = rows.length > 0;
   for (const row of rows) {
     const debtor = totals.find((item) => item.name === row.from);
@@ -152,7 +180,7 @@ async function transfers(ctx: JudgeContext, totals: Awaited<ReturnType<typeof ba
   return { valid: valid && [...remaining.values()].every((value) => value === 0), rows };
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-const judge: TaskJudge = async (ctx) => {
+export const judge: TaskJudge = async (ctx) => {
   const probes: JudgeProbe[] = [];
   try {
     for (const name of ['Zed', 'Ada', 'Cara']) await person(ctx, name);
@@ -187,7 +215,7 @@ const judge: TaskJudge = async (ctx) => {
       pass: same(initial, await balances(ctx)),
       evidence: await balances(ctx),
     });
-    await click(ctx, /\bdelete\b.*\bperson\b.*\bZed\b/i);
+    await click(ctx, actionCaption('delete', 'person', 'Zed'));
     probes.push({
       name: 'referenced person deletion rejected',
       pass: same(initial, await balances(ctx)),
@@ -199,7 +227,7 @@ const judge: TaskJudge = async (ctx) => {
       pass: same(initial, await balances(ctx)),
       evidence: await balances(ctx),
     });
-    await click(ctx, /\bedit\b.*\bexpense\b.*\bLunch\b/i);
+    await click(ctx, actionCaption('edit', 'expense', 'Lunch'));
     await input(ctx, /\bamount\b/i).fill('2.00');
     await save(ctx);
     const changed = await balances(ctx);
@@ -212,7 +240,7 @@ const judge: TaskJudge = async (ctx) => {
       ]),
       evidence: changed,
     });
-    await click(ctx, /\bdelete\b.*\bexpense\b.*\bLunch\b/i);
+    await click(ctx, actionCaption('delete', 'expense', 'Lunch'));
     const afterDelete = await balances(ctx);
     probes.push({
       name: 'expense deletion recomputes totals and transfers',

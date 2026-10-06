@@ -49,6 +49,7 @@ it('binds each new case to its public workflow, starter and certified semantic o
     ['expense-settlement', 'svelte', '5.38.7', 'expense', 'expense'],
   ] as const) {
     const task = tasks.find((candidate) => candidate.id === id)!;
+    expect(task.judge).toBeTypeOf('function');
     const pkg = JSON.parse(task.files['package.json']!) as {
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;

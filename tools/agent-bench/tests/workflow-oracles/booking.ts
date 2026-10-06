@@ -1,4 +1,4 @@
-import { caption, fieldValue, verdict } from '../../src/judge/context.ts';
+import { actionCaption, fieldValue, verdict } from '../../src/judge/context.ts';
 import type { JudgeContext, JudgeProbe, TaskJudge } from '../../src/judge/context.ts';
 
 const controls = {
@@ -22,13 +22,13 @@ async function click(ctx: JudgeContext, name: RegExp) {
   throw new Error(`Missing named action ${name}`);
 }
 async function saveRoom(ctx: JudgeContext) {
-  const update = ctx.view.getByRole('button', { name: /\b(?:save|update)\b.*\broom\b/i });
-  if (await update.count()) await click(ctx, /\b(?:save|update)\b.*\broom\b/i);
-  else await click(ctx, /\b(?:add|create)\b.*\broom\b/i);
+  const update = ctx.view.getByRole('button', { name: actionCaption('save|update', 'room') });
+  if (await update.count()) await click(ctx, actionCaption('save|update', 'room'));
+  else await click(ctx, actionCaption('add|create', 'room'));
 }
 async function room(ctx: JudgeContext, name: string, capacity: number) {
   if (!(await input(ctx, 'name').isVisible()))
-    await click(ctx, /\b(?:add|create|new)\b.*\broom\b/i);
+    await click(ctx, actionCaption('add|create|new', 'room'));
   await input(ctx, 'name').fill(name);
   await input(ctx, 'capacity').fill(String(capacity));
   await saveRoom(ctx);
@@ -44,9 +44,9 @@ async function chooseRoom(ctx: JudgeContext, name: string) {
   }
 }
 async function saveBooking(ctx: JudgeContext) {
-  const update = /\b(?:save|update)\b.*\b(?:reservation|booking)\b/i;
+  const update = actionCaption('save|update', 'reservation|booking');
   if (await ctx.view.getByRole('button', { name: update }).count()) await click(ctx, update);
-  else await click(ctx, /\b(?:add|create)\b.*\b(?:reservation|booking)\b/i);
+  else await click(ctx, actionCaption('add|create', 'reservation|booking'));
 }
 async function book(
   ctx: JudgeContext,
@@ -56,10 +56,10 @@ async function book(
   end: string,
   seats: number,
 ) {
-  const fresh = ctx.view.getByRole('button', { name: /\bnew\b.*\b(?:reservation|booking)\b/i });
+  const fresh = ctx.view.getByRole('button', { name: actionCaption('new', 'reservation|booking') });
   if (await fresh.count()) await fresh.first().click();
   if (!(await input(ctx, 'date').isVisible()))
-    await click(ctx, /\b(?:add|create|new)\b.*\b(?:reservation|booking)\b/i);
+    await click(ctx, actionCaption('add|create|new', 'reservation|booking'));
   await chooseRoom(ctx, room);
   await input(ctx, 'date').fill(date);
   await input(ctx, 'start').fill(start);
@@ -68,7 +68,7 @@ async function book(
   await saveBooking(ctx);
 }
 function edits(ctx: JudgeContext) {
-  return ctx.view.getByRole('button', { name: /\bedit\b.*\b(?:reservation|booking)\b/i });
+  return ctx.view.getByRole('button', { name: actionCaption('edit', 'reservation|booking') });
 }
 async function snapshot(ctx: JudgeContext) {
   const rows = [];
@@ -90,7 +90,7 @@ async function snapshot(ctx: JudgeContext) {
   return rows;
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-const judge: TaskJudge = async (ctx) => {
+export const judge: TaskJudge = async (ctx) => {
   const probes: JudgeProbe[] = [];
   try {
     await room(ctx, 'Amber', 4);
@@ -132,10 +132,10 @@ const judge: TaskJudge = async (ctx) => {
       pass: same(valid, afterEdit),
       evidence: afterEdit,
     });
-    await click(ctx, /\bedit\b.*\broom\b.*\bAmber\b/i);
+    await click(ctx, actionCaption('edit', 'room', 'Amber'));
     await input(ctx, 'capacity').fill('2');
     await saveRoom(ctx);
-    await click(ctx, /\bedit\b.*\broom\b.*\bAmber\b/i);
+    await click(ctx, actionCaption('edit', 'room', 'Amber'));
     probes.push({
       name: 'capacity reduction guard preserves room and bookings',
       pass: (await fieldValue(input(ctx, 'capacity'))) === '4' && same(valid, await snapshot(ctx)),
@@ -162,14 +162,14 @@ const judge: TaskJudge = async (ctx) => {
       pass: same(valid, await snapshot(ctx)),
       evidence: await snapshot(ctx),
     });
-    await click(ctx, /\bdelete\b.*\broom\b.*\bAmber\b/i);
+    await click(ctx, actionCaption('delete', 'room', 'Amber'));
     probes.push({
       name: 'referenced room deletion preserves bookings',
       pass: same(valid, await snapshot(ctx)),
       evidence: await snapshot(ctx),
     });
     const deletion = ctx.view.getByRole('button', {
-      name: /\bdelete\b.*\b(?:reservation|booking)\b/i,
+      name: actionCaption('delete', 'reservation|booking'),
     });
     await deletion.first().click();
     await ctx.view.goto(ctx.view.url());
@@ -179,13 +179,13 @@ const judge: TaskJudge = async (ctx) => {
       evidence: await snapshot(ctx),
     });
     await room(ctx, 'Unused', 1);
-    await click(ctx, /\bdelete\b.*\broom\b.*\bUnused\b/i);
+    await click(ctx, actionCaption('delete', 'room', 'Unused'));
     probes.push({
       name: 'unreferenced room deletion',
       pass:
         (await ctx.view
           .getByRole('button', {
-            name: new RegExp(`\\bedit\\b.*\\broom\\b.*${caption('Unused').source}`, 'i'),
+            name: actionCaption('edit', 'room', 'Unused'),
           })
           .count()) === 0,
       evidence: await ctx.view.locator('body').innerText(),

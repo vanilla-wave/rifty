@@ -71,3 +71,28 @@ Correctnewapplication positive/fault/alternative proof remains implementation
 acceptance target; no appdelivered claim. Currentsemantic assertions coveractual
 namedactions/state/conservation, not marker strings or generic outcome metadata.
 Independent changed-tree Contract+RED verification next; implementation waits.
+
+Changed-tree Contract+RED BLOCK @6c0d7e898: oldworkflow substitution rejected,
+but realpublic alternatives expose ordered actioncaptions andTransfer-named-region
+constraint; real loadergetsjudgeundefined(defaultonly); precise4.345/5.335 truncated
+to434/533, dishonestclearance. AllfouracceptedFIX, sourcescopecheck stillclear.
+[Originalverdict](agent-eval-corpus-expansion-semantic-contract-block.json),
+[realshapeRED](agent-eval-expansion-oracle-shape-red.json.gz),
+[realAPIRED](agent-eval-expansion-oracle-export-red.json.gz).
+
+Shared actionCaption owner incontext uses independent semanticword presence,
+allactionverb/subject/identity callsites swept. Payment candidates grouped by
+relatednamed outputs, no table/region role orTransfer-caption requirement;
+editableexpense controls excluded. Decoder exactwhole numeric token, atmost2
+fractiondigits/safeinteger cents, no truncation. Bothoracles namedjudgeexport,
+unitrequirescallable loadedjudge +certifiedsourcebinding.
+
+Permanent realChromium conformance:4room captions +32other actionordervariants,
+9section/article/div×Transfer/Payment/Settlement variantsPASS; invalidprecision/
+wrongsum/zero3FAIL. UnchangedloadCorpus realprobe bothloadedjudgefunction.
+FourguardreversionsallRED, source restored. ExistingwrongCSV/notes all8FAIL/errors0;
+inheritedcorpus/CSV17tests/typecheck/biomePASS.
+[GREEN/source/programmes/reverts](agent-eval-expansion-oracle-conformance-green.json.gz).
+No newapp/project/control/manifest implemented; missingeval3RED remainsexpected.
+Newhelper bytes enter accepted supporthash, oldseries scores remain immutable.
+Independent changed-tree preparationverification next, no modelcalls/new96 yet.
