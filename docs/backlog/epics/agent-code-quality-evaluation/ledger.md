@@ -64,3 +64,9 @@
 - 2026-10-06 — expansion secondContract+RED BLOCK @6c0d7e898 accepted4FIX: captionorder/Transfer-region hiddencriteria, named-loaderexport mismatch, lossycentprecision. SharedactionCaption owner/sibling sweep, relatednamedpayment grouping, exactcentdecoder,namedexports/callablebinding. RealChromium4+32captions/9paymentlayoutPASS,3numericnegativesFAIL; realloadCorpus2callables,4guardrevertsRED/restored,wrongworkflows8FAIL/errors0,inherited17/typecheck/biomePASS. OriginalBLOCK/RED retained; changed-tree verification next. No app/manifest/control/campaign implementation, whole goalopen.
 
 - 2026-10-06 — agent re-cut expansion: source/control capability independently Final+GREEN before calls; original expansion6+7 now linked expanded-comparison96, samePR341. I1/I4/I7 fullmeasurement +I10/I11 remain mandatory; no goal amendment.
+
+- 2026-10-06 — re-chart after expandedsource (final-green PASS with advisory @5a8ecf4e4ca865a75bc98c437f3aeaa3588e04a5): eightcases/sevenfamilies/fourstarters; native8/exactlargecent/28faults/current64/sourcefreeze proof accepted. One display-proof concern NOTE, no unitresiduals. Sourcechild removed; next frozen96comparison, then mandatoryI10/I11. Goal notcomplete.
+
+- 2026-10-06 — sourcecontract kept as exact reviewed authority untilCLOSE (blockers validator reads livecontract); removed only fromactive map, no extra implementation obligation. Currentcomparison ready viaRDY8 certifiedmechanism reuse; protocol/config/cost frozen beforecalls.
+
+- 2026-10-06 — re-chart gate27/27PASS; unit2timeouts under31.5load/12cpus, mandatoryisolation bothfilesPASS (companion-producer.contract/statistics-report). No source/test edits; parityPASS. Clean source freeze next, actual96campaign authorized.

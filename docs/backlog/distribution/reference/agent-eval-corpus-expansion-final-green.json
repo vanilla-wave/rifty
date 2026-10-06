@@ -1,0 +1,182 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Source/control slice accepted; advisory only. Continue mandatory96 comparison and I10/I11; whole goal remains open.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "5a8ecf4e4ca865a75bc98c437f3aeaa3588e04a5",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-corpus-expansion.md @5a8ecf4e4ca865a75bc98c437f3aeaa3588e04a5; BASE4db652200789456c597bb8a38a95d7bb12df7aae; goal docs/backlog/epics/agent-code-quality-evaluation/goal.md unchanged",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1+I2+I3+I4+I7+I8+I9; original expansion Acceptance6+7",
+      "location": "docs/backlog/distribution/agent-eval-expanded-comparison.md:22",
+      "summary": "Fresh frozen96 actual agent trials, selected failures/costs/uncertainty and offline regeneration not yet executed; mandatory linked child, samePR341."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md:1",
+      "summary": "Executed operation-level environment difference catalog remains mandatory, including exact Svelte COI CSS request/specifier effect and observed dependency substitution; root cause unknown."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md:1",
+      "summary": "Finite substantive escalation, stopping bounds and fresh repeated boundary/reference confirmation remain mandatory; source controls and pilot cannot close it."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: frozen8/7-family/6evaluation, four installed starters, exact oldsix and public/oracle binding",
+      "source": "acceptance",
+      "trace": "I1+I6+I7+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-expansion.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: booking workflow/four controls/valid alternatives and public invalid guards",
+      "source": "acceptance",
+      "trace": "I1+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracles/booking.ts:118",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: exact cents/conservation/clearing transfer alternatives and mutation/reference guards",
+      "source": "acceptance",
+      "trace": "I1+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracles/expense.ts:191",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: locked native8 and own-origin32 references+32 new controls, private judges excluded, all failures retained",
+      "source": "acceptance",
+      "trace": "I2+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-origin-controls.ts:28",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: actual authoring/fault/valid-alternative/guard evidence before calls; public-only criteria, unknown manual time",
+      "source": "acceptance",
+      "trace": "I6+I7",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-corpus-expansion-evidence.md:115",
+      "note": ""
+    },
+    {
+      "row": "frozen-assumption/sibling-drift × judge: public alternatives and guard discrimination",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracle-conformance.ts:41",
+      "note": ""
+    },
+    {
+      "row": "torn-state × invalid mutation: rooms/expenses/persistence preserved",
+      "source": "fault-matrix",
+      "trace": "I1+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracles/booking.ts:201",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × amount/interval/selection: rejection and retained state",
+      "source": "fault-matrix",
+      "trace": "I1+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracles/expense.ts:247",
+      "note": ""
+    },
+    {
+      "row": "input/provenance drift × frozen version: mismatch rejected and private artifacts excluded",
+      "source": "fault-matrix",
+      "trace": "I6+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-validation.fault.test.ts:8",
+      "note": ""
+    },
+    {
+      "row": "setup/unsupported/interruption × matrix: failed/partial sources preserved; next series separate",
+      "source": "fault-matrix",
+      "trace": "I3+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-origin-controls.ts:37",
+      "note": ""
+    },
+    {
+      "row": "eval-v1 immutable manifest/cards/project/lock/prompt/control identity and oldsix continuity",
+      "source": "frozen-artifact",
+      "trace": "I1+I6+I7+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/eval-v1.json:1",
+      "note": ""
+    },
+    {
+      "row": "booking certified frozen public oracle",
+      "source": "frozen-artifact",
+      "trace": "I1+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-expansion.test.ts:43",
+      "note": ""
+    },
+    {
+      "row": "expense certified frozen public oracle",
+      "source": "frozen-artifact",
+      "trace": "I1+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-expansion.test.ts:43",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/corpus/cases/booking-workflow/judge.ts:80",
+          "summary": "Booking observable-state proof reads edit fields and saves each record. Hiding reservation summary paragraphs still passes26/26; list-specific End/Seats presentation is therefore not independently discriminated. Advisory only: public prompt keeps layout open and permits the editor to show record details; no permanent/read-only summary requirement is declared.",
+          "authority": "",
+          "evidence": "node --import tsx /tmp/expansion-review-probe.mts; scratch Vue source changes only summary <p> to hidden; actual Vite/Chromium: judge.pass=true,26 probes,pageerrors=[]; rendered body has no reservation End/Seats summaries. /tmp/expansion-review-probe-l5fNfC/evidence.json. Initial scratch .ts launch failed ESM harness setup, rerun .mts completed. No tracked bytes changed."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
