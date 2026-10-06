@@ -35,3 +35,19 @@ Carriers: agent-eval-choice-caption-origin-proof.json.gz,
 agent-eval-choice-svelte-origin-events.json.gz, source summaries
 2026-10-06-choice-final-{references,baseline,partial,alternative,decorated-reference,decorated-alternative}.
 IndependentrepairFinal and freshcomplete96 remain; I10/I11 untouched.
+
+IndependentFinal BLOCK c96: B1/I6 real working Name of room label, BASE PASS,
+v2FAIL/errors0; one visible label changed only. Raw independent carrier
+agent-eval-choice-room-name-observed.json.gz; original verdict
+agent-eval-choice-caption-final-block-c96.json. Accepted required repair, no
+adjudication/scope narrowing. Sweep newly introduced booking purpose namespace;
+retain BASE matching for fields not implicated in option-caption collision.
+Expected-positive permanent regression before fix; no model calls yet.
+
+B1 repair: delete whole introduced booking namespace; all non-Seats fields keep
+BASE predicates, Seats alone excludes Room option-caption collisions. Public
+requirements/source/prompts/controls unchanged; no modelcalls/v2freeze yet.
+Permanent --reversed-room-name regression beforefix4bookingFAIL/4expensePASS,
+afterfix8PASS/errors0. Real guard reintroduction RED, restored GREEN; corpus4
+tests/typecheck/Chromium semanticfaultPASS. Semanticnegative/currentownorigin
+proof, fullgate and independentchanged-tree Final follow beforecalls.

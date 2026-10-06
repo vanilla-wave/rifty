@@ -91,3 +91,23 @@ await writeFile(join(root, 'decorated-input-plan.json'), JSON.stringify(decorate
 frozen.tasks = decoratedPlan.tasks;
 for (const variant of ['reference', 'alternative'])
   await controls(`decorated-${variant}`, selected, variant);
+
+const booking = selected.filter((task) => task.family === 'booking-constraints');
+for (const task of booking)
+  for (const variant of ['reference', 'alternative']) {
+    const patch = { ...task.controls![variant]! };
+    assert.ok(patch['src/App.vue']!.includes('<label>Room name <input'));
+    patch['src/App.vue'] = patch['src/App.vue']!.replace(
+      '<label>Room name <input',
+      '<label>Name of room <input',
+    );
+    task.controls![variant] = patch;
+  }
+const reversedNamePlan = await resolvePlan(config, tasks, [...lanes]);
+await writeFile(
+  join(root, 'reversed-name-input-plan.json'),
+  JSON.stringify(reversedNamePlan, null, 2),
+);
+frozen.tasks = reversedNamePlan.tasks;
+for (const variant of ['reference', 'alternative'])
+  await controls(`reversed-name-${variant}`, booking, variant);

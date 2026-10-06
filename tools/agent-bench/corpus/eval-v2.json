@@ -162,7 +162,7 @@
       "inputsSha256": "76471556c6a004bcca21d20433eb109a0196d1b535616edc6266bdd1030c33fe",
       "lockSha256": "cd06957ac69920a59436a7b07834952a8c88fb4c2aa5407512e8d068c72f124b",
       "promptSha256": "2795d993df1a8b6cf33ce6c36d904599f5e65ebc4578f6a0f1e2a448b02f27bb",
-      "judgeSha256": "acbe9ead36456ec1358168e8a294d83e189d9244c911a7400a78e1372fe21c8f"
+      "judgeSha256": "f3d111988567c4d61dc3f5c921b6b7a8cea8b3846f53525332cbc57e93d9de60"
     },
     {
       "id": "expense-settlement-v2",

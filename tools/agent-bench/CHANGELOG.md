@@ -54,3 +54,5 @@
 - Retain large source traces as original-byte gzip plus index/manifest references; unchanged original JSON hashes, avoid V8 aggregate string limit.
 
 - Eval-v2 workflow judges accept contextual choice captions; real option identities/primary field purposes, missing/ambiguous choices loud. Original eval-v1 and interrupted74/96 evidence retained; no rescoring.
+
+- Preserve BASE room/name field word order and other booking purposes; scope option-caption exclusion to Seats, regression on real Name of room controls.

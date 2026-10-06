@@ -22,15 +22,11 @@ const controls = {
   seats: /\bseats\b/i,
 };
 const input = (ctx: JudgeContext, name: keyof typeof controls) =>
-  describedEditableControl(ctx, name, {
-    name: ['Room name'],
-    capacity: ['Capacity'],
-    room: ['Room'],
-    date: ['Date'],
-    start: ['Start'],
-    end: ['End'],
-    seats: ['Seats'],
-  }).and(editableControl(ctx, controls[name]));
+  name === 'seats'
+    ? describedEditableControl(ctx, name, { room: ['Room'], seats: ['Seats'] }).and(
+        editableControl(ctx, controls[name]),
+      )
+    : editableControl(ctx, controls[name]);
 async function click(ctx: JudgeContext, name: RegExp) {
   const matches = namedActions(ctx, name);
   for (const node of await matches.all())

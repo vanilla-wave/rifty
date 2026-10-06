@@ -19,6 +19,7 @@ const browser = await chromium.launch();
 const rows = [];
 try {
   const suite = process.argv[2] ?? 'eval-v1';
+  const reversedRoomName = process.argv.includes('--reversed-room-name');
   const tasks = (await loadCorpus(suite)).filter((task) =>
     ['booking-constraints', 'expense-conservation'].includes(task.family!),
   );
@@ -26,6 +27,13 @@ try {
     for (const variant of ['reference', 'alternative'])
       for (const decorated of [false, true]) {
         const patch = { ...task.controls![variant]! };
+        if (reversedRoomName && task.family === 'booking-constraints') {
+          assert.ok(patch['src/App.vue']!.includes('<label>Room name <input'));
+          patch['src/App.vue'] = patch['src/App.vue']!.replace(
+            '<label>Room name <input',
+            '<label>Name of room <input',
+          );
+        }
         if (decorated) {
           const path = task.family === 'booking-constraints' ? 'src/App.vue' : 'src/App.svelte';
           const from =
@@ -76,7 +84,16 @@ try {
             view: page,
             previewUrl: url,
           });
-          const row = { task: task.id, variant, decorated, result, errors, files, dir };
+          const row = {
+            task: task.id,
+            variant,
+            decorated,
+            reversedRoomName,
+            result,
+            errors,
+            files,
+            dir,
+          };
           rows.push(row);
           console.log(JSON.stringify({ task: task.id, variant, decorated, pass: result.pass }));
         } finally {

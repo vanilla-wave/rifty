@@ -1,0 +1,196 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK: исправить новую зависимость booking judge от точного порядка слов Room name; затем независимый Final+GREEN. Весь PR341/goal пока не завершён.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #341 observed choice-caption repair, BASE e7d9fc850b85045241b6d74a9676c12b9d59fe71, clean reviewed HEAD c96c1547ddbb8f63dfd5573cf39256bf5b8e436d; authority docs/backlog/epics/agent-code-quality-evaluation/goal.md I3/I6, public booking/expense prompts, ADR-0512. This unit is the observed judge repair; fresh comparison and I10/I11 remain goal work.",
+  "unit_residuals": [
+    {
+      "clause": "I6: hidden checks add no unstated requirements or arbitrary UI structure; named BASE booking judge accepts equivalent accessible room-name word order.",
+      "location": "tools/agent-bench/corpus/cases/booking-workflow-v2/judge.ts:26",
+      "summary": "Новый primary-purpose namespace требует точную фразу Room name. Реальное рабочее reference-приложение с единственной заменой label на Name of room: BASE judge PASS, новый judge FAIL. Требуется regression RED и исправление semantic field projection, включая sweep введённого booking namespace."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I1+I2+I3+I4+I7+I8+I9; expanded-comparison Acceptance 1/2; ADR-0512 before comparative acceptance",
+      "location": "docs/backlog/distribution/agent-eval-expanded-comparison.md:28",
+      "summary": "После исправления и независимого Final выполнить новую frozen eval-v2 серию96:8cases×4origins×3freshrepeats, retained failures/usage/source identity/uncertainty и offline regeneration. Сохранённые interrupted74/96 и controls48 не заменяют сравнение."
+    },
+    {
+      "clause": "I10; scenario7",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Обязателен operation-level каталог реальных tool/API/policy/behavior differences, recovery/impact/source evidence, включая контролируемые SvelteCOI CSS/CORS наблюдения без выдуманной причины."
+    },
+    {
+      "clause": "I11; scenario8",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Обязательна конечная executed escalation по нескольким семействам сверх пилота, объявленные stopping bounds и fresh repeated confirmation/reference controls. Goal не закрыт."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Contextual room option captions select the real unambiguous identity rather than exact visible label.",
+      "source": "acceptance",
+      "trace": "I3+I6+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/booking-workflow-v2/judge.ts:55",
+      "note": ""
+    },
+    {
+      "row": "Contextual expense payer and multi-participant option captions retain semantic choice identity.",
+      "source": "acceptance",
+      "trace": "I3+I6+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/expense-settlement-v2/judge.ts:52",
+      "note": ""
+    },
+    {
+      "row": "Missing or duplicate named options fail loudly before selection mutation; selection uses actual option indices.",
+      "source": "acceptance",
+      "trace": "ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/choice-projection.fault.spec.ts:4",
+      "note": ""
+    },
+    {
+      "row": "Booking selected identity is canonicalized against actual edited room records, not caption suffixes.",
+      "source": "acceptance",
+      "trace": "ADR-0512+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/booking-workflow-v2/judge.ts:92",
+      "note": ""
+    },
+    {
+      "row": "Primary field purpose excludes concatenated option context without adding arbitrary hidden accessible-name constraints.",
+      "source": "acceptance",
+      "trace": "I6+booking public prompt:20-25+named BASE booking field projection",
+      "status": "weak",
+      "citation": "tools/agent-bench/corpus/cases/booking-workflow-v2/judge.ts:24",
+      "note": "Finding B1: exact-phrase name:['Room name'] passes committed current controls but rejects the executed working alternative Name of room. Independent artifact /tmp/rifty-choice-name-label-7FPkRQ/evidence.json: BASE PASS/new FAIL/errors0. Direct correctness finding is blocking under I6 and baseline; weak carrier alone remains advisory under REV-4."
+    },
+    {
+      "row": "Versioned booking oracle accepts plain/decorated reference and working alternative, rejects unmet baseline/plausible partial and semantic regressions.",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-controls.ts:96",
+      "note": ""
+    },
+    {
+      "row": "Versioned expense oracle accepts plain/decorated reference and working alternative, rejects unmet baseline/plausible partial and semantic regressions.",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-controls.ts:98",
+      "note": ""
+    },
+    {
+      "row": "Frozen reference/alternative positive caption controls use real installed Vue/Svelte/Vite applications and actual Chromium, with no page errors.",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-choice-caption-controls.ts:31",
+      "note": ""
+    },
+    {
+      "row": "References/alternatives and baseline/partial controls are exercised in all four originating environments; environment failures remain visible and native cannot rescue them.",
+      "source": "acceptance",
+      "trace": "I3+I6+scenario3+scenario4+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-choice-origin-controls.ts:29",
+      "note": ""
+    },
+    {
+      "row": "Original eval-v1/cases retain original bytes; eval-v2 changes two judge identities and keeps public prompts/project/lock/controls/families/splits unchanged.",
+      "source": "frozen-artifact",
+      "trace": "I4+I6+I7+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-choice-version.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Deployed versioned judge bytes match the independently inspected certified oracle modules.",
+      "source": "frozen-artifact",
+      "trace": "I4+I6+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-choice-version.test.ts:29",
+      "note": ""
+    },
+    {
+      "row": "Both plain and decorated control plans bind actual input/lock/prompt/judge/control identities; actual after files equal before plus declared patch.",
+      "source": "acceptance",
+      "trace": "I4+I6+I7+I8+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-choice-origin-controls.ts:31",
+      "note": ""
+    },
+    {
+      "row": "Interrupted original96 retains74 original scored attempts and22 missing trials; archive cannot become corrected comparative acceptance or resumption.",
+      "source": "frozen-artifact",
+      "trace": "I3+I4+I7+I9+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-06-eval-v1-caption-interrupted/README.md:3",
+      "note": ""
+    },
+    {
+      "row": "Archived physical artifacts and large original-byte traces match inventories/manifests; offline regeneration preserves authoritative bytes and identical derived views.",
+      "source": "frozen-artifact",
+      "trace": "I3+I4+I8+I9+ADR-0512",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-choice-caption-evidence.md:30",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/corpus/cases/booking-workflow-v2/judge.ts:26",
+          "evidence": "B1. Executed node --import tsx /tmp/rifty-choice-name-label-probe.mts, exit0; real installed Vue3/Vite application and Chromium in separate fresh contexts, no model calls. ONLY public visible label changed '<label>Room name <input' -> '<label>Name of room <input'; all handlers/source/data otherwise identical. stdout: old {pass:true,failed:[],errors:[]}; new {pass:false,failed:[booking workflow completed: Error Missing named action add|create|new room],errors:[]}. Raw complete files/verdicts: /tmp/rifty-choice-name-label-7FPkRQ/evidence.json. Old oracle source is unchanged from BASE e7d9fc850; new source matches inspected c96c1547. New name:['Room name'] enters purposePattern as a contiguous exact phrase; input.isVisible becomes false and then a nonexistent add-room action is required. Fault class: frozen-assumption/sibling-drift in owned semantic field projection. Missing RED for equivalent room-name word order introduced by the new primary-purpose seam; sibling sweep must cover that booking namespace alongside existing wrapped-caption exclusion.",
+          "summary": "B1: Новый booking judge отвергает рабочий Name of room label, который BASE принимал; скрытое требование к точной фразе Room name нарушает открытый UI-контракт.",
+          "authority": "I6 (goal.md:105-108): trusted checks accept working alternatives; hidden checks add no unstated requirements or arbitrary UI structure. Named baseline e7d9fc850 booking judge editableControl controls.name uses room/name lookaheads and accepts Name of room; booking public prompt.md:20-25 requires accessible semantic Room name and leaves layout/DOM open."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "c96c1547ddbb8f63dfd5573cf39256bf5b8e436d"
+}
