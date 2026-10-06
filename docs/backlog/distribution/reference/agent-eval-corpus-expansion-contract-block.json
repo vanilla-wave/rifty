@@ -1,0 +1,180 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK Contract+RED preparation; add intended workflow semantic REDs and independently verify the substitution is rejected before implementation. Whole-goal PR remains draft; no user scope fork.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "ef60485c7db7061129605eddf812fa061bc35a44",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-corpus-expansion.md; BASE4db652200789456c597bb8a38a95d7bb12df7aae, clean reviewed HEAD ef60485c7db7061129605eddf812fa061bc35a44; fresh independent reviewer /root/expansion_contract_review, read-only/nochildren/no model calls. Raw docs/backlog/epics/agent-code-quality-evaluation/goal.md scenario1-8/I1-I11/Decisions164-188; original user source docs/backlog/distribution/reference/agent-code-quality-refine-evidence.md Original request/answers7-30 and Corpus discussion215-297; public booking/expense prompts, ADR0511/0506/0507, accepted pilot final report and per-case trajectory/cost evidence, actual diff including BASE criteria inspected. RDY-6 final related-set scope/source check CLEAR: exact finite selection/domain policies are curator-owned; original20-30/mix explicitly estimates; fixed8 preserves six pilot cases and adds independent interval/capacity and financial conservation workflows, not framework-swap diversity; no user amendment or weakened user trace, ledger append-only, I10/I11 remain linked. Unknown manual authoring time honestly unknown; no new native/browser-support assertion. Premise/cheaper-route CLEAR: reuse existing loader/runner/report, no new scheduler/root dependency; accepted pilot-only rejected route does not discharge expansion. Independently current unit2RED ENOENT and native-controlRED ENOENT reproduced; initial sandbox Chromium MachPort denial rerun once unsandboxed reaches intended missing manifest (/tmp/rifty-pr341-expansion-review-unit-red.log,/tmp/rifty-pr341-expansion-review-native-red-unsandboxed.log). Native scratch substitution then proves REV5 class4 (see B1). Typecheck/backlog/refs and pilot-plan1/1PASS/gitdiffcheck independently passed. Coverage pass cells for campaign/report/retention reuse accepted unchanged baseline carriers as preparation, never claim new96/full-origin/freeze acceptance delivered now. Only missing semantic preparation is current unit residual; corpus/control/full-campaign implementation remains required goal continuation after accepted preparation.",
+  "unit_residuals": [
+    {
+      "clause": "RDY-8; Acceptance1-5 -> I1+I3+I6+I7; new-workflow semantic RED discrimination",
+      "location": "tools/agent-bench/tests/workflow-controls.ts:61",
+      "summary": "Replace missing-version-only preparation with committed public-prompt/starter binding and intended workflow behavioral REDs. Execute real wrong/unmet workflow negatives under those judges; existing renamed CSV/notes must be rejected. Reference apps, all-origin controls, freeze and96quality proof remain later implementation targets."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I1+I6+I7; expansion acceptance1-7",
+      "location": "docs/backlog/distribution/agent-eval-corpus-expansion.md:43",
+      "summary": "After preparation repair: deliver pinned new cases/semantic judges, corruption/valid-alternative/guard-revert proof, fresh32reference+32newcase all-origin controls, freeze and separate complete96trial campaign/offline regeneration; preserve all selected outcomes."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md:1",
+      "summary": "Evidence-backed command/tool/API/behavior/policy difference catalog, including recovered obstacles and effect/unknown, remains mandatory."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md:1",
+      "summary": "Executed substantive finite escalation, justified stopping bounds and fresh repeated boundary confirmation/controls remain mandatory; pilot/expanded comparison alone cannot close goal."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: separately frozen eight-case/seven-family suite; installed Vue/Svelte starters, public prompts and frozen provenance; unchanged pilot.",
+      "source": "acceptance",
+      "trace": "I1+I6+I7+I8",
+      "status": "missing",
+      "citation": "docs/backlog/distribution/agent-eval-corpus-expansion.md:45",
+      "note": "B1 executed old-workflow substitution passes the entire current RED set; no committed intended booking/expense semantic carrier discriminates this declared obligation. Supply prompt-derived trusted behavioral checks and execute an unmet/wrong-workflow negative before implementing case applications; do not manufacture reference GREEN. Counts/split alone accept old React/vanilla seed/prompt/judge bytes in place of both new cases."
+    },
+    {
+      "row": "Acceptance2: room/reservation guards, interval/capacity independence, atomicity/filter/order/reload and four real control outcomes.",
+      "source": "acceptance",
+      "trace": "I1+I3+I6",
+      "status": "missing",
+      "citation": "docs/backlog/distribution/agent-eval-corpus-expansion.md:51",
+      "note": "B1 executed old-workflow substitution passes the entire current RED set; no committed intended booking/expense semantic carrier discriminates this declared obligation. Supply prompt-derived trusted behavioral checks and execute an unmet/wrong-workflow negative before implementing case applications; do not manufacture reference GREEN."
+    },
+    {
+      "row": "Acceptance3: exact cents/creation-order allocation/conservation/any-clearing-settlement and mutation/reference/persistence guards.",
+      "source": "acceptance",
+      "trace": "I1+I3+I6",
+      "status": "missing",
+      "citation": "docs/backlog/distribution/agent-eval-corpus-expansion.md:56",
+      "note": "B1 executed old-workflow substitution passes the entire current RED set; no committed intended booking/expense semantic carrier discriminates this declared obligation. Supply prompt-derived trusted behavioral checks and execute an unmet/wrong-workflow negative before implementing case applications; do not manufacture reference GREEN."
+    },
+    {
+      "row": "Acceptance4: real locked native new-case controls, same own-origin requirements, full32 references/32 new controls; all failures retained.",
+      "source": "acceptance",
+      "trace": "I2+I3+I6",
+      "status": "missing",
+      "citation": "docs/backlog/distribution/agent-eval-corpus-expansion.md:61",
+      "note": "B1 executed old-workflow substitution passes the entire current RED set; no committed intended booking/expense semantic carrier discriminates this declared obligation. Supply prompt-derived trusted behavioral checks and execute an unmet/wrong-workflow negative before implementing case applications; do not manufacture reference GREEN. The native carrier runs real npm/build/Chromium but delegates its semantic oracle to the substituted case; actual new-starter/all-origin GREEN remains a later acceptance target."
+    },
+    {
+      "row": "Acceptance5: corrupted/valid-alternative controls and each guarded requirement negative/revert; public requirements only, honest authoring evidence before calls.",
+      "source": "acceptance",
+      "trace": "I6+I7",
+      "status": "missing",
+      "citation": "docs/backlog/distribution/agent-eval-corpus-expansion.md:67",
+      "note": "B1 executed old-workflow substitution passes the entire current RED set; no committed intended booking/expense semantic carrier discriminates this declared obligation. Supply prompt-derived trusted behavioral checks and execute an unmet/wrong-workflow negative before implementing case applications; do not manufacture reference GREEN."
+    },
+    {
+      "row": "Acceptance6: fresh fixed96 trial campaign plan with all4 origins/3 repeats/declared config and no adaptive exclusions.",
+      "source": "acceptance",
+      "trace": "I1+I2+I3+I4+I7+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-expansion.test.ts:23",
+      "note": ""
+    },
+    {
+      "row": "Acceptance7: separate complete campaign, retained own-origin evidence, conditional fixed-matrix report/offline regeneration, no equality/causal claim.",
+      "source": "acceptance",
+      "trace": "I3+I4+I7+I8+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-comparison-report-final-green.json:5",
+      "note": ""
+    },
+    {
+      "row": "Fault frozen-assumption/sibling-drift x judge: valid alternatives PASS, unmet public requirements FAIL.",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "missing",
+      "citation": "docs/backlog/distribution/agent-eval-corpus-expansion.md:86",
+      "note": "B1 executed old-workflow substitution passes the entire current RED set; no committed intended booking/expense semantic carrier discriminates this declared obligation. Supply prompt-derived trusted behavioral checks and execute an unmet/wrong-workflow negative before implementing case applications; do not manufacture reference GREEN."
+    },
+    {
+      "row": "Fault torn-state x invalid app mutation: prior rooms/expenses/persistence preserved.",
+      "source": "fault-matrix",
+      "trace": "I1+I6",
+      "status": "missing",
+      "citation": "docs/backlog/distribution/agent-eval-corpus-expansion.md:87",
+      "note": "B1 executed old-workflow substitution passes the entire current RED set; no committed intended booking/expense semantic carrier discriminates this declared obligation. Supply prompt-derived trusted behavioral checks and execute an unmet/wrong-workflow negative before implementing case applications; do not manufacture reference GREEN."
+    },
+    {
+      "row": "Fault corrupt-input x amount/interval/selection: visible rejection without retained mutation.",
+      "source": "fault-matrix",
+      "trace": "I1+I6",
+      "status": "missing",
+      "citation": "docs/backlog/distribution/agent-eval-corpus-expansion.md:88",
+      "note": "B1 executed old-workflow substitution passes the entire current RED set; no committed intended booking/expense semantic carrier discriminates this declared obligation. Supply prompt-derived trusted behavioral checks and execute an unmet/wrong-workflow negative before implementing case applications; do not manufacture reference GREEN."
+    },
+    {
+      "row": "Fault input/provenance drift x frozen version: reject mismatch/private-check leakage.",
+      "source": "fault-matrix",
+      "trace": "I6+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus.ts:96",
+      "note": ""
+    },
+    {
+      "row": "Fault setup/unsupported/interruption x matrix: retain failed/partial/missing, fresh next series.",
+      "source": "fault-matrix",
+      "trace": "I3+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-comparison-report-final-green.json:5",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/tests/workflow-controls.ts:61",
+          "summary": "The committed expansion REDs pass with both promised workflows absent: identity/count checks and self-selected corpus judges accept renamed existing CSV/notes cases.",
+          "authority": "RDY-8; Acceptance2+3 -> I1+I3+I6; goal I6 trusted checks reject the unmet task; REV-5 Contract+RED class4 (RED passes with the scenario unimplemented).",
+          "evidence": "Executed read-only scratch probe /tmp/rifty-pr341-expansion-substitution-probe.json, prepared by /tmp/rifty-pr341-expansion-substitution.mjs in /tmp/rifty-pr341-expansion-substitute-1IyCLz: copied unchanged csv-workflow-v3 to booking-workflow and markdown-notes-v3 to expense-settlement; only card identities/families and an eval-v1 manifest changed. node v24.16.0. ./node_modules/.bin/vitest run tools/agent-bench/src/corpus-expansion.test.ts exit0,2/2PASS (/tmp/rifty-pr341-expansion-substitution-unit.log). node --import tsx tools/agent-bench/tests/workflow-controls.ts exit0, all8 expected baselineFAIL/referencePASS/partialFAIL/alternativePASS and errors0 (/tmp/rifty-pr341-expansion-substitution-native.log). Physical snapshots and full actual CSV/Markdown probes: /tmp/rifty-pr341-expansion-substitution-native-evidence.json.gz. No room/reservation or person/expense/settlement behavior exists in the substitute."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

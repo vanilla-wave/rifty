@@ -47,7 +47,8 @@ source attribution and cheaper-route/value objections before implementation.
    libraries/React/vanilla inputs; frozen provenance/card/source/lock-v3/prompt/
    judge/support hashes, public obligations/difficulty/selection rationale.
    Old six cases/versions/72+partial outcomes unchanged. Actual CLIplan/loader
-   and frozen-byte tests; missing eval-v1 RED before implementation. → I1+I6+I7+I8
+   and frozen-byte tests bind exact public prompts/pinned starters/certified test
+   oracles; missing eval-v1 and real wrong-workflow semantic RED before implementation. → I1+I6+I7+I8
 2. Booking checks public room/create/edit/delete, exclusivity/adjacency/capacity,
    date/resource independence, rejected-edit/capacity/reference guards preserve
    state, combined filters/order and reload. Real native baselineFAIL/reference
@@ -98,6 +99,8 @@ advice promise. I10/I11 catalog/substantive escalation remains nextlinkedunit;
 expanded corpus cannot close whole goal alone.
 
 ## Decisions
+
+- 2026-10-06 — accepted Contract+RED blocker repaired with trusted public workflow test oracles, starter/prompt/source binding and actual renamed-workflow RED; frozen case judges copy certified test bytes, only import depth differs.
 
 - 2026-10-06 — ADR0511 records separately frozen connected-workflow selection; prototype/registry/RED evidence in reference/agent-eval-corpus-expansion-evidence.md.
 

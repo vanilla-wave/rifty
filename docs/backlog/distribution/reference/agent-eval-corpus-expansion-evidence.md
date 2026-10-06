@@ -47,3 +47,27 @@ RED independently reproducible, expectedmissingmanifest.
 [Staticchecks](agent-eval-corpus-expansion-static-checks.json.gz). Fullprcheck is
 not GREEN at Contract+RED because these required positive tests deliberately fail.
 No implementation before independent preparation acceptance.
+
+IndependentContract+RED BLOCK @ef60485c7: renamedCSV/notes substitutedbothcases,
+unit2PASS/native8expectedoutcomes/errors0 despiteabsentnewworkflows. Accepted
+REV5class4/RDY8; [originalverdict](agent-eval-corpus-expansion-contract-block.json),
+[probe](agent-eval-expansion-substitution-probe.json.gz),
+[physicalnativecontrols](agent-eval-expansion-substitution-native.json.gz).
+
+Test-first repair: trusted public-workflow browser assertions under
+tests/workflow-oracles/booking.ts,expense.ts (testcode, no app/project/control/
+manifest implementation). Nativecontrolcarrier invokes these intended assertions,
+not a substitutable case.judge; unitbinds newprompt/starter and exact certified
+oracle source tofuturecasejudge bytes (only relativecontextimport adjusted).
+This is a single semantic source/gate; snapshotcopies deliberatefrozenartifacts,
+no independent duplicated hand-maintained oracle. Loader hashes fullcasejudges.
+
+RealexistingCSV/notes fourcontrols each nowall8FAIL/errors0 under intended
+booking/expense oracle. Same reviewer-substitution recipe: binding/oracle unit
+RED andnativecarrierRED; disablingintendedsemanticguard returnsnativePASS
+(exit0) again, scratch restored. Unitmissing-version3RED; typecheck/biome/refs/
+backlogPASS. [Currentoracles/rawnegative/substitution/revert](agent-eval-expansion-semantic-red.json.gz).
+Correctnewapplication positive/fault/alternative proof remains implementation
+acceptance target; no appdelivered claim. Currentsemantic assertions coveractual
+namedactions/state/conservation, not marker strings or generic outcome metadata.
+Independent changed-tree Contract+RED verification next; implementation waits.

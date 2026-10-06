@@ -12,13 +12,19 @@ import {
   spawnLoggedServer,
   waitHttpReady,
 } from '../src/proc.ts';
+import bookingOracle from './workflow-oracles/booking.ts';
+import expenseOracle from './workflow-oracles/expense.ts';
 
 const root = await mkdtemp(join(tmpdir(), 'rifty-workflow-controls-'));
 const browser = await chromium.launch();
 const rows = [];
 try {
-  const tasks = (await loadCorpus('eval-v1')).filter((task) =>
-    ['booking-workflow', 'expense-settlement'].includes(task.id),
+  const wrongWorkflow = process.argv.includes('--wrong-workflow');
+  const ids = wrongWorkflow
+    ? ['csv-workflow-v3', 'markdown-notes-v3']
+    : ['booking-workflow', 'expense-settlement'];
+  const tasks = (await loadCorpus(wrongWorkflow ? 'pilot-v4' : 'eval-v1')).filter((task) =>
+    ids.includes(task.id),
   );
   assert.equal(tasks.length, 2);
   for (const task of tasks) {
@@ -58,11 +64,12 @@ try {
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.goto(url);
-        const result = await task.judge!({ view: page, previewUrl: url });
+        const oracle = task.id === ids[0] ? bookingOracle : expenseOracle;
+        const result = await oracle({ view: page, previewUrl: url });
         const row = {
           task: task.id,
           variant,
-          expectedPass: variant === 'reference' || variant === 'alternative',
+          expectedPass: !wrongWorkflow && (variant === 'reference' || variant === 'alternative'),
           result,
           errors,
           startedAt,
