@@ -207,6 +207,12 @@ function assertSupportedScriptOptions(options: ScriptOptions, feature: string): 
 
 function assertSupportedCompileOptions(options: CompileFunctionOptions): void {
   assertSupportedScriptOptions(options, 'vm.compileFunction');
+  if ((options.lineOffset ?? 0) !== 0) {
+    throw new NotImplementedError('vm.compileFunction.lineOffset');
+  }
+  if ((options.columnOffset ?? 0) !== 0) {
+    throw new NotImplementedError('vm.compileFunction.columnOffset');
+  }
   if (options.parsingContext !== undefined) {
     throw new NotImplementedError('vm.compileFunction.parsingContext');
   }
@@ -308,52 +314,54 @@ function assertIntegerOffsets(options: ScriptOptions): void {
 
 /**
  * Shift stack-frame positions reported for `filename` while `run` executes
- * (Node `lineOffset`/`columnOffset` semantics: raw shift, no clamping).
- * Positive line shifts are already baked into the source as a newline prefix;
- * this dispatcher carries the column shift (and negative line shifts, which a
- * physical prefix cannot express). Reads inside the script and thrown errors
+ * (Node semantics, oracle-verified): `columnOffset` applies ONLY to frames on
+ * the (prefix-shifted) first line — raw, may display negative; other lines'
+ * columns never move. A negative `lineOffset` (no physical prefix possible)
+ * shifts every frame's line here. Reads inside the script and thrown errors
  * (materialised while installed) carry the shift, as in Node.
  */
 function withOffsetStackShift<T>(
   filename: string | undefined,
-  lineShift: number,
+  firstShiftedLine: number,
   columnShift: number,
+  negativeLineShift: number,
   run: () => T,
 ): T {
   const errorCtor = Error as unknown as ErrorWithPrepareStackTrace;
   const previous = errorCtor.prepareStackTrace;
-  const frameRe =
-    filename === undefined
-      ? null
-      : new RegExp(`(${filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}):(\\d+):(\\d+)`, 'g');
+  const escapedName = filename?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const evalFrameRe =
-    filename === undefined
+    filename === undefined || escapedName === undefined
       ? null
-      : new RegExp(
-          `at eval \\((${filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}):(\\d+):(\\d+)\\)`,
-          'g',
-        );
+      : new RegExp(`at eval \\(${escapedName}:(\\d+):(\\d+)\\)`, 'g');
+  const frameRe =
+    filename === undefined || escapedName === undefined
+      ? null
+      : new RegExp(`${escapedName}:(\\d+):(\\d+)`, 'g');
   errorCtor.prepareStackTrace = (err, frames) => {
     const rendered = previous
       ? String(previous(err, frames))
       : `${err.name}: ${err.message}\n${frames.map((frame) => `    at ${String(frame)}`).join('\n')}`;
     if (frameRe === null) return rendered;
-    let out = rendered;
-    if (evalFrameRe !== null) {
-      // The host compiles via indirect eval; Node's vm frames have no `eval`
-      // marker on top-level frames of the script.
-      out = out.replace(evalFrameRe, (_m, name: string, line: string, col: string) => {
-        return `at ${name}:${Number(line) + lineShift}:${Number(col) + columnShift}`;
-      });
-    }
-    if (lineShift === 0 && columnShift === 0) return out;
-    return out.replace(frameRe, (_match, name: string, line: string, col: string) => {
-      return `${name}:${Number(line) + lineShift}:${Number(col) + columnShift}`;
-    });
+    const shift = (line: string, col: string): string => {
+      const outLine = Number(line) + negativeLineShift;
+      let outCol = Number(col);
+      if (Number(line) === firstShiftedLine) outCol += columnShift;
+      return `${filename}:${outLine}:${outCol}`;
+    };
+    // The host compiles via indirect eval; Node's vm frames carry no `eval`
+    // marker on frames of the script — normalize and shift in one pass.
+    const out =
+      evalFrameRe === null
+        ? rendered
+        : rendered.replace(
+            evalFrameRe,
+            (_m, line: string, col: string) => `at ${shift(line, col)}`,
+          );
+    return out.replace(frameRe, (_m, line: string, col: string) => shift(line, col));
   };
   try {
-    const result = run();
-    return result;
+    return run();
   } catch (err) {
     if (err instanceof Error) void err.stack; // materialise while the shift is installed
     throw err;
@@ -380,8 +388,12 @@ function runGlobalScriptWithOffsets(
   if (lineOffset === 0 && columnOffset === 0) {
     return runGlobalScript(withSourceURL(prefixed, filename));
   }
-  return withOffsetStackShift(filename, negativeLineShift, columnOffset, () =>
-    runGlobalScript(withSourceURL(prefixed, filename)),
+  return withOffsetStackShift(
+    filename,
+    1 + Math.max(0, lineOffset),
+    columnOffset,
+    negativeLineShift,
+    () => runGlobalScript(withSourceURL(prefixed, filename)),
   );
 }
 
@@ -510,8 +522,12 @@ export class Script {
     if (this.#lineOffset === 0 && this.#columnOffset === 0) {
       return runGlobalScript(withSourceURL(this.#code, this.#filename));
     }
-    return withOffsetStackShift(this.#filename, negativeLineShift, this.#columnOffset, () =>
-      runGlobalScript(withSourceURL(this.#code, this.#filename)),
+    return withOffsetStackShift(
+      this.#filename,
+      1 + Math.max(0, this.#lineOffset),
+      this.#columnOffset,
+      negativeLineShift,
+      () => runGlobalScript(withSourceURL(this.#code, this.#filename)),
     );
   }
 

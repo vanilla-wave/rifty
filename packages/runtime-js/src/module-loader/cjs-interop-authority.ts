@@ -12,6 +12,25 @@ type CjsImportJob =
       readonly promise: Promise<Record<string, unknown>>;
     };
 
+// Rifty host-bridge members ride the NodeProcess prototype but are NOT part
+// of Node's process export surface — never projected as builtin export names.
+const HOST_BRIDGE_EXCLUDED = new Set(['pushStdin']);
+
+// Function.prototype's own members never project as builtin export names.
+const FUNCTION_PROTOTYPE_OWN = new Set([
+  'apply',
+  'bind',
+  'call',
+  'toString',
+  'length',
+  'name',
+  'arguments',
+  'caller',
+  'constructor',
+  'Symbol.hasInstance',
+  '@@hasInstance',
+]);
+
 interface StaticNameNode {
   readonly names: Set<string>;
   readonly reexports: StaticNameNode[];
@@ -75,7 +94,13 @@ export function createCjsInteropAuthority(options: {
       let proto: object | null = Object.getPrototypeOf(outer);
       while (proto !== null && proto !== Object.prototype) {
         for (const name of Object.getOwnPropertyNames(proto)) {
-          if (name !== 'constructor') node.names.add(name);
+          // Exclusions: `constructor` (never a named export) and the
+          // Function.prototype surface (apply/bind/call — a function-valued
+          // builtin's chain passes through it; Node never exports those).
+          if (name === 'constructor' || FUNCTION_PROTOTYPE_OWN.has(name)) continue;
+          if (HOST_BRIDGE_EXCLUDED.has(name)) continue;
+          if (proto === Object.getPrototypeOf(Function.prototype)) continue;
+          node.names.add(name);
         }
         proto = Object.getPrototypeOf(proto);
       }

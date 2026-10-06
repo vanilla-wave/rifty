@@ -18,6 +18,17 @@ export interface SymbolGuardContext {
   readonly scopes: readonly (SymbolValueScope | undefined)[];
   isShadowed(name: string): boolean;
   staticPropertyName(node: unknown): string | undefined;
+  /** The module reassigns `Symbol`/`Symbol.for` somewhere — nothing is provable. */
+  readonly symbolMutated?: boolean;
+}
+
+/** Conservative source pre-scan: any assignment/deletion of `Symbol` or
+ * `Symbol.for` poisons the module's Symbol-key exemptions. */
+const SYMBOL_MUTATION_RE =
+  /(?:^|[^\w$.])Symbol(?:\s*\.\s*for)?\s*(?:[+\-*/%&|^]|\*\*|<<|>>>?)?=(?!=)|delete\s+Symbol|(?:^|[^\w$.])Object\.defineProperty\s*\(\s*Symbol/u;
+
+export function symbolGuardPoisoned(source: string): boolean {
+  return SYMBOL_MUTATION_RE.test(source);
 }
 
 function nodeName(node: unknown): string | undefined {
@@ -27,6 +38,7 @@ function nodeName(node: unknown): string | undefined {
 
 /** True for `Symbol(...)` / `Symbol.for(...)` / `Symbol.<well-known>` shapes. */
 export function isProvablySymbolValueExpression(node: unknown, ctx: SymbolGuardContext): boolean {
+  if (ctx.symbolMutated === true) return false;
   if (!node || typeof node !== 'object') return false;
   const type = (node as { type?: unknown }).type;
   if (type === 'CallExpression') {
@@ -47,13 +59,8 @@ export function isProvablySymbolValueExpression(node: unknown, ctx: SymbolGuardC
     }
     return false;
   }
-  if (type === 'MemberExpression') {
-    return (
-      nodeName((node as { object?: unknown }).object) === 'Symbol' &&
-      !ctx.isShadowed('Symbol') &&
-      ctx.staticPropertyName(node) !== undefined
-    );
-  }
+  // `Symbol.<name>` member expressions are NOT provable — the Symbol object
+  // can carry arbitrary STRING properties (guard review finding).
   return false;
 }
 

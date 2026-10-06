@@ -97,10 +97,11 @@ export function setSameRealmWorkerModuleImporter(importer: SameRealmWorkerModule
 export class Worker extends EventEmitter {
   static isMainThread = true;
   threadId: number;
-  /** Piped only with `stdout: true` (Node: `null` otherwise). */
-  stdout: Readable | null = null;
-  /** Piped only with `stderr: true` (Node: `null` otherwise). */
-  stderr: Readable | null = null;
+  /** Always a stream (Node 24): with `stdout: true` the child's stdout is
+   * captured here only; without it chunks ALSO tee to the parent's stdout. */
+  stdout: Readable = new Readable({ read() {} });
+  /** Same shape as {@link stdout}, for stderr. */
+  stderr: Readable = new Readable({ read() {} });
   private readonly entry: WorkerEntry;
   private readonly workerData: unknown;
   private readonly env: Record<string, string>;
@@ -108,6 +109,8 @@ export class Worker extends EventEmitter {
   private readonly ownerProcess: unknown;
   private readonly ownerBootstrap: ReturnType<typeof readActiveNodeProcessBootstrap>;
   private exited = false;
+  readonly #stdoutPiped: boolean;
+  readonly #stderrPiped: boolean;
   /** ADR-0152 handle class (goal I2): a live, ref'd Worker keeps the parent's
    * loop alive until it exits — Node parity; `unref()` releases the hold. */
   private readonly keepaliveRef = new WorkerKeepaliveRef();
@@ -123,12 +126,8 @@ export class Worker extends EventEmitter {
     super();
     this.ownerProcess = (globalThis as { process?: unknown }).process;
     this.ownerBootstrap = readActiveNodeProcessBootstrap();
-    // Node exposes piped stdio streams SYNCHRONOUSLY at construction; the
-    // kernel handle only exists after the deferred start(). Late-attach
-    // wrappers keep the object identity stable for listeners attached right
-    // after `new Worker(...)`.
-    if (opts.stdout === true) this.stdout = new Readable({ read() {} });
-    if (opts.stderr === true) this.stderr = new Readable({ read() {} });
+    this.#stdoutPiped = opts.stdout === true;
+    this.#stderrPiped = opts.stderr === true;
     const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
     const inheritedLaunch = readNodeEntryBootstrapIfPresent()?.launch;
     if (
@@ -231,13 +230,27 @@ export class Worker extends EventEmitter {
       if (handle.kind === 'worker') {
         handle.stdout().on('data', (chunk) => this.emitToOwner('stdout', chunk));
         handle.stderr().on('data', (chunk) => this.emitToOwner('stderr', chunk));
-        // `stdout/stderr: true` (Node): pipe into the construction wrappers.
-        if (this.stdout !== null) {
-          pipeHandleStdioStream(handle.stdout(), this.stdout);
-        }
-        if (this.stderr !== null) {
-          pipeHandleStdioStream(handle.stderr(), this.stderr);
-        }
+        // Wrappers always exist (Node 24); `stdout/stderr: true` captures
+        // into them ONLY, otherwise chunks also tee to the parent's stdio.
+        const ownerStdio =
+          (fd: 'stdout' | 'stderr') =>
+          (chunk: unknown): void => {
+            const proc = (
+              globalThis as {
+                process?: {
+                  stdout?: { write(c: unknown): unknown };
+                  stderr?: { write(c: unknown): unknown };
+                };
+              }
+            ).process;
+            proc?.[fd]?.write(chunk);
+          };
+        if (!this.#stdoutPiped)
+          pipeHandleStdioStream(handle.stdout(), this.stdout, ownerStdio('stdout'));
+        else pipeHandleStdioStream(handle.stdout(), this.stdout);
+        if (!this.#stderrPiped)
+          pipeHandleStdioStream(handle.stderr(), this.stderr, ownerStdio('stderr'));
+        else pipeHandleStdioStream(handle.stderr(), this.stderr);
         handle.on('message', (msg) => this.emitWorkerMessage(msg));
         this.flushKernelMessages(handle);
         // Node emits 'online' once the worker realm exists. Construction-start

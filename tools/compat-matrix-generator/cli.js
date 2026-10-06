@@ -1243,7 +1243,7 @@ from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-tes
 - [esbuild-js-api.md](./esbuild-js-api.md) — direct CJS/ESM and Vite 7 share exact registry-owned esbuild 0.28.0 over guest VFS; CLI and D4 gaps stay loud (ADR-0226/0308/0311)
 - [sass-embedded.md](./sass-embedded.md) — exact sass-embedded 1.100.0 facade over the exact pure-JS Sass twin; direct construction, initialized-compiler reflection, CLI/watch/types gaps, and the sync-importer divergence stay visible (ADR-0344)
 - [git.md](./git.md) — git over the VFS (isomorphic-git, ADR-0167); offline-faithful porcelain + smart-HTTP network ceiling
-- [vite-command.md](./vite-command.md) — playground \`vite\` command through the installed \`.bin\` CLI (ADR-0174)\n- [vitest.md](./vitest.md) — exact vitest 4.1.11 + vite 8.0.16 \`vitest run\` on both pools, exit codes, loud ceilings (goal \`vitest-run-in-browser\`)
+- [vite-command.md](./vite-command.md) — playground \`vite\` command through the installed \`.bin\` CLI (ADR-0174)\n- [vitest.md](./vitest.md) — exact vitest 4.1.11 + vite 8.0.16: install + CLI + runtime capabilities proven; \`vitest run\` blocked by the config-pipeline wall (goal \`vitest-run-in-browser\`)
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal \`node <file>\` command + its gaps (ADR-0155/0157)
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (\`@riftydev/runtime-wasi\`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)

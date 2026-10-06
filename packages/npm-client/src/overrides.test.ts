@@ -185,3 +185,26 @@ describe('override target parsing — npm bare-version spelling (→ I1)', () =>
     });
   });
 });
+
+describe('override target parsing — fault row (→ I1 loud corrupt-input)', () => {
+  it('npm: alias values are NAMES, never bare ranges: npm:2.x aliases package "2.x"', () => {
+    expect(resolveOverride('foo', undefined, { foo: 'npm:2.x' })).toEqual({
+      name: '2.x',
+      range: null,
+      source: 'user',
+    });
+    expect(resolveOverride('foo', undefined, { foo: 'npm:vite' })).toEqual({
+      name: 'vite',
+      range: null,
+      source: 'user',
+    });
+  });
+
+  it('a malformed $ref value stays a package-name parse — the loud registry-404 path', () => {
+    expect(resolveOverride('baz', undefined, { baz: '$baz' })).toEqual({
+      name: '$baz',
+      range: null,
+      source: 'user',
+    });
+  });
+});

@@ -137,7 +137,15 @@ export function predeclareFunctionGuardLexialScope(
   scope: FunctionGuardScope,
   options?: { readonly imports?: boolean },
 ): void {
-  for (const node of body) {
+  for (const raw of body) {
+    // `export const/let/class/function …` binds names exactly like the bare
+    // declaration (the exporter node wraps it).
+    const node =
+      raw.type === 'ExportNamedDeclaration' &&
+      raw.declaration !== null &&
+      raw.declaration !== undefined
+        ? (raw.declaration as GuardAstNode)
+        : raw;
     if (options?.imports === true && node.type === 'ImportDeclaration') {
       declareFunctionGuardImport(scope, node);
     } else if (

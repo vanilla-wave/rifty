@@ -40,8 +40,14 @@ export class WorkerKeepaliveRef {
 
 /** Pipe a kernel handle stdio stream into a construction-time wrapper. The
  * wrapper ends when the HANDLE stream ends (sealed output drains after the
- * exit event), holding a keepalive ref until then. */
-export function pipeHandleStdioStream(source: Readable, wrapper: Readable): void {
+ * exit event), holding a keepalive ref until then. `tee` (the unpiped
+ * default) also delivers every chunk to the parent's inherited stdio, as
+ * Node does when `stdout: true` is absent. */
+export function pipeHandleStdioStream(
+  source: Readable,
+  wrapper: Readable,
+  tee?: (chunk: unknown) => void,
+): void {
   refEventLoop();
   let released = false;
   const settle = (): void => {
@@ -50,7 +56,10 @@ export function pipeHandleStdioStream(source: Readable, wrapper: Readable): void
     released = true;
     unrefEventLoop();
   };
-  source.on('data', (chunk) => wrapper.push(chunk));
+  source.on('data', (chunk) => {
+    wrapper.push(chunk);
+    if (tee !== undefined) tee(chunk);
+  });
   source.once('end', settle);
   source.once('close', settle);
 }

@@ -43,12 +43,14 @@ function parseTarget(target: string, key: string): { name: string; range: string
   //   "bcryptjs"             → name=bcryptjs, range=null (latest)
   //   "bcryptjs@2.x"         → name=bcryptjs, range="2.x"
   //   "npm:bcryptjs@2.x"     → npm alias form, same as above
+  //   "npm:bcryptjs"         → alias to the named package (never a bare range)
   //   "8.0.16" / "^8.0.0"    → npm bare-version spelling: the KEY package at
   //                            that range (npm 11 `overrides` semantics)
+  const isAlias = target.startsWith('npm:');
   let str = target;
-  if (str.startsWith('npm:')) str = str.slice(4);
+  if (isAlias) str = str.slice(4);
   const at = str.lastIndexOf('@');
   if (at > 0) return { name: str.slice(0, at), range: str.slice(at + 1) };
-  if (at < 0 && str !== '' && isRangeShaped(str)) return { name: key, range: str };
+  if (at < 0 && !isAlias && str !== '' && isRangeShaped(str)) return { name: key, range: str };
   return { name: str, range: null };
 }

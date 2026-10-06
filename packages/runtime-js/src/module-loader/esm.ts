@@ -12,6 +12,7 @@ import {
   predeclareFunctionGuardScope as predeclareGuardFunctionScope,
   predeclareFunctionGuardLexialScope as predeclareGuardLexicalScope,
 } from './function-guard-scopes.ts';
+import { symbolGuardPoisoned } from './guard-symbol-values.ts';
 import {
   type SymbolGuardContext,
   computedKeyProvablyNotFunction as sharedComputedKeyNotFunction,
@@ -45,6 +46,7 @@ const directEvalImportProbeHelper = '__riftyDynamicImport';
 
 export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): void {
   if (!functionRoutingAnalysisToken.test(source)) return;
+  guardSymbolMutation.symbolMutated = symbolGuardPoisoned(source);
   let program: Program;
   try {
     program = acornParse(source, {
@@ -1110,8 +1112,11 @@ function guardSymbolContext(ctx: EsmFunctionGuardCtx): SymbolGuardContext {
     scopes: ctx.scopes,
     isShadowed: (name) => isGuardShadowed(ctx, name),
     staticPropertyName,
+    symbolMutated: guardSymbolMutation.symbolMutated,
   };
 }
+
+const guardSymbolMutation = { symbolMutated: false };
 
 function isProvablySymbolValueExpression(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
   return sharedIsProvablySymbolExpression(node, guardSymbolContext(ctx));

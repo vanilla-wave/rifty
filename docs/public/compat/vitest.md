@@ -11,11 +11,11 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Feature | Status | Notes |
 |---|---|---|
 | `npm install` with `overrides: {vite: "8.0.16"}` | ✅ | npm's bare-version spelling resolves as the key package at that range; one hoisted `vite@8.0.16` satisfies vitest's `vite ^8` edge. The rifty `vite@8.0.16` spelling keeps working. |
-| `vitest.config.ts` loaded and honoured | ✅ | The TS config loads through vite's config bundle; the `include` glob drives collection. |
-| TypeScript test files (`.ts`) | ✅ | Vitest's module evaluator transforms and runs `.ts` sources; stack offsets honoured (`vm.runInThisContext` `lineOffset`/`columnOffset`). |
-| `vitest run` (default `forks` pool) | ✅ | Default reporter lists the file, reports `1 passed` / `1 failed` with the assertion diff; exit code 1, then 0 after the fix. |
-| `npm test`, `--reporter=verbose` | ✅ | Same results and exit codes as `vitest run`. |
-| `--pool=threads` | ✅ | Same results and exit code as `forks`: Worker `stdout`/`stderr` streams, explicit `execArgv: []`, live-Worker keepalive. |
+| `vitest.config.ts` loaded and honoured | ⚠️ | BLOCKED by `runtime-js/vitest-config-pipeline-suspension` — `vite.createServer({configFile, plugins})` never settles, so `createVitest` never returns. |
+| TypeScript test files (`.ts`) | ⚠️ | Same blocker (the `.ts` evaluator is only reached after config load). `vm.runInThisContext` offsets themselves are ✅ (parity). |
+| `vitest run` (default `forks` pool) | ⚠️ | Same blocker — the CLI surface (`--version`, `--help`) is ✅; the run itself never reaches the reporter. |
+| `npm test`, `--reporter=verbose` | ⚠️ | Same blocker as `vitest run`. |
+| `--pool=threads` | ⚠️ | Same blocker; the pool substrate itself is ✅ unit-proven (Worker streams, `execArgv: []`, keepalive, advanced IPC). |
 | Process lifecycle the CLI relies on | ✅ | `uncaughtException`/`unhandledRejection` handlers, the `exit` event, `process.exit()` honouring `exitCode`. |
 | `child_process.fork` IPC `serialization: 'advanced'` | ✅ | Structured-clone values round-trip child↔parent; functions throw `ERR_INVALID_ARG_TYPE`. |
 | `Readable.pipe(process.stdout|stderr)` | ✅ | Node's stdio end-exemption; pipe wiring detaches on source end. |

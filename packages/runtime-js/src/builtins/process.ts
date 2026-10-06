@@ -33,6 +33,7 @@ import {
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
 import { serializeIpcPayload } from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
+import { installProcessAbsentMembers } from './absent-members.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import {
@@ -629,7 +630,6 @@ export class NodeProcess extends EventEmitter {
       this.argv = [...spec.argv];
       const launch = readNodeEntryBootstrapIfPresent()?.launch;
       this.execArgv = launch?.kind === 'eval' ? [...launch.execArgv] : [];
-      // Copy: per-process env mutation must not leak into the shared spec.env.
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
       const terminal = processTerminalBootstrap(launch);
@@ -756,7 +756,7 @@ export class NodeProcess extends EventEmitter {
     const exitCode = toUint8ExitCode(c);
     const exitError = Object.assign(new Error(`process.exit(${c})`), {
       code: RIFTY_PROCESS_EXIT,
-      exitCode, // OS-style uint8 wrap (process.exit(257) → 1)
+      exitCode, // uint8 wrap: process.exit(257) → 1
     });
     const evalLifecycleOwned = beginNodeEvalExplicitExit(exitError, () => {
       this.#requestSelfExit(exitCode);
@@ -768,10 +768,7 @@ export class NodeProcess extends EventEmitter {
 
   kill(pid: number, signal = 'SIGTERM'): boolean {
     if (pid !== this.pid || signal !== 'SIGUSR2') {
-      throw new NotImplementedError(
-        'process.kill',
-        'only process.kill(process.pid, "SIGUSR2") is implemented',
-      );
+      throw new NotImplementedError('process.kill', 'only process.kill(process.pid, "SIGUSR2")');
     }
     return this.#requestSelfSignal(signal);
   }
@@ -1180,7 +1177,7 @@ export function nodeProcessWorkerIpc(process: unknown): NodeProcessWorkerIpc {
 
 /** REPL/default singleton (no spec). Kernel children get their own seeded one. */
 export const riftyProcess = new NodeProcess();
-import('./absent-members.ts').then((m) => m.installProcessAbsentMembers(NodeProcess));
+installProcessAbsentMembers(NodeProcess);
 
 /** Host bridge: deliver terminal/process stdin into the REPL Worker process. */
 export function writeProcessStdin(data: string | Uint8Array): void {

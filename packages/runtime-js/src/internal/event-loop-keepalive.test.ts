@@ -781,6 +781,49 @@ describe('process lifecycle dispatcher (process-lifecycle-events-exit-code)', ()
     expect(String((terminated[0] as Error).stack)).toContain('handler-exploded');
   });
 
+  it('an uncaught ERROR never falls to a unhandledRejection-only handler (Node: fatal)', () => {
+    withDispatcher({
+      uncaughtException: [],
+      unhandledRejection: [() => {}],
+    });
+    // Not handled: the loud default (stderr + exit 1) stands, as in Node.
+    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toBe(false);
+  });
+
+  it('the REAL dispatcher: a handler throwing null is fatal with null (sentinel)', async () => {
+    const { NodeProcess } = await import('../builtins/process.ts');
+    const { installProcessLifecycleDispatcher } = await import(
+      '../builtins/process-lifecycle-dispatcher.ts'
+    );
+    const { setActiveNodeProcessBootstrap } = await import(
+      '../builtins/process-bootstrap-identity.ts'
+    );
+    installProcessLifecycleDispatcher((value: unknown): boolean => value instanceof NodeProcess);
+    const proc = new NodeProcess();
+    setActiveNodeProcessBootstrap(proc);
+    proc.on('uncaughtException', () => {
+      throw null;
+    });
+    const terminated: unknown[] = [];
+    registerNodeEvalDrainLifecycle({
+      beforeExit: () => {},
+      projectUnhandled: (reason) => reason,
+      terminateUnhandled: (reason) => {
+        terminated.push(reason);
+        return Object.assign(new Error('process.exit(1)'), {
+          code: 'RIFTY_PROCESS_EXIT',
+          exitCode: 1,
+        });
+      },
+    });
+    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(terminated).toHaveLength(1);
+    expect(terminated[0]).toBeNull();
+    setActiveNodeProcessBootstrap(null);
+  });
+
   it('no handler: the loud default stands (unhandled → drain rejection, exit 1 path)', async () => {
     keepalive.setProcessLifecycleDispatcher(null);
     expect(keepalive.intakeUnhandledError(new Error('boom'), 'rejection')).toBe(false);

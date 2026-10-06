@@ -25,7 +25,9 @@ type NodeProcessShape = {
 
 /** Install the named-loud members + the keepalive dispatcher. Call once at
  * module init, after the class declaration. */
-export function installProcessAbsentMembers(NodeProcess: new (...args: never[]) => unknown): void {
+export function installProcessAbsentMembers(
+  NodeProcess: abstract new (...args: never[]) => unknown,
+): void {
   installProcessLifecycleDispatcher((value: unknown): boolean => value instanceof NodeProcess);
   const proto = NodeProcess.prototype as unknown as Record<string, unknown>;
   proto.memoryUsage = (): never => {

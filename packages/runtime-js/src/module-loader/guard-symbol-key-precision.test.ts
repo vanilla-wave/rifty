@@ -43,6 +43,31 @@ describe('ESM guard accepts provably-Symbol computed keys', () => {
     CLEANUP.push(Symbol.for('test.safe-timers'));
   });
 
+  it('export const Symbol.for key marks too (exported declarator)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "export const KEY = Symbol.for('test.exported'); globalThis[KEY] = { landed: true }; export const out = 'ok';\n",
+    });
+    const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: string };
+    expect(ns.out).toBe('ok');
+    expect((globalThis as Record<symbol, unknown>)[Symbol.for('test.exported')]).toEqual({
+      landed: true,
+    });
+    Reflect.deleteProperty(globalThis, Symbol.for('test.exported'));
+  });
+
+  it('a mutated Symbol.for disables the exemption (not provable)', async () => {
+    const originalFor = Symbol.for;
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "Symbol.for = () => 'Function'; const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+    Symbol.for = originalFor;
+  });
+
   it('direct Symbol() key expression loads', async () => {
     const loader = esmLoader({
       '/work/main.mjs': "globalThis[Symbol('direct')] = 1; export const out = 'ok';\n",

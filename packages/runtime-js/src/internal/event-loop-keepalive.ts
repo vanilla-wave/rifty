@@ -67,7 +67,10 @@ export function intakeUnhandledError(reason: unknown, origin: NodeEvalUnhandledO
   const state = keepaliveState();
   const dispatch = state.processLifecycle?.dispatchUnhandled(reason, origin);
   if (dispatch?.handled) return true;
-  const terminalReason = dispatch?.replacement ?? reason;
+  // A handler throw is fatal with the NEW thrown value — null included; only
+  // an absent dispatch (no dispatcher) keeps the original reason.
+  const terminalReason =
+    dispatch !== undefined && dispatch.replacement !== undefined ? dispatch.replacement : reason;
   if (beginNodeEvalUnhandled(terminalReason, origin)) return true;
   if (origin === 'rejection') recordRejection(terminalReason, 'rejection');
   return false;

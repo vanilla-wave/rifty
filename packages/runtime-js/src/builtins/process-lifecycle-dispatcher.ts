@@ -36,30 +36,34 @@ export function installProcessLifecycleDispatcher(
         emit(event: string, ...args: unknown[]): unknown;
         listenerCount(event: string): number;
       };
-      const emitFor = (event: 'uncaughtException' | 'unhandledRejection'): unknown => {
+      const HANDLED = Symbol('handled');
+      const emitFor = (
+        event: 'uncaughtException' | 'unhandledRejection',
+      ): typeof HANDLED | { readonly thrown: unknown } => {
         try {
           if (event === 'unhandledRejection') proc.emit(event, reason, undefined);
           else proc.emit(event, reason);
-          return null;
+          return HANDLED;
         } catch (replacement) {
-          // Node: an exception inside a handler is fatal with the NEW error.
-          return replacement;
+          // Node: an exception inside a handler is fatal with the NEW thrown
+          // value — even when a handler throws null/undefined.
+          return { thrown: replacement };
         }
       };
-      if (proc.listenerCount('uncaughtException') > 0) {
-        // Node default (--unhandled-rejections=throw): a rejection with no
-        // dedicated handler falls to uncaughtException.
-        const direct =
-          origin === 'uncaught-error' || proc.listenerCount('unhandledRejection') === 0;
-        if (direct) {
-          const thrown = emitFor('uncaughtException');
-          return thrown === null ? { handled: true } : { handled: false, replacement: thrown };
-        }
-      }
-      if (proc.listenerCount('unhandledRejection') > 0) {
-        const thrown = emitFor('unhandledRejection');
-        return thrown === null ? { handled: true } : { handled: false, replacement: thrown };
-      }
+      // Node default (--unhandled-rejections=throw): a REJECTION goes to its
+      // dedicated handler, else falls to uncaughtException. An uncaught ERROR
+      // never falls the other way — UR handlers do not catch exceptions.
+      const preferRejectionHandler =
+        origin === 'rejection' && proc.listenerCount('unhandledRejection') > 0;
+      const outcome = preferRejectionHandler
+        ? emitFor('unhandledRejection')
+        : proc.listenerCount('uncaughtException') > 0
+          ? emitFor('uncaughtException')
+          : undefined;
+      if (outcome === undefined) return { handled: false };
+      return outcome === HANDLED
+        ? { handled: true }
+        : { handled: false, replacement: outcome.thrown };
       return { handled: false };
     },
     emitNaturalExit() {

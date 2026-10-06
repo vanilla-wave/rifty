@@ -20,6 +20,7 @@ import {
   type SymbolGuardContext,
   computedKeyProvablyNotFunction as sharedComputedKeyNotFunction,
   isProvablySymbolValueExpression as sharedIsProvablySymbolExpression,
+  symbolGuardPoisoned,
 } from './guard-symbol-values.ts';
 import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
@@ -242,6 +243,7 @@ function rewriteCjsFunctionConstructorReferences(
   predeclareFunctionScope(program.body as unknown as AnyNodeShape[], rootScope);
   predeclareLexicalScope(program.body as unknown as AnyNodeShape[], rootScope);
   const ctx: FunctionRewriteCtx = {
+    ...{},
     edits: [],
     scopes: [rootScope],
     functionHelperName,
@@ -254,6 +256,7 @@ function rewriteCjsFunctionConstructorReferences(
     hasRoutedFunctionReference: false,
     hasFunctionEvalText: false,
   };
+  guardSymbolMutation.symbolMutated = symbolGuardPoisoned(source);
   walkFunctionReferences(program as unknown as AnyNodeShape, ctx);
   if (ctx.hasDerivedHostFunctionConstructor) {
     throw new NotImplementedError(
@@ -1534,8 +1537,11 @@ function guardSymbolContext(ctx: FunctionRewriteCtx): SymbolGuardContext {
     scopes: ctx.scopes,
     isShadowed: (name) => isShadowed(ctx, name),
     staticPropertyName,
+    symbolMutated: guardSymbolMutation.symbolMutated,
   };
 }
+
+const guardSymbolMutation = { symbolMutated: false };
 
 function isProvablySymbolValueExpression(node: unknown, ctx: FunctionRewriteCtx): boolean {
   return sharedIsProvablySymbolExpression(node, guardSymbolContext(ctx));
