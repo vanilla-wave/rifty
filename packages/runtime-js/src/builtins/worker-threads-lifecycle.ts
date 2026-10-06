@@ -12,6 +12,7 @@ import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-
 export class WorkerKeepaliveRef {
   #held = false;
   #userUnrefd = false;
+  #auxHeld = 0;
 
   acquire(): void {
     if (this.#held || this.#userUnrefd) return;
@@ -25,10 +26,29 @@ export class WorkerKeepaliveRef {
     unrefEventLoop();
   }
 
-  /** Node `worker.unref()`: the running worker stops holding the loop. */
+  /** Piped-stdio aux refs: released wholesale by `unref()` (an unref'd
+   * worker's open streams do not hold the loop — Node oracle). */
+  acquireAux(): void {
+    if (this.#userUnrefd) return;
+    this.#auxHeld += 1;
+    refEventLoop();
+  }
+
+  releaseAux(): void {
+    if (this.#auxHeld === 0) return;
+    this.#auxHeld -= 1;
+    unrefEventLoop();
+  }
+
+  /** Node `worker.unref()`: the running worker and its piped streams stop
+   * holding the loop. */
   userUnref(): void {
     this.#userUnrefd = true;
     this.release();
+    while (this.#auxHeld > 0) {
+      this.#auxHeld -= 1;
+      unrefEventLoop();
+    }
   }
 
   /** Node `worker.ref()`: re-acquire the hold (no-op once exited). */
@@ -46,15 +66,18 @@ export class WorkerKeepaliveRef {
 export function pipeHandleStdioStream(
   source: Readable,
   wrapper: Readable,
+  keepalive?: WorkerKeepaliveRef,
   tee?: (chunk: unknown) => void,
 ): void {
-  refEventLoop();
+  if (keepalive === undefined) refEventLoop();
+  else keepalive.acquireAux();
   let released = false;
   const settle = (): void => {
     wrapper.push(null);
     if (released) return;
     released = true;
-    unrefEventLoop();
+    if (keepalive === undefined) unrefEventLoop();
+    else keepalive.releaseAux();
   };
   source.on('data', (chunk) => {
     wrapper.push(chunk);

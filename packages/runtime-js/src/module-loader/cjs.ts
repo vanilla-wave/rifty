@@ -433,11 +433,20 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
   if (typeof n.type !== 'string') return;
 
   switch (n.type) {
-    case 'Program':
-      for (const child of (n as unknown as { body: AnyNodeShape[] }).body) {
-        walkFunctionReferences(child, ctx);
+    case 'Program': {
+      const body = (n as unknown as { body: AnyNodeShape[] }).body;
+      // PRE-PASS: a top-level class/function named `Symbol` shadows the global
+      // identifier for script code — nothing is provable.
+      for (const child of body) {
+        if (child.type === 'ClassDeclaration' || child.type === 'FunctionDeclaration') {
+          if ((child.id as { name?: string } | undefined)?.name === 'Symbol') {
+            guardSymbolMutation.symbolMutated = true;
+          }
+        }
       }
+      for (const child of body) walkFunctionReferences(child, ctx);
       return;
+    }
 
     case 'Identifier': {
       const name = (n as unknown as { name?: string }).name;
@@ -602,6 +611,9 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
       }
       if (isReflectDerivedFunctionConstructorCall(n, ctx)) {
         ctx.hasDerivedHostFunctionConstructor = true;
+      }
+      if (mutatesSymbolBuiltin(n, ctx)) {
+        guardSymbolMutation.symbolMutated = true;
       }
       if (calleeMayBeDerivedHostFunction(callee, ctx) && constructorArgsMayImport(args)) {
         ctx.hasDerivedHostFunctionConstructor = true;
@@ -1544,6 +1556,36 @@ function guardSymbolContext(ctx: FunctionRewriteCtx): SymbolGuardContext {
 }
 
 const guardSymbolMutation = { symbolMutated: false };
+
+/** Object.defineProperty/Reflect.set-style calls targeting the `Symbol`
+ * builtin itself — they can replace `Symbol.for`. */
+function mutatesSymbolBuiltin(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
+  const call = node as unknown as { callee?: AnyNodeShape; arguments?: unknown[] };
+  const callee = call.callee;
+  if (!callee || callee.type !== 'MemberExpression') return false;
+  const object = callee.object as AnyNodeShape | undefined;
+  const objectName =
+    object?.type === 'Identifier' ? (object as unknown as { name?: string }).name : undefined;
+  const prop = staticPropertyName(callee);
+  const isObject = objectName === 'Object' && !isShadowed(ctx, 'Object');
+  const isReflect = objectName === 'Reflect' && !isShadowed(ctx, 'Reflect');
+  if (
+    !(
+      (isObject && (prop === 'defineProperty' || prop === 'defineProperties')) ||
+      (isReflect && (prop === 'set' || prop === 'defineProperty'))
+    )
+  ) {
+    return false;
+  }
+  const target: unknown = (call.arguments ?? [])[0];
+  if (!target || typeof target !== 'object') return false;
+  const t = target as AnyNodeShape;
+  return (
+    t.type === 'Identifier' &&
+    (t as unknown as { name?: string }).name === 'Symbol' &&
+    !isShadowed(ctx, 'Symbol')
+  );
+}
 
 /** A member rooted at the (unshadowed) `Symbol` identifier — assignment/delete
  * through it can replace `Symbol.for`; no Symbol-key exemption is provable. */

@@ -16,9 +16,13 @@ import {
   unref,
 } from './event-loop-keepalive.ts';
 
-afterEach(() => {
+afterEach(async () => {
   resetKeepalive();
   vi.useRealTimers();
+  const { setActiveNodeProcessBootstrap } = await import(
+    '../builtins/process-bootstrap-identity.ts'
+  );
+  setActiveNodeProcessBootstrap(null);
 });
 
 describe('event-loop keepalive', () => {
@@ -714,32 +718,27 @@ describe('uncaught error trap', () => {
 });
 
 describe('process lifecycle dispatcher (process-lifecycle-events-exit-code)', () => {
-  function withDispatcher(
+  async function withRealProcess(
     listeners: Record<'uncaughtException' | 'unhandledRejection', Array<(e: unknown) => unknown>>,
-  ): { seen: unknown[] } {
-    const seen: unknown[] = [];
-    keepalive.setProcessLifecycleDispatcher({
-      dispatchUnhandled(reason, origin) {
-        seen.push(reason);
-        const handler =
-          listeners[origin === 'rejection' ? 'unhandledRejection' : 'uncaughtException'];
-        if (handler.length === 0) return { handled: false };
-        for (const fn of handler) {
-          try {
-            fn(reason);
-          } catch (thrownValue) {
-            return { handled: false, hasThrownValue: true, thrownValue };
-          }
-        }
-        return { handled: true };
-      },
-      emitNaturalExit() {},
-    });
-    return { seen };
+  ): Promise<InstanceType<typeof NodeProcess>> {
+    const { NodeProcess } = await import('../builtins/process.ts');
+    const { defineLifecycleIdentity, installProcessLifecycleDispatcher } = await import(
+      '../builtins/process-lifecycle-dispatcher.ts'
+    );
+    const { setActiveNodeProcessBootstrap } = await import(
+      '../builtins/process-bootstrap-identity.ts'
+    );
+    installProcessLifecycleDispatcher();
+    const proc = new NodeProcess();
+    defineLifecycleIdentity(proc);
+    setActiveNodeProcessBootstrap(proc);
+    for (const fn of listeners.uncaughtException ?? []) proc.on('uncaughtException', fn);
+    for (const fn of listeners.unhandledRejection ?? []) proc.on('unhandledRejection', fn);
+    return proc;
   }
 
   it('an uncaughtException handler takes the error: no drain rejection, loop continues', async () => {
-    withDispatcher({
+    await withRealProcess({
       uncaughtException: [(e) => expect((e as Error).message).toBe('boom')],
       unhandledRejection: [],
     });
@@ -753,7 +752,7 @@ describe('process lifecycle dispatcher (process-lifecycle-events-exit-code)', ()
   });
 
   it('a throwing handler is fatal with the NEW error (loud default keeps its stderr stack)', async () => {
-    withDispatcher({
+    await withRealProcess({
       uncaughtException: [
         () => {
           throw new Error('handler-exploded');
@@ -785,8 +784,8 @@ describe('process lifecycle dispatcher (process-lifecycle-events-exit-code)', ()
     expect(String((terminated[0] as Error).stack)).toContain('handler-exploded');
   });
 
-  it('an uncaught ERROR never falls to a unhandledRejection-only handler (Node: fatal)', () => {
-    withDispatcher({
+  it('an uncaught ERROR never falls to a unhandledRejection-only handler (Node: fatal)', async () => {
+    await withRealProcess({
       uncaughtException: [],
       unhandledRejection: [() => {}],
     });

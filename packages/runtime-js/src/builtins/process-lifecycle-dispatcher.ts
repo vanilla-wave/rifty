@@ -73,8 +73,12 @@ export interface DispatchOutcome {
 }
 
 export function installProcessLifecycleDispatcher(): void {
+  // Node: an exception inside a lifecycle handler is FATAL — the process is
+  // dying; later dispatches must not re-enter any handler.
+  const died = false;
   setProcessLifecycleDispatcher({
     dispatchUnhandled(reason, origin) {
+      if (died) return { handled: false, hasThrownValue: true, thrownValue: reason };
       const active = activeLifecycleProcess();
       if (!isNodeProcess(active)) return { handled: false };
       const proc = active as unknown as {

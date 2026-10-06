@@ -14,7 +14,16 @@ type CjsImportJob =
 
 // Rifty host-bridge members ride the NodeProcess prototype but are NOT part
 // of Node's process export surface — never projected as builtin export names.
-const HOST_BRIDGE_EXCLUDED = new Set(['pushStdin', 'emitNaturalExitEvent']);
+const HOST_BRIDGE_EXCLUDED = new Set([
+  'pushStdin',
+  'emitNaturalExitEvent',
+  // NodeProcess host-bridge overrides of the EventEmitter surface — Node's
+  // process exposes none of these as importable named exports.
+  'addListener',
+  'prependListener',
+  'removeListener',
+  'removeAllListeners',
+]);
 
 interface StaticNameNode {
   readonly names: Set<string>;

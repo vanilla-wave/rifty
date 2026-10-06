@@ -244,11 +244,27 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
   const n = node as GuardNodeShape;
   if (typeof n.type !== 'string') return;
   switch (n.type) {
-    case 'Program':
-      for (const child of (n as unknown as { body: GuardNodeShape[] }).body) {
-        walkEsmFunctionGuard(child, ctx);
+    case 'Program': {
+      const body = (n as unknown as { body: GuardNodeShape[] }).body;
+      // PRE-PASS: module-scope `class Symbol` shadows the global identifier
+      // for every module-level `Symbol.for(...)` — nothing is provable.
+      for (const raw of body) {
+        // Unwrap exporters: `export default class Symbol {...}` shadows the
+        // global identifier for module code in rifty's execution semantics.
+        let child = raw as GuardNodeShape & { declaration?: unknown };
+        if (child.type === 'ExportNamedDeclaration' || child.type === 'ExportDefaultDeclaration') {
+          const inner = child.declaration;
+          if (inner !== null && typeof inner === 'object') child = inner as typeof child;
+        }
+        if (child.type === 'ClassDeclaration' || child.type === 'FunctionDeclaration') {
+          if ((child.id as { name?: string } | undefined)?.name === 'Symbol') {
+            guardSymbolMutation.symbolMutated = true;
+          }
+        }
       }
+      for (const child of body) walkEsmFunctionGuard(child, ctx);
       return;
+    }
     case 'ImportDeclaration':
       return;
     case 'Identifier':
@@ -316,9 +332,6 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
     }
     case 'ClassDeclaration':
     case 'ClassExpression': {
-      if ((n.id as { name?: string } | undefined)?.name === 'Symbol') {
-        guardSymbolMutation.symbolMutated = true;
-      }
       pushGuardScope(ctx);
       addGuardBinding(topGuardScope(ctx), (n.id as { name?: string } | undefined)?.name);
       if (n.superClass) walkEsmFunctionGuard(n.superClass, ctx);
@@ -353,6 +366,9 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
       }
       if (isReflectDerivedFunctionConstructorCall(n, ctx)) {
         ctx.hasDerivedHostFunctionConstructor = true;
+      }
+      if (mutatesSymbolBuiltin(n, ctx)) {
+        guardSymbolMutation.symbolMutated = true;
       }
       if (guardCalleeMayBeDerivedHostFunction(callee, ctx) && constructorArgsMayImport(args)) {
         ctx.hasDerivedHostFunctionConstructor = true;
@@ -1129,6 +1145,36 @@ function guardSymbolContext(ctx: EsmFunctionGuardCtx): SymbolGuardContext {
 }
 
 const guardSymbolMutation = { symbolMutated: false };
+
+/** Object.defineProperty/Reflect.set-style calls targeting the `Symbol`
+ * builtin itself — they can replace `Symbol.for`. */
+function mutatesSymbolBuiltin(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {
+  const call = node as unknown as { callee?: GuardNodeShape; arguments?: unknown[] };
+  const callee = call.callee;
+  if (!callee || callee.type !== 'MemberExpression') return false;
+  const object = callee.object as GuardNodeShape | undefined;
+  const objectName =
+    object?.type === 'Identifier' ? (object as unknown as { name?: string }).name : undefined;
+  const prop = staticPropertyName(callee);
+  const isObject = objectName === 'Object' && !isGuardShadowed(ctx, 'Object');
+  const isReflect = objectName === 'Reflect' && !isGuardShadowed(ctx, 'Reflect');
+  if (
+    !(
+      (isObject && (prop === 'defineProperty' || prop === 'defineProperties')) ||
+      (isReflect && (prop === 'set' || prop === 'defineProperty'))
+    )
+  ) {
+    return false;
+  }
+  const target: unknown = (call.arguments ?? [])[0];
+  if (!target || typeof target !== 'object') return false;
+  const t = target as GuardNodeShape;
+  return (
+    t.type === 'Identifier' &&
+    (t as unknown as { name?: string }).name === 'Symbol' &&
+    !isGuardShadowed(ctx, 'Symbol')
+  );
+}
 
 /** A member expression rooted at the (unshadowed) `Symbol` identifier — an
  * assignment/delete through it (any property, computed or static) can replace

@@ -88,9 +88,13 @@ function rootWatchPatchSites(
     if (entry.isDirectory || !entry.name.endsWith('.js')) continue;
     const path = `${chunks}/${entry.name}`;
     const source = dec.decode(fs.readFileBytesSync(path));
+    // A chunk carrying EITHER anchor kind is a patch site (a URL-only chunk
+    // must be prepared and validated like a watch-only one).
     const count =
       occurrences(source, viteRootWatchPatchPolicy.needle) +
-      occurrences(source, viteRootWatchPatchPolicy.replacement);
+      occurrences(source, viteRootWatchPatchPolicy.replacement) +
+      occurrences(source, viteRootUrlPatchPolicy.needle) +
+      occurrences(source, viteRootUrlPatchPolicy.replacement);
     if (count > 0) sites.push({ path, source });
   }
   if (sites.length === 0) {

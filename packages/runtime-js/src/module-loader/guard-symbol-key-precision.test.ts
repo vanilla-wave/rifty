@@ -149,6 +149,16 @@ describe('CJS guard accepts provably-Symbol computed keys', () => {
     CLEANUP.push(Symbol.for('test.global-dispatcher'));
   });
 
+  it('CJS: defineProperty on Symbol itself poisons', () => {
+    const loader = cjsLoader({
+      '/work/main.js':
+        "Object.defineProperty(Symbol, 'for', { value: () => 'Function' }); const KEY = Symbol.for('x'); globalThis[KEY] = 1; module.exports = 'unreachable';",
+    });
+    expect(() => loader.require('./main.js', '/work/__entry__.js')).toThrow(
+      'module-loader.cjs-global-function-assignment',
+    );
+  });
+
   it('non-Symbol-bound defineProperty key keeps the loud ceiling', () => {
     const loader = cjsLoader({
       '/work/main.js':

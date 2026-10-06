@@ -246,11 +246,21 @@ export class Worker extends EventEmitter {
             proc?.[fd]?.write(chunk);
           };
         if (!this.#stdoutPiped)
-          pipeHandleStdioStream(handle.stdout(), this.stdout, ownerStdio('stdout'));
-        else pipeHandleStdioStream(handle.stdout(), this.stdout);
+          pipeHandleStdioStream(
+            handle.stdout(),
+            this.stdout,
+            this.keepaliveRef,
+            ownerStdio('stdout'),
+          );
+        else pipeHandleStdioStream(handle.stdout(), this.stdout, this.keepaliveRef);
         if (!this.#stderrPiped)
-          pipeHandleStdioStream(handle.stderr(), this.stderr, ownerStdio('stderr'));
-        else pipeHandleStdioStream(handle.stderr(), this.stderr);
+          pipeHandleStdioStream(
+            handle.stderr(),
+            this.stderr,
+            this.keepaliveRef,
+            ownerStdio('stderr'),
+          );
+        else pipeHandleStdioStream(handle.stderr(), this.stderr, this.keepaliveRef);
         handle.on('message', (msg) => this.emitWorkerMessage(msg));
         this.flushKernelMessages(handle);
         // Node emits 'online' once the worker realm exists. Construction-start
