@@ -5,7 +5,6 @@ title: Execute the frozen eight-case four-origin comparison
 created: 2026-10-06
 why: Expanded source/control proof does not establish actual comparative agent outcomes or uncertainty.
 epic: agent-code-quality-evaluation
-blocked_by: [distribution/agent-eval-csv-export-toggle-judging]
 sources: [ADR-0511, ADR-0507, docs/backlog/distribution/reference/agent-eval-corpus-expansion-evidence.md]
 code: [tools/agent-bench/src/runner.ts, tools/agent-bench/src/report.ts, tools/agent-bench/src/cli.ts]
 ---
@@ -31,7 +30,7 @@ No new user scope choice, model/estimator/selection policy or execution mechanis
 
 ## Acceptance
 
-1. Freeze complete corrected eval-v4/config/selection/control/source identity before a fresh
+1. Freeze complete corrected eval-v5/config/selection/control/source identity before a fresh
   96trial campaign:8cases×4origins×3freshrepeats, task/lane/trial order, PiLuna/medium,
    nativeCodexgpt-6.1-sol/low separate,100tools/600s. Allselected failures retained;
    fullmatrixprimary. No adaptive compatible-subset pruning; no resume/overwrite.
@@ -89,3 +88,5 @@ Original mandatory I10/I11 diagnostics follows; comparison never closes goal alo
 ## Export-toggle continuation
 
 re-cut: 2026-10-07 — source repair precedes fresh eval-v5; expansion acceptance unchanged, interrupted55/missing41 retained — trace: none
+
+- 2026-10-07 — source/control Final8544 accepted11/11/0blockers; NOTE version corrected to eval-v5 before calls, public matrix unchanged. Frozen source contract retained for verdict reader; not an open map item.

@@ -1,8 +1,7 @@
 ## Items
 
-1. `distribution/agent-eval-csv-export-toggle-judging` — captured CSV public7/private6-of7 RED; correct current-filter output visibility across Export toggles, preserve v4/55 interrupted history, native/fault/all-origin controls and independent Final; I3/I6/I7/I9.
-2. `distribution/agent-eval-expanded-comparison` — after Export-toggle source Final, fresh eval-v5 same eight public inputs/full96/all4/three repeats; retained failures, uncertainty/offline report; I1/I2/I3/I4/I7/I8/I9.
-3. `distribution/agent-eval-boundary-diagnostics` — observed operation catalog and substantive finite escalation/fresh confirmation; I10/I11 remain required. Existing scripts, report and corpus reused.
+1. `distribution/agent-eval-expanded-comparison` — accepted Export-toggle source/control Final8544/11of11; fresh eval-v5 same eight public inputs/full96/all4/three repeats, retained failures/uncertainty/offline report; I1/I2/I3/I4/I7/I8/I9.
+2. `distribution/agent-eval-boundary-diagnostics` — actual operation catalog and substantive finite escalation/fresh confirmation; I10/I11 mandatory. Existing scripts/report/corpus reused.
 
 ## Open questions
 

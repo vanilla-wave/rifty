@@ -108,3 +108,7 @@
 - 2026-10-06 — completedsource unit removed from frontier; frozen293contract retained until goal cleanup for direct verdict validation. SourceFinal17/17 andv4full96protocol recorded beforecalls; currentfullgate27PASS after sandboxEPERM preserved and solecorrected statistics-report timeout isolatedPASS. No product/test/criterion changes.
 
 - 2026-10-07 — eval-v4/source4e interrupted55/96 after actual COI CSV Export-toggle criterion false-negative: native public7/currentprivate6-of7 RED, original selected row unchanged. All55 outcomes/41missing retained, two offline regenerations364 unchanged files/identical views; source repair stays in PR341, no rescore/resume/rescue. I10/I11 open; diagnostic draft source check had0blockers/3concerns, readiness/executed search still unproven.
+
+- 2026-10-07 — independent Export-toggle source Final8544 accepted11/11/8axes/0blockers, unit residuals empty/goal false; sameJSON archived. Forty physical no-model controls12PASS28expectedFAIL,2offline273unchanged/identical; native8+14+8/reversion andfullgate27PASS. Comparison unblocked eval-v5; I10/I11 remain. Completed source contract kept byte-frozen8544 for validator reader until CLOSE; removed from map.
+
+- re-chart after CSV Export-toggle source (final-green PASS with NOTE @ 8544ddd4ba607ee3d547b030c285a7e37c646d0b): source unit removed from map, exact frozen contract retained; comparison eval-v5 unblocked, I10/I11 mandatory.
