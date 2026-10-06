@@ -102,3 +102,7 @@
 - 2026-10-06 — notes-v4 correction: capturedprogramme full-public7/private7PASS, guarded14nativecontrols and3guardreversions/restored4GREEN; actual60own-origin controls23PASS37FAIL with60exactphysicalpatches, originalprogramme3COI nav failure retained. Current source gate/Final and fresh96/I10/I11 remain mandatory; no goal closure or old-score rewrite.
 
 - 2026-10-06 — sourceFinal @57337576e BLOCK B1 accepted: Delete icon accessible caption lost by innerText; workingprogramme public7/old7PASS/newFAIL. Currentsharedrole-purpose repair actual3siblingRED/8GREEN, public7/old7/new7PASS/captured/inherited14GREEN, fresh32controls16PASS16FAIL and32exactpatches/2offline. Previous ENOSPC25/32/7missing/one missingtrace retained; only verifiedterminal/completednoModel generatedcopies reclaimed by hashes. Newgate/independentverify and full96/I10/I11 still required.
+
+- re-chart after distribution/agent-eval-notes-composed-entry-judging (final-green PASS @ 293c18962df0430365e9730128c17ab81637f812): independent17/17/8axesPASS/findings0; B1 repaired and independentlyverified, original65/25/sourcecriteria retained. Sourceunit removed; freshfull96eval-v4 is next, mandatoryI10/I11/audit remain.
+
+- 2026-10-06 — completedsource unit removed from frontier; frozen293contract retained until goal cleanup for direct verdict validation. SourceFinal17/17 andv4full96protocol recorded beforecalls; currentfullgate27PASS after sandboxEPERM preserved and solecorrected statistics-report timeout isolatedPASS. No product/test/criterion changes.

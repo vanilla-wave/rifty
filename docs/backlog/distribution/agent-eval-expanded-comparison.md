@@ -7,7 +7,6 @@ why: Expanded source/control proof does not establish actual comparative agent o
 epic: agent-code-quality-evaluation
 sources: [ADR-0511, ADR-0507, docs/backlog/distribution/reference/agent-eval-corpus-expansion-evidence.md]
 code: [tools/agent-bench/src/runner.ts, tools/agent-bench/src/report.ts, tools/agent-bench/src/cli.ts]
-blocked_by: [distribution/agent-eval-notes-composed-entry-judging]
 ---
 
 ## Context
@@ -16,7 +15,9 @@ Original expansion Acceptance6+7 carried unchanged below; source/control unit
 closes first, then this campaign executes existing accepted runner/report.
 Eval-v1 interrupted on private judge-caption defect;74/96 retained immutable.
 Eval-v2 stopped54/96 on independently confirmed saved-table CSV false-negative.
-Eval-v3 corrects CSV saved-state judging before fresh96; pilot-v4 stays history.
+Eval-v3 corrects CSV saved-state; eval-v4 corrects composed saved-entry/Wiki
+observation. Corrected source/control independently accepted before fresh96;
+pilot-v4 and interrupted versions stay history.
 Same user-owned goal/scenarios/I1-I11, same PR341. Negative/inconclusive valid.
 
 ## Challenge
@@ -27,7 +28,7 @@ No new user scope choice, model/estimator/selection policy or execution mechanis
 
 ## Acceptance
 
-1. Freeze complete corrected eval-v3/config/selection/control/source identity before a fresh
+1. Freeze complete corrected eval-v4/config/selection/control/source identity before a fresh
   96trial campaign:8cases×4origins×3freshrepeats, task/lane/trial order, PiLuna/medium,
    nativeCodexgpt-6.1-sol/low separate,100tools/600s. Allselected failures retained;
    fullmatrixprimary. No adaptive compatible-subset pruning; no resume/overwrite.
@@ -79,3 +80,5 @@ Original mandatory I10/I11 diagnostics follows; comparison never closes goal alo
 - 2026-10-06 — externalprocessloss35/96 retained; originalcriteria/source/scores/header unchanged,2offlineviews preserved. Sameeval-v3 frozen96 startsfresh per reference/agent-eval-expanded-comparison-v3-fresh-series.md; no scope reduction or resume.
 
 - re-cut: 2026-10-06 — actual notes caption false-negative I3/I6 requires corrected source/control Final before fresh complete96; original65scores immutable, no scope reduction — trace: none
+
+- 2026-10-06 — ADR0514 sourceFinal293c18962 independentlyaccepted17/17/8axesPASS/findings0. Actualnativepublic7/old7/new7,8faults/3reversions/inherited14/captured/fresh32controls/32physical/2offline andfullgate27PASS; previous60/65/failed25 remain immutable history. Freshfull96eval-v4 protocol frozen beforecalls; alloriginalpublic8/other7judges and I10/I11 unchanged.
