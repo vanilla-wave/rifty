@@ -7,6 +7,7 @@ why: Expanded source/control proof does not establish actual comparative agent o
 epic: agent-code-quality-evaluation
 sources: [ADR-0511, ADR-0507, docs/backlog/distribution/reference/agent-eval-corpus-expansion-evidence.md]
 code: [tools/agent-bench/src/runner.ts, tools/agent-bench/src/report.ts, tools/agent-bench/src/cli.ts]
+blocked_by: [distribution/agent-eval-notes-composed-entry-judging]
 ---
 
 ## Context
@@ -76,3 +77,5 @@ Original mandatory I10/I11 diagnostics follows; comparison never closes goal alo
 - 2026-10-06 — ADR0513CSV/SIGINT sourceFinal76b046b1a accepted15/15;actual40/fullgate27PASS; reference/agent-eval-expanded-comparison-v3-protocol.md frozen before NEWfull96, oldv1/v2history immutable.
 
 - 2026-10-06 — externalprocessloss35/96 retained; originalcriteria/source/scores/header unchanged,2offlineviews preserved. Sameeval-v3 frozen96 startsfresh per reference/agent-eval-expanded-comparison-v3-fresh-series.md; no scope reduction or resume.
+
+- re-cut: 2026-10-06 — actual notes caption false-negative I3/I6 requires corrected source/control Final before fresh complete96; original65scores immutable, no scope reduction — trace: none

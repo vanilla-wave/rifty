@@ -210,6 +210,73 @@ export function noteTarget(ctx: JudgeContext, target: string, current: string) {
   return savedEntry(ctx, target, current && current !== target ? [current] : []);
 }
 
+/** Current note identity uses visible caption components; legacy versions retain savedEntry. */
+export async function savedNoteEntry(
+  ctx: JudgeContext,
+  title: string,
+  otherTitles: readonly string[] = [],
+) {
+  const actions = namedActions(ctx, new RegExp(escapeCaption(title), 'i'));
+  const exact = namedActions(ctx, new RegExp(`^${escapeCaption(title)}$`, 'i'));
+  const legacy = savedEntry(ctx, title, otherTitles);
+  const identities = [title, ...otherTitles, 'Delete', 'Remove'];
+  let result = actions.and(ctx.view.locator(':not(*)'));
+  for (const candidate of await actions.all()) {
+    if ((await candidate.and(exact).count()) > 0) {
+      result = result.or(candidate);
+      continue;
+    }
+    const identity = await candidate.evaluate((node, identities) => {
+      const explicitLabel = (node.getAttribute('aria-label') ?? '').trim().toLocaleLowerCase();
+      const explicit = identities.findIndex((name) => name.toLocaleLowerCase() === explicitLabel);
+      if (explicit >= 0) return explicit;
+      const walker = document.createTreeWalker(
+        node,
+        NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+      );
+      let primary = -1;
+      let deletion = false;
+      let current: Node | null = node;
+      while (current) {
+        const element = current instanceof HTMLElement ? current : current.parentElement;
+        if (element && !element.closest('input,textarea,[contenteditable],script,style')) {
+          let visible = true;
+          for (let parent: HTMLElement | null = element; parent; parent = parent.parentElement) {
+            const style = getComputedStyle(parent);
+            if (
+              parent.hidden ||
+              parent.getAttribute('aria-hidden') === 'true' ||
+              style.display === 'none' ||
+              style.visibility === 'hidden'
+            ) {
+              visible = false;
+              break;
+            }
+          }
+          if (visible) {
+            const text =
+              current instanceof HTMLElement ? current.innerText : (current.nodeValue ?? '');
+            const found = identities.findIndex(
+              (name) => name.toLocaleLowerCase() === text.trim().toLocaleLowerCase(),
+            );
+            if (found >= identities.length - 2) deletion = true;
+            else if (found >= 0 && primary < 0) primary = found;
+          }
+        }
+        current = walker.nextNode();
+      }
+      return deletion ? identities.length - 1 : primary;
+    }, identities);
+    if (identity === 0 || (identity < 0 && (await candidate.and(legacy).count()) > 0))
+      result = result.or(candidate);
+  }
+  return result;
+}
+
+export function wikiNoteTarget(ctx: JudgeContext, target: string, current: string) {
+  return savedNoteEntry(ctx, target, current && current !== target ? [current] : []);
+}
+
 /** RFC4180 field decoding; exported LF/CRLF records, optional header/quoting. */
 export function csvExportMatches(
   text: string,

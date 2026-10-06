@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Observe composed saved-note identities through accessible titles and visible components; freeze notes-v4/eval-v4, preserve prior inputs/results (ADR-0514).
+
 - Observe CSV saved records through public export, preserving multiplicity without editor/order constraints; freeze CSVv4/eval-v3, old criteria/results unchanged (ADR-0513).
 - Keep SIGINT partial-series persistence under the runner owner; suppress Playwright default process exit and prove real SIGINT/TERM interruption.
 

@@ -37,3 +37,9 @@ No resume/native rescue/re-scoring.
 NativeNode24.16.0/Chromium real installedVite. First narrowerfix stillmisread
 Beta inAlpha excerpt; same-class owner fixed, final controls/gates/review recorded
 in `docs/backlog/distribution/reference/agent-eval-notes-render-fix-evidence.md`.
+
+## Corrections (active)
+
+2026-10-06 — ADR0514 supersedes only the single matcher for fields/entry/Wiki:
+current note identity has its own shared observation owner; field purposes and
+all remaining decisions stay active. Original versions/outcomes immutable.

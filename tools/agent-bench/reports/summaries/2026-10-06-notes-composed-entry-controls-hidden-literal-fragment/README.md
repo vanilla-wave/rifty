@@ -1,0 +1,1 @@
+Non-model notes-v4 control hidden-literal-fragment; four own origins. Physical patches/versions, two offline regenerations and all15-series declaration retained in agent-eval-notes-composed-entry-origin-proof.json.gz. Original outcomes unchanged.
