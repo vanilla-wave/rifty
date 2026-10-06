@@ -14,22 +14,7 @@ type CjsImportJob =
 
 // Rifty host-bridge members ride the NodeProcess prototype but are NOT part
 // of Node's process export surface — never projected as builtin export names.
-const HOST_BRIDGE_EXCLUDED = new Set(['pushStdin']);
-
-// Function.prototype's own members never project as builtin export names.
-const FUNCTION_PROTOTYPE_OWN = new Set([
-  'apply',
-  'bind',
-  'call',
-  'toString',
-  'length',
-  'name',
-  'arguments',
-  'caller',
-  'constructor',
-  'Symbol.hasInstance',
-  '@@hasInstance',
-]);
+const HOST_BRIDGE_EXCLUDED = new Set(['pushStdin', 'emitNaturalExitEvent']);
 
 interface StaticNameNode {
   readonly names: Set<string>;
@@ -91,18 +76,16 @@ export function createCjsInteropAuthority(options: {
       // `import { cwd } from 'node:process'` links and binds the live member.
       const outer = loadBuiltin(resolved.id);
       for (const name of Object.keys(outer)) node.names.add(name);
-      let proto: object | null = Object.getPrototypeOf(outer);
-      while (proto !== null && proto !== Object.prototype) {
+      // Projection = the builtin's OWN prototype level only (Node's process
+      // methods are own props; rifty keeps them on the class prototype).
+      // Inherited bases (EventEmitter/Function/Object prototypes) are NOT part
+      // of any Node builtin's export surface.
+      const proto: object | null = Object.getPrototypeOf(outer);
+      if (proto !== null && proto !== Object.prototype && proto !== Function.prototype) {
         for (const name of Object.getOwnPropertyNames(proto)) {
-          // Exclusions: `constructor` (never a named export) and the
-          // Function.prototype surface (apply/bind/call — a function-valued
-          // builtin's chain passes through it; Node never exports those).
-          if (name === 'constructor' || FUNCTION_PROTOTYPE_OWN.has(name)) continue;
-          if (HOST_BRIDGE_EXCLUDED.has(name)) continue;
-          if (proto === Object.getPrototypeOf(Function.prototype)) continue;
+          if (name === 'constructor' || HOST_BRIDGE_EXCLUDED.has(name)) continue;
           node.names.add(name);
         }
-        proto = Object.getPrototypeOf(proto);
       }
       return node;
     }

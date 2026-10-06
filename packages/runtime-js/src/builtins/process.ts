@@ -53,8 +53,7 @@ import {
   type NodeProcessRelease,
   createNodeProcessRelease,
 } from './process-identity.ts';
-import { emitProcessExitEvent } from './process-lifecycle-dispatcher.ts';
-
+import { defineLifecycleIdentity, emitProcessExitEvent } from './process-lifecycle-dispatcher.ts';
 const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
   'rifty.runtime-js.process-terminal-bootstrap.v1',
 );
@@ -622,6 +621,7 @@ export class NodeProcess extends EventEmitter {
       configurable: false,
       writable: false,
     });
+    if (spec !== undefined) defineLifecycleIdentity(this);
     if (spec) {
       attachNodeProcessBootstrapIdentity(this, spec);
       installProcessExitErrorTrap();

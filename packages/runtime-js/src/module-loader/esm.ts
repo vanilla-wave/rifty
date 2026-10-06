@@ -12,7 +12,6 @@ import {
   predeclareFunctionGuardScope as predeclareGuardFunctionScope,
   predeclareFunctionGuardLexialScope as predeclareGuardLexicalScope,
 } from './function-guard-scopes.ts';
-import { symbolGuardPoisoned } from './guard-symbol-values.ts';
 import {
   type SymbolGuardContext,
   computedKeyProvablyNotFunction as sharedComputedKeyNotFunction,
@@ -46,7 +45,6 @@ const directEvalImportProbeHelper = '__riftyDynamicImport';
 
 export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): void {
   if (!functionRoutingAnalysisToken.test(source)) return;
-  guardSymbolMutation.symbolMutated = symbolGuardPoisoned(source);
   let program: Program;
   try {
     program = acornParse(source, {
@@ -63,6 +61,7 @@ export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): v
   const body = program.body as unknown as GuardNodeShape[];
   predeclareGuardFunctionScope(body, rootScope);
   predeclareGuardLexicalScope(body, rootScope, { imports: true });
+  guardSymbolMutation.symbolMutated = false;
   const ctx: EsmFunctionGuardCtx = {
     scopes: [rootScope],
     hasGlobalFunctionWrite: false,
@@ -317,6 +316,9 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
     }
     case 'ClassDeclaration':
     case 'ClassExpression': {
+      if ((n.id as { name?: string } | undefined)?.name === 'Symbol') {
+        guardSymbolMutation.symbolMutated = true;
+      }
       pushGuardScope(ctx);
       addGuardBinding(topGuardScope(ctx), (n.id as { name?: string } | undefined)?.name);
       if (n.superClass) walkEsmFunctionGuard(n.superClass, ctx);
@@ -568,11 +570,21 @@ function walkGuardAssignmentTarget(target: unknown, ctx: EsmFunctionGuardCtx): v
     if (name === 'Function' && !isGuardShadowed(ctx, name)) {
       ctx.hasGlobalFunctionWrite = true;
     }
+    // Reassigning `Symbol` itself poisons every Symbol-key exemption.
+    if (name === 'Symbol' && !isGuardShadowed(ctx, name)) {
+      guardSymbolMutation.symbolMutated = true;
+    }
     return;
   }
   if (t.type === 'MemberExpression') {
     if (isGlobalFunctionWriteMember(t, ctx)) {
       ctx.hasGlobalFunctionWrite = true;
+    }
+    if (
+      isSymbolRootedMember(t, ctx) ||
+      (isGlobalObjectExpression(t.object, ctx) && staticPropertyName(t) === 'Symbol')
+    ) {
+      guardSymbolMutation.symbolMutated = true;
     }
     walkEsmFunctionGuard(t.object, ctx);
     if ((t as unknown as { computed?: boolean }).computed) walkEsmFunctionGuard(t.property, ctx);
@@ -1117,6 +1129,18 @@ function guardSymbolContext(ctx: EsmFunctionGuardCtx): SymbolGuardContext {
 }
 
 const guardSymbolMutation = { symbolMutated: false };
+
+/** A member expression rooted at the (unshadowed) `Symbol` identifier — an
+ * assignment/delete through it (any property, computed or static) can replace
+ * `Symbol.for`, so no Symbol-key exemption is provable. */
+function isSymbolRootedMember(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {
+  const object = node.object;
+  return (
+    (object as unknown as { type?: string; name?: string })?.type === 'Identifier' &&
+    (object as unknown as { name?: string }).name === 'Symbol' &&
+    !isGuardShadowed(ctx, 'Symbol')
+  );
+}
 
 function isProvablySymbolValueExpression(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
   return sharedIsProvablySymbolExpression(node, guardSymbolContext(ctx));

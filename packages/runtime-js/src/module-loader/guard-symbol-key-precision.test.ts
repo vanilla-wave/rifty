@@ -93,6 +93,36 @@ describe('ESM guard accepts provably-Symbol computed keys', () => {
     );
   });
 
+  it('comments/strings mentioning Symbol.for mutations do NOT poison (AST-based)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "// Symbol.for = () => 'Function'\nconst KEY = Symbol.for('test.comment'); globalThis[KEY] = 1; export const out = 'ok';\n",
+    });
+    const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: string };
+    expect(ns.out).toBe('ok');
+    Reflect.deleteProperty(globalThis, Symbol.for('test.comment'));
+  });
+
+  it('computed Symbol[for] mutation poisons', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "Symbol['for'] = () => 'Function'; const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('a class named Symbol poisons (static for shadows nothing at module scope)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "export default class Symbol { static for() { return 'Function'; } }\nconst KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
   it("literal string writes keep today's behavior: 'Function' rejects, other literals pass", async () => {
     const loud = esmLoader({
       '/work/loud.mjs': 'globalThis.Function = function evil() {};\n',

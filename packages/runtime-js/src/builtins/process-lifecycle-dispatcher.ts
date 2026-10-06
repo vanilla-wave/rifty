@@ -9,12 +9,28 @@
 import { setProcessLifecycleDispatcher } from '../internal/event-loop-keepalive.ts';
 import { readActiveNodeProcessBootstrap } from './process-bootstrap-identity.ts';
 
-/** Exit-event state; per-process, kept off the class body. */
-const EXIT_EMITTED = new WeakSet<object>();
+// Realm-shared exit-event state: module graphs can carry more than one copy
+// of this module (bundle/dynamic-import duplication) — key on the realm so the
+// once-per-process guarantee is universal.
+const EXIT_EMITTED_KEY = Symbol.for('rifty.runtime-js.process-exit-emitted.v1');
+
+function exitEmittedSet(): WeakSet<object> {
+  const realm = globalThis as { [EXIT_EMITTED_KEY]?: WeakSet<object> };
+  if (realm[EXIT_EMITTED_KEY] === undefined) {
+    Object.defineProperty(globalThis, EXIT_EMITTED_KEY, {
+      value: new WeakSet<object>(),
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+  }
+  return realm[EXIT_EMITTED_KEY] as WeakSet<object>;
+}
 
 export function emitProcessExitEvent(proc: object, code: number): void {
-  if (EXIT_EMITTED.has(proc)) return;
-  EXIT_EMITTED.add(proc);
+  const emitted = exitEmittedSet();
+  if (emitted.has(proc)) return;
+  emitted.add(proc);
   (proc as { emit(event: 'exit', code: number): boolean }).emit('exit', code);
 }
 
@@ -25,9 +41,38 @@ function activeLifecycleProcess(): object | null {
   return global ?? null;
 }
 
-export function installProcessLifecycleDispatcher(
-  isNodeProcess: (value: unknown) => boolean,
-): void {
+/** Trusted runtime-owned marker every seeded NodeProcess carries — survives
+ * cross-bundle adoption (instanceof breaks between production bundles). */
+const NODE_PROCESS_IDENTITY = Symbol.for('rifty.runtime-js.node-process-identity.v1');
+
+/** Trusted runtime-owned marker on every spec-seeded NodeProcess (constructor
+ * calls this; cross-bundle safe recognition). */
+export function defineLifecycleIdentity(proc: object): void {
+  Object.defineProperty(proc, NODE_PROCESS_IDENTITY, {
+    value: true,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+}
+
+function isNodeProcess(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as Record<symbol, unknown>)[NODE_PROCESS_IDENTITY] === true
+  );
+}
+
+/** `hasThrownValue` distinguishes "handler threw undefined" from "no handler
+ * threw" (a bare undefined replacement would be lossy). */
+export interface DispatchOutcome {
+  readonly handled: boolean;
+  readonly hasThrownValue?: boolean;
+  readonly thrownValue?: unknown;
+}
+
+export function installProcessLifecycleDispatcher(): void {
   setProcessLifecycleDispatcher({
     dispatchUnhandled(reason, origin) {
       const active = activeLifecycleProcess();
@@ -37,6 +82,10 @@ export function installProcessLifecycleDispatcher(
         listenerCount(event: string): number;
       };
       const HANDLED = Symbol('handled');
+      const asOutcome = (result: typeof HANDLED | { readonly thrown: unknown }): DispatchOutcome =>
+        result === HANDLED
+          ? { handled: true }
+          : { handled: false, hasThrownValue: true, thrownValue: result.thrown };
       const emitFor = (
         event: 'uncaughtException' | 'unhandledRejection',
       ): typeof HANDLED | { readonly thrown: unknown } => {
@@ -55,16 +104,13 @@ export function installProcessLifecycleDispatcher(
       // never falls the other way — UR handlers do not catch exceptions.
       const preferRejectionHandler =
         origin === 'rejection' && proc.listenerCount('unhandledRejection') > 0;
-      const outcome = preferRejectionHandler
+      const result = preferRejectionHandler
         ? emitFor('unhandledRejection')
         : proc.listenerCount('uncaughtException') > 0
           ? emitFor('uncaughtException')
           : undefined;
-      if (outcome === undefined) return { handled: false };
-      return outcome === HANDLED
-        ? { handled: true }
-        : { handled: false, replacement: outcome.thrown };
-      return { handled: false };
+      if (result === undefined) return { handled: false };
+      return asOutcome(result);
     },
     emitNaturalExit() {
       const active = activeLifecycleProcess();

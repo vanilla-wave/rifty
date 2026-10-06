@@ -727,8 +727,8 @@ describe('process lifecycle dispatcher (process-lifecycle-events-exit-code)', ()
         for (const fn of handler) {
           try {
             fn(reason);
-          } catch (replacement) {
-            return { handled: false, replacement };
+          } catch (thrownValue) {
+            return { handled: false, hasThrownValue: true, thrownValue };
           }
         }
         return { handled: true };
@@ -743,7 +743,9 @@ describe('process lifecycle dispatcher (process-lifecycle-events-exit-code)', ()
       uncaughtException: [(e) => expect((e as Error).message).toBe('boom')],
       unhandledRejection: [],
     });
-    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toBe(true);
+    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toEqual({
+      handled: true,
+    });
     const queue: Array<() => void> = [];
     const drain = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
     queue.shift()!();
@@ -771,7 +773,9 @@ describe('process lifecycle dispatcher (process-lifecycle-events-exit-code)', ()
         });
       },
     });
-    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toBe(true);
+    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toEqual({
+      handled: true,
+    });
     await Promise.resolve();
     await Promise.resolve();
     // The replacement error (not the original boom) reaches the loud terminal;
@@ -787,19 +791,22 @@ describe('process lifecycle dispatcher (process-lifecycle-events-exit-code)', ()
       unhandledRejection: [() => {}],
     });
     // Not handled: the loud default (stderr + exit 1) stands, as in Node.
-    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toBe(false);
+    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toEqual({
+      handled: false,
+    });
   });
 
   it('the REAL dispatcher: a handler throwing null is fatal with null (sentinel)', async () => {
     const { NodeProcess } = await import('../builtins/process.ts');
-    const { installProcessLifecycleDispatcher } = await import(
+    const { defineLifecycleIdentity, installProcessLifecycleDispatcher } = await import(
       '../builtins/process-lifecycle-dispatcher.ts'
     );
     const { setActiveNodeProcessBootstrap } = await import(
       '../builtins/process-bootstrap-identity.ts'
     );
-    installProcessLifecycleDispatcher((value: unknown): boolean => value instanceof NodeProcess);
+    installProcessLifecycleDispatcher();
     const proc = new NodeProcess();
+    defineLifecycleIdentity(proc);
     setActiveNodeProcessBootstrap(proc);
     proc.on('uncaughtException', () => {
       throw null;
@@ -816,7 +823,9 @@ describe('process lifecycle dispatcher (process-lifecycle-events-exit-code)', ()
         });
       },
     });
-    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toBe(true);
+    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toEqual({
+      handled: true,
+    });
     await Promise.resolve();
     await Promise.resolve();
     expect(terminated).toHaveLength(1);
@@ -826,7 +835,9 @@ describe('process lifecycle dispatcher (process-lifecycle-events-exit-code)', ()
 
   it('no handler: the loud default stands (unhandled → drain rejection, exit 1 path)', async () => {
     keepalive.setProcessLifecycleDispatcher(null);
-    expect(keepalive.intakeUnhandledError(new Error('boom'), 'rejection')).toBe(false);
+    expect(keepalive.intakeUnhandledError(new Error('boom'), 'rejection')).toEqual({
+      handled: false,
+    });
     const queue: Array<() => void> = [];
     const drain = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
     queue.shift()!();

@@ -38,16 +38,19 @@ interface KeepaliveState {
  * lifecycle does not own (its owner terminates via `process.exit`, which emits
  * itself — Node order: flush, then `exit`).
  */
+export interface ProcessLifecycleDispatchOutcome {
+  readonly handled: boolean;
+  /** A handler threw — Node treats that as fatal with the NEW thrown value
+   * (present even when the value is null/undefined). */
+  readonly hasThrownValue?: boolean;
+  readonly thrownValue?: unknown;
+}
+
 export interface ProcessLifecycleDispatcher {
-  /**
-   * Returns `handled: true` when a process listener took the error. A listener
-   * THROW surfaces as `{ handled: false, replacement }` — Node treats an
-   * exception inside `uncaughtException` as fatal with the new error.
-   */
   dispatchUnhandled(
     reason: unknown,
     origin: NodeEvalUnhandledOrigin,
-  ): { readonly handled: boolean; readonly replacement?: unknown };
+  ): ProcessLifecycleDispatchOutcome;
   /** Natural drain resolved: emit `exit` with the process's final code. */
   emitNaturalExit(): void;
 }
@@ -60,20 +63,29 @@ export function setProcessLifecycleDispatcher(dispatcher: ProcessLifecycleDispat
  * One unhandled-error intake for every trap surface (browser `self` error /
  * unhandledrejection events, host-process rejection forwarding): process
  * listeners first (Node: handlers take the error, loop continues), then the
- * eval terminal claim, then the drain record. Returns true when the caller
- * should swallow/preventDefault the platform event.
+ * eval terminal claim, then the drain record. `handled` = swallow the
+ * platform event; `rethrow` = a handler threw with no lifecycle owner — the
+ * caller surfaces THAT value (Node: fatal with the new error).
  */
-export function intakeUnhandledError(reason: unknown, origin: NodeEvalUnhandledOrigin): boolean {
+export interface UnhandledIntakeOutcome {
+  readonly handled: boolean;
+  readonly rethrow?: unknown;
+}
+
+export function intakeUnhandledError(
+  reason: unknown,
+  origin: NodeEvalUnhandledOrigin,
+): UnhandledIntakeOutcome {
   const state = keepaliveState();
   const dispatch = state.processLifecycle?.dispatchUnhandled(reason, origin);
-  if (dispatch?.handled) return true;
-  // A handler throw is fatal with the NEW thrown value — null included; only
-  // an absent dispatch (no dispatcher) keeps the original reason.
-  const terminalReason =
-    dispatch !== undefined && dispatch.replacement !== undefined ? dispatch.replacement : reason;
-  if (beginNodeEvalUnhandled(terminalReason, origin)) return true;
+  if (dispatch?.handled) return { handled: true };
+  // A handler throw is fatal with the NEW thrown value — null/undefined
+  // included (hasThrownValue), never conflated with "no handler".
+  const terminalReason = dispatch?.hasThrownValue === true ? dispatch.thrownValue : reason;
+  if (beginNodeEvalUnhandled(terminalReason, origin)) return { handled: true };
   if (origin === 'rejection') recordRejection(terminalReason, 'rejection');
-  return false;
+  if (dispatch?.hasThrownValue === true) return { handled: false, rethrow: dispatch.thrownValue };
+  return { handled: false };
 }
 
 export interface NodeEvalDrainLifecycle {
@@ -539,7 +551,19 @@ export function installUnhandledErrorTrap(
         : typeof event.message === 'string'
           ? new Error(event.message)
           : new Error('Worker terminated by an uncaught error');
-    if (intakeUnhandledError(reason, 'uncaught-error')) event.preventDefault?.();
+    const outcome = intakeUnhandledError(reason, 'uncaught-error');
+    if (outcome.handled) {
+      event.preventDefault?.();
+      return;
+    }
+    if (outcome.rethrow !== undefined || 'rethrow' in outcome) {
+      // Fatal handler throw without a lifecycle owner: surface the NEW error
+      // on the macrotask queue (Node: crash with the handler's error).
+      event.preventDefault?.();
+      keepaliveState().hostSetTimeout(() => {
+        throw outcome.rethrow;
+      }, 0);
+    }
   });
 }
 
@@ -557,7 +581,17 @@ export function installUnhandledRejectionTrap(
   target: RejectionTarget = self as unknown as RejectionTarget,
 ): void {
   target.addEventListener('unhandledrejection', (ev: RejectionEventLike) => {
-    if (intakeUnhandledError(ev.reason, 'rejection')) ev.preventDefault?.();
+    const outcome = intakeUnhandledError(ev.reason, 'rejection');
+    if (outcome.handled) {
+      ev.preventDefault?.();
+      return;
+    }
+    if ('rethrow' in outcome) {
+      ev.preventDefault?.();
+      keepaliveState().hostSetTimeout(() => {
+        throw outcome.rethrow;
+      }, 0);
+    }
   });
 }
 

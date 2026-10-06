@@ -125,19 +125,21 @@ setSyncMirror(vfs);
 resetKeepalive();
 installTimerGlobals();
 installNodeHostRejectionEvents(hostProcess, (reason) => {
-  intakeUnhandledError(reason, 'rejection');
+  const outcome = intakeUnhandledError(reason, 'rejection');
+  if ('rethrow' in outcome) throw outcome.rethrow;
 });
 const onUncaughtException = (error: unknown): void => {
   if (
-    (typeof error === 'object' &&
-      error !== null &&
-      (error as { readonly code?: unknown }).code === 'RIFTY_PROCESS_EXIT') ||
-    intakeUnhandledError(error, 'uncaught-error')
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { readonly code?: unknown }).code === 'RIFTY_PROCESS_EXIT'
   ) {
     return;
   }
+  const outcome = intakeUnhandledError(error, 'uncaught-error');
+  if (outcome.handled) return;
   hostProcess.removeListener('uncaughtException', onUncaughtException);
-  throw error;
+  throw 'rethrow' in outcome ? outcome.rethrow : error;
 };
 hostProcess.on('uncaughtException', onUncaughtException);
 let childLocalVfsAuditReported = false;

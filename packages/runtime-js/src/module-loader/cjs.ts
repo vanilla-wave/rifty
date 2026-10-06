@@ -20,7 +20,6 @@ import {
   type SymbolGuardContext,
   computedKeyProvablyNotFunction as sharedComputedKeyNotFunction,
   isProvablySymbolValueExpression as sharedIsProvablySymbolExpression,
-  symbolGuardPoisoned,
 } from './guard-symbol-values.ts';
 import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
@@ -242,6 +241,7 @@ function rewriteCjsFunctionConstructorReferences(
   const rootScope = createScope();
   predeclareFunctionScope(program.body as unknown as AnyNodeShape[], rootScope);
   predeclareLexicalScope(program.body as unknown as AnyNodeShape[], rootScope);
+  guardSymbolMutation.symbolMutated = false;
   const ctx: FunctionRewriteCtx = {
     ...{},
     edits: [],
@@ -256,7 +256,6 @@ function rewriteCjsFunctionConstructorReferences(
     hasRoutedFunctionReference: false,
     hasFunctionEvalText: false,
   };
-  guardSymbolMutation.symbolMutated = symbolGuardPoisoned(source);
   walkFunctionReferences(program as unknown as AnyNodeShape, ctx);
   if (ctx.hasDerivedHostFunctionConstructor) {
     throw new NotImplementedError(
@@ -791,6 +790,9 @@ function walkAssignmentTarget(target: unknown, ctx: FunctionRewriteCtx): void {
   const t = target as AnyNodeShape;
   if (t.type === 'Identifier') {
     markGlobalFunctionWrite(t, ctx);
+    if ((t as unknown as { name?: string }).name === 'Symbol' && !isShadowed(ctx, 'Symbol')) {
+      guardSymbolMutation.symbolMutated = true;
+    }
     return;
   }
   if (t.type === 'MemberExpression') {
@@ -1542,6 +1544,17 @@ function guardSymbolContext(ctx: FunctionRewriteCtx): SymbolGuardContext {
 }
 
 const guardSymbolMutation = { symbolMutated: false };
+
+/** A member rooted at the (unshadowed) `Symbol` identifier — assignment/delete
+ * through it can replace `Symbol.for`; no Symbol-key exemption is provable. */
+function isSymbolRootedMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
+  const object = node.object;
+  return (
+    (object as unknown as { type?: string; name?: string })?.type === 'Identifier' &&
+    (object as unknown as { name?: string }).name === 'Symbol' &&
+    !isShadowed(ctx, 'Symbol')
+  );
+}
 
 function isProvablySymbolValueExpression(node: unknown, ctx: FunctionRewriteCtx): boolean {
   return sharedIsProvablySymbolExpression(node, guardSymbolContext(ctx));

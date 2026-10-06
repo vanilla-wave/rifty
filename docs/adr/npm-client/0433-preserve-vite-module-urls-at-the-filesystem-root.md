@@ -44,3 +44,10 @@ the policy and snapshots use the existing producer. No live URL rewrite layer.
 Node 24.16.0, Vite 7.3.6, plugin-react 5.2.0, React 19.2.8.
 Raw commands/results and root-slice/native browser evidence:
 `docs/backlog/playground/reference/ai-mode-chat-evidence.md`.
+
+**Extended (2026-10-06, goal vitest-run-in-browser):** Vite 8.0.16 ships BOTH
+watched anchors (Chokidar `DirEntry.add` and the resolved-id root slice) in
+TWO chunks each — the "one original/prepared anchor" invariant is corrected to
+"at least one PREPARED anchor of each kind and ZERO raw anchors anywhere"
+(fail-closed on mixed/unprepared trees, discovered live at the vitest install;
+`docs/backlog/runtime-js/reference/vitest-config-pipeline-suspension-evidence.md`).

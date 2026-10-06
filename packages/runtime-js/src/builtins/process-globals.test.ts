@@ -217,12 +217,14 @@ describe('process exit lifecycle (process-lifecycle-events-exit-code, I3)', () =
     expect((caught as { exitCode?: number }).exitCode).toBe(3);
   });
 
-  it("'exit' fires exactly once with the RAW code, on both natural and explicit paths", () => {
+  it("'exit' fires exactly once with the RAW code, on both natural and explicit paths", async () => {
     const proc = freshProcess();
     proc.exitCode = 257; // OS wraps to 1; the event sees the raw value (Node oracle)
     const codes: unknown[] = [];
     proc.on('exit', (code) => codes.push(code));
-    (proc as unknown as { emitNaturalExitEvent(): void }).emitNaturalExitEvent();
+    // Natural-exit emission rides the keepalive dispatcher (no guest API).
+    const { emitProcessExitEvent } = await import('./process-lifecycle-dispatcher.ts');
+    emitProcessExitEvent(proc, proc.exitCode);
     let caught: unknown;
     try {
       proc.exit(1);
