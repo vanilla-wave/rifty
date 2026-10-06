@@ -1,7 +1,8 @@
 ## Items
 
-1. `distribution/agent-eval-corpus-expansion` — original pilot route6: after pilot trajectories/campaign, finite expanded evaluation version, selection/cost rationale, controls and separate campaign; I1/I6/I7.
-2. `distribution/agent-eval-boundary-diagnostics` — observed environment/tool differences and executed substantive escalation/confirmation beyond pilot; I10/I11. Existing scripts, report and corpus reused.
+1. `distribution/agent-eval-corpus-expansion` — after accepted pilot: finite expanded source/version, selection rationale and native/fault/own-origin controls; independently certify before comparison; I1/I6/I7.
+2. `distribution/agent-eval-expanded-comparison` — original expansion6+7: fresh fixed96/all4/three repeats, retained failures, uncertainty/offline report; after independently accepted source/control unit; I1/I2/I3/I4/I7/I8/I9.
+3. `distribution/agent-eval-boundary-diagnostics` — observed environment/tool differences and executed substantive escalation/confirmation beyond pilot; I10/I11. Existing scripts, report and corpus reused.
 
 ## Open questions
 

@@ -1,4 +1,11 @@
-import { actionCaption, fieldValue, namedActions, verdict } from '../../src/judge/context.ts';
+import {
+  actionCaption,
+  editableControl,
+  fieldValue,
+  namedActions,
+  renderedValue,
+  verdict,
+} from '../../src/judge/context.ts';
 import type { JudgeContext, JudgeProbe, TaskJudge } from '../../src/judge/context.ts';
 
 const controls = {
@@ -11,7 +18,7 @@ const controls = {
   seats: /\bseats\b/i,
 };
 const input = (ctx: JudgeContext, name: keyof typeof controls) =>
-  ctx.view.getByLabel(controls[name]);
+  editableControl(ctx, controls[name]);
 async function click(ctx: JudgeContext, name: RegExp) {
   const matches = namedActions(ctx, name);
   for (const node of await matches.all())
@@ -89,12 +96,80 @@ async function snapshot(ctx: JudgeContext) {
   }
   return rows;
 }
+async function rooms(ctx: JudgeContext) {
+  const result = [];
+  const actions = namedActions(ctx, actionCaption('edit', 'room'));
+  for (let index = 0; index < (await actions.count()); index++) {
+    await actions.nth(index).click();
+    result.push({
+      name: await fieldValue(input(ctx, 'name')),
+      capacity: Number(await fieldValue(input(ctx, 'capacity'))),
+    });
+    await saveRoom(ctx);
+  }
+  return result.sort((a, b) => a.name.localeCompare(b.name));
+}
+async function validationVisible(ctx: JudgeContext) {
+  for (const output of await ctx.view.getByLabel(/\bvalidation\b/i).all())
+    if ((await output.isVisible()) && (await renderedValue(output)).trim()) return true;
+  return false;
+}
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 export const judge: TaskJudge = async (ctx) => {
   const probes: JudgeProbe[] = [];
   try {
-    await room(ctx, 'Amber', 4);
+    await room(ctx, ' Amber ', 4);
     await room(ctx, 'Bay', 2);
+    const initialRooms = await rooms(ctx);
+    probes.push({
+      name: 'room names trimmed; positive capacities retained',
+      pass: same(initialRooms, [
+        { name: 'Amber', capacity: 4 },
+        { name: 'Bay', capacity: 2 },
+      ]),
+      evidence: initialRooms,
+    });
+    for (const [name, capacity] of [
+      ['aMbEr', 3],
+      ['', 2],
+      ['Empty capacity', 0],
+      ['Fraction capacity', 1.5],
+    ] as const) {
+      await room(ctx, name, capacity);
+      const after = await rooms(ctx);
+      probes.push({
+        name: `invalid/duplicate room preserves state: ${name}/${capacity}`,
+        pass: same(after, initialRooms),
+        evidence: after,
+      });
+    }
+    await click(ctx, actionCaption('edit', 'room', 'Bay'));
+    await input(ctx, 'name').fill('');
+    await input(ctx, 'capacity').fill('1.5');
+    await saveRoom(ctx);
+    const invalidRoomEdit = await rooms(ctx);
+    probes.push({
+      name: 'invalid room edit preserves prior room',
+      pass: same(invalidRoomEdit, initialRooms),
+      evidence: invalidRoomEdit,
+    });
+    await click(ctx, actionCaption('edit', 'room', 'Bay'));
+    await input(ctx, 'name').fill('Bay East');
+    await input(ctx, 'capacity').fill('3');
+    await saveRoom(ctx);
+    const renamed = await rooms(ctx);
+    probes.push({
+      name: 'valid room name/capacity edit',
+      pass: same(renamed, [
+        { name: 'Amber', capacity: 4 },
+        { name: 'Bay East', capacity: 3 },
+      ]),
+      evidence: renamed,
+    });
+    await click(ctx, actionCaption('edit', 'room', 'Bay East'));
+    await input(ctx, 'name').fill('Bay');
+    await input(ctx, 'capacity').fill('2');
+    await saveRoom(ctx);
     await book(ctx, 'Amber', '2030-01-10', '10:00', '11:00', 2);
     await book(ctx, 'Amber', '2030-01-10', '09:00', '10:00', 3);
     await book(ctx, 'Bay', '2030-01-10', '09:00', '10:00', 2);
@@ -116,7 +191,61 @@ export const judge: TaskJudge = async (ctx) => {
         ),
       evidence: valid,
     });
+    await edits(ctx).nth(2).click();
+    await input(ctx, 'end').fill('11:30');
+    await input(ctx, 'seats').fill('1');
+    await saveBooking(ctx);
+    const changed = await snapshot(ctx);
+    probes.push({
+      name: 'valid reservation edit changes retained end/seats',
+      pass: same(changed, [valid[0], valid[1], { ...valid[2], end: '11:30', seats: 1 }]),
+      evidence: changed,
+    });
+    await edits(ctx).nth(2).click();
+    await input(ctx, 'end').fill('11:00');
+    await input(ctx, 'seats').fill('2');
+    await saveBooking(ctx);
+    await edits(ctx).nth(2).click();
+    await input(ctx, 'start').fill('09:30');
+    await input(ctx, 'end').fill('10:30');
+    await saveBooking(ctx);
+    await ctx.view.goto(ctx.view.url());
+    const rejectedOverlapEdit = await snapshot(ctx);
+    probes.push({
+      name: 'overlap edit preserves prior reservation through reload',
+      pass: same(valid, rejectedOverlapEdit),
+      evidence: rejectedOverlapEdit,
+    });
+    await book(ctx, 'Amber', '2030-01-11', '09:00', '10:00', 2);
+    const nextDate = await snapshot(ctx);
+    probes.push({
+      name: 'same interval on different date accepted and sorted',
+      pass: nextDate.length === 4 && nextDate[3]?.date === '2030-01-11',
+      evidence: nextDate,
+    });
+    await namedActions(ctx, actionCaption('delete', 'reservation|booking')).nth(3).click();
+    for (const [date, start, end, seats] of [
+      ['2030-02-30', '12:00', '13:00', 1],
+      ['2030-01-10', '13:00', '12:00', 1],
+      ['2030-01-10', '25:00', '26:00', 1],
+      ['2030-01-10', '12:00', '13:00', 0],
+      ['2030-01-10', '12:00', '13:00', 1.5],
+    ] as const) {
+      await book(ctx, 'Amber', date, start, end, seats);
+      const after = await snapshot(ctx);
+      probes.push({
+        name: `invalid calendar/interval/seats preserves records: ${date}/${start}/${seats}`,
+        pass: same(valid, after),
+        evidence: after,
+      });
+    }
     await book(ctx, 'Amber', '2030-01-10', '09:30', '10:30', 1);
+    probes.push({
+      name: 'rejected overlap has visible named validation',
+      pass: await validationVisible(ctx),
+      evidence: await ctx.view.locator('body').innerText(),
+    });
+    await ctx.view.goto(ctx.view.url());
     const afterOverlap = await snapshot(ctx);
     probes.push({
       name: 'overlap creation rejected without mutation',

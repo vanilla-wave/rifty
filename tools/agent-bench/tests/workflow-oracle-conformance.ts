@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from '@playwright/test';
-import { actionCaption, namedActions } from '../src/judge/context.ts';
+import { actionCaption, editableControl, namedActions } from '../src/judge/context.ts';
 import type { JudgeContext } from '../src/judge/context.ts';
 
 const root = await mkdtemp(join(tmpdir(), 'rifty-workflow-oracle-conformance-'));
@@ -37,6 +37,15 @@ const evidence = [];
 try {
   const page = await browser.newPage();
   page.setDefaultTimeout(1000);
+  for (const tag of ['input', 'textarea', 'select']) {
+    await page.setContent(
+      `<${tag} aria-label="Payer"></${tag}><output aria-label="Payer">Ada</output><span aria-label="Amount">4.34</span><input aria-label="Amount">`,
+    );
+    const ctx = { view: page, previewUrl: 'about:blank' };
+    assert.equal(await editableControl(ctx, /payer/i).count(), 1);
+    assert.equal(await editableControl(ctx, /amount/i).count(), 1);
+    evidence.push({ kind: 'editable/output purpose distinction', tag, accepted: true });
+  }
   for (const tag of ['button', 'a']) {
     for (const [subject, save] of [
       ['room', booking.saveRoom],
@@ -182,6 +191,35 @@ try {
         visible: await page.locator('body').innerText(),
       });
     }
+  }
+  for (const format of ['symbol-after-sign', 'sign-after-symbol', 'parenthesized']) {
+    const outputs = totals
+      .map((row) =>
+        [
+          ['Paid', row.paid],
+          ['Owed', row.owed],
+          ['Net', row.net],
+        ]
+          .map(([label, value]) => {
+            const number = Number(value);
+            const absolute = (Math.abs(number) / 100).toFixed(2);
+            const text =
+              number < 0
+                ? format === 'symbol-after-sign'
+                  ? `-$${absolute}`
+                  : format === 'sign-after-symbol'
+                    ? `$-${absolute}`
+                    : `($${absolute})`
+                : `$${absolute}`;
+            return `<output aria-label="${row.name} ${label}">${text}</output>`;
+          })
+          .join(''),
+      )
+      .join('');
+    await page.setContent(outputs);
+    const result = await expense.balances({ view: page, previewUrl: 'about:blank' });
+    assert.deepEqual(result, totals, format);
+    evidence.push({ kind: 'signed currency output', format, result });
   }
   for (const [a, b] of [
     ['4.345', '5.335'],

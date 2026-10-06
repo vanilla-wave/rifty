@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Add finite eval-v1: eight real cases/seven families with locked Vue reservations and Svelte cent settlement workflows; public requirements, private semantic oracles and real positive/partial/alternative/guard controls.
+- Distinguish editable workflow fields from read-only outputs; preserve signed currency before symbols and verify invalid mutations through reload.
+
 - Share button/link discovery for workflow actions; financial proof reads visible output, rejecting hidden values in cards and tables.
 
 - Match named workflow actions by semantic words independent of caption order; shared owner keeps open app captions consistent.

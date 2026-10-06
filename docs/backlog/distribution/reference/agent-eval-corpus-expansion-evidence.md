@@ -112,3 +112,52 @@ PermanentChromium conformance adds realbutton/link save/edit/new/delete and
 visible/hidden financial cards/tables/balances. Bothguard reverts RED, restored.
 Missingeval-v1 positiveRED remains expected, no apps/models implemented.
 [Conformance/guard reverts/physical wrong controls/source](agent-eval-expansion-role-visibility-green.json.gz): conformanceexit0; eachnewguard revert exit1 and source restored; oldworkflow8FAIL/errors0. Actual inherited14PASS, typecheck/biome/docs PASS. Three expected missing-manifest RED, no claimed blanket fullgateGREEN. Independent changed-tree verification next.
+
+Implementation authoring (before freeze/model calls): locked Vue/Svelte minimal
+starters, public prompts/cards/controls and certified oracle snapshots. Native8
+final controls: bothbaseline/partialFAIL andref/alternativePASS, pageerrors0.
+Real28guard variants allFAIL; actual runtime errors in deliberately broken payer
+variant retained, stale UI alone no longer passes because rejection reload tested.
+Original10+3surviving mutants/failed build/oracle attempts retained at original
+criteria. [Allnative source/log/physicaldata](agent-eval-expansion-authoring-native.json.gz).
+
+Actual native App exposed editable/read-only Payer ambiguity; shared
+editableControl shapes both new oracles, without changing readonly output proof.
+Public signed-currency -$4.34 RED, exact sign fixed; allprevious conformance
+controls plus three currency layoutsPASS. Valid-booking edit and overlap-edit
+mutants exposedmissing checks; added. Silent validation mutant exposed visibility
+hole; Validation output discovery now explicitlypublic beforefreeze/calls, any
+readonly DOM/role and duplicated visible output accepted, no hidden label rule.
+Curator-owned case clarification, usergoal unchanged; old pre-freeze prompts/data
+retain original revision/proof. Currentsource binding reflects exactnewprompts.
+
+Firstauthoring originattempt interrupted aftercriteria changed, retained with
+22/32 records/header running; not score evidence or resumed. Owned leftover
+Vite processgroup53242 stopped, port5397 closed. Second authoring64 completed
+with actual frozen-input criteria check; preceding booking criteria retained,
+not substituted for new three requirements. Finalcurrent32+32 matrix running.
+
+SvelteCOI reference has realCSS external http://src URL/CORS failure; samepayload
+noCOI/nativePASS. Measured gap retained, not fixed/rescued; exactspecifier/rootcause
+unknown pending I10. Independent factualdraft finalcheckPASS; source/snapshots/
+console excerpts/hash: ../../service-worker/reference/svelte-css-preview-network-url-observed.json.gz.
+
+Delivery split: source/control Final+GREEN beforecalls; original expansion6+7 preserved in linked expanded-comparison96. No sourceunit/goal closure inferred from authoring proof. Finalpack attempt0/32 failed ENOENT missing workbenchassets during concurrent pr:check/build; retained, serialize subsequent gate/control phases, no new coordinator.
+
+Node24 actual reference formatter RED:9007199254740990 safe cents incorrectly
+displayed90071992547409.91, expected.90. Reference aggregation/settlement/format
+now BigInt; input/persisted per-expense cents remain validatedsafeNumbers, no
+JSONBigInt. No publicrange cut or approximation. Native8 againcorrect, errors0:
+reference+alternative realUI appendlarge validexpense +two1centexpenses, exact
+paid90071992547419.91→.92→.93 beyondsafe aggregate, reloadsame. Real28negative
+guards allFAIL; deliberatebadApp errors retained. [RED/source/rawphysical/UI](agent-eval-expansion-exact-cent-controls.json.gz).
+
+Fullsource pr:check first26/27, lint-only3JSONformat errors; formatter fixes
+then27/27PASS (unit211.0/parity112.8). LaterBigInt data/carrier change requires
+newcurrent gate; nowrunning beforefreshfinal64 controls, sequentialbuilds.
+
+FinalBigInt sourcegate27/27PASS: unit198.1/parity114.2s, no isolated test rerun needed. [Actual fullgate](agent-eval-expansion-source-prcheck-bigint.log.gz). Finalauthoring64 now executes sequentially aftergate; no modelcalls.
+
+Finalsource control64 completed, allfive seriescompleted/selectedrows retained; frozen-input task/control/judge hashes unchanged acrossseries and equalcurrent96CLIplan. Nativeexpectedoutcomes/physical before+patch checks PASS. [Current64/raw hashes/plan](agent-eval-expansion-final-origin-controls.json.gz); summaries2026-10-06-expansion-final-* hold all originals, no quality score. IndependentFinal+GREEN sourceunit next; comparison96 +I10/I11 remainlinked.
+
+Final64 totals37PASS/27FAIL/0missing:16expectedbaseline/partialFAIL,8browser-library setupFAIL and3SvelteCOI CSSFAIL. No exclusions/rescue; native reference/alternative allPASS. Current summarypolicy4/4PASS9.81s, docs/diffcheckPASS. SourceFinal review beforecomparison96; wholegoal open.

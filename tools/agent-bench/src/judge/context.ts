@@ -70,6 +70,17 @@ export function field({ view }: JudgeContext, name: string | RegExp) {
     .or(view.getByRole('combobox', { name }));
 }
 
+/** Editing selects controls, even when read-only outputs share their purpose. */
+export function editableControl({ view }: JudgeContext, name: string | RegExp) {
+  return view
+    .getByLabel(name)
+    .and(
+      view.locator(
+        'input:not([readonly]):not([disabled]),textarea:not([readonly]):not([disabled]),select:not([disabled]),[contenteditable="true"],[role="combobox"]:not([aria-disabled="true"]):not([aria-readonly="true"])',
+      ),
+    );
+}
+
 const escapeCaption = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export function caption(name: string): RegExp {
   return new RegExp(`\\b${escapeCaption(name)}\\b`, 'i');

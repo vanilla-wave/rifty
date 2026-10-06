@@ -1,6 +1,8 @@
 import {
   actionCaption,
   caption,
+  editableControl,
+  fieldValue,
   namedActions,
   renderedValue,
   verdict,
@@ -16,7 +18,7 @@ async function click(ctx: JudgeContext, name: RegExp) {
     }
   throw new Error(`Missing named action ${name}`);
 }
-const input = (ctx: JudgeContext, name: RegExp) => ctx.view.getByLabel(name);
+const input = (ctx: JudgeContext, name: RegExp) => editableControl(ctx, name);
 function cents(text: string) {
   const normalized = text.trim().replaceAll('−', '-');
   const tokens = normalized.match(/[+-]?\d[\d.,]*/g);
@@ -34,7 +36,9 @@ function cents(text: string) {
   if (!/^\d+$/.test(whole)) throw new Error(`Invalid amount: ${text}`);
   const result = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
   if (!Number.isSafeInteger(result)) throw new Error(`Unsafe cent amount: ${text}`);
-  return result * (value.startsWith('-') || /^\s*\(/.test(normalized) ? -1 : 1);
+  const signs = normalized.match(/[+-]/g) ?? [];
+  if (signs.length > 1) throw new Error(`Ambiguous amount sign: ${text}`);
+  return result * (signs[0] === '-' || /^\s*\(/.test(normalized) ? -1 : 1);
 }
 
 async function person(ctx: JudgeContext, name: string) {
@@ -195,14 +199,37 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 export const judge: TaskJudge = async (ctx) => {
   const probes: JudgeProbe[] = [];
   try {
-    for (const name of ['Zed', 'Ada', 'Cara']) await person(ctx, name);
-    await expense(ctx, 'Train', 'Zed', '10.01', ['Ada', 'Cara']);
+    for (const name of [' Zed ', 'Ada', 'Cara']) await person(ctx, name);
+    for (const name of ['zed', '']) {
+      await person(ctx, name);
+      const count = await namedActions(ctx, actionCaption('delete', 'person')).count();
+      probes.push({
+        name: `duplicate/empty person rejected: ${name}`,
+        pass: count === 3,
+        evidence: count,
+      });
+    }
+    await person(ctx, 'Unused');
+    await click(ctx, actionCaption('delete', 'person', 'Unused'));
+    probes.push({
+      name: 'unreferenced person deletion',
+      pass: (await namedActions(ctx, actionCaption('delete', 'person', 'Unused')).count()) === 0,
+      evidence: await ctx.view.locator('body').innerText(),
+    });
+    await expense(ctx, ' Train ', 'Zed', '10.01', ['Ada', 'Cara']);
     await expense(ctx, 'Lunch', 'Ada', '1.00', ['Zed', 'Ada', 'Cara']);
     const expected = [
       { name: 'Zed', paid: 1001, owed: 34, net: 967 },
       { name: 'Ada', paid: 100, owed: 534, net: -434 },
       { name: 'Cara', paid: 0, owed: 533, net: -533 },
     ];
+    await click(ctx, actionCaption('edit', 'expense', 'Train'));
+    probes.push({
+      name: 'expense description trimmed',
+      pass: (await fieldValue(input(ctx, /\bdescription\b/i))) === 'Train',
+      evidence: await fieldValue(input(ctx, /\bdescription\b/i)),
+    });
+    await save(ctx);
     const initial = await balances(ctx);
     probes.push({
       name: 'payer outside participants, integer cents and creation-order remainder',
@@ -221,6 +248,23 @@ export const judge: TaskJudge = async (ctx) => {
       pass: same(initial, await balances(ctx)),
       evidence: await balances(ctx),
     });
+    for (const value of ['', '0.00', '-1.00', '1e2', 'abc', '90071992547409.92']) {
+      await expense(ctx, 'Invalid amount', 'Zed', value, ['Ada']);
+      const after = await balances(ctx);
+      probes.push({
+        name: `invalid amount preserves totals: ${value}`,
+        pass:
+          same(initial, after) &&
+          (await namedActions(ctx, actionCaption('edit', 'expense')).count()) === 2,
+        evidence: after,
+      });
+    }
+    await expense(ctx, '   ', 'Zed', '1.00', ['Ada']);
+    probes.push({
+      name: 'empty description rejected',
+      pass: same(initial, await balances(ctx)),
+      evidence: await balances(ctx),
+    });
     await expense(ctx, 'Empty participants', 'Zed', '1.00', []);
     probes.push({
       name: 'empty participants rejected without mutation',
@@ -230,6 +274,22 @@ export const judge: TaskJudge = async (ctx) => {
     await click(ctx, actionCaption('delete', 'person', 'Zed'));
     probes.push({
       name: 'referenced person deletion rejected',
+      pass: same(initial, await balances(ctx)),
+      evidence: await balances(ctx),
+    });
+    await click(ctx, actionCaption('delete', 'person', 'Cara'));
+    probes.push({
+      name: 'participant-only reference prevents person deletion',
+      pass:
+        same(initial, await balances(ctx)) &&
+        (await namedActions(ctx, actionCaption('delete', 'person', 'Cara')).count()) === 1,
+      evidence: await balances(ctx),
+    });
+    await click(ctx, actionCaption('edit', 'expense', 'Lunch'));
+    await input(ctx, /\bamount\b/i).fill('1.005');
+    await save(ctx);
+    probes.push({
+      name: 'invalid expense edit preserves prior expense/totals',
       pass: same(initial, await balances(ctx)),
       evidence: await balances(ctx),
     });
@@ -263,6 +323,15 @@ export const judge: TaskJudge = async (ctx) => {
           { name: 'Cara', paid: 0, owed: 500, net: -500 },
         ]) && (await transfers(ctx, afterDelete)).valid,
       evidence: afterDelete,
+    });
+    await click(ctx, actionCaption('delete', 'person', 'Zed'));
+    await ctx.view.goto(ctx.view.url());
+    probes.push({
+      name: 'payer-only reference prevents person deletion',
+      pass:
+        same(afterDelete, await balances(ctx)) &&
+        (await namedActions(ctx, actionCaption('delete', 'person', 'Zed')).count()) === 1,
+      evidence: await balances(ctx),
     });
   } catch (error) {
     probes.push({ name: 'expense workflow completed', pass: false, evidence: String(error) });

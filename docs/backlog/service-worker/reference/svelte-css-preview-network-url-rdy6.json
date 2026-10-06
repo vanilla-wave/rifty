@@ -1,0 +1,103 @@
+{
+  "kind": "RDY-6 final written-result check; factual agent-only capture",
+  "reviewer": "/root/preview_css_finding_review",
+  "read_only": true,
+  "date": "2026-10-06",
+  "verdict": "PASS — factual deferred capture; two transcription overclaims corrected; no silently decided user scope or prescribed implementation",
+  "reviewed_revision": "927dba64ace86a94634892c2578b6d269933e9f5",
+  "reviewed_files": {
+    "docs/backlog/service-worker/svelte-css-preview-network-url.md": "7c1da93160a082300b7b9c44c2ec7f8b46daf255651382ae73b2ebe07fad04d3",
+    "docs/backlog/service-worker/reference/svelte-css-preview-network-url-observed.json.gz": "403cab5dd579bcf27f55390a4d752c3905b61c1a38a27c18485059a9a9c3445d"
+  },
+  "authority": [
+    "AGENTS.md",
+    "docs/process/README.md",
+    ".agents/skills/rifty-to-backlog/SKILL.md",
+    "docs/process/rules/readiness.md RDY-6",
+    "docs/backlog/README.md",
+    "docs/backlog/epics/agent-code-quality-evaluation/goal.md I10, Decisions original user amendment 2026-09-27",
+    "docs/backlog/distribution/agent-eval-corpus-expansion.md Out of scope runtime gap repair",
+    "tools/agent-bench/corpus/cases/expense-settlement/prompt.md"
+  ],
+  "verified": {
+    "source_provenance": "gzip header and four expense runs exactly equal original report.json; physical before/after data and hashes equal original files; retained console events exactly equal original trace.trace lines234/235; traceSha256 equals original browser.zip hash; screenSha256 equals original screen.png hash; original screen inspected: blank COI preview.",
+    "four_origins": [
+      {
+        "lane": "rifty",
+        "outcome": "fail",
+        "agentStatus": "not-run",
+        "turns": 0,
+        "toolCalls": 0,
+        "judgePass": false
+      },
+      {
+        "lane": "rifty-no-coi",
+        "outcome": "pass",
+        "agentStatus": "not-run",
+        "turns": 0,
+        "toolCalls": 0,
+        "judgePass": true
+      },
+      {
+        "lane": "local-reference",
+        "outcome": "pass",
+        "agentStatus": "not-run",
+        "turns": 0,
+        "toolCalls": 0,
+        "judgePass": true
+      },
+      {
+        "lane": "native-codex",
+        "outcome": "pass",
+        "agentStatus": "not-run",
+        "turns": 0,
+        "toolCalls": 0,
+        "judgePass": true
+      }
+    ],
+    "reference_app_sha256": "54446fe0810583af58c7f4d14cbb38325e97469945da991754960f64bd9a2120",
+    "reference_equivalence": "all four finalDiff src/App.svelte after bytes same; physical COI after contains component style. Existing reference.json matches same App source.",
+    "lock_sha256": "11416467f3aa369ab3f34f91b1bbd102c9ca7233d2879aa506c6a32bd2760af5",
+    "versions": {
+      "node": "24.16.0",
+      "chromium": "148.0.7778.96",
+      "svelte": "5.38.7",
+      "vitePluginSvelte": "6.1.0",
+      "vite": "7.3.6"
+    },
+    "attribution": "No user scope choice silently settled. Factual deferred draft aligns I10 catalog, runtime repair explicitly outside expansion scope. No carrier/mechanism prescribed, cause/layer/native provenance/organic repro unknown; no universal Svelte/Node/runtime-only claim; old control series explicitly not quality acceptance.",
+    "dedup": "Bounded backlog titles/code/maps and traps/ADR declined concepts inspected; no equivalent Svelte external URL finding. Preview prefix reference records govern root-absolute requests. No declined mechanism match.",
+    "boundary_model": "Owned in-process policy/graph projection permits malformed path/ambiguous projection/sibling classification drift; network permits corrupt input. No excluded transport fault/coordination mechanism adopted."
+  },
+  "remaining": "Compiled specifier, exact layer/root cause, minimal organic repro and direct public-host/native-response provenance remain open. Draft does not certify runtime repair or quality acceptance. If corrections are treated as material under RDY-6, obtain a new clean-context pass; this follow-up is explicitly not fresh.",
+  "previous_reviewed_files": {
+    "docs/backlog/service-worker/svelte-css-preview-network-url.md": "62d14c3aca0c74269076813bc7a0cf1f95dd16ac7d9e5a61e9fc95e65f2d38fc",
+    "docs/backlog/service-worker/reference/svelte-css-preview-network-url-observed.json.gz": "403cab5dd579bcf27f55390a4d752c3905b61c1a38a27c18485059a9a9c3445d"
+  },
+  "resolved_problems": [
+    {
+      "path": "docs/backlog/service-worker/svelte-css-preview-network-url.md",
+      "line": 4,
+      "claim": "external network-path URL",
+      "evidence": "Retained browser events establish absolute http://src/App.svelte?svelte&type=style&lang.css only; no compiled specifier retained. Network-path relative reference //src is not proven. Draft itself keeps exact compiled specifier open.",
+      "correction": "Use external URL / external http://src URL; retain specifier as open."
+    },
+    {
+      "path": "docs/backlog/service-worker/svelte-css-preview-network-url.md",
+      "line": 15,
+      "claim": "Physical source/locks and browser trace retained in gzip",
+      "evidence": "gzip contains physical snapshots, two console event excerpts and SHA256 of original browser.zip; full browser.zip/network metadata are not in gzip.",
+      "correction": "Name console event excerpts + original trace hash rather than browser trace retained."
+    }
+  ],
+  "problems": [],
+  "followup": {
+    "context": "Same independent reviewer follow-up; not a new clean context.",
+    "literal_corrections": [
+      "title: external network-path URL → external http://src URL",
+      "Physical source/locks and browser trace → Physical source/locks, browser console excerpts and trace hash",
+      "Svelte style/external network-path equivalent → Svelte style/external URL equivalent"
+    ],
+    "source_change": "none; gzip SHA unchanged; raw carriers rechecked; no new runtime/npm/browser/model execution"
+  }
+}

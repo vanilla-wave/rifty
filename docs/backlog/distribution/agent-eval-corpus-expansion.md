@@ -50,7 +50,8 @@ source attribution and cheaper-route/value objections before implementation.
    and frozen-byte tests bind exact public prompts/pinned starters/certified test
    oracles; missing eval-v1 and real wrong-workflow semantic RED before implementation. → I1+I6+I7+I8
 2. Booking checks public room/create/edit/delete, exclusivity/adjacency/capacity,
-   date/resource independence, rejected-edit/capacity/reference guards preserve
+   date/resource independence, valid reservation edit, rejected-overlap edit and
+   publicly named visible Validation feedback; rejected-edit/capacity/reference guards preserve
    state, combined filters/order and reload. Real native baselineFAIL/reference
    PASS/partialFAIL/alternativePASS; alternative DOM/control layout accepted;
    broken overlap/capacity/atomicity/filter/persistence variants fail. → I1+I3+I6
@@ -69,16 +70,13 @@ source attribution and cheaper-route/value objections before implementation.
    validation evidence before freeze/calls; uninstrumented time remains unknown.
    Each guarded requirement has real negative and guard-revert proof. No label/
    role/order/layout requirement unstated by public prompts. → I6+I7
-6. Freeze complete eval-v1/config/selection/control/source identity before a fresh
-  96trial campaign:8cases×4origins×3freshrepeats, task/lane/trial order, PiLuna/medium,
-   nativeCodexgpt-6.1-sol/low separate,100tools/600s. Allselected failures retained;
-   fullmatrixprimary. No adaptive compatible-subset pruning; no resume/overwrite.
-   Pre-call expected matrix/wall/usage and actual costs recorded. → I1+I2+I3+I4+I7+I9
-7. Execute separate complete campaign, retain source/trace/diff/phase/usage/failure
-   artifacts and conditional intervals/workload/task/family results using accepted
-   scripts. Stop model services; offline regeneration preserves authoritative
-   bytes/scores and identical derived views. Negative/inconclusive valid; no
-   equality/population-quality/runtime-only causal claim. → I3+I4+I7+I8+I9
+
+## Following unit
+
+Original Acceptance6+7 move unchanged to distribution/agent-eval-expanded-comparison:
+separately frozen96 campaign, all selected outcomes and offline report remain
+mandatory goal work. This unit delivers source/control capability before paid
+calls; no claim I1/I4/I7 campaign or whole goal complete. Same PR341.
 
 ## Fault matrix
 
@@ -109,3 +107,7 @@ expanded corpus cannot close whole goal alone.
 - 2026-10-06 — I1/I6/I7 curator selects two independent workflow families after accepted pilot; original20–30 estimate remains estimate, finite8 justified by coverage/locked-control cost.
 - 2026-10-06 — exact sample-task policies resolved by public prompts; no user-owned goal scope cut, previous prototype examples reused only as preparation.
 - 2026-10-06 — loader/runner/report reused; new deps live only in pinned case fixtures; no root runtime/coordination mechanism.
+
+- 2026-10-06 — real booking mutants expose valid-edit/overlap-edit/visible-validation holes; firsttwo public behaviors added to oracle, Validation feedback discovery explicitly public before freeze/calls; no private label/role criterion. Prior authoring64 retained at original criteria, current matrix rerun; user goal unchanged.
+
+- 2026-10-06 — re-cut authoring/source+controls and actual96 comparison into sequential units; original6+7 carried unchanged by linked comparison, no user obligation dropped; independent source Final+GREEN precedes calls, samePR.
