@@ -1,7 +1,8 @@
 ## Items
 
-1. `distribution/agent-eval-expanded-comparison` — original expansion6+7: after acceptedADR0512/0513/0514sourceFinal293c18962+controls, fresh eval-v4 fixed96/all4/three repeats, retained failures, uncertainty/offline report; after independently accepted source/control unit; I1/I2/I3/I4/I7/I8/I9.
-2. `distribution/agent-eval-boundary-diagnostics` — observed environment/tool differences and executed substantive escalation/confirmation beyond pilot; I10/I11. Existing scripts, report and corpus reused.
+1. `distribution/agent-eval-csv-export-toggle-judging` — captured CSV public7/private6-of7 RED; correct current-filter output visibility across Export toggles, preserve v4/55 interrupted history, native/fault/all-origin controls and independent Final; I3/I6/I7/I9.
+2. `distribution/agent-eval-expanded-comparison` — after Export-toggle source Final, fresh eval-v5 same eight public inputs/full96/all4/three repeats; retained failures, uncertainty/offline report; I1/I2/I3/I4/I7/I8/I9.
+3. `distribution/agent-eval-boundary-diagnostics` — observed operation catalog and substantive finite escalation/fresh confirmation; I10/I11 remain required. Existing scripts, report and corpus reused.
 
 ## Open questions
 

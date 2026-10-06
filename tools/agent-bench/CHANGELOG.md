@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Observe current-filter CSV exports before/after toggle actions; freeze CSVv5/eval-v5 with unchanged public inputs/history (ADR-0515).
+
 - Exclude note delete actions through computed accessible role names, including descendant ARIA/image labels; shared entry/Wiki regression proof, prior outcomes unchanged.
 
 - Observe composed saved-note identities through accessible titles and visible components; freeze notes-v4/eval-v4, preserve prior inputs/results (ADR-0514).

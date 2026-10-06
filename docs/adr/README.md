@@ -407,6 +407,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0512 | Accept contextual choice captions in workflow judges |
 | 0513 | Observe persisted CSV records through public export |
 | 0514 | Observe composed saved-note captions |
+| 0515 | Observe visible CSV exports before state-changing actions |
 
 ## Superseded (removed)
 

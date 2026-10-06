@@ -106,3 +106,5 @@
 - re-chart after distribution/agent-eval-notes-composed-entry-judging (final-green PASS @ 293c18962df0430365e9730128c17ab81637f812): independent17/17/8axesPASS/findings0; B1 repaired and independentlyverified, original65/25/sourcecriteria retained. Sourceunit removed; freshfull96eval-v4 is next, mandatoryI10/I11/audit remain.
 
 - 2026-10-06 — completedsource unit removed from frontier; frozen293contract retained until goal cleanup for direct verdict validation. SourceFinal17/17 andv4full96protocol recorded beforecalls; currentfullgate27PASS after sandboxEPERM preserved and solecorrected statistics-report timeout isolatedPASS. No product/test/criterion changes.
+
+- 2026-10-07 — eval-v4/source4e interrupted55/96 after actual COI CSV Export-toggle criterion false-negative: native public7/currentprivate6-of7 RED, original selected row unchanged. All55 outcomes/41missing retained, two offline regenerations364 unchanged files/identical views; source repair stays in PR341, no rescore/resume/rescue. I10/I11 open; diagnostic draft source check had0blockers/3concerns, readiness/executed search still unproven.

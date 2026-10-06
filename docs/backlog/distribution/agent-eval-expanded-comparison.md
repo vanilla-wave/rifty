@@ -5,6 +5,7 @@ title: Execute the frozen eight-case four-origin comparison
 created: 2026-10-06
 why: Expanded source/control proof does not establish actual comparative agent outcomes or uncertainty.
 epic: agent-code-quality-evaluation
+blocked_by: [distribution/agent-eval-csv-export-toggle-judging]
 sources: [ADR-0511, ADR-0507, docs/backlog/distribution/reference/agent-eval-corpus-expansion-evidence.md]
 code: [tools/agent-bench/src/runner.ts, tools/agent-bench/src/report.ts, tools/agent-bench/src/cli.ts]
 ---
@@ -17,7 +18,9 @@ Eval-v1 interrupted on private judge-caption defect;74/96 retained immutable.
 Eval-v2 stopped54/96 on independently confirmed saved-table CSV false-negative.
 Eval-v3 corrects CSV saved-state; eval-v4 corrects composed saved-entry/Wiki
 observation. Corrected source/control independently accepted before fresh96;
-pilot-v4 and interrupted versions stay history.
+pilot-v4 and interrupted versions stay history. Eval-v4 stopped55/96 on
+independently confirmed Export-toggle false-negative; CSVv5/eval-v5 preserves
+public inputs and other seven judge entries, fresh96 after source/control Final.
 Same user-owned goal/scenarios/I1-I11, same PR341. Negative/inconclusive valid.
 
 ## Challenge
@@ -82,3 +85,7 @@ Original mandatory I10/I11 diagnostics follows; comparison never closes goal alo
 - re-cut: 2026-10-06 — actual notes caption false-negative I3/I6 requires corrected source/control Final before fresh complete96; original65scores immutable, no scope reduction — trace: none
 
 - 2026-10-06 — ADR0514 sourceFinal293c18962 independentlyaccepted17/17/8axesPASS/findings0. Actualnativepublic7/old7/new7,8faults/3reversions/inherited14/captured/fresh32controls/32physical/2offline andfullgate27PASS; previous60/65/failed25 remain immutable history. Freshfull96eval-v4 protocol frozen beforecalls; alloriginalpublic8/other7judges and I10/I11 unchanged.
+
+## Export-toggle continuation
+
+re-cut: 2026-10-07 — source repair precedes fresh eval-v5; expansion acceptance unchanged, interrupted55/missing41 retained — trace: none
