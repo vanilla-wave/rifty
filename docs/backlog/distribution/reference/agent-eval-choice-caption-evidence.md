@@ -22,3 +22,16 @@ negativesFAIL;4corpus/version testsPASS,typecheckPASS;3guardrevertsRED/restored.
 Final source/hash and full native carriers in agent-eval-choice-caption-source-proof.json.gz,
 agent-eval-choice-caption-final-green-controls.json.gz and
 agent-eval-choice-caption-final-faults.json.gz. Full gate/all-origin48/Final pending.
+
+Final own-origin proof:48/48 retained,0missing,28PASS/20FAIL;16baseline/partial
+negatives,4positiveSvelteCOIfailures. AllVueplain/decorated positivesPASS;
+SveltepositivesPASS on packed/native. Fouractualbrowserconsole pairs request
+http://src/App.svelte style URL/CORS; compiledspecifier/rootcauseunknown.
+Everyphysicalafter=before+patch;48before/after pairs; sourcef690clean, scripts
+make no modelcalls. All6series twooffline regenerations preserve57authoritative
+files each and identicalderivedviews. Fullgate27/27PASS before serializedpack
+(unit191.4s/parity114.4s); summarypolicy after bundling checked separately.
+Carriers: agent-eval-choice-caption-origin-proof.json.gz,
+agent-eval-choice-svelte-origin-events.json.gz, source summaries
+2026-10-06-choice-final-{references,baseline,partial,alternative,decorated-reference,decorated-alternative}.
+IndependentrepairFinal and freshcomplete96 remain; I10/I11 untouched.
