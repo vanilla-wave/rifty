@@ -74,3 +74,5 @@ Original mandatory I10/I11 diagnostics follows; comparison never closes goal alo
 - re-cut: 2026-10-06 — ADR0513 saved-state CSV judge correction CSVv4/eval-v3, identical public inputs/other7cases/96selection; eval-v2/54partial and originalcriteria unchanged, no scope reduction — trace: none
 
 - 2026-10-06 — ADR0513CSV/SIGINT sourceFinal76b046b1a accepted15/15;actual40/fullgate27PASS; reference/agent-eval-expanded-comparison-v3-protocol.md frozen before NEWfull96, oldv1/v2history immutable.
+
+- 2026-10-06 — externalprocessloss35/96 retained; originalcriteria/source/scores/header unchanged,2offlineviews preserved. Sameeval-v3 frozen96 startsfresh per reference/agent-eval-expanded-comparison-v3-fresh-series.md; no scope reduction or resume.
