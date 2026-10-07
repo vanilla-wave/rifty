@@ -866,3 +866,18 @@ describe('node:vm Script sandbox offsets stay loud (vm-run-in-this-context-offse
     expect(() => pos.runInContext(ctx)).not.toThrow();
   });
 });
+
+describe('node:vm offsets survive DEFERRED reads (vitest evaluator shape)', () => {
+  it('a wrapper returned by the offset run still reports shifted stacks later', () => {
+    const vm = loadBuiltin('vm') as {
+      runInThisContext(code: string, options?: Record<string, unknown>): unknown;
+    };
+    const wrapper = vm.runInThisContext('() => new Error("deferred").stack', {
+      filename: '/virtual/wrapped.js',
+      lineOffset: 0,
+      columnOffset: 5,
+    }) as () => string;
+    const stack = wrapper();
+    expect(stack.split('\n')[1]).toBe('    at /virtual/wrapped.js:1:12');
+  });
+});

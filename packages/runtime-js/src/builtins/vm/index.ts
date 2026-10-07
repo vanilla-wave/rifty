@@ -320,62 +320,69 @@ function assertIntegerOffsets(options: ScriptOptions): void {
  * shifts every frame's line here. Reads inside the script and thrown errors
  * (materialised while installed) carry the shift, as in Node.
  */
-function withOffsetStackShift<T>(
-  filename: string | undefined,
-  firstShiftedLine: number,
-  columnShift: number,
-  negativeLineShift: number,
-  run: () => T,
-): T {
+// Persistent per-filename shifts (vm-run-in-this-context-offsets): Node bakes
+// offsets at COMPILE, so a wrapper function returned by the script still
+// reports shifted stacks when called LATER (vitest's evaluator shape). One
+// realm-global dispatcher, scoped to the registered filenames only.
+interface OffsetShift {
+  firstShiftedLine: number;
+  columnShift: number;
+  negativeLineShift: number;
+}
+const PERSISTENT_SHIFTS = new Map<string, OffsetShift>();
+let persistentDispatcherInstalled = false;
+const GENERIC_FRAME_RE = /(at (?:eval )?\()?([^\s()]+):(\d+):(\d+)\)?/g;
+
+function ensurePersistentOffsetDispatcher(): void {
+  if (persistentDispatcherInstalled) return;
+  persistentDispatcherInstalled = true;
   const errorCtor = Error as unknown as ErrorWithPrepareStackTrace;
   const previous = errorCtor.prepareStackTrace;
-  const escapedName = filename?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const evalFrameRe =
-    filename === undefined || escapedName === undefined
-      ? null
-      : new RegExp(`at eval \\(${escapedName}:(\\d+):(\\d+)\\)`, 'g');
-  const frameRe =
-    filename === undefined || escapedName === undefined
-      ? null
-      : new RegExp(`${escapedName}:(\\d+):(\\d+)`, 'g');
   errorCtor.prepareStackTrace = (err, frames) => {
     const rendered = previous
       ? String(previous(err, frames))
       : `${err.name}: ${err.message}\n${frames.map((frame) => `    at ${String(frame)}`).join('\n')}`;
-    if (frameRe === null) return rendered;
-    const shift = (line: string, col: string): string => {
-      const outLine = Number(line) + negativeLineShift;
-      let outCol = Number(col);
-      if (Number(line) === firstShiftedLine) outCol += columnShift;
-      return `${filename}:${outLine}:${outCol}`;
-    };
-    // The host compiles via indirect eval; Node's vm frames carry no `eval`
-    // marker on frames of the script — normalize and shift in one pass.
-    const out =
-      evalFrameRe === null
-        ? rendered
-        : rendered.replace(
-            evalFrameRe,
-            (_m, line: string, col: string) => `at ${shift(line, col)}`,
-          );
-    return out.replace(frameRe, (_m, line: string, col: string) => shift(line, col));
+    if (PERSISTENT_SHIFTS.size === 0) return rendered;
+    return rendered.replace(
+      GENERIC_FRAME_RE,
+      (match, evalPrefix: string | undefined, file: string, line: string, col: string) => {
+        const shift = PERSISTENT_SHIFTS.get(file);
+        if (shift === undefined) return match;
+        // The host compiles via indirect eval; Node's vm frames carry no `eval`
+        // marker on frames of the script. Function frames (`at f (…):L:C`) keep
+        // their parenthesis; top-level frames lose the marker.
+        const outLine = Number(line) + shift.negativeLineShift;
+        const outCol =
+          Number(line) === shift.firstShiftedLine ? Number(col) + shift.columnShift : Number(col);
+        const shifted = `${file}:${outLine}:${outCol}`;
+        return evalPrefix === undefined ? `${shifted})` : `at ${shifted}`;
+      },
+    );
   };
-  try {
-    return run();
-  } catch (err) {
-    if (err instanceof Error) void err.stack; // materialise while the shift is installed
-    throw err;
-  } finally {
-    if (previous) errorCtor.prepareStackTrace = previous;
-    else Reflect.deleteProperty(errorCtor, 'prepareStackTrace');
-  }
+}
+
+/** Register the filename's shift (idempotent; latest wins, Node = compile-time). */
+function registerOffsetShift(
+  filename: string | undefined,
+  lineOffset: number,
+  columnOffset: number,
+): void {
+  if (filename === undefined) return;
+  PERSISTENT_SHIFTS.set(filename, {
+    firstShiftedLine: 1 + Math.max(0, lineOffset),
+    columnShift: columnOffset,
+    negativeLineShift: lineOffset < 0 ? lineOffset : 0,
+  });
+  ensurePersistentOffsetDispatcher();
 }
 
 interface ErrorWithPrepareStackTrace {
   prepareStackTrace?: (err: Error, frames: NodeJS.CallSite[]) => unknown;
 }
 
-/** Apply `lineOffset`/`columnOffset` to a host-realm script run (goal I4/I5). */
+/** Apply `lineOffset`/`columnOffset` to a host-realm script run (goal I4/I5):
+ * positive lines are a physical prefix; the shift registry carries columns
+ * (and negative lines) for BOTH in-run and DEFERRED stack reads. */
 function runGlobalScriptWithOffsets(
   code: string,
   filename: string | undefined,
@@ -383,18 +390,11 @@ function runGlobalScriptWithOffsets(
   columnOffset: number,
 ): unknown {
   const prefixed = lineOffset > 0 ? `${'\n'.repeat(lineOffset)}${code}` : code;
-  const negativeLineShift = lineOffset < 0 ? lineOffset : 0;
-  // The dispatcher also normalizes `eval` frame markers for this filename.
   if (lineOffset === 0 && columnOffset === 0) {
     return runGlobalScript(withSourceURL(prefixed, filename));
   }
-  return withOffsetStackShift(
-    filename,
-    1 + Math.max(0, lineOffset),
-    columnOffset,
-    negativeLineShift,
-    () => runGlobalScript(withSourceURL(prefixed, filename)),
-  );
+  registerOffsetShift(filename, lineOffset, columnOffset);
+  return runGlobalScript(withSourceURL(prefixed, filename));
 }
 
 export function createContext<T extends Record<string, unknown> = Record<string, unknown>>(
@@ -529,17 +529,11 @@ export class Script {
     // (they are construction options); construction offsets apply here.
     const normalized = normalizeOptions(options);
     assertSupportedRunOptions(normalized, 'vm.Script');
-    const negativeLineShift = this.#lineOffset < 0 ? this.#lineOffset : 0;
     if (this.#lineOffset === 0 && this.#columnOffset === 0) {
       return runGlobalScript(withSourceURL(this.#code, this.#filename));
     }
-    return withOffsetStackShift(
-      this.#filename,
-      1 + Math.max(0, this.#lineOffset),
-      this.#columnOffset,
-      negativeLineShift,
-      () => runGlobalScript(withSourceURL(this.#code, this.#filename)),
-    );
+    registerOffsetShift(this.#filename, this.#lineOffset, this.#columnOffset);
+    return runGlobalScript(withSourceURL(this.#code, this.#filename));
   }
 
   runInContext(contextifiedObject: Record<string, unknown>, options?: VmOptions): unknown {

@@ -5,7 +5,11 @@
  * Node tests use a `setTimeout(fn, 0)` fallback).
  */
 
-import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import {
+  isRealmDying,
+  ref as keepaliveRef,
+  unref as keepaliveUnref,
+} from '../internal/event-loop-keepalive.ts';
 
 type ImmediateHandle = { readonly id: number };
 type HostTimeout = ReturnType<typeof globalThis.setTimeout>;
@@ -143,6 +147,8 @@ export function setTimeout(
   const raw = hostSetTimeout(
     (...a: unknown[]) => {
       if (!box.handle?.fireTimeout()) return;
+      // Node: a fatal handler throw kills the process — pending timers never run.
+      if (isRealmDying()) return;
       fn(...a);
     },
     ms,
@@ -178,6 +184,7 @@ export function setInterval(
   const raw = hostSetInterval(
     (...a: unknown[]) => {
       if (!box.handle?.shouldRunInterval()) return;
+      if (isRealmDying()) return;
       fn(...a);
     },
     ms,

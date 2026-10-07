@@ -26,6 +26,7 @@ interface KeepaliveState {
   nodeEvalDrainOwner: object | null;
   nodeEvalDirectTerminalPending: boolean;
   processLifecycle: ProcessLifecycleDispatcher | null;
+  dying: boolean;
   readonly hostSetTimeout: typeof globalThis.setTimeout;
 }
 
@@ -85,6 +86,7 @@ export function intakeUnhandledError(
   // A handler throw is fatal with the NEW thrown value — null/undefined
   // included (hasThrownValue), never conflated with "no handler".
   const terminalReason = dispatch?.hasThrownValue === true ? dispatch.thrownValue : reason;
+  if (dispatch?.hasThrownValue === true) markRealmDying();
   if (beginNodeEvalUnhandled(terminalReason, origin)) return { handled: true };
   if (origin === 'rejection') recordRejection(terminalReason, 'rejection');
   if (dispatch?.hasThrownValue === true) return { handled: false, rethrow: dispatch.thrownValue };
@@ -133,6 +135,7 @@ function keepaliveState(): KeepaliveState {
         nodeEvalDrainOwner: null,
         nodeEvalDirectTerminalPending: false,
         processLifecycle: null,
+        dying: false,
         // awaitDrain MUST use the host timer, not installTimerGlobals' ref-counted
         // wrapper. Store the first bundle's capture on the realm so later
         // node-entry chunks share both the counter and the original timer.
@@ -144,6 +147,19 @@ function keepaliveState(): KeepaliveState {
     });
   }
   return realm[KEEPALIVE_STATE] as KeepaliveState;
+}
+
+/**
+ * Node: a FATAL handler throw kills the process — pending timers and nextTick
+ * callbacks never run. Set once at the fatal dispatch; every scheduled
+ * callback surface consults it.
+ */
+export function markRealmDying(): void {
+  keepaliveState().dying = true;
+}
+
+export function isRealmDying(): boolean {
+  return keepaliveState().dying;
 }
 
 /** Increment the active-handle count (timer/immediate/import scheduled). */
@@ -364,6 +380,7 @@ export function resetKeepalive(): void {
   state.nodeEvalLifecycle = null;
   state.nodeEvalDrainOwner = null;
   state.nodeEvalDirectTerminalPending = false;
+  state.dying = false;
 }
 
 /**

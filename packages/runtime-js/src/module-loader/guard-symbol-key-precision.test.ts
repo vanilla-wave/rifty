@@ -207,6 +207,16 @@ describe('CJS guard accepts provably-Symbol computed keys', () => {
     );
   });
 
+  it('a LOCAL parameter/declaration named Symbol does NOT poison (scope-aware)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "function tweak(Symbol) { Symbol.for = () => 'Function'; }\nconst KEY = Symbol.for('review.shadowed'); globalThis[KEY] = 17; export const out = 'ok';\n",
+    });
+    const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: string };
+    expect(ns.out).toBe('ok');
+    Reflect.deleteProperty(globalThis, Symbol.for('review.shadowed'));
+  });
+
   it('CJS: defineProperty on Symbol itself poisons', () => {
     const loader = cjsLoader({
       '/work/main.js':

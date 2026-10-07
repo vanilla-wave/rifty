@@ -28,6 +28,7 @@ import { NotImplementedError, isAbsolute, joinPath, normalizePath } from '@rifty
 import {
   beginNodeEvalExplicitExit,
   intakeUnhandledError,
+  isRealmDying,
   ref as refEventLoop,
   unref as unrefEventLoop,
 } from '../internal/event-loop-keepalive.ts';
@@ -109,11 +110,11 @@ function installProcessExitErrorTrap(): void {
 }
 
 function drainNextTicks(): void {
-  // Re-read `.length` each iteration: items enqueued mid-drain (nextTick from
-  // nextTick) must process; no array snapshot.
+  // Re-read `.length` each iteration: mid-drain enqueues must process.
   while (drainHead < nextTickQueue.length) {
     const item = nextTickQueue[drainHead++];
     if (!item) continue;
+    if (isRealmDying()) break;
     try {
       item.fn(...item.args);
     } catch (err) {
@@ -533,7 +534,6 @@ export class NodeProcess extends EventEmitter {
   env: Record<string, string | undefined>;
   // Node-faithful: assigning an invalid exit code throws at the SETTER (loud),
   // a numeric string coerces; reads return the validated integer.
-  // exit/kill: prototype-installed by absent-members (receiver-safe delegation).
   declare exit: (code?: unknown) => never;
   declare kill: (pid: number, signal?: string) => boolean;
   #exitCode = 0;
@@ -769,7 +769,7 @@ export class NodeProcess extends EventEmitter {
 
   killForNode(pid: number, signal: string): boolean {
     if (pid !== this.pid || signal !== 'SIGUSR2') {
-      throw new NotImplementedError('process.kill', 'only process.kill(process.pid, "SIGUSR2")');
+      throw new NotImplementedError('process.kill', 'only process.kill(pid,SIGUSR2)');
     }
     return this.#requestSelfSignal(signal);
   }

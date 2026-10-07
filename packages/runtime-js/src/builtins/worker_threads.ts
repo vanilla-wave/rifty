@@ -130,10 +130,13 @@ export class Worker extends EventEmitter {
     this.#stderrPiped = opts.stderr === true;
     const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
     const inheritedLaunch = readNodeEntryBootstrapIfPresent()?.launch;
+    const hasOwnExecArgv = Object.prototype.hasOwnProperty.call(opts, 'execArgv');
+    // An EXPLICIT own `execArgv: []` overrides any inheritance (vitest's
+    // spelling); an own non-empty array and an inherited nonempty eval launch
+    // stay the loud ceiling.
     if (
-      (Object.prototype.hasOwnProperty.call(opts, 'execArgv') &&
-        !isExplicitEmptyExecArgv(opts.execArgv)) ||
-      (inheritedLaunch?.kind === 'eval' && inheritedLaunch.execArgv.length > 0)
+      (hasOwnExecArgv && !isExplicitEmptyExecArgv(opts.execArgv)) ||
+      (!hasOwnExecArgv && inheritedLaunch?.kind === 'eval' && inheritedLaunch.execArgv.length > 0)
     ) {
       // TODO(backlog: runtime-js/worker-threads-inherited-exec-argv)
       throw new NotImplementedError(
@@ -230,8 +233,7 @@ export class Worker extends EventEmitter {
       if (handle.kind === 'worker') {
         handle.stdout().on('data', (chunk) => this.emitToOwner('stdout', chunk));
         handle.stderr().on('data', (chunk) => this.emitToOwner('stderr', chunk));
-        // Wrappers always exist (Node 24); `stdout/stderr: true` captures
-        // into them ONLY, otherwise chunks also tee to the parent's stdio.
+        // Wrappers always exist (Node 24); piped captures ONLY, else tee to parent.
         const ownerStdio =
           (fd: 'stdout' | 'stderr') =>
           (chunk: unknown): void => {
