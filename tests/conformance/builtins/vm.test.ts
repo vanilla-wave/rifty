@@ -842,3 +842,27 @@ describe('node:vm runInThisContext offsets (vm-run-in-this-context-offsets)', ()
     );
   });
 });
+
+describe('node:vm Script sandbox offsets stay loud (vm-run-in-this-context-offsets)', () => {
+  it('runInContext/runInNewContext reject columnOffset and negative lineOffset', () => {
+    const vm = loadBuiltin('vm') as {
+      Script: new (
+        code: string,
+        options?: Record<string, unknown>,
+      ) => {
+        runInContext(ctx: Record<string, unknown>): unknown;
+        runInNewContext(ctx?: Record<string, unknown>): unknown;
+      };
+      createContext: (obj?: Record<string, unknown>) => Record<string, unknown>;
+    };
+    const ctx = vm.createContext({});
+    const col = new vm.Script('1;', { columnOffset: 5 });
+    expect(() => col.runInContext(ctx)).toThrow('vm.Script.runInContext.columnOffset');
+    expect(() => col.runInNewContext()).toThrow('vm.Script.runInContext.columnOffset');
+    const neg = new vm.Script('1;', { lineOffset: -2 });
+    expect(() => neg.runInContext(ctx)).toThrow('vm.Script.runInContext.lineOffset.negative');
+    // Positive lineOffset is baked as a physical prefix — sandbox-safe.
+    const pos = new vm.Script('1;', { lineOffset: 3 });
+    expect(() => pos.runInContext(ctx)).not.toThrow();
+  });
+});

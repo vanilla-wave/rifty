@@ -85,6 +85,15 @@ function nameOf(node: unknown): string | undefined {
   return (node as { name?: unknown }).name as string | undefined;
 }
 
+/** Static identifier name OR a string-literal computed key (`o['for']`). */
+function propertyNameOf(node: unknown): string | undefined {
+  if (!node || typeof node !== 'object') return undefined;
+  const n = node as PoisonNode;
+  if (n.type === 'Identifier') return nameOf(n);
+  if (n.type === 'Literal' && typeof n.value === 'string') return n.value;
+  return undefined;
+}
+
 function isIdentifier(node: unknown, name: string): boolean {
   return (
     node !== null &&
@@ -102,12 +111,8 @@ function isSymbolMutationTarget(node: unknown): boolean {
   if (n.type === 'MemberExpression') {
     const object = n.object;
     if (isIdentifier(object, 'Symbol')) return true;
-    // globalThis.Symbol = …
-    if (
-      isIdentifier(object, 'globalThis') &&
-      (n.property !== null && typeof n.property === 'object' ? nameOf(n.property) : undefined) ===
-        'Symbol'
-    ) {
+    // globalThis.Symbol / globalThis['Symbol'] = …
+    if (isIdentifier(object, 'globalThis') && propertyNameOf(n.property) === 'Symbol') {
       return true;
     }
     return isSymbolMutationTarget(object);
@@ -136,10 +141,7 @@ function visitPoison(node: unknown, out: { poisoned: boolean }): void {
       ) {
         const call = callee as PoisonNode;
         const object = call.object;
-        const prop =
-          call.property !== null && typeof call.property === 'object'
-            ? nameOf(call.property)
-            : undefined;
+        const prop = propertyNameOf(call.property);
         const args = Array.isArray(n.arguments) ? (n.arguments as unknown[]) : [];
         const first = args[0];
         // Object.defineProperty/defineProperties/assign or Reflect.set/defineProperty
@@ -153,12 +155,6 @@ function visitPoison(node: unknown, out: { poisoned: boolean }): void {
       }
       break;
     }
-    case 'ClassDeclaration':
-    case 'FunctionDeclaration':
-      // A top-level declaration named `Symbol` shadows the global identifier
-      // for module code (checked by the caller for top level only).
-      if (nameOf(n.id) === 'Symbol') out.poisoned = true;
-      break;
     default:
       break;
   }

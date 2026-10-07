@@ -179,6 +179,34 @@ describe('CJS guard accepts provably-Symbol computed keys', () => {
     );
   });
 
+  it('a NESTED function named Symbol does NOT poison (lexical scope)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "function unrelated() { function Symbol() {} }\nconst KEY = Symbol.for('review.safe.nested'); globalThis[KEY] = 17; export const out = 'ok';\n",
+    });
+    const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: string };
+    expect(ns.out).toBe('ok');
+    expect((globalThis as Record<symbol, unknown>)[Symbol.for('review.safe.nested')]).toBe(17);
+    Reflect.deleteProperty(globalThis, Symbol.for('review.safe.nested'));
+  });
+
+  it('computed spellings poison: Object["defineProperty"](Symbol, …) and globalThis["Symbol"] = …', async () => {
+    const a = esmLoader({
+      '/work/a.mjs':
+        "Object['defineProperty'](Symbol, 'for', { value: () => 'Function' }); const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
+    });
+    await expect(a.import('./a.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+    const b = esmLoader({
+      '/work/b.mjs':
+        "globalThis['Symbol'] = { for: () => 'Function' }; const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
+    });
+    await expect(b.import('./b.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
   it('CJS: defineProperty on Symbol itself poisons', () => {
     const loader = cjsLoader({
       '/work/main.js':

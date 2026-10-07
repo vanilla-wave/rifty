@@ -23,6 +23,8 @@ const HOST_BRIDGE_EXCLUDED = new Set([
   'prependListener',
   'removeListener',
   'removeAllListeners',
+  'exitForNode',
+  'killForNode',
 ]);
 
 interface StaticNameNode {

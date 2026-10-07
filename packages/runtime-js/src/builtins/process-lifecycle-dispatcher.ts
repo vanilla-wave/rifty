@@ -34,6 +34,15 @@ export function emitProcessExitEvent(proc: object, code: number): void {
   (proc as { emit(event: 'exit', code: number): boolean }).emit('exit', code);
 }
 
+/** Receiver-less calls on receiver-dependent process methods (`exit`, `kill`)
+ * act on the ACTIVE runtime-owned process — Node's process methods are plain
+ * closures over the process, so a named import must keep working. */
+export function activeDispatchReceiver(fallback: object): object {
+  const active = readActiveNodeProcessBootstrap()?.process;
+  if (active !== undefined && active !== null && isNodeProcess(active)) return active;
+  return fallback;
+}
+
 function activeLifecycleProcess(): object | null {
   const active = readActiveNodeProcessBootstrap()?.process;
   if (active !== undefined && active !== null) return active;
@@ -95,7 +104,10 @@ export function installProcessLifecycleDispatcher(): void {
     dispatchUnhandled(reason, origin) {
       const active0 = activeLifecycleProcess();
       if (active0 !== null && diedSet().has(active0)) {
-        return { handled: false, hasThrownValue: true, thrownValue: reason };
+        // The process is dying from a previous fatal handler throw — no
+        // handler re-entry, no rethrow claim: the platform's default crash
+        // reporting owns the error (a rethrow here would loop the trap).
+        return { handled: false };
       }
       const active = activeLifecycleProcess();
       if (!isNodeProcess(active)) return { handled: false };

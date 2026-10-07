@@ -513,6 +513,17 @@ export class Script {
     return this.#compiled;
   }
 
+  /** Sandbox (engine-op) runs cannot see the host stack dispatcher: column
+   * offsets and negative line offsets are loudly unsupported there. */
+  #assertSandboxOffsetsSupported(): void {
+    if (this.#columnOffset !== 0) {
+      throw new NotImplementedError('vm.Script.runInContext.columnOffset');
+    }
+    if (this.#lineOffset < 0) {
+      throw new NotImplementedError('vm.Script.runInContext.lineOffset.negative');
+    }
+  }
+
   runInThisContext(options?: VmOptions): unknown {
     // Node ignores run-time lineOffset/columnOffset for a compiled Script
     // (they are construction options); construction offsets apply here.
@@ -535,6 +546,7 @@ export class Script {
     const normalized = { ...normalizeOptions(options), filename: this.#filename };
     assertSupportedScriptOptions(normalized, 'vm.Script');
     assertContextified(contextifiedObject);
+    this.#assertSandboxOffsetsSupported();
     return selectEngineForRun().runCompiled(
       this.#getCompiled(),
       contextifiedObject as ContextObject,
@@ -547,6 +559,7 @@ export class Script {
     }
     const normalized = { ...normalizeOptions(options), filename: this.#filename };
     assertSupportedScriptOptions(normalized, 'vm.Script');
+    this.#assertSandboxOffsetsSupported();
     const context = createContext(contextObject === undefined ? {} : contextObject);
     return selectEngineForRun().runCompiled(this.#getCompiled(), context as ContextObject);
   }

@@ -27,6 +27,7 @@ import {
 import { NotImplementedError, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import {
   beginNodeEvalExplicitExit,
+  intakeUnhandledError,
   ref as refEventLoop,
   unref as unrefEventLoop,
 } from '../internal/event-loop-keepalive.ts';
@@ -108,20 +109,17 @@ function installProcessExitErrorTrap(): void {
 }
 
 function drainNextTicks(): void {
-  // Re-read `.length` each iteration so items enqueued mid-drain (nextTick from
-  // inside nextTick) are processed — same as the old shift()-until-empty loop.
-  // Do NOT snapshot the array.
+  // Re-read `.length` each iteration: items enqueued mid-drain (nextTick from
+  // nextTick) must process; no array snapshot.
   while (drainHead < nextTickQueue.length) {
     const item = nextTickQueue[drainHead++];
     if (!item) continue;
     try {
       item.fn(...item.args);
     } catch (err) {
-      // Surface on the ACTIVE realm process (the one user code attached handlers
-      // to): the seeded NodeProcess in a kernel child, else the REPL singleton.
-      const active = (globalThis as { process?: unknown }).process;
-      const target = active instanceof NodeProcess ? active : riftyProcess;
-      (target as unknown as EventEmitter).emit('uncaughtException', err);
+      // One intake with every other trap surface (fatal latch honored).
+      const o = intakeUnhandledError(err, 'uncaught-error');
+      if (!o.handled) throw 'rethrow' in o ? o.rethrow : err;
     }
   }
   // Fully drained: clear the array + cursor so the next nextTick sees length
@@ -535,6 +533,9 @@ export class NodeProcess extends EventEmitter {
   env: Record<string, string | undefined>;
   // Node-faithful: assigning an invalid exit code throws at the SETTER (loud),
   // a numeric string coerces; reads return the validated integer.
+  // exit/kill: prototype-installed by absent-members (receiver-safe delegation).
+  declare exit: (code?: unknown) => never;
+  declare kill: (pid: number, signal?: string) => boolean;
   #exitCode = 0;
   get exitCode(): number {
     return this.#exitCode;
@@ -621,7 +622,7 @@ export class NodeProcess extends EventEmitter {
       configurable: false,
       writable: false,
     });
-    if (spec !== undefined) defineLifecycleIdentity(this);
+    defineLifecycleIdentity(this);
     if (spec) {
       attachNodeProcessBootstrapIdentity(this, spec);
       installProcessExitErrorTrap();
@@ -749,14 +750,14 @@ export class NodeProcess extends EventEmitter {
     return performance.now() / 1000;
   }
 
-  exit(code?: unknown): never {
-    const c = coerceExitCode(code === undefined ? this.#exitCode : code); // honours exitCode
+  exitForNode(code?: unknown): never {
+    const c = coerceExitCode(code === undefined ? this.#exitCode : code);
     this.#exitCode = c;
     emitProcessExitEvent(this, c);
     const exitCode = toUint8ExitCode(c);
     const exitError = Object.assign(new Error(`process.exit(${c})`), {
       code: RIFTY_PROCESS_EXIT,
-      exitCode, // uint8 wrap: process.exit(257) → 1
+      exitCode, // uint8 wrap
     });
     const evalLifecycleOwned = beginNodeEvalExplicitExit(exitError, () => {
       this.#requestSelfExit(exitCode);
@@ -766,7 +767,7 @@ export class NodeProcess extends EventEmitter {
     throw exitError;
   }
 
-  kill(pid: number, signal = 'SIGTERM'): boolean {
+  killForNode(pid: number, signal: string): boolean {
     if (pid !== this.pid || signal !== 'SIGUSR2') {
       throw new NotImplementedError('process.kill', 'only process.kill(process.pid, "SIGUSR2")');
     }
@@ -780,7 +781,6 @@ export class NodeProcess extends EventEmitter {
 
   #wireIpc(port: MessagePort): void {
     this.#ipcPort = port;
-    // `onmessage = …` does not auto-start the port; `start()` is called below.
     port.onmessage = (ev: MessageEvent): void => {
       const frame = this.#receiveControlFrame(ev.data);
       if (frame === null) return;
