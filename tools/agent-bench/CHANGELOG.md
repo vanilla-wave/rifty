@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Match equivalent action captions through independent declared verb/subject tokens, preserving remaining record identity without adjacency/order restrictions.
+
 - Read YAML-quoted ARIA action headings, preserving colon/apostrophe/control-character record captions and explicit action aliases.
 
 - Accept explicit Save/Update, Add/Create and reservation/booking action aliases of one editor; preserve opaque record suffixes and distinct editors.

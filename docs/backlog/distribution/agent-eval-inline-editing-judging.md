@@ -65,6 +65,7 @@ only here, not at browser/runner/storage boundaries.
 | equivalent commit affordances | raw action count rejects one editor; lossy collapse picks other record | actualpinnedBASE3PASS/current3RED→same3GREEN; caption/editor/enabled guards1/2/1/1RED→exact106GREEN, realoldworkflow3FAIL → I3/I6 |
 | explicit action aliases | Save/Update, Add/Create or reservation/booking mistaken for record identity | actual pinned BASE3PASS/current3RED→same3GREEN; native aliases6RED, opaque suffix guard; exact115GREEN, realoldworkflow3FAIL → I3/I6 |
 | computed action caption | YAML heading quotes mistaken for missing caption | actual pinned BASE3PASS/current3RED→same3GREEN; native3RED beforecode, reader3/caption4 guards→exact119GREEN → I3/I6 |
+| action token placement | adjacent verb/subject assumption rejects existing BASE vocabulary | pinnedBASE3PASS/current3RED→same3GREEN; corrected native7RED, verb15/subject4 guards→exact128GREEN → I3/I6 |
 | version/report | changed criteria rescored as old | retained interrupted82/full96 declarations/offline/archive exact → I8/I9 |
 
 ## Acceptance
@@ -214,3 +215,36 @@ Latest full source gate27/27PASS, actualexit0: unit238.3s FIRSTPASS/no isolated
 rerun, parity119.2s. Launched after all producer/browser/guard/archive work ended.
 Raw: `reference/agent-eval-action-caption-prcheck-green.log.gz`.
 Fresh independent Final round6 required before model96; source unit not closed.
+
+
+Round6 Final7beee BLOCK B7 accepted: SAME pinned Save changes to room / Update
+changes to room (reservation/expense twins), BASE3PASS/current3FAIL; sixphysical
+sourcepairs exact/noModels/pairedApps identical. Permanentreal3RED and native7RED
+before root repair. First authored native8RED included one invalid raw-whitespace
+witness: actual ARIA normalizes both names identically; primary snapshots proved
+this before code, originaltest/log retained, corrected observable-identity test
+PASS. Never claimed that eighth failure as product RED. Shared owner removes
+one declared verb/subject token independent of adjacency/order; preserves other
+caption text, computed-name normalization, native editor identity and enabled
+choices. Real same3GREEN/types0/current128nativePASS; YAML3/verb15/subject4/
+equivalence1/caption4/editor2/enabled1RED→exact128/sourceunchanged; onlyold7beee
+workflow/currentcallers/current3programmes3FAIL. Newcurrent100 controls/gate/
+fresh Final pending; old76/88+12 and originalfailures stay history. Raw:
+`reference/agent-eval-action-caption-final-green-blocked.json`,
+`reference/agent-eval-separated-alias-proof.json.gz`.
+
+
+Latest new100 completed76PASS24FAIL/consumer0, all100physical/noModels/exactpatch,
+book13positiveprogrammesall4PASS; expense8sourcepositiveother3PASS/ownCOICSSFAIL;
+negative16FAIL,9rawCSSrowsincludingpartial. Currenttasks/trials/config/resolved
+criteria exact, original7beeedirty metadata retained. Twoofflineauthoritative
+unchanged/derivedidentical; archive353JSONparsedexact/carriersunchanged. Previous
+88setupFAIL remainsunknown originalFAIL; newseriesdoesnotrescueit. Currentfull
+gate/newFinalR7 next; full96/I10/I11/CLOSE mandatory. Raw:
+`reference/agent-eval-separated-alias-controls-proof.json.gz`.
+
+
+Current fullsourcegate27/27PASS actualexit0: unit236.6s FIRSTPASS/no isolation,
+parity118.7s. All producer/browser/guard/archive work ended before gate. Raw:
+`reference/agent-eval-separated-alias-prcheck-green.log.gz`.
+Fresh independent Final round7 required; source/goal not yetclosed.

@@ -420,3 +420,42 @@ test('YAML quoted captions preserve distinct record suffixes', async ({ page }) 
     ),
   ).rejects.toThrow(/Ambiguous/);
 });
+
+for (const [subjects, first, second] of [
+  ['room', 'Save changes to room', 'Update changes to room'],
+  ['room', 'Add new room', 'Create new room'],
+  ['reservation|booking', 'Save changes to reservation', 'Update changes to booking'],
+  ['reservation|booking', 'Add new reservation', 'Create new booking'],
+  ['expense', 'Save changes to expense', 'Update changes to expense'],
+  ['person', 'Add a new person', 'Create a new person'],
+  ['room', 'Save room', 'room Update'],
+  ['room', 'room Amber Save', 'Update Amber room'],
+] as const) {
+  test(`independent action tokens ${first}/${second} preserve one editor`, async ({ page }) => {
+    await page.setContent(
+      `<input aria-label="Name"><button>${first}</button><button>${second}</button>`,
+    );
+    await expect(
+      workflowAction(
+        { view: page, previewUrl: 'about:blank' },
+        subjects,
+        true,
+        page.getByRole('textbox', { name: 'Name' }),
+      ),
+    ).resolves.toBeDefined();
+  });
+}
+
+test('ARIA-normalized caption whitespace preserves observable alias identity', async ({ page }) => {
+  await page.setContent(
+    '<input aria-label="Name"><button>Save room Train  Fare</button><button>Update room Train Fare</button>',
+  );
+  await expect(
+    workflowAction(
+      { view: page, previewUrl: 'about:blank' },
+      'room',
+      false,
+      page.getByRole('textbox', { name: 'Name' }),
+    ),
+  ).resolves.toBeDefined();
+});

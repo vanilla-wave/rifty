@@ -135,11 +135,39 @@ for (const [task, path, marker, suffix] of [
   );
   add(task, suffix, true, patch);
 }
+for (const [task, path, marker, suffix] of [
+  [
+    booking,
+    'src/App.vue',
+    '<button @click="saveRoom">Save room</button>',
+    'separated-alias-room-commit',
+  ],
+  [
+    booking,
+    'src/App.vue',
+    '<button @click="saveBooking">Save reservation</button>',
+    'separated-alias-reservation-commit',
+  ],
+  [
+    expense,
+    'src/App.svelte',
+    '<button onclick={saveExpense}>Save expense</button>',
+    'separated-alias-expense-commit',
+  ],
+] as const) {
+  const patch = { ...task.controls!.reference! };
+  assert.equal(patch[path]!.split(marker).length, 2);
+  patch[path] = patch[path]!.replace(
+    marker,
+    marker.replace('>Save ', '>Save changes to ') + marker.replace('>Save ', '>Update changes to '),
+  );
+  add(task, suffix, true, patch);
+}
 const lanes: Lane[] = ['rifty', 'rifty-no-coi', 'local-reference', 'native-codex'];
-assert.equal(tasks.length, 22);
+assert.equal(tasks.length, 25);
 const declaration = {
   purpose:
-    'Action-context class consumer controls; twenty-two real programmes/four hosts, no models/quality evidence',
+    'Action-context class consumer controls; twenty-five real programmes/four hosts, no models/quality evidence',
   sourceExpectationVsOwnOutcome:
     'Source-correct expense COI controls may retain exact existing style-import bootstrap failure; no native rescue/score substitution',
   variants,
@@ -151,7 +179,7 @@ const declaration = {
 await writeFile(join(root, 'declared-input-plan.json'), JSON.stringify(declaration, null, 2));
 console.log(`ACTION_CONTEXT_ROOT ${root}`);
 const report = await run(config, tasks, lanes, join(root, 'series'), 'reference');
-assert.equal(report.runs.length, 88);
+assert.equal(report.runs.length, 100);
 assert.deepEqual(report.header.plan, declaration.plan);
 const physical = [];
 for (const row of report.runs) {

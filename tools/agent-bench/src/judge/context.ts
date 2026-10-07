@@ -194,7 +194,8 @@ export async function workflowAction(
   const visible = async (choices: Locator, verbs: string) => {
     const verb = `(?:${verbs.split('|').map(escapeCaption).join('|')})`;
     const subject = `(?:${subjects.split('|').map(escapeCaption).join('|')})`;
-    const actionPrefix = new RegExp(`^(?:${verb}\\s+${subject}|${subject}\\s+${verb})\\b`, 'i');
+    const actionVerb = new RegExp(`\\b${verb}\\b\\s*`, 'i');
+    const actionSubject = new RegExp(`\\b${subject}\\b\\s*`, 'i');
     const result: Locator[] = [];
     const captions: (string | undefined)[] = [];
     for (const node of await choices.all()) {
@@ -205,11 +206,13 @@ export async function workflowAction(
         ? heading.slice(1, heading.lastIndexOf("'")).replace(/''/g, "'")
         : heading;
       const quotedCaption = root?.match(/^(?:button|link) ("(?:\\.|[^"\\])*")/)?.[1];
-      // Only declared leading action aliases; the remaining record caption stays exact.
+      // Remove one declared verb/subject token; all other caption text stays identity.
       const caption = quotedCaption
-        ? (JSON.parse(quotedCaption) as string).replace(
-            actionPrefix,
-            `${verbs.split('|')[0]} ${subjects.split('|')[0]}`,
+        ? JSON.stringify(
+            (JSON.parse(quotedCaption) as string)
+              .replace(actionVerb, '')
+              .replace(actionSubject, '')
+              .trim(),
           )
         : undefined;
       let duplicate = -1;
