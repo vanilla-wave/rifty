@@ -177,10 +177,11 @@ const FUNCTION_LIKE = new Set([
 
 function visitPoison(
   node: unknown,
-  out: { poisoned: boolean },
+  out: { poisoned: boolean; passesSymbolArg?: boolean; declaresSymbolParam?: boolean },
   shadowed: ReadonlySet<string> = new Set(),
-  aliases: ReadonlySet<string> = new Set(),
+  aliasesIn?: Set<string>,
 ): void {
+  const aliases = aliasesIn ?? new Set<string>();
   if (out.poisoned || node === null || typeof node !== 'object') return;
   const n = node as PoisonNode;
   if (typeof n.type !== 'string') return;
@@ -189,8 +190,10 @@ function visitPoison(
   if (FUNCTION_LIKE.has(n.type)) {
     const names = scopeShadowedNames(n as PoisonNode);
     // A local binding named `Symbol` shadows the global identifier INSIDE
-    // this scope — mutations there are local, not builtin mutations.
+    // this scope — mutations there are local, not builtin mutations. Alias
+    // knowledge snapshots at the boundary (outer aliases stay outer).
     innerShadowed = new Set([...shadowed, ...names]);
+    innerAliases = new Set([...aliases]);
   } else if (n.type === 'VariableDeclaration') {
     for (const decl of (n.declarations as unknown[]) ?? []) {
       const d = decl as PoisonNode;
@@ -207,7 +210,8 @@ function visitPoison(
         typeof d.id === 'object' &&
         (d.id as PoisonNode).type === 'Identifier'
       ) {
-        innerAliases = new Set([...aliases, String((d.id as PoisonNode).name)]);
+        innerAliases = aliases;
+        aliases.add(String((d.id as PoisonNode).name));
       }
     }
   }
@@ -261,15 +265,27 @@ function visitPoison(
     default:
       break;
   }
+  // A global-Symbol ARGUMENT flowing into a function whose parameter is named
+  // `Symbol` mutates the builtin through the parameter — poison.
+  if (n.type === 'CallExpression' && !shadowed.has('Symbol')) {
+    for (const arg of Array.isArray(n.arguments) ? (n.arguments as unknown[]) : []) {
+      if (isIdentifier(arg, 'Symbol')) {
+        out.passesSymbolArg = true;
+      }
+    }
+  }
+  if (FUNCTION_LIKE.has(n.type) && scopeShadowedNames(n as PoisonNode).has('Symbol')) {
+    out.declaresSymbolParam = true;
+  }
   for (const key of Object.keys(n)) {
     if (key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'range') {
       continue;
     }
     const value = n[key];
     if (Array.isArray(value)) {
-      for (const item of value) visitPoison(item, out, innerShadowed, innerAliases);
+      for (const item of value) visitPoison(item, out, innerShadowed, innerAliases as Set<string>);
     } else if (value !== null && typeof value === 'object') {
-      visitPoison(value, out, innerShadowed, innerAliases);
+      visitPoison(value, out, innerShadowed, innerAliases as Set<string>);
     }
   }
 }
@@ -311,7 +327,7 @@ export function programPoisonsSymbolProofs(
   program: unknown,
   topLevelBody: readonly unknown[],
 ): boolean {
-  const out = { poisoned: false };
+  const out = { poisoned: false, passesSymbolArg: false, declaresSymbolParam: false };
   for (const child of topLevelBody) {
     if (child !== null && typeof child === 'object') {
       const c = child as PoisonNode;
@@ -329,5 +345,6 @@ export function programPoisonsSymbolProofs(
     }
   }
   if (!out.poisoned) visitPoison(program, out);
+  if (out.passesSymbolArg === true && out.declaresSymbolParam === true) return true;
   return out.poisoned;
 }

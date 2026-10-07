@@ -123,6 +123,26 @@ describe('ESM guard accepts provably-Symbol computed keys', () => {
     );
   });
 
+  it('sibling-statement aliases poison (alias survives to later statements)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "const S = Symbol;\nS.for = () => 'Function';\nconst K = Symbol.for('x'); globalThis[K] = 1; export const out = 'u';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('global Symbol passed into a Symbol-named parameter poisons (mutation reaches the builtin)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "function tweak(Symbol) { Symbol.for = () => 'Function'; }\ntweak(Symbol);\nconst K = Symbol.for('x'); globalThis[K] = 1; export const out = 'u';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
   it("literal string writes keep today's behavior: 'Function' rejects, other literals pass", async () => {
     const loud = esmLoader({
       '/work/loud.mjs': 'globalThis.Function = function evil() {};\n',

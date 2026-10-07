@@ -331,6 +331,7 @@ interface OffsetShift {
 }
 const PERSISTENT_SHIFTS = new Map<string, OffsetShift>();
 let persistentDispatcherInstalled = false;
+let vmDispatching = false;
 const GENERIC_FRAME_RE = /(at (?:eval )?\()?([^\s()]+):(\d+):(\d+)\)?/g;
 
 function ensurePersistentOffsetDispatcher(): void {
@@ -339,9 +340,20 @@ function ensurePersistentOffsetDispatcher(): void {
   const errorCtor = Error as unknown as ErrorWithPrepareStackTrace;
   const previous = errorCtor.prepareStackTrace;
   errorCtor.prepareStackTrace = (err, frames) => {
-    const rendered = previous
-      ? String(previous(err, frames))
-      : `${err.name}: ${err.message}\n${frames.map((frame) => `    at ${String(frame)}`).join('\n')}`;
+    // Re-entrancy guard: when invoked as ANOTHER dispatcher's saved
+    // `previous`, render the default text directly — following the chain
+    // again would cycle (vm ↔ source-maps) and blow the stack.
+    let rendered: string;
+    if (vmDispatching || !previous) {
+      rendered = `${err.name}: ${err.message}\n${frames.map((frame) => `    at ${String(frame)}`).join('\n')}`;
+    } else {
+      vmDispatching = true;
+      try {
+        rendered = String(previous(err, frames));
+      } finally {
+        vmDispatching = false;
+      }
+    }
     if (PERSISTENT_SHIFTS.size === 0) return rendered;
     return rendered.replace(
       GENERIC_FRAME_RE,
@@ -361,13 +373,18 @@ function ensurePersistentOffsetDispatcher(): void {
   };
 }
 
-/** Register the filename's shift (idempotent; latest wins, Node = compile-time). */
+/** Register the filename's shift; a zero-offset run RESETS it (back to the
+ * untouched base for that filename, Node = compile-time semantics). */
 function registerOffsetShift(
   filename: string | undefined,
   lineOffset: number,
   columnOffset: number,
 ): void {
   if (filename === undefined) return;
+  if (lineOffset === 0 && columnOffset === 0) {
+    PERSISTENT_SHIFTS.delete(filename);
+    return;
+  }
   PERSISTENT_SHIFTS.set(filename, {
     firstShiftedLine: 1 + Math.max(0, lineOffset),
     columnShift: columnOffset,
@@ -390,9 +407,6 @@ function runGlobalScriptWithOffsets(
   columnOffset: number,
 ): unknown {
   const prefixed = lineOffset > 0 ? `${'\n'.repeat(lineOffset)}${code}` : code;
-  if (lineOffset === 0 && columnOffset === 0) {
-    return runGlobalScript(withSourceURL(prefixed, filename));
-  }
   registerOffsetShift(filename, lineOffset, columnOffset);
   return runGlobalScript(withSourceURL(prefixed, filename));
 }
@@ -529,9 +543,6 @@ export class Script {
     // (they are construction options); construction offsets apply here.
     const normalized = normalizeOptions(options);
     assertSupportedRunOptions(normalized, 'vm.Script');
-    if (this.#lineOffset === 0 && this.#columnOffset === 0) {
-      return runGlobalScript(withSourceURL(this.#code, this.#filename));
-    }
     registerOffsetShift(this.#filename, this.#lineOffset, this.#columnOffset);
     return runGlobalScript(withSourceURL(this.#code, this.#filename));
   }

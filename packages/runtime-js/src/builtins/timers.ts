@@ -26,6 +26,7 @@ const hostSetTimeout = globalThis.setTimeout.bind(globalThis);
 const hostClearTimeout = globalThis.clearTimeout.bind(globalThis);
 const hostSetInterval = globalThis.setInterval.bind(globalThis);
 const hostClearInterval = globalThis.clearInterval.bind(globalThis);
+const hostQueueMicrotask = globalThis.queueMicrotask.bind(globalThis);
 
 let nextTimerId = 1;
 
@@ -256,6 +257,7 @@ export function setImmediate(
       if (!item) return; // cleared before its timer fired
       immediates.delete(id);
       keepaliveUnref();
+      if (isRealmDying()) return; // Node: fatal kill stops pending immediates
       item.fn(...item.args);
     }, 0);
   return { id };
@@ -273,7 +275,7 @@ export const timers = {
   clearInterval,
   setImmediate,
   clearImmediate,
-  queueMicrotask: globalThis.queueMicrotask,
+  queueMicrotask: hostQueueMicrotask,
 };
 
 // ───────────────────────────── timers/promises ─────────────────────────────
