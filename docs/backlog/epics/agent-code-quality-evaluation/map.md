@@ -1,11 +1,11 @@
 ## Items
 
-0. `distribution/agent-eval-editable-name-judging` — class proof/48 controls atb836; Final BLOCK native role override. B1 repair65BASE/45RED/73GREEN; current gate/fresh Final before eval-v7.
-
-1. `distribution/agent-eval-expanded-comparison` — accepted native-input/Room namespace source Finalc58/8of8; fresh eval-v6 same eight public inputs/full96/all4/three repeats, retained failures/uncertainty/offline report; I1/I2/I3/I4/I7/I8/I9.
+1. `distribution/agent-eval-expanded-comparison` — accepted editable-name/native-role source Final9b/15of15; fresh eval-v7 same eight public inputs/full96/all4/three repeats, retained failures/uncertainty/offline report; I1/I2/I3/I4/I7/I8/I9.
 2. `distribution/agent-eval-boundary-diagnostics` — actual operation catalog and substantive finite escalation/fresh confirmation; I10/I11 mandatory. Existing scripts/report/corpus reused.
 
 ## Open questions
+
+- Completed-contract retirement before CLOSE — owner: agent — same accepted JSON must remain inspectable against reviewed authority after cleanup. Direct CLI currently needs named HEAD document (actual deletion2/restoration0); keep source contract byte-frozen9b until historical-reading proof settles retirement. Source unit itself accepted; no rescore or scope reduction.
 
 - Completed prerequisites: nativeCodex0.159.3 real CLI/usage/isolation/budget proof; SIGINT physically settles tools. Frozen pilot-v1/own-origin private command checks; native24 authoring controls, physical four-origin exit/judge-substitution controls; original runners unsupported in browsers explicitly measured. Last current refs24:16PASS/8browser-library setupFAIL, bothappsall4PASS. Independent Final+GREEN baef89ee, no unit residuals.
 - Campaign size: roughly 20–30 cases × 4 environments × 3 trials ≈ 240–360 live runs plus reference solutions per environment; 2026-09-13 medians 62–83 s agent time with tails 329–541 s, plus cold real-project install in the browser — owner: agent — report PICKUP records the declared matrix, expected runs, wall-clock and usage before a campaign starts; the pilot corpus frozen under I7 closes I5, expansion carries its own campaign.

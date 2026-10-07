@@ -30,7 +30,7 @@ No new user scope choice, model/estimator/selection policy or execution mechanis
 
 ## Acceptance
 
-1. Freeze complete corrected eval-v6/config/selection/control/source identity before a fresh
+1. Freeze complete corrected eval-v7/config/selection/control/source identity before a fresh
   96trial campaign:8cases×4origins×3freshrepeats, task/lane/trial order, PiLuna/medium,
    nativeCodexgpt-6.1-sol/low separate,100tools/600s. Allselected failures retained;
    fullmatrixprimary. No adaptive compatible-subset pruning; no resume/overwrite.
@@ -100,3 +100,19 @@ re-cut: 2026-10-07 — independently confirmed native Date/Time false-negative r
 - 2026-10-07 — required class sweep independently confirms native Number/abc false-negative; shared native-input source/profile fingerprints cover booking-v3/expense-v3, same public8/other6. Label-only Reservation room name public36/privateRED requires primary field namespace repair. First72/29PASS43FAIL retained; three COI Svelte source positives have console-supported bootstrap CORS, Amount not reached. Re-cut source controls retain own-host failures perI6 and add actual Vue Number consumer; no runtime feature expansion. Source Final/gates and fresh96 still pending.
 
 - 2026-10-07 — corrected native-input/Room sourceFinalc58 independentlyaccepted8/8/8axes/no findings; reference/agent-eval-native-input-judging-final-green.json. Frozenv6 protocol reference/agent-eval-expanded-comparison-v6-protocol.md, fullfresh96 identicalpublic8/config/order/limits. Historical87/sourcescores andcontrolattempts remainunchanged; I10/I11 stillmandatory.
+
+
+## Editable-name continuation
+
+re-cut: 2026-10-07 — eval-v6 interrupted84/96 after independently verified
+accessible-name false-negative, original outcomes/12missing retained. Common
+context fixes descendant values and preserves named native ARIA role overrides;
+public8/case judges/controls/config/support unchanged — trace: none
+
+- sourceFinal+GREEN9b00128347bb7499b9a94f0507e28a342f9dc4db accepted15/15,
+  all8axesPASS/findings0/unitresiduals0; same record
+  reference/agent-eval-editable-name-judging-final-green.json. Native73GREEN,
+  role guard45RED/28GREEN→exact73GREEN, trueBASE65GREEN; source fullgate27PASS.
+  Original48controls/b836BLOCK remain history. Frozenv7 protocol
+  reference/agent-eval-expanded-comparison-v7-protocol.md before fresh full96;
+  actual clean launch/source/cost/resource identities remeasured. I10/I11 remain.

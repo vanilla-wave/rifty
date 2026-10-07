@@ -275,8 +275,8 @@ This helper stays outside agent projects. Original eval-v5 interrupted87/96 and
 its immutable scores remain history; no retrospective rejudge or native rescue.
 
 ```sh
-pnpm agent-bench plan --suite eval-v6 --config tools/agent-bench/configs/pilot-comparison.json
-pnpm agent-bench run --suite eval-v6 --config tools/agent-bench/configs/pilot-comparison.json --output /tmp/agent-eval-fresh
+pnpm agent-bench plan --suite eval-v7 --config tools/agent-bench/configs/pilot-comparison.json
+pnpm agent-bench run --suite eval-v7 --config tools/agent-bench/configs/pilot-comparison.json --output /tmp/agent-eval-fresh
 pnpm agent-bench report /tmp/agent-eval-fresh
 ```
 
@@ -285,3 +285,10 @@ Expanded comparison completion does not close the goal: operation catalog and
 substantive boundary exploration/fresh confirmations (I10/I11) remain required.
 
 Editable-name correction: eval-v7 keeps the same eight public inputs; booking-v4/expense-v4 use shared accessible-control names (ADR-0517). Source/context fingerprints distinguish criteria; eval-v6 interrupted84/96 remains unaccepted history. Real48 no-model controls include all4-host bare-label/textarea/contenteditable positives; three expense COI references retain exact bootstrap failures. Full96/I10/I11 remain pending.
+
+
+Editable-name source Final+GREEN9b accepted15/15; legal native input role overrides
+preserved (65BASE/73current native interactions). Full source gate27PASS.
+Original b83648 controls/BLOCK and eval-v6 interrupted84 remain unchanged history.
+Fresh96 uses [frozenv7 protocol](../../docs/backlog/distribution/reference/agent-eval-expanded-comparison-v7-protocol.md);
+I10/I11 and whole goal remain open.
