@@ -141,3 +141,5 @@
 
 
 - 2026-10-07 — frozenv8 protocol/8tasks96plan beforecodingcalls, sourcebcebaa603f andcompletedcontractbytefrozen. Precallgate accidentallydefault-sandbox/full27:6RED,13unitfiles122fail/35timeouts/85EPERM, onceisolatedstayedRED; primarylistenEPERM127.0.0.1. No product/test fix. Correctpermissionsfullgate27PASS/unit251.6FIRSTPASS/parity119.0, rawbothhistoriesretained. Actualcleanlaunchplan remeasuredaftermetadata commit; samecriteria/config/tasks/order/trials. PRbodyNOTEupdatedv8/open96-I10-I11-CLOSE, no goalcompletion.
+
+- 2026-10-07 — eval-v8 clean49d28 completed96/44PASS51FAIL1budget, runner0, own services stopped; two offline unchanged/387JSON/24large archive. New real pinned-reference Cancel room edit public saved-state/cancel/reload GREEN versus privateRED confirms I3/I6 required source repair; full96 stays immutable/unaccepted history. reference/agent-eval-expanded-comparison-v8-completed.md and agent-eval-cancel-action-baseline.json.gz. No scope reduction; fresh accepted96/I10/I11/CLOSE still mandatory.

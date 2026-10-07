@@ -130,3 +130,18 @@ Fresh complete96 eval-v8, same public8/config/limits/order/estimator; frozen
 reference/agent-eval-expanded-comparison-v8-protocol.md before calls. Original
 88unknownCOIsetupFAIL and source-positive expenseCSSFAIL stay own failures,
 never native-rescued. I10/I11 still mandatory; campaign not whole-goal closure.
+
+
+## Cancellation continuation
+
+re-cut: 2026-10-07 — complete eval-v8/96 retained, confirmed reference Cancel
+room edit false-positive invalidates acceptance; shared operation repair and
+new frozen source/fresh96 precede comparison Final. Public eight/config/limits/
+order preserved; I10/I11 mandatory, original scores unchanged — trace: none
+
+- Completed96/44PASS51FAIL1budget, runner0; own services stopped; two offline
+  views unchanged,387JSON/24large canonical archive. Raw authorities/actual
+  native public saved-state/cancel/reload GREEN versus privateRED recorded in
+  reference/agent-eval-expanded-comparison-v8-completed.md and
+  reference/agent-eval-cancel-action-baseline.json.gz. No captured-programme
+  full-public claim; Edit Bay/Edit Train candidates still unverified.
