@@ -283,3 +283,5 @@ pnpm agent-bench report /tmp/agent-eval-fresh
 Before live model calls, source/control Final and a clean frozen plan are required.
 Expanded comparison completion does not close the goal: operation catalog and
 substantive boundary exploration/fresh confirmations (I10/I11) remain required.
+
+Editable-name correction: eval-v7 keeps the same eight public inputs; booking-v4/expense-v4 use shared accessible-control names (ADR-0517). Source/context fingerprints distinguish criteria; eval-v6 interrupted84/96 remains unaccepted history. Real48 no-model controls include all4-host bare-label/textarea/contenteditable positives; three expense COI references retain exact bootstrap failures. Full96/I10/I11 remain pending.

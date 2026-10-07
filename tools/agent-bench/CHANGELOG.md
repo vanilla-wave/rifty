@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Select editable controls by accessible names, excluding textarea/option data; booking-v4/expense-v4/eval-v7 preserve public inputs/history (ADR-0517).
+
 - Judge native Date/Time/Number representability through one owner; include private support provenance, booking-v3/expense-v3/eval-v6 with unchanged public inputs/history (ADR-0516).
 
 - Observe current-filter CSV exports before/after toggle actions; freeze CSVv5/eval-v5 with unchanged public inputs/history (ADR-0515).

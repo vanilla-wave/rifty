@@ -73,8 +73,19 @@ export function field({ view }: JudgeContext, name: string | RegExp) {
 /** Editing selects controls, even when read-only outputs share their purpose. */
 const editableControls =
   'input:not([readonly]):not([disabled]),textarea:not([readonly]):not([disabled]),select:not([disabled]),[contenteditable="true"],[role="combobox"]:not([aria-disabled="true"]):not([aria-readonly="true"])';
-export function editableControl({ view }: JudgeContext, name: string | RegExp) {
-  return view.getByLabel(name).and(view.locator(editableControls));
+export function editableControl(ctx: JudgeContext, name: string | RegExp) {
+  const { view } = ctx;
+  // Prefer accessible names over label text that includes control values.
+  const labelledEditable = '[contenteditable][aria-label],[contenteditable][aria-labelledby]';
+  return field(ctx, name)
+    .or(view.getByRole('listbox', { name }))
+    .or(view.getByRole('spinbutton', { name }))
+    .or(view.getByRole('checkbox', { name }))
+    .or(view.getByRole('radio', { name }))
+    .or(view.getByRole('slider', { name }))
+    .or(view.getByRole('button', { name }))
+    .or(view.getByLabel(name).and(view.locator(labelledEditable)))
+    .and(view.locator(editableControls));
 }
 
 const escapeCaption = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
