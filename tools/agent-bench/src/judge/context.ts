@@ -84,6 +84,16 @@ export function editableControl(ctx: JudgeContext, name: string | RegExp) {
     .or(view.getByRole('radio', { name }))
     .or(view.getByRole('slider', { name }))
     .or(view.getByRole('button', { name }))
+    .or(view.getByRole('switch', { name }))
+    .or(view.getByRole('menuitemcheckbox', { name }))
+    .or(view.getByRole('menuitemradio', { name }))
+    .or(view.getByRole('option', { name }))
+    .or(view.getByRole('gridcell', { name }))
+    .or(view.getByRole('link', { name }))
+    .or(view.getByRole('menuitem', { name }))
+    .or(view.getByRole('separator', { name }))
+    .or(view.getByRole('tab', { name }))
+    .or(view.getByRole('treeitem', { name }))
     .or(view.getByLabel(name).and(view.locator(labelledEditable)))
     .and(view.locator(editableControls));
 }

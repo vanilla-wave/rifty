@@ -53,6 +53,18 @@ Unaccepted quality history because known observer defect, no quality conclusion.
 
 ## Limits
 
+Independent Final at b836 BLOCK B1: legal native checkbox role=switch worked at
+BASE0f6, current role list omitted it. [Original review, native gold, class
+RED/GREEN and exact guard reversion](agent-eval-native-role-override-proof.json.gz).
+65 actual native baseline interactions pass; b83645RED/20GREEN; current all65
+plus unchanged8 regressions pass. Role-family revert45RED/28GREEN, exact byte
+restore73GREEN. Includes checkbox/radio overrides and permitted native
+button/image/reset/submit role siblings. Actual role-name projection retained;
+no raw-label union admitting textarea/option values. Original48 controls above
+remain b836 history; no retrospective report/proof rewrite. Current source full
+pr:check27/27 PASS (unit206.5s/parity114.5s), formatted73 native regressions PASS;
+current gate log in the new proof bundle. Fresh independent Final pending.
+
 Controls establish this observer class; no representative comparison or goal
 closure. Full pr:check27/27 PASS (unit201s/parity114.7s), [original gate log](agent-eval-editable-name-prcheck-green.log.gz). Independent Final precedes new96. I10 actual catalog/probes,
 I11 controls/escalation/fresh confirmation and whole audit remain mandatory.

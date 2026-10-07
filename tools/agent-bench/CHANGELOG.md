@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve named native input ARIA role overrides in the shared editable-control judge; 65 actual baseline interactions and class regression/reversion proof.
+
 - Select editable controls by accessible names, excluding textarea/option data; booking-v4/expense-v4/eval-v7 preserve public inputs/history (ADR-0517).
 
 - Judge native Date/Time/Number representability through one owner; include private support provenance, booking-v3/expense-v3/eval-v6 with unchanged public inputs/history (ADR-0516).

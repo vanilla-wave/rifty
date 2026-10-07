@@ -1,6 +1,6 @@
 ## Items
 
-0. `distribution/agent-eval-editable-name-judging` — observed common getter defect; class RED/GREEN/48 controls, source gate/independent Final before fresh eval-v7.
+0. `distribution/agent-eval-editable-name-judging` — class proof/48 controls atb836; Final BLOCK native role override. B1 repair65BASE/45RED/73GREEN; current gate/fresh Final before eval-v7.
 
 1. `distribution/agent-eval-expanded-comparison` — accepted native-input/Room namespace source Finalc58/8of8; fresh eval-v6 same eight public inputs/full96/all4/three repeats, retained failures/uncertainty/offline report; I1/I2/I3/I4/I7/I8/I9.
 2. `distribution/agent-eval-boundary-diagnostics` — actual operation catalog and substantive finite escalation/fresh confirmation; I10/I11 mandatory. Existing scripts/report/corpus reused.
