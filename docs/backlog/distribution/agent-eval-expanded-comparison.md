@@ -30,7 +30,7 @@ No new user scope choice, model/estimator/selection policy or execution mechanis
 
 ## Acceptance
 
-1. Freeze complete corrected eval-v7/config/selection/control/source identity before a fresh
+1. Freeze complete corrected eval-v8/config/selection/control/source identity before a fresh
   96trial campaign:8cases×4origins×3freshrepeats, task/lane/trial order, PiLuna/medium,
    nativeCodexgpt-6.1-sol/low separate,100tools/600s. Allselected failures retained;
    fullmatrixprimary. No adaptive compatible-subset pruning; no resume/overwrite.
@@ -116,3 +116,17 @@ public8/case judges/controls/config/support unchanged — trace: none
   Original48controls/b836BLOCK remain history. Frozenv7 protocol
   reference/agent-eval-expanded-comparison-v7-protocol.md before fresh full96;
   actual clean launch/source/cost/resource identities remeasured. I10/I11 remain.
+
+
+## Action-context continuation
+
+re-cut: 2026-10-07 — eval-v7 interrupted82/96 on confirmed inline-edit scalar
+ambiguity; all82scores/14missing preserved. Action-context book-v5/expense-v5/
+eval-v8 sourceFinalbcebaa independent8axes/26of26PASS/0blockers/unitresiduals0.
+Actual128native/BASE-current6/100sourcecontrols/fingerprints8/archive353/fullgate
+27 verified; B1–B7 and YAML real RED/GREEN/guard histories retained. Named source
+contract stays byte-frozen for historical-reader proof atCLOSE, not unfinished.
+Fresh complete96 eval-v8, same public8/config/limits/order/estimator; frozen
+reference/agent-eval-expanded-comparison-v8-protocol.md before calls. Original
+88unknownCOIsetupFAIL and source-positive expenseCSSFAIL stay own failures,
+never native-rescued. I10/I11 still mandatory; campaign not whole-goal closure.

@@ -1,8 +1,6 @@
 ## Items
 
-0. `distribution/agent-eval-inline-editing-judging` — observed creation/inline-edit scalar ambiguity; actual native public gold/private RED, source repair/class controls/Final before new96.
-
-1. `distribution/agent-eval-expanded-comparison` — accepted editable-name/native-role source Final9b/15of15; eval-v7 interrupted82 for observed inline-edit ambiguity; corrected fresh same eight public inputs/full96/all4/three repeats, retained failures/uncertainty/offline report; I1/I2/I3/I4/I7/I8/I9.
+1. `distribution/agent-eval-expanded-comparison` — action-context source Finalbcebaa PASS26/26; eval-v7 interrupted82 remains history. Frozen eval-v8/same eight public inputs/full96/all4/three repeats, retained failures/uncertainty/offline report; I1/I2/I3/I4/I7/I8/I9.
 2. `distribution/agent-eval-boundary-diagnostics` — actual operation catalog and substantive finite escalation/fresh confirmation; I10/I11 mandatory. Existing scripts/report/corpus reused.
 
 ## Open questions
