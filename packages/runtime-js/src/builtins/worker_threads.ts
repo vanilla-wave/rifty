@@ -97,10 +97,8 @@ export function setSameRealmWorkerModuleImporter(importer: SameRealmWorkerModule
 export class Worker extends EventEmitter {
   static isMainThread = true;
   threadId: number;
-  /** Always a stream (Node 24): with `stdout: true` the child's stdout is
-   * captured here only; without it chunks ALSO tee to the parent's stdout. */
+  /** Always a stream (Node 24); piped captures only, else tee to parent. */
   stdout: Readable = new Readable({ read() {} });
-  /** Same shape as {@link stdout}, for stderr. */
   stderr: Readable = new Readable({ read() {} });
   private readonly entry: WorkerEntry;
   private readonly workerData: unknown;

@@ -1,0 +1,197 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Блокеров unit нет. 87 unit-тестов и 7 parity GREEN; merge после pr:check (не запускался). Tracked-файлы не изменены; цель открыта.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "b39f885dd2f28d691901cf1080f11caf62c0050f",
+  "unit_goal_source": "docs/backlog/runtime-js/worker-threads-stdio-streams-empty-exec-argv.md @ e01dae63; goal: docs/backlog/epics/vitest-run-in-browser/goal.md (не изменён); BASE 64fd44b9f66f8bd099dbd20dde5c55568d01f9c1",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4+I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:45",
+      "summary": "Child13 config-pipeline suspension блокирует acceptance12: config.ts, TS tests, оба pools, результаты и exit codes ещё не доказаны end-to-end."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/public/compat/vitest.md:9",
+      "summary": "Финальная compat-заявка и доказательство claimed/loud paths остаются до GREEN acceptance12."
+    },
+    {
+      "clause": "I3+I4+I5+I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/ledger.md:16",
+      "summary": "Review loops u3/u5/u7/u10 остаются открыты по ledger; эта проверка относится только к u11."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Fault: non-empty execArgv — loud throw, без выделения thread",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/worker_threads.test.ts:502",
+      "note": ""
+    },
+    {
+      "row": "Fault: trailing output drains до wrapper EOF; без потерянного хвоста/cap hang",
+      "source": "fault-matrix",
+      "trace": "I2+I5",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/worker_threads/stdio-streams-empty-exec-argv.case.ts:38",
+      "note": "C3: EOF после первого chunk проходит; многокусковый хвост не дискриминируется."
+    },
+    {
+      "row": "Acceptance 1: explicit [] constructs; оба Readable и pipe доступны синхронно",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/worker_threads/stdio-streams-empty-exec-argv.case.ts:25",
+      "note": "C1: stderr.pipe=undefined проходит."
+    },
+    {
+      "row": "Acceptance 2: console bytes только в streams; streams завершаются после exit",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/worker_threads/stdio-streams-empty-exec-argv.case.ts:33",
+      "note": "C2/C3: лишний parent stderr и ранний EOF проходят."
+    },
+    {
+      "row": "Acceptance 3: non-empty execArgv сохраняет named loud ceiling",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/worker_threads.test.ts:502",
+      "note": ""
+    },
+    {
+      "row": "Worker constructor: explicit-empty execArgv и stdout/stderr options",
+      "source": "public-api",
+      "trace": "I5",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/worker_threads/stdio-streams-empty-exec-argv.case.ts:25",
+      "note": "C1/C2: проверка stderr shape/suppression неполная."
+    },
+    {
+      "row": "Worker.stdout: construction-time Readable, captured bytes, EOF",
+      "source": "public-api",
+      "trace": "I5",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/worker_threads/stdio-streams-empty-exec-argv.case.ts:30",
+      "note": "C3: EOF после первого chunk проходит."
+    },
+    {
+      "row": "Worker.stderr: construction-time Readable, captured bytes, EOF",
+      "source": "public-api",
+      "trace": "I5",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/worker_threads/stdio-streams-empty-exec-argv.case.ts:30",
+      "note": "C1/C2/C3: pipe, suppression и trailing EOF неполно дискриминируются."
+    },
+    {
+      "row": "Worker.ref(): возвращает hold живого Worker",
+      "source": "public-api",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/worker_threads.test.ts:1080",
+      "note": ""
+    },
+    {
+      "row": "Worker.unref(): снимает Worker hold без активных stdio consumers",
+      "source": "public-api",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/worker-keepalive.case.ts:40",
+      "note": ""
+    },
+    {
+      "row": "Frozen expected stdout: types и точные captured from-worker/werr bytes",
+      "source": "frozen-artifact",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/stdio-streams-empty-exec-argv.case.ts:53",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/worker_threads/stdio-streams-empty-exec-argv.case.ts:30",
+          "evidence": "node --import tsx /tmp/rifty-worker-stdio-review-mutants.mjs (exit 0): stderr-pipe-undefined → stillMatchesExpected:true. Probe меняет только rifty stderr.pipe; исходный Node oracle сохранён.",
+          "summary": "C1: проверяется stdout.pipe, но не stderr.pipe; нарушение Acceptance 1 проходит.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/worker_threads/stdio-streams-empty-exec-argv.case.ts:53",
+          "evidence": "node --import tsx /tmp/rifty-worker-stdio-review-mutants.mjs (exit 0): stderr-parent-leak → stillMatchesExpected:true. run-in-node.ts:422 возвращает только успешный stdout; run-in-rifty.ts:609–610 тоже.",
+          "summary": "C2: лишний parent stderr невидим comparator; suppression из Acceptance 2 проверена слабо.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/worker_threads/stdio-streams-empty-exec-argv.case.ts:38",
+          "evidence": "node --import tsx /tmp/rifty-worker-stdio-review-mutants.mjs (exit 0): end-on-first-chunk → stillMatchesExpected:true; instrumented replay → before-exit-end [\"stdout\",\"stderr\"].",
+          "summary": "C3: один chunk на поток; ранний EOF проходит. Хвост и порядок EOF не дискриминируются.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/worker-threads-stdio-streams-empty-exec-argv.md:45",
+          "evidence": "node --input-type=module -e 'import { Worker } from \"node:worker_threads\"; const w=new Worker(\"\",{eval:true,execArgv:[]}); console.log(process.version,typeof w.stdout,typeof w.stdout.pipe,typeof w.stderr,typeof w.stderr.pipe); await w.terminate();' → v24.16.0 object function object function (exit 0).",
+          "summary": "C5: Context/Acceptance 4 ошибочно обещают null без опций. Код соответствует Node. I5 null не требует; по RDY-3 эта строка не создаёт coverage-обязательство.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/worker-threads-lifecycle.ts:45",
+          "evidence": "node --import tsx /tmp/rifty-worker-unref-pipe-probe.mts (exit 0), Node v24.16.0: child timer100 → console.log/error + process.exit(0); parent execArgv:[], stdout/stderr:true, stdout.pipe(process.stdout), stderr.on(data), unref(). Node=\"later\\ngot-error later-error\\n\", rifty=\"\". Контроль без consumers: оба \"\". acquireAux():31–34 пропускает refs после unref; userUnref():45–51 снимает все aux refs. Коммитного RED для взаимодействия нет. Exact Vitest 4.1.11 cli-api.CnMVyzaz.js:3229–3238 использует pipe; ThreadsPoolWorker не вызывает Worker.unref(). Sweep: Worker ref/unref, capture/default tee, child-process stdio.",
+          "summary": "C4: unref() снимает refs читаемых stdio; поздние bytes теряются. Реальный Node mismatch, но дополнительное взаимодействие вне заявленного I5 пути — advisory по REV-2/3.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

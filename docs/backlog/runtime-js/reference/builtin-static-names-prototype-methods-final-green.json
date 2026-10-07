@@ -1,0 +1,127 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Unit принять с NOTE: 41 Vitest и 2 parity GREEN; goal продолжить. Tracked-файлы не изменены.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "b39f885dd2f28d691901cf1080f11caf62c0050f",
+  "unit_goal_source": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md (ready, неизменён относительно BASE); docs/backlog/epics/vitest-run-in-browser/goal.md I6; BASE a482910684e6c38ad9ad89ca7f6473a8f6de9a3e.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4+I5+I6",
+      "location": "docs/backlog/runtime-js/vitest-config-pipeline-suspension.md:21",
+      "summary": "u13: configFile+plugins pipeline не завершён; claimed vitest tree ещё не выполняется целиком."
+    },
+    {
+      "clause": "I4+I5+I7",
+      "location": "docs/backlog/runtime-js/vitest-run-acceptance.md:44",
+      "summary": "u12: end-to-end pass/fail, оба pools, npm test, verbose и итоговые compat claims остаются открыты."
+    },
+    {
+      "clause": "I3+I4+I5+I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/ledger.md:16",
+      "summary": "Независимые Final+GREEN исправлений u5/u7/u10/u11 остаются продолжением; этот verdict проверяет только u3."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: named cwd links, cwd() returns string; nextTick links.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-prototype-methods.case.ts:12",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: hydrated cwd is the exact instance member.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-prototype-methods.case.ts:18",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: own argv/env named imports keep working.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-prototype-methods.case.ts:16",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: unprovided builtin export names fail at link; statfsSync exception ends when sibling u4 supplies it.",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/cjs-static-export-link.test.ts:334",
+      "note": ""
+    },
+    {
+      "row": "New public builtin export node:process.cwd: callable ESM named import.",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-prototype-methods.case.ts:14",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/absent-members.ts:23",
+          "evidence": "node --import tsx /tmp/rifty-review-authority-probe.ts → exit 0. Node v24.16.0 named exit(0): \"true\\n\"; rifty: \"true\\nTypeError self.exitForNode is not a function\\n\". Standalone createModuleLoader: named kill → TypeError self.killForNode is not a function; default.kill → NotImplementedError process.kill; named exit → TypeError; default.exit → Error process.exit(0). После installProcessGlobals named kill даёт правильный loud throw.",
+          "summary": "Без trusted bootstrap новые named exit/kill получают namespace/{} вместо singleton process. Реальный false-fallback; Acceptance 1–3 и ADR-0157 не заявляют receiverless exit/kill без bootstrap, поэтому NOTE.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/module-loader/cjs-interop-authority.ts:99",
+          "evidence": "pnpm vitest run packages/runtime-js/src/module-loader/cjs-static-export-link.test.ts → 16/16 PASS; cjs-interop.test.ts + builtin-overrides.test.ts → 25/25 PASS. node --import tsx /tmp/rifty-review-projection-probe.ts → Projected prototype names absent from Node []; constructor/bridge/Function/Object exclusions false на обеих сторонах. PR-4: unit parity относительно BASE изменён только newline; negative test и relevant runner criteria неизменны. node /private/tmp/rifty-u3-red-YkKz2T/baseline-authority.mjs → exit 1, cwd link-time SyntaxError; current.mjs → exit 0, string/function/true/true/true. BASE authority подставлен точно из git; остальные модули текущие, реальные.",
+          "summary": "Committed negative carrier проверяет own runtime-only имя util, но не constructor/host bridges/inherited prototypes. Текущая проекция корректна; negative-тест исключений — advisory, Out of scope не имеет trace.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}
