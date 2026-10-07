@@ -126,3 +126,6 @@
 
 
 - 2026-10-07 — verifier retirement observation: direct blockers CLI after optional completed-contract deletion exits2 unreadable named contract; restore EXACT9b bytes yields PASS15/15 exit0, same JSON unchanged. Contract retained only as reviewed authority, not unfinished source/map work. Before CLOSE, prove historical verdict validation through completed-document retirement; no blanket deletion or record rewrite. Current source/criteria unchanged.
+
+
+- 2026-10-07 — eval-v7 ownSIGINT42015 after observed inline-edit scalar ambiguity;82/96 retained47PASS35FAIL14missing, actualexit0/statusinterrupted/activeCodex2unrecorded. Ownproxy41959 stoppedafterterminal, wrapper/CLI/proxyallpsgone. Twooffline592authoritativeunchanged/identical, canonicalarchive334JSON/18large originalbytes/carriers/parsedreportexact. Current sourceaa616/criteria untouched, no rescore/resume. CapturednoCOI1 creation+inlineRoomNamecount2; nativeinteractivepublicedit/invalidpreservationGREEN/globalRED. RealpinnedVueoriginal40GREEN, onlyconcurrentindependentlyworkingcreate/editorlayout throughsamevalidation/commitowner publicGREEN/privateRED. Requiredsource repair ready; full96/I10/I11/auditCLOSE unchanged.
