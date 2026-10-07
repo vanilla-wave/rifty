@@ -193,7 +193,33 @@ export async function workflowAction(
   const add = namedActions(ctx, actionCaption('add|create', subjects));
   const visible = async (choices: Locator) => {
     const result: Locator[] = [];
-    for (const node of await choices.all()) if (await node.isVisible()) result.push(node);
+    const captions: (string | undefined)[] = [];
+    for (const node of await choices.all()) {
+      if (!(await node.isVisible())) continue;
+      // Root ARIA caption includes descendant names; role/state/DOM shape is not identity.
+      const caption = (await node.ariaSnapshot()).match(
+        /^-(?: button| link) ("(?:\\.|[^"\\])*")/,
+      )?.[1];
+      let duplicate = -1;
+      if (purpose && (await purpose.count()) && caption) {
+        for (let index = 0; index < result.length; index++) {
+          if (captions[index] !== caption) continue;
+          const first = await controlForAction(purpose, result[index]!);
+          const second = await controlForAction(purpose, node);
+          if (await first.and(second).count()) {
+            duplicate = index;
+            break;
+          }
+        }
+      }
+      if (duplicate >= 0) {
+        if (!(await result[duplicate]!.isEnabled()) && (await node.isEnabled()))
+          result[duplicate] = node;
+      } else {
+        result.push(node);
+        captions.push(caption);
+      }
+    }
     return result;
   };
   const updates = await visible(update);

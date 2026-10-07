@@ -62,6 +62,7 @@ only here, not at browser/runner/storage boundaries.
 | participant representation | global select/checkbox branch hides intended toggle/checkbox | six real native mixed-type consumers3RED/3PASS before repair; exact same tests current94GREEN → I3/I6 |
 | complete participant group | nearest nonempty ancestor drops sibling; native ownership pins id | actual BASE-v4 whole helperPASS/current2permanentRED, idless form/non-form; guards6/1/1/1RED→exact100GREEN → I3/I6 |
 | creation opener/commit | Add begins/resets shared editor; Save commits, label priority loses data | actual3pinnedBASEPASS/current3RED beforecode→same3GREEN; sharedcommit1/distinctintent1RED→exact102GREEN/realoldworkflow3FAIL → I3/I6 |
+| equivalent commit affordances | raw action count rejects one editor; lossy collapse picks other record | actualpinnedBASE3PASS/current3RED→same3GREEN; caption/editor/enabled guards1/2/1/1RED→exact106GREEN, realoldworkflow3FAIL → I3/I6 |
 | version/report | changed criteria rescored as old | retained interrupted82/full96 declarations/offline/archive exact → I8/I9 |
 
 ## Acceptance
@@ -146,3 +147,20 @@ fresh independent Finalround4 pending. Raw:
 `reference/agent-eval-creation-opener-controls-proof.json.gz`.
 
 Current B4 gate: `reference/agent-eval-creation-opener-prcheck-green.log.gz`.
+
+Round4 Finalc9 BLOCK B5 accepted: two SAME Save handlers for one editor,
+pinned room/reservation/expense BASE3PASS/current3FAIL. Permanent same3RED
+beforecode→same3GREEN; native106PASS/types0/current3opener+4singledualPASS;
+equivalence/caption/editor/enabled guards1/2/1/1RED→exact106GREEN, real old
+workflow/currentcallers3FAIL/sourceunchanged. Same computed accessible caption
+and editable purpose group equivalent affordances; preserve escaped identities
+and editor distinctions, prefer enabled counterpart. No guessed NLP or DOM shape.
+Current64 completed43PASS21FAIL/allphysical/noModels/raw6CSS, twooffline
+authoritativeunchanged/derivedidentical, archive227JSONparsedexact/carriers
+unchanged. Currentfullgate27/27PASS (unit243.1s/parity116.5s, firstPASS/no retries);
+fresh independent Finalround5 pending. Raw:
+`reference/agent-eval-creation-opener-final-green-blocked.json`,
+`reference/agent-eval-duplicate-commit-proof.json.gz`.
+
+Current B5 controls: `reference/agent-eval-duplicate-commit-controls-proof.json.gz`;
+gate: `reference/agent-eval-duplicate-commit-prcheck-green.log.gz`.

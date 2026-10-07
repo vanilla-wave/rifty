@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Accept equivalent commit affordances of one editor through computed accessible captions and editable purpose; preserve distinct record/editor ambiguity and enabled choices.
+
 - Commit a shared creation editor through Save when Add opens/resets it; preserve Add for an independent creation editor using its editable purpose.
 
 - Preserve complete participant sets in split editors and idless forms; compare actual native form elements, retain shared unique purposes and validate complete contextual groups.

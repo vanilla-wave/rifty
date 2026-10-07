@@ -277,3 +277,46 @@ test('creation Add and editing Save keep distinct editor purposes', async ({ pag
   await expect(page.locator('body')).toHaveAttribute('data-saved', 'New');
   await expect(page.locator('#edit-name')).toHaveValue('Existing');
 });
+
+test('equivalent commit affordances preserve computed caption across role and DOM shape', async ({
+  page,
+}) => {
+  await page.setContent(
+    '<input aria-label="Room name" value="Amber"><button disabled aria-label="Save room"><span>icon only</span></button><a href="#" aria-label="Save room" onclick="event.preventDefault();document.body.dataset.saved=\'Amber\'">Different text</a>',
+  );
+  const ctx = { view: page, previewUrl: 'about:blank' };
+  await (
+    await workflowAction(ctx, 'room', false, page.getByRole('textbox', { name: 'Room name' }))
+  ).click();
+  await expect(page.locator('body')).toHaveAttribute('data-saved', 'Amber');
+});
+
+test('equal commit captions in distinct editors remain ambiguous', async ({ page }) => {
+  await page.setContent(
+    '<form><label>Room name<input value="Amber"></label><button>Save room</button></form><form><label>Room name<input value="Bay"></label><button>Save room</button></form>',
+  );
+  const ctx = { view: page, previewUrl: 'about:blank' };
+  await expect(
+    workflowAction(ctx, 'room', false, page.getByRole('textbox', { name: 'Room name' })),
+  ).rejects.toThrow(/Ambiguous/);
+});
+
+test('different record captions sharing fields remain ambiguous', async ({ page }) => {
+  await page.setContent(
+    '<input aria-label="Room name"><button>Save room Amber</button><button>Save room Bay</button>',
+  );
+  const ctx = { view: page, previewUrl: 'about:blank' };
+  await expect(
+    workflowAction(ctx, 'room', false, page.getByRole('textbox', { name: 'Room name' })),
+  ).rejects.toThrow(/Ambiguous/);
+});
+
+test('escaped record captions remain distinct identities', async ({ page }) => {
+  await page.setContent(
+    '<input aria-label="Room name"><button aria-label=\'Save room "Amber"\'>Save</button><button aria-label=\'Save room "Bay"\'>Save</button>',
+  );
+  const ctx = { view: page, previewUrl: 'about:blank' };
+  await expect(
+    workflowAction(ctx, 'room', false, page.getByRole('textbox', { name: 'Room name' })),
+  ).rejects.toThrow(/Ambiguous/);
+});
