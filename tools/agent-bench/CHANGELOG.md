@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Scope participant selects, checkboxes and toggles to their intended editor before choosing representation or state; include native external button form ownership.
+
 - Bind creation/editing scalar controls to their intended actions/native form owner; book-v5/expense-v5/eval-v8 preserve public inputs/history (ADR-0518).
 
 - Preserve named native input ARIA role overrides in the shared editable-control judge; 65 actual baseline interactions and class regression/reversion proof.

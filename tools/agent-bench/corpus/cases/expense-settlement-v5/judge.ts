@@ -2,7 +2,7 @@ import {
   actionCaption,
   caption,
   choiceOption,
-  controlForAction,
+  controlsForAction,
   editableControl,
   editableControlForAction,
   fieldValue,
@@ -78,31 +78,34 @@ async function payer(ctx: JudgeContext, name: string) {
       await (await choiceOption(ctx.view, name)).click();
   }
 }
-async function participants(ctx: JudgeContext, names: string[]) {
+export async function participants(ctx: JudgeContext, names: string[]) {
   const action = await workflowAction(ctx, 'expense', true);
-  const candidates = editableControl(ctx, /\bparticipants\b/i);
-  const select = (await candidates.count())
-    ? await controlForAction(candidates, action)
-    : candidates;
-  if (
-    (await select.count()) &&
-    (await select.first().evaluate((node) => node.tagName)) === 'SELECT'
-  ) {
-    await selectChoices(select.first(), names);
+  const selects = editableControl(ctx, /\bparticipants\b/i);
+  const identities = /\b(?:Zed|Ada|Cara)\b/i;
+  const checkboxes = ctx.view.getByRole('checkbox', { name: identities });
+  const toggles = ctx.view
+    .getByRole('button', { name: identities })
+    .and(
+      ctx.view
+        .getByRole('button', { pressed: true })
+        .or(ctx.view.getByRole('button', { pressed: false })),
+    );
+  const candidates = selects.or(checkboxes).or(toggles);
+  if (!(await candidates.count())) return;
+  const owned = await controlsForAction(candidates, action);
+  const select = owned.and(selects);
+  if ((await select.count()) && (await select.evaluate((node) => node.tagName)) === 'SELECT') {
+    await selectChoices(select, names);
     return;
   }
   for (const name of ['Zed', 'Ada', 'Cara']) {
-    const checkboxes = ctx.view.getByRole('checkbox', { name: caption(name) });
-    const checkbox = (await checkboxes.count())
-      ? await controlForAction(checkboxes, action)
-      : checkboxes;
+    const checkbox = owned.and(ctx.view.getByRole('checkbox', { name: caption(name) }));
     if (await checkbox.count()) await checkbox.setChecked(names.includes(name));
     else {
-      const toggle = ctx.view.getByRole('button', {
-        name: caption(name),
-        pressed: !names.includes(name),
-      });
-      if (await toggle.count()) await (await controlForAction(toggle, action)).click();
+      const toggle = owned.and(
+        ctx.view.getByRole('button', { name: caption(name), pressed: !names.includes(name) }),
+      );
+      if (await toggle.count()) await toggle.click();
     }
   }
 }

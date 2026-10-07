@@ -98,9 +98,12 @@ export function editableControl(ctx: JudgeContext, name: string | RegExp) {
     .and(view.locator(editableControls));
 }
 
-/** Scalar observation follows its intended action when several editors coexist. */
-export async function controlForAction(candidates: Locator, action: Locator): Promise<Locator> {
-  if ((await candidates.count()) === 1) return candidates;
+/** Native form association or closest action context owns the candidate set. */
+async function controlsInAction(
+  candidates: Locator,
+  action: Locator,
+  scalar: boolean,
+): Promise<Locator> {
   if ((await action.count()) !== 1) throw new Error('Action context is missing or ambiguous');
   const formId = await action.evaluate((node) => {
     const form =
@@ -110,26 +113,44 @@ export async function controlForAction(candidates: Locator, action: Locator): Pr
     return form?.id || null;
   });
   if (formId) {
-    const index = await candidates.evaluateAll((nodes, id) => {
-      const owned = nodes.flatMap((node, index) => {
-        const form =
-          node instanceof HTMLInputElement ||
-          node instanceof HTMLTextAreaElement ||
-          node instanceof HTMLSelectElement
-            ? node.form
-            : node.closest('form');
-        return form?.id === id ? [index] : [];
-      });
-      return owned.length === 1 ? owned[0]! : -1;
-    }, formId);
-    if (index >= 0) return candidates.nth(index);
+    const indices = await candidates.evaluateAll(
+      (nodes, id) =>
+        nodes.flatMap((node, index) => {
+          const form =
+            node instanceof HTMLInputElement ||
+            node instanceof HTMLTextAreaElement ||
+            node instanceof HTMLSelectElement ||
+            node instanceof HTMLButtonElement
+              ? node.form
+              : node.closest('form');
+          return form?.id === id ? [index] : [];
+        }),
+      formId,
+    );
+    if (scalar ? indices.length === 1 : indices.length > 0) {
+      let owned = candidates.nth(indices[0]!);
+      for (const index of indices.slice(1)) owned = owned.or(candidates.nth(index));
+      return owned;
+    }
   }
   const scopes = await action.locator('xpath=ancestor::*').all();
   for (const scope of scopes.reverse()) {
     const contained = candidates.and(scope.locator('*'));
-    if ((await contained.count()) === 1) return contained;
+    const count = await contained.count();
+    if (scalar ? count === 1 : count > 0) return contained;
   }
   throw new Error('Control purpose is missing or ambiguous in the intended action context');
+}
+
+/** Scalar observation preserves shared singleton editors and rejects ambiguous sets. */
+export async function controlForAction(candidates: Locator, action: Locator): Promise<Locator> {
+  if ((await candidates.count()) === 1) return candidates;
+  return controlsInAction(candidates, action, true);
+}
+
+/** Scope a heterogeneous participant set before selecting its representation or state. */
+export async function controlsForAction(candidates: Locator, action: Locator): Promise<Locator> {
+  return controlsInAction(candidates, action, false);
 }
 
 export async function editableControlForAction(

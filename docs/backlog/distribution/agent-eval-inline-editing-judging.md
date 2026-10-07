@@ -57,6 +57,9 @@ only here, not at browser/runner/storage boundaries.
 | creation while editing visible | first/edit field silently selected | independent native public create preserves edit draft; creation intent native guard2RED→exactGREEN → I3/I6 |
 | reservation picker/date/time/seats | same row/form context assumption | book/expense class sweep; native3control-context types/current40physical → I3/I6 |
 | repeated action/edit/read | stale or wrong row context | native80 incltarget state/ambiguousaction1RED→exactGREEN → I3/I6 |
+| participant toggle native form | external button native owner omitted | actual native external button RED; owner revert2RED/exact88GREEN → I3/I6 |
+| participant state/identity | pressed filter discards intended editor | actual expense consumer opposite-state3RED overall; state revert2RED/exact88GREEN; checkbox/select/button external siblings → I3/I6 |
+| participant representation | global select/checkbox branch hides intended toggle/checkbox | six real native mixed-type consumers3RED/3PASS before repair; exact same tests current94GREEN → I3/I6 |
 | version/report | changed criteria rescored as old | retained interrupted82/full96 declarations/offline/archive exact → I8/I9 |
 
 ## Acceptance
@@ -80,10 +83,20 @@ all3positivebookprogrammesall4PASS, all3positiveexpenseprogrammesother3PASS,
 COIFAIL actualexactCSSCORS. Fourbootstraprowsinclpartial; baselinehasnone.
 All40physicalbefore+patch/after/noModels, twooffline273unchanged/identical.
 Current full source pr:check27/27 PASS (unit1301.2s/parity129.4s);
-fresh independent Final pending; proof:
+Fresh independent Final29bc BLOCK: native external button ownership and
+state-before-context; executed genuine bugs accepted without scope reduction.
+Native permanent3RED/9PASS before repair; current88GREEN including external
+checkbox/select/button consumers; both guards RED/exact restoration GREEN.
+Class sweep additionally observed mixed representation3RED/3PASS. One existing
+action-context owner now scopes the complete participant set, then representation
+and pressed state. Original mixed tests unchanged/current94PASS. Current group-source40 completed21PASS19FAIL; physical/ZIP/noModels
+verified, two offline273authoritative unchanged/derivedidentical, archive143JSON
+parsedsourceexact/carriers unchanged. Current full gate27/27PASS (unit287.4s, both initially-red files passed
+built-in isolated rerun; parity121.7s). Fresh independent Final round2 pending; prior intermediate40 completed
+21PASS19FAIL (original controls archive and scores retained). Prior proof:
 `reference/agent-eval-action-context-proof.json.gz`.
 Eval-v7 ownSIGINT:82/96/47PASS35FAIL14missing, actualexit0/headerinterrupted.
-History full pr:check27/27 PASS (unit205.4s/parity114.9s); source fix not implemented.
+Interruption history full pr:check27/27 PASS (unit205.4s/parity114.9s); retained before current source repair.
 Two offline regenerations592 authoritative unchanged/identical views; archive334
 JSON/18large original bytes exact/canonical CLI links/carriers unchanged.
 
@@ -95,6 +108,10 @@ exact, shared context changesall8fingerprints; oldcriteria/results remainhistory
 
 ## Residuals
 
-Unit: fresh independent Final pending; current source gate27/27 PASS; implementation/class proof/current40 complete.
+Unit: Final29bc BLOCK recorded in `reference/agent-eval-action-context-final-green-blocked.json`; both defects and executed representation sibling repaired at one owner; native94PASS. Current group-source40 completed21PASS19FAIL/physical+twooffline+archive exact; threeguards2/2/3RED→exact94GREEN; current full gate27/27PASS (unit287.4s, two files passed isolation; parity121.7s); fresh independent round2 pending; original/intermediate40 and gates remain immutable history.
 Goal: accepted full96, I10 actual catalog/probes, I11 finite escalation/fresh48,
 end-to-end audit/CLOSE with historical-contract retirement proof.
+Current raw group proof: `reference/agent-eval-participant-group-proof.json.gz`;
+current40 proof: `reference/agent-eval-participant-group-controls-proof.json.gz`.
+
+Current gate raw: `reference/agent-eval-participant-group-prcheck-green.log.gz`.

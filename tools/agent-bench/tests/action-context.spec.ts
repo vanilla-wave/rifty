@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { editableControlForAction, workflowAction } from '../src/judge/context.ts';
+import { participants } from '../corpus/cases/expense-settlement-v5/judge.ts';
+import {
+  controlForAction,
+  editableControlForAction,
+  workflowAction,
+} from '../src/judge/context.ts';
 
 for (const reversed of [false, true]) {
   test(`creation and inline editing target their own controls, reversed=${reversed}`, async ({
@@ -92,3 +97,101 @@ test('native form-associated controls remain targeted outside the form subtree',
   await expect(page.locator('#edit')).toHaveValue('Changed');
   await expect(page.locator('#create')).toHaveValue('Creation');
 });
+
+test('native external participant buttons follow their form action', async ({ page }) => {
+  await page.setContent(
+    '<form id="create-form"><button>Add expense</button></form><form id="edit-form"><button>Save expense Train</button></form><button type="button" form="create-form" aria-label="Ada" aria-pressed="false" onclick="this.setAttribute(\'aria-pressed\',\'true\')">Ada</button><button type="button" form="edit-form" aria-label="Ada" aria-pressed="false" onclick="this.setAttribute(\'aria-pressed\',\'true\')">Ada</button>',
+  );
+  const ctx = { view: page, previewUrl: 'about:blank' };
+  await (
+    await controlForAction(
+      page.getByRole('button', { name: 'Ada' }),
+      await workflowAction(ctx, 'expense', true),
+    )
+  ).click();
+  await expect(page.locator('button[form="create-form"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('button[form="edit-form"]')).toHaveAttribute('aria-pressed', 'false');
+});
+
+for (const desired of [false, true]) {
+  for (const createState of [false, true]) {
+    test(`expense participant intent precedes state, desired=${desired}, create=${createState}`, async ({
+      page,
+    }) => {
+      const editState = !createState;
+      const toggle = (state: boolean) =>
+        `<button type="button" aria-label="Ada" aria-pressed="${state}" onclick="this.setAttribute('aria-pressed',String(this.getAttribute('aria-pressed')!=='true'))">Ada</button>`;
+      await page.setContent(
+        `<form>${toggle(createState)}<button>Add expense</button></form><form>${toggle(editState)}<button>Save expense Train</button></form>`,
+      );
+      await participants({ view: page, previewUrl: 'about:blank' }, desired ? ['Ada'] : []);
+      await expect(
+        page.locator('form').nth(0).getByRole('button', { name: 'Ada' }),
+      ).toHaveAttribute('aria-pressed', String(desired));
+      await expect(
+        page.locator('form').nth(1).getByRole('button', { name: 'Ada' }),
+      ).toHaveAttribute('aria-pressed', String(editState));
+    });
+  }
+}
+
+for (const kind of ['checkbox', 'select', 'button'] as const) {
+  test(`external native ${kind} participant consumer preserves the other draft`, async ({
+    page,
+  }) => {
+    const control = (form: string, selected: boolean) =>
+      kind === 'checkbox'
+        ? `<input type="checkbox" form="${form}" aria-label="Ada" ${selected ? 'checked' : ''}>`
+        : kind === 'select'
+          ? `<select form="${form}" multiple aria-label="Participants"><option ${selected ? 'selected' : ''}>Ada</option></select>`
+          : `<button type="button" form="${form}" aria-label="Ada" aria-pressed="${selected}" onclick="this.setAttribute('aria-pressed',String(this.getAttribute('aria-pressed')!=='true'))">Ada</button>`;
+    await page.setContent(
+      `<form id="create-form"><button>Add expense</button></form><form id="edit-form"><button>Save expense Train</button></form>${control('create-form', false)}${control('edit-form', true)}<button>Delete person Ada</button>`,
+    );
+    await participants({ view: page, previewUrl: 'about:blank' }, ['Ada']);
+    for (const form of ['create-form', 'edit-form']) {
+      const node = page.locator(`[form="${form}"]`);
+      if (kind === 'checkbox') await expect(node).toBeChecked();
+      else if (kind === 'select') await expect(node).toHaveValues(['Ada']);
+      else await expect(node).toHaveAttribute('aria-pressed', 'true');
+    }
+  });
+}
+
+for (const createKind of ['checkbox', 'select', 'button'] as const) {
+  for (const editKind of ['checkbox', 'select', 'button'] as const) {
+    if (createKind === editKind) continue;
+    test(`participant representation follows intent: create=${createKind}, edit=${editKind}`, async ({
+      page,
+    }) => {
+      const control = (kind: typeof createKind) =>
+        kind === 'checkbox'
+          ? '<input type="checkbox" aria-label="Ada">'
+          : kind === 'select'
+            ? '<select multiple aria-label="Participants"><option>Ada</option><option selected>Cara</option></select>'
+            : `<button type="button" aria-label="Ada" aria-pressed="false" onclick="this.setAttribute('aria-pressed',String(this.getAttribute('aria-pressed')!=='true'))">Ada</button>`;
+      await page.setContent(
+        `<form id="create-form">${control(createKind)}<button>Add expense</button></form><form id="edit-form">${control(editKind)}<button>Save expense Train</button></form>`,
+      );
+      await participants({ view: page, previewUrl: 'about:blank' }, ['Ada']);
+      const create = page.locator('#create-form');
+      const edit = page.locator('#edit-form');
+      if (createKind === 'checkbox') await expect(create.getByRole('checkbox')).toBeChecked();
+      else if (createKind === 'select')
+        await expect(create.getByRole('listbox')).toHaveValues(['Ada']);
+      else
+        await expect(create.getByRole('button', { name: 'Ada' })).toHaveAttribute(
+          'aria-pressed',
+          'true',
+        );
+      if (editKind === 'checkbox') await expect(edit.getByRole('checkbox')).not.toBeChecked();
+      else if (editKind === 'select')
+        await expect(edit.getByRole('listbox')).toHaveValues(['Cara']);
+      else
+        await expect(edit.getByRole('button', { name: 'Ada' })).toHaveAttribute(
+          'aria-pressed',
+          'false',
+        );
+    });
+  }
+}
