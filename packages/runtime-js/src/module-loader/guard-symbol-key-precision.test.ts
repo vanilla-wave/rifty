@@ -179,6 +179,16 @@ describe('ESM guard accepts provably-Symbol computed keys', () => {
     expect(ns.out).toBe('u');
   });
 
+  it('computed globalThis access with a DYNAMIC key poisons (Sym+bol concatenation)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "const S = globalThis['Sym' + 'bol']; S.for = () => 'Function'; const K = Symbol.for('x'); globalThis[K] = 1; export const out = 'u';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
   it("literal string writes keep today's behavior: 'Function' rejects, other literals pass", async () => {
     const loud = esmLoader({
       '/work/loud.mjs': 'globalThis.Function = function evil() {};\n',

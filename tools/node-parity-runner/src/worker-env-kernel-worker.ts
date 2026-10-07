@@ -124,8 +124,8 @@ setSyncMirror(vfs);
 
 resetKeepalive();
 installTimerGlobals();
-installNodeHostRejectionEvents(hostProcess, (reason) => {
-  const outcome = intakeUnhandledError(reason, 'rejection');
+installNodeHostRejectionEvents(hostProcess, (reason, promise) => {
+  const outcome = intakeUnhandledError(reason, 'rejection', promise);
   if ('rethrow' in outcome) throw outcome.rethrow;
 });
 const onUncaughtException = (error: unknown): void => {

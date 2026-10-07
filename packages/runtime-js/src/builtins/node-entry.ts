@@ -208,7 +208,17 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
         compiler,
       }).run(opts.source);
     } catch (error) {
-      throw projectNodeEvalError(error, opts.source, 'sync', compiler);
+      // A top-level SYNC throw reaches the process handlers first (Node);
+      // unclaimed errors keep the loud projection below.
+      const { intakeUnhandledError } = await import('../internal/event-loop-keepalive.ts');
+      const outcome = intakeUnhandledError(error, 'uncaught-error');
+      if (outcome.handled) return;
+      throw projectNodeEvalError(
+        'rethrow' in outcome ? outcome.rethrow : error,
+        opts.source,
+        'sync',
+        compiler,
+      );
     }
     registerNodeEvalDrainLifecycle({
       beforeExit: async () => {

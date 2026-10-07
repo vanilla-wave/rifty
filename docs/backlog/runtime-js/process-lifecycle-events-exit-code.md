@@ -63,12 +63,13 @@ fault tests in `event-loop-keepalive.test.ts` + `process-globals.test.ts`.
 
 ## Out of scope
 
-- Stopping RAW guest microtasks (`queueMicrotask`, Promise reactions) after a
-  fatal handler throw: any JS wrapper frame shifts the pinned `[eval]` caret
-  projection (parity `process/node-eval-context-lifecycle-a`), and the host
-  queue cannot be gated. Macrotask surfaces (timeout/interval/immediate/
-  nextTick) ARE gated. Open residual on this unit — needs a stack-invisible
-  seam or loader-level compile support.
+- RAW guest microtasks (`queueMicrotask`, Promise reactions) after a fatal
+  handler throw still run — the Fault-matrix row `throw inside handler` KEEPS
+  this obligation; it is an OPEN unit residual (macrotask surfaces
+  timeout/interval/immediate/nextTick ARE gated). Two wrapper approaches
+  shifted the pinned `[eval]` caret projection (parity
+  `process/node-eval-context-lifecycle-a`); the host queue cannot be gated.
+  Needs a stack-invisible seam or loader-level compile support.
 - `beforeExit` emission — goal map §Out of scope (note, not an obligation).
 - vitest-main silent-exit (I4 `process.exit(0)` while cac action pending) —
   owned by `worker-threads-handle-keepalive` (the drain must wait on a live
@@ -92,6 +93,10 @@ challenge: 2026-10-02 — clear — inherited goal §Challenge (2026-09-15, 6 pr
 
 ## Decisions
 
+- re-cut: 2026-10-06 — fork: RAW-microtask continuation after a fatal handler
+  throw stays an OPEN unit residual (two carrier attempts broke the pinned
+  eval caret projection; host queue ungated) — trace: I3 (fault-matrix
+  'throw inside handler' row unchanged; goal residual)
 - ready-verdict: 2026-10-02 — Contract+RED @ 24a8a8546976c82de76e4f4ef1a6d2dfad6cd9e7
 - 2026-10-02 — agent (PICKUP, `DEC-2` pending final shape): carrier = a
   process-lifecycle dispatcher registered into the existing keepalive traps

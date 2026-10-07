@@ -101,7 +101,7 @@ function diedSet(): WeakSet<object> {
 
 export function installProcessLifecycleDispatcher(): void {
   setProcessLifecycleDispatcher({
-    dispatchUnhandled(reason, origin) {
+    dispatchUnhandled(reason, origin, promise) {
       const active0 = activeLifecycleProcess();
       if (active0 !== null && diedSet().has(active0)) {
         // The process is dying from a previous fatal handler throw — no
@@ -133,7 +133,7 @@ export function installProcessLifecycleDispatcher(): void {
         emitReason: unknown,
       ): typeof HANDLED | { readonly thrown: unknown } => {
         try {
-          if (event === 'unhandledRejection') proc.emit(event, emitReason, undefined);
+          if (event === 'unhandledRejection') proc.emit(event, emitReason, promise);
           else proc.emit(event, emitReason);
           return HANDLED;
         } catch (replacement) {

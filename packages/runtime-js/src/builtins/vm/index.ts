@@ -417,9 +417,11 @@ function installPersistentHook(): void {
       // recompiling the same filename with DIFFERENT offsets: last wins.
       return defaultStackRender(err, wrapped);
     }
-    if (previous) return previous(err, frames);
-    // Unshifted stack, no outer hook — read through V8's own default so the
-    // header/frames stay byte-identical to the pre-hook base.
+    // Unshifted stack: read through V8's own default — byte-identical to the
+    // pre-hook base AND cycle-free (a chained source-map dispatcher that
+    // captured this hook would otherwise re-enter it forever). Known
+    // limitation: an outer remapper does not map stacks while a vm offset
+    // registration is active (Out of scope).
     Reflect.deleteProperty(errorCtor, 'prepareStackTrace');
     try {
       return err.stack;

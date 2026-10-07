@@ -90,7 +90,11 @@ type PoisonNode = { readonly type?: string; readonly [key: string]: unknown };
  * reviewers enumerated; the ceiling (ADR-0171) stays whole everywhere else.
  */
 
-function countIdentifierOccurrences(program: unknown, name: string): number {
+function countIdentifierOccurrences(
+  program: unknown,
+  name: string,
+  allowedComputed: ReadonlySet<string>,
+): number {
   let count = 0;
   const scan = (node: unknown): void => {
     if (node === null || typeof node !== 'object') return;
@@ -100,6 +104,28 @@ function countIdentifierOccurrences(program: unknown, name: string): number {
     // A string literal naming the target (globalThis['Symbol'] = …) can reach
     // the builtin through computed access — counts as an occurrence.
     if (n.type === 'Literal' && (n as { value?: unknown }).value === name) count += 1;
+    // A COMPUTED member on globalThis with a non-literal key can construct any
+    // name ('Sym'+'bol') — the module loses Symbol-key provability entirely.
+    if (n.type === 'MemberExpression' && (n as { computed?: unknown }).computed === true) {
+      const obj = n.object as PoisonNode | null;
+      const prop = n.property as PoisonNode | null;
+      if (
+        obj !== null &&
+        typeof obj === 'object' &&
+        obj.type === 'Identifier' &&
+        obj.name === 'globalThis' &&
+        prop !== null &&
+        typeof prop === 'object' &&
+        prop.type !== 'Literal'
+      ) {
+        // The qualifying const binding itself is the claimed write key — any
+        // OTHER dynamic key can construct any name.
+        const propName = prop.type === 'Identifier' ? String(prop.name) : undefined;
+        if (propName === undefined || !allowedComputed.has(propName)) {
+          count += 1_000; // guaranteed poison
+        }
+      }
+    }
     for (const key of Object.keys(n)) {
       if (key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'range') {
         continue;
@@ -184,7 +210,7 @@ export function programPoisonsSymbolProofs(
 ): boolean {
   const bound = literalSymbolConstNames(topLevelBody);
   if (bound.size === 0) return true;
-  const occurrences = countIdentifierOccurrences(program, 'Symbol');
+  const occurrences = countIdentifierOccurrences(program, 'Symbol', bound);
   // Each qualifying factory consumes exactly one `Symbol` identifier.
   return occurrences !== bound.size;
 }

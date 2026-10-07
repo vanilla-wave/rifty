@@ -51,6 +51,7 @@ export interface ProcessLifecycleDispatcher {
   dispatchUnhandled(
     reason: unknown,
     origin: NodeEvalUnhandledOrigin,
+    promise?: unknown,
   ): ProcessLifecycleDispatchOutcome;
   /** Natural drain resolved: emit `exit` with the process's final code. */
   emitNaturalExit(): void;
@@ -76,12 +77,13 @@ export interface UnhandledIntakeOutcome {
 export function intakeUnhandledError(
   reason: unknown,
   origin: NodeEvalUnhandledOrigin,
+  promise?: unknown,
 ): UnhandledIntakeOutcome {
   // The internal exit control signal never reaches user handlers (baseline:
   // beginNodeEvalUnhandled excludes it too).
   if (isRiftyProcessExit(reason)) return { handled: true };
   const state = keepaliveState();
-  const dispatch = state.processLifecycle?.dispatchUnhandled(reason, origin);
+  const dispatch = state.processLifecycle?.dispatchUnhandled(reason, origin, promise);
   if (dispatch?.handled) return { handled: true };
   // A handler throw is fatal with the NEW thrown value — null/undefined
   // included (hasThrownValue), never conflated with "no handler".
@@ -550,6 +552,7 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
 
 interface RejectionEventLike {
   reason: unknown;
+  promise?: unknown;
   preventDefault?(): void;
 }
 interface RejectionTarget {
@@ -619,7 +622,7 @@ export function installUnhandledRejectionTrap(
   target: RejectionTarget = self as unknown as RejectionTarget,
 ): void {
   target.addEventListener('unhandledrejection', (ev: RejectionEventLike) => {
-    const outcome = intakeUnhandledError(ev.reason, 'rejection');
+    const outcome = intakeUnhandledError(ev.reason, 'rejection', ev.promise);
     if (outcome.handled) {
       ev.preventDefault?.();
       return;
