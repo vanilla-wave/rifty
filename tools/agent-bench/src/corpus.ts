@@ -14,6 +14,7 @@ interface Card {
   project: string;
   prompt: string;
   judge: string;
+  judgeSupport?: 'native-input-v1';
   inputsSha256: string;
   lockSha256: string;
   promptSha256: string;
@@ -62,7 +63,8 @@ export async function loadCorpus(
       !['calibration', 'evaluation'].includes(card.split) ||
       card.project !== 'project.json' ||
       card.prompt !== 'prompt.md' ||
-      !/^judge\.(cjs|mjs|ts)$/.test(card.judge)
+      !/^judge\.(cjs|mjs|ts)$/.test(card.judge) ||
+      (card.judgeSupport !== undefined && card.judgeSupport !== 'native-input-v1')
     )
       throw new Error('Invalid corpus card');
     ids.add(card.id);
@@ -117,7 +119,13 @@ export async function loadCorpus(
       corpusManifestSha256: digest(manifestText),
       caseCardSha256: digest(cardText),
       controls,
-      judgeFiles: [join(dir, card.judge), 'tools/agent-bench/src/judge/context.ts'],
+      judgeFiles: [
+        join(dir, card.judge),
+        'tools/agent-bench/src/judge/context.ts',
+        ...(card.judgeSupport === 'native-input-v1'
+          ? ['tools/agent-bench/src/judge/native-input.ts']
+          : []),
+      ],
       ...(app
         ? {
             judge: (

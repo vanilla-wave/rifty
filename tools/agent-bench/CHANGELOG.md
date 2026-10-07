@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Judge native Date/Time/Number representability through one owner; include private support provenance, booking-v3/expense-v3/eval-v6 with unchanged public inputs/history (ADR-0516).
+
 - Observe current-filter CSV exports before/after toggle actions; freeze CSVv5/eval-v5 with unchanged public inputs/history (ADR-0515).
 
 - Exclude note delete actions through computed accessible role names, including descendant ARIA/image labels; shared entry/Wiki regression proof, prior outcomes unchanged.

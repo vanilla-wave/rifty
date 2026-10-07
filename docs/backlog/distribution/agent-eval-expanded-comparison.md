@@ -30,7 +30,7 @@ No new user scope choice, model/estimator/selection policy or execution mechanis
 
 ## Acceptance
 
-1. Freeze complete corrected eval-v5/config/selection/control/source identity before a fresh
+1. Freeze complete corrected eval-v6/config/selection/control/source identity before a fresh
   96trial campaign:8cases×4origins×3freshrepeats, task/lane/trial order, PiLuna/medium,
    nativeCodexgpt-6.1-sol/low separate,100tools/600s. Allselected failures retained;
    fullmatrixprimary. No adaptive compatible-subset pruning; no resume/overwrite.
@@ -90,3 +90,11 @@ Original mandatory I10/I11 diagnostics follows; comparison never closes goal alo
 re-cut: 2026-10-07 — source repair precedes fresh eval-v5; expansion acceptance unchanged, interrupted55/missing41 retained — trace: none
 
 - 2026-10-07 — source/control Final8544 accepted11/11/0blockers; NOTE version corrected to eval-v5 before calls, public matrix unchanged. Frozen source contract retained for verdict reader; not an open map item.
+
+## Native calendar continuation
+
+re-cut: 2026-10-07 — independently confirmed native Date/Time false-negative requires source repair before fresh eval-v6; interrupted87/missing9 retained, no public scope reduction — trace: none
+
+- Actual independent native public36/36 versus immutable private RED; reference26/26 unchanged. Captured public34/36 additionally demonstrates missing Validation for native Seats0/1.5; old scores unchanged. ADR0516/new source/control proof precedes the full fresh96; I10/I11 mandatory.
+
+- 2026-10-07 — required class sweep independently confirms native Number/abc false-negative; shared native-input source/profile fingerprints cover booking-v3/expense-v3, same public8/other6. Label-only Reservation room name public36/privateRED requires primary field namespace repair. First72/29PASS43FAIL retained; three COI Svelte source positives have console-supported bootstrap CORS, Amount not reached. Re-cut source controls retain own-host failures perI6 and add actual Vue Number consumer; no runtime feature expansion. Source Final/gates and fresh96 still pending.

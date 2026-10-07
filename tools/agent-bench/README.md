@@ -1,8 +1,8 @@
 # Agent benchmark
 
-Private diagnostic harness; never a paid CI lane. Same five tasks/model/common Pi
-policy, three cold runs per supported lane by default. Tool/context differences
-remain explicit; a delta is not automatically a runtime defect.
+Private local benchmark; four real lanes, versioned bug/feature/app corpora and
+three fresh trials by default. The original five tasks are the smoke set.
+Tool/context differences remain explicit; a delta is not a runtime-only cause.
 
 ```sh
 pnpm agent-bench plan --config tools/agent-bench/configs/gpt-6-luna.json
@@ -257,3 +257,29 @@ old six cases unchanged. No rescoring/resume. Real regressions:
 `node --import tsx tools/agent-bench/tests/workflow-choice-origin-controls.ts`.
 All-origin proof/independentFinal then fresh full96 remains required before
 comparison. I10/I11 remains mandatory.
+
+
+## Native workflow input corrections
+
+Eval-v6 preserves eight public tasks/locked projects/controls; booking-v3 and
+expense-v3 repair native Date/Time/Number interaction. Six other judges and old
+criteria/results stay unchanged. Native-invalid literals cannot always enter
+these controls: clear the actual field, invoke the application action and check
+rejection/state. Text fields receive the original literal. Native1e2 remains
+representable; actual decimal validation still rejects it. Booking also checks
+its existing named Validation clause after every rejected operation.
+
+Two cases declare native-input-v1 private support; resolved judge fingerprints
+include native-input.ts plus existing context source. Unsupported profiles reject.
+This helper stays outside agent projects. Original eval-v5 interrupted87/96 and
+its immutable scores remain history; no retrospective rejudge or native rescue.
+
+```sh
+pnpm agent-bench plan --suite eval-v6 --config tools/agent-bench/configs/pilot-comparison.json
+pnpm agent-bench run --suite eval-v6 --config tools/agent-bench/configs/pilot-comparison.json --output /tmp/agent-eval-fresh
+pnpm agent-bench report /tmp/agent-eval-fresh
+```
+
+Before live model calls, source/control Final and a clean frozen plan are required.
+Expanded comparison completion does not close the goal: operation catalog and
+substantive boundary exploration/fresh confirmations (I10/I11) remain required.

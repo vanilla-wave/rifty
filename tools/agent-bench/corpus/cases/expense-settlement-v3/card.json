@@ -1,0 +1,20 @@
+{
+  "id": "expense-settlement-v3",
+  "group": "app",
+  "family": "expense-conservation",
+  "split": "evaluation",
+  "origin": {
+    "type": "original-scenario",
+    "created": "2026-10-06",
+    "starter": "svelte5.38.7 + @sveltejs/vite-plugin-svelte + Vite7.3.6",
+    "registryEvidence": "docs/backlog/distribution/reference/agent-eval-expansion-starter-metadata.json.gz"
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.ts",
+  "regressionSources": ["minimal installed starter build/boot"],
+  "difficulty": "Exact integer cents, creation-order remainder, payer outside participants, conservation/any-clearing settlement and atomic mutation/reference guards",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "Same frozen public workflow/source/lock/controls as eval-v5; ADR0516 corrects native input representability after independently verified working Number control/private RED. Full matched selection retained, fresh96 after all-origin controls.",
+  "judgeSupport": "native-input-v1"
+}

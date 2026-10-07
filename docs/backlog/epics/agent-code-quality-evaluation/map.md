@@ -1,6 +1,6 @@
 ## Items
 
-1. `distribution/agent-eval-expanded-comparison` — accepted Export-toggle source/control Final8544/11of11; fresh eval-v5 same eight public inputs/full96/all4/three repeats, retained failures/uncertainty/offline report; I1/I2/I3/I4/I7/I8/I9.
+1. `distribution/agent-eval-expanded-comparison` — accepted Export-toggle source/control Final8544/11of11; native-calendar/Validation observed-defect repair before source Final; fresh eval-v6 same eight public inputs/full96/all4/three repeats, retained failures/uncertainty/offline report; I1/I2/I3/I4/I7/I8/I9.
 2. `distribution/agent-eval-boundary-diagnostics` — actual operation catalog and substantive finite escalation/fresh confirmation; I10/I11 mandatory. Existing scripts/report/corpus reused.
 
 ## Open questions
