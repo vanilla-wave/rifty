@@ -29,7 +29,12 @@ async function input(ctx: JudgeContext, name: RegExp, creation = false) {
   return editableControlForAction(
     ctx,
     name,
-    await workflowAction(ctx, person ? 'person' : 'expense', person || creation),
+    await workflowAction(
+      ctx,
+      person ? 'person' : 'expense',
+      person || creation,
+      editableControl(ctx, name),
+    ),
   );
 }
 function cents(text: string) {
@@ -79,7 +84,6 @@ async function payer(ctx: JudgeContext, name: string) {
   }
 }
 export async function participants(ctx: JudgeContext, names: string[]) {
-  const action = await workflowAction(ctx, 'expense', true);
   const selects = editableControl(ctx, /\bparticipants\b/i);
   const identities = /\b(?:Zed|Ada|Cara)\b/i;
   const checkboxes = ctx.view.getByRole('checkbox', { name: identities });
@@ -97,6 +101,16 @@ export async function participants(ctx: JudgeContext, names: string[]) {
       .or(checkboxes.and(ctx.view.getByRole('checkbox', { name: caption(name) })))
       .or(toggles.and(ctx.view.getByRole('button', { name: caption(name) }))),
   );
+  let purpose = editableControl(ctx, /\bdescription\b/i);
+  if (!(await purpose.count())) {
+    // Participant purposes anchor selection when descriptive fields are not visible.
+    for (const group of groups)
+      if (await group.count()) {
+        purpose = group;
+        if ((await group.count()) > 1) break;
+      }
+  }
+  const action = await workflowAction(ctx, 'expense', true, purpose);
   const owned = await controlsForAction(candidates, action, groups);
   const select = owned.and(selects);
   if ((await select.count()) && (await select.evaluate((node) => node.tagName)) === 'SELECT') {
@@ -116,7 +130,9 @@ export async function participants(ctx: JudgeContext, names: string[]) {
 }
 async function save(ctx: JudgeContext, creation = false) {
   if (creation) {
-    await (await workflowAction(ctx, 'expense', true)).click();
+    await (
+      await workflowAction(ctx, 'expense', true, editableControl(ctx, /\bdescription\b/i))
+    ).click();
     return;
   }
   const update = actionCaption('save|update', 'expense');

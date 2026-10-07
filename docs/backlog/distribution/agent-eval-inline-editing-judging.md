@@ -61,6 +61,7 @@ only here, not at browser/runner/storage boundaries.
 | participant state/identity | pressed filter discards intended editor | actual expense consumer opposite-state3RED overall; state revert2RED/exact88GREEN; checkbox/select/button external siblings → I3/I6 |
 | participant representation | global select/checkbox branch hides intended toggle/checkbox | six real native mixed-type consumers3RED/3PASS before repair; exact same tests current94GREEN → I3/I6 |
 | complete participant group | nearest nonempty ancestor drops sibling; native ownership pins id | actual BASE-v4 whole helperPASS/current2permanentRED, idless form/non-form; guards6/1/1/1RED→exact100GREEN → I3/I6 |
+| creation opener/commit | Add begins/resets shared editor; Save commits, label priority loses data | actual3pinnedBASEPASS/current3RED beforecode→same3GREEN; sharedcommit1/distinctintent1RED→exact102GREEN/realoldworkflow3FAIL → I3/I6 |
 | version/report | changed criteria rescored as old | retained interrupted82/full96 declarations/offline/archive exact → I8/I9 |
 
 ## Acceptance
@@ -129,3 +130,19 @@ Previous accepted-for-gate source87 gate raw: `reference/agent-eval-participant-
 Current B3 own-controls raw: `reference/agent-eval-participant-completeness-controls-proof.json.gz`.
 
 Current B3 full gate: `reference/agent-eval-participant-completeness-prcheck-green.log.gz`.
+
+Round3 Finalf46 BLOCK B4: actual pinned Vue room/reservation and Svelte expense
+Add-opener/Save-commit programmes BASE-v4PASS/currentv5FAIL. Permanent same3RED
+beforecode/current3GREEN, exact102nativeGREEN, sameFieldcommit1/distinctintent1
+RED→exact102GREEN and real root-workflow revert3FAIL/sourceunchanged; types0 and
+current4realdual/singlePASS. Intended editable purpose binds creation commits:
+sameeditor Save, independent creator Add. No side-effect reset/rescue or DOM/id/
+field-order protocol. Currentown52 completed32PASS20FAIL; all52physical/noModels/
+exactpatch/raw5CSSCORS, twooffline authoritativeunchanged/derivedidentical,
+archive185JSONparsedsourceexact/carriersunchanged. Currentfullgate27/27PASS (unit240.6s/parity114.0s, firstPASS/no retries);
+fresh independent Finalround4 pending. Raw:
+`reference/agent-eval-participant-completeness-final-green-blocked.json`,
+`reference/agent-eval-creation-opener-proof.json.gz`,
+`reference/agent-eval-creation-opener-controls-proof.json.gz`.
+
+Current B4 gate: `reference/agent-eval-creation-opener-prcheck-green.log.gz`.

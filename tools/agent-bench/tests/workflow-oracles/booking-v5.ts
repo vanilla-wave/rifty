@@ -26,7 +26,7 @@ const controls = {
 };
 async function input(ctx: JudgeContext, name: keyof typeof controls, creation = false) {
   const domain = name === 'name' || name === 'capacity' ? 'room' : 'reservation|booking';
-  const target = await workflowAction(ctx, domain, creation);
+  const target = await workflowAction(ctx, domain, creation, editableControl(ctx, controls[name]));
   const selected = await editableControlForAction(ctx, controls[name], target);
   return name === 'seats'
     ? selected.and(describedEditableControl(ctx, name, { room: ['Room'], seats: ['Seats'] }))
@@ -43,7 +43,7 @@ async function click(ctx: JudgeContext, name: RegExp) {
 }
 async function saveRoom(ctx: JudgeContext, creation = false) {
   if (creation) {
-    await (await workflowAction(ctx, 'room', true)).click();
+    await (await workflowAction(ctx, 'room', true, editableControl(ctx, controls.name))).click();
     return;
   }
   const update = namedActions(ctx, actionCaption('save|update', 'room'));
@@ -75,7 +75,9 @@ async function chooseRoom(ctx: JudgeContext, name: string) {
 }
 async function saveBooking(ctx: JudgeContext, creation = false) {
   if (creation) {
-    await (await workflowAction(ctx, 'reservation|booking', true)).click();
+    await (
+      await workflowAction(ctx, 'reservation|booking', true, editableControl(ctx, controls.date))
+    ).click();
     return;
   }
   const update = actionCaption('save|update', 'reservation|booking');

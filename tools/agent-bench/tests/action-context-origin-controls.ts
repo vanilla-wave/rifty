@@ -44,11 +44,33 @@ const dualExpense = JSON.parse(
 ) as FileTree;
 add(booking, 'dual-editor', true, dualBooking);
 add(expense, 'dual-editor', true, dualExpense);
+for (const [task, path, before, after, suffix] of [
+  [
+    booking,
+    'src/App.vue',
+    '<label>Room name <input',
+    "<button @click=\"Object.assign(roomForm, { id: '', name: '', capacity: '' })\">Add room</button><label>Room name <input",
+    'room-opener',
+  ],
+  [
+    booking,
+    'src/App.vue',
+    '>New reservation</button>',
+    '>Add reservation</button>',
+    'reservation-opener',
+  ],
+  [expense, 'src/App.svelte', '>New expense</button>', '>Add expense</button>', 'expense-opener'],
+] as const) {
+  const patch = { ...task.controls!.reference! };
+  assert.equal(patch[path]!.split(before).length, 2);
+  patch[path] = patch[path]!.replace(before, after);
+  add(task, suffix, true, patch);
+}
 const lanes: Lane[] = ['rifty', 'rifty-no-coi', 'local-reference', 'native-codex'];
-assert.equal(tasks.length, 10);
+assert.equal(tasks.length, 13);
 const declaration = {
   purpose:
-    'Action-context class consumer controls; ten real programmes/four hosts, no models/quality evidence',
+    'Action-context class consumer controls; thirteen real programmes/four hosts, no models/quality evidence',
   sourceExpectationVsOwnOutcome:
     'Source-correct expense COI controls may retain exact existing style-import bootstrap failure; no native rescue/score substitution',
   variants,
@@ -60,7 +82,7 @@ const declaration = {
 await writeFile(join(root, 'declared-input-plan.json'), JSON.stringify(declaration, null, 2));
 console.log(`ACTION_CONTEXT_ROOT ${root}`);
 const report = await run(config, tasks, lanes, join(root, 'series'), 'reference');
-assert.equal(report.runs.length, 40);
+assert.equal(report.runs.length, 52);
 assert.deepEqual(report.header.plan, declaration.plan);
 const physical = [];
 for (const row of report.runs) {

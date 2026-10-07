@@ -254,3 +254,26 @@ test('shared unique participant purposes preserve an unassociated sibling contro
   await expect(page.getByRole('checkbox', { name: 'Ada' })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'Cara' })).toBeChecked();
 });
+
+test('Add opener and Save commit share one editor purpose', async ({ page }) => {
+  await page.setContent(
+    '<section><label>Room name<input id="name" value="Amber"></label><button type="button" onclick="document.querySelector(\'#name\').value=\'\'">Add room</button><button type="button" onclick="document.body.dataset.saved=document.querySelector(\'#name\').value">Save room</button></section>',
+  );
+  const ctx = { view: page, previewUrl: 'about:blank' };
+  const purpose = page.getByRole('textbox', { name: 'Room name' });
+  await (await workflowAction(ctx, 'room', true, purpose)).click();
+  await expect(page.locator('body')).toHaveAttribute('data-saved', 'Amber');
+  await expect(purpose).toHaveValue('Amber');
+});
+
+test('creation Add and editing Save keep distinct editor purposes', async ({ page }) => {
+  await page.setContent(
+    '<form><label>Room name<input id="create-name" value="New"></label><button type="button" onclick="document.body.dataset.saved=document.querySelector(\'#create-name\').value">Add room</button></form><form><label>Room name<input id="edit-name" value="Existing"></label><button type="button" onclick="document.body.dataset.saved=document.querySelector(\'#edit-name\').value">Save room</button></form>',
+  );
+  const ctx = { view: page, previewUrl: 'about:blank' };
+  await (
+    await workflowAction(ctx, 'room', true, page.getByRole('textbox', { name: 'Room name' }))
+  ).click();
+  await expect(page.locator('body')).toHaveAttribute('data-saved', 'New');
+  await expect(page.locator('#edit-name')).toHaveValue('Existing');
+});

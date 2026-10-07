@@ -187,14 +187,31 @@ export async function workflowAction(
   ctx: JudgeContext,
   subjects: string,
   creation = false,
+  purpose?: Locator,
 ): Promise<Locator> {
   const update = namedActions(ctx, actionCaption('save|update', subjects));
   const add = namedActions(ctx, actionCaption('add|create', subjects));
-  for (const choices of creation ? [add, update] : [update, add]) {
-    const visible = [];
-    for (const node of await choices.all()) if (await node.isVisible()) visible.push(node);
-    if (visible.length === 1) return visible[0]!;
-    if (visible.length > 1) throw new Error(`Ambiguous intended ${subjects} action`);
+  const visible = async (choices: Locator) => {
+    const result: Locator[] = [];
+    for (const node of await choices.all()) if (await node.isVisible()) result.push(node);
+    return result;
+  };
+  const updates = await visible(update);
+  const additions = await visible(add);
+  if (creation && additions.length === 1 && purpose && (await purpose.count())) {
+    const creationControl = await controlForAction(purpose, additions[0]!);
+    const commits: Locator[] = [];
+    for (const candidate of updates) {
+      const updateControl = await controlForAction(purpose, candidate);
+      if (await creationControl.and(updateControl).count()) commits.push(candidate);
+    }
+    // Add can open/reset the same editor whose Save commits the filled draft.
+    if (commits.length === 1) return commits[0]!;
+    if (commits.length > 1) throw new Error(`Ambiguous intended ${subjects} commit`);
+  }
+  for (const choices of creation ? [additions, updates] : [updates, additions]) {
+    if (choices.length === 1) return choices[0]!;
+    if (choices.length > 1) throw new Error(`Ambiguous intended ${subjects} action`);
   }
   throw new Error(`Missing intended ${subjects} action`);
 }
