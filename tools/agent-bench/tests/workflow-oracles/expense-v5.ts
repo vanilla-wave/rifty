@@ -92,7 +92,12 @@ export async function participants(ctx: JudgeContext, names: string[]) {
     );
   const candidates = selects.or(checkboxes).or(toggles);
   if (!(await candidates.count())) return;
-  const owned = await controlsForAction(candidates, action);
+  const groups = ['Zed', 'Ada', 'Cara'].map((name) =>
+    selects
+      .or(checkboxes.and(ctx.view.getByRole('checkbox', { name: caption(name) })))
+      .or(toggles.and(ctx.view.getByRole('button', { name: caption(name) }))),
+  );
+  const owned = await controlsForAction(candidates, action, groups);
   const select = owned.and(selects);
   if ((await select.count()) && (await select.evaluate((node) => node.tagName)) === 'SELECT') {
     await selectChoices(select, names);

@@ -103,41 +103,57 @@ async function controlsInAction(
   candidates: Locator,
   action: Locator,
   scalar: boolean,
+  groups: readonly Locator[] = [],
 ): Promise<Locator> {
   if ((await action.count()) !== 1) throw new Error('Action context is missing or ambiguous');
-  const formId = await action.evaluate((node) => {
-    const form =
-      node instanceof HTMLButtonElement || node instanceof HTMLInputElement
-        ? node.form
-        : node.closest('form');
-    return form?.id || null;
-  });
-  if (formId) {
+  // A shared editor has one control for each observed participant purpose.
+  if (
+    !scalar &&
+    groups.length &&
+    (await Promise.all(groups.map((group) => group.count()))).every((count) => count === 1)
+  )
+    return candidates;
+  const form = await action.evaluateHandle((node) =>
+    node instanceof HTMLButtonElement || node instanceof HTMLInputElement
+      ? node.form
+      : node.closest('form'),
+  );
+  try {
     const indices = await candidates.evaluateAll(
-      (nodes, id) =>
+      (nodes, owner) =>
         nodes.flatMap((node, index) => {
-          const form =
+          const nativeOwner =
             node instanceof HTMLInputElement ||
             node instanceof HTMLTextAreaElement ||
             node instanceof HTMLSelectElement ||
             node instanceof HTMLButtonElement
               ? node.form
               : node.closest('form');
-          return form?.id === id ? [index] : [];
+          return owner && nativeOwner === owner ? [index] : [];
         }),
-      formId,
+      form,
     );
     if (scalar ? indices.length === 1 : indices.length > 0) {
       let owned = candidates.nth(indices[0]!);
       for (const index of indices.slice(1)) owned = owned.or(candidates.nth(index));
       return owned;
     }
+  } finally {
+    await form.dispose();
   }
   const scopes = await action.locator('xpath=ancestor::*').all();
   for (const scope of scopes.reverse()) {
     const contained = candidates.and(scope.locator('*'));
     const count = await contained.count();
-    if (scalar ? count === 1 : count > 0) return contained;
+    if (scalar ? count === 1 : count > 0) {
+      if (
+        scalar ||
+        (await Promise.all(groups.map((group) => group.and(contained).count()))).every(
+          (count) => count === 1,
+        )
+      )
+        return contained;
+    }
   }
   throw new Error('Control purpose is missing or ambiguous in the intended action context');
 }
@@ -149,8 +165,14 @@ export async function controlForAction(candidates: Locator, action: Locator): Pr
 }
 
 /** Scope a heterogeneous participant set before selecting its representation or state. */
-export async function controlsForAction(candidates: Locator, action: Locator): Promise<Locator> {
-  return controlsInAction(candidates, action, false);
+export async function controlsForAction(
+  candidates: Locator,
+  action: Locator,
+  groups: readonly Locator[],
+): Promise<Locator> {
+  const observed: Locator[] = [];
+  for (const group of groups) if (await group.count()) observed.push(group);
+  return controlsInAction(candidates, action, false, observed);
 }
 
 export async function editableControlForAction(

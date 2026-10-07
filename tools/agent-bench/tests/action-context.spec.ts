@@ -195,3 +195,62 @@ for (const createKind of ['checkbox', 'select', 'button'] as const) {
     });
   }
 }
+
+for (const container of ['form', 'section']) {
+  test(`complete participant set survives a nested action in idless ${container}`, async ({
+    page,
+  }) => {
+    await page.setContent(
+      `<${container}><div><label>Ada<input type="checkbox"></label><button type="button">Add expense</button></div><label>Cara<input type="checkbox"></label></${container}>`,
+    );
+    await participants({ view: page, previewUrl: 'about:blank' }, ['Ada', 'Cara']);
+    await expect(page.getByRole('checkbox', { name: 'Ada' })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Cara' })).toBeChecked();
+  });
+}
+
+for (const container of ['form', 'section']) {
+  test(`complete intended participant set preserves a second idless ${container}`, async ({
+    page,
+  }) => {
+    await page.setContent(
+      `<${container}><div><label>Ada<input type="checkbox"></label><button type="button">Add expense</button></div><label>Cara<input type="checkbox"></label></${container}><${container}><label>Ada<input type="checkbox"></label><label>Cara<input type="checkbox"></label><button type="button">Save expense Train</button></${container}>`,
+    );
+    await participants({ view: page, previewUrl: 'about:blank' }, ['Ada', 'Cara']);
+    await expect(
+      page.locator(container).nth(0).getByRole('checkbox', { name: 'Ada' }),
+    ).toBeChecked();
+    await expect(
+      page.locator(container).nth(0).getByRole('checkbox', { name: 'Cara' }),
+    ).toBeChecked();
+    await expect(
+      page.locator(container).nth(1).getByRole('checkbox', { name: 'Ada' }),
+    ).not.toBeChecked();
+    await expect(
+      page.locator(container).nth(1).getByRole('checkbox', { name: 'Cara' }),
+    ).not.toBeChecked();
+  });
+}
+
+test('idless native owner excludes a foreign participant inside its action container', async ({
+  page,
+}) => {
+  await page.setContent(
+    '<form><div><label>Ada<input type="checkbox"></label><label>Cara<input id="foreign" type="checkbox" form="edit-form"></label><button type="button">Add expense</button></div><label>Cara<input id="owned" type="checkbox"></label></form><form id="edit-form"><button type="button">Save expense Train</button></form>',
+  );
+  await participants({ view: page, previewUrl: 'about:blank' }, ['Ada', 'Cara']);
+  await expect(page.getByRole('checkbox', { name: 'Ada' })).toBeChecked();
+  await expect(page.locator('#owned')).toBeChecked();
+  await expect(page.locator('#foreign')).not.toBeChecked();
+});
+
+test('shared unique participant purposes preserve an unassociated sibling control', async ({
+  page,
+}) => {
+  await page.setContent(
+    '<form id="shared"><label>Ada<input type="checkbox"></label><button type="button">Add expense</button></form><label>Cara<input type="checkbox"></label>',
+  );
+  await participants({ view: page, previewUrl: 'about:blank' }, ['Ada', 'Cara']);
+  await expect(page.getByRole('checkbox', { name: 'Ada' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Cara' })).toBeChecked();
+});

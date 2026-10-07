@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve complete participant sets in split editors and idless forms; compare actual native form elements, retain shared unique purposes and validate complete contextual groups.
+
 - Scope participant selects, checkboxes and toggles to their intended editor before choosing representation or state; include native external button form ownership.
 
 - Bind creation/editing scalar controls to their intended actions/native form owner; book-v5/expense-v5/eval-v8 preserve public inputs/history (ADR-0518).
