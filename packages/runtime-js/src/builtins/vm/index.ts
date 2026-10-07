@@ -366,7 +366,13 @@ function shiftForRendered(text: string): ShiftLookup | undefined {
   for (const file of PERSISTENT_SHIFTS.keys()) {
     let re = renderedMatchers.get(file);
     if (re === undefined) {
-      re = new RegExp(`${file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:(\\d+):(\\d+)\\)?$`, 'u');
+      // Lookbehind: the file must START at a boundary — a SUFFIX collision
+      // (`/other/virtual/suffix.js` vs registered `/virtual/suffix.js`)
+      // must not shift a foreign file's frames.
+      re = new RegExp(
+        `(?<![\\w./$-])${file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:(\\d+):(\\d+)\\)?$`,
+        'u',
+      );
       renderedMatchers.set(file, re);
     }
     if (re.test(trimmed)) {

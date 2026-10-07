@@ -239,6 +239,7 @@ if (channel) {
     if (item === undefined) return; // cleared between message post and dispatch
     immediates.delete(id);
     keepaliveUnref();
+    if (isRealmDying()) return; // Node: fatal kill stops pending immediates
     item.fn(...item.args);
   };
 }

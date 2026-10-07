@@ -245,12 +245,19 @@ describe('CJS guard accepts provably-Symbol computed keys', () => {
     );
   });
 
-  it('computed spellings poison: Object["defineProperty"](Symbol, …)', async () => {
-    const loader = esmLoader({
+  it('computed spellings poison: Object["defineProperty"](Symbol, …) and globalThis["Symbol"] = …', async () => {
+    const a = esmLoader({
       '/work/main.mjs':
         "Object['defineProperty'](Symbol, 'for', { value: () => 'Function' }); const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
     });
-    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+    await expect(a.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+    const b = esmLoader({
+      '/work/main.mjs':
+        "globalThis['Symbol'] = { for: () => 'Function' }; const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
+    });
+    await expect(b.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
       'module-loader.esm-global-function-assignment',
     );
   });

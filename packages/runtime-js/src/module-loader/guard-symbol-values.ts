@@ -97,6 +97,9 @@ function countIdentifierOccurrences(program: unknown, name: string): number {
     const n = node as PoisonNode;
     if (typeof n.type !== 'string') return;
     if (n.type === 'Identifier' && (n as { name?: unknown }).name === name) count += 1;
+    // A string literal naming the target (globalThis['Symbol'] = …) can reach
+    // the builtin through computed access — counts as an occurrence.
+    if (n.type === 'Literal' && (n as { value?: unknown }).value === name) count += 1;
     for (const key of Object.keys(n)) {
       if (key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'range') {
         continue;

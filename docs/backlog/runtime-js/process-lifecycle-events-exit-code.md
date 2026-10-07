@@ -63,6 +63,12 @@ fault tests in `event-loop-keepalive.test.ts` + `process-globals.test.ts`.
 
 ## Out of scope
 
+- Stopping RAW guest microtasks (`queueMicrotask`, Promise reactions) after a
+  fatal handler throw: any JS wrapper frame shifts the pinned `[eval]` caret
+  projection (parity `process/node-eval-context-lifecycle-a`), and the host
+  queue cannot be gated. Macrotask surfaces (timeout/interval/immediate/
+  nextTick) ARE gated. Open residual on this unit — needs a stack-invisible
+  seam or loader-level compile support.
 - `beforeExit` emission — goal map §Out of scope (note, not an obligation).
 - vitest-main silent-exit (I4 `process.exit(0)` while cac action pending) —
   owned by `worker-threads-handle-keepalive` (the drain must wait on a live
