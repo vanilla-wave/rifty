@@ -175,9 +175,50 @@ const FUNCTION_LIKE = new Set([
   'ClassExpression',
 ]);
 
+function mutatesMemberRootedAt(node: unknown, name: string): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const n = node as PoisonNode;
+  if (n.type === 'MemberExpression') {
+    return isIdentifier(n.object, name) || mutatesMemberRootedAt(n.object, name);
+  }
+  return false;
+}
+
+function mutatesNameInside(body: unknown, name: string): boolean {
+  const probe = { mutated: false };
+  const scan = (node: unknown): void => {
+    if (probe.mutated || node === null || typeof node !== 'object') return;
+    const n = node as PoisonNode;
+    if (typeof n.type !== 'string') return;
+    if (
+      (n.type === 'AssignmentExpression' || n.type === 'UpdateExpression') &&
+      (isIdentifier(n.left ?? n.argument, name) ||
+        mutatesMemberRootedAt(n.left ?? n.argument, name))
+    ) {
+      probe.mutated = true;
+      return;
+    }
+    for (const key of Object.keys(n)) {
+      if (key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'range') {
+        continue;
+      }
+      const value = n[key];
+      if (Array.isArray(value)) {
+        for (const item of value) scan(item);
+      } else if (value !== null && typeof value === 'object') scan(value);
+    }
+  };
+  scan(body);
+  return probe.mutated;
+}
+
 function visitPoison(
   node: unknown,
-  out: { poisoned: boolean; passesSymbolArg?: boolean; declaresSymbolParam?: boolean },
+  out: {
+    poisoned: boolean;
+    symbolArgCallees: Set<string>;
+    mutatingSymbolParamFns: Set<string>;
+  },
   shadowed: ReadonlySet<string> = new Set(),
   aliasesIn?: Set<string>,
 ): void {
@@ -213,6 +254,19 @@ function visitPoison(
         innerAliases = aliases;
         aliases.add(String((d.id as PoisonNode).name));
       }
+    }
+  }
+  if (n.type === 'AssignmentExpression') {
+    // let X; X = Symbol — alias born by assignment (unshadowed both sides).
+    if (
+      isIdentifier(n.right, 'Symbol') &&
+      !innerShadowed.has('Symbol') &&
+      n.left !== null &&
+      typeof n.left === 'object' &&
+      (n.left as PoisonNode).type === 'Identifier' &&
+      !innerShadowed.has(String((n.left as PoisonNode).name))
+    ) {
+      aliases.add(String((n.left as PoisonNode).name));
     }
   }
   const symbolish = (id: unknown): boolean =>
@@ -265,17 +319,27 @@ function visitPoison(
     default:
       break;
   }
-  // A global-Symbol ARGUMENT flowing into a function whose parameter is named
-  // `Symbol` mutates the builtin through the parameter — poison.
+  // A global-Symbol argument flowing into a function whose parameter is named
+  // `Symbol` AND whose body mutates that parameter poisons (the mutation
+  // reaches the builtin). Pure identity-style functions stay loadable.
   if (n.type === 'CallExpression' && !shadowed.has('Symbol')) {
-    for (const arg of Array.isArray(n.arguments) ? (n.arguments as unknown[]) : []) {
-      if (isIdentifier(arg, 'Symbol')) {
-        out.passesSymbolArg = true;
+    const calleeName = nameOf(n.callee);
+    if (calleeName !== undefined) {
+      for (const arg of Array.isArray(n.arguments) ? (n.arguments as unknown[]) : []) {
+        if (isIdentifier(arg, 'Symbol')) out.symbolArgCallees.add(calleeName);
       }
     }
   }
-  if (FUNCTION_LIKE.has(n.type) && scopeShadowedNames(n as PoisonNode).has('Symbol')) {
-    out.declaresSymbolParam = true;
+  if (FUNCTION_LIKE.has(n.type)) {
+    const names = scopeShadowedNames(n as PoisonNode);
+    if (names.has('Symbol')) {
+      const body = (n as PoisonNode).body;
+      if (body !== null && typeof body === 'object' && mutatesNameInside(body, 'Symbol')) {
+        const fnName = nameOf((n as PoisonNode).id);
+        if (fnName !== undefined) out.mutatingSymbolParamFns.add(fnName);
+        else if (n.type === 'FunctionDeclaration') out.mutatingSymbolParamFns.add('');
+      }
+    }
   }
   for (const key of Object.keys(n)) {
     if (key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'range') {
@@ -283,9 +347,9 @@ function visitPoison(
     }
     const value = n[key];
     if (Array.isArray(value)) {
-      for (const item of value) visitPoison(item, out, innerShadowed, innerAliases as Set<string>);
+      for (const item of value) visitPoison(item, out, innerShadowed, innerAliases);
     } else if (value !== null && typeof value === 'object') {
-      visitPoison(value, out, innerShadowed, innerAliases as Set<string>);
+      visitPoison(value, out, innerShadowed, innerAliases);
     }
   }
 }
@@ -327,7 +391,11 @@ export function programPoisonsSymbolProofs(
   program: unknown,
   topLevelBody: readonly unknown[],
 ): boolean {
-  const out = { poisoned: false, passesSymbolArg: false, declaresSymbolParam: false };
+  const out = {
+    poisoned: false,
+    symbolArgCallees: new Set<string>(),
+    mutatingSymbolParamFns: new Set<string>(),
+  };
   for (const child of topLevelBody) {
     if (child !== null && typeof child === 'object') {
       const c = child as PoisonNode;
@@ -345,6 +413,8 @@ export function programPoisonsSymbolProofs(
     }
   }
   if (!out.poisoned) visitPoison(program, out);
-  if (out.passesSymbolArg === true && out.declaresSymbolParam === true) return true;
+  for (const callee of out.symbolArgCallees) {
+    if (out.mutatingSymbolParamFns.has(callee)) return true;
+  }
   return out.poisoned;
 }

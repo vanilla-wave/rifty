@@ -843,3 +843,31 @@ describe('process lifecycle dispatcher (process-lifecycle-events-exit-code)', ()
     await expect(drain).rejects.toThrow('boom');
   });
 });
+
+describe('UR-handler throw routes to the UE handler (Node semantics)', () => {
+  it('a throwing UR handler with a UE handler: UE receives the UR throw, loop continues', async () => {
+    const { NodeProcess } = await import('../builtins/process.ts');
+    const { defineLifecycleIdentity, installProcessLifecycleDispatcher } = await import(
+      '../builtins/process-lifecycle-dispatcher.ts'
+    );
+    const { setActiveNodeProcessBootstrap } = await import(
+      '../builtins/process-bootstrap-identity.ts'
+    );
+    installProcessLifecycleDispatcher();
+    const proc = new NodeProcess();
+    defineLifecycleIdentity(proc);
+    setActiveNodeProcessBootstrap(proc);
+    const seen: string[] = [];
+    proc.on('unhandledRejection', () => {
+      seen.push('ur');
+      throw new Error('handler-error');
+    });
+    proc.on('uncaughtException', (e) => {
+      seen.push(`ue:${(e as Error).message}`);
+    });
+    const outcome = keepalive.intakeUnhandledError(new Error('rej'), 'rejection');
+    expect(outcome).toEqual({ handled: true });
+    expect(seen).toEqual(['ur', 'ue:handler-error']);
+    setActiveNodeProcessBootstrap(null);
+  });
+});

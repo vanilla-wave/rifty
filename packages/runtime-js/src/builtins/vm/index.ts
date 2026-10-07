@@ -320,57 +320,121 @@ function assertIntegerOffsets(options: ScriptOptions): void {
  * shifts every frame's line here. Reads inside the script and thrown errors
  * (materialised while installed) carry the shift, as in Node.
  */
+interface ErrorWithPrepareStackTrace {
+  prepareStackTrace?: (err: Error, frames: NodeJS.CallSite[]) => unknown;
+}
+
 // Persistent per-filename shifts (vm-run-in-this-context-offsets): Node bakes
 // offsets at COMPILE, so a wrapper function returned by the script still
-// reports shifted stacks when called LATER (vitest's evaluator shape). One
-// realm-global dispatcher, scoped to the registered filenames only.
+// reports shifted stacks when called LATER (vitest's evaluator shape). The
+// dispatcher wraps CallSite OBJECTS (frame-level, idempotent — no string
+// post-processing, no double-shift through chained dispatchers) and restores
+// the previous hook when the last registration resets.
 interface OffsetShift {
   firstShiftedLine: number;
   columnShift: number;
   negativeLineShift: number;
 }
 const PERSISTENT_SHIFTS = new Map<string, OffsetShift>();
-let persistentDispatcherInstalled = false;
-let vmDispatching = false;
-const GENERIC_FRAME_RE = /(at (?:eval )?\()?([^\s()]+):(\d+):(\d+)\)?/g;
+let persistentHook: ((err: Error, frames: NodeJS.CallSite[]) => unknown) | null = null;
 
-function ensurePersistentOffsetDispatcher(): void {
-  if (persistentDispatcherInstalled) return;
-  persistentDispatcherInstalled = true;
+interface CallSiteLike {
+  getFileName?: () => unknown;
+  getLineNumber?: () => number | null;
+  getColumnNumber?: () => number | null;
+  toString?: () => string;
+}
+
+interface ShiftLookup {
+  readonly shift: OffsetShift;
+  readonly file: string;
+}
+
+function shiftForFile(file: unknown): ShiftLookup | undefined {
+  if (typeof file !== 'string') return undefined;
+  const shift = PERSISTENT_SHIFTS.get(file);
+  return shift === undefined ? undefined : { shift, file };
+}
+
+/** Look up a shift by the trailing `<file>:<line>:<col>` of a frame render. */
+function shiftForRendered(text: string): ShiftLookup | undefined {
+  const m = /([^\s()]+):(\d+):(\d+)\)?$/u.exec(text.trim());
+  if (m === null) return undefined;
+  const shift = PERSISTENT_SHIFTS.get(m[1] ?? '');
+  return shift === undefined ? undefined : { shift, file: m[1] ?? '' };
+}
+
+function installPersistentHook(): void {
+  if (persistentHook !== null) return;
   const errorCtor = Error as unknown as ErrorWithPrepareStackTrace;
   const previous = errorCtor.prepareStackTrace;
-  errorCtor.prepareStackTrace = (err, frames) => {
-    // Re-entrancy guard: when invoked as ANOTHER dispatcher's saved
-    // `previous`, render the default text directly — following the chain
-    // again would cycle (vm ↔ source-maps) and blow the stack.
-    let rendered: string;
-    if (vmDispatching || !previous) {
-      rendered = `${err.name}: ${err.message}\n${frames.map((frame) => `    at ${String(frame)}`).join('\n')}`;
-    } else {
-      vmDispatching = true;
-      try {
-        rendered = String(previous(err, frames));
-      } finally {
-        vmDispatching = false;
+  const hook = (err: Error, frames: NodeJS.CallSite[]): unknown => {
+    if (PERSISTENT_SHIFTS.size === 0) {
+      // Self-uninstall: back to the exact base hook (zero-offset parity).
+      if (errorCtor.prepareStackTrace === hook) {
+        if (previous) errorCtor.prepareStackTrace = previous;
+        else Reflect.deleteProperty(errorCtor, 'prepareStackTrace');
       }
+      return previous ? previous(err, frames) : defaultStackRender(err, frames);
     }
-    if (PERSISTENT_SHIFTS.size === 0) return rendered;
-    return rendered.replace(
-      GENERIC_FRAME_RE,
-      (match, evalPrefix: string | undefined, file: string, line: string, col: string) => {
-        const shift = PERSISTENT_SHIFTS.get(file);
-        if (shift === undefined) return match;
-        // The host compiles via indirect eval; Node's vm frames carry no `eval`
-        // marker on frames of the script. Function frames (`at f (…):L:C`) keep
-        // their parenthesis; top-level frames lose the marker.
-        const outLine = Number(line) + shift.negativeLineShift;
-        const outCol =
-          Number(line) === shift.firstShiftedLine ? Number(col) + shift.columnShift : Number(col);
-        const shifted = `${file}:${outLine}:${outCol}`;
-        return evalPrefix === undefined ? `${shifted})` : `at ${shifted}`;
-      },
-    );
+    const wrapped = frames.map((frame) => {
+      const site = frame as unknown as CallSiteLike;
+      // Eval-compiled frames carry no getFileName(); the sourceURL rides in
+      // the rendered text — anchor the shift lookup on it.
+      const found = shiftForFile(site.getFileName?.()) ?? shiftForRendered(String(frame));
+      if (found === undefined) return null;
+      return wrapCallSite(site, found.shift, found.file);
+    }) as (NodeJS.CallSite | null)[];
+    if (wrapped.some((frame) => frame !== null)) {
+      // Shifted stacks render HERE: positions and text are already in the
+      // wrapped CallSites (single application — no double-shift through a
+      // chained dispatcher, no ecosystem-specific `eval (` marker rebuilds).
+      // Known limitation: an outer source-map remapper does not re-map an
+      // already-shifted frame in the same read (contract Out of scope).
+      return defaultStackRender(err, wrapped.filter((f) => f !== null) as NodeJS.CallSite[]);
+    }
+    return previous ? previous(err, frames) : defaultStackRender(err, frames);
   };
+  persistentHook = hook;
+  errorCtor.prepareStackTrace = hook;
+}
+
+function defaultStackRender(err: Error, frames: NodeJS.CallSite[]): string {
+  return `${err.name}: ${err.message}\n${frames.map((f) => `    at ${String(f)}`).join('\n')}`;
+}
+
+/** A CallSite reporting shifted positions (Node compile-time semantics):
+ * delegates EVERY method to the original site (native/eval/origin probes),
+ * overriding only the position getters and the rendered text. */
+function wrapCallSite(site: CallSiteLike, shift: OffsetShift, fileName?: string): NodeJS.CallSite {
+  const line = site.getLineNumber?.() ?? 0;
+  const outLine = line + shift.negativeLineShift;
+  const outCol =
+    line === shift.firstShiftedLine
+      ? (site.getColumnNumber?.() ?? 0) + shift.columnShift
+      : (site.getColumnNumber?.() ?? 0);
+  const base = String(site);
+  const shiftedText = base
+    .replace(/^eval \((.*)\)$/u, '$1')
+    .replace(/:\d+:\d+(\)?)$/u, (_m, close: string) => `:${outLine}:${outCol}${close}`);
+  return new Proxy(site, {
+    get(target, prop, receiver) {
+      if (prop === 'getLineNumber') return () => outLine;
+      if (prop === 'getColumnNumber') return () => outCol;
+      if (prop === 'toString') return () => shiftedText;
+      // Node vm frames report no eval origin and carry the script name —
+      // renderers rebuilding frame text from CallSite probes must neither
+      // re-add the `eval (` marker nor lose the file.
+      if (prop === 'getEvalOrigin') return () => undefined;
+      if (prop === 'getFileName' && fileName !== undefined) return () => fileName;
+      if (prop === 'isEval') return () => false;
+      if (prop === 'getScriptNameOrSourceURL' && fileName !== undefined) return () => fileName;
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === 'function'
+        ? (value as (...a: unknown[]) => unknown).bind(target)
+        : value;
+    },
+  }) as unknown as NodeJS.CallSite;
 }
 
 /** Register the filename's shift; a zero-offset run RESETS it (back to the
@@ -390,11 +454,7 @@ function registerOffsetShift(
     columnShift: columnOffset,
     negativeLineShift: lineOffset < 0 ? lineOffset : 0,
   });
-  ensurePersistentOffsetDispatcher();
-}
-
-interface ErrorWithPrepareStackTrace {
-  prepareStackTrace?: (err: Error, frames: NodeJS.CallSite[]) => unknown;
+  installPersistentHook();
 }
 
 /** Apply `lineOffset`/`columnOffset` to a host-realm script run (goal I4/I5):

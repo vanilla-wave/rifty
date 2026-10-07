@@ -61,10 +61,11 @@ fix, 2026-10-05).
   (`vm.runInContext.columnOffset`); positive `lineOffset` there works via the
   same physical prefix.
 - `compileFunction` offsets — not on vitest's path.
-- Errors captured inside but read AFTER the run returned — Node bakes offsets
-  at compile; the dispatcher shifts reads during the run and materialised
-  throws. Deferred-read columns are unshifted (documented edge, not on the
-  claimed path).
+- Errors captured inside but read AFTER the run returned — COVERED since the
+  persistent registry (deferred reads shift, conformance carrier).
+- An outer source-map remapper does not re-map an ALREADY-SHIFTED frame in the
+  same read (one transform wins; composing both needs loader-level support —
+  documented edge, not on vitest's path).
 
 ## Fault matrix
 

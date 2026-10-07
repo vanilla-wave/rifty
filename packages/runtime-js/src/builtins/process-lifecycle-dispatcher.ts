@@ -126,10 +126,15 @@ export function installProcessLifecycleDispatcher(): void {
       };
       const emitFor = (
         event: 'uncaughtException' | 'unhandledRejection',
+      ): typeof HANDLED | { readonly thrown: unknown } => emitFor2(event, reason);
+
+      const emitFor2 = (
+        event: 'uncaughtException' | 'unhandledRejection',
+        emitReason: unknown,
       ): typeof HANDLED | { readonly thrown: unknown } => {
         try {
-          if (event === 'unhandledRejection') proc.emit(event, reason, undefined);
-          else proc.emit(event, reason);
+          if (event === 'unhandledRejection') proc.emit(event, emitReason, undefined);
+          else proc.emit(event, emitReason);
           return HANDLED;
         } catch (replacement) {
           // Node: an exception inside a handler is fatal with the NEW thrown
@@ -140,15 +145,21 @@ export function installProcessLifecycleDispatcher(): void {
       // Node default (--unhandled-rejections=throw): a REJECTION goes to its
       // dedicated handler, else falls to uncaughtException. An uncaught ERROR
       // never falls the other way — UR handlers do not catch exceptions.
-      const preferRejectionHandler =
-        origin === 'rejection' && proc.listenerCount('unhandledRejection') > 0;
-      const result = preferRejectionHandler
-        ? emitFor('unhandledRejection')
-        : proc.listenerCount('uncaughtException') > 0
-          ? emitFor('uncaughtException')
-          : undefined;
-      if (result === undefined) return { handled: false };
-      return asOutcome(result);
+      // A THROWING UR handler routes its error to the UE handler (Node
+      // semantics); only with no UE handler is it fatal.
+      if (origin === 'rejection' && proc.listenerCount('unhandledRejection') > 0) {
+        const urResult = emitFor('unhandledRejection');
+        if (urResult === HANDLED) return { handled: true };
+        if (proc.listenerCount('uncaughtException') > 0) {
+          const ueResult = emitFor2('uncaughtException', urResult.thrown);
+          return asOutcome(ueResult);
+        }
+        return asOutcome(urResult);
+      }
+      if (proc.listenerCount('uncaughtException') > 0) {
+        return asOutcome(emitFor('uncaughtException'));
+      }
+      return { handled: false };
     },
     emitNaturalExit() {
       const active = activeLifecycleProcess();
