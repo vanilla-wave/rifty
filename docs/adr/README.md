@@ -410,6 +410,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0515 | Observe visible CSV exports before state-changing actions |
 | 0516 | Accept native calendar controls in booking judges |
 | 0517 | Use accessible names for editable judge controls |
+| 0518 | Bind editable judge controls to action context |
 
 ## Superseded (removed)
 

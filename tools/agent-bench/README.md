@@ -292,3 +292,11 @@ preserved (65BASE/73current native interactions). Full source gate27PASS.
 Original b83648 controls/BLOCK and eval-v6 interrupted84 remain unchanged history.
 Fresh96 uses [frozenv7 protocol](../../docs/backlog/distribution/reference/agent-eval-expanded-comparison-v7-protocol.md);
 I10/I11 and whole goal remain open.
+
+
+Action-context correction: eval-v8/book-v5/expense-v5 preserve public inputs and
+control payloads. Creation/inline editors share one intended-action/native-form
+control owner (ADR0518); source fingerprints distinguish criteria. Real native
+single/dual Vue/Svelte controls4PASS; native80/guardsRED/currentown40 retain
+SvelteCOIbootstrapfailures. Eval-v7 interrupted82 remains unaccepted history.
+Source gate/independent Final precede fresh96; I10/I11 remain required.

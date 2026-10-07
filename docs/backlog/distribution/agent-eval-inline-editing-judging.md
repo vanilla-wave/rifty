@@ -5,8 +5,8 @@ title: Bind workflow editing controls to their intended action
 created: 2026-10-07
 why: Global purpose lookup selects creation and inline-edit controls together despite valid open layout.
 epic: agent-code-quality-evaluation
-sources: [ADR-0512, ADR-0516, ADR-0517]
-code: [tools/agent-bench/src/judge/context.ts, tools/agent-bench/corpus/cases/booking-workflow-v4/judge.ts]
+sources: [ADR-0512, ADR-0516, ADR-0517, ADR-0518]
+code: [tools/agent-bench/src/judge/context.ts, tools/agent-bench/corpus/cases/booking-workflow-v5/judge.ts, tools/agent-bench/corpus/cases/expense-settlement-v5/judge.ts, tools/agent-bench/tests/action-context.spec.ts, tools/agent-bench/tests/inline-editing-controls.ts, tools/agent-bench/tests/action-context-origin-controls.ts]
 ---
 
 ## Context
@@ -53,10 +53,10 @@ only here, not at browser/runner/storage boundaries.
 
 | Operation | Fault | Carrier |
 | --- | --- | --- |
-| room Name/Capacity edit/read | creation+edit purposes collide | native interactive2 and actual Vue original40/dualRED; scoped regression pending → I3/I6 |
-| creation while editing visible | first/edit field silently selected | independent native public create preserves edit draft; permanent guard pending → I3/I6 |
-| reservation picker/date/time/seats | same row/form context assumption | call-site class sweep and actual alternative/fault controls pending → I3/I6 |
-| repeated action/edit/read | stale or wrong row context | exact target/state preservation tests pending → I3/I6 |
+| room Name/Capacity edit/read | creation+edit purposes collide | native interactive2 and actual Vue original40/dualRED; permanent real Vue RED→GREEN; native scope/form guards5/1RED→exactGREEN → I3/I6 |
+| creation while editing visible | first/edit field silently selected | independent native public create preserves edit draft; creation intent native guard2RED→exactGREEN → I3/I6 |
+| reservation picker/date/time/seats | same row/form context assumption | book/expense class sweep; native3control-context types/current40physical → I3/I6 |
+| repeated action/edit/read | stale or wrong row context | native80 incltarget state/ambiguousaction1RED→exactGREEN → I3/I6 |
 | version/report | changed criteria rescored as old | retained interrupted82/full96 declarations/offline/archive exact → I8/I9 |
 
 ## Acceptance
@@ -73,7 +73,15 @@ only here, not at browser/runner/storage boundaries.
 
 Native micro actualglobal2/privateRED/qualifiededit+invalidpreservationGREEN.
 Real pinned Vue original40PASS; independent creation/editor public workflow PASS,
-old fullprivateRED. Source fix/permanent regressions/controls/gate/Final pending.
+old fullprivateRED. Current action/native-form owner fixesbook5+expense5. PermanentrealVue/Svelte
+single/dual4PASS; bothdualsRED beforetheirfix. Native80PASS, fourguards
+5/1/2/1RED→exact80GREEN; typesPASS. Current40sourcecontrols completed21PASS19FAIL;
+all3positivebookprogrammesall4PASS, all3positiveexpenseprogrammesother3PASS,
+COIFAIL actualexactCSSCORS. Fourbootstraprowsinclpartial; baselinehasnone.
+All40physicalbefore+patch/after/noModels, twooffline273unchanged/identical.
+Current full source pr:check27/27 PASS (unit1301.2s/parity129.4s);
+fresh independent Final pending; proof:
+`reference/agent-eval-action-context-proof.json.gz`.
 Eval-v7 ownSIGINT:82/96/47PASS35FAIL14missing, actualexit0/headerinterrupted.
 History full pr:check27/27 PASS (unit205.4s/parity114.9s); source fix not implemented.
 Two offline regenerations592 authoritative unchanged/identical views; archive334
@@ -81,11 +89,12 @@ JSON/18large original bytes exact/canonical CLI links/carriers unchanged.
 
 ## Decisions
 
-Observed baseline restores existing open-layout authority; no mechanism/policy
-chosen before the action-context and sibling sweep. Prior criteria remain history.
+ADR0518; one context projection, native form association thenclosestcontext
+whenneeded, no field-order/visibility/UIprotocol. Sourcepublic/control payloads
+exact, shared context changesall8fingerprints; oldcriteria/results remainhistory.
 
 ## Residuals
 
-Unit: implementation/permanent RED/GREEN/controls/gate/fresh Final.
+Unit: fresh independent Final pending; current source gate27/27 PASS; implementation/class proof/current40 complete.
 Goal: accepted full96, I10 actual catalog/probes, I11 finite escalation/fresh48,
 end-to-end audit/CLOSE with historical-contract retirement proof.

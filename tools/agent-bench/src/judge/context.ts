@@ -98,6 +98,64 @@ export function editableControl(ctx: JudgeContext, name: string | RegExp) {
     .and(view.locator(editableControls));
 }
 
+/** Scalar observation follows its intended action when several editors coexist. */
+export async function controlForAction(candidates: Locator, action: Locator): Promise<Locator> {
+  if ((await candidates.count()) === 1) return candidates;
+  if ((await action.count()) !== 1) throw new Error('Action context is missing or ambiguous');
+  const formId = await action.evaluate((node) => {
+    const form =
+      node instanceof HTMLButtonElement || node instanceof HTMLInputElement
+        ? node.form
+        : node.closest('form');
+    return form?.id || null;
+  });
+  if (formId) {
+    const index = await candidates.evaluateAll((nodes, id) => {
+      const owned = nodes.flatMap((node, index) => {
+        const form =
+          node instanceof HTMLInputElement ||
+          node instanceof HTMLTextAreaElement ||
+          node instanceof HTMLSelectElement
+            ? node.form
+            : node.closest('form');
+        return form?.id === id ? [index] : [];
+      });
+      return owned.length === 1 ? owned[0]! : -1;
+    }, formId);
+    if (index >= 0) return candidates.nth(index);
+  }
+  const scopes = await action.locator('xpath=ancestor::*').all();
+  for (const scope of scopes.reverse()) {
+    const contained = candidates.and(scope.locator('*'));
+    if ((await contained.count()) === 1) return contained;
+  }
+  throw new Error('Control purpose is missing or ambiguous in the intended action context');
+}
+
+export async function editableControlForAction(
+  ctx: JudgeContext,
+  name: string | RegExp,
+  action: Locator,
+): Promise<Locator> {
+  return controlForAction(editableControl(ctx, name), action);
+}
+
+export async function workflowAction(
+  ctx: JudgeContext,
+  subjects: string,
+  creation = false,
+): Promise<Locator> {
+  const update = namedActions(ctx, actionCaption('save|update', subjects));
+  const add = namedActions(ctx, actionCaption('add|create', subjects));
+  for (const choices of creation ? [add, update] : [update, add]) {
+    const visible = [];
+    for (const node of await choices.all()) if (await node.isVisible()) visible.push(node);
+    if (visible.length === 1) return visible[0]!;
+    if (visible.length > 1) throw new Error(`Ambiguous intended ${subjects} action`);
+  }
+  throw new Error(`Missing intended ${subjects} action`);
+}
+
 const escapeCaption = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export function caption(name: string): RegExp {
   return new RegExp(`\\b${escapeCaption(name)}\\b`, 'i');
