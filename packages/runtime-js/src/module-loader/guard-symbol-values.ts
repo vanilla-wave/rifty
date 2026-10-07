@@ -212,6 +212,34 @@ function mutatesNameInside(body: unknown, name: string): boolean {
   return probe.mutated;
 }
 
+/** let/const/class/function names a BLOCK binds (block-scoped only). */
+function blockScopedNames(block: PoisonNode): Set<string> {
+  const out = new Set<string>();
+  for (const stmt of (block.body as unknown[]) ?? []) {
+    if (stmt === null || typeof stmt !== 'object') continue;
+    const st = stmt as PoisonNode;
+    if (st.type === 'VariableDeclaration' && st.kind !== 'var') {
+      for (const decl of (st.declarations as unknown[]) ?? []) {
+        const d = decl as PoisonNode;
+        if (
+          d.id !== null &&
+          typeof d.id === 'object' &&
+          (d.id as PoisonNode).type === 'Identifier'
+        ) {
+          out.add(String((d.id as PoisonNode).name));
+        }
+      }
+    } else if (
+      st.type === 'ClassDeclaration' ||
+      st.type === 'FunctionDeclaration' ||
+      st.type === 'FunctionExpression'
+    ) {
+      if (st.id !== null && typeof st.id === 'object') out.add(String((st.id as PoisonNode).name));
+    }
+  }
+  return out;
+}
+
 function visitPoison(
   node: unknown,
   out: {
@@ -235,38 +263,50 @@ function visitPoison(
     // knowledge snapshots at the boundary (outer aliases stay outer).
     innerShadowed = new Set([...shadowed, ...names]);
     innerAliases = new Set([...aliases]);
+  } else if (n.type === 'BlockStatement') {
+    // Block-scoped let/const/class/function shadow within the block only.
+    const names = blockScopedNames(n as PoisonNode);
+    if (names.size > 0) innerShadowed = new Set([...shadowed, ...names]);
   } else if (n.type === 'VariableDeclaration') {
     for (const decl of (n.declarations as unknown[]) ?? []) {
       const d = decl as PoisonNode;
       if (d === null || typeof d !== 'object') continue;
       const init = d.init;
-      // Track simple aliases: const/let X = Symbol (unshadowed here).
+      // Track aliases: const/let X = Symbol, or X = <known alias>
+      // (transitive — const S = Symbol; const T = S; T.for = … poisons).
       if (
         init !== null &&
         typeof init === 'object' &&
         (init as PoisonNode).type === 'Identifier' &&
-        (init as PoisonNode).name === 'Symbol' &&
-        !shadowed.has('Symbol') &&
         d.id !== null &&
         typeof d.id === 'object' &&
         (d.id as PoisonNode).type === 'Identifier'
       ) {
-        innerAliases = aliases;
-        aliases.add(String((d.id as PoisonNode).name));
+        const initName = String((init as PoisonNode).name);
+        const isAliasSource =
+          (initName === 'Symbol' && !shadowed.has('Symbol')) ||
+          (aliases.has(initName) && !shadowed.has(initName));
+        if (isAliasSource) aliases.add(String((d.id as PoisonNode).name));
       }
     }
   }
   if (n.type === 'AssignmentExpression') {
-    // let X; X = Symbol — alias born by assignment (unshadowed both sides).
+    // let X; X = Symbol — alias born by assignment (unshadowed both sides);
+    // X = <known alias> extends the alias chain transitively.
     if (
-      isIdentifier(n.right, 'Symbol') &&
-      !innerShadowed.has('Symbol') &&
+      n.right !== null &&
+      typeof n.right === 'object' &&
+      (n.right as PoisonNode).type === 'Identifier' &&
       n.left !== null &&
       typeof n.left === 'object' &&
-      (n.left as PoisonNode).type === 'Identifier' &&
-      !innerShadowed.has(String((n.left as PoisonNode).name))
+      (n.left as PoisonNode).type === 'Identifier'
     ) {
-      aliases.add(String((n.left as PoisonNode).name));
+      const rightName = String((n.right as PoisonNode).name);
+      const leftName = String((n.left as PoisonNode).name);
+      const isAliasSource =
+        (rightName === 'Symbol' && !innerShadowed.has('Symbol')) ||
+        (aliases.has(rightName) && !innerShadowed.has(rightName));
+      if (isAliasSource && !innerShadowed.has(leftName)) aliases.add(leftName);
     }
   }
   const symbolish = (id: unknown): boolean =>

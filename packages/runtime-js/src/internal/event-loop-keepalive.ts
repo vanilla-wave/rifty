@@ -450,6 +450,24 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
     ): void => {
       if (terminal) return;
       terminal = true;
+      // The settle path below dispatches user handlers (exit listeners,
+      // lifecycle hooks); a listener throw must NEVER strand the promise —
+      // Node kills the process, we reject with the listener's error.
+      try {
+        finishSettled(outcome);
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+    const finishSettled = (
+      outcome:
+        | { readonly kind: 'resolved' }
+        | {
+            readonly kind: 'rejected';
+            readonly reason: unknown;
+            readonly origin: NodeEvalTerminalOrigin;
+          },
+    ): void => {
       const state = keepaliveState();
       if (nodeEvalDrainLease !== null && state.nodeEvalDrainOwner !== nodeEvalDrainLease) {
         resolve();

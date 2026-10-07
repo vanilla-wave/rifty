@@ -364,34 +364,37 @@ function shiftForRendered(text: string): ShiftLookup | undefined {
   return shift === undefined ? undefined : { shift, file: m[1] ?? '' };
 }
 
+function uninstallPersistentHook(): void {
+  const hook = persistentHook;
+  if (hook === null) return;
+  persistentHook = null;
+  const errorCtor = Error as unknown as ErrorWithPrepareStackTrace;
+  if (errorCtor.prepareStackTrace === hook) {
+    Reflect.deleteProperty(errorCtor, 'prepareStackTrace');
+  }
+}
+
 function installPersistentHook(): void {
   if (persistentHook !== null) return;
   const errorCtor = Error as unknown as ErrorWithPrepareStackTrace;
   const previous = errorCtor.prepareStackTrace;
   const hook = (err: Error, frames: NodeJS.CallSite[]): unknown => {
-    if (PERSISTENT_SHIFTS.size === 0) {
-      // Self-uninstall: back to the exact base hook (zero-offset parity).
-      if (errorCtor.prepareStackTrace === hook) {
-        if (previous) errorCtor.prepareStackTrace = previous;
-        else Reflect.deleteProperty(errorCtor, 'prepareStackTrace');
-      }
-      return previous ? previous(err, frames) : defaultStackRender(err, frames);
-    }
+    let anyShifted = false;
     const wrapped = frames.map((frame) => {
       const site = frame as unknown as CallSiteLike;
       // Eval-compiled frames carry no getFileName(); the sourceURL rides in
       // the rendered text — anchor the shift lookup on it.
       const found = shiftForFile(site.getFileName?.()) ?? shiftForRendered(String(frame));
-      if (found === undefined) return null;
+      if (found === undefined) return frame;
+      anyShifted = true;
       return wrapCallSite(site, found.shift, found.file);
-    }) as (NodeJS.CallSite | null)[];
-    if (wrapped.some((frame) => frame !== null)) {
-      // Shifted stacks render HERE: positions and text are already in the
-      // wrapped CallSites (single application — no double-shift through a
-      // chained dispatcher, no ecosystem-specific `eval (` marker rebuilds).
-      // Known limitation: an outer source-map remapper does not re-map an
-      // already-shifted frame in the same read (contract Out of scope).
-      return defaultStackRender(err, wrapped.filter((f) => f !== null) as NodeJS.CallSite[]);
+    }) as NodeJS.CallSite[];
+    if (anyShifted) {
+      // Shifted stacks render HERE (single application — no double-shift
+      // through a chained dispatcher, no `eval (` marker rebuilds). Unshifted
+      // caller frames stay in place. Known limitation: an outer source-map
+      // remapper does not re-map an already-shifted frame (Out of scope).
+      return defaultStackRender(err, wrapped);
     }
     return previous ? previous(err, frames) : defaultStackRender(err, frames);
   };
@@ -447,6 +450,9 @@ function registerOffsetShift(
   if (filename === undefined) return;
   if (lineOffset === 0 && columnOffset === 0) {
     PERSISTENT_SHIFTS.delete(filename);
+    // Reset-to-base parity: with the last registration gone, restore the
+    // caller's hook immediately (and allow a fresh capture next time).
+    if (PERSISTENT_SHIFTS.size === 0) uninstallPersistentHook();
     return;
   }
   PERSISTENT_SHIFTS.set(filename, {
