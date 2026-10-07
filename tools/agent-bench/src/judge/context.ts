@@ -191,15 +191,27 @@ export async function workflowAction(
 ): Promise<Locator> {
   const update = namedActions(ctx, actionCaption('save|update', subjects));
   const add = namedActions(ctx, actionCaption('add|create', subjects));
-  const visible = async (choices: Locator) => {
+  const visible = async (choices: Locator, verbs: string) => {
+    const verb = `(?:${verbs.split('|').map(escapeCaption).join('|')})`;
+    const subject = `(?:${subjects.split('|').map(escapeCaption).join('|')})`;
+    const actionPrefix = new RegExp(`^(?:${verb}\\s+${subject}|${subject}\\s+${verb})\\b`, 'i');
     const result: Locator[] = [];
     const captions: (string | undefined)[] = [];
     for (const node of await choices.all()) {
       if (!(await node.isVisible())) continue;
       // Root ARIA caption includes descendant names; role/state/DOM shape is not identity.
-      const caption = (await node.ariaSnapshot()).match(
-        /^-(?: button| link) ("(?:\\.|[^"\\])*")/,
-      )?.[1];
+      const heading = (await node.ariaSnapshot()).split('\n')[0]?.slice(2);
+      const root = heading?.startsWith("'")
+        ? heading.slice(1, heading.lastIndexOf("'")).replace(/''/g, "'")
+        : heading;
+      const quotedCaption = root?.match(/^(?:button|link) ("(?:\\.|[^"\\])*")/)?.[1];
+      // Only declared leading action aliases; the remaining record caption stays exact.
+      const caption = quotedCaption
+        ? (JSON.parse(quotedCaption) as string).replace(
+            actionPrefix,
+            `${verbs.split('|')[0]} ${subjects.split('|')[0]}`,
+          )
+        : undefined;
       let duplicate = -1;
       if (purpose && (await purpose.count()) && caption) {
         for (let index = 0; index < result.length; index++) {
@@ -222,8 +234,8 @@ export async function workflowAction(
     }
     return result;
   };
-  const updates = await visible(update);
-  const additions = await visible(add);
+  const updates = await visible(update, 'save|update');
+  const additions = await visible(add, 'add|create');
   if (creation && additions.length === 1 && purpose && (await purpose.count())) {
     const creationControl = await controlForAction(purpose, additions[0]!);
     const commits: Locator[] = [];

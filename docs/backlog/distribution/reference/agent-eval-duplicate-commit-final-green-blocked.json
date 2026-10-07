@@ -1,0 +1,257 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK unit: repair explicit supported action aliases for one editor/commit (B6), preserve B1\u2013B5 and genuine record identity; real RED/GREEN and fresh independent Final required. Full goal remains open.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "2ffb1e063c458b4382462ccacb7ad1b6377a762f",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-inline-editing-judging.md against BASE 5acb79d1d8359f1d340d1072352c2242ab050ba8; accepted docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance1/2 \u2192 I3/I6; Reference contract open named actions; named BASE-v4 Save/Update working alternatives",
+      "location": "tools/agent-bench/src/judge/context.ts:206",
+      "summary": "B6: supported explicit action-verb aliases still reject one real editor/commit. Permanent genuine RED/GREEN, shared caller/mirror class sweep and fresh independent Final remain."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I3/I5/I6/I7 expanded comparison",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:96",
+      "summary": "Fresh accepted full96 own-environment comparison after corrected criteria; interrupted82 immutable/unaccepted history."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Actual operation catalog, directed probes, evidence-backed recovery/impact remain required."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Finite substantive escalation/control32 and frozen fresh48 confirmation remain required; native106/source64 do not close the goal."
+    },
+    {
+      "clause": "End-to-end invariant proof / CLOSE",
+      "location": "docs/backlog/distribution/agent-eval-inline-editing-judging.md:114",
+      "summary": "Whole-goal audit and historical-contract retirement proof remain; this source unit cannot close the epic."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "room Name/Capacity edit/read: creation+edit purposes collide",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:9; tools/agent-bench/tests/inline-editing-controls.ts:17",
+      "note": ""
+    },
+    {
+      "row": "creation while editing visible: first/edit field silently selected",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:9; tools/agent-bench/tests/action-context.spec.ts:269",
+      "note": ""
+    },
+    {
+      "row": "reservation picker/date/time/seats: same row/form context assumption",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:37; tools/agent-bench/corpus/cases/booking-workflow-v5/judge.ts:93",
+      "note": ""
+    },
+    {
+      "row": "repeated action/edit/read: stale or wrong row context",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:77; tools/agent-bench/corpus/cases/booking-workflow-v5/judge.ts:111",
+      "note": ""
+    },
+    {
+      "row": "participant toggle native form: external button native owner omitted",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:101; docs/backlog/distribution/reference/agent-eval-action-context-toggle-proof.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "participant state/identity: pressed filter discards intended editor",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:116; tools/agent-bench/corpus/cases/expense-settlement-v5/judge.ts:86",
+      "note": ""
+    },
+    {
+      "row": "participant representation: global select/checkbox branch hides intended toggle/checkbox",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:161; docs/backlog/distribution/reference/agent-eval-participant-group-proof.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "complete participant group: nearest nonempty ancestor drops sibling; native ownership pins id",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:199; docs/backlog/distribution/reference/agent-eval-participant-completeness-proof.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "creation opener/commit: Add begins/resets shared editor; Save commits, label priority loses data",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/creation-opener-controls.ts:15; /tmp/rifty-pr341-action-context-final-review-r5/real-openers-green.log:1",
+      "note": ""
+    },
+    {
+      "row": "equivalent commit affordances: raw action count rejects one editor; lossy collapse picks other record",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/duplicate-commit-controls.ts:14; tools/agent-bench/tests/action-context.spec.ts:281",
+      "note": "Identical-caption B5 real3/current106 and exact caption/editor/enabled guards verified. Executed B6: existing explicit Save/Update aliases, same editor and same actual domain handler, BASE3PASS/current3FAIL; b6-physical.json. Current caption equality preserves record distinctions but falsely treats verb synonyms as distinct intent."
+    },
+    {
+      "row": "version/report: changed criteria rescored as old",
+      "source": "fault-matrix",
+      "trace": "I8/I9",
+      "status": "pass",
+      "citation": "/tmp/rifty-pr341-action-context-final-review-r5/historical-preservation.json:1; /tmp/rifty-pr341-action-context-final-review-r5/fingerprints.json:1",
+      "note": ""
+    },
+    {
+      "row": "Actual baseline/RED before code; one honest action-context owner, class sweep",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "weak",
+      "citation": "docs/backlog/distribution/reference/agent-eval-duplicate-commit-proof.json.gz:1; tools/agent-bench/src/judge/context.ts:186",
+      "note": "Original and B1\u2013B5 reference/RED/GREEN/guards genuine; raw hashes and scripts verified. B6 executed same-class counterexample has no permanent carrier: explicit action verb synonym with same intended editable purpose and unchanged real commit handler."
+    },
+    {
+      "row": "Existing reference and real concurrent-editor alternatives pass; wrong-target fault controls fail; guards revert RED/exact restore GREEN",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "weak",
+      "citation": "/tmp/rifty-pr341-action-context-final-review-r5/native-green.log:1; /tmp/rifty-pr341-action-context-final-review-r5/dual-editors-green.log:1",
+      "note": "Fresh current106/current3duplicate/current3opener/current4single-dual PASS; historical discriminating guard reversions preserved. Actual public working BASE Save/Update alternatives fail current full judges (B6)."
+    },
+    {
+      "row": "All4 own-origin source controls retain failures and source/host proof separately",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context-origin-controls.ts:103; /tmp/rifty-pr341-action-context-final-review-r5/artifact-verification.json:1",
+      "note": ""
+    },
+    {
+      "row": "Public inputs/control payloads and original outcomes unchanged; criteria versions and all resolved hashes explicit",
+      "source": "acceptance",
+      "trace": "I8/I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/eval-v8.json:1; /tmp/rifty-pr341-action-context-final-review-r5/artifact-verification.json:1; /tmp/rifty-pr341-action-context-final-review-r5/fingerprints.json:1",
+      "note": ""
+    },
+    {
+      "row": "Full source gate and fresh independent Final before new full96",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "/tmp/rifty-pr341-duplicate-commit-prcheck-final.log:1; docs/backlog/distribution/reference/agent-eval-duplicate-commit-prcheck-green.log.gz:1",
+      "note": ""
+    },
+    {
+      "row": "controlForAction preserves singleton/native ownership and intended editor scalar cardinality",
+      "source": "public-api",
+      "trace": "I3+I6+ADR-0518",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/judge/context.ts:161; tools/agent-bench/tests/action-context.spec.ts:9",
+      "note": ""
+    },
+    {
+      "row": "editableControlForAction preserves accessible editable purposes and representation/exclusions",
+      "source": "public-api",
+      "trace": "I3+I6+ADR-0518",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/judge/context.ts:178; tools/agent-bench/tests/editable-control-names.spec.ts:1; tools/agent-bench/tests/native-input-roles.spec.ts:1",
+      "note": ""
+    },
+    {
+      "row": "controlsForAction scopes complete heterogeneous participant groups before representation/state",
+      "source": "public-api",
+      "trace": "I3+I6+ADR-0518",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/judge/context.ts:168; tools/agent-bench/tests/action-context.spec.ts:199",
+      "note": ""
+    },
+    {
+      "row": "workflowAction selects intended creation/editing action without imposing a UI protocol",
+      "source": "public-api",
+      "trace": "I3+I6+ADR-0518",
+      "status": "weak",
+      "citation": "tools/agent-bench/src/judge/context.ts:206",
+      "note": "B4 Add-opener/Save-commit and B5 equal-caption equivalents pass; B6 explicit Save/Update verb aliases of one actual editor/commit falsely remain two intended actions. No opaque identity normalization requested; named BASE regression is executed."
+    },
+    {
+      "row": "Versioned booking/expense-v5 public and frozen controls preserve v4; changed oracle fingerprints identify new criteria",
+      "source": "frozen-artifact",
+      "trace": "I6+I8+ADR-0518",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/booking-workflow-v5/card.json:1; tools/agent-bench/corpus/cases/expense-settlement-v5/card.json:1; /tmp/rifty-pr341-action-context-final-review-r5/artifact-verification.json:1",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/src/judge/context.ts:206",
+          "summary": "Exact caption equality treats explicitly supported Save/Update aliases of the same editor and actual commit handler as distinct intended actions, rejecting working BASE workflows.",
+          "authority": "I6 lines103\u2013109: trusted checks accept working alternatives, hidden checks add no unstated requirements or arbitrary UI structure. Unit Reference contract29\u201332 preserves accessible actions/layout freedom and Acceptance1/2 \u2192 I3/I6. Named BASE5acb79d booking-v4/expense-v4 full judges accept Save/Update actions through existing actionCaption('save|update'); booking public prompt20\u201325 and expense public prompt21\u201326 leave DOM/layout/actions open. ADR-0518 requires loud ambiguity for unresolved intended actions, not a new exact-verb caption restriction on one editor/commit.",
+          "evidence": "Executed node --import tsx /tmp/rifty-pr341-action-context-final-review-r5/save-update-aliases.mts, actual exit1; save-update-aliases.log: BASE-v4 room/reservation/expense all3PASS, current-v5 all3FAIL with Ambiguous intended room/reservation|booking/expense action. Root /tmp/rifty-review-save-update-CtFNrh; independently executed verify-new-probe.py produced b6-physical.json. Each real pinned Vue/Svelte programme duplicates only the existing Save control, changes the duplicate explicit verb Save to Update, uses exactly SAME saveRoom/saveBooking/saveExpense handler and SAME editor/validation/commit/persistence. All6 physical before+patch=after, paired exported App bytes identical, agentStatus=not-run/noModelInvocation=true, clean actual2ffb source. BASE judge bytes exact; current shared helper equals BASE outside the newly inserted context functions, so BASE probes use actual unchanged criteria. Root206 compares entire computed caption even though192 explicitly puts Save/Update in one verb class. Fault class frozen-assumption/lossy semantic projection at the owned in-process action boundary: verb synonym mistaken for record/action identity. Missing RED: supported verb aliases for equivalent commit affordances of SAME editor; sibling sweep room/reservation/expense inputs+commits, corresponding explicit add/create and reservation/booking aliases, mirrors/shared workflowAction, retain B1\u2013B5 and genuine distinct record/editor/escaped identity rejection. No guessing opaque identities or handler introspection required. Fresh106native/current3identical-caption/current3opener/current4single-dual PASS/types0 and physical64/public/history/archive proof do not discriminate this BASE regression."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "blocker",
+      "findings": []
+    }
+  ]
+}

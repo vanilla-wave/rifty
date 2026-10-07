@@ -63,6 +63,8 @@ only here, not at browser/runner/storage boundaries.
 | complete participant group | nearest nonempty ancestor drops sibling; native ownership pins id | actual BASE-v4 whole helperPASS/current2permanentRED, idless form/non-form; guards6/1/1/1RED→exact100GREEN → I3/I6 |
 | creation opener/commit | Add begins/resets shared editor; Save commits, label priority loses data | actual3pinnedBASEPASS/current3RED beforecode→same3GREEN; sharedcommit1/distinctintent1RED→exact102GREEN/realoldworkflow3FAIL → I3/I6 |
 | equivalent commit affordances | raw action count rejects one editor; lossy collapse picks other record | actualpinnedBASE3PASS/current3RED→same3GREEN; caption/editor/enabled guards1/2/1/1RED→exact106GREEN, realoldworkflow3FAIL → I3/I6 |
+| explicit action aliases | Save/Update, Add/Create or reservation/booking mistaken for record identity | actual pinned BASE3PASS/current3RED→same3GREEN; native aliases6RED, opaque suffix guard; exact115GREEN, realoldworkflow3FAIL → I3/I6 |
+| computed action caption | YAML heading quotes mistaken for missing caption | actual pinned BASE3PASS/current3RED→same3GREEN; native3RED beforecode, reader3/caption4 guards→exact119GREEN → I3/I6 |
 | version/report | changed criteria rescored as old | retained interrupted82/full96 declarations/offline/archive exact → I8/I9 |
 
 ## Acceptance
@@ -164,3 +166,51 @@ fresh independent Finalround5 pending. Raw:
 
 Current B5 controls: `reference/agent-eval-duplicate-commit-controls-proof.json.gz`;
 gate: `reference/agent-eval-duplicate-commit-prcheck-green.log.gz`.
+
+
+Round5 Final2ffb BLOCK B6 accepted: explicit Save/Update affordances use SAME
+pinned room/reservation/expense commit owners, BASE3PASS/current3FAIL. Permanent
+same3RED beforecode→same3GREEN; six native alias variants RED beforecode;
+opaque identity negative alreadyPASS. Only declared leading verb/subject aliases
+are equivalent, in either order; remaining record caption exact. Same native
+editor purpose and enabled representative guards remain. Final native115PASS;
+alias7/caption3/editor2/equivalence1/enabled1RED→exact115GREEN; real oldworkflow
+only/currentcallers3FAIL, sourceunchanged; types0. Current76/fresh gate/Final
+pending, full96/I10/I11/CLOSE remain. Raw:
+`reference/agent-eval-duplicate-commit-final-green-blocked.json`,
+`reference/agent-eval-commit-alias-proof.json.gz`.
+
+
+B6 class sweep captured another genuine BASE regression before Final: actual
+Save/Update captions with colon force Playwright YAML heading quoting. SAME
+pinned handlers/Apps BASE3PASS/current3FAIL; all6 physical pairs/source Apps
+identical/noModels. Permanent real3RED and native colon/apostrophe/C1 threeRED
+before reader repair. Unwrap only serializer root-key quoting, then decode its
+JSON caption; preserve opaque suffix and editor identity. Current real3GREEN,
+native119GREEN; YAMLreader3/alias7/caption4/editor2/equivalence1/enabled1RED→
+exact119GREEN, real pre-YAMLworkflow only/current3FAIL/sourceunchanged/types0.
+Original76 completed54PASS22FAIL, allphysical/noModels/exactpatch/raw7CSS,
+twooffline authoritativeunchanged/derivedidentical; archive269JSONparsedexact.
+Retained as pre-YAML history; latest88/fullgate/Final pending. Raw:
+`reference/agent-eval-commit-alias-controls-proof.json.gz`,
+`reference/agent-eval-action-caption-proof.json.gz`.
+
+
+Latest source controls: ORIGINAL completed88 own64PASS24FAIL, consumerexit1:
+COI YAML-room workspace archive import toast90s fails BEFORE patch/judge;
+no before/after/model/probes, same declared starter as prior working reference,
+causeunknown. Other87 physical pairs exact/noModels;8rawCSS rows inclpartial.
+Keep failure/header unchanged, twooffline unchanged/identical, archive310JSON
+sourceparsedexact/carriersunchanged. SEPARATE fresh three-YAML×four cohort12
+completed11PASS1expenseCOICSSFAIL/consumer0, all12physical/noModels/rawCSS1,
+twooffline unchanged/identical/archive45JSONexact. YAML room/reservation all4
+PASS here; new pass never rescues old setupFAIL. All tasks/trials/config/current
+criteria fingerprints exact in both; launch dirty metadata preserved, no source
+header replacement. Fullgate/fresh Final next; 96/I10/I11/CLOSE remain. Raw:
+`reference/agent-eval-action-caption-controls-proof.json.gz`.
+
+
+Latest full source gate27/27PASS, actualexit0: unit238.3s FIRSTPASS/no isolated
+rerun, parity119.2s. Launched after all producer/browser/guard/archive work ended.
+Raw: `reference/agent-eval-action-caption-prcheck-green.log.gz`.
+Fresh independent Final round6 required before model96; source unit not closed.

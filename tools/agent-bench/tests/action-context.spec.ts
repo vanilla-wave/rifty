@@ -320,3 +320,103 @@ test('escaped record captions remain distinct identities', async ({ page }) => {
     workflowAction(ctx, 'room', false, page.getByRole('textbox', { name: 'Room name' })),
   ).rejects.toThrow(/Ambiguous/);
 });
+
+for (const [subjects, first, second] of [
+  ['room', 'Save room', 'Update room'],
+  ['room', 'Add room', 'Create room'],
+  ['reservation|booking', 'Save reservation', 'Update booking'],
+  ['reservation|booking', 'Add reservation', 'Create booking'],
+  ['expense', 'Save expense', 'Update expense'],
+  ['room', 'room Save', 'room Update'],
+] as const) {
+  test(`explicit action aliases ${first}/${second} preserve one editor`, async ({ page }) => {
+    await page.setContent(
+      `<input aria-label="Name"><button>${first}</button><button>${second}</button>`,
+    );
+    await expect(
+      workflowAction(
+        { view: page, previewUrl: 'about:blank' },
+        subjects,
+        true,
+        page.getByRole('textbox', { name: 'Name' }),
+      ),
+    ).resolves.toBeDefined();
+  });
+}
+
+test('action aliases preserve verb words inside opaque record identity', async ({ page }) => {
+  await page.setContent(
+    '<input aria-label="Name"><button>Save room Save</button><button>Update room Update</button>',
+  );
+  await expect(
+    workflowAction(
+      { view: page, previewUrl: 'about:blank' },
+      'room',
+      false,
+      page.getByRole('textbox', { name: 'Name' }),
+    ),
+  ).rejects.toThrow(/Ambiguous/);
+});
+
+test('action aliases preserve identical opaque record suffixes', async ({ page }) => {
+  await page.setContent(
+    '<input aria-label="Name"><button>Save room Update</button><button>Update room Update</button>',
+  );
+  await expect(
+    workflowAction(
+      { view: page, previewUrl: 'about:blank' },
+      'room',
+      false,
+      page.getByRole('textbox', { name: 'Name' }),
+    ),
+  ).resolves.toBeDefined();
+});
+
+test('action aliases across distinct editors remain ambiguous', async ({ page }) => {
+  await page.setContent(
+    '<form><input aria-label="Name"><button>Save room</button></form><form><input aria-label="Name"><button>Update room</button></form>',
+  );
+  await expect(
+    workflowAction(
+      { view: page, previewUrl: 'about:blank' },
+      'room',
+      false,
+      page.getByRole('textbox', { name: 'Name' }),
+    ),
+  ).rejects.toThrow(/Ambiguous/);
+});
+
+for (const suffix of [': commit', ": Ada's", ' \u0080']) {
+  test(`computed action caption preserves YAML quoting ${JSON.stringify(suffix)}`, async ({
+    page,
+  }) => {
+    await page.setContent('<input aria-label="Name"><button></button><button></button>');
+    for (const [index, verb] of ['Save', 'Update'].entries())
+      await page
+        .getByRole('button')
+        .nth(index)
+        .evaluate((node, name) => node.setAttribute('aria-label', name), `${verb} room${suffix}`);
+    await expect(
+      workflowAction(
+        { view: page, previewUrl: 'about:blank' },
+        'room',
+        false,
+        page.getByRole('textbox', { name: 'Name' }),
+      ),
+    ).resolves.toBeDefined();
+  });
+}
+
+test('YAML quoted captions preserve distinct record suffixes', async ({ page }) => {
+  await page.setContent(
+    '<input aria-label="Name"><button>Save room: Amber</button><button>Update room: Bay</button>',
+  );
+  await expect(
+    workflowAction(
+      { view: page, previewUrl: 'about:blank' },
+      'room',
+      false,
+      page.getByRole('textbox', { name: 'Name' }),
+    ),
+  ).rejects.toThrow(/Ambiguous/);
+});

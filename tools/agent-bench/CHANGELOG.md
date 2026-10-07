@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Read YAML-quoted ARIA action headings, preserving colon/apostrophe/control-character record captions and explicit action aliases.
+
+- Accept explicit Save/Update, Add/Create and reservation/booking action aliases of one editor; preserve opaque record suffixes and distinct editors.
+
 - Accept equivalent commit affordances of one editor through computed accessible captions and editable purpose; preserve distinct record/editor ambiguity and enabled choices.
 
 - Commit a shared creation editor through Save when Add opens/resets it; preserve Add for an independent creation editor using its editable purpose.
