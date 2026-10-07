@@ -80,124 +80,23 @@ export function computedKeyProvablyNotFunction(node: unknown, ctx: SymbolGuardCo
 
 type PoisonNode = { readonly type?: string; readonly [key: string]: unknown };
 
-function nameOf(node: unknown): string | undefined {
-  if (!node || typeof node !== 'object') return undefined;
-  return (node as { name?: unknown }).name as string | undefined;
-}
+/**
+ * DECISIVE narrow exemption (re-cut 2026-10-06): the analyzer accepts ONLY
+ * the two claimed shapes — a module-top-level `const X = Symbol('<literal>')`
+ * or `const X = Symbol.for('<literal>')` — and ONLY when the identifier
+ * `Symbol` appears NOWHERE ELSE in the module (every other occurrence —
+ * alias, parameter, shadow, mutation, second reference — poisons). This is
+ * decidable in one pass and cannot be weakened by any static shape the
+ * reviewers enumerated; the ceiling (ADR-0171) stays whole everywhere else.
+ */
 
-/** Static identifier name OR a string-literal computed key (`o['for']`). */
-function propertyNameOf(node: unknown): string | undefined {
-  if (!node || typeof node !== 'object') return undefined;
-  const n = node as PoisonNode;
-  if (n.type === 'Identifier') return nameOf(n);
-  if (n.type === 'Literal' && typeof n.value === 'string') return n.value;
-  return undefined;
-}
-
-function isIdentifier(node: unknown, name: string): boolean {
-  return (
-    node !== null &&
-    typeof node === 'object' &&
-    (node as PoisonNode).type === 'Identifier' &&
-    nameOf(node) === name
-  );
-}
-
-/** `Symbol` / `Symbol.<p>` / `Symbol[...]` / `globalThis.Symbol` targets. */
-function isSymbolMutationTarget(node: unknown): boolean {
-  if (!node || typeof node !== 'object') return false;
-  const n = node as PoisonNode;
-  if (n.type === 'Identifier') return nameOf(n) === 'Symbol';
-  if (n.type === 'MemberExpression') {
-    const object = n.object;
-    if (isIdentifier(object, 'Symbol')) return true;
-    // globalThis.Symbol / globalThis['Symbol'] = …
-    if (isIdentifier(object, 'globalThis') && propertyNameOf(n.property) === 'Symbol') {
-      return true;
-    }
-    return isSymbolMutationTarget(object);
-  }
-  return false;
-}
-
-/** Names a function-like node binds/shadows in ITS scope (params + locals). */
-function scopeShadowedNames(node: PoisonNode): Set<string> {
-  const out = new Set<string>();
-  const addPattern = (pattern: unknown): void => {
-    if (!pattern || typeof pattern !== 'object') return;
-    const p = pattern as PoisonNode;
-    if (p.type === 'Identifier') out.add(String(p.name));
-    else if (p.type === 'RestElement') addPattern(p.argument);
-    else if (p.type === 'AssignmentPattern') addPattern(p.left);
-    else if (p.type === 'ObjectPattern' || p.type === 'ArrayPattern') {
-      const items =
-        p.type === 'ObjectPattern'
-          ? ((p.properties as unknown[]) ?? []).map((prop) =>
-              (prop as PoisonNode).type === 'RestElement'
-                ? (prop as PoisonNode).argument
-                : (prop as PoisonNode).value,
-            )
-          : ((p.elements as unknown[]) ?? []);
-      for (const item of items) addPattern(item);
-    }
-  };
-  const params = Array.isArray(node.params) ? (node.params as unknown[]) : [];
-  for (const param of params) addPattern(param);
-  if (node.id !== null && typeof node.id === 'object')
-    out.add(String((node.id as PoisonNode).name));
-  const body = node.body;
-  if (body !== null && typeof body === 'object' && (body as PoisonNode).type === 'BlockStatement') {
-    for (const stmt of ((body as PoisonNode).body as unknown[]) ?? []) {
-      if (!stmt || typeof stmt !== 'object') continue;
-      const st = stmt as PoisonNode;
-      if (st.type === 'VariableDeclaration') {
-        for (const decl of (st.declarations as unknown[]) ?? []) {
-          addPattern((decl as PoisonNode)?.id);
-        }
-      } else if (
-        st.type === 'ClassDeclaration' ||
-        st.type === 'FunctionDeclaration' ||
-        st.type === 'FunctionExpression'
-      ) {
-        if (st.id !== null && typeof st.id === 'object')
-          out.add(String((st.id as PoisonNode).name));
-      }
-    }
-  }
-  return out;
-}
-
-const FUNCTION_LIKE = new Set([
-  'FunctionDeclaration',
-  'FunctionExpression',
-  'ArrowFunctionExpression',
-  'ClassDeclaration',
-  'ClassExpression',
-]);
-
-function mutatesMemberRootedAt(node: unknown, name: string): boolean {
-  if (!node || typeof node !== 'object') return false;
-  const n = node as PoisonNode;
-  if (n.type === 'MemberExpression') {
-    return isIdentifier(n.object, name) || mutatesMemberRootedAt(n.object, name);
-  }
-  return false;
-}
-
-function mutatesNameInside(body: unknown, name: string): boolean {
-  const probe = { mutated: false };
+function countIdentifierOccurrences(program: unknown, name: string): number {
+  let count = 0;
   const scan = (node: unknown): void => {
-    if (probe.mutated || node === null || typeof node !== 'object') return;
+    if (node === null || typeof node !== 'object') return;
     const n = node as PoisonNode;
     if (typeof n.type !== 'string') return;
-    if (
-      (n.type === 'AssignmentExpression' || n.type === 'UpdateExpression') &&
-      (isIdentifier(n.left ?? n.argument, name) ||
-        mutatesMemberRootedAt(n.left ?? n.argument, name))
-    ) {
-      probe.mutated = true;
-      return;
-    }
+    if (n.type === 'Identifier' && (n as { name?: unknown }).name === name) count += 1;
     for (const key of Object.keys(n)) {
       if (key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'range') {
         continue;
@@ -205,256 +104,84 @@ function mutatesNameInside(body: unknown, name: string): boolean {
       const value = n[key];
       if (Array.isArray(value)) {
         for (const item of value) scan(item);
-      } else if (value !== null && typeof value === 'object') scan(value);
+      } else if (value !== null && typeof value === 'object') {
+        scan(value);
+      }
     }
   };
-  scan(body);
-  return probe.mutated;
+  scan(program);
+  return count;
 }
 
-/** let/const/class/function names a BLOCK binds (block-scoped only). */
-function blockScopedNames(block: PoisonNode): Set<string> {
+/** `const X = Symbol('lit')` / `const X = Symbol.for('lit')` at module top
+ * level; returns the identifiers bound by such declarators. */
+function literalSymbolConstNames(topLevelBody: readonly unknown[]): Set<string> {
   const out = new Set<string>();
-  for (const stmt of (block.body as unknown[]) ?? []) {
-    if (stmt === null || typeof stmt !== 'object') continue;
-    const st = stmt as PoisonNode;
-    if (st.type === 'VariableDeclaration' && st.kind !== 'var') {
-      for (const decl of (st.declarations as unknown[]) ?? []) {
-        const d = decl as PoisonNode;
+  for (const raw of topLevelBody) {
+    if (raw === null || typeof raw !== 'object') continue;
+    let n = raw as PoisonNode;
+    if (n.type === 'ExportNamedDeclaration' || n.type === 'ExportDefaultDeclaration') {
+      const inner = n.declaration;
+      if (inner === null || typeof inner !== 'object') continue;
+      n = inner as PoisonNode;
+    }
+    if (n.type !== 'VariableDeclaration' || n.kind !== 'const') continue;
+    for (const decl of (n.declarations as unknown[]) ?? []) {
+      const d = decl as PoisonNode;
+      const init = d.init;
+      if (init === null || typeof init !== 'object') continue;
+      const call = init as PoisonNode;
+      if (call.type !== 'CallExpression') continue;
+      const callee = call.callee as PoisonNode | null;
+      if (callee === null || typeof callee !== 'object') continue;
+      let isFactory = false;
+      if (callee.type === 'Identifier' && callee.name === 'Symbol') isFactory = true;
+      if (callee.type === 'MemberExpression') {
+        const obj = callee.object as PoisonNode | null;
+        const prop = callee.property as PoisonNode | null;
         if (
-          d.id !== null &&
-          typeof d.id === 'object' &&
-          (d.id as PoisonNode).type === 'Identifier'
+          obj !== null &&
+          typeof obj === 'object' &&
+          obj.type === 'Identifier' &&
+          obj.name === 'Symbol' &&
+          prop !== null &&
+          typeof prop === 'object' &&
+          (prop as { name?: unknown }).name === 'for'
         ) {
-          out.add(String((d.id as PoisonNode).name));
+          isFactory = true;
         }
       }
-    } else if (
-      st.type === 'ClassDeclaration' ||
-      st.type === 'FunctionDeclaration' ||
-      st.type === 'FunctionExpression'
-    ) {
-      if (st.id !== null && typeof st.id === 'object') out.add(String((st.id as PoisonNode).name));
+      if (!isFactory) continue;
+      // Literal argument only — dynamic arguments stay unproven.
+      const arg = (call.arguments as unknown[] | undefined)?.[0];
+      if (arg === null || typeof arg !== 'object') continue;
+      if (
+        (arg as PoisonNode).type !== 'Literal' ||
+        typeof (arg as { value?: unknown }).value !== 'string'
+      ) {
+        continue;
+      }
+      const id = d.id as PoisonNode | null;
+      if (id !== null && typeof id === 'object' && id.type === 'Identifier') {
+        out.add(String(id.name));
+      }
     }
   }
   return out;
 }
 
-function visitPoison(
-  node: unknown,
-  out: {
-    poisoned: boolean;
-    symbolArgCallees: Set<string>;
-    mutatingSymbolParamFns: Set<string>;
-  },
-  shadowed: ReadonlySet<string> = new Set(),
-  aliasesIn?: Set<string>,
-): void {
-  const aliases = aliasesIn ?? new Set<string>();
-  if (out.poisoned || node === null || typeof node !== 'object') return;
-  const n = node as PoisonNode;
-  if (typeof n.type !== 'string') return;
-  let innerShadowed = shadowed;
-  let innerAliases = aliases;
-  if (FUNCTION_LIKE.has(n.type)) {
-    const names = scopeShadowedNames(n as PoisonNode);
-    // A local binding named `Symbol` shadows the global identifier INSIDE
-    // this scope — mutations there are local, not builtin mutations. Alias
-    // knowledge snapshots at the boundary (outer aliases stay outer).
-    innerShadowed = new Set([...shadowed, ...names]);
-    innerAliases = new Set([...aliases]);
-  } else if (n.type === 'BlockStatement') {
-    // Block-scoped let/const/class/function shadow within the block only.
-    const names = blockScopedNames(n as PoisonNode);
-    if (names.size > 0) innerShadowed = new Set([...shadowed, ...names]);
-  } else if (n.type === 'VariableDeclaration') {
-    for (const decl of (n.declarations as unknown[]) ?? []) {
-      const d = decl as PoisonNode;
-      if (d === null || typeof d !== 'object') continue;
-      const init = d.init;
-      // Track aliases: const/let X = Symbol, or X = <known alias>
-      // (transitive — const S = Symbol; const T = S; T.for = … poisons).
-      if (
-        init !== null &&
-        typeof init === 'object' &&
-        (init as PoisonNode).type === 'Identifier' &&
-        d.id !== null &&
-        typeof d.id === 'object' &&
-        (d.id as PoisonNode).type === 'Identifier'
-      ) {
-        const initName = String((init as PoisonNode).name);
-        const isAliasSource =
-          (initName === 'Symbol' && !shadowed.has('Symbol')) ||
-          (aliases.has(initName) && !shadowed.has(initName));
-        if (isAliasSource) aliases.add(String((d.id as PoisonNode).name));
-      }
-    }
-  }
-  if (n.type === 'AssignmentExpression') {
-    // let X; X = Symbol — alias born by assignment (unshadowed both sides);
-    // X = <known alias> extends the alias chain transitively.
-    if (
-      n.right !== null &&
-      typeof n.right === 'object' &&
-      (n.right as PoisonNode).type === 'Identifier' &&
-      n.left !== null &&
-      typeof n.left === 'object' &&
-      (n.left as PoisonNode).type === 'Identifier'
-    ) {
-      const rightName = String((n.right as PoisonNode).name);
-      const leftName = String((n.left as PoisonNode).name);
-      const isAliasSource =
-        (rightName === 'Symbol' && !innerShadowed.has('Symbol')) ||
-        (aliases.has(rightName) && !innerShadowed.has(rightName));
-      if (isAliasSource && !innerShadowed.has(leftName)) aliases.add(leftName);
-    }
-  }
-  const symbolish = (id: unknown): boolean =>
-    !innerShadowed.has('Symbol') &&
-    (isIdentifier(id, 'Symbol') ||
-      (innerAliases.size > 0 && FUNCTION_LIKE.size > 0 && isAnyIdentifier(id, innerAliases)));
-  switch (n.type) {
-    case 'AssignmentExpression':
-    case 'UpdateExpression':
-      if (isSymbolMutationTargetWith(n.left ?? n.argument, symbolish, innerShadowed))
-        out.poisoned = true;
-      break;
-    case 'UnaryExpression':
-      if (
-        n.operator === 'delete' &&
-        isSymbolMutationTargetWith(n.argument, symbolish, innerShadowed)
-      ) {
-        out.poisoned = true;
-      }
-      break;
-    case 'CallExpression': {
-      const callee = n.callee;
-      if (
-        callee !== null &&
-        typeof callee === 'object' &&
-        (callee as PoisonNode).type === 'MemberExpression'
-      ) {
-        const call = callee as PoisonNode;
-        const object = call.object;
-        const prop = propertyNameOf(call.property);
-        const args = Array.isArray(n.arguments) ? (n.arguments as unknown[]) : [];
-        const first = args[0];
-        const isObject = isIdentifier(object, 'Object');
-        const isReflect = isIdentifier(object, 'Reflect');
-        if (
-          (isObject &&
-            (prop === 'defineProperty' || prop === 'defineProperties' || prop === 'assign')) ||
-          (isReflect && (prop === 'set' || prop === 'defineProperty'))
-        ) {
-          // Direct `Symbol` target OR `globalThis` + 'Symbol' property.
-          if (symbolish(first)) out.poisoned = true;
-          else if (isIdentifier(first, 'globalThis')) {
-            const key = propertyNameOf(args[1]);
-            if (key === 'Symbol') out.poisoned = true;
-          }
-        }
-      }
-      break;
-    }
-    default:
-      break;
-  }
-  // A global-Symbol argument flowing into a function whose parameter is named
-  // `Symbol` AND whose body mutates that parameter poisons (the mutation
-  // reaches the builtin). Pure identity-style functions stay loadable.
-  if (n.type === 'CallExpression' && !shadowed.has('Symbol')) {
-    const calleeName = nameOf(n.callee);
-    if (calleeName !== undefined) {
-      for (const arg of Array.isArray(n.arguments) ? (n.arguments as unknown[]) : []) {
-        if (isIdentifier(arg, 'Symbol')) out.symbolArgCallees.add(calleeName);
-      }
-    }
-  }
-  if (FUNCTION_LIKE.has(n.type)) {
-    const names = scopeShadowedNames(n as PoisonNode);
-    if (names.has('Symbol')) {
-      const body = (n as PoisonNode).body;
-      if (body !== null && typeof body === 'object' && mutatesNameInside(body, 'Symbol')) {
-        const fnName = nameOf((n as PoisonNode).id);
-        if (fnName !== undefined) out.mutatingSymbolParamFns.add(fnName);
-        else if (n.type === 'FunctionDeclaration') out.mutatingSymbolParamFns.add('');
-      }
-    }
-  }
-  for (const key of Object.keys(n)) {
-    if (key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'range') {
-      continue;
-    }
-    const value = n[key];
-    if (Array.isArray(value)) {
-      for (const item of value) visitPoison(item, out, innerShadowed, innerAliases);
-    } else if (value !== null && typeof value === 'object') {
-      visitPoison(value, out, innerShadowed, innerAliases);
-    }
-  }
-}
-
-function isAnyIdentifier(node: unknown, names: ReadonlySet<string>): boolean {
-  return (
-    node !== null &&
-    typeof node === 'object' &&
-    (node as PoisonNode).type === 'Identifier' &&
-    names.has(String((node as PoisonNode).name))
-  );
-}
-
-function isSymbolMutationTargetWith(
-  node: unknown,
-  symbolish: (id: unknown) => boolean,
-  shadowed: ReadonlySet<string>,
-): boolean {
-  if (!node || typeof node !== 'object') return false;
-  const n = node as PoisonNode;
-  if (n.type === 'Identifier') return symbolish(n);
-  if (n.type === 'MemberExpression') {
-    const object = n.object;
-    if (symbolish(object)) return true;
-    if (isIdentifier(object, 'globalThis') && propertyNameOf(n.property) === 'Symbol') return true;
-    return isSymbolMutationTargetWith(object, symbolish, shadowed);
-  }
-  return false;
-}
-
 /**
- * True when the program (or its top-level declarations named `Symbol`)
- * contains ANY shape that can replace `Symbol.for`/`Symbol` — making every
- * Symbol-key exemption unprovable in that module. Conservative by design:
- * over-rejecting keeps the ADR-0171 ceiling whole; never silently weakens it.
- * `topLevelBody` supplies the module-scope declaration check.
+ * True when the module is NOT eligible for the narrow Symbol-key exemption:
+ * either no qualifying const factory binding exists, or `Symbol` occurs more
+ * often than those factories use it (any alias/mutation/second reference).
  */
 export function programPoisonsSymbolProofs(
   program: unknown,
   topLevelBody: readonly unknown[],
 ): boolean {
-  const out = {
-    poisoned: false,
-    symbolArgCallees: new Set<string>(),
-    mutatingSymbolParamFns: new Set<string>(),
-  };
-  for (const child of topLevelBody) {
-    if (child !== null && typeof child === 'object') {
-      const c = child as PoisonNode;
-      let decl = c;
-      if (c.type === 'ExportNamedDeclaration' || c.type === 'ExportDefaultDeclaration') {
-        const inner = c.declaration;
-        if (inner !== null && typeof inner === 'object') decl = inner as PoisonNode;
-      }
-      if (
-        (decl.type === 'ClassDeclaration' || decl.type === 'FunctionDeclaration') &&
-        nameOf(decl.id) === 'Symbol'
-      ) {
-        out.poisoned = true;
-      }
-    }
-  }
-  if (!out.poisoned) visitPoison(program, out);
-  for (const callee of out.symbolArgCallees) {
-    if (out.mutatingSymbolParamFns.has(callee)) return true;
-  }
-  return out.poisoned;
+  const bound = literalSymbolConstNames(topLevelBody);
+  if (bound.size === 0) return true;
+  const occurrences = countIdentifierOccurrences(program, 'Symbol');
+  // Each qualifying factory consumes exactly one `Symbol` identifier.
+  return occurrences !== bound.size;
 }

@@ -337,6 +337,7 @@ interface OffsetShift {
 }
 const PERSISTENT_SHIFTS = new Map<string, OffsetShift>();
 let persistentHook: ((err: Error, frames: NodeJS.CallSite[]) => unknown) | null = null;
+let capturedPrevious: ((err: Error, frames: NodeJS.CallSite[]) => unknown) | undefined;
 
 interface CallSiteLike {
   getFileName?: () => unknown;
@@ -356,12 +357,23 @@ function shiftForFile(file: unknown): ShiftLookup | undefined {
   return shift === undefined ? undefined : { shift, file };
 }
 
-/** Look up a shift by the trailing `<file>:<line>:<col>` of a frame render. */
+/** Look up a shift by the trailing `<file>:<line>:<col>` of a frame render.
+ * Per-file regexes — filenames may contain parens/spaces. */
+const renderedMatchers = new Map<string, RegExp>();
+
 function shiftForRendered(text: string): ShiftLookup | undefined {
-  const m = /([^\s()]+):(\d+):(\d+)\)?$/u.exec(text.trim());
-  if (m === null) return undefined;
-  const shift = PERSISTENT_SHIFTS.get(m[1] ?? '');
-  return shift === undefined ? undefined : { shift, file: m[1] ?? '' };
+  const trimmed = text.trim();
+  for (const file of PERSISTENT_SHIFTS.keys()) {
+    let re = renderedMatchers.get(file);
+    if (re === undefined) {
+      re = new RegExp(`${file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:(\\d+):(\\d+)\\)?$`, 'u');
+      renderedMatchers.set(file, re);
+    }
+    if (re.test(trimmed)) {
+      return { shift: PERSISTENT_SHIFTS.get(file) as OffsetShift, file };
+    }
+  }
+  return undefined;
 }
 
 function uninstallPersistentHook(): void {
@@ -370,7 +382,8 @@ function uninstallPersistentHook(): void {
   persistentHook = null;
   const errorCtor = Error as unknown as ErrorWithPrepareStackTrace;
   if (errorCtor.prepareStackTrace === hook) {
-    Reflect.deleteProperty(errorCtor, 'prepareStackTrace');
+    if (capturedPrevious) errorCtor.prepareStackTrace = capturedPrevious;
+    else Reflect.deleteProperty(errorCtor, 'prepareStackTrace');
   }
 }
 
@@ -378,6 +391,7 @@ function installPersistentHook(): void {
   if (persistentHook !== null) return;
   const errorCtor = Error as unknown as ErrorWithPrepareStackTrace;
   const previous = errorCtor.prepareStackTrace;
+  capturedPrevious = previous;
   const hook = (err: Error, frames: NodeJS.CallSite[]): unknown => {
     let anyShifted = false;
     const wrapped = frames.map((frame) => {
@@ -393,10 +407,19 @@ function installPersistentHook(): void {
       // Shifted stacks render HERE (single application — no double-shift
       // through a chained dispatcher, no `eval (` marker rebuilds). Unshifted
       // caller frames stay in place. Known limitation: an outer source-map
-      // remapper does not re-map an already-shifted frame (Out of scope).
+      // remapper does not re-map an already-shifted frame (Out of scope);
+      // recompiling the same filename with DIFFERENT offsets: last wins.
       return defaultStackRender(err, wrapped);
     }
-    return previous ? previous(err, frames) : defaultStackRender(err, frames);
+    if (previous) return previous(err, frames);
+    // Unshifted stack, no outer hook — read through V8's own default so the
+    // header/frames stay byte-identical to the pre-hook base.
+    Reflect.deleteProperty(errorCtor, 'prepareStackTrace');
+    try {
+      return err.stack;
+    } finally {
+      errorCtor.prepareStackTrace = hook;
+    }
   };
   persistentHook = hook;
   errorCtor.prepareStackTrace = hook;

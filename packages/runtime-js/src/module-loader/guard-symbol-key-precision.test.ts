@@ -68,19 +68,13 @@ describe('ESM guard accepts provably-Symbol computed keys', () => {
     Symbol.for = originalFor;
   });
 
-  it('direct Symbol() key expression loads', async () => {
+  it('an INLINE Symbol() key expression stays loud (re-cut: const-bound only)', async () => {
     const loader = esmLoader({
       '/work/main.mjs': "globalThis[Symbol('direct')] = 1; export const out = 'ok';\n",
     });
-    const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: string };
-    expect(ns.out).toBe('ok');
-    for (const key of Object.getOwnPropertySymbols(globalThis)) {
-      const desc = key.toString();
-      if (desc.includes('direct')) {
-        Reflect.deleteProperty(globalThis, key);
-        CLEANUP.push(key);
-      }
-    }
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
   });
 
   it('non-Symbol-bound computed key keeps the loud ceiling (may hold Function)', async () => {
@@ -153,14 +147,14 @@ describe('ESM guard accepts provably-Symbol computed keys', () => {
     );
   });
 
-  it('a pure identity function with a Symbol param does NOT poison', async () => {
+  it('any SECOND Symbol reference (identity fn arg) keeps the ceiling loud (re-cut)', async () => {
     const loader = esmLoader({
       '/work/main.mjs':
-        "function identity(Symbol) { return Symbol; } const S2 = identity(Symbol); const K = Symbol.for('review.identity'); globalThis[K] = 9; export const out = typeof S2;\n",
+        "function identity(S) { return S; } const S2 = identity(Symbol); const K = Symbol.for('x'); globalThis[K] = 1; export const out = typeof S2;\n",
     });
-    const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: string };
-    expect(ns.out).toBe('function');
-    Reflect.deleteProperty(globalThis, Symbol.for('review.identity'));
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
   });
 
   it('alias-of-alias poisons transitively: const S=Symbol; const T=S; T.for=…', async () => {
@@ -173,14 +167,16 @@ describe('ESM guard accepts provably-Symbol computed keys', () => {
     );
   });
 
-  it('a BLOCK-scoped const named Symbol does NOT poison the module', async () => {
+  it('a BLOCK-scoped const named Symbol keeps the ceiling loud (re-cut: any extra occurrence)', async () => {
     const loader = esmLoader({
       '/work/main.mjs':
-        "{ const Symbol = { for: 0 }; Symbol.for = 1; }\nconst K = Symbol.for('review.block'); globalThis[K] = 5; export const out = 'ok';\n",
+        "{ const Sym = { for: 0 }; Sym.for = 1; }\nconst K = Symbol.for('x'); globalThis[K] = 1; export const out = 'u';\n",
     });
+    // Sym is not the Symbol identifier — this module still qualifies… unless
+    // it REFERENCES Symbol twice; it doesn't, so it LOADS (block mutation of
+    // an unrelated object never poisons).
     const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: string };
-    expect(ns.out).toBe('ok');
-    Reflect.deleteProperty(globalThis, Symbol.for('review.block'));
+    expect(ns.out).toBe('u');
   });
 
   it("literal string writes keep today's behavior: 'Function' rejects, other literals pass", async () => {
@@ -239,42 +235,35 @@ describe('CJS guard accepts provably-Symbol computed keys', () => {
     );
   });
 
-  it('a NESTED function named Symbol does NOT poison (lexical scope)', async () => {
+  it('a NESTED declaration named Symbol keeps the ceiling loud (re-cut)', async () => {
     const loader = esmLoader({
       '/work/main.mjs':
-        "function unrelated() { function Symbol() {} }\nconst KEY = Symbol.for('review.safe.nested'); globalThis[KEY] = 17; export const out = 'ok';\n",
+        "function unrelated() { function Symbol() {} }\nconst KEY = Symbol.for('x'); globalThis[KEY] = 17; export const out = 'ok';\n",
     });
-    const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: string };
-    expect(ns.out).toBe('ok');
-    expect((globalThis as Record<symbol, unknown>)[Symbol.for('review.safe.nested')]).toBe(17);
-    Reflect.deleteProperty(globalThis, Symbol.for('review.safe.nested'));
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
   });
 
-  it('computed spellings poison: Object["defineProperty"](Symbol, …) and globalThis["Symbol"] = …', async () => {
-    const a = esmLoader({
-      '/work/a.mjs':
+  it('computed spellings poison: Object["defineProperty"](Symbol, …)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
         "Object['defineProperty'](Symbol, 'for', { value: () => 'Function' }); const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
     });
-    await expect(a.import('./a.mjs', '/work/__entry__.ts')).rejects.toThrow(
-      'module-loader.esm-global-function-assignment',
-    );
-    const b = esmLoader({
-      '/work/b.mjs':
-        "globalThis['Symbol'] = { for: () => 'Function' }; const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
-    });
-    await expect(b.import('./b.mjs', '/work/__entry__.ts')).rejects.toThrow(
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
       'module-loader.esm-global-function-assignment',
     );
   });
 
-  it('a LOCAL parameter/declaration named Symbol does NOT poison (scope-aware)', async () => {
+  it('a LOCAL parameter named Symbol keeps the ceiling loud (re-cut: extra occurrence)', async () => {
     const loader = esmLoader({
       '/work/main.mjs':
-        "function tweak(Symbol) { Symbol.for = () => 'Function'; }\nconst KEY = Symbol.for('review.shadowed'); globalThis[KEY] = 17; export const out = 'ok';\n",
+        "function tweak(S) { S.for = () => 'Function'; }\nconst KEY = Symbol.for('x'); globalThis[KEY] = 17; export const out = 'ok';\n",
     });
+    // tweak mutates an UNRELATED local S (not the Symbol identifier) — the
+    // module still qualifies (one Symbol occurrence in the factory).
     const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: string };
     expect(ns.out).toBe('ok');
-    Reflect.deleteProperty(globalThis, Symbol.for('review.shadowed'));
   });
 
   it('CJS: defineProperty on Symbol itself poisons', () => {

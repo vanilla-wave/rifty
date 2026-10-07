@@ -77,6 +77,17 @@ challenge: 2026-10-02 — clear — inherited goal §Challenge (2026-09-15, 6 pr
 
 ## Decisions
 
+- re-cut: 2026-10-06 — agent: after five adversarial review waves each found a
+  new static bypass of the scope/alias-aware analyzer (alias chains, parameter
+  flows, block shadows, computed spellings), the exemption is now DECISIVE and
+  minimal: only a module-top-level `const X = Symbol('<literal>')` /
+  `const X = Symbol.for('<literal>')` qualifies, and only when the identifier
+  `Symbol` occurs NOWHERE else in the module (occurrence count == qualifying
+  factories). Both claimed carriers match exactly (@vitest/utils timers.js,
+  undici global.js). Everything else — including previously-accepted benign
+  shapes (inline expressions, local `Symbol`-named bindings) — stays loud.
+  Over-rejection is the safe direction (ADR-0171 ceiling stays whole).
+  — trace: none (analyzer shape is agent-owned; Acceptance 1/2 unchanged)
 - ready-verdict: 2026-10-02 — Contract+RED @ 24a8a8546976c82de76e4f4ef1a6d2dfad6cd9e7
 - 2026-10-02 — agent (PICKUP): carrier = precision in the two existing guard
   analyzers, not a new mechanism: track identifiers initialized (const
