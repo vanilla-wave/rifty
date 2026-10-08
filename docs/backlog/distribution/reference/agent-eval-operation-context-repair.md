@@ -204,3 +204,10 @@ bytes no longer available. First current cohort terminal1 after that loss;
 logs/partial results unavailable, not merged/rescored. Fresh cohort4 is separate.
 Current scratch uses `.cache/pr341`; isolated Playwright output explicitly set.
 F6/observer implementation, fresh96/I10/I11/historical-reader/CLOSE stay open.
+
+Literal-choice independent Final PASS @ e8dbbd8:7/7,0 findings; actual current43
+plus ARIA-precedence/duplicate/no-partial-mutation probe, BASE/eachguard8RED,
+raw17JSON/physicalall4/noModels/twooffline/fingerprints/prototypes verified.
+Exact verdict `agent-eval-literal-choice-final-green.json`; executed receipts
+`agent-eval-literal-choice-final-evidence.json.gz`. Unit residuals0; goal
+residuals5/goalfalse. F6 still blocks source-criterion admission.
