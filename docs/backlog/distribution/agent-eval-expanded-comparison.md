@@ -24,6 +24,8 @@ Same user-owned goal/scenarios/I1-I11, same PR341. Negative/inconclusive valid.
 Eval-v8 complete96 remains unaccepted after operation-projection defects.
 Eval-v9 source Final BLOCK631 on public-valid Discard cancellation; ADR0520
 book-v7/expense-v7/eval-v10 preserves public inputs and historical outcomes.
+Source61 Final BLOCK on decorated stable identity; book-v8/expense-v8/eval-v11
+repairs literal punctuation matching at the shared caption owner.
 Source review precedes fresh96; criterion version changes no accepted scope.
 
 ## Challenge
@@ -34,7 +36,7 @@ No new user scope choice, model/estimator/selection policy or execution mechanis
 
 ## Acceptance
 
-1. Freeze complete corrected eval-v10/config/selection/control/source identity before a fresh
+1. Freeze complete corrected eval-v11/config/selection/control/source identity before a fresh
   96trial campaign:8cases×4origins×3freshrepeats, task/lane/trial order, PiLuna/medium,
    nativeCodexgpt-6.1-sol/low separate,100tools/600s. Allselected failures retained;
    fullmatrixprimary. No adaptive compatible-subset pruning; no resume/overwrite.

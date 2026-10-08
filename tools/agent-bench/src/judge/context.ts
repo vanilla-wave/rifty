@@ -249,7 +249,10 @@ export async function workflowAction(
 
 const escapeCaption = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export function caption(name: string): RegExp {
-  return new RegExp(`\\b${escapeCaption(name)}\\b`, 'i');
+  return new RegExp(
+    `${/^\w/.test(name) ? '\\b' : ''}${escapeCaption(name)}${/\w$/.test(name) ? '\\b' : ''}`,
+    'i',
+  );
 }
 
 /** Display context is open; missing or ambiguous semantic choices are errors. */
@@ -280,9 +283,10 @@ export async function selectedChoice(field: Locator, identities: readonly string
 
 /** Named action meaning is independent of caption word order. */
 export function actionCaption(verbs: string, subjects: string, identity?: string): RegExp {
-  const words = [verbs.split('|'), subjects.split('|'), ...(identity ? [[identity]] : [])];
+  const words = [verbs.split('|'), subjects.split('|')];
   return new RegExp(
-    words.map((group) => `(?=.*\\b(?:${group.map(escapeCaption).join('|')})\\b)`).join(''),
+    words.map((group) => `(?=.*\\b(?:${group.map(escapeCaption).join('|')})\\b)`).join('') +
+      (identity ? `(?=.*${caption(identity).source})` : ''),
     'i',
   );
 }
@@ -552,7 +556,7 @@ export async function workflowActions(
   identity?: string,
 ): Promise<Locator> {
   const requested = new RegExp(
-    `(?=.*\\b(?:${verbs.split('|').map(escapeCaption).join('|')})\\b)${identity ? `(?=.*\\b${escapeCaption(identity)}\\b)` : ''}`,
+    `(?=.*\\b(?:${verbs.split('|').map(escapeCaption).join('|')})\\b)${identity ? `(?=.*${caption(identity).source})` : ''}`,
     'i',
   );
   const candidates = namedActions(ctx, requested);
@@ -585,7 +589,7 @@ export async function workflowActions(
     let record: Locator | undefined;
     if (identityText) {
       const opposite = new RegExp(
-        `(?=.*\\b(?:${verbs.includes('delete') ? 'edit' : 'delete'})\\b)(?=.*\\b${escapeCaption(identityText)}\\b)`,
+        `(?=.*\\b(?:${verbs.includes('delete') ? 'edit' : 'delete'})\\b)(?=.*${caption(identityText).source})`,
         'i',
       );
       for (const scope of scopes) {
@@ -632,7 +636,7 @@ export async function workflowActions(
           }
           return values.join(' ').replace(/\s+/g, ' ').trim();
         });
-        if (new RegExp(`\\b${escapeCaption(identityText)}\\b`, 'i').test(text)) {
+        if (caption(identityText).test(text)) {
           record = scope;
           break;
         }

@@ -98,3 +98,29 @@ normalized metadata headers to03, links identify immutable bundle entries.
 Bundle/sourceJSON unchanged; existing summaries-policy4PASS29.76s/exit0.
 Both logs/current producer retained in record-identity proof. Final refs/backlog
 and diff checks PASS. Independent source Final remains pending.
+
+## Independent F4 and literal matching
+
+Source61 Final BLOCK: actual Edit/Delete room (Bay) captions publicGREEN/
+originalBASEprivatePASS/currentprivateRED; exact verdict/probe/proof/log retained
+in agent-eval-record-identity-final-blocked.json.gz. No scope amendment.
+Owned projection corrupt-input/sibling-drift: word-boundary assertion at a
+nonword literal edge excluded valid values. One existing caption matcher owns
+choice, action identity, requested record, peer and read-only corroboration.
+Word edges preserve boundaries; punctuation edges retain exact escaped text.
+No decoration stripping, extra parser, cancellation lexicon or state owner.
+
+Permanent decorated room/expense class8RED16PASS44.9s; refined row identity
+fixture and literal-consumer carrier9RED (before product change). Current
+native153PASS14.6s; old matcher in isolated copy9RED16PASS50.3s. Actual public
+original/Discard/decorated3GREEN/errors0, baseline/result/source kept separate.
+Book-v8/expense-v8/eval-v11 ten public/control carriers exactv7; six manifest
+entries unchanged; native-input exact61; all eight resolved criteria change.
+Current permanent real7PASS/actualexit0 on eval-v11; rawJSON/ZIP copied byte-exact
+to ignored workspace. Separate current own-origin12 allPASS/40probes each, before+patch=after/noModels,
+actualexit0. Canonical decorated-record archive45JSON retains originalText and
+parsed data; two offline regenerations preserve every originalJSON byte.
+Current fullgate27/27 PASS (unit289.1s firstpass/parity127.1s), exact log retained.
+Archive policy4PASS32.27s/actualexit0; refs/backlog/diffPASS. Independent clean
+committed Final still pending.
+No paid v11 campaign or historical rejudge; fresh96/I10/I11/CLOSE remain required.

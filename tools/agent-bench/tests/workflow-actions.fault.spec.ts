@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { workflowActions } from '../src/judge/context.ts';
+import { actionCaption, choiceOption, workflowActions } from '../src/judge/context.ts';
 
 for (const tag of ['button', 'a']) {
   for (const [subject, collection, other] of [
@@ -72,3 +72,31 @@ for (const subject of ['room', 'expense']) {
     await expect(actions).toHaveAttribute('data-target', 'record');
   });
 }
+
+for (const subject of ['room', 'expense']) {
+  for (const identity of ['(Amber)', '[Amber]', '"Amber"', '(Bay)']) {
+    test(`decorated record identity ${subject}/${identity}`, async ({ page }) => {
+      await page.setContent(
+        `<article><span>${identity === '(Bay)' ? 'Bay' : 'Amber'}</span><button data-target="record">Edit ${subject} ${identity}</button><button>Delete ${subject} ${identity}</button></article>`,
+      );
+      const actions = await workflowActions(
+        { view: page, previewUrl: 'about:blank' },
+        'edit',
+        subject,
+      );
+      await expect(actions).toHaveCount(1);
+    });
+  }
+}
+
+test('punctuated literal identity reaches action and choice consumers', async ({ page }) => {
+  await page.setContent(
+    '<article><span>(Amber)</span><button>Edit room (Amber)</button><button>Delete room (Amber)</button></article><select><option>(Amber)</option></select>',
+  );
+  const ctx = { view: page, previewUrl: 'about:blank' };
+  await expect(
+    page.getByRole('button', { name: actionCaption('edit', 'room', '(Amber)') }),
+  ).toHaveCount(1);
+  await expect(await workflowActions(ctx, 'edit', 'room', '(Amber)')).toHaveCount(1);
+  await expect(await choiceOption(page, '(Amber)')).toHaveCount(1);
+});

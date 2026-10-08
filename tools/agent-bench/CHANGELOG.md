@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Match punctuated literal record identities at the shared caption boundary across action/choice consumers; book-v8/expense-v8/eval-v11 retain public inputs and prior results.
+
 - Verify Edit/Delete record identity outside their own caption; preserve opaque Discard names and unpaired row actions. Book-v7/expense-v7/eval-v10 retain public inputs and original outcomes.
 
 - Discover workflow operations through observable collection/record context; distinguish cancellation from an opaque record identity and accept contextual row actions. Book-v6/expense-v6/eval-v9 preserve public inputs and original96 outcomes.
