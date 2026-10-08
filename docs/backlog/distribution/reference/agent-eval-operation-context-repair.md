@@ -148,3 +148,21 @@ Current permanent real8PASS/actualexit0; rawJSON/ZIP copied byte-exact ignored
 workspace. Fullgate27PASS (unit222.2s firstpass/parity113.8s), archive policy4PASS
 27.78s; logs retained. Clean independent Final still pending.
 No paid eval-v12; fresh96/I10/I11/historical-reader/CLOSE remain mandatory.
+
+## Independent F6 — unresolved data authority
+
+Source58 Final BLOCKF6: actual Edit room details for Bay publicGREEN/BASE40PASS/
+current0-editsFAIL; exact verdict/script/source/log in
+agent-eval-asymmetric-record-final-blocked.json.gz. Current162/real8/source16/
+fullgate positives do not accept the criterion or close the goal.
+Root: complete caption remainder is not record identity. Independent DEC audit
+executes both alternatives: pure data→caption passes wording but arbitrary
+Discard-changes note wrongly corroborates cancellation; field observation
+changes drafts and stale id-reset can masquerade as load. Caller observation
+needs actual persisted-update proof, not hidden clicks inside count/query.
+No new implementation or source acceptance; no input narrowing/word list.
+Fresh96/I10/I11/historical-reader/CLOSE remain mandatory.
+
+Record-only gate first sandbox6/27RED (listenEPERM HTTP/IPC, includes isolated
+rerun), then realhost27PASS; both exactlogs retained. No production changes,
+F6 and persistence discriminator remain unresolved.
