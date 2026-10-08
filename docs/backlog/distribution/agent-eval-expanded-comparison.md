@@ -30,7 +30,7 @@ No new user scope choice, model/estimator/selection policy or execution mechanis
 
 ## Acceptance
 
-1. Freeze complete corrected eval-v8/config/selection/control/source identity before a fresh
+1. Freeze complete corrected eval-v9/config/selection/control/source identity before a fresh
   96trial campaign:8cases×4origins×3freshrepeats, task/lane/trial order, PiLuna/medium,
    nativeCodexgpt-6.1-sol/low separate,100tools/600s. Allselected failures retained;
    fullmatrixprimary. No adaptive compatible-subset pruning; no resume/overwrite.
@@ -145,3 +145,17 @@ order preserved; I10/I11 mandatory, original scores unchanged — trace: none
   reference/agent-eval-expanded-comparison-v8-completed.md and
   reference/agent-eval-cancel-action-baseline.json.gz. No captured-programme
   full-public claim; Edit Bay/Edit Train candidates still unverified.
+
+
+## Operation-context continuation
+
+re-cut: 2026-10-08 — independent621 comparisonBLOCK F1/F2 requires shared
+operation-context source repair/book-v6/expense-v6/eval-v9; same eight public
+inputs/config/limits/order. Complete original96 immutable/unaccepted; source
+proof precedes fresh full96, I10/I11 unchanged — trace: none
+
+- Actual real baseline/permanent5 RED→GREEN, native138, guard2/8 reversions,
+  source112/physical111+unknownsetup1 and separate4 retained; two offline/archive
+  percohort. reference/agent-eval-operation-context-repair.md and
+  reference/agent-eval-operation-context-proof.json.gz.
+  Current fullgate and independent sourceFinal pending; no comparison/goal closure.

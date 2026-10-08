@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Discover workflow operations through observable collection/record context; distinguish cancellation from an opaque record identity and accept contextual row actions. Book-v6/expense-v6/eval-v9 preserve public inputs and original96 outcomes.
+
 - Match equivalent action captions through independent declared verb/subject tokens, preserving remaining record identity without adjacency/order restrictions.
 
 - Read YAML-quoted ARIA action headings, preserving colon/apostrophe/control-character record captions and explicit action aliases.

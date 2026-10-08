@@ -14,7 +14,7 @@ import type { Task } from '../src/tasks.ts';
 const root = await mkdtemp(join(tmpdir(), 'rifty-action-context-origins-'));
 const config = await loadConfig('tools/agent-bench/configs/pilot-comparison.json');
 config.runsPerTask = 1;
-const corpus = await loadCorpus('eval-v8');
+const corpus = await loadCorpus('eval-v9');
 const tasks: Task[] = [];
 const variants: {
   id: string;
@@ -163,11 +163,49 @@ for (const [task, path, marker, suffix] of [
   );
   add(task, suffix, true, patch);
 }
+for (const [task, path, changes, suffix] of [
+  [
+    booking,
+    'src/App.vue',
+    [
+      [
+        '<button @click="saveRoom">Save room</button>',
+        '<button @click="saveRoom">Save room</button><button v-if="roomForm.id" @click="Object.assign(roomForm, { id: \'\', name: \'\', capacity: \'\' })">Cancel room edit</button>',
+      ],
+    ],
+    'cancel-edit',
+  ],
+  [
+    booking,
+    'src/App.vue',
+    [
+      ['Edit room {{row.name}}', 'Edit {{row.name}}'],
+      ['Delete room {{row.name}}', 'Delete {{row.name}}'],
+    ],
+    'contextual-row-actions',
+  ],
+  [
+    expense,
+    'src/App.svelte',
+    [
+      ['Edit expense {row.description}', 'Edit {row.description}'],
+      ['Delete expense {row.description}', 'Delete {row.description}'],
+    ],
+    'contextual-row-actions',
+  ],
+] as const) {
+  const patch = { ...task.controls!.reference! };
+  for (const [before, after] of changes) {
+    assert.equal(patch[path]!.split(before).length, 2);
+    patch[path] = patch[path]!.replace(before, after);
+  }
+  add(task, suffix, true, patch);
+}
 const lanes: Lane[] = ['rifty', 'rifty-no-coi', 'local-reference', 'native-codex'];
-assert.equal(tasks.length, 25);
+assert.equal(tasks.length, 28);
 const declaration = {
   purpose:
-    'Action-context class consumer controls; twenty-five real programmes/four hosts, no models/quality evidence',
+    'Action-context class consumer controls; twenty-eight real programmes/four hosts, no models/quality evidence',
   sourceExpectationVsOwnOutcome:
     'Source-correct expense COI controls may retain exact existing style-import bootstrap failure; no native rescue/score substitution',
   variants,
@@ -179,7 +217,7 @@ const declaration = {
 await writeFile(join(root, 'declared-input-plan.json'), JSON.stringify(declaration, null, 2));
 console.log(`ACTION_CONTEXT_ROOT ${root}`);
 const report = await run(config, tasks, lanes, join(root, 'series'), 'reference');
-assert.equal(report.runs.length, 100);
+assert.equal(report.runs.length, 112);
 assert.deepEqual(report.header.plan, declaration.plan);
 const physical = [];
 for (const row of report.runs) {

@@ -189,8 +189,8 @@ export async function workflowAction(
   creation = false,
   purpose?: Locator,
 ): Promise<Locator> {
-  const update = namedActions(ctx, actionCaption('save|update', subjects));
-  const add = namedActions(ctx, actionCaption('add|create', subjects));
+  const update = await workflowActions(ctx, 'save|update', subjects);
+  const add = await workflowActions(ctx, 'add|create', subjects);
   const visible = async (choices: Locator, verbs: string) => {
     const verb = `(?:${verbs.split('|').map(escapeCaption).join('|')})`;
     const subject = `(?:${subjects.split('|').map(escapeCaption).join('|')})`;
@@ -200,21 +200,11 @@ export async function workflowAction(
     const captions: (string | undefined)[] = [];
     for (const node of await choices.all()) {
       if (!(await node.isVisible())) continue;
-      // Root ARIA caption includes descendant names; role/state/DOM shape is not identity.
-      const heading = (await node.ariaSnapshot()).split('\n')[0]?.slice(2);
-      const root = heading?.startsWith("'")
-        ? heading.slice(1, heading.lastIndexOf("'")).replace(/''/g, "'")
-        : heading;
-      const quotedCaption = root?.match(/^(?:button|link) ("(?:\\.|[^"\\])*")/)?.[1];
-      // Remove one declared verb/subject token; all other caption text stays identity.
-      const caption = quotedCaption
-        ? JSON.stringify(
-            (JSON.parse(quotedCaption) as string)
-              .replace(actionVerb, '')
-              .replace(actionSubject, '')
-              .trim(),
-          )
-        : undefined;
+      const name = accessibleRoot(await node.ariaSnapshot());
+      const caption =
+        name === undefined
+          ? undefined
+          : JSON.stringify(name.replace(actionVerb, '').replace(actionSubject, '').trim());
       let duplicate = -1;
       if (purpose && (await purpose.count()) && caption) {
         for (let index = 0; index < result.length; index++) {
@@ -543,4 +533,98 @@ export async function outputTexts(ctx: JudgeContext): Promise<string[]> {
       .map((node) => (node instanceof HTMLElement ? node.innerText : (node.textContent ?? ''))),
   );
   return [...new Set([...values, ...texts])].filter(Boolean);
+}
+
+function accessibleRoot(snapshot: string): string | undefined {
+  const heading = snapshot.split('\n')[0]?.slice(2) ?? '';
+  const root = heading.startsWith("'")
+    ? heading.slice(1, heading.lastIndexOf("'")).replace(/''/g, "'")
+    : heading;
+  const quoted = root.match(/^\S+ ("(?:\\.|[^"\\])*")/)?.[1];
+  return quoted ? (JSON.parse(quoted) as string) : undefined;
+}
+
+/** Declared operation uses its accessible record/collection context. */
+export async function workflowActions(
+  ctx: JudgeContext,
+  verbs: string,
+  subjects: string,
+  identity?: string,
+): Promise<Locator> {
+  const requested = new RegExp(
+    `(?=.*\\b(?:${verbs.split('|').map(escapeCaption).join('|')})\\b)${identity ? `(?=.*\\b${escapeCaption(identity)}\\b)` : ''}`,
+    'i',
+  );
+  const candidates = namedActions(ctx, requested);
+  const subjectWords = subjects
+    .split('|')
+    .flatMap((word) => [word, word === 'person' ? 'people' : `${word}s`]);
+  const domain = new RegExp(`\\b(?:${subjectWords.map(escapeCaption).join('|')})\\b`, 'i');
+  const collections = ctx.view
+    .getByRole('region', { name: domain })
+    .or(ctx.view.getByRole('group', { name: domain }))
+    .or(ctx.view.getByRole('form', { name: domain }))
+    .or(ctx.view.getByRole('list', { name: domain }))
+    .or(ctx.view.getByRole('table', { name: domain }));
+  let result = ctx.view.locator('xpath=//*[false()]');
+  for (const node of await candidates.all()) {
+    if (!(await node.isVisible())) continue;
+    const name = accessibleRoot(await node.ariaSnapshot());
+    if (name === undefined) throw new Error('Missing computed operation caption');
+    const identityText = name
+      .replace(
+        new RegExp(`\\b(?:${verbs.split('|').map(escapeCaption).join('|')})\\b\\s*`, 'i'),
+        '',
+      )
+      .replace(
+        new RegExp(`\\b(?:${subjects.split('|').map(escapeCaption).join('|')})\\b\\s*`, 'i'),
+        '',
+      )
+      .trim();
+    const scopes = (await node.locator('xpath=ancestor::*').all()).reverse();
+    let record: Locator | undefined;
+    if (identityText) {
+      const opposite = new RegExp(
+        `(?=.*\\b(?:${verbs.includes('delete') ? 'edit' : 'delete'})\\b)(?=.*\\b${escapeCaption(identityText)}\\b)`,
+        'i',
+      );
+      for (const scope of scopes) {
+        const local = scope
+          .getByRole('button', { name: requested })
+          .or(scope.getByRole('link', { name: requested }));
+        const complement = scope
+          .getByRole('button', { name: opposite })
+          .or(scope.getByRole('link', { name: opposite }));
+        if ((await complement.count()) && (await local.count()) === 1) {
+          record = scope;
+          break;
+        }
+      }
+    }
+    // A cancellation caption can be the literal identity of a saved record.
+    if (/^cancel\b/i.test(name) && !record) continue;
+    let accepted = actionCaption(verbs, subjects, identity).test(name);
+    if (!accepted) {
+      for (const scope of scopes) {
+        if (await scope.and(collections).count()) {
+          accepted = true;
+          break;
+        }
+        const headings = scope.getByRole('heading');
+        if ((await headings.count()) === 1 && domain.test(await renderedValue(headings.first()))) {
+          accepted = true;
+          break;
+        }
+      }
+    }
+    if (!accepted) continue;
+    const owner = record ?? scopes[0];
+    if (!owner) throw new Error('Operation has no observable context');
+    result = result.or(
+      owner
+        .getByRole('button', { name, exact: true })
+        .or(owner.getByRole('link', { name, exact: true })),
+    );
+  }
+  return result;
 }

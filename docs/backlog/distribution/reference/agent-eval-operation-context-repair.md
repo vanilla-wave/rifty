@@ -1,0 +1,67 @@
+# Operation-context repair — observed baseline
+
+Authority: goal I3/I6, public eight inputs, ADR0511/0512/0518/0519.
+Baseline621e285 source: real Vue/Svelte originals PASS; working cancellation and
+contextual room/expense actions publicGREEN/privateRED. Same-caption Cancel
+record/cancellation independently discriminated. Exact independent BLOCK:
+agent-eval-expanded-comparison-v8-final-blocked.json. No new promise/scope cut.
+
+Current helper da98ef36a5b50a1372ac5a63df3bf8f25c44c9923e71a9f6e5672ef678ea4fb1.
+Book-v6/expense-v6/eval-v9: ten public/control carrier bytes exactv5; other six
+manifest entries exact; all eight resolved criteria fingerprints change.
+Native-input-v1 byte-exact621. Existing goal/public scenarios remain unchanged.
+
+## Fault matrix
+
+| projection operation | fault and boundary | actual proof | trace |
+|---|---|---|---|
+| Edit selection | cancellation/opaque identity conflation, computed caption → operation | real reference public/private RED; identical captions; actual new all4 booking controls | I3/I6 |
+| room/expense row actions | hidden literal subject, declared operation → collection/record | real Vue/Svelte contextual variants publicGREEN/privateRED→new nativeGREEN/all4 outcomes | I3/I6 |
+| collection ownership | ancestor snapshot borrows sibling caption, DOM scope → domain | eight nativeRED→GREEN; mutation8RED and exact restoration | I3/I6 |
+| repeated observation / commit / participant ownership | changed operation query must preserve existing scope/alias/native semantics | inherited128 plus new10 native138GREEN; real legacy/new source controls | I3/I6/ADR0518 |
+| source evidence / unavailable preparation | source expected outcome must not overwrite own host outcome | original112 retained; physical111+unobserved1; separate4; both offline/archive | I3/I8/I9 |
+
+Owned in-process projection boundary: transport loss/duplicate/reorder physically
+excluded; browser/network/setup faults remain observed outcomes, never excused
+through another host. No new coordination/state owner or case parser copy.
+
+## Evidence
+
+agent-eval-operation-context-proof.json.gz: exact sources, original baseline,
+permanent5 RED2PASS/3FAIL→5GREEN, native138/types0, two guard reversions
+2RED/8RED→exact138GREEN, fingerprints and source inventories/logs.
+Initial TMP import/async preparation errors are not productRED; tuple type
+annotation repair leaves assertions intact. Source version changes measurement
+identity, not expected public behaviour. No old96 rejudge/rescore.
+
+Original source112:87PASS25FAIL, physical111. Sixteen negative controls retain
+ownFAIL; source-positive failures:8 original ZIP-confirmed CSS/CORS,1 unknown
+COI setup waiting archive-import toast90s before patch/judge. Producer's original
+assertion FAILED; numeric detached exit unobserved. Source setup has no invented
+before/after/semantic proof. Independent inventory/offline does not waive it.
+
+Separate fresh duplicate-expense4:3PASS/1CSS bootstrapFAIL, physical4/noModels,
+producer actualexit0. Original setupFAIL unchanged; cohorts never combined.
+Canonical archives 2026-10-08-operation-context-origin-controls394JSON and
+2026-10-08-operation-context-import-confirm17JSON; original parsed JSON exact,
+two offline regenerations each preserve authoritative hashes/derived views.
+Original browser ZIPs were not included in the JSON archive. After the
+interruption the recorded temporary raw roots are unavailable; original ZIP
+bytes cannot be claimed retained. Parsed original console/error/hash receipts
+and exact source/JSON data remain; review copies reconstructed from archives
+are parsed-exact, not original outer JSON/ZIP bytes. This gap stays explicit.
+
+Current fullgate and clean committed independent sourceFinal still required.
+Then freeze clean eval-v9/source/config/selection/cost before new full96.
+I10 catalogue/directed cause+recovery/unknown, I11 substantive finite32/fresh48
+controls/stopping proof, historical-contract retirement and whole-goal CLOSE
+remain mandatory. This source work cannot close the goal.
+
+## Current gate recovery
+
+Interrupted old gate handle/log unavailable; no live gate found before rerun.
+Current full run26/27: only eval-v9 JSON formatting failed; unit201.0s first
+pass/parity111.6s GREEN. Formatter preserves parsed manifest exactly/context
+bytes unchanged; original source-control plans remain original bytes/metadata.
+Red log and format proof retained. Full rerun27/27 PASS: unit204.7s first pass/parity116.9s. Green log retained;
+independent clean committed sourceFinal still pending.
