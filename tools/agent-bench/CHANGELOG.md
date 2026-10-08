@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Verify Edit/Delete record identity outside their own caption; preserve opaque Discard names and unpaired row actions. Book-v7/expense-v7/eval-v10 retain public inputs and original outcomes.
+
 - Discover workflow operations through observable collection/record context; distinguish cancellation from an opaque record identity and accept contextual row actions. Book-v6/expense-v6/eval-v9 preserve public inputs and original96 outcomes.
 
 - Match equivalent action captions through independent declared verb/subject tokens, preserving remaining record identity without adjacency/order restrictions.

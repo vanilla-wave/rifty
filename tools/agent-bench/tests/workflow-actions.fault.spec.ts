@@ -37,3 +37,38 @@ for (const tag of ['button', 'a']) {
     await expect(actions).toHaveAttribute('data-target', 'record');
   });
 }
+
+for (const [subject, collection] of [
+  ['room', 'Rooms'],
+  ['expense', 'Expenses'],
+] as const) {
+  for (const tag of ['button', 'a']) {
+    test(`draft discard and opaque Discard record/${subject}/${tag}`, async ({ page }) => {
+      await page.setContent(
+        `<section aria-label="${collection}"><h2>${collection}</h2><label>Name<input value="Discard"></label><${tag} href="#" data-target="draft">Discard ${subject} edit</${tag}><ul><li><span>Discard</span><${tag} href="#" data-target="record">Discard ${subject} edit</${tag}><${tag} href="#">Delete ${subject} Discard</${tag}></li></ul></section>`,
+      );
+      const actions = await workflowActions(
+        { view: page, previewUrl: 'about:blank' },
+        'edit',
+        subject,
+      );
+      await expect(actions).toHaveCount(1);
+      await expect(actions).toHaveAttribute('data-target', 'record');
+    });
+  }
+}
+
+for (const subject of ['room', 'expense']) {
+  test(`a named ${subject} record needs no complementary action`, async ({ page }) => {
+    await page.setContent(
+      `<article><span>Amber</span><button data-target="record">${subject} Amber Edit</button></article>`,
+    );
+    const actions = await workflowActions(
+      { view: page, previewUrl: 'about:blank' },
+      'edit',
+      subject,
+    );
+    await expect(actions).toHaveCount(1);
+    await expect(actions).toHaveAttribute('data-target', 'record');
+  });
+}

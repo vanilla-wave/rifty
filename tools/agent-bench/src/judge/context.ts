@@ -601,8 +601,44 @@ export async function workflowActions(
         }
       }
     }
-    // A cancellation caption can be the literal identity of a saved record.
-    if (/^cancel\b/i.test(name) && !record) continue;
+    // Record operations need identity evidence outside their own action caption.
+    if (/\b(?:edit|delete)\b/.test(verbs) && !record) {
+      if (!identityText) continue;
+      for (const scope of scopes) {
+        const local = scope
+          .getByRole('button', { name: requested })
+          .or(scope.getByRole('link', { name: requested }));
+        if ((await local.count()) !== 1) continue;
+        const text = await scope.evaluate((owner) => {
+          const walker = document.createTreeWalker(owner, NodeFilter.SHOW_TEXT);
+          const values: string[] = [];
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const parent = node.parentElement;
+            if (
+              !parent ||
+              parent.closest(
+                'button,a,input,textarea,select,[contenteditable], [role="button"],[role="link"]',
+              )
+            )
+              continue;
+            const style = getComputedStyle(parent);
+            if (
+              style.display === 'none' ||
+              style.visibility === 'hidden' ||
+              !parent.getClientRects().length
+            )
+              continue;
+            values.push(node.textContent ?? '');
+          }
+          return values.join(' ').replace(/\s+/g, ' ').trim();
+        });
+        if (new RegExp(`\\b${escapeCaption(identityText)}\\b`, 'i').test(text)) {
+          record = scope;
+          break;
+        }
+      }
+      if (!record) continue;
+    }
     let accepted = actionCaption(verbs, subjects, identity).test(name);
     if (!accepted) {
       for (const scope of scopes) {

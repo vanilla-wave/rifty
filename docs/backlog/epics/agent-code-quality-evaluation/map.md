@@ -1,6 +1,6 @@
 ## Items
 
-1. `distribution/agent-eval-expanded-comparison` — action-context source Finalbcebaa PASS26/26; eval-v7 interrupted82 remains history. Eval-v8 completed96 retained/unaccepted after real reference Cancel-action false-positive; operation-context repair/book-v6+expense-v6/eval-v9: native138/class/source112+separate4 retained; current gate/independent sourceFinal then new frozen full96/same eight public inputs/all4/three repeats, retained failures/uncertainty/offline report; I1/I2/I3/I4/I7/I8/I9.
+1. `distribution/agent-eval-expanded-comparison` — action-context source Finalbcebaa PASS26/26; eval-v7 interrupted82 remains history. Eval-v8 completed96 retained/unaccepted after real reference Cancel-action false-positive; operation-context repair/book-v6+expense-v6/eval-v9: native138/class/source112+separate4 retained; source631 Final BLOCK on Discard cancellation; ADR0520/book-v7+expense-v7/eval-v10 record-identity repair: real6GREEN/native144/guard6RED, own-origin8PASS/current gate27PASS (one unit timeout, isolatedPASS)/independent sourceFinal then new frozen full96/same eight public inputs/all4/three repeats, retained failures/uncertainty/offline report; I1/I2/I3/I4/I7/I8/I9.
 2. `distribution/agent-eval-boundary-diagnostics` — actual operation catalog and substantive finite escalation/fresh confirmation; I10/I11 mandatory. Existing scripts/report/corpus reused.
 
 ## Open questions

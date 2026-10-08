@@ -10,7 +10,7 @@ import type { Task } from '../src/tasks.ts';
 
 const config = await loadConfig('tools/agent-bench/configs/pilot-comparison.json');
 config.runsPerTask = 1;
-const corpus = await loadCorpus('eval-v9');
+const corpus = await loadCorpus('eval-v10');
 const book = corpus.find((task) => task.family === 'booking-constraints')!;
 const expense = corpus.find((task) => task.family === 'expense-conservation')!;
 const tasks: Task[] = [];
@@ -32,6 +32,12 @@ variant(book, 'cancel-edit', 'src/App.vue', (text) =>
     '<button @click="saveRoom">Save room</button><button v-if="roomForm.id" @click="Object.assign(roomForm, { id: \'\', name: \'\', capacity: \'\' })">Cancel room edit</button>',
   ),
 );
+variant(book, 'discard-edit', 'src/App.vue', (text) =>
+  text.replace(
+    '<button @click="saveRoom">Save room</button>',
+    '<button @click="saveRoom">Save room</button><button v-if="roomForm.id" @click="Object.assign(roomForm, { id: \'\', name: \'\', capacity: \'\' })">Discard room edit</button>',
+  ),
+);
 variant(book, 'contextual-actions', 'src/App.vue', (text) =>
   text
     .replace('Edit room {{row.name}}', 'Edit {{row.name}}')
@@ -51,7 +57,7 @@ console.log(
     results: report.runs.map((trial) => ({ task: trial.task, outcome: trial.outcome })),
   }),
 );
-assert.equal(report.runs.length, 5);
+assert.equal(report.runs.length, 6);
 for (const trial of report.runs) {
   assert.equal(trial.agentStatus, 'not-run');
   assert.ok(trial.judge.probes.length > 0);

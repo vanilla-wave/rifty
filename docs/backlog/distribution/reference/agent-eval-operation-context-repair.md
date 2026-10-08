@@ -6,7 +6,7 @@ contextual room/expense actions publicGREEN/privateRED. Same-caption Cancel
 record/cancellation independently discriminated. Exact independent BLOCK:
 agent-eval-expanded-comparison-v8-final-blocked.json. No new promise/scope cut.
 
-Current helper da98ef36a5b50a1372ac5a63df3bf8f25c44c9923e71a9f6e5672ef678ea4fb1.
+Historical eval-v9 helper da98ef36a5b50a1372ac5a63df3bf8f25c44c9923e71a9f6e5672ef678ea4fb1.
 Book-v6/expense-v6/eval-v9: ten public/control carrier bytes exactv5; other six
 manifest entries exact; all eight resolved criteria fingerprints change.
 Native-input-v1 byte-exact621. Existing goal/public scenarios remain unchanged.
@@ -51,8 +51,8 @@ bytes cannot be claimed retained. Parsed original console/error/hash receipts
 and exact source/JSON data remain; review copies reconstructed from archives
 are parsed-exact, not original outer JSON/ZIP bytes. This gap stays explicit.
 
-Current fullgate and clean committed independent sourceFinal still required.
-Then freeze clean eval-v9/source/config/selection/cost before new full96.
+Historical eval-v9 fullgate passed; independent sourceFinal subsequently BLOCK631.
+Corrected source acceptance precedes new clean frozen full96.
 I10 catalogue/directed cause+recovery/unknown, I11 substantive finite32/fresh48
 controls/stopping proof, historical-contract retirement and whole-goal CLOSE
 remain mandatory. This source work cannot close the goal.
@@ -64,4 +64,37 @@ Current full run26/27: only eval-v9 JSON formatting failed; unit201.0s first
 pass/parity111.6s GREEN. Formatter preserves parsed manifest exactly/context
 bytes unchanged; original source-control plans remain original bytes/metadata.
 Red log and format proof retained. Full rerun27/27 PASS: unit204.7s first pass/parity116.9s. Green log retained;
-independent clean committed sourceFinal still pending.
+independent sourceFinal subsequently BLOCK631 below.
+
+## Independent F3 and record-identity repair
+
+Source631 Final BLOCK: actual Discard-room-edit cancellation publicGREEN/privateRED;
+exact verdict/probe/source/logs in agent-eval-operation-context-final-blocked.json.gz.
+Permanent real6 before repair5PASS/1FAIL (exit1); native class4RED/12PASS.
+Sandbox Chromium startup failures stay separate, not semantic RED.
+
+ADR0520 shared Edit/Delete boundary checks saved identity outside action captions;
+no cancellation lexicon, mandatory complementary action or word-order restriction.
+Real6 GREEN (exit0), public original/Cancel/Discard edit/validation/cancel/reload/
+delete GREEN/errors0, inherited/new native144PASS12.2s. Isolated guard deletion
+6RED/10PASS (exit1), current helper never mutated during live producers.
+Book-v7/expense-v7/eval-v10 retain ten public/control carriers byte-exactv6;
+other six manifest entries unchanged. Native-input-v1 unchanged.
+Exact source/logs/original JSON in agent-eval-record-identity-proof.json.gz;
+raw realRED/GREEN JSON/ZIP copied byte-exact to ignored workspace scratch.
+Separate current eval-v10 own-origin8:8PASS, all four origins × original/Discard,
+40probes each; before+patch=after, noModelInvocation, actual producerexit0.
+Archive2026-10-08-record-identity-origin-controls retains31JSON; original outer
+JSON in originalText, parsed data and hash inventory; raw ZIPs remain at ignored
+workspace source root. Two offline regenerations keep every originalJSON byte
+identical (actualexit0). No merge with original112/separate4 and no rescue.
+Current fullgate27/27 PASS: unit273.2s with one statistics-report timeout under
+load, mandated isolated rerunPASS; parity113.5s. Exact log retained separately.
+Independent clean committed Final still required;
+new frozen96/I10/I11/CLOSE remain mandatory. No prior trial rejudge/rescore.
+
+Archive packaging gate initially2FAIL: host gzip OS byte19 and stale JSON links;
+normalized metadata headers to03, links identify immutable bundle entries.
+Bundle/sourceJSON unchanged; existing summaries-policy4PASS29.76s/exit0.
+Both logs/current producer retained in record-identity proof. Final refs/backlog
+and diff checks PASS. Independent source Final remains pending.
