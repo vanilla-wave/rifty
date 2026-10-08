@@ -70,6 +70,10 @@ challenge: 2026-10-09 — inherited accepted goal premise; independent DEC audit
 
 ## Decisions
 
+ready-verdict: 2026-10-09 — Contract+RED @ ae7e9bf9ae892297f17bb6b362dda3c86bbc11f7
+
 - 2026-10-09 — Existing observed I3/I6 baseline supplies F6 RED; held identity introduces a stateful observation lifecycle, so independent Contract+RED precedes adoption/implementation.
 - 2026-10-09 — DEC-2 audit keeps causal effect only as savedness; flat receipt cardinality killed by actual aliases, expense tuple dedup rejected, held identity remains conditional on traced lifecycle/adapter proof.
 - 2026-10-09 — ADR0522 separates savedness/multiplicity, partially corrects ADR0519/0520/0521 and retains literal data/control ownership; independent Contract+RED precedes production adoption.
+
+- 2026-10-09 — Independent Contract+RED accepted17/17/0 blockers; concern: pre-reload ownership proof is not arbitrary full draft restoration. No extra app persistence/schema requirement inferred; implementation/Final must distinguish these claims.
