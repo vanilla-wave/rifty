@@ -255,11 +255,30 @@ export function caption(name: string): RegExp {
   );
 }
 
-/** Display context is open; missing or ambiguous semantic choices are errors. */
+async function optionLabel(option: Locator): Promise<string> {
+  const nativeLabel = await option.evaluate((node) =>
+    node instanceof HTMLOptionElement &&
+    node.hasAttribute('label') &&
+    !node.hasAttribute('aria-label') &&
+    !node.hasAttribute('aria-labelledby')
+      ? node.label
+      : undefined,
+  );
+  return nativeLabel ?? accessibleRoot(await option.ariaSnapshot()) ?? '';
+}
+
+/** Display context is open; exact literal identities precede caption fragments. */
 export async function choiceOption(scope: JudgeContext['view'] | Locator, name: string) {
-  const options = scope.getByRole('option', { name: caption(name) });
-  if ((await options.count()) !== 1) throw new Error(`Missing/ambiguous choice: ${name}`);
-  return options;
+  const exact: Locator[] = [];
+  const contextual: Locator[] = [];
+  for (const option of await scope.getByRole('option').all()) {
+    const label = await optionLabel(option);
+    if (label === name) exact.push(option);
+    if (caption(name).test(label)) contextual.push(option);
+  }
+  const options = exact.length ? exact : contextual;
+  if (options.length !== 1) throw new Error(`Missing/ambiguous choice: ${name}`);
+  return options[0]!;
 }
 
 export async function selectChoices(field: Locator, names: readonly string[]) {
@@ -272,11 +291,11 @@ export async function selectChoices(field: Locator, names: readonly string[]) {
 }
 
 export async function selectedChoice(field: Locator, identities: readonly string[]) {
-  const label = await field.evaluate((node) => {
-    const option = (node as HTMLSelectElement).selectedOptions[0];
-    return option?.getAttribute('aria-label') ?? option?.label ?? '';
-  });
-  const matches = identities.filter((name) => caption(name).test(label));
+  const selected = field.locator('option:checked');
+  if ((await selected.count()) !== 1) throw new Error('Missing/ambiguous selected option');
+  const label = await optionLabel(selected);
+  const exact = identities.filter((name) => name === label);
+  const matches = exact.length ? exact : identities.filter((name) => caption(name).test(label));
   if (matches.length !== 1) throw new Error(`Missing/ambiguous selected identity: ${label}`);
   return matches[0]!;
 }

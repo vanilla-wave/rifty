@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve overlapping literal option identities (`Amber`/`(Amber)`); one native/accessibility label owner serves selection and observation. Eval-v13 preserves public inputs; workflow record observation remains blocked.
+
 - Corroborate saved record identity across independent action/read-only presentation while retaining literal action/selection identity; book-v9/expense-v9/eval-v12 preserve public inputs/history (ADR0521).
 
 - Match punctuated literal record identities at the shared caption boundary across action/choice consumers; book-v8/expense-v8/eval-v11 retain public inputs and prior results.

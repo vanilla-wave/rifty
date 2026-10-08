@@ -5,6 +5,8 @@
 
 ## Open questions
 
+- Record observation repair — owner: agent — eval-v13 literal-choice repair: native106PASS/old8RED, own-origin4PASS/noModels, fullgate27PASS; independent Final pending. F6 remains blocking. New real Vue reservation-link/Svelte Paid-delta probes distinguish update from creation and restore exact saved bytes; criteria implementation/four-origin acceptance still required. Receipts in `distribution/reference/agent-eval-operation-context-repair.md`; no admission/rescore of original96.
+
 - Completed-contract retirement before CLOSE — owner: agent — same accepted JSON must remain inspectable against reviewed authority after cleanup. Direct CLI currently needs named HEAD document (actual deletion2/restoration0); keep source contract byte-frozen9b until historical-reading proof settles retirement. Source unit itself accepted; no rescore or scope reduction.
 
 - Completed prerequisites: nativeCodex0.159.3 real CLI/usage/isolation/budget proof; SIGINT physically settles tools. Frozen pilot-v1/own-origin private command checks; native24 authoring controls, physical four-origin exit/judge-substitution controls; original runners unsupported in browsers explicitly measured. Last current refs24:16PASS/8browser-library setupFAIL, bothappsall4PASS. Independent Final+GREEN baef89ee, no unit residuals.

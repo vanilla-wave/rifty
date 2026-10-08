@@ -166,3 +166,41 @@ Fresh96/I10/I11/historical-reader/CLOSE remain mandatory.
 Record-only gate first sandbox6/27RED (listenEPERM HTTP/IPC, includes isolated
 rerun), then realhost27PASS; both exactlogs retained. No production changes,
 F6 and persistence discriminator remain unresolved.
+
+## Literal choice and persistence discrimination
+
+Observed native selection `(Amber)` collided with `Amber`: both selection and
+readback treated contextual caption fragments as literal identity. Same owned
+projection boundary: `lossy-aggregate`, `sibling-drift`, `observable-order`.
+One option-label owner now reads native `label` or computed ARIA; exact literal
+identity precedes contextual matching. Missing/duplicate choices still throw
+before mutation. Existing case judges/cards/public inputs remain byte-identical;
+eval-v13 makes the shared support change visible, all8 resolved hashes change.
+
+Actual old baseline8RED/1PASS; current native106PASS; independently removing
+either exact-identity guard8RED/1PASS. Separate own-origin cohort4PASS: actual
+Amber/(Amber) reservations survive reload, physical before+reference=after,
+noModels. Archive17 functional/declaration/report JSON, two offline regenerations
+byte-exact; native private launch configuration excluded. Typecheck, archive
+policy4PASS, fullgate27PASS (unit193.0s firstpass/parity113.3s).
+Exact receipts: `agent-eval-literal-choice-proof.json.gz`; controls:
+`tools/agent-bench/reports/summaries/2026-10-09-literal-choice-origin-controls`.
+This closes neither F6 nor admission of the comparison.
+
+Prepared field observation also has a real negative: cancellation restores Bay/2
+while clearing id; observer admits3 from2 saved rooms. Marker Save creates a
+third room across reload. New pinned public-working Vue graph probe distinguishes
+true update (existing reservation shows renamed room,2 rooms) from cancellation
+(reservation stays Bay,3 rooms). Svelte sibling distinguishes amount update
+(Paid100→101 cents) from creation (100→201). Each probe rolls back exact saved
+bytes; errors0. Exact sources/scripts/receipts:
+`agent-eval-record-persistence-discrimination.json.gz`. These are directed native
+prototype evidence, not implemented criteria, four-origin proof or I10 closure.
+
+Scratch loss: external-config Playwright cleared the root `test-results`.
+Previously committed bundles remain exact; old local DEC research/raw browser
+ZIPs lost. Current source16 JSON survive in its committed59-entry bundle; ZIP
+bytes no longer available. First current cohort terminal1 after that loss;
+logs/partial results unavailable, not merged/rescored. Fresh cohort4 is separate.
+Current scratch uses `.cache/pr341`; isolated Playwright output explicitly set.
+F6/observer implementation, fresh96/I10/I11/historical-reader/CLOSE stay open.

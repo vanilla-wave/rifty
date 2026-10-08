@@ -36,3 +36,30 @@ test('selects real identities and rejects missing/ambiguous choices before mutat
     await browser.close();
   }
 });
+
+for (const representation of ['text', 'aria', 'label', 'labelledby'] as const) {
+  for (const reversed of [false, true]) {
+    test(`literal overlapping identities follow native selection: ${representation}, reversed=${reversed}`, async ({
+      page,
+    }) => {
+      const names = reversed ? ['(Amber)', 'Amber'] : ['Amber', '(Amber)'];
+      const option = (name: string, index: number) =>
+        representation === 'aria'
+          ? `<option value="${index}" aria-label="${name}">Display ${index}</option>`
+          : representation === 'label'
+            ? `<option value="${index}" label="${name}">Display ${index}</option>`
+            : representation === 'labelledby'
+              ? `<option value="${index}" aria-labelledby="name-${index}">Display ${index}</option>`
+              : `<option value="${index}">${name}</option>`;
+      await page.setContent(
+        `${names.map((name, index) => `<span id="name-${index}">${name}</span>`).join('')}<select aria-label="Room">${names.map(option).join('')}</select>`,
+      );
+      const field = page.getByRole('combobox');
+      for (const name of names) {
+        await selectChoices(field, [name]);
+        expect(await field.inputValue()).toBe(String(names.indexOf(name)));
+        expect(await selectedChoice(field, names)).toBe(name);
+      }
+    });
+  }
+}
