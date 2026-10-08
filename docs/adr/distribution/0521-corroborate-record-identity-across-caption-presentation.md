@@ -3,6 +3,10 @@
 Status: Accepted
 Date: 2026-10
 
+## Corrections (active)
+
+2026-10-09 — Caption remainder/punctuation witnesses cannot establish record identity; superseded by ADR0522. Original data/action captions and selectors remain literal; no normalization/merging.
+
 Extends ADR0520/0519, overturns none; existing I3/I6 stable-identity/open-layout authority.
 
 ## Context

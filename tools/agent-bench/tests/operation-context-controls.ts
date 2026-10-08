@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { loadConfig } from '../src/config.ts';
 import { loadCorpus } from '../src/corpus.ts';
 import type { FileTree } from '../src/files.ts';
@@ -10,7 +9,7 @@ import type { Task } from '../src/tasks.ts';
 
 const config = await loadConfig('tools/agent-bench/configs/pilot-comparison.json');
 config.runsPerTask = 1;
-const corpus = await loadCorpus('eval-v12');
+const corpus = await loadCorpus('eval-v13');
 const book = corpus.find((task) => task.family === 'booking-constraints')!;
 const expense = corpus.find((task) => task.family === 'expense-conservation')!;
 const tasks: Task[] = [];
@@ -46,6 +45,9 @@ variant(book, 'decorated-actions', 'src/App.vue', (text) =>
 variant(book, 'independent-presentation', 'src/App.vue', (text) =>
   text.replace('Edit room {{row.name}}', 'Edit room ({{row.name}})'),
 );
+variant(book, 'qualified-edit', 'src/App.vue', (text) =>
+  text.replace('Edit room {{row.name}}', 'Edit room details for {{row.name}}'),
+);
 variant(book, 'contextual-actions', 'src/App.vue', (text) =>
   text
     .replace('Edit room {{row.name}}', 'Edit {{row.name}}')
@@ -57,7 +59,10 @@ variant(expense, 'contextual-actions', 'src/App.svelte', (text) =>
     .replace('Edit expense {row.description}', 'Edit {row.description}')
     .replace('Delete expense {row.description}', 'Delete {row.description}'),
 );
-const root = await mkdtemp(join(tmpdir(), 'rifty-operation-context-regression-'));
+variant(expense, 'qualified-edit', 'src/App.svelte', (text) =>
+  text.replace('Edit expense {row.description}', 'Edit expense details for {row.description}'),
+);
+const root = await mkdtemp(join(resolve('.cache/pr341'), 'operation-context-regression-'));
 const report = await run(config, tasks, ['local-reference'], join(root, 'series'), 'reference');
 console.log(
   JSON.stringify({
@@ -65,7 +70,7 @@ console.log(
     results: report.runs.map((trial) => ({ task: trial.task, outcome: trial.outcome })),
   }),
 );
-assert.equal(report.runs.length, 8);
+assert.equal(report.runs.length, 10);
 for (const trial of report.runs) {
   assert.equal(trial.agentStatus, 'not-run');
   assert.ok(trial.judge.probes.length > 0);

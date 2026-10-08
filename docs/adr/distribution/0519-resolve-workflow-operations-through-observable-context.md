@@ -3,6 +3,10 @@
 Status: Accepted
 Date: 2026-10
 
+## Corrections (active)
+
+2026-10-09 — Operation projection is candidate eligibility only; context does not certify saved identity. ADR0522 replaces the no-UI-protocol claim with explicit caller-owned observation. Domain/opaque-caption/control ownership stays; no runtime coordinator.
+
 Extends ADR0511/0512/0518, overturns none. Existing public action/layout authority;
 observed defect repair, no new programme promise.
 

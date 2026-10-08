@@ -3,6 +3,10 @@
 Status: Accepted
 Date: 2026-10
 
+## Corrections (active)
+
+2026-10-09 — Peer/read-only corroboration alone is not saved-record authority; ADR0522 supplies explicit persisted effect and identity lifetime. No editable/self proof, mandatory pairing, word order or storage schema; literal data/control ownership stay.
+
 Extends ADR0519, overturns none. Existing I3/I6 public operation authority.
 
 ## Context
