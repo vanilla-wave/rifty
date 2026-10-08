@@ -10,7 +10,7 @@ import type { Task } from '../src/tasks.ts';
 
 const config = await loadConfig('tools/agent-bench/configs/pilot-comparison.json');
 config.runsPerTask = 1;
-const corpus = await loadCorpus('eval-v11');
+const corpus = await loadCorpus('eval-v12');
 const book = corpus.find((task) => task.family === 'booking-constraints')!;
 const expense = corpus.find((task) => task.family === 'expense-conservation')!;
 const tasks: Task[] = [];
@@ -43,6 +43,9 @@ variant(book, 'decorated-actions', 'src/App.vue', (text) =>
     .replace('Edit room {{row.name}}', 'Edit room ({{row.name}})')
     .replace('Delete room {{row.name}}', 'Delete room ({{row.name}})'),
 );
+variant(book, 'independent-presentation', 'src/App.vue', (text) =>
+  text.replace('Edit room {{row.name}}', 'Edit room ({{row.name}})'),
+);
 variant(book, 'contextual-actions', 'src/App.vue', (text) =>
   text
     .replace('Edit room {{row.name}}', 'Edit {{row.name}}')
@@ -62,7 +65,7 @@ console.log(
     results: report.runs.map((trial) => ({ task: trial.task, outcome: trial.outcome })),
   }),
 );
-assert.equal(report.runs.length, 7);
+assert.equal(report.runs.length, 8);
 for (const trial of report.runs) {
   assert.equal(trial.agentStatus, 'not-run');
   assert.ok(trial.judge.probes.length > 0);

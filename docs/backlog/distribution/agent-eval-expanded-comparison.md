@@ -5,7 +5,7 @@ title: Execute the frozen eight-case four-origin comparison
 created: 2026-10-06
 why: Expanded source/control proof does not establish actual comparative agent outcomes or uncertainty.
 epic: agent-code-quality-evaluation
-sources: [ADR-0520, ADR-0511, ADR-0507, docs/backlog/distribution/reference/agent-eval-corpus-expansion-evidence.md]
+sources: [ADR-0521, ADR-0520, ADR-0511, ADR-0507, docs/backlog/distribution/reference/agent-eval-corpus-expansion-evidence.md]
 code: [tools/agent-bench/src/runner.ts, tools/agent-bench/src/report.ts, tools/agent-bench/src/cli.ts]
 ---
 
@@ -26,6 +26,8 @@ Eval-v9 source Final BLOCK631 on public-valid Discard cancellation; ADR0520
 book-v7/expense-v7/eval-v10 preserves public inputs and historical outcomes.
 Source61 Final BLOCK on decorated stable identity; book-v8/expense-v8/eval-v11
 repairs literal punctuation matching at the shared caption owner.
+Sourcefe Final BLOCKF5 on independent Edit/Delete decoration; ADR0521/
+book-v9+expense-v9/eval-v12 correct corroboration while retaining literal names.
 Source review precedes fresh96; criterion version changes no accepted scope.
 
 ## Challenge
@@ -36,7 +38,7 @@ No new user scope choice, model/estimator/selection policy or execution mechanis
 
 ## Acceptance
 
-1. Freeze complete corrected eval-v11/config/selection/control/source identity before a fresh
+1. Freeze complete corrected eval-v12/config/selection/control/source identity before a fresh
   96trial campaign:8cases×4origins×3freshrepeats, task/lane/trial order, PiLuna/medium,
    nativeCodexgpt-6.1-sol/low separate,100tools/600s. Allselected failures retained;
    fullmatrixprimary. No adaptive compatible-subset pruning; no resume/overwrite.

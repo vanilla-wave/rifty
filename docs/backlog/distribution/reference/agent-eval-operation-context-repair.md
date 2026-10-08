@@ -124,3 +124,27 @@ Current fullgate27/27 PASS (unit289.1s firstpass/parity127.1s), exact log retain
 Archive policy4PASS32.27s/actualexit0; refs/backlog/diffPASS. Independent clean
 committed Final still pending.
 No paid v11 campaign or historical rejudge; fresh96/I10/I11/CLOSE remain required.
+
+## Independent F5 and presentation corroboration
+
+Sourcefe Final BLOCKF5: only Edit wraps Bay, Delete/read-only stay bare;
+publicGREEN/BASE40PASS/current0-editsFAIL, exact report/probe/source/log retained
+in agent-eval-decorated-record-final-blocked.json.gz. ADR0521, I3/I6; no scope cut.
+Permanent class9RED25PASS50.6s before repair; actual native162PASS12.9s,
+old literal witness isolated9RED25PASS50.8s. Original/symmetric/asymmetric
+real Vue public/current40PASS each/errors0; original baseline kept separate.
+
+One shared witness permits independent presentation while original actions,
+selected identities and return locators stay literal. Paired/unpaired button/
+link room/expense and distinct original identities covered. No new state owner.
+Book-v9/expense-v9/eval-v12 retain ten carriers exactv8/six manifestentries/
+native-input exactfe; all8 resolved fingerprints change. Separate own-origin16
+(original/Discard/symmetric/asymmetric ×all4) allPASS40probes each, actualexit0,
+before+patch=after/noModels. Two offline regenerations preserve originalJSON
+bytes; archive59JSON retains data/originalText/hash inventory, rawZIPs stay
+at ignored workspace source root. No original112/separate4/8/12 merge or rescue.
+
+Current permanent real8PASS/actualexit0; rawJSON/ZIP copied byte-exact ignored
+workspace. Fullgate27PASS (unit222.2s firstpass/parity113.8s), archive policy4PASS
+27.78s; logs retained. Clean independent Final still pending.
+No paid eval-v12; fresh96/I10/I11/historical-reader/CLOSE remain mandatory.

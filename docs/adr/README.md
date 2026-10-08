@@ -413,6 +413,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0518 | Bind editable judge controls to action context |
 | 0519 | Resolve workflow operations through observable context |
 | 0520 | Verify workflow record identity outside action captions |
+| 0521 | Corroborate record identity across caption presentation |
 
 ## Superseded (removed)
 

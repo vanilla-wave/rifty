@@ -100,3 +100,34 @@ test('punctuated literal identity reaches action and choice consumers', async ({
   await expect(await workflowActions(ctx, 'edit', 'room', '(Amber)')).toHaveCount(1);
   await expect(await choiceOption(page, '(Amber)')).toHaveCount(1);
 });
+
+for (const subject of ['room', 'expense']) {
+  for (const tag of ['button', 'a']) {
+    for (const paired of [false, true]) {
+      test(`independent record presentation ${subject}/${tag}/paired=${paired}`, async ({
+        page,
+      }) => {
+        await page.setContent(
+          `<article><span>Amber</span><${tag} href="#" data-target="record">Edit ${subject} (Amber)</${tag}>${paired ? `<${tag} href="#">Delete ${subject} Amber</${tag}>` : ''}</article>`,
+        );
+        const actions = await workflowActions(
+          { view: page, previewUrl: 'about:blank' },
+          'edit',
+          subject,
+        );
+        await expect(actions).toHaveCount(1);
+        await expect(actions).toHaveAttribute('data-target', 'record');
+      });
+    }
+  }
+}
+
+test('record corroboration preserves distinct literal action identities', async ({ page }) => {
+  await page.setContent(
+    '<article><span>(Amber)</span><button>Edit room [(Amber)]</button><button>Delete room (Amber)</button></article><article><span>Amber</span><button>Edit room [Amber]</button><button>Delete room Amber</button></article>',
+  );
+  const actions = await workflowActions({ view: page, previewUrl: 'about:blank' }, 'edit', 'room');
+  await expect(actions).toHaveCount(2);
+  await expect(actions.filter({ hasText: 'Edit room [(Amber)]' })).toHaveCount(1);
+  await expect(actions.filter({ hasText: 'Edit room [Amber]' })).toHaveCount(1);
+});

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Corroborate saved record identity across independent action/read-only presentation while retaining literal action/selection identity; book-v9/expense-v9/eval-v12 preserve public inputs/history (ADR0521).
+
 - Match punctuated literal record identities at the shared caption boundary across action/choice consumers; book-v8/expense-v8/eval-v11 retain public inputs and prior results.
 
 - Verify Edit/Delete record identity outside their own caption; preserve opaque Discard names and unpaired row actions. Book-v7/expense-v7/eval-v10 retain public inputs and original outcomes.

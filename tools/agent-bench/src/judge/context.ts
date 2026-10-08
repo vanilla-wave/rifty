@@ -585,11 +585,20 @@ export async function workflowActions(
         '',
       )
       .trim();
+    // Presentation may differ; original action and selected identity stay literal.
+    const plainIdentity = identityText.replace(/^[^\p{L}\p{N}_]+|[^\p{L}\p{N}_]+$/gu, '');
+    const identityEvidence = new RegExp(
+      [...new Set([identityText, plainIdentity])]
+        .filter(Boolean)
+        .map((value) => caption(value).source)
+        .join('|'),
+      'i',
+    );
     const scopes = (await node.locator('xpath=ancestor::*').all()).reverse();
     let record: Locator | undefined;
     if (identityText) {
       const opposite = new RegExp(
-        `(?=.*\\b(?:${verbs.includes('delete') ? 'edit' : 'delete'})\\b)(?=.*${caption(identityText).source})`,
+        `(?=.*\\b(?:${verbs.includes('delete') ? 'edit' : 'delete'})\\b)(?=.*(?:${identityEvidence.source}))`,
         'i',
       );
       for (const scope of scopes) {
@@ -636,7 +645,7 @@ export async function workflowActions(
           }
           return values.join(' ').replace(/\s+/g, ' ').trim();
         });
-        if (caption(identityText).test(text)) {
+        if (identityEvidence.test(text)) {
           record = scope;
           break;
         }
