@@ -255,7 +255,7 @@ export function caption(name: string): RegExp {
   );
 }
 
-async function optionLabel(option: Locator): Promise<string> {
+export async function optionLabel(option: Locator): Promise<string> {
   const nativeLabel = await option.evaluate((node) =>
     node instanceof HTMLOptionElement &&
     node.hasAttribute('label') &&
@@ -565,6 +565,57 @@ function accessibleRoot(snapshot: string): string | undefined {
     : heading;
   const quoted = root.match(/^\S+ ("(?:\\.|[^"\\])*")/)?.[1];
   return quoted ? (JSON.parse(quoted) as string) : undefined;
+}
+
+export async function actionName(action: Locator): Promise<string> {
+  const name = accessibleRoot(await action.ariaSnapshot());
+  if (name === undefined) throw new Error('Missing computed action name');
+  return name;
+}
+
+/** Pure eligibility only. Record identity is established by explicit saved effects. */
+export async function workflowCandidates(
+  ctx: JudgeContext,
+  verbs: string,
+  subjects: string,
+): Promise<Locator> {
+  const requested = new RegExp(`\\b(?:${verbs.split('|').map(escapeCaption).join('|')})\\b`, 'i');
+  const domain = new RegExp(
+    `\\b(?:${subjects
+      .split('|')
+      .flatMap((word) => [word, word === 'person' ? 'people' : `${word}s`])
+      .map(escapeCaption)
+      .join('|')})\\b`,
+    'i',
+  );
+  const collections = ctx.view
+    .getByRole('region', { name: domain })
+    .or(ctx.view.getByRole('group', { name: domain }))
+    .or(ctx.view.getByRole('form', { name: domain }))
+    .or(ctx.view.getByRole('list', { name: domain }))
+    .or(ctx.view.getByRole('table', { name: domain }));
+  let result = ctx.view.locator('xpath=//*[false()]');
+  for (const candidate of await namedActions(ctx, requested).all()) {
+    if (!(await candidate.isVisible()) || !(await candidate.isEnabled())) continue;
+    const name = accessibleRoot(await candidate.ariaSnapshot());
+    if (name === undefined) throw new Error('Missing computed operation caption');
+    let eligible = actionCaption(verbs, subjects).test(name);
+    if (!eligible) {
+      for (const scope of (await candidate.locator('xpath=ancestor::*').all()).reverse()) {
+        if (await scope.and(collections).count()) {
+          eligible = true;
+          break;
+        }
+        const headings = scope.getByRole('heading');
+        if ((await headings.count()) === 1 && domain.test(await renderedValue(headings.first()))) {
+          eligible = true;
+          break;
+        }
+      }
+    }
+    if (eligible) result = result.or(candidate);
+  }
+  return result;
 }
 
 /** Declared operation uses its accessible record/collection context. */

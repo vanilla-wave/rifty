@@ -14,7 +14,7 @@ interface Card {
   project: string;
   prompt: string;
   judge: string;
-  judgeSupport?: 'native-input-v1';
+  judgeSupport?: 'native-input-v1' | 'record-observation-v1';
   inputsSha256: string;
   lockSha256: string;
   promptSha256: string;
@@ -64,7 +64,8 @@ export async function loadCorpus(
       card.project !== 'project.json' ||
       card.prompt !== 'prompt.md' ||
       !/^judge\.(cjs|mjs|ts)$/.test(card.judge) ||
-      (card.judgeSupport !== undefined && card.judgeSupport !== 'native-input-v1')
+      (card.judgeSupport !== undefined &&
+        !['native-input-v1', 'record-observation-v1'].includes(card.judgeSupport))
     )
       throw new Error('Invalid corpus card');
     ids.add(card.id);
@@ -122,9 +123,19 @@ export async function loadCorpus(
       judgeFiles: [
         join(dir, card.judge),
         'tools/agent-bench/src/judge/context.ts',
-        ...(card.judgeSupport === 'native-input-v1'
-          ? ['tools/agent-bench/src/judge/native-input.ts']
+        ...(card.judgeSupport === 'record-observation-v1'
+          ? [
+              'tools/agent-bench/src/judge/record-observation.ts',
+              'tools/agent-bench/src/judge/record-candidates.ts',
+              'tools/agent-bench/src/judge/record-action-binding.ts',
+              'tools/agent-bench/src/judge/public-record-display.ts',
+              'tools/agent-bench/src/judge/reservation-records.ts',
+              'tools/agent-bench/src/judge/reservation-display.ts',
+              'tools/agent-bench/src/judge/expense-records.ts',
+              'tools/agent-bench/src/judge/room-records.ts',
+            ]
           : []),
+        ...(card.judgeSupport ? ['tools/agent-bench/src/judge/native-input.ts'] : []),
       ],
       ...(app
         ? {

@@ -415,6 +415,8 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0520 | Verify workflow record identity outside action captions |
 | 0521 | Corroborate record identity across caption presentation |
 | 0522 | Observe record identity through persisted effects |
+| 0523 | Observe reservations through independent public display |
+| 0524 | Project reservation fields without aggregate identity |
 
 ## Superseded (removed)
 

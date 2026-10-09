@@ -9,7 +9,7 @@ import type { Task } from '../src/tasks.ts';
 
 const config = await loadConfig('tools/agent-bench/configs/pilot-comparison.json');
 config.runsPerTask = 1;
-const corpus = await loadCorpus('eval-v13');
+const corpus = await loadCorpus('eval-v14');
 const book = corpus.find((task) => task.family === 'booking-constraints')!;
 const expense = corpus.find((task) => task.family === 'expense-conservation')!;
 const tasks: Task[] = [];

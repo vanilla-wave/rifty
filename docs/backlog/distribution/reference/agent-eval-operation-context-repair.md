@@ -211,3 +211,33 @@ raw17JSON/physicalall4/noModels/twooffline/fingerprints/prototypes verified.
 Exact verdict `agent-eval-literal-choice-final-green.json`; executed receipts
 `agent-eval-literal-choice-final-evidence.json.gz`. Unit residuals0; goal
 residuals5/goalfalse. F6 still blocks source-criterion admission.
+
+
+## Persisted observation implementation — pending acceptance
+
+Caller-owned observation confirms savedness through Paid delta, room membership
+or an owned reservation relation, and independently projected booking keys.
+Shared lifetime registers restoration before writes; failed cleanup retains its
+cause and cannot return success. Identical expenses hold separate persisted
+identities; action captions only narrow a causally observed actor.
+
+Actual grouped date headings exposed a second defect: aggregate text combined
+neighbor intervals into the removed middle key; cleanup deleted an original.
+ADR0524 uses non-overlapping core fields and nearest readonly grouping context.
+Original source RED expected3/observed2 becomes GREEN3 with exact saved bytes.
+Calendar-shaped names remain literal. Dynamic Cancel insertion also exposed
+stale global ordinals; caption-group requery preserves all three expenses.
+
+Current executed controls: adapter4/4, lifecycle8/8, grouped projection6/6,
+pure discovery/choice/display77/77; formatted date positive PASS and descending
+chronology negative FAIL for its actual requirement. Native storage reads are
+fixture oracles only. Ten public carrier files remain byte-identical to v9;
+new v10/eval-v14 criteria carry new fingerprints. The record-observation support
+profile is confined to its two cases; historical native-input profiles retain
+their original dependency lists. An unchanged old-version gate supplied its RED.
+
+Exact prototype/source/fixture/log lineage (273 entries):
+`agent-eval-record-observation-implementation-evidence.json.gz`.
+Current full gate27/27 PASS (unit277.4s first pass/parity135.8s), archive policy4/4 PASS; exact logs retained. Initial lint/support-profile RED and isolated RED retained; unchanged old-version test2/2 GREEN. Own-origin40/inherited28 still executing; no source acceptance,
+comparative rescore or goal closure. Source Final precedes fresh96; I10/I11 and
+historical-reader retirement remain mandatory.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Observe room/reservation/expense records through persisted effects and owned temporary identities; preserve aliases, duplicate expenses, optionless room inputs, literal data and independent display chronology. Eval-v14 retains public inputs/history; source acceptance and new comparison remain pending.
+
 - Preserve overlapping literal option identities (`Amber`/`(Amber)`); one native/accessibility label owner serves selection and observation. Eval-v13 preserves public inputs; workflow record observation remains blocked.
 
 - Corroborate saved record identity across independent action/read-only presentation while retaining literal action/selection identity; book-v9/expense-v9/eval-v12 preserve public inputs/history (ADR0521).
