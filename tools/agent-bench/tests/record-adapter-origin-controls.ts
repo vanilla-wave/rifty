@@ -26,7 +26,7 @@ import {
 const parent = resolve('.cache/pr341');
 await mkdir(parent, { recursive: true });
 const root = await mkdtemp(join(parent, 'record-adapters-'));
-const corpus = await loadCorpus('eval-v15');
+const corpus = await loadCorpus('eval-v16');
 const browser = await chromium.launch();
 const evidence: unknown[] = [];
 function replace(source: string, before: string, after: string) {

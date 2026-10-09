@@ -275,3 +275,29 @@ Latest frozen-v15 fullgate27/27 PASS (unit225.3s firstpass/parity119.0s).
 Exact original log: `agent-eval-record-settlement-v15-prcheck-green.log.gz`.
 All25 current source hashes match the retained v15 snapshot. Independent verify
 and current own-origin cohort remain pending; no source acceptance claim.
+
+## Zero-effect settlement verify
+
+Fresh independent Final a24 BLOCK2 R4/R5; prior R1/R2/R3 fixes verified.
+Actual .01 expense keeps description/cents/financial rows but changes participants;
+textbox room keeps name/relation but changes capacity2→3. Both normal return.
+All FIX under Acceptance4/5 and ADR0525; no adjudication/scope change.
+Exact verdict/evidence: `agent-eval-record-settlement-final-blocked.json.gz`,
+`agent-eval-record-settlement-final-blocked-evidence.json.gz`.
+
+Frozen v15 own40 original20PASS/20FAIL retained; consumer terminal1 on missing
+before/after after two COI setup failures. Ancillary38 physical completed plus
+2 setup-unexecuted,3 positive CSS bootstrap failures,15 executed negative FAIL.
+Canonical123 originalJSON/two offline regenerations exact; summary policy4PASS.
+No cohort GREEN or source acceptance. Terminal log:
+`agent-eval-record-settlement-v15-origin-terminal.log.gz`.
+Fresh96/I10/I11/readerCLOSE remain mandatory.
+
+Current zero-effect repair checks matching original payload on all cleanup paths;
+only confirmed updates require an original to exist. Candidate fields still grant
+no savedness; no-op admission remains false. Permanent17 baseline RED reproduces
+both findings; current17 GREEN:6 references exact/11 explicit faults. Adapter4
+GREEN preserves aliases/duplicates/falseCreate/dual-owner graph. Types PASS.
+Exact source25/fixture/log lineage340 in `agent-eval-record-zero-effect-proof.json.gz`.
+Eval-v16 fixes new criteria identity without changing public8/card/control bytes.
+Fullworkflow10/fullgate/current own-origin/independent verify pending.

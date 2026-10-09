@@ -8,7 +8,7 @@ import type { Task } from '../src/tasks.ts';
 
 const config = await loadConfig('tools/agent-bench/configs/pilot-comparison.json');
 config.runsPerTask = 1;
-const book = (await loadCorpus('eval-v15')).find((task) => task.family === 'booking-constraints')!;
+const book = (await loadCorpus('eval-v16')).find((task) => task.family === 'booking-constraints')!;
 const file = 'src/App.vue';
 const original = book.controls!.reference![file]!;
 const formatted = original.replace('{{b.date}}', '{{b.date.split("-").reverse().join("/")}}');

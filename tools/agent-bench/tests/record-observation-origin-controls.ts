@@ -12,7 +12,7 @@ import type { Task } from '../src/tasks.ts';
 
 const config = await loadConfig('tools/agent-bench/configs/pilot-comparison.json');
 config.runsPerTask = 1;
-const corpus = await loadCorpus('eval-v15');
+const corpus = await loadCorpus('eval-v16');
 const tasks: Task[] = [];
 const expectations: Record<string, boolean> = {};
 for (const family of ['booking-constraints', 'expense-conservation']) {

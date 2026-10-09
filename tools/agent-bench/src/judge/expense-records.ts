@@ -65,7 +65,6 @@ async function witnessExpense(
       throw new Error(`Temporary expense rollback changed Paid: ${marker}`);
     if ((await controls.effects()) !== effectsBefore)
       throw new Error(`Temporary expense rollback changed public effects: ${marker}`);
-    if (!confirmedUpdate) return;
     const choices = await observedRecordActions(
       ctx,
       'edit',
@@ -74,11 +73,15 @@ async function witnessExpense(
       original.description,
       marker,
     );
+    let matchingDescription = false;
     for (const action of await choices.all()) {
       const value = await controls.load(action);
+      if (value.description !== original.description) continue;
+      matchingDescription = true;
       if (samePayload(value, original)) return;
     }
-    throw new Error(`Temporary expense rollback lost its original payload: ${marker}`);
+    if (confirmedUpdate || matchingDescription)
+      throw new Error(`Temporary expense rollback lost its original payload: ${marker}`);
   };
   let delta: number | undefined;
   await scope.apply(

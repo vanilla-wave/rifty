@@ -115,7 +115,7 @@ async function witnessRoom(
             (await relation!.follows(original.name)) &&
             !(await relation!.follows(marker))
           ) {
-            if (update) await verifyPayload();
+            await verifyPayload(update);
             return;
           }
           throw new Error(`Missing owned temporary room deletion: ${marker}`);
@@ -130,7 +130,7 @@ async function witnessRoom(
           : !(await relation!.follows(original.name)) || (await relation!.follows(marker))
       )
         throw new Error(`Temporary room rollback changed membership: ${marker}`);
-      if (update) await verifyPayload();
+      await verifyPayload(update);
     },
     async () => {
       await controls.write({ ...original, name: marker });

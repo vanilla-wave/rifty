@@ -25,7 +25,7 @@ import {
 const parent = resolve('.cache/pr341');
 await mkdir(parent, { recursive: true });
 const root = await mkdtemp(join(parent, 'record-settlement-'));
-const corpus = await loadCorpus('eval-v15');
+const corpus = await loadCorpus('eval-v16');
 const browser = await chromium.launch();
 const rows: {
   mode: string;
@@ -38,12 +38,16 @@ const rows: {
 }[] = [];
 const modes = [
   'expense-reference',
+  'expense-zero-share-reference',
+  'expense-noeffect-participants-zero-share',
   'expense-partial-apply',
   'expense-partial-restore',
   'expense-partial-payer',
   'expense-partial-participants',
   'expense-partial-participants-zero-share',
   'room-reference',
+  'room-textbox-reference',
+  'room-textbox-partial-apply',
   'room-partial-restore',
   'room-partial-apply',
   'reservation-reference',
@@ -61,8 +65,21 @@ try {
     const task = corpus.find(
       (entry) => entry.family === (expense ? 'expense-conservation' : 'booking-constraints'),
     )!;
+    const textbox = mode.includes('textbox');
     const file = expense ? 'src/App.svelte' : 'src/App.vue';
     let source = task.controls!.reference![file]!;
+    if (textbox)
+      source = replace(
+        source,
+        '<select v-model="booking.room"><option value="">Choose room</option><option v-for="r in state.rooms" :key="r.id" :value="r.id">{{r.name}}</option></select>',
+        '<input :value="roomName(booking.room)" @input="booking.room = state.rooms.find(r => r.name === $event.target.value)?.id || \'\'">',
+      );
+    if (mode === 'expense-noeffect-participants-zero-share')
+      source = replace(
+        source,
+        'description: description.trim(), payer, cents, participants: selected',
+        'description: editId ? state.expenses.find(e => e.id === editId).description : description.trim(), payer, cents: editId ? state.expenses.find(e => e.id === editId).cents : cents, participants: editId ? state.people.map(p => p.id) : selected',
+      );
     if (mode === 'expense-partial-apply')
       source = replace(
         source,
@@ -99,7 +116,7 @@ try {
         'booking.id ? state.value.bookings.map(b => b.id === row.id ? row : b)',
         'booking.id ? [row]',
       );
-    if (mode === 'room-partial-apply')
+    if (mode === 'room-partial-apply' || mode === 'room-textbox-partial-apply')
       source = replace(
         source,
         'name, capacity };',
@@ -135,7 +152,9 @@ try {
         expense
           ? page.getByRole('textbox', { name, exact: true })
           : name === 'Reservation room'
-            ? page.getByRole('combobox', { name: /^Reservation room/ })
+            ? textbox
+              ? page.getByLabel('Reservation room', { exact: true })
+              : page.getByRole('combobox', { name: /^Reservation room/ })
             : page.getByLabel(name, { exact: true });
       const button = (name: string) => page.getByRole('button', { name, exact: true });
       const state = () =>
@@ -156,7 +175,8 @@ try {
         { room: 'Bay', date: '2030-01-10', start: '10:00', end: '11:00', seats: 1 },
       ];
       const writeBooking = async (value: ReservationRecord) => {
-        await field('Reservation room').selectOption({ label: value.room });
+        if (textbox) await field('Reservation room').fill(value.room);
+        else await field('Reservation room').selectOption({ label: value.room });
         for (const key of ['date', 'start', 'end', 'seats'] as const)
           await field(key[0]!.toUpperCase() + key.slice(1)).fill(String(value[key]));
       };
@@ -169,7 +189,7 @@ try {
         await page
           .getByRole('combobox', { name: 'Payer', exact: true })
           .selectOption({ label: mode === 'expense-partial-payer' ? 'Ada' : 'Zed' });
-        await field('Amount').fill(mode.endsWith('zero-share') ? '0.01' : '1.00');
+        await field('Amount').fill(mode.includes('zero-share') ? '0.01' : '1.00');
         await page.getByRole('checkbox', { name: 'Zed', exact: true }).check();
         await button('Save expense').click();
       } else {
@@ -264,7 +284,44 @@ try {
               await page.reload();
             },
             async labels() {
-              return field('Reservation room').getByRole('option').allTextContents();
+              return textbox
+                ? null
+                : field('Reservation room').getByRole('option').allTextContents();
+            },
+            async relation(scope, original) {
+              return createRoomRelation(
+                ctx,
+                scope,
+                original.name,
+                {
+                  async load(action) {
+                    await action.click();
+                    return {
+                      room: await field('Reservation room').inputValue(),
+                      date: await field('Date').inputValue(),
+                      start: await field('Start').inputValue(),
+                      end: await field('End').inputValue(),
+                      seats: Number(await field('Seats').inputValue()),
+                    };
+                  },
+                  write: writeBooking,
+                  async save() {
+                    await button('Save reservation').click();
+                  },
+                  async reload() {
+                    await page.reload();
+                  },
+                  async display(value, known) {
+                    return (await reservationDisplay(ctx, value, known)).present;
+                  },
+                  async create(value) {
+                    await button('New reservation').click();
+                    await writeBooking(value);
+                    await button('Save reservation').click();
+                  },
+                },
+                [],
+              );
             },
             async label(name) {
               return name;
@@ -339,7 +396,14 @@ try {
         assert.deepEqual(
           records,
           expense
-            ? [{ description: 'Original', amount: '1.00', payer: 'Zed', participants: ['Zed'] }]
+            ? [
+                {
+                  description: 'Original',
+                  amount: mode.includes('zero-share') ? '0.01' : '1.00',
+                  payer: 'Zed',
+                  participants: ['Zed'],
+                },
+              ]
             : mode.startsWith('room')
               ? [{ name: 'Bay', capacity: 2 }]
               : bookings,
@@ -366,7 +430,7 @@ for (const row of rows.filter((row) => !row.mode.endsWith('reference'))) {
         : /Reservation observation lost an original peer/,
   );
 }
-assert.equal(rows.length, 13);
+assert.equal(rows.length, 17);
 console.log(
-  'PASS: four real references settle exactly; nine partial-write/peer-loss faults fail explicitly',
+  'PASS: six real references settle exactly; eleven partial-write/peer-loss faults fail explicitly',
 );
