@@ -8,15 +8,6 @@ import {
   renderedValue,
 } from '../../../src/judge/context.ts';
 import type { JudgeContext } from '../../../src/judge/context.ts';
-const compilerGoldens = {
-  source: 'const box: {n:number} = {n:21}; globalThis.answer = box?.n * 2;',
-  target: 'es2015',
-  typescriptVersion: '5.9.2',
-  esbuildWasmVersion: '0.28.0',
-  typescript:
-    'const box = { n: 21 };\nglobalThis.answer = (box === null || box === void 0 ? void 0 : box.n) * 2;\n',
-  esbuild: 'const box = { n: 21 };\nglobalThis.answer = (box == null ? void 0 : box.n) * 2;\n',
-};
 async function publicScenario(ctx: JudgeContext) {
   const task = { id: 'indexed-data-2', family: 'indexed-resource', group: 'app' };
   const higher = true;
@@ -64,9 +55,20 @@ async function publicScenario(ctx: JudgeContext) {
   await expect(ctx.view.getByLabel('Status', { exact: true })).toContainText(/ready/i, {
     timeout: 60000,
   });
-  await search.fill('');
+  const matching = ctx.view.getByLabel('Matching rows', { exact: true });
+  let searchedCount = 0;
+  let combinedCount = 0;
+  for (let i = 0; i < count; i++) {
+    if (`Customer ${i % 4096}`.includes('Customer 100')) {
+      searchedCount++;
+      if (i % 4 === 0 && i % 12 === 0) combinedCount++;
+    }
+  }
+  await expect.poll(() => renderedValue(matching)).toBe(String(searchedCount));
   await editableControl(ctx, /^Region$/i).selectOption('North');
   await editableControl(ctx, /^Month$/i).selectOption('1');
+  await expect.poll(() => renderedValue(matching)).toBe(String(combinedCount));
+  await search.fill('');
   await expect
     .poll(() => renderedValue(ctx.view.getByLabel('Matching rows', { exact: true })))
     .toBe(String(Math.ceil(count / 12)));

@@ -10,36 +10,55 @@ const compilerGoldens = {
   typescript:
     'const box = { n: 21 };\nglobalThis.answer = (box === null || box === void 0 ? void 0 : box.n) * 2;\n',
   esbuild: 'const box = { n: 21 };\nglobalThis.answer = (box == null ? void 0 : box.n) * 2;\n',
+  es2020: {
+    typescript: 'const box = { n: 21 };\nglobalThis.answer = box?.n * 2;\n',
+    esbuild: 'const box = { n: 21 };\nglobalThis.answer = box?.n * 2;\n',
+  },
 };
 async function publicScenario(ctx: JudgeContext) {
   const task = { id: 'compiler-dependency-2', family: 'compiler-integration', group: 'app' };
   const higher = true;
   const source = editableControl(ctx, /^Source$/i);
   const target = editableControl(ctx, /^Target$/i);
-  if (higher) await editableControl(ctx, /^Compiler$/i).selectOption('esbuild');
-  await source.fill('const box: {n:number} = {n:21}; globalThis.answer = box?.n * 2;');
-  await target.selectOption('es2015');
-  await action(ctx, caption('Compile')).click();
   const output = ctx.view.getByLabel('JavaScript', { exact: true });
-  await expect.poll(() => renderedValue(output), { timeout: 60000 }).not.toBe('');
-  const code = await renderedValue(output);
-  assert.equal(code.trim(), (higher ? compilerGoldens.esbuild : compilerGoldens.typescript).trim());
-  const answer = await ctx.view.evaluate((text) => {
-    const box: { answer?: number } = {};
-    new Function('globalThis', text)(box);
-    return box.answer;
-  }, code);
-  assert.equal(answer, 42);
-  await source.fill('const = ;');
-  await action(ctx, caption('Compile')).click();
-  await expect
-    .poll(() => renderedValue(ctx.view.getByLabel('Diagnostics', { exact: true })))
-    .not.toBe('');
-  assert.equal((await renderedValue(output)).trim(), '');
+  const diagnostics = ctx.view.getByLabel('Diagnostics', { exact: true });
+  const compilers = higher ? (['typescript', 'esbuild'] as const) : (['typescript'] as const);
+  const results = [];
+  for (const compiler of compilers) {
+    if (higher) await editableControl(ctx, /^Compiler$/i).selectOption(compiler);
+    for (const selectedTarget of ['es2015', 'es2020'] as const) {
+      await source.fill(compilerGoldens.source);
+      await target.selectOption(selectedTarget);
+      await action(ctx, caption('Compile')).click();
+      await expect
+        .poll(
+          async () =>
+            (await renderedValue(output)).trim() || (await renderedValue(diagnostics)).trim(),
+          { timeout: 60000 },
+        )
+        .not.toBe('');
+      assert.equal((await renderedValue(diagnostics)).trim(), '');
+      const code = await renderedValue(output);
+      const expected =
+        selectedTarget === 'es2015' ? compilerGoldens[compiler] : compilerGoldens.es2020[compiler];
+      assert.equal(code.trim(), expected.trim());
+      const answer = await ctx.view.evaluate((text) => {
+        const box: { answer?: number } = {};
+        new Function('globalThis', text)(box);
+        return box.answer;
+      }, code);
+      assert.equal(answer, 42);
+      await source.fill('const = ;');
+      await action(ctx, caption('Compile')).click();
+      await expect.poll(() => renderedValue(diagnostics)).not.toBe('');
+      assert.equal((await renderedValue(output)).trim(), '');
+      results.push({ compiler, target: selectedTarget, answer });
+    }
+  }
   return {
     family: task.family,
-    source: 'actual browser compilation/syntax error/result clearing',
-    answer,
+    source: 'actual browser compilation/syntax error/result clearing in each published mode/target',
+    results,
   };
 }
 export async function judge(ctx: JudgeContext) {

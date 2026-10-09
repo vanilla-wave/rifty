@@ -66,9 +66,15 @@ await Promise.all([slow,fast]);
 assert.equal(c.state().query.page,2);assert.deepEqual(c.state().items.map(r=>r.id),['b']);assert.equal(c.state().total,3);assert.equal(c.state().pending,false);
 c.select('a');await c.search({filter:'Alpha',page:1,pageSize:1,sort:'name-asc'});
 assert.deepEqual(c.state().selectedIds,['a']);
+assert.deepEqual(c.state().items.map(r=>r.id),['a']);assert.equal(c.state().total,1);
 await c.back();assert.equal(c.state().query.page,2);assert.deepEqual(c.state().items.map(r=>r.id),['b']);
 const restored=createController(client);restored.restoreJson(c.exportJson());
 assert.deepEqual(restored.state().query,c.state().query);assert.deepEqual(restored.state().selectedIds,['a']);
+// The external data changes: name order must not accidentally equal value order.
+rows=rows.map(r=>r.id==='a'?{...r,value:5}:r);
+await c.search({filter:'',page:1,pageSize:3,sort:'value-desc'});
+assert.deepEqual(c.state().items.map(r=>r.id),['b','c','a']);
+rows=rows.map(r=>r.id==='a'?{...r,value:30}:r);
 ${
   higher
     ? `
@@ -107,33 +113,48 @@ export async function probeBoundaryPublicScenario(prepared: Prepared, task: Task
   if (task.family === 'compiler-integration') {
     const source = editableControl(ctx, /^Source$/i);
     const target = editableControl(ctx, /^Target$/i);
-    if (higher) await editableControl(ctx, /^Compiler$/i).selectOption('esbuild');
-    await source.fill('const box: {n:number} = {n:21}; globalThis.answer = box?.n * 2;');
-    await target.selectOption('es2015');
-    await action(ctx, caption('Compile')).click();
     const output = ctx.view.getByLabel('JavaScript', { exact: true });
-    await expect.poll(() => renderedValue(output), { timeout: 60000 }).not.toBe('');
-    const code = await renderedValue(output);
-    assert.equal(
-      code.trim(),
-      (higher ? compilerGoldens.esbuild : compilerGoldens.typescript).trim(),
-    );
-    const answer = await ctx.view.evaluate((text) => {
-      const box: { answer?: number } = {};
-      new Function('globalThis', text)(box);
-      return box.answer;
-    }, code);
-    assert.equal(answer, 42);
-    await source.fill('const = ;');
-    await action(ctx, caption('Compile')).click();
-    await expect
-      .poll(() => renderedValue(ctx.view.getByLabel('Diagnostics', { exact: true })))
-      .not.toBe('');
-    assert.equal((await renderedValue(output)).trim(), '');
+    const diagnostics = ctx.view.getByLabel('Diagnostics', { exact: true });
+    const compilers = higher ? (['typescript', 'esbuild'] as const) : (['typescript'] as const);
+    const results = [];
+    for (const compiler of compilers) {
+      if (higher) await editableControl(ctx, /^Compiler$/i).selectOption(compiler);
+      for (const selectedTarget of ['es2015', 'es2020'] as const) {
+        await source.fill(compilerGoldens.source);
+        await target.selectOption(selectedTarget);
+        await action(ctx, caption('Compile')).click();
+        await expect
+          .poll(
+            async () =>
+              (await renderedValue(output)).trim() || (await renderedValue(diagnostics)).trim(),
+            { timeout: 60000 },
+          )
+          .not.toBe('');
+        assert.equal((await renderedValue(diagnostics)).trim(), '');
+        const code = await renderedValue(output);
+        const expected =
+          selectedTarget === 'es2015'
+            ? compilerGoldens[compiler]
+            : compilerGoldens.es2020[compiler];
+        assert.equal(code.trim(), expected.trim());
+        const answer = await ctx.view.evaluate((text) => {
+          const box: { answer?: number } = {};
+          new Function('globalThis', text)(box);
+          return box.answer;
+        }, code);
+        assert.equal(answer, 42);
+        await source.fill('const = ;');
+        await action(ctx, caption('Compile')).click();
+        await expect.poll(() => renderedValue(diagnostics)).not.toBe('');
+        assert.equal((await renderedValue(output)).trim(), '');
+        results.push({ compiler, target: selectedTarget, answer });
+      }
+    }
     return {
       family: task.family,
-      source: 'actual browser compilation/syntax error/result clearing',
-      answer,
+      source:
+        'actual browser compilation/syntax error/result clearing in each published mode/target',
+      results,
     };
   }
   assert.equal(task.family, 'indexed-resource');
@@ -180,9 +201,20 @@ export async function probeBoundaryPublicScenario(prepared: Prepared, task: Task
   await expect(ctx.view.getByLabel('Status', { exact: true })).toContainText(/ready/i, {
     timeout: 60000,
   });
-  await search.fill('');
+  const matching = ctx.view.getByLabel('Matching rows', { exact: true });
+  let searchedCount = 0;
+  let combinedCount = 0;
+  for (let i = 0; i < count; i++) {
+    if (`Customer ${i % 4096}`.includes('Customer 100')) {
+      searchedCount++;
+      if (i % 4 === 0 && i % 12 === 0) combinedCount++;
+    }
+  }
+  await expect.poll(() => renderedValue(matching)).toBe(String(searchedCount));
   await editableControl(ctx, /^Region$/i).selectOption('North');
   await editableControl(ctx, /^Month$/i).selectOption('1');
+  await expect.poll(() => renderedValue(matching)).toBe(String(combinedCount));
+  await search.fill('');
   await expect
     .poll(() => renderedValue(ctx.view.getByLabel('Matching rows', { exact: true })))
     .toBe(String(Math.ceil(count / 12)));

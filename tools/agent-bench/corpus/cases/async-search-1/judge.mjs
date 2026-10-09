@@ -47,6 +47,11 @@ assert.equal(c.state().pending, false);
 c.select('a');
 await c.search({ filter: 'Alpha', page: 1, pageSize: 1, sort: 'name-asc' });
 assert.deepEqual(c.state().selectedIds, ['a']);
+assert.deepEqual(
+  c.state().items.map((r) => r.id),
+  ['a'],
+);
+assert.equal(c.state().total, 1);
 await c.back();
 assert.equal(c.state().query.page, 2);
 assert.deepEqual(
@@ -57,5 +62,13 @@ const restored = createController(client);
 restored.restoreJson(c.exportJson());
 assert.deepEqual(restored.state().query, c.state().query);
 assert.deepEqual(restored.state().selectedIds, ['a']);
+// The external data changes: name order must not accidentally equal value order.
+rows = rows.map((r) => (r.id === 'a' ? { ...r, value: 5 } : r));
+await c.search({ filter: '', page: 1, pageSize: 3, sort: 'value-desc' });
+assert.deepEqual(
+  c.state().items.map((r) => r.id),
+  ['b', 'c', 'a'],
+);
+rows = rows.map((r) => (r.id === 'a' ? { ...r, value: 30 } : r));
 
 console.log('RIFTY_CORPUS_PASS:async-search-1');

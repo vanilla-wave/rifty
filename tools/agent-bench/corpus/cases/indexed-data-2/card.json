@@ -16,5 +16,6 @@
   "controls": ["baseline", "reference", "partial", "alternative"],
   "selection": "I11 resource level2; real browser actions/source controls and measured admission pending; comparison public8 unchanged",
   "level": 2,
-  "boundaryDimension": "resource"
+  "boundaryDimension": "resource",
+  "criteriaVersion": "query-selection-2"
 }
