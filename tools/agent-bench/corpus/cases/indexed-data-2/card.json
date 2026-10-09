@@ -1,0 +1,20 @@
+{
+  "id": "indexed-data-2",
+  "group": "app",
+  "family": "indexed-resource",
+  "split": "evaluation",
+  "origin": {
+    "type": "original-boundary-scenario",
+    "created": "2026-10-09",
+    "starter": "Vanilla Vite7.3.6"
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.ts",
+  "regressionSources": ["supplied browser UI engine interface", "deterministic indexed dataset"],
+  "difficulty": "Implement async indexed data/filter/sort/page/export engine behind supplied UI for 1000000 deterministic records; preserve usable navigation while indexing.",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "I11 resource level2; real browser actions/source controls and measured admission pending; comparison public8 unchanged",
+  "level": 2,
+  "boundaryDimension": "resource"
+}

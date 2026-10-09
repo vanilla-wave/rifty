@@ -1,0 +1,20 @@
+{
+  "id": "linked-import-1",
+  "group": "feature",
+  "family": "linked-data-import",
+  "split": "evaluation",
+  "origin": {
+    "type": "original-boundary-scenario",
+    "created": "2026-10-09",
+    "starter": "Vanilla JavaScript + Vite7.3.6"
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.mjs",
+  "regressionSources": ["existing minimal starter build/boot", "published engine API"],
+  "difficulty": "Implement the linked customer/invoice CSV workbook API: quoted/escaped/multiline CSV, exact cents, keys/references, atomic import and JSON restore.",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "I11 linked-data-import level1; public observable semantic probe, independent alternatives, no changed comparative public8; source admission pending",
+  "level": 1,
+  "boundaryDimension": "engineering"
+}

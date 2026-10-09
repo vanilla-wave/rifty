@@ -1,0 +1,205 @@
+{
+  "version": "boundary-v1",
+  "stage": "evaluation",
+  "purpose": "Separate adaptive I11 source preparation; public semantic requirements/pinned projects/controls; admission/reference bounds not yet accepted; comparison eval16 untouched",
+  "cases": [
+    {
+      "id": "linked-import-1",
+      "group": "feature",
+      "family": "linked-data-import",
+      "split": "evaluation",
+      "origin": {
+        "type": "original-boundary-scenario",
+        "created": "2026-10-09",
+        "starter": "Vanilla JavaScript + Vite7.3.6"
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.mjs",
+      "regressionSources": ["existing minimal starter build/boot", "published engine API"],
+      "difficulty": "Implement the linked customer/invoice CSV workbook API: quoted/escaped/multiline CSV, exact cents, keys/references, atomic import and JSON restore.",
+      "controls": ["baseline", "reference", "partial", "alternative"],
+      "selection": "I11 linked-data-import level1; public observable semantic probe, independent alternatives, no changed comparative public8; source admission pending",
+      "level": 1,
+      "boundaryDimension": "engineering",
+      "inputsSha256": "ec57cb2619e6b821e0778a336a347fdd8a8e0c68a21afbcde28077fc7fc51927",
+      "lockSha256": "342412adeb6b33ec3a754f53b1f70168b37ce9af9387bb8b82121bf282293bf4",
+      "promptSha256": "90b0d011c0703c7c2553d2ac0ba23d79fbd4743fd256b0a346088ffe03ad5d33",
+      "judgeSha256": "c376cd7accd49d20fefc462f1387f90fc9fb42eaead898989969fe4cc9d90d25"
+    },
+    {
+      "id": "linked-import-2",
+      "group": "feature",
+      "family": "linked-data-import",
+      "split": "evaluation",
+      "origin": {
+        "type": "original-boundary-scenario",
+        "created": "2026-10-09",
+        "starter": "Vanilla JavaScript + Vite7.3.6"
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.mjs",
+      "regressionSources": ["existing minimal starter build/boot", "published engine API"],
+      "difficulty": "Extend the workbook with a third linked credits dataset, exact per-currency conservation/over-credit rejection and undo history surviving JSON reload.",
+      "controls": ["baseline", "reference", "partial", "alternative"],
+      "selection": "I11 linked-data-import level2; public observable semantic probe, independent alternatives, no changed comparative public8; source admission pending",
+      "level": 2,
+      "boundaryDimension": "engineering",
+      "inputsSha256": "ec57cb2619e6b821e0778a336a347fdd8a8e0c68a21afbcde28077fc7fc51927",
+      "lockSha256": "342412adeb6b33ec3a754f53b1f70168b37ce9af9387bb8b82121bf282293bf4",
+      "promptSha256": "916cd6321eb7025fd6ce328774b49e85c7907410d89150bc07a5da162f6bc00c",
+      "judgeSha256": "da79cdfd981bfc66f22351a456eefd6887127c812c7ff8c3cdc207df32342176"
+    },
+    {
+      "id": "async-search-1",
+      "group": "feature",
+      "family": "async-search-state",
+      "split": "evaluation",
+      "origin": {
+        "type": "original-boundary-scenario",
+        "created": "2026-10-09",
+        "starter": "Vanilla JavaScript + Vite7.3.6"
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.mjs",
+      "regressionSources": ["existing minimal starter build/boot", "published engine API"],
+      "difficulty": "Implement async filter/page/sort/selection/navigation controller: newer request wins, selection survives, back/JSON restore preserve query.",
+      "controls": ["baseline", "reference", "partial", "alternative"],
+      "selection": "I11 async-search-state level1; public observable semantic probe, independent alternatives, no changed comparative public8; source admission pending",
+      "level": 1,
+      "boundaryDimension": "engineering",
+      "inputsSha256": "9e3bc090bb67911cc91c6c55f1b712f3181610ce23723a10ad7267b2edab4a3e",
+      "lockSha256": "342412adeb6b33ec3a754f53b1f70168b37ce9af9387bb8b82121bf282293bf4",
+      "promptSha256": "c5b9b682ace5afa01c511a43717b069cb4925539a295f8a3bca5e87cff91a68b",
+      "judgeSha256": "71684cc7353d2e3c4e62e6cbd0649bc78b1c410afb2b8ad1d615c1129cd05974"
+    },
+    {
+      "id": "async-search-2",
+      "group": "feature",
+      "family": "async-search-state",
+      "split": "evaluation",
+      "origin": {
+        "type": "original-boundary-scenario",
+        "created": "2026-10-09",
+        "starter": "Vanilla JavaScript + Vite7.3.6"
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.mjs",
+      "regressionSources": ["existing minimal starter build/boot", "published engine API"],
+      "difficulty": "Extend async controller with optimistic writes amid searches/navigation, failure rollback, retry and durable undo; stale responses cannot erase a later committed write.",
+      "controls": ["baseline", "reference", "partial", "alternative"],
+      "selection": "I11 async-search-state level2; public observable semantic probe, independent alternatives, no changed comparative public8; source admission pending",
+      "level": 2,
+      "boundaryDimension": "engineering",
+      "inputsSha256": "9e3bc090bb67911cc91c6c55f1b712f3181610ce23723a10ad7267b2edab4a3e",
+      "lockSha256": "342412adeb6b33ec3a754f53b1f70168b37ce9af9387bb8b82121bf282293bf4",
+      "promptSha256": "814acca91a49a2ee5622faab982c16719917deab6bba78767d7cf2d629792a62",
+      "judgeSha256": "95ee16943483d46981e5ad09cc18532596de9792fcf75bef9320597b83962533"
+    },
+    {
+      "id": "compiler-dependency-1",
+      "group": "app",
+      "family": "compiler-integration",
+      "split": "evaluation",
+      "origin": {
+        "type": "original-boundary-scenario",
+        "created": "2026-10-09",
+        "starter": "Vanilla Vite7.3.6 + TypeScript5.9.2"
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.ts",
+      "regressionSources": ["supplied browser UI engine interface", "pinned compiler API"],
+      "difficulty": "Integrate the real compiler engine behind supplied browser UI, level1; preserve UI and implement src/engine.mjs.",
+      "controls": ["baseline", "reference", "partial", "alternative"],
+      "selection": "I11 dependency level1; real browser actions/source controls and measured admission pending; comparison public8 unchanged",
+      "level": 1,
+      "boundaryDimension": "dependency",
+      "inputsSha256": "0ce74bdf9dd4c11176f85cac0df3373318e1cc7f4eb2c4a3aebdc276cfb4235f",
+      "lockSha256": "ab79717c04f9984cf459145e044f3602814e265590c17ff5af35611f51c56607",
+      "promptSha256": "7fda100471e63b241cd481e724097297fba5d3620b6d0ce0161ceb718082c77c",
+      "judgeSha256": "448ed4438fff7b226d28f07050cfc18f21366276162bfb8660678aa4f15747ca"
+    },
+    {
+      "id": "compiler-dependency-2",
+      "group": "app",
+      "family": "compiler-integration",
+      "split": "evaluation",
+      "origin": {
+        "type": "original-boundary-scenario",
+        "created": "2026-10-09",
+        "starter": "Vanilla Vite7.3.6 + TypeScript5.9.2 + esbuild-wasm0.28.0"
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.ts",
+      "regressionSources": ["supplied browser UI engine interface", "pinned compiler API"],
+      "difficulty": "Integrate the real compiler engine behind supplied browser UI, level2; preserve UI and implement src/engine.mjs.",
+      "controls": ["baseline", "reference", "partial", "alternative"],
+      "selection": "I11 dependency level2; real browser actions/source controls and measured admission pending; comparison public8 unchanged",
+      "level": 2,
+      "boundaryDimension": "dependency",
+      "inputsSha256": "2ee34b3d9b9f1879b6fdaf8abc75c42bc40193cb7d23d41f8c9d3c4c8ebe42e6",
+      "lockSha256": "693030aad1de7fbd52b3822c4e13b28955c821af0fa32dfe5c9b8be9875660ba",
+      "promptSha256": "d24643777aa6f0cd9b049f0ea3034f3ec5f5ab5b72fcb568cb5dff8fcf57da96",
+      "judgeSha256": "1135979aa09affef1851b331469dc7954e9b933d53c231e472ab9edc84edb651"
+    },
+    {
+      "id": "indexed-data-1",
+      "group": "app",
+      "family": "indexed-resource",
+      "split": "evaluation",
+      "origin": {
+        "type": "original-boundary-scenario",
+        "created": "2026-10-09",
+        "starter": "Vanilla Vite7.3.6"
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.ts",
+      "regressionSources": [
+        "supplied browser UI engine interface",
+        "deterministic indexed dataset"
+      ],
+      "difficulty": "Implement async indexed data/filter/sort/page/export engine behind supplied UI for 100000 deterministic records; preserve usable navigation while indexing.",
+      "controls": ["baseline", "reference", "partial", "alternative"],
+      "selection": "I11 resource level1; real browser actions/source controls and measured admission pending; comparison public8 unchanged",
+      "level": 1,
+      "boundaryDimension": "resource",
+      "inputsSha256": "944701a6ac9a51b857f5919d713defb7cc39dd163ee95ba612fe46a4e1e61447",
+      "lockSha256": "342412adeb6b33ec3a754f53b1f70168b37ce9af9387bb8b82121bf282293bf4",
+      "promptSha256": "61c3e53dff4bc9a9217c23d9a3232736d278978b307e33a47bc5219d247a755a",
+      "judgeSha256": "63b5fe763a365e33bc45c174d624dcc5e901d31a837996d4b79a8376582a2cd4"
+    },
+    {
+      "id": "indexed-data-2",
+      "group": "app",
+      "family": "indexed-resource",
+      "split": "evaluation",
+      "origin": {
+        "type": "original-boundary-scenario",
+        "created": "2026-10-09",
+        "starter": "Vanilla Vite7.3.6"
+      },
+      "project": "project.json",
+      "prompt": "prompt.md",
+      "judge": "judge.ts",
+      "regressionSources": [
+        "supplied browser UI engine interface",
+        "deterministic indexed dataset"
+      ],
+      "difficulty": "Implement async indexed data/filter/sort/page/export engine behind supplied UI for 1000000 deterministic records; preserve usable navigation while indexing.",
+      "controls": ["baseline", "reference", "partial", "alternative"],
+      "selection": "I11 resource level2; real browser actions/source controls and measured admission pending; comparison public8 unchanged",
+      "level": 2,
+      "boundaryDimension": "resource",
+      "inputsSha256": "e2e45d0c18730721ae08cf7533572e7719ed3222a8a04a52a24c5934f2170257",
+      "lockSha256": "342412adeb6b33ec3a754f53b1f70168b37ce9af9387bb8b82121bf282293bf4",
+      "promptSha256": "d896da35fbb07ecdc00c4a20df3f9002be7f22dd8c9d7fe7ceb932be4296b940",
+      "judgeSha256": "7fb23717298891ea2f684ebe4b12d114429ac44b40fcf8592ed8fb73b0bae145"
+    }
+  ]
+}

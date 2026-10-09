@@ -1,0 +1,20 @@
+{
+  "id": "compiler-dependency-2",
+  "group": "app",
+  "family": "compiler-integration",
+  "split": "evaluation",
+  "origin": {
+    "type": "original-boundary-scenario",
+    "created": "2026-10-09",
+    "starter": "Vanilla Vite7.3.6 + TypeScript5.9.2 + esbuild-wasm0.28.0"
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.ts",
+  "regressionSources": ["supplied browser UI engine interface", "pinned compiler API"],
+  "difficulty": "Integrate the real compiler engine behind supplied browser UI, level2; preserve UI and implement src/engine.mjs.",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "I11 dependency level2; real browser actions/source controls and measured admission pending; comparison public8 unchanged",
+  "level": 2,
+  "boundaryDimension": "dependency"
+}

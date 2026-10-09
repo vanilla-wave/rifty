@@ -1,0 +1,58 @@
+import assert from 'node:assert/strict';
+import { createWorkbook } from './src/workbook.mjs';
+const book = createWorkbook();
+const customers = 'id,name\r\nc1,"Alpha, A"\r\nc2,"Beta ""B"""\r\n';
+const invoices = 'id,customer_id,amount,currency\nc1-i,c1,100.01,USD\nc2-i,c2,2.00,EUR\n';
+book.importFiles({ customers, invoices });
+assert.deepEqual(book.snapshot().customers, [
+  { id: 'c1', name: 'Alpha, A' },
+  { id: 'c2', name: 'Beta "B"' },
+]);
+assert.deepEqual(book.snapshot().invoices, [
+  { id: 'c1-i', customerId: 'c1', cents: 10001, currency: 'USD' },
+  { id: 'c2-i', customerId: 'c2', cents: 200, currency: 'EUR' },
+]);
+const before = structuredClone(book.snapshot());
+assert.throws(() =>
+  book.importFiles({ customers, invoices: 'id,customer_id,amount,currency\nx,missing,1.00,USD\n' }),
+);
+assert.deepEqual(book.snapshot(), before);
+assert.throws(() => book.importFiles({ customers: 'id,name\nc1,A\nc1,B\n', invoices }));
+assert.deepEqual(book.snapshot(), before);
+assert.throws(() =>
+  book.importFiles({ customers, invoices: 'id,customer_id,amount,currency\nx,c1,1.005,USD\n' }),
+);
+assert.deepEqual(book.snapshot(), before);
+const malformed = (() => {
+  try {
+    book.importFiles({ customers: 'id,name\nc1,"unfinished', invoices });
+  } catch (e) {
+    return e;
+  }
+})();
+assert.equal(malformed.line, 2);
+assert.equal(malformed.column, 4);
+assert.deepEqual(book.snapshot(), before);
+const multiline = 'id,name\nc1,"Alpha\nSecond"\nc2,Beta\n';
+book.importFiles({ customers: multiline, invoices });
+assert.equal(book.snapshot().customers[0].name, 'Alpha\nSecond');
+
+const credits = 'id,invoice_id,amount\nk1,c1-i,0.01\nk2,c1-i,0.02\n';
+book.importFiles({ customers: multiline, invoices, credits });
+assert.deepEqual(book.snapshot().totals, { USD: 9998, EUR: 200 });
+const credited = structuredClone(book.snapshot());
+assert.throws(() =>
+  book.importFiles({
+    customers: multiline,
+    invoices,
+    credits: 'id,invoice_id,amount\nx,c1-i,100.02\n',
+  }),
+);
+assert.deepEqual(book.snapshot(), credited);
+const restored = createWorkbook();
+restored.restoreJson(book.exportJson());
+assert.deepEqual(restored.snapshot(), credited);
+assert.equal(restored.undo(), true);
+assert.deepEqual(restored.snapshot().totals, { USD: 10001, EUR: 200 });
+
+console.log('RIFTY_CORPUS_PASS:linked-import-2');

@@ -1,0 +1,20 @@
+{
+  "id": "linked-import-2",
+  "group": "feature",
+  "family": "linked-data-import",
+  "split": "evaluation",
+  "origin": {
+    "type": "original-boundary-scenario",
+    "created": "2026-10-09",
+    "starter": "Vanilla JavaScript + Vite7.3.6"
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.mjs",
+  "regressionSources": ["existing minimal starter build/boot", "published engine API"],
+  "difficulty": "Extend the workbook with a third linked credits dataset, exact per-currency conservation/over-credit rejection and undo history surviving JSON reload.",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "I11 linked-data-import level2; public observable semantic probe, independent alternatives, no changed comparative public8; source admission pending",
+  "level": 2,
+  "boundaryDimension": "engineering"
+}
