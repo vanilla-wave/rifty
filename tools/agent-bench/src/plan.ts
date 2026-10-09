@@ -1,8 +1,9 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { Config } from './config.ts';
 import type { Lane } from './lanes/types.ts';
+import { killProcessGroup } from './proc.ts';
 import type { Task } from './tasks.ts';
 
 export interface Trial {
@@ -36,6 +37,35 @@ export interface Plan {
 export function digest(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
+async function gitOutput(
+  args: string[],
+  consume: (chunk: string) => void,
+  timeoutMs: number,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn('git', args, { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    let stderr = '';
+    const timer = setTimeout(() => {
+      void killProcessGroup(child);
+      reject(new Error(`Git source command timed out: ${args.join(' ')}`));
+    }, timeoutMs);
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', consume);
+    child.stderr.on('data', (chunk: string) => {
+      stderr = (stderr + chunk).slice(-4096);
+    });
+    child.once('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.once('close', (code, signal) => {
+      clearTimeout(timer);
+      if (code === 0) resolve();
+      else reject(new Error(`Git source command failed (${code ?? signal}): ${stderr}`));
+    });
+  });
+}
 export async function resolvePlan(config: Config, tasks: Task[], lanes: Lane[]): Promise<Plan> {
   if (!tasks.length || !lanes.length || new Set(lanes).size !== lanes.length)
     throw new Error('Plan requires nonempty tasks and unique lanes');
@@ -45,13 +75,28 @@ export async function resolvePlan(config: Config, tasks: Task[], lanes: Lane[]):
       throw new Error(`Invalid or duplicate task identity: ${task.id}`);
     ids.add(task.id);
   }
+  const sourceRevision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  let sourceDirty = false;
+  await gitOutput(
+    ['status', '--porcelain'],
+    (chunk) => {
+      sourceDirty ||= /\S/.test(chunk);
+    },
+    config.limits.runTimeoutMs,
+  );
+  const sourceDiff = createHash('sha256');
+  await gitOutput(
+    ['diff', 'HEAD', '--binary'],
+    (chunk) => {
+      sourceDiff.update(chunk);
+    },
+    config.limits.runTimeoutMs,
+  );
   return {
     version: 1,
-    sourceRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-    sourceDirty: !!execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim(),
-    sourceDiffSha256: digest(
-      execFileSync('git', ['diff', 'HEAD', '--binary'], { encoding: 'utf8' }),
-    ),
+    sourceRevision,
+    sourceDirty,
+    sourceDiffSha256: sourceDiff.digest('hex'),
     config: structuredClone(config),
     order: 'task-lane-trial',
     tasks: await Promise.all(

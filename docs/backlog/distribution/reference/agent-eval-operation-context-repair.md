@@ -301,3 +301,32 @@ GREEN preserves aliases/duplicates/falseCreate/dual-owner graph. Types PASS.
 Exact source25/fixture/log lineage340 in `agent-eval-record-zero-effect-proof.json.gz`.
 Eval-v16 fixes new criteria identity without changing public8/card/control bytes.
 Fullworkflow10/fullgate/current own-origin/independent verify pending.
+
+Post-fix full native workflow10 PASS (original/Cancel/Discard/decorated/contextual/
+qualified variants); source25 remains frozen. Proof lineage now406 entries,
+including full10 before/after/traces and independent storage audit/cleanup.
+Removed133 completed fixture dependency caches (du4.116GiB); all source/locks/
+proofs and two shared guard targets retained. Current full gate pending.
+
+## Source fingerprint buffer failure
+
+Current fullgate27: parity/static PASS; six unit files reproduce ENOBUFS in
+isolation at plan.ts Git diff capture. Dirty proof-bundle diff exceeds default
+1MiB capture; no grader/model fault. Existing I4/I8 source identity obligation.
+Same unbounded status capture appeared twice (plan/header): one streaming Git
+output owner, full UTF8 digest, nonzero/spawn/deadline failure never a partial
+identity; header reuses the accepted plan fields. Rev-parse HEAD is bounded by
+Git object id. Native process-pipe fault model recorded before adoption.
+
+Permanent real isolated2MiB Git binary baseline RED; fixture path mistakes
+(two ENOENT attempts) retained, not GREEN. Corrected fixture old module RED
+for both diff/status, no import failure. Current four fault controls + six
+previous red files16 tests PASS; exit/deadline guard removals actualRED.
+Root/stall source processes are real Git/Node; no mocked package or protocol.
+Current fullgate/independent verify pending; no source/goal acceptance.
+
+Current fullgate27/27 PASS, unit189.8s firstpass/parity117.0s. Source collector
+reference/fault/reversion/current code and exact gate logs retained in
+`agent-eval-source-fingerprint-repair.json.gz`; raw fullgate log
+`agent-eval-record-settlement-source-volume-prcheck-green.log.gz`.
+Independent current-source acceptance/own-origin/fresh96 remain pending.

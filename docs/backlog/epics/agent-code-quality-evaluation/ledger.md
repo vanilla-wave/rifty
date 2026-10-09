@@ -165,3 +165,7 @@
 - 2026-10-09 — source a24 pushed; fresh independent Final BLOCK2 R4/R5 zero-effect participant/capacity drift; prior R1-R3 verified, all2 FIX. Own-v15 selected40 retained20PASS20FAIL/consumer1, physical38/setup2/three positiveCSS bootstrapFAIL; canonical123/offline2 exact/summary-policy4PASS. Source unaccepted; fresh96/I10/I11/readerCLOSE linked.
 
 - 2026-10-09 — R4/R5 permanent17 baselineRED (2 silent normals)→currentGREEN (6 exactreferences/11 explicitfaults), adapters4GREEN/typesPASS; zero-effect cleanup verifies matching original payload without requiring unconfirmed draft-as-original. Eval16/source25 frozen; raw340 files retained. Fullworkflow10/fullgate/own-origin/Final pending; source/goal unaccepted.
+
+- 2026-10-09 — post-R4/R5 fullworkflow10PASS; fullgate unit6 reproduces ENOBUFS on dirty proof diff>1MiB (parity/staticPASS). Required I4/I8 source fingerprint repair: actual2MiB/status-volume baselineRED, stream collector/current4faults+six oldredfiles16PASS, baseline/exit/deadline reversionsRED. Header uses same plan identity. Fullgate/independent acceptance pending; no scope reduction.
+
+- 2026-10-09 — source fingerprint repair/current observer fullgate27/27PASS unit189.8firstpass/parity117.0; exact source/native4+old6=16GREEN/three guardRED/failed27 gate retained. Workflow10PASS/source25 v16 unchanged; repair proof406 entries includes independent cache cleanup133dirs/du4.116GiB with source/locks/guard targets preserved. Current own-origin/independent Final/fresh96/I10/I11/readerCLOSE still required.

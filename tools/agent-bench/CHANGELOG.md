@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Stream Git source fingerprints beyond1MiB; retain exit/deadline failures and reuse plan identity in report headers.
+
 - Verify original payload on zero-effect expense and textbox-room observation cleanup.
 
 - Verify complete expense payload/financial effects, room capacity and original booking peers during cleanup; eval-v15 preserves public inputs/history.

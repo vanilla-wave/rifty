@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { type Browser, chromium } from '@playwright/test';
@@ -44,9 +43,8 @@ export async function run(
       purpose: control ? 'controls' : endpoint.id === 'scripted' ? 'smoke' : 'quality',
       control,
       createdAt: new Date().toISOString(),
-      sourceRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-      sourceDirty:
-        execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim().length > 0,
+      sourceRevision: plan.sourceRevision,
+      sourceDirty: plan.sourceDirty,
       versions: {
         node: process.version,
         piCli: (
