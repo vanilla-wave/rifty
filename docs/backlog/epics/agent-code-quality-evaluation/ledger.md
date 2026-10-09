@@ -169,3 +169,9 @@
 - 2026-10-09 — post-R4/R5 fullworkflow10PASS; fullgate unit6 reproduces ENOBUFS on dirty proof diff>1MiB (parity/staticPASS). Required I4/I8 source fingerprint repair: actual2MiB/status-volume baselineRED, stream collector/current4faults+six oldredfiles16PASS, baseline/exit/deadline reversionsRED. Header uses same plan identity. Fullgate/independent acceptance pending; no scope reduction.
 
 - 2026-10-09 — source fingerprint repair/current observer fullgate27/27PASS unit189.8firstpass/parity117.0; exact source/native4+old6=16GREEN/three guardRED/failed27 gate retained. Workflow10PASS/source25 v16 unchanged; repair proof406 entries includes independent cache cleanup133dirs/du4.116GiB with source/locks/guard targets preserved. Current own-origin/independent Final/fresh96/I10/I11/readerCLOSE still required.
+
+- 2026-10-09 — re-chart after distribution/agent-eval-record-observation-judging (final-green PASS @37e19eb16776f69c5052687bc628cda2ce0af1e1):fresh/root/record_settlement_verify_r3,30coveragePASS/0findings/unitres0/goalfalse5residuals,validator0. Independent source16+splitUTF8 full1.32MiB/native raw17/guard baselines/current40 canonical124 audited; current39 physical+1referenceCOIsetup unexecuted/CSS2positive1negative/15semanticnegative,21PASS19FAIL unchanged, consumer1 retained; offline2/policy4PASS. SameJSON and new top-level raw44 audits/proofs committed; historical1775 extracted files remain nine original archives. Source unit accepted; next fresh frozen96, then I10/I11/reader/CLOSE. No whole-goal closure.
+
+- 2026-10-09 — correction to preceding review-custody count: new top-level raw41, not44; same original PASS JSON/source SHA and all prior hashes unchanged.
+
+- 2026-10-09 — accepted source/current40 packaging fullgate27/27PASS unit228.4s/parity113.3s; exact terminal log retained. Fresh96 and five goal residuals remain.

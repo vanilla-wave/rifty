@@ -330,3 +330,20 @@ reference/fault/reversion/current code and exact gate logs retained in
 `agent-eval-source-fingerprint-repair.json.gz`; raw fullgate log
 `agent-eval-record-settlement-source-volume-prcheck-green.log.gz`.
 Independent current-source acceptance/own-origin/fresh96 remain pending.
+
+## Accepted current source
+
+Fresh independent Final+GREEN PASS @37e19eb16776f69c5052687bc628cda2ce0af1e1:
+30/30 coverage,0 findings/unit residuals; whole goalfalse,5 goal residuals.
+Same schema JSON: `agent-eval-record-observation-final-green.json`; raw executed
+audits/probes/hashes: `agent-eval-record-observation-final-evidence.json.gz`.
+All prior BLOCK/RED/harness errors remain historical; no verdict rescore.
+
+Current eval16 own40:21PASS19FAIL. Exact39 physical completed/noModels plus
+1 trace-only COI expense-reference setup failure; CSS2 positive/1 negative;
+15 semantic negative failures. Consumer terminal1 on absent setup before/after,
+not GREEN. Canonical124 originalJSON/live bytes and2 offline regenerations
+exact; summarypolicy4PASS28.51s. Independent audit verifies input identity and
+all selected failures; source acceptance does not rescue unsuccessful origins.
+Terminal log: `agent-eval-record-zero-effect-v16-origin-terminal.log.gz`.
+Source unit closed; fresh96/I10/I11/historical-reader/CLOSE remain mandatory.
