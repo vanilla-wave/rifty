@@ -69,8 +69,12 @@ Export actions; named read-only Status/Matching rows/Page outputs. Level1
 Zero-based indexi: id=i+1,customer=`Customer ${i%4096}`,regions North/South/East/
 West by i%4,cents=(i*7919)%1000000,month=i%12+1. Filter/search combined;
 sort cents-desc with id-asc tie, page100, JSON export all filtered sorted rows.
-During real indexing, visible navigation/search remains usable; admission
-records achieved timings/actual opportunity to intervene. Reference-grounded
+During real indexing, visible navigation/search remains usable; actual input
+event and visible Status are captured. Deadline begins before Load. If indexing
+completed before interaction, control is functionally evaluated and explicitly
+provides no during-indexing proof; do not slow an instant implementation.
+Admission must obtain actual during-indexing evidence/meaningful pressure
+before claiming responsiveness or closing the bounded question. Reference-grounded
 final response deadline/finite upper-question rationale frozen before models;
 no count-only closure. Independent scenario queries North/month1, exact
 ceil(N/12) matching rows, page2, full unique/export identities/cents/order.

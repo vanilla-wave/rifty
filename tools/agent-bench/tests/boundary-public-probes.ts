@@ -138,11 +138,45 @@ export async function probeBoundaryPublicScenario(prepared: Prepared, task: Task
   }
   assert.equal(task.family, 'indexed-resource');
   const count = higher ? 1000000 : 100000;
-  await action(ctx, caption('Load')).click();
   const search = editableControl(ctx, /^Search$/i);
+  const status = await ctx.view.getByLabel('Status', { exact: true }).elementHandle();
+  assert.ok(status);
+  const inputObservation = await search.evaluateHandle((node, statusNode) => {
+    const observation: { phase: string | null; eventTime: number | null } = {
+      phase: null,
+      eventTime: null,
+    };
+    node.addEventListener(
+      'input',
+      () => {
+        observation.phase =
+          statusNode instanceof HTMLInputElement || statusNode instanceof HTMLTextAreaElement
+            ? statusNode.value
+            : statusNode instanceof HTMLElement
+              ? statusNode.innerText
+              : (statusNode.textContent ?? '');
+        observation.eventTime = performance.now();
+      },
+      { capture: true, once: true },
+    );
+    return observation;
+  }, status);
+  const interactionStarted = performance.now();
+  await action(ctx, caption('Load')).click({ timeout: 2000 });
   // Generous admission target; final response deadline frozen from real references before exploration.
-  await search.fill('Customer 100', { timeout: 2000 });
+  const remaining = 2000 - (performance.now() - interactionStarted);
+  assert.ok(remaining > 0, 'Indexing blocked the first user interaction deadline');
+  await search.fill('Customer 100', { timeout: remaining });
+  const firstInteractionMs = performance.now() - interactionStarted;
+  assert.ok(firstInteractionMs <= 2000, 'Indexing blocked the first user interaction deadline');
   assert.equal(await fieldValue(search), 'Customer 100');
+  const observedInput = await inputObservation.jsonValue();
+  await inputObservation.dispose();
+  await status.dispose();
+  assert.ok(observedInput.phase !== null, 'Actual input event was not observed');
+  const interactionDuringIndexing = /indexing|loading/i.test(observedInput.phase);
+  const completedBeforeInteraction = /ready/i.test(observedInput.phase);
+  assert.ok(interactionDuringIndexing || completedBeforeInteraction, 'Unknown indexing phase');
   await expect(ctx.view.getByLabel('Status', { exact: true })).toContainText(/ready/i, {
     timeout: 60000,
   });
@@ -188,6 +222,13 @@ export async function probeBoundaryPublicScenario(prepared: Prepared, task: Task
   return {
     family: task.family,
     source: 'actual browser navigation/indexing/export',
+    firstInteractionMs,
+    observedInput,
+    interactionDuringIndexing,
+    completedBeforeInteraction,
+    responsivenessEvidence: interactionDuringIndexing
+      ? 'observed during indexing'
+      : 'completed before interaction; no during-indexing proof',
     rows: count,
     exported: records.length,
   };
