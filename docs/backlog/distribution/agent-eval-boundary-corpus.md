@@ -73,6 +73,14 @@ No new runtime compatibility feature, scheduler/platform or generic UI adapter;
 no private requirement hidden from public task cards, success-based exclusion,
 comparison rescoring, population/absolute-ceiling claim or goal closure here.
 
+## Public scenario proof
+
+`reference/agent-eval-boundary-public-scenarios.md` publishes exact boundaries
+used by independent RED probes. `boundary-semantic-native-controls.ts` executes
+module transitions and browser controls independently of each new case judge;
+renamed pilot labels/generic judge truth-table cannot close these assertions.
+All corresponding interfaces appear in public cards/prompts before admission.
+
 ## Route
 
 Ready promise; missing preparation reviewed before source implementation.

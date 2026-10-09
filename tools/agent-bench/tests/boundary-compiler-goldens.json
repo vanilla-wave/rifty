@@ -1,0 +1,8 @@
+{
+  "source": "const box: {n:number} = {n:21}; globalThis.answer = box?.n * 2;",
+  "target": "es2015",
+  "typescriptVersion": "5.9.2",
+  "esbuildWasmVersion": "0.28.0",
+  "typescript": "const box = { n: 21 };\nglobalThis.answer = (box === null || box === void 0 ? void 0 : box.n) * 2;\n",
+  "esbuild": "const box = { n: 21 };\nglobalThis.answer = (box == null ? void 0 : box.n) * 2;\n"
+}
