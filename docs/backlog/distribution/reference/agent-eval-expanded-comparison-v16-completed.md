@@ -28,6 +28,10 @@ summary-policy checks PASS. Model services stopped. Original runner log and
 remain local ancillary artifacts; JSON trace/tool/phase/source/after records
 are committed. Earlier interrupted/completed campaigns stay immutable history.
 
-Independent comparison Final and combined full gate pending; I10/I11 and whole
-goal CLOSE remain mandatory. Source controls/quality campaign alone do not close
-the goal.
+Independent Final+GREEN PASS6/6,8axes,0findings/unit residuals at
+`8065464894ec16515f5c6aaa5205ef4f04837410`;
+[original verdict](agent-eval-expanded-comparison-v16-final-green.json),
+[raw evidence](agent-eval-expanded-comparison-v16-final-evidence.json.gz).
+Current fullgate27PASS (unit204.5s/parity117.1s). Independently37×2 historical
+CLI outcomes identical with current contracts removed. I10/I11 and whole-goal
+CLOSE remain mandatory; this accepted comparison does not close the goal.

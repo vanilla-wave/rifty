@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Agent benchmark retains completed eval16 comparison and adds eight substantive engineering/compiler/resource boundary candidates; admission and boundary model study remain separate.
+
 - Review CLI validates retained verdicts against their reviewed Git contract; changed or retired current documents no longer substitute authority. Missing reviewed history stays explicit.
 
 - Codex sees the `rifty-review` skill in its catalog (`allow_implicit_invocation: true`), matching Claude; verified by a fresh read-only `codex exec` listing.

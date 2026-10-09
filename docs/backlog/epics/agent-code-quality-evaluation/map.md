@@ -1,14 +1,13 @@
 ## Items
 
-1. `distribution/agent-eval-expanded-comparison` — source Final37e19 PASS30/30; eval16/current40 retained21PASS19FAIL. Fresh frozen96/same public8/all4/three repeats, retained failures/uncertainty/offline report; I1/I2/I3/I4/I6/I7/I8/I9. Prior interrupted/completed series remain history, original96 unaccepted/unrescored.
-2. `distribution/agent-eval-boundary-corpus` — source admission: meaningful levels/actual locks/oracles/working alternatives/four-origin references/measured finite bounds, then source Final before diagnostic calls; I6/I11.
-3. `distribution/agent-eval-boundary-diagnostics` — actual operation catalog and substantive finite escalation/fresh confirmation; I10/I11 mandatory. Existing scripts/report/corpus reused.
+1. `distribution/agent-eval-boundary-corpus` — source admission: meaningful levels/actual locks/oracles/working alternatives/four-origin references/measured finite bounds, then source Final before diagnostic calls; I6/I11.
+2. `distribution/agent-eval-boundary-diagnostics` — actual operation catalog and substantive finite escalation/fresh confirmation; I10/I11 mandatory. Existing scripts/report/corpus reused.
 
 ## Open questions
 
-- Record observation source accepted — owner: agent — Final+GREEN PASS37e19eb (30/30,0 findings/unit residuals). Eval16/current-own40 original21PASS19FAIL/39physical+1setup unexecuted preserved; source acceptance does not rescue failed origins. Freeze fresh96 on the current accepted criteria; prior96 remains unaccepted/unrescored.
+- Record observation source accepted — owner: agent — Final+GREEN PASS37e19eb (30/30,0 findings/unit residuals). Eval16/current-own40 original21PASS19FAIL/39physical+1setup unexecuted preserved; source acceptance does not rescue failed origins. Fresh96 completed43PASS53FAIL24setup, sourceed4; comparison Final806546489 accepted6/6,0findings/unit residuals, two offline exact views. Prior96 remains unaccepted/unrescored.
 
-- Completed-contract retirement before CLOSE — owner: agent — same accepted JSON must remain inspectable against reviewed authority after cleanup. Reader source Final0ef6 PASS4/4 now reads reviewedGit; global actual retirement audit still required, source contracts retained until CLOSE. Source unit itself accepted; no rescore or scope reduction.
+- Completed-contract retirement before CLOSE — owner: agent — same accepted JSON must remain inspectable against reviewed authority after cleanup. Reader source Final0ef6 PASS4/4 now reads reviewedGit; actual37×2 retirement audit independently PASS; source contracts retained until CLOSE. Source unit itself accepted; no rescore or scope reduction.
 
 - Completed prerequisites: nativeCodex0.159.3 real CLI/usage/isolation/budget proof; SIGINT physically settles tools. Frozen pilot-v1/own-origin private command checks; native24 authoring controls, physical four-origin exit/judge-substitution controls; original runners unsupported in browsers explicitly measured. Last current refs24:16PASS/8browser-library setupFAIL, bothappsall4PASS. Independent Final+GREEN baef89ee, no unit residuals.
 - Campaign size: roughly 20–30 cases × 4 environments × 3 trials ≈ 240–360 live runs plus reference solutions per environment; 2026-09-13 medians 62–83 s agent time with tails 329–541 s, plus cold real-project install in the browser — owner: agent — report PICKUP records the declared matrix, expected runs, wall-clock and usage before a campaign starts; the pilot corpus frozen under I7 closes I5, expansion carries its own campaign.
