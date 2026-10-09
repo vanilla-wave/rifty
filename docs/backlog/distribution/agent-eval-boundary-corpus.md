@@ -93,4 +93,6 @@ own frozen ready protocol; this source unit alone cannot close goal.
 
 ## Decisions
 
+- ready-verdict: 2026-10-09 — Contract+RED @2ee8fa7079f4e55a0e29a364314cbb1447434807; reference/agent-eval-boundary-corpus-contract-red.json,11/11PASS,0findings/unitresiduals.
+
 - re-cut: 2026-10-09 — split source admission from original boundary diagnostics; no I10/I11 reduction, samePR341; original item owns actual search/report — trace: none
