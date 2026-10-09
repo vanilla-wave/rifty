@@ -27,3 +27,8 @@ scenarios verified separately. Lint/typecheck/refs/backlog PASS; setup-only
 pnpm/Vite/missing/mixed workspace dependency failures retained/excluded.
 Independent Final and combined full PR gate after fresh96 remain required. Source contracts stay retained until
 independent acceptance and CLOSE; fresh96 runs on frozened4.
+
+Independent Final+GREEN PASS0ef6bf08:4/4coverage,8axesPASS,0findings/unit
+residuals; source/47raw proofs/independent22GREEN/guard4RED-restored22GREEN/
+original15row JSON14 scenarios verified. Same original verdict retained; global
+retirement audit/combinedfullgate/fresh96/I10/I11/CLOSE remain.

@@ -181,3 +181,5 @@
 - 2026-10-09 — protocol gate initial sandboxEPERM (6lanes red, failedunitfiles isolated once); corrected authorized fullgate27/27PASS, unit238.3s/parity retained exact logs. Same source/criteria; fresh96 starts after clean protocol commit.
 
 - 2026-10-09 — observed historical reader I4/I8 repair isolated while fresh96 remains frozened4: same accepted15row JSON retirement2, weaker1row/current and missing reviewedSHA incorrectly0; source reads reviewedGit, unbound drafts currentFS. Actual permanent22GREEN/guard4RED-restored22GREEN/lint+typecheck+refs+backlogPASS; raw authority/source/fixtures/setup failures retained. Independent Final/combinedgate pending; no source-contract retirement or whole-goal CLOSE yet.
+
+- 2026-10-09 — independent reader Final+GREEN PASS0ef6bf08c706a2b37ce316e46c03bf493b14380c:4/4,8axesPASS,0findings/unitresiduals; same JSON/newraw evidence retained. Independently22GREEN/4RED→22GREEN and original15row CLI/Git14 scenarios verified, no original JSON mutation. Reader source unit accepted; global actual contract retirement audit/combinedgate and fresh96/I10/I11/CLOSE remain.
