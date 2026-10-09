@@ -179,3 +179,5 @@
 - 2026-10-09 — PICKUP expanded comparison: sourceFinal37e19 accepted; eval16 full96 samepublic8/all4/3/task-lane-trial/config100tools600s/estimandADR0507 frozen before calls. Protocol records expected120–220min/6–10Minput250–400koutput; preflightclean0553e8ed5/Node24.16/Codex0.159.3/354GiB. Exact launch identity remeasured after protocol commit; I10/I11/reader/CLOSE remain.
 
 - 2026-10-09 — protocol gate initial sandboxEPERM (6lanes red, failedunitfiles isolated once); corrected authorized fullgate27/27PASS, unit238.3s/parity retained exact logs. Same source/criteria; fresh96 starts after clean protocol commit.
+
+- 2026-10-09 — observed historical reader I4/I8 repair isolated while fresh96 remains frozened4: same accepted15row JSON retirement2, weaker1row/current and missing reviewedSHA incorrectly0; source reads reviewedGit, unbound drafts currentFS. Actual permanent22GREEN/guard4RED-restored22GREEN/lint+typecheck+refs+backlogPASS; raw authority/source/fixtures/setup failures retained. Independent Final/combinedgate pending; no source-contract retirement or whole-goal CLOSE yet.
