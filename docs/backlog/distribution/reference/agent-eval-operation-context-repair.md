@@ -241,3 +241,37 @@ Exact prototype/source/fixture/log lineage (288 entries):
 Current full gate27/27 PASS (unit277.4s first pass/parity135.8s), archive policy4/4 PASS; exact logs retained. Initial lint/support-profile RED and isolated RED retained; unchanged old-version test2/2 GREEN. Own-origin40 terminal0:21PASS/15 semantic negative FAIL/4 console-proven COI CSS bootstrap FAIL (3 positive,1 negative), physical40/noModels exact. Inherited native28 terminal0:24 positive PASS/4 negative FAIL, physical28/noModels exact. Each cohort has a separate canonical archive and two exact offline regenerations. Full current textbox-room workflow PASS after typed-projection integration. Final gate27/27 PASS (one statistical timeout, mandatory isolatedPASS; parity118.3s). Independent Final pending; no source acceptance,
 comparative rescore or goal closure. Source Final precedes fresh96; I10/I11 and
 historical-reader retirement remain mandatory.
+
+
+## Independent settlement BLOCK and class repair
+
+Final3005 BLOCK R1/R2/R3: description survives restored Paid; capacity3 survives
+restored room names; a restored booking key hides a removed peer. Same schema
+JSON and89 independent source/proof files retained in
+`agent-eval-record-observation-final-blocked.json.gz` and
+`agent-eval-record-observation-final-blocked-evidence.json.gz`. All FIX; no scope
+change or adjudication. Source unit remains unaccepted.
+
+Production RED reproduces all4 counterexamples with3 exact references. Sibling
+sweep finds no-name capacity drift, auxiliary-create peer loss and payer/
+participant/zero-share changes hidden by aggregate Paid. First party attempt
+had an Amount input/readonly-output locator collision: false GREEN, retained;
+corrected role locator and exact causal checks yield real party RED.
+
+ADR0525: complete captured payload plus independent effects; confirmed Update
+and owned Create stay distinct. Shared peer checker covers movement and auxiliary
+creation. Current13 controls:4 references exact/9 explicit failures; adapter4,
+grouped projection6 and full workflow10 PASS. Four isolated guard reversions each
+reproduce silent normal-return partial state; no import/locator rescue. Fullgate
+27/27 PASS (unit228.7s firstpass/parity118.7s). Exact lineage863 files in
+`agent-eval-record-settlement-proof.json.gz`; later receipts supplement it.
+
+Same8 public inputs/cards/control payloads; eval-v15 versions the corrected
+criteria before comparative calls. Original headers/outcomes and code snapshots
+remain history. Fresh v15 own-origin controls and independent verify pending;
+no new accepted comparison or goal closure. Fresh96/I10/I11/readerCLOSE mandatory.
+
+Latest frozen-v15 fullgate27/27 PASS (unit225.3s firstpass/parity119.0s).
+Exact original log: `agent-eval-record-settlement-v15-prcheck-green.log.gz`.
+All25 current source hashes match the retained v15 snapshot. Independent verify
+and current own-origin cohort remain pending; no source acceptance claim.

@@ -30,6 +30,26 @@ function freshDate() {
   return new Date(Date.UTC(2090, 0, 1) + days * 86400000).toISOString().slice(0, 10);
 }
 
+async function observedPeers(
+  controls: ReservationRecordControls,
+  originals: readonly ReservationRecord[],
+  known: readonly ReservationRecord[],
+): Promise<ReservationRecord[]> {
+  const peers = new Map<string, ReservationRecord>();
+  for (const value of originals)
+    if (await controls.display(value, known)) peers.set(reservationKey(value), value);
+  return [...peers.values()];
+}
+async function verifyPeers(
+  controls: ReservationRecordControls,
+  peers: readonly ReservationRecord[],
+  known: readonly ReservationRecord[],
+) {
+  for (const value of peers)
+    if (!(await controls.display(value, known)))
+      throw new Error(`Reservation observation lost an original peer: ${reservationKey(value)}`);
+}
+
 async function witnessReservation(
   ctx: JudgeContext,
   controls: ReservationRecordControls,
@@ -46,6 +66,7 @@ async function witnessReservation(
   if (await controls.display(marked, [...originals, marked]))
     throw new Error('Temporary reservation key already displayed');
   if (!(await controls.display(original, [...originals, marked]))) return false;
+  const peers = await observedPeers(controls, originals, [...originals, marked]);
   let update = false;
   await scope.apply(
     date,
@@ -55,6 +76,7 @@ async function witnessReservation(
       const retained = await controls.display(original, [...originals, marked]);
       if (!moved) {
         if (!retained) throw new Error('Reservation observation lost both public keys');
+        await verifyPeers(controls, peers, [...originals, marked]);
         return;
       }
       if (retained) {
@@ -93,6 +115,7 @@ async function witnessReservation(
         (await controls.display(marked, [...originals, marked]))
       )
         throw new Error('Reservation observation failed to restore its public keys');
+      await verifyPeers(controls, peers, [...originals, marked]);
     },
     async () => {
       await controls.write(marked);
@@ -160,6 +183,7 @@ export async function createRoomRelation(
     originals.map((value) => value.date),
   );
   const original: ReservationRecord = { room, date, start: '00:00', end: '00:01', seats: 1 };
+  const peers = await observedPeers(controls, originals, [...originals, original]);
   const names = new Set([room]);
   const follows = async (name: string) => {
     names.add(name);
@@ -175,7 +199,10 @@ export async function createRoomRelation(
       await controls.reload();
       const present: string[] = [];
       for (const name of names) if (await follows(name)) present.push(name);
-      if (!present.length) return;
+      if (!present.length) {
+        await verifyPeers(controls, peers, [...originals, original]);
+        return;
+      }
       if (present.length !== 1) throw new Error('Ambiguous owned room relation');
       const deletion = await recordCandidates(
         ctx,
@@ -189,6 +216,7 @@ export async function createRoomRelation(
       await controls.reload();
       for (const name of names)
         if (await follows(name)) throw new Error('Owned room relation survived cleanup');
+      await verifyPeers(controls, peers, [...originals, original]);
     },
     async () => {
       await controls.create(original);

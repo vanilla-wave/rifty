@@ -26,7 +26,7 @@ import {
 const parent = resolve('.cache/pr341');
 await mkdir(parent, { recursive: true });
 const root = await mkdtemp(join(parent, 'record-adapters-'));
-const corpus = await loadCorpus('eval-v14');
+const corpus = await loadCorpus('eval-v15');
 const browser = await chromium.launch();
 const evidence: unknown[] = [];
 function replace(source: string, before: string, after: string) {
@@ -166,25 +166,50 @@ try {
           {
             async load(action) {
               await action.click();
+              const selected = await page
+                .getByRole('combobox', { name: 'Payer', exact: true })
+                .locator('option:checked')
+                .innerText();
+              const participants: string[] = [];
+              for (const name of ['Zed', 'Ada'])
+                if (await page.getByRole('checkbox', { name, exact: true }).isChecked())
+                  participants.push(name);
               return {
                 description: await input('Expense description').inputValue(),
                 amount: await input('Amount').inputValue(),
+                payer: selected === 'Choose payer' ? '' : selected,
+                participants,
               };
             },
             async write(value) {
               await input('Expense description').fill(value.description);
               await input('Amount').fill(value.amount);
+              await page
+                .getByRole('combobox', { name: 'Payer', exact: true })
+                .selectOption({ label: value.payer });
+              for (const name of ['Zed', 'Ada'])
+                await page
+                  .getByRole('checkbox', { name, exact: true })
+                  .setChecked(value.participants.includes(name));
             },
             save: async () => {
               await button('Save expense').click();
             },
             paid,
+            async effects() {
+              const rows: string[][] = [];
+              for (const row of await page.getByRole('row').all()) {
+                const cells = await row.getByRole('cell').allTextContents();
+                if (cells.length) rows.push(cells);
+              }
+              return JSON.stringify(rows.sort((a, b) => a[0]!.localeCompare(b[0]!)));
+            },
           },
         );
         assert.deepEqual(
           [...records].sort((a, b) => a.description.localeCompare(b.description)),
           (mode === 'dynamic-cancel' ? ['First', 'Second', 'Third'] : ['Same', 'Same', 'Same']).map(
-            (description) => ({ description, amount: '1.00' }),
+            (description) => ({ description, amount: '1.00', payer: 'Zed', participants: ['Ada'] }),
           ),
         );
         assert.equal(await state(), before);

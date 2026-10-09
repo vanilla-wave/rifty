@@ -16,7 +16,7 @@ import {
 const parent = resolve('.cache/pr341');
 await mkdir(parent, { recursive: true });
 const root = await mkdtemp(join(parent, 'record-lifecycle-'));
-const task = (await loadCorpus('eval-v14')).find(
+const task = (await loadCorpus('eval-v15')).find(
   (entry) => entry.family === 'expense-conservation',
 )!;
 await writeTree(root, { ...task.files, ...task.controls!.reference! });

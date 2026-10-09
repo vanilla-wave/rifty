@@ -10,12 +10,15 @@ import type { RecordObservation } from './record-observation.ts';
 export interface ExpenseRecord {
   description: string;
   amount: string;
+  payer: string;
+  participants: string[];
 }
 export interface ExpenseRecordControls {
   load(action: Locator): Promise<ExpenseRecord>;
   write(value: ExpenseRecord): Promise<void>;
   save(): Promise<void>;
   paid(): Promise<number>;
+  effects(): Promise<string>;
 }
 
 function cents(amount: string): number {
@@ -29,6 +32,11 @@ function cents(amount: string): number {
 }
 const money = (value: number) =>
   `${Math.floor(value / 100)}.${String(value % 100).padStart(2, '0')}`;
+const samePayload = (a: ExpenseRecord, b: ExpenseRecord) =>
+  a.description === b.description &&
+  cents(a.amount) === cents(b.amount) &&
+  a.payer === b.payer &&
+  JSON.stringify([...a.participants].sort()) === JSON.stringify([...b.participants].sort());
 
 async function witnessExpense(
   ctx: JudgeContext,
@@ -42,14 +50,46 @@ async function witnessExpense(
   const amount = cents(original.amount);
   const step = amount === Number.MAX_SAFE_INTEGER ? -1 : 1;
   const paidBefore = await controls.paid();
+  const effectsBefore = await controls.effects();
   const reload = () => ctx.view.goto(ctx.view.url());
+  const markerRemaining = async () => {
+    const choices = await recordCandidates(ctx, 'edit', 'expense', marker, others);
+    for (const action of await choices.all())
+      if ((await controls.load(action)).description === marker) return true;
+    return false;
+  };
+  const verifySettlement = async (confirmedUpdate: boolean) => {
+    if (await markerRemaining())
+      throw new Error(`Temporary expense rollback left its description: ${marker}`);
+    if ((await controls.paid()) !== paidBefore)
+      throw new Error(`Temporary expense rollback changed Paid: ${marker}`);
+    if ((await controls.effects()) !== effectsBefore)
+      throw new Error(`Temporary expense rollback changed public effects: ${marker}`);
+    if (!confirmedUpdate) return;
+    const choices = await observedRecordActions(
+      ctx,
+      'edit',
+      'expense',
+      observedCaption,
+      original.description,
+      marker,
+    );
+    for (const action of await choices.all()) {
+      const value = await controls.load(action);
+      if (samePayload(value, original)) return;
+    }
+    throw new Error(`Temporary expense rollback lost its original payload: ${marker}`);
+  };
   let delta: number | undefined;
   await scope.apply(
     marker,
     async () => {
       await reload();
       const current = delta ?? (await controls.paid()) - paidBefore;
-      if (current === 0) return;
+      if (current === 0) {
+        await verifySettlement(false);
+        return;
+      }
       if (current === step) {
         const choices = (
           await observedRecordActions(
@@ -77,11 +117,10 @@ async function witnessExpense(
         await choices.first().click();
       } else throw new Error(`Unsettled temporary expense effect: ${current}`);
       await reload();
-      if ((await controls.paid()) !== paidBefore)
-        throw new Error(`Temporary expense rollback changed Paid: ${marker}`);
+      await verifySettlement(current === step);
     },
     async () => {
-      await controls.write({ description: marker, amount: money(amount + step) });
+      await controls.write({ ...original, description: marker, amount: money(amount + step) });
       await controls.save();
       await reload();
       delta = (await controls.paid()) - paidBefore;

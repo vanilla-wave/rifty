@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Verify complete expense payload/financial effects, room capacity and original booking peers during cleanup; eval-v15 preserves public inputs/history.
+
 - Observe room/reservation/expense records through persisted effects and owned temporary identities; preserve aliases, duplicate expenses, optionless room inputs, literal data and independent display chronology. Eval-v14 retains public inputs/history; source acceptance and new comparison remain pending.
 
 - Preserve overlapping literal option identities (`Amber`/`(Amber)`); one native/accessibility label owner serves selection and observation. Eval-v13 preserves public inputs; workflow record observation remains blocked.

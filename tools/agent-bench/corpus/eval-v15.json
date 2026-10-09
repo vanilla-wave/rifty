@@ -1,7 +1,7 @@
 {
-  "version": "eval-v14",
+  "version": "eval-v15",
   "stage": "evaluation",
-  "purpose": "Explicit persisted room/reservation/expense observation; public eight inputs unchanged. Source Final and comparative campaign remain pending.",
+  "purpose": "Complete record settlement after independent partial-write/peer-loss BLOCK; same eight public inputs. Source verify and comparative campaign pending.",
   "cases": [
     {
       "id": "ms-negative",

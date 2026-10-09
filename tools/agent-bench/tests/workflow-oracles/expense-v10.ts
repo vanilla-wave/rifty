@@ -7,6 +7,7 @@ import {
   fieldValue,
   renderedValue,
   selectChoices,
+  selectedChoice,
   verdict,
   workflowAction,
   workflowActions,
@@ -111,7 +112,7 @@ async function payer(ctx: JudgeContext, name: string) {
       await (await choiceOption(ctx.view, name)).click();
   }
 }
-export async function participants(ctx: JudgeContext, names: string[]) {
+async function participantControls(ctx: JudgeContext, creation: boolean) {
   const selects = editableControl(ctx, /\bparticipants\b/i);
   const identities = /\b(?:Zed|Ada|Cara)\b/i;
   const checkboxes = ctx.view.getByRole('checkbox', { name: identities });
@@ -123,7 +124,7 @@ export async function participants(ctx: JudgeContext, names: string[]) {
         .or(ctx.view.getByRole('button', { pressed: false })),
     );
   const candidates = selects.or(checkboxes).or(toggles);
-  if (!(await candidates.count())) return;
+  if (!(await candidates.count())) throw new Error('Missing participant controls');
   const groups = ['Zed', 'Ada', 'Cara'].map((name) =>
     selects
       .or(checkboxes.and(ctx.view.getByRole('checkbox', { name: caption(name) })))
@@ -138,9 +139,13 @@ export async function participants(ctx: JudgeContext, names: string[]) {
         if ((await group.count()) > 1) break;
       }
   }
-  const action = await workflowAction(ctx, 'expense', true, purpose);
+  const action = await workflowAction(ctx, 'expense', creation, purpose);
   const owned = await controlsForAction(candidates, action, groups);
   const select = owned.and(selects);
+  return { select, owned, checkboxes, toggles };
+}
+export async function participants(ctx: JudgeContext, names: string[], creation = true) {
+  const { select, owned, checkboxes, toggles } = await participantControls(ctx, creation);
   if ((await select.count()) && (await select.evaluate((node) => node.tagName)) === 'SELECT') {
     await selectChoices(select, names);
     return;
@@ -155,6 +160,26 @@ export async function participants(ctx: JudgeContext, names: string[]) {
       if (await toggle.count()) await toggle.click();
     }
   }
+}
+async function selectedParticipants(ctx: JudgeContext): Promise<string[]> {
+  const { select, owned } = await participantControls(ctx, false);
+  const result: string[] = [];
+  for (const name of ['Zed', 'Ada', 'Cara']) {
+    if ((await select.count()) && (await select.evaluate((node) => node.tagName)) === 'SELECT') {
+      const option = await choiceOption(select, name);
+      if (await option.evaluate((node) => node instanceof HTMLOptionElement && node.selected))
+        result.push(name);
+      continue;
+    }
+    const checkbox = owned.and(ctx.view.getByRole('checkbox', { name: caption(name) }));
+    if (await checkbox.count()) {
+      if (await checkbox.isChecked()) result.push(name);
+    } else if (
+      await owned.and(ctx.view.getByRole('button', { name: caption(name), pressed: true })).count()
+    )
+      result.push(name);
+  }
+  return result;
 }
 async function save(ctx: JudgeContext, creation = false) {
   if (creation) {
@@ -194,17 +219,29 @@ function recordControls(ctx: JudgeContext): ExpenseRecordControls {
   return {
     load: async (action) => {
       await action.click();
+      const description = await fieldValue(await input(ctx, /\bdescription\b/i));
+      const payerField = await input(ctx, /\bpayer\b/i);
       return {
-        description: await fieldValue(await input(ctx, /\bdescription\b/i)),
+        description,
         amount: await fieldValue(await input(ctx, /\bamount\b/i)),
+        payer: description
+          ? (await payerField.evaluate((node) => node.tagName)) === 'SELECT'
+            ? await selectedChoice(payerField, ['Zed', 'Ada', 'Cara'])
+            : await fieldValue(payerField)
+          : '',
+        participants: description ? await selectedParticipants(ctx) : [],
       };
     },
     write: async (value) => {
       await (await input(ctx, /\bdescription\b/i)).fill(value.description);
       await fillNativeInput(await input(ctx, /\bamount\b/i), value.amount);
+      await payer(ctx, value.payer);
+      await participants(ctx, value.participants, false);
     },
     save: () => save(ctx),
     paid: async () => (await balances(ctx)).reduce((sum, person) => sum + person.paid, 0),
+    effects: async () =>
+      JSON.stringify((await balances(ctx)).sort((a, b) => a.name.localeCompare(b.name))),
   };
 }
 

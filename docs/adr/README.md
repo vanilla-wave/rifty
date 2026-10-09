@@ -417,6 +417,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0522 | Observe record identity through persisted effects |
 | 0523 | Observe reservations through independent public display |
 | 0524 | Project reservation fields without aggregate identity |
+| 0525 | Verify complete record observation settlement |
 
 ## Superseded (removed)
 

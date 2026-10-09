@@ -52,13 +52,38 @@ async function witnessRoom(
   }
   const marker = scope.reserve(`Rifty observation ${randomUUID()}`, [...forbidden, original.name]);
   const reload = () => controls.reload();
+  const verifyPayload = async (required = true) => {
+    const choices = await observedRecordActions(
+      ctx,
+      'edit',
+      'room',
+      observedCaption,
+      original.name,
+      marker,
+    );
+    let found = false;
+    for (const action of await choices.all()) {
+      const value = await controls.load(action);
+      if (value.name === marker)
+        throw new Error(`Temporary room rollback left its name: ${marker}`);
+      if (value.name !== original.name) continue;
+      if (value.capacity !== original.capacity)
+        throw new Error(`Temporary room rollback changed its capacity: ${marker}`);
+      found = true;
+    }
+    if (required && !found)
+      throw new Error(`Temporary room rollback lost its original payload: ${marker}`);
+  };
   let update = false;
   await scope.apply(
     marker,
     async () => {
       await reload();
       const labels = await controls.labels();
-      if (before !== null && labels !== null && equalLabels(labels, before)) return;
+      if (before !== null && labels !== null && equalLabels(labels, before)) {
+        await verifyPayload(update);
+        return;
+      }
       const retained =
         before !== null && labels !== null
           ? labels.includes(originalLabel!)
@@ -89,8 +114,10 @@ async function witnessRoom(
             before === null &&
             (await relation!.follows(original.name)) &&
             !(await relation!.follows(marker))
-          )
+          ) {
+            if (update) await verifyPayload();
             return;
+          }
           throw new Error(`Missing owned temporary room deletion: ${marker}`);
         }
         await choices.first().click();
@@ -103,6 +130,7 @@ async function witnessRoom(
           : !(await relation!.follows(original.name)) || (await relation!.follows(marker))
       )
         throw new Error(`Temporary room rollback changed membership: ${marker}`);
+      if (update) await verifyPayload();
     },
     async () => {
       await controls.write({ ...original, name: marker });
