@@ -236,8 +236,8 @@ new v10/eval-v14 criteria carry new fingerprints. The record-observation support
 profile is confined to its two cases; historical native-input profiles retain
 their original dependency lists. An unchanged old-version gate supplied its RED.
 
-Exact prototype/source/fixture/log lineage (273 entries):
+Exact prototype/source/fixture/log lineage (288 entries):
 `agent-eval-record-observation-implementation-evidence.json.gz`.
-Current full gate27/27 PASS (unit277.4s first pass/parity135.8s), archive policy4/4 PASS; exact logs retained. Initial lint/support-profile RED and isolated RED retained; unchanged old-version test2/2 GREEN. Own-origin40/inherited28 still executing; no source acceptance,
+Current full gate27/27 PASS (unit277.4s first pass/parity135.8s), archive policy4/4 PASS; exact logs retained. Initial lint/support-profile RED and isolated RED retained; unchanged old-version test2/2 GREEN. Own-origin40 terminal0:21PASS/15 semantic negative FAIL/4 console-proven COI CSS bootstrap FAIL (3 positive,1 negative), physical40/noModels exact. Inherited native28 terminal0:24 positive PASS/4 negative FAIL, physical28/noModels exact. Each cohort has a separate canonical archive and two exact offline regenerations. Full current textbox-room workflow PASS after typed-projection integration. Final gate27/27 PASS (one statistical timeout, mandatory isolatedPASS; parity118.3s). Independent Final pending; no source acceptance,
 comparative rescore or goal closure. Source Final precedes fresh96; I10/I11 and
 historical-reader retirement remain mandatory.
