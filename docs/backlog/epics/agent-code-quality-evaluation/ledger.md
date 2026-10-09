@@ -175,3 +175,7 @@
 - 2026-10-09 — correction to preceding review-custody count: new top-level raw41, not44; same original PASS JSON/source SHA and all prior hashes unchanged.
 
 - 2026-10-09 — accepted source/current40 packaging fullgate27/27PASS unit228.4s/parity113.3s; exact terminal log retained. Fresh96 and five goal residuals remain.
+
+- 2026-10-09 — PICKUP expanded comparison: sourceFinal37e19 accepted; eval16 full96 samepublic8/all4/3/task-lane-trial/config100tools600s/estimandADR0507 frozen before calls. Protocol records expected120–220min/6–10Minput250–400koutput; preflightclean0553e8ed5/Node24.16/Codex0.159.3/354GiB. Exact launch identity remeasured after protocol commit; I10/I11/reader/CLOSE remain.
+
+- 2026-10-09 — protocol gate initial sandboxEPERM (6lanes red, failedunitfiles isolated once); corrected authorized fullgate27/27PASS, unit238.3s/parity retained exact logs. Same source/criteria; fresh96 starts after clean protocol commit.

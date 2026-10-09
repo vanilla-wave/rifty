@@ -38,7 +38,7 @@ No new user scope choice, model/estimator/selection policy or execution mechanis
 
 ## Acceptance
 
-1. Freeze complete corrected eval-v12/config/selection/control/source identity before a fresh
+1. Freeze complete corrected eval-v16/config/selection/control/source identity before a fresh
   96trial campaign:8cases×4origins×3freshrepeats, task/lane/trial order, PiLuna/medium,
    nativeCodexgpt-6.1-sol/low separate,100tools/600s. Allselected failures retained;
    fullmatrixprimary. No adaptive compatible-subset pruning; no resume/overwrite.
@@ -167,3 +167,13 @@ proof precedes fresh full96, I10/I11 unchanged — trace: none
   percohort. reference/agent-eval-operation-context-repair.md and
   reference/agent-eval-operation-context-proof.json.gz.
   Current fullgate and independent sourceFinal pending; no comparison/goal closure.
+
+
+## Accepted record-observation continuation
+
+re-cut: 2026-10-09 — sourceFinal37e19 PASS30/30,0findings/unitresiduals; eval16
+criteria/public8/config/order/limits/estimand unchanged in scope. Current own40
+original21PASS19FAIL preserved. Fresh96 protocol frozen in
+reference/agent-eval-expanded-comparison-v16-protocol.md before calls; existing
+certified runner/report reused perRDY8. Historical96 remains unaccepted/unrescored;
+I10/I11/historical reader/whole-goal CLOSE remain — trace: none
