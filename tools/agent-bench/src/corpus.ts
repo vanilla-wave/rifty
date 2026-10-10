@@ -14,6 +14,7 @@ interface Card {
   project: string;
   prompt: string;
   judge: string;
+  starterRegression?: { buildCommand: string; heading: string };
   judgeSupport?: 'native-input-v1' | 'record-observation-v1';
   inputsSha256: string;
   lockSha256: string;
@@ -68,6 +69,14 @@ export async function loadCorpus(
         !['native-input-v1', 'record-observation-v1'].includes(card.judgeSupport))
     )
       throw new Error('Invalid corpus card');
+    if (
+      card.starterRegression &&
+      (card.group !== 'feature' ||
+        card.starterRegression.buildCommand !== 'npm run build' ||
+        typeof card.starterRegression.heading !== 'string' ||
+        !card.starterRegression.heading)
+    )
+      throw new Error('Invalid starter regression');
     ids.add(card.id);
     if (families.has(card.family) && families.get(card.family) !== card.split)
       throw new Error(`Corpus family leaks across splits: ${card.family}`);
@@ -123,6 +132,9 @@ export async function loadCorpus(
       judgeFiles: [
         join(dir, card.judge),
         'tools/agent-bench/src/judge/context.ts',
+        ...(card.starterRegression
+          ? ['tools/agent-bench/src/runner.ts', 'tools/agent-bench/src/corpus.ts']
+          : []),
         ...(card.judgeSupport === 'record-observation-v1'
           ? [
               'tools/agent-bench/src/judge/record-observation.ts',
@@ -148,6 +160,7 @@ export async function loadCorpus(
               path: `.bench-judge.${card.judge.split('.').at(-1)}`,
               text: judge,
               marker: `RIFTY_CORPUS_PASS:${card.id}`,
+              ...(card.starterRegression ? { starterRegression: card.starterRegression } : {}),
             },
           }),
     });

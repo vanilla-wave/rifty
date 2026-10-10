@@ -27,26 +27,23 @@ try {
     await prepared.apply({ 'src/engine.mjs': original });
     const reference = await task.judge!(await prepared.preview());
     assert.equal(reference.pass, true);
-    const source = original.replace('(!search||row.customer.includes(search))', 'true');
-    assert.notEqual(source, original);
-    await prepared.apply({ 'src/engine.mjs': source });
-    const judge = await task.judge!(await prepared.preview());
-    await writeFile(
-      join(root, 'result.json'),
-      `${JSON.stringify(
-        {
-          task: task.id,
-          source,
-          reference,
-          judge,
-          claim: 'Published Search filter omitted; capture current criterion result',
-        },
-        null,
-        2,
-      )}\n`,
+    const rows = [];
+    for (const [fault, omitted] of [
+      ['Search', '(!search||row.customer.includes(search))'],
+      ['Region', '(!region||row.region===region)'],
+    ] as const) {
+      const source = original.replace(omitted, 'true');
+      assert.notEqual(source, original);
+      await prepared.apply({ 'src/engine.mjs': source });
+      const judge = await task.judge!(await prepared.preview());
+      rows.push({ task: task.id, fault, source, reference, judge });
+      await writeFile(join(root, 'results.json'), JSON.stringify(rows, null, 2));
+    }
+    assert.ok(
+      rows.every((row) => !row.judge.pass),
+      'Published Search/Region must reject omitted filtering',
     );
-    assert.equal(judge.pass, false, 'Published Search must reject missing filtering');
-    console.log(JSON.stringify({ referencePass: reference.pass, rejected: !judge.pass }));
+    console.log(JSON.stringify({ referencePass: reference.pass, rejected: rows.length }));
   } finally {
     await prepared.close();
   }

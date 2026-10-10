@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
-import { type Browser, chromium } from '@playwright/test';
+import { type Browser, chromium, expect } from '@playwright/test';
 import { getAgentPromptProfile } from '@riftydev/agent';
 import { type Config, readKey, redact, redactJson, secretValues, taskSet } from './config.ts';
 import { diffTrees } from './files.ts';
@@ -215,6 +215,40 @@ export async function run(
                 { name: 'trusted same-origin semantic regressions', pass, evidence: receipt },
               ],
             };
+            const starter = task.commandJudge.starterRegression;
+            if (starter) {
+              const build = await prepared.command(starter.buildCommand);
+              record.judge.probes.push({
+                name: 'existing starter build',
+                pass: build.exitCode === 0,
+                evidence: build,
+              });
+              const errors: string[] = [];
+              const onError = (error: Error) => errors.push(error.message);
+              let bootPass = false;
+              let bootEvidence: unknown = 'Unexecuted after failed build';
+              if (build.exitCode === 0) {
+                prepared.page.on('pageerror', onError);
+                try {
+                  const ctx = await prepared.preview();
+                  await expect(
+                    ctx.view.getByRole('heading', { name: starter.heading, exact: true }),
+                  ).toBeVisible({ timeout: 10000 });
+                  bootPass = errors.length === 0;
+                  bootEvidence = { heading: starter.heading, pageErrors: errors };
+                } catch (error) {
+                  bootEvidence = { error: String(error), pageErrors: errors };
+                } finally {
+                  prepared.page.off('pageerror', onError);
+                }
+              }
+              record.judge.probes.push({
+                name: 'existing starter boot',
+                pass: bootPass,
+                evidence: bootEvidence,
+              });
+              record.judge.pass = record.judge.probes.every((probe) => probe.pass);
+            }
           } else {
             if (!task.judge) throw new Error('Task has no judge');
             record.judge = await task.judge(await prepared.preview());

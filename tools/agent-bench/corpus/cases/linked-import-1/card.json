@@ -16,5 +16,10 @@
   "controls": ["baseline", "reference", "partial", "alternative"],
   "selection": "I11 linked-data-import level1; public observable semantic probe, independent alternatives, no changed comparative public8; source admission pending",
   "level": 1,
-  "boundaryDimension": "engineering"
+  "boundaryDimension": "engineering",
+  "starterRegression": {
+    "buildCommand": "npm run build",
+    "heading": "Minimal JavaScript starter"
+  },
+  "criteriaVersion": "module-starter-3"
 }

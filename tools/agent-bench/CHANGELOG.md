@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve boundary engineering starter build/boot and independently observe indexed Region filtering; prior scores retained.
+
 - Stream Git source fingerprints beyond1MiB; retain exit/deadline failures and reuse plan identity in report headers.
 
 - Verify original payload on zero-effect expense and textbox-room observation cleanup.

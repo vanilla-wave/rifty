@@ -16,7 +16,12 @@ export interface Task {
   preset: string;
   port: number;
   judge?: TaskJudge;
-  commandJudge?: { path: string; text: string; marker: string };
+  commandJudge?: {
+    path: string;
+    text: string;
+    marker: string;
+    starterRegression?: { buildCommand: string; heading: string };
+  };
   corpus?: string;
   corpusManifestSha256?: string;
   caseCardSha256?: string;

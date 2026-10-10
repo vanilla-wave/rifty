@@ -204,14 +204,17 @@ export async function probeBoundaryPublicScenario(prepared: Prepared, task: Task
   const matching = ctx.view.getByLabel('Matching rows', { exact: true });
   let searchedCount = 0;
   let combinedCount = 0;
+  let regionCount = 0;
   for (let i = 0; i < count; i++) {
     if (`Customer ${i % 4096}`.includes('Customer 100')) {
       searchedCount++;
+      if (i % 4 === 0) regionCount++;
       if (i % 4 === 0 && i % 12 === 0) combinedCount++;
     }
   }
   await expect.poll(() => renderedValue(matching)).toBe(String(searchedCount));
   await editableControl(ctx, /^Region$/i).selectOption('North');
+  await expect.poll(() => renderedValue(matching)).toBe(String(regionCount));
   await editableControl(ctx, /^Month$/i).selectOption('1');
   await expect.poll(() => renderedValue(matching)).toBe(String(combinedCount));
   await search.fill('');
