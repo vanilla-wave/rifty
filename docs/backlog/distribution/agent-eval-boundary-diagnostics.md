@@ -1,53 +1,90 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Map observed environment differences and Rifty capability boundaries
 created: 2026-09-27
-why: Aggregate passes on the pilot cannot reveal recovered tool obstacles or where realistic coding workflows stop being reliable in Rifty.
+why: Passing tasks can hide recovered obstacles; a pilot cannot locate substantive capability limits.
 epic: agent-code-quality-evaluation
-blocked_by: [distribution/agent-eval-boundary-corpus]
-sources: [ADR-0434, docs/backlog/distribution/reference/agent-eval-boundaries-refine-evidence.md]
-code: [tools/agent-bench/src/runner.ts, tools/agent-bench/src/report.ts, tools/agent-bench/tests/baseline-probes.ts, packages/agent/src/prompt.ts]
+sources: [ADR-0434, docs/backlog/distribution/reference/agent-eval-boundaries-refine-evidence.md, docs/backlog/distribution/reference/agent-eval-boundary-public-scenarios.md]
+code: [tools/agent-bench/src/runner.ts, tools/agent-bench/src/report.ts, tools/agent-bench/corpus/boundary-v1.json]
 ---
 
 ## Context
 
-The existing 42-run diagnostic retains tool calls/results but does not produce
-an operation-level difference catalog or graded search for capability limits.
-User explicitly requests both, and rejects closing on a few easy passes.
-Research found native curl/sed use; Python was not detected by the limited
-trace scan. Standalone Shell rejects all three, but this is not public-browser
-host evidence. Preserve that distinction, rather than manufacture a live defect.
+I10/I11 measurement follows independently admitted boundary source. Accepted
+comparison and every historical outcome remain fixed. Existing corpus/config/
+runner/report own execution and retention; no runtime compatibility expansion.
+Earlier limited Python scan was inconclusive; completed native traces contain
+actual Python. Natural operations, directed probes and candidates stay distinct.
 
-## Diagnostic route
+## Challenge
 
-- I10: inspect actual tool calls/results across all participants, including
-  successes following errors. Record exact command/flags/API/tool protocol,
-  host/version, source trace or probe, native/Rifty outcomes, recovery and
-  supported impact. Flag parser uncertainty; no universal shell parser needed.
-  Distinguish unavailable executable, unsupported flag/API, semantic mismatch,
-  host policy, output/context limits and unknown cause. Candidate extraction
-  is not proof; verify relevant operations in the actual selected environments.
-- I11: use several real-task families with explicit successive levels. Vary
-  engineering interactions/context, dependencies/tool needs and resource
-  pressure as separate dimensions. No file-count proxy, disguised repeated
-  CRUD or artificially required Python command as the whole ceiling result.
-- At PICKUP, declare levels, settings, stopping bounds and interpretation before
-  execution. Extend existing scripts, task cards and report structures. Keep
-  settings matched across lanes within a level; name any changed dimension.
-  Saturated easy levels require escalation, not goal completion.
-- Freeze selected boundary cases and run fresh repeated confirmation with
-  reference controls. A native-only pass is a candidate gap; discriminate the
-  relevant operation/host failure before assigning a runtime cause. A task
-  rescued by Node after a failed Python call stays successful, with obstacle
-  and recovery separately visible.
-- Retain diagnostic selection provenance and every attempted level. Adaptive
-  selection/fresh repeats do not make the sample representative; report this
-  search separately from I4's comparison. Both fail means a shared observed
-  limit or unknown cause; all pass means only a tested lower bound. Finite
-  stopping is justified with evidence, never an absolute-ceiling claim.
+challenge: 2026-09-27 — clear; accepted boundary extension premise reused.
+Source preparation resolves real compiler/Wasm and finite stopping questions;
+public module APIs accepted for engineering, actual browser proof for other paths.
 
-The catalog and boundary profile are required goal results even when the
-validated pilot closes I5. This item measures gaps; it does not silently add
-runtime features or tune prompts to hide unavailable commands. User-facing
-working capability and own-environment scoring remain unchanged.
+## Acceptance
+
+1. Operation catalog covers actual completed comparison and retained pilot
+   calls/results across all four participants, including obstacles in passing
+   tasks. Exact arguments/API, versions, lane, trace/hash, native/Rifty outcome,
+   recovery and measured impact or unknown recorded. Parser uncertainty explicit;
+   unavailable executable, API/flag, semantic, policy, output/context and unknown
+   distinguishable. → I10
+2. Relevant directed operations exercise both actual public Rifty hosts and
+   native, separate from natural use/quality. Captured Python/curl/sed/jq, Node,
+   shell, tool protocol, host policies and installed-lock divergence preserved;
+   exact natural heredoc/direct-write recovery replay discriminates its effect.
+   A later successful task/command alone never establishes causal recovery. → I3+I10
+3. Freeze admitted boundary-v1, matched pilot settings and declared finite
+   protocol before calls. Execute both substantive steps of linked import,
+   async state, compiler dependency and indexed resource paths in all four
+   origins; engineering/dependency/resource dimensions reported separately.
+   Keep every attempt/setup failure and selection provenance separate from
+   representative comparison. → I7+I8+I9+I11
+4. Each path ends at a reproduced candidate boundary or justified stopping
+   bound after substantive escalation. If initial levels are easy without
+   meaningful pressure, escalate and admit new controls before confirmation.
+   Freeze chosen step and execute fresh two model repeats plus working reference
+   in every origin. Native success cannot rescue an originating failure or
+   alone establish runtime cause; shared fail/unknown/all-pass lower bound
+   remain separate. No absolute ceiling/population claim. → I3+I11
+5. Catalog/profile and raw evidence committed; existing report regenerates
+   unchanged summaries without models. Record actual matrix/elapsed/usage,
+   zero-priced proxy accounting versus unknown monetary cost, all selected
+   failures and finite stop rationale. Independent Final checks I10/I11 result;
+   goal CLOSE remains a separate end-to-end invariant audit. → I8+I10+I11
+
+## Parity cases
+
+1. Same supplied task/project/lock/judge/settings within each matched level;
+   actual installed graph/versions and divergence captured per origin, not
+   asserted identical or silently repaired. → I3+I7+I10
+2. Real public tools/native outcomes and originating working references prove
+   supported operations; scripted external-provider probes never become model
+   quality trials. → I3+I10+I11
+
+## Fault matrix
+
+| axis × operation | honest outcome | proof | trace |
+|---|---|---|---|
+| parser/causal ambiguity × catalog | preserve exact source; unknown explicit | source cardinality/hash audit and raw results | → I10 |
+| setup/tool/policy/resource failure × selection | unsuccessful retained; own origin authoritative | original records/phase/trace | → I3+I9+I11 |
+| input/judge/settings drift × confirmation | freeze fresh identity; never rescore history | existing resolved plans/fingerprints/report | → I7+I8+I11 |
+| easy saturation × stopping | escalate or justify measured bounded question | retained levels/control pressure/fresh confirmation | → I11 |
+
+## Out of scope
+
+New scheduler/storage/UI/runtime feature, task-specific prompt tuning, common-
+native quality grading, success-selected exclusion and absolute ceilings.
+
+## Route
+
+Existing certified corpus/runner/report preparation reused; this unit executes
+and reports their real diagnostic evidence, without new product state machine.
+Initial32 exploration +48 confirmation =64 model trials+16 references; extra
+substantive escalation recorded/admitted before execution. No automatic resume.
+
+## Decisions
+
+- ready-verdict: 2026-10-10 — source Final+GREEN @11c0b3ac6430b65fba42722f955c988eec2ffea1; certified runner/report/corpus preparation reused unchanged (RDY-8); final written-result scope PASS in reference/agent-eval-boundary-diagnostics-pickup-scope.json.gz.

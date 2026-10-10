@@ -1,0 +1,108 @@
+{
+  "status": "Frozen diagnostic ready protocol after actual source Final11c0/current27gate; no model boundary trials executed at freeze",
+  "authority": "goalI10/I11; samePR341; exploration separate from representative comparison",
+  "sourceRevision": "32530444ffa7634edfec68816bb036ab0511130c",
+  "sourceManifest": "tools/agent-bench/corpus/boundary-v1.json",
+  "sourceManifestSha256": "34c5f7a8c9bdd653c04fcf1239fb584951ebb41e3fabad7b916ff5eaafc447e4",
+  "config": "tools/agent-bench/configs/pilot-comparison.json",
+  "configSha256": "eabd5914ba0319b6956c9a934789adf0dceeb9a0feb374e40c1c2fe5b7049980",
+  "settings": {
+    "endpoint": {
+      "id": "gpt-6-luna",
+      "name": "GPT-6 Luna",
+      "provider": "codex-proxy",
+      "api": "openai-completions",
+      "baseUrl": "http://127.0.0.1:10539/v1",
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1000000,
+      "maxTokens": 8192,
+      "reasoning": true,
+      "thinking": "medium",
+      "compat": {
+        "supportsReasoningEffort": true
+      },
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      }
+    },
+    "limits": {
+      "maxToolCalls": 100,
+      "runTimeoutMs": 600000
+    },
+    "runsPerTask": 3,
+    "playgroundPort": 5397,
+    "codex": {
+      "model": "gpt-6.1-sol",
+      "reasoning": "low"
+    }
+  },
+  "paths": [
+    {
+      "dimension": "engineering",
+      "family": "linked-data-import",
+      "tasks": [
+        "linked-import-1",
+        "linked-import-2"
+      ],
+      "lower": "Two related CSV datasets, exact cents, keys/references, atomic invalid import/restore",
+      "upper": "Third linked credits dataset, per-currency conservation/over-credit rejection, durable undo across JSON restore",
+      "bound": "Three related types/two currencies/declared persisted operation history"
+    },
+    {
+      "dimension": "engineering",
+      "family": "async-search-state",
+      "tasks": [
+        "async-search-1",
+        "async-search-2"
+      ],
+      "lower": "Public module query/filter/page/sort/selection/Back and serialized navigation; newest request wins",
+      "upper": "Optimistic writes, failure rollback/retry and durable undo interleaved with stale responses",
+      "bound": "Three records,5/25/70ms external client latencies and declared transition interactions; no new URL/UI promise"
+    },
+    {
+      "dimension": "dependency",
+      "family": "compiler-integration",
+      "tasks": [
+        "compiler-dependency-1",
+        "compiler-dependency-2"
+      ],
+      "lower": "Actual pinned TypeScript5.9.2 transpilation/target/syntax diagnostics/result clearing",
+      "upper": "Actual esbuild-wasm0.28.0 browser asset/async initialization/API added; both modes/targets",
+      "bound": "Two target variants/pinned real package APIs; gojs WebAssembly, not WASI"
+    },
+    {
+      "dimension": "resource",
+      "family": "indexed-resource",
+      "tasks": [
+        "indexed-data-1",
+        "indexed-data-2"
+      ],
+      "lower": "100000 actual generated rows/index/filter/sort/page100/full export and visible navigation during indexing",
+      "upper": "1000000 rows with same public engine/data/UI,10x scale; observed input phase/deadline/visible pages",
+      "bound": "Serialized dataset8125023→82256260bytes; selected export679214→6875515bytes;60s load/firstinput≤2000ms; memory unknown, no RAM budget claim"
+    }
+  ],
+  "exploration": {
+    "initialModelTrials": 32,
+    "matrix": "8cases×4ownorigins×1freshtrial; both declared levels on every path"
+  },
+  "confirmation": {
+    "modelTrials": 32,
+    "referenceTrials": 16,
+    "matrix": "4frozenselectedsteps×4ownorigins×(2freshmodeltrials+1workingreference)",
+    "selection": "First candidate boundary with lower evidence, otherwise highest tested step; preserve exact rationale and every attempted level. New easy-path escalation admitted/frozen before confirmation."
+  },
+  "stopping": "For every path substantively escalate beyond pilot then reproduce candidate or justify measured bounded question. Two levels/repeats alone insufficient. Easy saturation without meaningful declared pressure requires substantive additional step/working controls. Native-pass/Rifty-fail only candidate; directed operation/host evidence required for runtime cause. Sharedfail/unknown/allpasslowerbound distinct; no absolute ceiling or representative-population claim.",
+  "cost": "Initial64 modeltrials+16 referenceexecutions; configured proxy prices0, actual monetarycost unknown; record observed usage and elapsed. Agentbudget64×600s theoretical maximum plus separate setup/judge time; no invented totalwall deadline.",
+  "retention": "Every selected failure/setup/unsupported/partial attempt retained. No native rescue, success-pruning, rescoring history or automatic resume. Fresh outputs per series.",
+  "admission": {
+    "reviewedRevision": "11c0b3ac6430b65fba42722f955c988eec2ffea1",
+    "verdict": "agent-eval-boundary-corpus-final-green.json",
+    "producerRevisionRule": "Record actual clean producer SHA in resolved plan before calls; input/card/prompt/lock/control/judge/config fingerprints must match admitted bytes; only documentation/report descendants permitted without new source review."
+  }
+}
