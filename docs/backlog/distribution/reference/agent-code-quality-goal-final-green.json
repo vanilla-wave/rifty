@@ -1,0 +1,142 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS whole accepted goal I1\u2013I11; CLOSE cleanup and same PR341 delivery may proceed. Merge not requested.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "2480c0e17a71eb3241b75e5ebaf76529d9b1778c",
+  "unit_goal_source": "docs/backlog/epics/agent-code-quality-evaluation/goal.md @ 2480c0e17a71eb3241b75e5ebaf76529d9b1778c; baseline51440931a, accepted user amendments unchanged. Whole-goal CLOSE independent /root/goal_close_independent_review; map Items empty, no linked implementation child. Accepted source901cef/report4db652/comparison806546/diagnosticf634/reader0ef6 reused only for unchanged obligations under REV1. Raw accepted destination, source-delta boundary, executed canonical/source/operation/profile/retirement evidence inspected; independent same-program composition, current documented CLI and cleanplan audits performed. No new model/browser/npm/gate invocation by reviewer. Root authorized fullgate27PASS at this result; exact log bound in current-gate-final-audit.json. Goal closure stops require no further implementation; completed13 contracts have unitresiduals0. Cleanup is documentary and retains reviewed Git authority/evidence.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "I1: finite versioned real JS/TS bug/feature and distinct installed app corpus, discriminating origin judges",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-09-eval-v16-expanded-comparison/report.json.gz:1; docs/backlog/distribution/reference/agent-eval-project-corpus-final-green.json:1",
+      "note": "Reviewed frozen pilot/expanded finite cases; actual72pilot and96eval ordered task/lane/repeat matrices; real bug/feature projects and linked installed app starters; corpus Finalsbaef89/5a8ecf plus source repairs37e19. canonical-audit.json"
+    },
+    {
+      "row": "I2: actual COI/no-COI/Pi/Codex, matched Pi/Rifty model, explicit separate native configuration",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-09-eval-v16-expanded-comparison/report.json.gz:1; docs/backlog/distribution/reference/agent-eval-codex-reference-final-green.json:1",
+      "note": "Actual fourorigins in real72/96/confirmation reports; endpoint/limits/source/version/model recorded; isolated Codex configuration labelled separate. Native reference Finalff7ecbb retained. canonical-audit.json"
+    },
+    {
+      "row": "I3: all selected origin outcomes honest, unsuccessful setup/provider/budget/runtime/judge retained, no native rescue",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-09-eval-v16-expanded-comparison/report.json.gz:1; tools/agent-bench/reports/summaries/2026-10-09-eval-v16-expanded-comparison/source-artifacts.json.gz:1",
+      "note": "Same representative csv-workflow-v5 COI1 actual generated program own-origin7probesPASS then retained report; allselected setupFAIL remain; primary43PASS53FAIL24setup, confirmation19PASS13FAIL4setup. No native rescue/rescoring. canonical-audit.json composition"
+    },
+    {
+      "row": "I4: repeatable identified retained report, workload/Pi/Codex/uncertainty/time/usage with assumptions",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-09-eval-v16-expanded-comparison/statistics.json.gz:1; docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-final-green.json:1",
+      "note": "Pilot/report Final4db652 and eval16 Final806546 retained; statistics cells/group/Pi differences/separateCodex/uncertainty constraints inspected, original manifest hashes checked. Current documented pnpm CLI6 offline calls and clean96trialplan independently PASS after actual52/104 retirement inventory"
+    },
+    {
+      "row": "I5: real repeated on-demand pilot, both workloads/all four environments, unchanged-evidence regeneration",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-06-pilot-v4-quality/report.json.gz:1; docs/backlog/distribution/reference/agent-eval-comparison-report-final-green.json:1",
+      "note": "Real on-demand clean3d01 pilot-v4 source;72selected/3repeats/all4origins/bothworkloadgroups/43PASS29FAIL24setup. Not deterministic controls. Samecampaign retained source and report across teardown+offline regeneration; original Final4db652"
+    },
+    {
+      "row": "I6: pinned provenance/requirements/regression/difficulty, alternative/partial controls, originating references",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-record-observation-final-green.json:1; docs/backlog/distribution/reference/agent-eval-boundary-pending-final-green.json:1",
+      "note": "Corpus casecard/prompt/lock/control/judge hashes in each frozenplan; admitted real alternatives/faults+reference controls across selected origins sourceFinalsbaef89/37e19/901cef reused underREV1. Browser preparation failures retained rather than casesexcluded"
+    },
+    {
+      "row": "I7: reviewed pilot before frozen expansion, family/split separation, no success-selected exclusions",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-protocol.md:1; tools/agent-bench/reports/summaries/2026-10-09-eval-v16-expanded-comparison/report.json.gz:1",
+      "note": "Reviewed pilot before expanded8case eval16; ms calibration family separated from evaluation; exact pre-call plans/reports original unchanged. Easy smoke/controls/diagnostic histories separate, no count-based breadth claim"
+    },
+    {
+      "row": "I8: documented script-owned deterministic plan/progress/execution/judging/report, same inputs/views and isolated Codex",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/README.md:140; docs/backlog/distribution/reference/agent-eval-local-runner-final-green.json:1; docs/backlog/distribution/reference/agent-eval-goal-retirement-proof.json.gz:1",
+      "note": "Script-owned plan/run/controls/report; current acceptedrunner34f905/report4db652/nativeff7ec retained. Actual realcampaign source->execution->ownjudge->storedJSON->sameofflineview composes on csv-workflow-v5 COI1. Current standalone CLI6report+cleanplanPASS"
+    },
+    {
+      "row": "I9: interruption persisted completed/unfinished matrix, offline partial, subsequent exclusive fresh output/workspace",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/series-interruption.spec.ts:111; docs/backlog/distribution/reference/agent-eval-local-runner-final-green.json:1",
+      "note": "Accepted34f905 real series-interruption.spec.ts journey: START/END interruption persisted completedNative realfix-date-sort fail, missingtrial, unchangedofflinepartial, then freshseries newworkspace/exclusiveoutput. Actual historical campaign partials retain original selected/missing records, fresh subsequent pilot/eval/confirmation never resume"
+    },
+    {
+      "row": "I10: observed operation arguments/version/lane/source, natural/directed/unknown distinction and recovered obstacles",
+      "source": "acceptance",
+      "trace": "I10",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-operation-catalog.json.gz:1; docs/backlog/distribution/reference/agent-eval-operation-heredoc-recovery-evidence.json.gz:1; docs/backlog/distribution/reference/agent-eval-boundary-diagnostics-final-green.json:1",
+      "note": "catalog-links-audit.json independently2642natural operations/8cohorts/15canonicalmanifest carriers exact and unique; passingobstacles/unknown classifications retained. Actual36public directed+12causalheredoc recovery proof reviewed; diagnostic independentFinal f634PASS"
+    },
+    {
+      "row": "I11: executed substantive finite escalation across multiple dimensions, frozen fresh confirmation/reference, justified stop and honest limits",
+      "source": "acceptance",
+      "trace": "I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-profile.json.gz:1; docs/backlog/distribution/reference/agent-eval-boundary-confirmation-selection-premise.json.gz:1; docs/backlog/distribution/reference/agent-eval-boundary-diagnostics-final-green.json:1",
+      "note": "Actual4families\u00d72substantivelevels path histories; independently admitted source901cef, pathonlyreuse premise and stoppingpremise. Fresh20/15PASS5FAIL2setup and freshconfirmation16refs/14PASS2setup32models/19PASS13FAIL4setup frozenall8plans beforecalls. Sharedfail/unknown/variablefail/allpasslowerbound distinct; real1m rows/export/inputduringindex controls, no scalarRAMceiling. Diagnostic independentFinal f634PASS"
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

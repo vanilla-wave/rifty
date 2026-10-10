@@ -57,5 +57,7 @@ time. Proxy configuredprices0; actual monetary costunknown.
 
 Original interruptions/stopped declarations remain history and unavailable
 attempts remain visible. Source oracles repaired from real RED before new
-calls; every original outcome/header immutable. Independent diagnosticFinal
-and whole-goal CLOSE remain; this result does not erase prior residuals.
+calls; every original outcome/header immutable.
+[Diagnostic Final](agent-eval-boundary-diagnostics-final-green.json) and
+[whole-goal CLOSE](agent-code-quality-evaluation-close.md) accepted; no required
+goal residual remains.

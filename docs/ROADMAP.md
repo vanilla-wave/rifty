@@ -121,8 +121,11 @@ lazy playground "+chat", three-lane42-run diagnostic. Consumer guide:
 Delivered no-COI host kit: copyable SDK + agent composition shared by packed CI
 and the benchmark; typed lifecycle/progress, policies, transcript, text transport
 and registry install. Proof: `docs/backlog/distribution/reference/no-coi-agent-host-kit-close.md`.
+Delivered coding comparison:four real origins, retained own-environment results/
+uncertainty, operation catalog and finite capability profile. Runbook:
+`tools/agent-bench/README.md`; proof:
+`docs/backlog/distribution/reference/agent-code-quality-evaluation-close.md`.
 open:
-- `docs/backlog/epics/agent-code-quality-evaluation` — real-project and varied-starter coding comparisons against native Pi and Codex, with own-environment checks and uncertainty.
 - `docs/backlog/distribution/ai-agent-subagent-orchestration` — `task`/subagent orchestration over the embeddable loop.
 - `docs/backlog/distribution/ai-ide-product-ui` — chat + streamed tool-call/diff/approve UI over the IDE-kit.
 - `docs/backlog/toolchain-build/ts-language-service` — in-browser TS diagnostics/hover/defs over VFS (agent `typecheck` + editor squiggles).

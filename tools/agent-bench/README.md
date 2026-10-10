@@ -4,7 +4,8 @@ Private local benchmark; four real lanes, versioned bug/feature/app corpora and
 three fresh trials by default. The original five tasks are the smoke set.
 Tool/context differences remain explicit; a delta is not a runtime-only cause.
 
-Current reference: [accepted eval-v16](../../docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-completed.md),
+[Delivered goal](../../docs/backlog/distribution/reference/agent-code-quality-evaluation-close.md);
+current reference: [accepted eval-v16](../../docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-completed.md),
 96selected43PASS53FAIL/24setup. [Operation catalog](../../docs/backlog/distribution/reference/agent-eval-environment-differences.md)
 and [finite boundary profile](../../docs/backlog/distribution/reference/agent-eval-boundary-results.md)
 retain natural/directed operations, failed attempts and bounded uncertainty.
@@ -17,7 +18,7 @@ explicit task/runs/lane/config and fresh output directories; see
 Freeze selection/config/source/working references before models. Choose an
 unused playgroundPort; record its transport change. Do not resume interrupted
 series, regrade history, tune prompts to rescue failures or infer runtime cause
-from native pass. A all-pass resource bound is not an absolute ceiling.
+from native pass. An all-pass resource bound is not an absolute ceiling.
 
 ```sh
 pnpm agent-bench plan --config tools/agent-bench/configs/gpt-6-luna.json
