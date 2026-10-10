@@ -1,9 +1,9 @@
 {
-  "status": "Frozen v2 diagnostic protocol after source Finalc799/current27gate; entirely fresh model series, original interrupted17 retained separately",
+  "status": "Frozen v3 diagnostic protocol after state collection source readmission; six fresh four-origin CLI series; original linked8 reused only as path observations",
   "authority": "goalI10/I11; samePR341; exploration separate from representative comparison",
-  "sourceRevision": "c79996bfdd2e65c6884fe8f08aaa43f93dc3f456",
+  "sourceRevision": "9483daa5d73a115a71e0d7b217c1224b49261f52",
   "sourceManifest": "tools/agent-bench/corpus/boundary-v1.json",
-  "sourceManifestSha256": "8e1f1923323cf9953c03dab8c9c5a13132c333ed73d74cc9dce695e510699a3b",
+  "sourceManifestSha256": "0d6a1d44c710946e10485ae543cdac066b81a22662dab31d254c2871547baf5b",
   "config": "Frozen config.json within declared fresh exploration root",
   "configSha256": "be10c8fb5499ea2f604babe9b908543a74d1bad182b366dec963476eda92f8d3",
   "settings": {
@@ -70,31 +70,49 @@
       "tasks": ["indexed-data-1", "indexed-data-2"],
       "lower": "100000 actual generated rows/index/filter/sort/page100/full export and visible navigation during indexing",
       "upper": "1000000 rows with same public engine/data/UI,10x scale; observed input phase/deadline/visible pages",
-      "bound": "Serialized dataset8125023→82256260bytes; selected export679214→6875515bytes;60s load/firstinput≤2000ms; memory unknown, no RAM budget claim"
+      "bound": "Serialized dataset8125023\u219282256260bytes; selected export679214\u21926875515bytes;60s load/firstinput\u22642000ms; memory unknown, no RAM budget claim"
     }
   ],
   "exploration": {
-    "initialModelTrials": 32,
-    "matrix": "8cases×4ownorigins×1freshtrial; both declared levels on every path"
+    "freshModelTrials": 24,
+    "matrix": "6cases\u00d74ownorigins\u00d71freshtrial; six separately predeclared existing CLI series",
+    "tasks": [
+      "async-search-1",
+      "async-search-2",
+      "compiler-dependency-1",
+      "compiler-dependency-2",
+      "indexed-data-1",
+      "indexed-data-2"
+    ],
+    "reusedLinkedPathObservations": {
+      "sourceRevision": "e8e9d830c37b88a9eff17dc89ae2d15ff6e747d9",
+      "archive": "2026-10-10-boundary-exploration-v2-interrupted",
+      "tasks": ["linked-import-1", "linked-import-2"],
+      "observations": 8,
+      "passed": 6,
+      "failed": 2,
+      "authority": "Independent path-reuse premise10/10PASS; effective task/card/project/lock/prompt/control/private/runner/context/config unchanged; global corpusManifest SHA changed",
+      "scope": "Path-specific exploration only; original32 interrupted12/8PASS4FAIL20unexecuted remains unaccepted globally; no completed32 aggregation or score/header rebinding"
+    }
   },
   "confirmation": {
     "modelTrials": 32,
     "referenceTrials": 16,
-    "matrix": "4frozenselectedsteps×4ownorigins×(2freshmodeltrials+1workingreference)",
+    "matrix": "4frozenselectedsteps\u00d74ownorigins\u00d7(2freshmodeltrials+1workingreference)",
     "selection": "First candidate boundary with lower evidence, otherwise highest tested step; preserve exact rationale and every attempted level. New easy-path escalation admitted/frozen before confirmation."
   },
   "stopping": "For every path substantively escalate beyond pilot then reproduce candidate or justify measured bounded question. Two levels/repeats alone insufficient. Easy saturation without meaningful declared pressure requires substantive additional step/working controls. Native-pass/Rifty-fail only candidate; directed operation/host evidence required for runtime cause. Sharedfail/unknown/allpasslowerbound distinct; no absolute ceiling or representative-population claim.",
-  "cost": "Initial64 modeltrials+16 referenceexecutions; configured proxy prices0, actual monetarycost unknown; record observed usage and elapsed. Agentbudget64×600s theoretical maximum plus separate setup/judge time; no invented totalwall deadline.",
+  "cost": "Fresh24 exploration+32 confirmation modeltrials+16reference executions; original attempts retained separately. Proxy configuredprices0/actualmonetarycostunknown; usage/elapsed recorded. Freshmodelbudget56\u00d7600s maximum plus setup/judge; no invented wall deadline.",
   "retention": "Every selected failure/setup/unsupported/partial attempt retained. No native rescue, success-pruning, rescoring history or automatic resume. Fresh outputs per series.",
   "admission": {
-    "reviewedRevision": "c79996bfdd2e65c6884fe8f08aaa43f93dc3f456",
-    "verdict": "agent-eval-boundary-public-observation-final-green.json",
-    "producerRevisionRule": "Actual clean launchSHA and exact admitted task/card/prompt/lock/control/judge/config bytes in resolved plan before calls; following sourcec799 docs/report bookkeeping descendants allowed. No original source/report header rebinding."
+    "reviewedRevision": "9483daa5d73a115a71e0d7b217c1224b49261f52",
+    "verdict": "agent-eval-boundary-state-collection-final-green.json",
+    "producerRevisionRule": "Actual clean launchSHA and exact admitted task/card/prompt/lock/control/judge/config bytes in all six resolved plans before first call; docs/report bookkeeping descendants allowed; no historical source/report header rebinding"
   },
   "configTemplate": {
     "path": "tools/agent-bench/configs/pilot-comparison.json",
     "sha256": "eabd5914ba0319b6956c9a934789adf0dceeb9a0feb374e40c1c2fe5b7049980",
-    "onlyEffectiveChange": "playgroundPort5397→5517 avoids preexisting orphan HTTP server; model/harness/endpoint/budget settings exact"
+    "onlyEffectiveChange": "playgroundPort5397\u21925517 avoids preexisting orphan HTTP server; model/harness/endpoint/budget settings exact"
   },
   "priorExploration": {
     "source": "be73f0d1c6ea924fdf244a1baaeeb3cd85d41aa0",
@@ -103,5 +121,15 @@
     "unexecuted": 15,
     "status": "interrupted/unaccepted; immutable, no resume or rescore",
     "archive": "2026-10-10-boundary-exploration-v1-interrupted"
+  },
+  "priorExplorationV2": {
+    "source": "e8e9d830c37b88a9eff17dc89ae2d15ff6e747d9",
+    "selected": 32,
+    "retained": 12,
+    "unexecuted": 20,
+    "passed": 8,
+    "failed": 4,
+    "status": "interrupted/unaccepted globally; linked8 path-onlyreuse as declared; async4 retained unchanged and not reused",
+    "archive": "2026-10-10-boundary-exploration-v2-interrupted"
   }
 }

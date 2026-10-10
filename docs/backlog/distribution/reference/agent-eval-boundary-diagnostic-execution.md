@@ -1,30 +1,35 @@
 # Boundary execution — existing CLI only
 
-No new phase/selection wrapper required. Use existing `agent-bench plan`, `run`,
-`controls`, `report`; freeze declared selection/provenance before each fresh
-series. Source admissionc799 accepted; diagnostic v2 freeze precedes new model calls.
+Use existing plan/run/controls/report; freeze all selected provenance before
+first new call. State collection source readmission binds current criteria8.
 Copy pilot-comparison config into fresh exploration/config.json; sole effective
-change playgroundPort5517 avoids a preexisting orphan5397 HTTP server. Endpoint/
-model/harness/budgets unchanged; exact config SHA in protocol/launch. Use that
-frozen config for exploration and all fresh confirmations; CLI runs override
-is explicitly declared. Original be73 interrupted17 remains immutable.
+change playgroundPort5517 avoids preexisting orphan5397 HTTP. Model/harness/
+endpoint/budgets unchanged; exact config SHA in protocol/launch. CLI runs
+override declared. All prior attempts retain original headers/scores.
 
-Exploration: full boundary-v1, allfourorigins, runs1 →32 model trials. Save
-resolved plan and exact protocol under a fresh ignored .cache/pr341 root.
-Confirmation: freeze one step per fourfamilies with observed rationale. For each
-step existing CLI controls/reference runs1/all →4 controls, then run runs2/all
-→8 models. Four independent family series:16 references+32 models. All outputs
-fresh; preserve unstarted declarations/partial runner reports on interruption.
+Exploration v3: six separate fresh series, each task/allfourorigins/runs1,
+24 model trials. Tasks: async-search1/2,compiler-dependency1/2,indexed-data1/2.
+Resolve/save all six plans and exact protocol before first call. Reuse all8
+linked-import1/2 observations from e8e interrupted32 only as path observations
+(6PASS2FAIL); independent10/10 premise verifies unchanged effective inputs,
+while global manifest SHA changed. Original12retained20unexecuted globalcohort
+stays interrupted/unaccepted; no combined completed32, no async score reuse.
 
-Exact invocation pattern:
+After observations freeze one chosen step per fourfamilies and actual rationale.
+Easy saturation without meaningful pressure requires substantive admitted
+escalation before confirmation. For each frozenstep controls/reference runs1/all
+→4 references, then run runs2/all→8 models. Fourfamily totals16references32models.
+All outputs/workspaces fresh; preserve every failure/unfinished declaration.
 
 ```sh
-pnpm agent-bench plan --suite boundary-v1 --config <fresh-exploration>/config.json --runs 1 --lane all
-pnpm agent-bench run --suite boundary-v1 --config <fresh-exploration>/config.json --runs 1 --lane all --output <fresh-exploration>/models
-pnpm agent-bench controls --suite boundary-v1 --config <fresh-exploration>/config.json --task <frozen-step> --control reference --runs 1 --lane all --output <fresh-confirmation>/<family>/reference
-pnpm agent-bench run --suite boundary-v1 --config <fresh-exploration>/config.json --task <frozen-step> --runs 2 --lane all --output <fresh-confirmation>/<family>/models
+pnpm agent-bench plan --suite boundary-v1 --config <fresh>/config.json --task <declared-task> --runs 1 --lane all
+pnpm agent-bench run --suite boundary-v1 --config <fresh>/config.json --task <declared-task> --runs 1 --lane all --output <fresh>/<declared-task>/models
+pnpm agent-bench controls --suite boundary-v1 --config <fresh>/config.json --task <frozen-step> --control reference --runs 1 --lane all --output <confirmation>/<family>/reference
+pnpm agent-bench run --suite boundary-v1 --config <fresh>/config.json --task <frozen-step> --runs 2 --lane all --output <confirmation>/<family>/models
 pnpm agent-bench report <retained-series>
 ```
 
-No untracked prototype is required for delivery. Paid experiments remain
-separate from scripted directed tool probes and non-model source controls.
+Existing scripts own scores; no new phase wrapper/core API. Model experiments
+separate from scripted directed tool probes/non-model source controls. Finite
+profile differs from representative comparison; native success alone is no
+runtime cause, and all-pass lowerbounds/sharedfail/unknown remain distinct.

@@ -1,0 +1,158 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS state-collection source readmission:11/11 rows,8 axes,0 findings/unit residuals; actual64 controls/current27 gate. I10/I11/CLOSE remain; no whole-goal merge/closure.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "9483daa5d73a115a71e0d7b217c1224b49261f52",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-boundary-corpus.md @9483daa5d73a115a71e0d7b217c1224b49261f52; BASE c79996bfdd2e65c6884fe8f08aaa43f93dc3f456 accepted source Final; goal docs/backlog/epics/agent-code-quality-evaluation/goal.md I3/I6/I7/I8/I11/scenario8. Fresh independent read-only observed state-collection repair Final+GREEN. Raw public contract, prior criteria at BASE/e8e, whole current-unit diff and executed evidence inspected. Actual e8e model Set rejection reopens accepted source; old scores remain immutable. Current source d285e3d43848c64537c3df670dc3b492a3279611 exact to clean archive9483. Unchanged accepted CSV/compiler/resource/upper-bound evidence reused under REV-1; independent new-plan premise reused under REV-6, not re-adjudicated. No new public promise, policy or rescoring.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I10 operation difference catalog",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Required operation-level difference catalog remains, including installed-lock/shadow divergence and recovered/unknown originating effects; no identical installed-graph claim."
+    },
+    {
+      "clause": "I11 executed finite search and confirmation",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Required separately frozen fresh24 exploration after source readmission; all original linked8 retained only as old-source path observations, never fabricated combined completed32. Substantive escalation, justified per-path stopping and fresh two-model repeats plus one working reference in all four origins remain. Original e8e interrupted32/12retained8PASS4FAIL20missing and old four async outcomes remain unrescored/unaccepted history;64 non-model controls cannot close I11."
+    },
+    {
+      "clause": "Whole goal CLOSE",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:3",
+      "summary": "Linked diagnostics, end-to-end invariant audit and CLOSE remain. Source repair/readmission only; accepted comparison unchanged, goal incomplete."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: eight versioned cases/two substantive levels/four families, public APIs/deltas/provenance/regression duties and shared supplied locked project",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/boundary-v1.json:1",
+      "note": "Eight cases/two levels/four families/public requirements and original project/prompt/supplied lock/controls unchanged. Independent six unaffected case/card directories and linked/common app branches byte-exact vs BASE. Only async selection8 judge/card identities changed; current source judged at d285 and exact clean9483. Known installed-graph differences remain visible I10 work."
+    },
+    {
+      "row": "Acceptance2: native working references/alternatives accepted; baseline/plausible partials rejected; four originating environments retain failures",
+      "source": "acceptance",
+      "trace": "I3+I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-state-collection-origin-controls.ts:35",
+      "note": "Current normal32:16 real reference/independent-alternative PASS,16 baseline/partial FAIL across all four origins. Derived32:16 valid selection/ordered Set carrier PASS,16 missing-member/reversed-row FAIL. Independent64 physical before+declared effective patch=after exact, no models/zero tool calls; all selected results retained,0setup. Permanent40 real public/private guards20valid20invalid independently rerun."
+    },
+    {
+      "row": "Acceptance3: linked atomic imports/guards/integer currency/credits/durable undo and async navigation/stale replies/optimistic rollback/retry via public APIs",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/async-search-2/judge.mjs:83",
+      "note": "Private/common readers materialize ordered rows, compare unordered selected-ID membership and exercise fresh singleton IDs a/c without adding multi-selection/toggle policy. Actual queries/back/JSON selection restore and level2 optimistic rollback/retry/durable undo/stale-write semantics retained. Captured real model oldRED/currentGREEN and unchanged real reference Set oldprivateRED/publicsemanticGREEN independently replayed; captured bytes exact, no historical rescue. CSV56/async6 inherited GREEN."
+    },
+    {
+      "row": "Acceptance4: actual TS5.9.2/esbuild-wasm0.28.0 browser compilation; responsive visible indexing and exact filter/sort/page/export/measurements",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/indexed-data-1/judge.ts:69",
+      "note": "Accepted real TypeScript5.9.2/esbuild-wasm0.28.0 browser compilation/resource-navigation/filter/sort/page/export/pressure evidence reused. Both compiler and indexed-data case directories/cards plus actual common app probe branch byte-exact vs BASE; no changed dependency/compiler/resource behavior. Current full27 gate GREEN."
+    },
+    {
+      "row": "Acceptance5: measured bounded questions/meaningful upper steps/finite resource and campaign bounds, frozen criteria/provenance before models, easy saturation escalates",
+      "source": "acceptance",
+      "trace": "I7+I8+I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-premise-check.md:38",
+      "note": "Accepted measured upper-step/finite bounds unchanged. Current64 controls are source admission only; easy saturation still requires substantive escalation and fresh confirmation. Exact criteria8 frozen before controls/model calls; original e8e interrupted32/12 outcomes retained. Checked path-reuse premise requires explicit separate fresh24, all linked8 including failures, no global source rebinding/completed32 claim."
+    },
+    {
+      "row": "Parity1: common real requirements/oracles in originating runtimes; actual versions, no mocked runtime/VFS/Workers/compiler",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-state-carrier-origin-controls.ts:61",
+      "note": "All64 actual originating Node/Rifty private programs and starter build/boot executed,32validPASS32invalidFAIL,0setup; versions/config/source headers retained. Independent physical before/after/control and real runner control branch confirm prepared.run not invoked, not fake noModel. Canonical213 original JSON entries/bundle hashes checked; ten independent offline regenerations byte-exact."
+    },
+    {
+      "row": "Parity2: independently implemented working alternatives satisfy published API/workflow, no private internal/DOM structure",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-selection-membership-controls.ts:27",
+      "note": "Real reference/independent alternatives accepted in all four origins. Permanent real reference wrappers accept Array/Set/iterable selected IDs and ordered Set/iterator rows; missing/extra/hardcoded/restoration loss and reversed row effects rejected by both common/private checks. Independent40/40 run and owner-revert REDs inspected; original public layout remains free, no Array methods/private return layout imposed."
+    },
+    {
+      "row": "Fault: source/config/control drift admission rejects mismatched identity/freezes bytes",
+      "source": "fault-matrix",
+      "trace": "I6+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus.ts:95",
+      "note": "Loader input/lock/prompt/judge/card drift checks unchanged;4 metadata tests GREEN. Current async8 manifest/card/private bytes synchronized. Six unaffected effective case inputs/common branches and runner/corpus/plan/config/context exact; shared corpusManifest hash drift explicit. Source d285 clean and exact to reviewed9483; original headers not rebound. Independent213 source JSON originalText/data/SHA+bundle checks and64 effective patches exact; five copied canonical cohorts each two offline regenerations preserve all views."
+    },
+    {
+      "row": "Fault: implementation omission grading rejects baseline/plausible partial exact requirements",
+      "source": "fault-matrix",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-selection-membership-controls.ts:29",
+      "note": "Independent40 real public/private commands discriminate20valid20invalid including hardcoded select-a, lost restored selection, wrong membership and row order; Set/iterator alternatives remain accepted. Actual original baseline/model RED, ordered-carrier/hardcoded class RED and three owning common/private causal reverts RED inspected with exact restoration. Current normal negatives16 and derived invalid16 reject in all four origins; inherited CSV56/async6 remain GREEN."
+    },
+    {
+      "row": "Fault: setup/unsupported/browser/resource failure retains originating failure/unknown cause",
+      "source": "fault-matrix",
+      "trace": "I3+I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-10-boundary-state-collection-v8-carrier-controls/README.md:1",
+      "note": "All64 selected completed originating records and physical patches retained,0setup; canonical213 JSON exact and five offline views reproducible. Original e8e interrupted12/32 (8PASS4FAIL20missing)45 JSON/source headers/outcomes unchanged; model regression replay does not rescore/rescue history. Earlier originating setup failures remain in accepted evidence; no exclusion or resumed series."
+    },
+    {
+      "row": "Fault: unjustified stopping admission forbids labels/count boundary, measures upper question",
+      "source": "fault-matrix",
+      "trace": "I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-public-scenarios.md:75",
+      "note": "Accepted upper-step pressure/during-indexing/visible behavior and finite-bound evidence unchanged. Controls/judge repair do not establish runtime ceiling or close model search. I10/I11/CLOSE explicitly continue, including substantive escalation, per-path stopping and frozen fresh repeated model/reference confirmation. No broader completion/causal claim."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

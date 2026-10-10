@@ -1,4 +1,4 @@
-# State collections — source readmission pending
+# State collections — source readmitted
 
 Actual e8e model exposes correct selection through Set; published API never
 requires Array. Original private/common observations compare raw Array and
@@ -35,3 +35,5 @@ canonical/fivecohorts/offline2each byteexact. Independent all64 effectivepatches
 all213 originalbytes and10offline regenerations PASS. Full current27gate PASS.
 Proof: `agent-eval-boundary-state-collection-v8-controls-proof.json.gz`.
 Cleanarchive/sourceFinal next; I10/I11/CLOSE remain.
+
+Independent Final+GREEN PASS @9483daa5d73a115a71e0d7b217c1224b49261f52:11/11rows,8axes,0findings/unitresiduals;validator0. Same verdict `agent-eval-boundary-state-collection-final-green.json`, raw `agent-eval-boundary-state-collection-final-green-evidence.json.gz`. I10/I11/CLOSE remain.
