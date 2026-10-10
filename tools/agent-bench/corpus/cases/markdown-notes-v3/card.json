@@ -1,0 +1,19 @@
+{
+  "id": "markdown-notes-v3",
+  "group": "app",
+  "family": "linked-knowledge",
+  "split": "evaluation",
+  "origin": {
+    "type": "original-scenario",
+    "created": "2026-10-05",
+    "starter": "Vanilla JavaScript + Vite7.3.6"
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.ts",
+  "regressionSources": ["minimal starter build/boot"],
+  "difficulty": "Draft versus saved state, Markdown/link navigation and cross-note search/persistence",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "Same public task/project; visible rendered text and functional Wiki actions after actual paragraph/button/duplicate oracle RED; frozen before fresh calls.",
+  "correctionOf": "pilot-v3/markdown-notes-v2"
+}

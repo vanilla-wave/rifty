@@ -1,0 +1,172 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK: comparison acceptance requires authority-bound operation projection repair/class proof, independent Final and new frozen full96; original completed96 remains immutable unaccepted evidence.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "621e28534ed3ac41752a1723c3e0136fe4bf1ce0",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-expanded-comparison.md; BASE49d28f73b667b58c969cf8fa5c2e4352b3eaab87; accepted docs/backlog/epics/agent-code-quality-evaluation/goal.md I1–I11; reached checking dependency via new executed Cancel/Edit Bay/Edit Train evidence",
+  "unit_residuals": [
+    {
+      "clause": "I3+I6 trusted own-origin checking",
+      "location": "tools/agent-bench/src/judge/context.ts:292",
+      "summary": "F1/F2 operation projection defects require real reference baseline/RED, owner+sibling class proof, GREEN/reversion/four-origin controls and independent verification; no original96 rescore."
+    },
+    {
+      "clause": "Acceptance2→I3+I4+I7+I8+I9",
+      "location": "docs/backlog/distribution/agent-eval-expanded-comparison.md:38",
+      "summary": "Fresh accepted full comparison under corrected frozen source/criteria identity; completed original96 and costs preserved. Artifact retention alone cannot settle observed wrong judgments."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I3+I4+I6+I7+I8",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:87",
+      "summary": "Accepted expanded comparison still required after trusted checking repair; current96 honest retained/unaccepted history."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Actual operation catalog with exact evidence/recovery/impact or unknown and required directed native/public-host confirmation;719-operation inventory is not causal closure."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Substantive finite multi-family escalation, declared resource/dependency/engineering levels, fresh repeated candidate confirmations and working controls/stopping bounds; broader authorized campaign still needed, none launched by reviewer."
+    },
+    {
+      "clause": "Goal closure/end-to-end authority",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:16",
+      "summary": "Whole-goal end-to-end audit/CLOSE and historical accepted-contract/verdict retirement proof remain; no goal-complete claim."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: pre-call frozen eight-case/four-origin/three-repeat plan, models/limits/cost declaration and retained full selection",
+      "source": "acceptance",
+      "trace": "I1+I2+I3+I4+I7+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-expanded-comparison.md:33",
+      "note": "Identity/selection proof passes; source semantic trust assessed separately by F1/F2. Launch18:11:29 before first attempt18:12:56, source49d28 clean,96 unique ordered records."
+    },
+    {
+      "row": "Acceptance2: complete honest own-origin comparison, retained artifacts/conditional views/services/offline proof",
+      "source": "acceptance",
+      "trace": "I3+I4+I7+I8+I9",
+      "status": "missing",
+      "citation": "docs/backlog/distribution/agent-eval-expanded-comparison.md:38",
+      "note": "Physical campaign/retention/offline complete; valid checking defects F1/F2 prevent acceptance as comparative quality. New accepted comparison remains required."
+    },
+    {
+      "row": "provenance/input drift × selection/report",
+      "source": "fault-matrix",
+      "trace": "I6+I7+I8",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-expanded-comparison.md:49",
+      "note": "Frozen plan/header/source identity exact; no source/checking mutation in current diff."
+    },
+    {
+      "row": "setup/provider/budget/interruption × run",
+      "source": "fault-matrix",
+      "trace": "I2+I3+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-expanded-comparison.md:50",
+      "note": "All96 retained,24 pre-agent setup failures and600s budget visible; no exclusions/resume."
+    },
+    {
+      "row": "lossy-aggregate × report",
+      "source": "fault-matrix",
+      "trace": "I4+I8",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-expanded-comparison.md:51",
+      "note": "Fixed-matrix conditional views preserved; Codex separate; no population/environment-only claim. Original scores remain unaccepted, not changed."
+    },
+    {
+      "row": "authoritative rewrite × regeneration",
+      "source": "fault-matrix",
+      "trace": "I3+I8",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-expanded-comparison.md:52",
+      "note": "/tmp/rifty-pr341-v8-comparison-final-review/archive-verification.json:698 authoritative hashes/27 archived carriers/387JSON/24 large byte-exact; two independent offline views exact in offline-independent.json."
+    },
+    {
+      "row": "Reached frozen booking oracle accepts working public action/layout alternatives",
+      "source": "frozen-artifact",
+      "trace": "I3+I6+ADR-0511",
+      "status": "missing",
+      "citation": "tools/agent-bench/corpus/cases/booking-workflow-v5/judge.ts:139",
+      "note": "F1/F2 executed public/private counterexamples."
+    },
+    {
+      "row": "Reached frozen expense oracle accepts working public contextual row actions",
+      "source": "frozen-artifact",
+      "trace": "I3+I6+ADR-0511",
+      "status": "missing",
+      "citation": "tools/agent-bench/corpus/cases/expense-settlement-v5/judge.ts:288",
+      "note": "F2 executed caption-only working reference alternate."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/src/judge/context.ts:292",
+          "summary": "F1: operation-caption projection treats genuine Cancel room edit as Edit room. Booking rooms() clicks cancellation, observes blank/0 instead of saved room, later loses selected identity. Public saved rooms, Validation, cancellation and reload remain correct. Fault class: operation/identity conflation → false-negative oracle. Current controls lack this discriminating RED; repair owner and sibling named-action consumers need class proof before fresh acceptance. Word order and opaque record identities remain public alternatives; this finding prescribes no parser/regex repair.",
+          "authority": "I3+I6 (docs/backlog/epics/agent-code-quality-evaluation/goal.md:87,docs/backlog/epics/agent-code-quality-evaluation/goal.md:103); booking public prompt:3–6,20–25; ADR-0511; Acceptance2→I3",
+          "evidence": "pnpm exec tsx /tmp/rifty-pr341-v8-comparison-final-probes.mts; exit0, Nodev24.16.0/Chromium148.0.7778.96; /tmp/rifty-pr341-v8-comparison-final-review/independent-public-private-probes.json + probe.log; original Vue privatePASS; same reference with draft-only Cancel button publicGREEN/privateFAIL: invalid room edit evidence [{name:\"\",capacity:0},{name:\"Bay\",capacity:2}], Missing/ambiguous selected identity: Bay. Captured nativeCodex booking1 matches these two failures; no whole-programme public certification. Independent identity-boundary replay: node --import tsx /tmp/rifty-pr341-v8-comparison-final-identity.mts exit0; /tmp/rifty-pr341-v8-comparison-final-review/identity-independent.log + /tmp/rifty-pr341-v8-comparison-final-review/identity-independent-66yIzi/proof.json: legal room Cancel row-edit and draft cancellation simultaneously expose identical ARIA - button \"Cancel room edit\"; actual list context distinguishes row operation. Public edit loads Cancel/4, cancellation leaves saved state, capacity5+reload GREEN. This prevents declaring lexical exclusions or verb-position restrictions sufficient."
+        },
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/corpus/cases/booking-workflow-v5/judge.ts:139",
+          "summary": "F2: row-action discovery requires literal room/expense subject words. Contextual named Edit Bay/Delete Bay East in Rooms and Edit Train/Delete Train in Expenses carry operation+stable identity and perform correct public edits/deletions, but private judges reject them. Sibling expense judge:288 has the same owner fault. Public prompts require named semantic actions, not those exact caption tokens. Fault class: caption grammar adds hidden requirement. Current controls lack the demonstrated alternatives; shared operation projection and sibling sweep remain required. Captured programmes may retain unrelated genuine Validation/domain failures.",
+          "authority": "I6 (docs/backlog/epics/agent-code-quality-evaluation/goal.md:103); booking prompt:20–25; expense prompt:21–26; ADR-0511; Acceptance2→I3",
+          "evidence": "pnpm exec tsx /tmp/rifty-pr341-v8-comparison-final-probes.mts; exit0, Nodev24.16.0/Chromium148.0.7778.96; /tmp/rifty-pr341-v8-comparison-final-review/independent-public-private-probes.json + probe.log; original Vue/Svelte privatePASS; caption-only real reference variants public editor identity/invalid-edit atomicity/valid edit/reload/delete GREEN, errors0; book-context privateFAIL rooms=[]+Missing named action edit+room+Bay; expense-context privateFAIL Missing named action edit+expense+Train. No original96 rescore."
+        },
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/corpus/cases/expense-settlement-v5/judge.ts:199",
+          "summary": "NOTE: native expense1/2 rows=[] and captured narrative transfer markup do not establish a new checking defect. Public requires payer/receiver/amount readable and named; no independently executed public-valid alternate transfer projection was demonstrated in this review. Preserve original failures; source snippets and absent literal labels alone decide neither validity nor invalidity.",
+          "authority": "",
+          "evidence": "/tmp/rifty-pr341-v8-comparison-final-review/raw-observation-verification.json; original report nativeExpense1/2 settlement rows=[], after source reviewed; no new public counterexample claimed."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

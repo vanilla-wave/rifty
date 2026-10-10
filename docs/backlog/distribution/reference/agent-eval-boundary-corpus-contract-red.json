@@ -1,0 +1,168 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS Contract+RED: оба предыдущих blockers исправлены и независимо проверены. Разрешён source IMPLEMENT; actual source/control Final, diagnostics, whole PR341/goal ещё открыты. Verdict/raw evidence .cache/pr341/boundary-corpus-contract-red-r3/; validator exit0.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "2ee8fa7079f4e55a0e29a364314cbb1447434807",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-boundary-corpus.md @ 2ee8fa7079f4e55a0e29a364314cbb1447434807; BASE 0ef6bf08c706a2b37ce316e46c03bf493b14380c; independent Contract+RED verify accepted FIX of edf83 label-only and c610 resource-observation findings; goal docs/backlog/epics/agent-code-quality-evaluation/goal.md scenario8/I6/I11",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1/I2/I3/I4/I7/I8/I9 expanded own-environment comparison",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:3",
+      "summary": "Fresh frozen96 remains external active work; retain failures/uncertainty/evidence and verify offline regeneration/independent comparison Final. This reviewer did not touch or accept that campaign."
+    },
+    {
+      "clause": "I6/I11 new boundary source admission",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:4",
+      "summary": "After discriminating RED, author substantive pinned cases/public cards/judges/real alternatives, run actual four-origin references, measure defensible finite bounds and independent source Final before diagnostic calls."
+    },
+    {
+      "clause": "I10 evidence-backed operation difference catalog",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Actual operation/args/versions/host/source records, recovery and measured/unknown impact across native and both public Rifty hosts remain."
+    },
+    {
+      "clause": "I11 executed finite escalation/frozen fresh confirmation",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Execute substantive multiple-family search with declared matched settings, evidence-backed stopping/escalation, fresh repeated selected-step confirmations/reference controls, separate diagnostic provenance and honest shared/unknown/lower-bound interpretation."
+    },
+    {
+      "clause": "I4/I8 retained authority/evidence inspectability + whole goal CLOSE",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:11",
+      "summary": "Global completed-contract retirement audit, combined full PR gate, linked independent reviews and end-to-end accepted-invariant audit/CLOSE remain; historical reader source acceptance alone does not complete these."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: two substantive higher levels in four families; public exact requirements/deltas/provenance, same locked input",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-public-probes.ts:92",
+      "note": "Public exact module/browser boundaries now carry substantive interactions, independent from family labels/case judges. Original genuine relabelled pilot16/16 reject proof retained; module route unchanged in this repair. Cases/judges remain absent, no source GREEN claimed."
+    },
+    {
+      "row": "Acceptance 2: working reference/alternatives pass; unmet baseline/partials fail new requirements; four-origin evidence retained",
+      "source": "acceptance",
+      "trace": "I3+I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-semantic-native-controls.ts:28",
+      "note": "Executed partial CSV/async discriminators2/2 PASS (actual modules import, AssertionError). Independently current full resource probe: blocking2500ms rejected with timeout2000; yielding100k and instant100k accepted, with overlap distinction. Generic judge truth-table alone remains insufficient."
+    },
+    {
+      "row": "Acceptance 3: linked atomic imports/reference guards/credits/currency/durable undo; async stale-reply/rollback/retry interactions via public APIs",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/boundary-probe-discrimination.test.ts:25",
+      "note": "Independent isolated unit2/2 PASS; CSV quoting/linked and async stale-reply partials fail semantically after successful imports. Exact higher-level transitions and public interfaces read; no contrary executed artifact."
+    },
+    {
+      "row": "Acceptance 4: actual pinned compiler browser integration and visible indexed-resource navigation/exact outputs/measurements",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-public-probes.ts:140",
+      "note": "Original responsiveness mutant now RED timeout2000; async real browser input phase=indexing with true overlap; instant real browser phase=ready, false overlap and explicit no proof (r3 blocking/yielding/instant logs/json). Actual pinned compiler goldens independently byte-matched in r2 and unchanged. Browser APIs published, internal layout free."
+    },
+    {
+      "row": "Acceptance 5: reference-grounded bounded questions and finite bounds before exploration; freeze/review criteria before model calls; escalate easy saturation",
+      "source": "acceptance",
+      "trace": "I7+I8+I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-boundary-corpus.md:47",
+      "note": "Measured control pressure/finite upper-question rationale remain pre-exploration acceptance targets. Public resource scenario forbids responsiveness claim without real overlap/pressure; no instant slowdown, stricter deadline or fabricated pickup measurements."
+    },
+    {
+      "row": "Parity 1: real task code/common requirements in each origin; captured actual versions, no fake runtime/compiler",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-semantic-native-controls.ts:11",
+      "note": "Independent semantic command exit1 on intentionally absent boundary-v1 manifest, imports succeed. Existing actual four-origin controls/version-report owner reused; full references/new cases are IMPLEMENT proof, not a present source GREEN claim."
+    },
+    {
+      "row": "Parity 2: real alternative accepted through public interfaces/workflow effects, no hidden structure",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-public-scenarios.md:3",
+      "note": "Exact public APIs and supplied UI published before admission; own implementation/serialization layout free. Current async/instant browser controls both accepted functional outputs and full exact export, independent of case judge."
+    },
+    {
+      "row": "Fault: source/config/control drift at admission rejects mismatched identity and freezes exact bytes",
+      "source": "fault-matrix",
+      "trace": "I6+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-validation.fault.test.ts:42",
+      "note": "Existing owner unchanged against BASE; r1 independently9/9 corpus faults passed. Original identity/hashes/card checks reused; reviewed raw histories kept unchanged."
+    },
+    {
+      "row": "Fault: implementation omission fails exact grading requirements for baseline/plausible partial",
+      "source": "fault-matrix",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-public-probes.ts:165",
+      "note": "Independent current full blocking probe exit1 versus positive yielding/instant exit0, proving earlier omission mutant dies. Partial CSV/async unit2/2 semantic rejection also retained; no mocking task/runtime/compiler."
+    },
+    {
+      "row": "Fault: setup/unsupported/browser/resource control failure retained in its originating environment with unknown attribution",
+      "source": "fault-matrix",
+      "trace": "I3+I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-corpus-controls.ts:24",
+      "note": "Existing all-four-lane failed-origin retention unchanged. Raw initial preview/sandbox/import errors remain history and excluded from semantic proof, actual successful authorized executions recorded separately."
+    },
+    {
+      "row": "Fault: unjustified stopping cannot claim boundary by labels/counts; measured upper-question evidence required",
+      "source": "fault-matrix",
+      "trace": "I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-public-scenarios.md:75",
+      "note": "Instant control explicitly reports no during-indexing evidence; admission must obtain actual overlap/meaningful pressure before responsiveness/bounded-question closure. Actual measured stopping remains future target; I11 not closed by source checkpoint."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

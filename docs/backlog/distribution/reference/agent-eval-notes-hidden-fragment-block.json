@@ -1,0 +1,265 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "FIX hidden-descendant text/bold projection, add real RED, rerun controls and independent verification; this repair only, whole PR/goal remains open.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "a7513f8634f0c480a18e27f088b06f9ed475697d",
+  "unit_goal_source": "PR #341 observed Markdown notes UI projection repair; BASE db494579e4bde3aa61525f416c33633784654b08; raw authority docs/backlog/epics/agent-code-quality-evaluation/goal.md I3/I6/I7/I9, original tools/agent-bench/corpus/cases/markdown-notes-v2/prompt.md, ADR-0510. Scope repair only, not whole comparison report/goal.",
+  "unit_residuals": [
+    {
+      "clause": "ADR-0510 hidden text cannot prove rendering (I3/I6).",
+      "location": "tools/agent-bench/src/judge/context.ts:94",
+      "summary": "Literal/bold hidden descendants still produce dishonest PASS; repair shared rendered projection and discriminating real negative controls before acceptance."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:3",
+      "summary": "Fresh frozen pilot-v4 repeated72 campaign and real reference-report proof remain; controls cannot close I5."
+    },
+    {
+      "clause": "I1/I6/I7",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:4",
+      "summary": "Expanded finite versioned evaluation corpus and separate campaign remain."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:5",
+      "summary": "Environment/tool differences catalog including measured viewport/profile effect and unknowns remains."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:5",
+      "summary": "Substantive finite escalation and fresh frozen repeated boundary confirmation remain."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Working literal HTML in a shared paragraph is accepted without exact-element/global uniqueness constraints.",
+      "source": "acceptance",
+      "trace": "I6 + ADR-0510",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-render-controls.ts:45",
+      "note": ""
+    },
+    {
+      "row": "Working duplicate heading/bold/preview elements are accepted.",
+      "source": "acceptance",
+      "trace": "I6 + ADR-0510",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-render-controls.ts:52",
+      "note": ""
+    },
+    {
+      "row": "Editor source and hidden text, including hidden descendants, cannot prove visible literal/bold rendering.",
+      "source": "acceptance",
+      "trace": "I3 + I6 + ADR-0510",
+      "status": "missing",
+      "citation": "tools/agent-bench/src/judge/context.ts:94",
+      "note": "Explicit ADR0510 discrimination fails: full real Vite/Chromium hidden-fragment mutant passes7/7; helper sibling bold also accepts visible Im as Important. Finding Bugs1; no committed carrier discriminates hidden descendants."
+    },
+    {
+      "row": "Missing heading, missing bold, stripped HTML and wholly hidden HTML remain unsuccessful.",
+      "source": "acceptance",
+      "trace": "I6 + ADR-0510",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-render-controls.ts:62",
+      "note": ""
+    },
+    {
+      "row": "Wiki actions accept accessible buttons/links and actually navigate to matching saved body.",
+      "source": "acceptance",
+      "trace": "I3 + I6 + ADR-0510",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes-v3/judge.ts:78",
+      "note": ""
+    },
+    {
+      "row": "Primary note identity disambiguates Beta in Alpha body excerpts during title/body search and deletion.",
+      "source": "acceptance",
+      "trace": "I6 + ADR-0510",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes-v3/judge.ts:22",
+      "note": ""
+    },
+    {
+      "row": "Editable field discovery preserves semantic Search/Title/Markdown controls.",
+      "source": "acceptance",
+      "trace": "I6 + ADR-0510",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes-v3/judge.ts:16",
+      "note": ""
+    },
+    {
+      "row": "Missing Wiki target reports a state change without draft loss.",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes-v3/judge.ts:43",
+      "note": ""
+    },
+    {
+      "row": "Search is case-insensitive and includes body without replacing saved notes.",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes-v3/judge.ts:62",
+      "note": ""
+    },
+    {
+      "row": "Reload keeps saved bodies; unsaved drafts do not overwrite them.",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes-v3/judge.ts:87",
+      "note": ""
+    },
+    {
+      "row": "Delete persists while preserving another saved note.",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes-v3/judge.ts:96",
+      "note": ""
+    },
+    {
+      "row": "Trusted controls reject baseline and nonpersistent partial; accept reference and alternative.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-render-controls.ts:47",
+      "note": ""
+    },
+    {
+      "row": "Actual programmes and old failed criteria have real baseline/RED before projection repair; nine guard reverts retain executed failures.",
+      "source": "frozen-artifact",
+      "trace": "I3 + I6 + ADR-0510",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-notes-render-controls-data.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "pilot-v3 cases/manifest and original programme bytes remain historical; notes-v3 clones public project/prompt/control inputs only.",
+      "source": "frozen-artifact",
+      "trace": "I7 + ADR-0510",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-notes-correction.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "pilot-v4 preserves task/family splits; changed private judge/support hashes remain visible and checks stay absent from agent seed.",
+      "source": "frozen-artifact",
+      "trace": "I6 + I7 + ADR-0510",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-notes-correction.test.ts:24",
+      "note": ""
+    },
+    {
+      "row": "Canonical app references run in each own environment; eight final reference outcomes remain PASS.",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-render-origin-controls.ts:15",
+      "note": ""
+    },
+    {
+      "row": "Actual programme1 passes each own environment; original programme3 COI failure remains unsuccessful despite other-origin PASS.",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-render-origin-controls.ts:56",
+      "note": ""
+    },
+    {
+      "row": "CSS-only responsive programme is a separate control; same558px none-to-block evidence supports presentation cause rather than Node-runtime causality.",
+      "source": "acceptance",
+      "trace": "I3 + I6 + ADR-0510",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-render-origin-controls.ts:29",
+      "note": ""
+    },
+    {
+      "row": "All twenty final own-origin physical after trees equal physical before plus the exact declared patch, including failed programme3 COI.",
+      "source": "frozen-artifact",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-render-origin-controls.ts:65",
+      "note": ""
+    },
+    {
+      "row": "Interrupted pilot-v3 retains63 completed/72 selected and9 missing, unchanged original scores; fresh series required.",
+      "source": "frozen-artifact",
+      "trace": "I3 + I7 + I9 + ADR-0510",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-06-pilot-notes-render-interrupted/README.md:3",
+      "note": ""
+    },
+    {
+      "row": "Large retained JSON traces stay inspectable original bytes with committed index references and both compressed/original hashes.",
+      "source": "frozen-artifact",
+      "trace": "I3 + I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-06-pilot-notes-render-interrupted/README.md:12",
+      "note": ""
+    },
+    {
+      "row": "Offline regeneration preserves retained reports/statistics/summary scores and produces resolvable artifact links without model calls.",
+      "source": "frozen-artifact",
+      "trace": "I9 + User scenario5",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-06-pilot-notes-render-interrupted/summary.md:1",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/src/judge/context.ts:94",
+          "summary": "Visible ancestor can satisfy rendering with hidden descendant text: complete notes judge falsely passes7/7; renderedBold has the same fault.",
+          "authority": "ADR-0510 decision lines18–20: editor source/hidden text cannot prove rendering; goal I3 honest functional result and I6 trusted checks; original markdown-notes-v2/prompt.md: HTML stays text, rendered **bold**.",
+          "evidence": "Executed `node --import tsx /tmp/rifty-pr341-review-full-judge-mutant.mts` (Node24.16.0, real installedVite/Chromium): exit0; result.pass=true, all7 probesPASS, rendering evidence `<script></script>` though required source `<script>not code</script>`. Single programme mutation wraps not code in <span hidden> inside visible paragraph. Raw /tmp/rifty-pr341-review-full-judge-mutant.json; complete files/result /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-review-hidden-fragment-qSP2fF/mutant-result.json. Independent helper sibling sweep `node --import tsx /tmp/rifty-pr341-review-render-probe.mts`: hidden literalfragment true with visibleText `<script></script>`; hidden boldfragment true with visibleText Im. Fault frozen-assumption at shared renderedCandidates owner; current hidden-html carrier only covers hidden whole element. Missing RED for hidden descendants; sweep both renderedText/renderedBold. This is explicit hidden-text discrimination, not a stricter DOM/layout constraint (REV-4)."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "blocker",
+      "findings": []
+    }
+  ]
+}

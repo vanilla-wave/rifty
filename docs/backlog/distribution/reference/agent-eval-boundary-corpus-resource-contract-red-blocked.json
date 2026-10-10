@@ -1,0 +1,182 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK Contract+RED: исходный label-only дефект исправлен; новый executed resource mutant проходит без navigation/search во время indexing. Нужен discriminating during-indexing RED. Verdict/raw evidence .cache/pr341/boundary-corpus-contract-red-r2/; validator exit1. Source implementation/model calls ещё не допускать.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "c6100f2d3f42848d4f356a8b7a4d4f9ce050db53",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-boundary-corpus.md @ c6100f2d3f42848d4f356a8b7a4d4f9ce050db53; BASE 0ef6bf08c706a2b37ce316e46c03bf493b14380c; verify accepted FIX after Contract+RED BLOCK edf83dc2; goal docs/backlog/epics/agent-code-quality-evaluation/goal.md scenario8/I6/I11",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance2/4 and implementation-omission grading → I6+I11; RDY-8",
+      "location": "tools/agent-bench/tests/boundary-public-probes.ts:141",
+      "summary": "Before implementation, make resource RED require a real interaction within the ongoing indexing interval; present Load→Search sequence passes fully blocking main-thread indexing. Reference-grounded final timing/deadline/bounds remain future acceptance targets, not fabricated pickup measurements."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I1/I2/I3/I4/I7/I8/I9 expanded own-environment comparison",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:3",
+      "summary": "Fresh frozen96 remains external active work; retain failures/uncertainty/evidence and verify offline regeneration/independent comparison Final. This reviewer did not touch or accept that campaign."
+    },
+    {
+      "clause": "I6/I11 new boundary source admission",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:4",
+      "summary": "After discriminating RED, author substantive pinned cases/public cards/judges/real alternatives, run actual four-origin references, measure defensible finite bounds and independent source Final before diagnostic calls."
+    },
+    {
+      "clause": "I10 evidence-backed operation difference catalog",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Actual operation/args/versions/host/source records, recovery and measured/unknown impact across native and both public Rifty hosts remain."
+    },
+    {
+      "clause": "I11 executed finite escalation/frozen fresh confirmation",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Execute substantive multiple-family search with declared matched settings, evidence-backed stopping/escalation, fresh repeated selected-step confirmations/reference controls, separate diagnostic provenance and honest shared/unknown/lower-bound interpretation."
+    },
+    {
+      "clause": "I4/I8 retained authority/evidence inspectability + whole goal CLOSE",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:11",
+      "summary": "Global completed-contract retirement audit, combined full PR gate, linked independent reviews and end-to-end accepted-invariant audit/CLOSE remain; historical reader source acceptance alone does not complete these."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: two substantive higher levels in four families; public exact requirements/deltas/provenance, same locked input",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-public-probes.ts:92",
+      "note": "Original label-only blocker FIX verified: committed public interfaces/probes reject retained old mutant16/16 (8 missing required modules,8 missing actual browser task). New public cases remain absent/RED; no source GREEN claim."
+    },
+    {
+      "row": "Acceptance 2: working reference/alternatives pass; unmet baseline/partials fail new requirements; four-origin evidence retained",
+      "source": "acceptance",
+      "trace": "I3+I6+I11",
+      "status": "missing",
+      "citation": "tools/agent-bench/tests/boundary-public-probes.ts:141",
+      "note": "Executed blocking-index mutant passes the full independent resource probe while violating public during-indexing interaction. Exact native/control discrimination of this requirement has no carrier; new Completeness finding."
+    },
+    {
+      "row": "Acceptance 3: linked atomic imports/reference guards/credits/currency/durable undo; async stale-reply/rollback/retry interactions via public APIs",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/boundary-probe-discrimination.test.ts:25",
+      "note": "Independently executed real partial CSV and sequential controller: unit2/2 PASS proves both reject via AssertionError after successful module import. Exact higher-level scenarios/public interfaces now present; no new executed contrary artifact."
+    },
+    {
+      "row": "Acceptance 4: actual pinned compiler browser integration and visible indexed-resource navigation/exact outputs/measurements",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/boundary-public-probes.ts:141",
+      "note": "Resource during-indexing assertion admits synchronous blocking mutant (resource-blocking-mutant.log exit0). Compiler oracle independently matches actual TS5.9.2/esbuild-wasm0.28.0 emitted bytes; compiler-oracle.log exit0. Published fixed UI/API names, free internals; no hidden layout demands."
+    },
+    {
+      "row": "Acceptance 5: reference-grounded bounded questions and finite bounds before exploration; freeze/review criteria before model calls; escalate easy saturation",
+      "source": "acceptance",
+      "trace": "I7+I8+I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-boundary-corpus.md:47",
+      "note": "Future working-control measurements/meaningful upper-question record required before exploration; no pickup timing demanded. New responsiveness finding concerns discrimination of a declared interaction, not a stricter deadline."
+    },
+    {
+      "row": "Parity 1: real task code/common requirements in each origin; captured actual versions, no fake runtime/compiler",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-semantic-native-controls.ts:28",
+      "note": "Real native public scenario probes plus existing actual four-origin control owner. Independent missing-suite semantic RED exit1 at exact boundary-v1 ENOENT, imports succeed; source/reference implementation remains next stage."
+    },
+    {
+      "row": "Parity 2: real alternative accepted through public interfaces/workflow effects, no hidden structure",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-public-scenarios.md:3",
+      "note": "Exact tested interfaces published before admission; provided browser UI preserved, serialized internals/layout free. Native alternative uses same external workflow. Resource requirement discrimination gap separately recorded."
+    },
+    {
+      "row": "Fault: source/config/control drift at admission rejects mismatched identity and freezes exact bytes",
+      "source": "fault-matrix",
+      "trace": "I6+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-validation.fault.test.ts:42",
+      "note": "Owner unchanged against BASE; independent r1 isolated existing corpus faults9/9 passed, accepted behavior reused. Raw original BLOCK393 members preserved/hash-valid."
+    },
+    {
+      "row": "Fault: implementation omission fails exact grading requirements for baseline/plausible partial",
+      "source": "fault-matrix",
+      "trace": "I6+I11",
+      "status": "missing",
+      "citation": "tools/agent-bench/tests/boundary-public-probes.ts:144",
+      "note": "Full actual resource probe passes omission of during-indexing responsiveness; resource-blocking-mutant.json/log. Original pilot-label omission now rejects16/16."
+    },
+    {
+      "row": "Fault: setup/unsupported/browser/resource control failure retained in its originating environment with unknown attribution",
+      "source": "fault-matrix",
+      "trace": "I3+I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-corpus-controls.ts:24",
+      "note": "Existing four-origin retained-failure owner unchanged. New proof retains initial inappropriate preview setup failure and does not count it as semantic RED."
+    },
+    {
+      "row": "Fault: unjustified stopping cannot claim boundary by labels/counts; measured upper-question evidence required",
+      "source": "fault-matrix",
+      "trace": "I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-boundary-corpus.md:68",
+      "note": "Measured stop rationale remains explicit pre-exploration target; source checkpoint does not assert a boundary or goal completion."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/tests/boundary-public-probes.ts:141",
+          "summary": "Resource RED делает Search после завершения Load handler: полностью блокирующий indexing проходит, during-indexing interaction отсутствует.",
+          "authority": "RDY-8; Acceptance4 → I6+I11; I6 trusted checks reject unmet public requirements; public resource scenario requires navigation/search during real indexing",
+          "evidence": "Executed REV-5 class4: node --import tsx .cache/pr341/boundary-corpus-contract-red-r2/resource-blocking-mutant.ts -> exit0, unchanged probe PASS, rows100000/export8334, real Chromium148.0.7778.96. Actual synchronous data generation/export and blocked main thread2500ms: index-start59.2/index-end2559.2; first main-thread opportunity2583.4; first search-input2591.7. No action during indexing. Probe waits for Load click handler then starts fill timeout2000, so cannot discriminate concurrency. Source/log/timeline: resource-blocking-mutant.ts/.log/.json. Initial scratch import error and sandbox MachPort launch error retained/excluded; isolated authorized Chromium rerun succeeded. No model/services/main96/proxy touched."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -1,0 +1,260 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK this observed CSV-export repair until semantic header acceptance is fixed and independently verified; no whole-PR or goal-completion judgment.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "4217af1e75f80770c0e3479c1d5f7e3f3c73c2ad",
+  "unit_goal_source": "PR #341 observed CSV export judge repair; BASE 0bed68b575f3a4a4f01c6babf0f15f2c0a5e7265; docs/backlog/epics/agent-code-quality-evaluation/goal.md I3/I6/I7/I9; original tools/agent-bench/corpus/cases/csv-workflow-v2/prompt.md; ADR0509. Boundary: this repair only, prior accepted slices and comparison/whole-goal closure excluded.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/src/judge/context.ts:124",
+          "summary": "CSV judge still rejects a working export solely for titlecase Name,Email header; optional header spelling is an unstated scoring requirement.",
+          "authority": "I6 (goal.md:103-109: accept working alternatives; no unstated requirements) + ADR0509:16-19 (no header spelling requirement); original csv-workflow-v2/prompt.md:1 requires proper CSV escaping, not lowercase export headings.",
+          "evidence": "Executed node --import tsx /tmp/rifty-pr341-review-csv-header-probe.mts pilot-v3 titlecase-header; exit1. Only export header changed from reference name,email to Name,Email. Chromium errors0, 5/7PASS, both export probesFAIL while exact decoded data remain correct. Log /tmp/rifty-pr341-review-csv-header-probe.log; retained source/results /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-csv-export-controls-codb4S/evidence.json. Node24.16.0; RFC4180 section2.3 names corresponding fields without lowercase constraint (https://www.rfc-editor.org/rfc/rfc4180). Fault class frozen-assumption at CSV-value projection; missing titlecase functional-positive RED; sibling sweep bounded to current CSVv3 helper, historical CSVv1/v2 known invalid preserved. Independent verification: pnpm exec vitest run tools/agent-bench/src/csv-export.fault.test.ts tools/agent-bench/src/corpus-csv-correction.test.ts ->4/4PASS (/tmp/rifty-pr341-review-csv-unit.log). node --import tsx tools/agent-bench/tests/csv-export-controls.ts ->exit0,12 controls6PASS/6FAIL/errors0 (/tmp/rifty-pr341-review-csv-native-controls.log; /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-csv-export-controls-e4xdZ8/evidence.json). Python independent raw-bundle/physical equality proof: original report49 unchanged, fixture physical SHA256 matches, final own-origin16/16 scoresPASS and physicalbefore+patch equality in each lane; /tmp/rifty-pr341-review-raw-artifacts-proof.json. Supplied fullgate27/27 log inspected, not rerun by reviewer; docs/backlog/distribution/reference/agent-eval-csv-export-pr-check.log.gz. Chromium probes rerun unsandboxed after MachPort launch permission error; tracked tree remained clean."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Actual pilot-v2 programme is accepted for correctly quoted filtered CSV values",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/csv-export-controls.ts:41; tools/agent-bench/reports/summaries/2026-10-05-csv-export-actual-programme1-controls/report.json.gz",
+      "note": ""
+    },
+    {
+      "row": "Optional field quoting is accepted",
+      "source": "acceptance",
+      "trace": "I6 + ADR0509",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/csv-export.fault.test.ts:4; tools/agent-bench/tests/csv-export-controls.ts:42",
+      "note": ""
+    },
+    {
+      "row": "Optional quoted header and headerless export are accepted",
+      "source": "acceptance",
+      "trace": "I6 + ADR0509",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/csv-export.fault.test.ts:4; tools/agent-bench/tests/csv-export-controls.ts:44",
+      "note": ""
+    },
+    {
+      "row": "Header spelling imposes no unstated export requirement",
+      "source": "acceptance",
+      "trace": "I6 + ADR0509",
+      "status": "missing",
+      "citation": "tools/agent-bench/src/judge/context.ts:124",
+      "note": "Titlecase Name,Email reference remains rejected. Executed /tmp/rifty-pr341-review-csv-header-probe.log; no committed positive carrier for this declared clause."
+    },
+    {
+      "row": "LF/CRLF, escaped quotes, commas and quoted embedded line breaks retain exact values",
+      "source": "acceptance",
+      "trace": "I6 + ADR0509",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/csv-export.fault.test.ts:4",
+      "note": ""
+    },
+    {
+      "row": "Malformed escaping, after-close garbage, bare and unfinished quotes fail",
+      "source": "acceptance",
+      "trace": "I3 + I6 + ADR0509",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/csv-export.fault.test.ts:20; docs/backlog/distribution/reference/agent-eval-csv-export-revert-proof.json.gz",
+      "note": ""
+    },
+    {
+      "row": "Wrong, extra, missing and duplicate records fail",
+      "source": "acceptance",
+      "trace": "I3 + I6 + ADR0509",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/csv-export.fault.test.ts:20; tools/agent-bench/tests/csv-export-controls.ts:77",
+      "note": ""
+    },
+    {
+      "row": "Both case-insensitive filter projections match exactly the current result",
+      "source": "acceptance",
+      "trace": "I3 + I6 + csv-workflow-v2/prompt.md export/filter requirement",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v3/judge.ts:73; tools/agent-bench/tests/csv-export-controls.ts:69",
+      "note": ""
+    },
+    {
+      "row": "Live field values and visible text output preserve open DOM/caption choice",
+      "source": "acceptance",
+      "trace": "I6 + ADR0509",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/csv-export-controls.ts:44; tools/agent-bench/src/judge/context.ts:128",
+      "note": ""
+    },
+    {
+      "row": "Hidden correct CSV cannot rescue corrupt visible output",
+      "source": "acceptance",
+      "trace": "I3 + I6 + ADR0509",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/csv-export-controls.ts:87; docs/backlog/distribution/reference/agent-eval-csv-export-revert-proof.json.gz",
+      "note": ""
+    },
+    {
+      "row": "Actual downloadable CSV bytes remain accepted",
+      "source": "acceptance",
+      "trace": "I6 + csv-workflow-v2/prompt.md accessible output or downloadable file",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v3/judge.ts:62; tools/agent-bench/tests/csv-export-controls.ts:100",
+      "note": ""
+    },
+    {
+      "row": "Baseline and plausible incomplete controls remain unsuccessful; reference and alternative successful",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/csv-export-controls.ts:97",
+      "note": ""
+    },
+    {
+      "row": "Frozen csv-workflow-v3 project.json preserves the prior public task, seed or control bytes",
+      "source": "frozen-artifact",
+      "trace": "I6 + I7 + ADR0509",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-csv-correction.test.ts:17; tools/agent-bench/corpus/cases/csv-workflow-v3/project.json:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen csv-workflow-v3 prompt.md preserves the prior public task, seed or control bytes",
+      "source": "frozen-artifact",
+      "trace": "I6 + I7 + ADR0509",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-csv-correction.test.ts:17; tools/agent-bench/corpus/cases/csv-workflow-v3/prompt.md:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen csv-workflow-v3 reference.json preserves the prior public task, seed or control bytes",
+      "source": "frozen-artifact",
+      "trace": "I6 + I7 + ADR0509",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-csv-correction.test.ts:17; tools/agent-bench/corpus/cases/csv-workflow-v3/reference.json:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen csv-workflow-v3 partial.json preserves the prior public task, seed or control bytes",
+      "source": "frozen-artifact",
+      "trace": "I6 + I7 + ADR0509",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-csv-correction.test.ts:17; tools/agent-bench/corpus/cases/csv-workflow-v3/partial.json:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen csv-workflow-v3 alternative.json preserves the prior public task, seed or control bytes",
+      "source": "frozen-artifact",
+      "trace": "I6 + I7 + ADR0509",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-csv-correction.test.ts:17; tools/agent-bench/corpus/cases/csv-workflow-v3/alternative.json:1",
+      "note": ""
+    },
+    {
+      "row": "Corrected pilot-v3 keeps six families and the existing calibration/evaluation separation",
+      "source": "frozen-artifact",
+      "trace": "I7 + ADR0509",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-csv-correction.test.ts:28; tools/agent-bench/corpus/pilot-v3.json:1",
+      "note": ""
+    },
+    {
+      "row": "Original v2 corpus and historical case bytes remain frozen",
+      "source": "frozen-artifact",
+      "trace": "I7 + I9 + ADR0509",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-csv-correction.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Interrupted49/72 original results remain unchanged and missing trials visible",
+      "source": "acceptance",
+      "trace": "I3 + I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-05-pilot-csv-encoding-interrupted/README.md:3; /tmp/rifty-pr341-review-raw-artifacts-proof.json",
+      "note": ""
+    },
+    {
+      "row": "Reference apps are exercised in all four origins, without model calls or native rescue",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/csv-export-origin-controls.ts:17; tools/agent-bench/reports/summaries/2026-10-05-csv-export-reference-controls/report.json.gz",
+      "note": ""
+    },
+    {
+      "row": "Actual and quoted-header programmes preserve physical-before plus applied files in all four origins",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/csv-export-origin-controls.ts:40; /tmp/rifty-pr341-review-raw-artifacts-proof.json",
+      "note": ""
+    }
+  ],
+  "unit_residuals": [
+    {
+      "clause": "I6 + ADR0509:16-19",
+      "location": "tools/agent-bench/src/judge/context.ts:124",
+      "summary": "Accept ordinary semantic header spelling (executed Name,Email reference currently fails), add discriminating positive control/RED and verify repaired tree."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I4 + I5 + I9",
+      "location": "docs/backlog/distribution/agent-eval-comparison-report.md:68",
+      "summary": "Fresh frozen72 campaign, inspectable comparison/uncertainty and no-model regeneration remain open; interrupted49 history is no quality or I5 completion proof."
+    },
+    {
+      "clause": "I1 + I6 + I7",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:4",
+      "summary": "Separately frozen expanded corpus and its campaign remain open."
+    },
+    {
+      "clause": "I2 + I10 + I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:5",
+      "summary": "Operation difference catalog and escalated boundary study remain open; expose verified physical host lock/esbuild differences22-vs72 entries and0.28.0-vs0.28.2, without dependency-equivalence claim."
+    }
+  ],
+  "goal_complete": false
+}

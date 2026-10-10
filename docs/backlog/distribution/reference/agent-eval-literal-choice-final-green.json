@@ -1,0 +1,136 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS literal-choice repair unit; keep PR #341 draft while F6 and required goal continuation remain open.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "e8dbbd8864cb84c2b414171915d85928601fd16c",
+  "unit_goal_source": "PR #341 observed literal-choice defect: actual native (Amber) with identities [Amber,(Amber)] caused selection/readback failure. BASE 3208fb9c2560a7516a24e94c19681c0f2cb48785; goal docs/backlog/epics/agent-code-quality-evaluation/goal.md I3/I6. Existing baseline authority; no new planned promise. Independent evidence .cache/pr341/literal-choice-final-review/review-evidence.json.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3 + I6",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:8",
+      "summary": "F6 valid Edit room details for Bay remains rejected. Persisted-record/editor ownership criterion implementation, class/four-origin proof and independent source Final remain required; directed prototypes do not close it."
+    },
+    {
+      "clause": "I1 + I2 + I3 + I4 + I7 + I8 + I9",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:3",
+      "summary": "After corrected source acceptance, freeze fresh eight-task/all-four/three-repeat96 campaign with retained failures/uncertainty/offline proof; original96 remains unaccepted and unrescored."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:4",
+      "summary": "Actual operation/tool/API/policy differences, recovery/impact and directed public-host/native evidence catalog remains required."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:16",
+      "summary": "Finite substantive engineering/dependency/resource escalation and fresh repeated boundary confirmation remain required."
+    },
+    {
+      "clause": "I4; end-to-end goal proof",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:10",
+      "summary": "Historical-reader retirement proof, whole-goal acceptance audit and CLOSE remain; literal unit cannot close goal."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Literal Amber/(Amber) selection chooses the actual option for text, aria-label, native label and aria-labelledby in either order.",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/choice-projection.fault.spec.ts:39; .cache/pr341/literal-choice-final-review/choice-mutant.log; .cache/pr341/literal-choice-final-review/baseline.log",
+      "note": ""
+    },
+    {
+      "row": "Selected native option reads back its exact overlapping literal identity through the same label authority.",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/choice-projection.fault.spec.ts:61; .cache/pr341/literal-choice-final-review/readback-mutant.log",
+      "note": ""
+    },
+    {
+      "row": "Existing contextual caption choices, missing/ambiguous errors and validation before selection mutation remain.",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/choice-projection.fault.spec.ts:4; tools/agent-bench/tests/workflow-actions.fault.spec.ts:87; .cache/pr341/literal-choice-final-review/current-host.log",
+      "note": ""
+    },
+    {
+      "row": "Separate reference-only four-origin controls select both literal rooms and observe actual saved reservations after reload.",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/literal-choice-origin-controls.ts:23; tools/agent-bench/tests/literal-choice-origin-controls.ts:47; .cache/pr341/literal-choice-final-review/archive-independent-proof.json",
+      "note": ""
+    },
+    {
+      "row": "Retained original functional/declaration/report JSON and report scores remain byte-exact; no model calls or cohort rescue.",
+      "source": "frozen-artifact",
+      "trace": "I3 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/literal-choice-origin-controls.ts:75; tools/agent-bench/reports/summaries/2026-10-09-literal-choice-origin-controls/README.md:3; .cache/pr341/literal-choice-final-review/offline-independent-proof.json",
+      "note": ""
+    },
+    {
+      "row": "Eval-v13 retains all eight public cases/cards/control inputs and exposes changed shared support in resolved fingerprints.",
+      "source": "frozen-artifact",
+      "trace": "I4 + I6 + I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/eval-v13.json:2; tools/agent-bench/src/corpus.ts:122; .cache/pr341/literal-choice-final-review/version-independent-proof.json",
+      "note": ""
+    },
+    {
+      "row": "Directed native Vue graph/Svelte Paid-delta research demonstrates update versus creation with exact rollback; makes no implementation/four-origin/I10 acceptance claim.",
+      "source": "frozen-artifact",
+      "trace": "I3 + I6 + I10",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-operation-context-repair.md:190; .cache/pr341/literal-choice-final-review/room-graph-discriminator-proof.json; .cache/pr341/literal-choice-final-review/expense-delta-discriminator-proof.json",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "id": "expense-settlement-v9",
+  "group": "app",
+  "family": "expense-conservation",
+  "split": "evaluation",
+  "origin": {
+    "type": "original-scenario",
+    "created": "2026-10-06",
+    "starter": "svelte5.38.7 + @sveltejs/vite-plugin-svelte + Vite7.3.6",
+    "registryEvidence": "docs/backlog/distribution/reference/agent-eval-expansion-starter-metadata.json.gz"
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.ts",
+  "regressionSources": ["minimal installed starter build/boot"],
+  "difficulty": "Exact integer cents, creation-order remainder, payer outside participants, conservation/any-clearing settlement and atomic mutation/reference guards",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "Observed cancellation/record-identity collision and contextual row-action false-negative; operation-context projection preserves public inputs and native-input-v1; new full96 after class proof/Final.",
+  "judgeSupport": "native-input-v1",
+  "correctionOf": "eval-v8/expense-settlement-v5"
+}

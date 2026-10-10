@@ -1,0 +1,1 @@
+Native eval-v14 directed criteria controls: formatted calendar output passes, reversed chronology fails its actual requirement. No model invocation; not comparative quality. Original JSON/text/hashes retained, two offline regenerations byte-exact. Raw ZIP/screens retained in ignored source root. Source Final and full goal pending.

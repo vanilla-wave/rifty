@@ -1,0 +1,220 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED permits implementation with advisory F1/F2; not a merge/goal completion verdict.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "bc1bcdb33561d2c3c5251e441b5db51f8314a7b4",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-project-corpus.md; goal ready I1/I2/I3/I6/I7; raw refine evidence; BASE ff7ecbb90d51f3857f1b1b2cc054d23556ee5d56. Fresh read-only depth1 reviewer /root/corpus_contract_review.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+      "summary": "Complete the real suite loader/install/series delivery; pilot preparation is not shipped acceptance."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+      "summary": "Run the selected real-project/app suite across all four actual origins."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+      "summary": "Implement and prove trusted post-agent own-origin command judging; retain failures without native rescue."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+      "summary": "Comparison report/identity/uncertainty obligations remain with report unit."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+      "summary": "Repeated live pilot comparison and no-model regeneration remain; controls do not close campaign."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+      "summary": "Four-origin case reference controls and final trusted judge validation remain implementation proof."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+      "summary": "Reviewed pilot trajectories/cost, finite expanded version and its separate campaign remain required."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+      "summary": "Difference catalog remains linked goal work."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+      "summary": "Executed escalating boundary search remains linked goal work; pilot/eight-case counts do not close it."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: frozen six-case input/cards/lock identity and private seed boundary",
+      "source": "acceptance",
+      "trace": "I1+I6+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-plan.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Acceptance2: both workloads, four real origins, trusted post-agent checks and honest failures",
+      "source": "acceptance",
+      "trace": "I2+I3",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/corpus-controls.spec.ts:7",
+      "note": ""
+    },
+    {
+      "row": "Acceptance3: semantic regressions and baseline/partial/reference/alternative controls",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "tools/agent-bench/corpus/cases/queue-clear/judge.mjs:59",
+      "note": "Executed limitFunction concurrency mutant passes trusted judge while concurrency1 runs3 simultaneous calls; concern F1. Native16 controls independently rerun, raw native8 app controls inspected."
+    },
+    {
+      "row": "Acceptance4: frozen family separation, pilot before expansion, selection integrity and original smoke separate",
+      "source": "acceptance",
+      "trace": "I1+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-plan.test.ts:44",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × corpus/card/lock/hash",
+      "source": "fault-matrix",
+      "trace": "I1+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-plan.test.ts:5",
+      "note": "Contract+RED loader entry point fails Unknown option --suite; deeper corruption probes not yet executed, advisory F2 (REV-4/REV-5). This is preparation, not GREEN corruption acceptance."
+    },
+    {
+      "row": "provenance-lie × trusted judge files",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-plan.test.ts:55",
+      "note": "Seed-exclusion RED prepared; post-agent physical origin/injection proof still implementation target, advisory F2."
+    },
+    {
+      "row": "sibling-drift × control/origin",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/corpus-controls.spec.ts:74",
+      "note": ""
+    },
+    {
+      "row": "ms-negative: frozen trusted semantic oracle and mapped reference/control fixtures",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/ms-negative/judge.cjs:1",
+      "note": ""
+    },
+    {
+      "row": "ms-weeks: frozen trusted semantic oracle and mapped reference/control fixtures",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/ms-weeks/judge.cjs:1",
+      "note": ""
+    },
+    {
+      "row": "stringify-boxed: frozen trusted semantic oracle and mapped reference/control fixtures",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/stringify-boxed/judge.cjs:1",
+      "note": ""
+    },
+    {
+      "row": "queue-clear: frozen trusted semantic oracle and mapped reference/control fixtures",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "tools/agent-bench/corpus/cases/queue-clear/judge.mjs:1",
+      "note": "F1: limitFunction concurrency mutant survives; other prepared controls remain discriminating."
+    },
+    {
+      "row": "csv-workflow: frozen trusted semantic oracle and mapped reference/control fixtures",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow/judge.ts:1",
+      "note": ""
+    },
+    {
+      "row": "markdown-notes: frozen trusted semantic oracle and mapped reference/control fixtures",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes/judge.ts:1",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/src/corpus-plan.test.ts:49",
+          "authority": "",
+          "summary": "Current RED is coarse loader admission; no executed corrupt-card/hash probe or adversarial physical-origin/judge-substitution check yet. Add relevant probes during implementation and verify them before Final+GREEN.",
+          "evidence": "Read corpus-plan.test.ts and corpus-controls.spec.ts; plan checks lock syntax/static seeds, controls checks24 lane rows/declared statuses and native passes. Executed pnpm exec vitest run tools/agent-bench/src/corpus-plan.test.ts:1 failure, Unknown option --suite; direct controls --suite pilot-v1 --control reference:exit1 same absent option. No import/typecheck failure. This is an advisory evidence gap at Contract+RED, not an imagined implementation defect."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/corpus/cases/queue-clear/judge.mjs:59",
+          "authority": "",
+          "summary": "limitFunction regression carrier checks values only; losing its concurrency control survives trusted judge.",
+          "evidence": "Node v24.16.0; scratch /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-corpus-review-queue-xnuUw8. Materialized pinned project+reference with actual installed yocto-queue. Reference node judge.mjs exit0. Replace limitFunction with direct Promise.resolve().then(function) wrapper ignoring option: node judge.mjs exit0 RIFTY_CORPUS_PASS:queue-clear. Independent declared-behavior specific.mjs runs3 calls with concurrency1: max concurrency3, assertion3!==1, exit1. REV-4 weak/advisory: no named-mutant discrimination requirement."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

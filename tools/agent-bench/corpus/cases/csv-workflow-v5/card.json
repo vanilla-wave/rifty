@@ -1,0 +1,19 @@
+{
+  "id": "csv-workflow-v5",
+  "group": "app",
+  "family": "contact-import",
+  "split": "evaluation",
+  "origin": {
+    "type": "original-scenario",
+    "created": "2026-10-05",
+    "starter": "React19.1.1 + TypeScript5.9.2 + Vite7.3.6"
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.ts",
+  "regressionSources": ["minimal starter build/boot"],
+  "difficulty": "Interacting validation/persistence/filter/export states",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "Captured Export-toggle native public7/private6-of7 RED; observe valid current-filter output before and after the public action. Same public inputs; prior criteria/results preserved.",
+  "correctionOf": "eval-v4/csv-workflow-v4"
+}

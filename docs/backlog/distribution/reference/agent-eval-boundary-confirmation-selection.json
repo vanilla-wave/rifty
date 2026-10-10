@@ -1,0 +1,56 @@
+{
+  "phase": "confirmation-selection",
+  "status": "Frozen before reference/model confirmation; independent stopping premisePASS",
+  "sourceAdmission": "901cef3cb9b76026c1567b7a852094adad2e3768",
+  "explorationSource": "a0b571faa7ca1f074b0c9ef18378958ed455dc40",
+  "configSha256": "be10c8fb5499ea2f604babe9b908543a74d1bad182b366dec963476eda92f8d3",
+  "sourceManifestSha256": "bfcbc23ccd846bcc74b62a55f06907341457098f1a5d719adca56ec4858563bb",
+  "selectedFamilies": [
+    {
+      "family": "linked-data-import",
+      "selectedTask": "linked-import-2",
+      "dimension": "engineering",
+      "lowerEvidence": "e8e linked1 all4PASS; effectiveinputs unchanged; historicpath-onlyreuse",
+      "upperEvidence": "e8e linked2 COI/CodexPASS,noCOI/PiFAIL; bothfailures retained, path-onlyreuse; no globalcompleted32",
+      "selectionReason": "First observed upper candidate after lower working evidence; thirdlinked credits/currency conservation/durableundo substantive; failed generated programs/context, runtime cause unknown",
+      "stoppingBound": "Declared three related datasets/two currencies/persisted history; confirm candidate in fresh four-origin repeats."
+    },
+    {
+      "family": "async-search-state",
+      "selectedTask": "async-search-2",
+      "dimension": "engineering",
+      "lowerEvidence": "800fa async1 all4PASS; independent semantic entailment/replay12PASS; judgebytes changed explicitly; path-onlyreuse",
+      "upperEvidence": "fresha0b async2 COI/noCOI/PiFAIL,CodexPASS; actualrollback/update/retry failures; no arbitrarypendingboolean criterion",
+      "selectionReason": "First upper failure candidate with lower evidence; optimistic failure/retry/durableundo/stalewrite interactions substantive; sharedLuna failures not runtimecausality",
+      "stoppingBound": "Declared three rows/5,25,70ms externalclient latencies and interaction graph; freshconfirmation confirms behavior under fixed agent budgets."
+    },
+    {
+      "family": "compiler-integration",
+      "selectedTask": "compiler-dependency-2",
+      "dimension": "dependency",
+      "lowerEvidence": "fresha0b TypeScript5.9.2 all4PASS",
+      "upperEvidence": "fresha0b TS+esbuild-wasm0.28 bothRiftysetupFAIL npm-client.bin-collision-reify; nativePi/CodexPASS",
+      "selectionReason": "First observed originating installation boundary after lowerworking case; adding real package/asset/initialization/compiler mode substantive; priorrealreference preparation samebin collision retained",
+      "stoppingBound": "Pinned two compiler stack/two targets/browser APIs; freshreference+models retain originating setupfailures. Installation failure does not prove WASM execution impossible."
+    },
+    {
+      "family": "indexed-resource",
+      "selectedTask": "indexed-data-2",
+      "dimension": "resource",
+      "lowerEvidence": "fresh100k all4PASS;firstinput9\u201323ms during actualindexing",
+      "upperEvidence": "fresh1m all4PASS; actualrows/fullfilteredexport/visibleindexinginput verified; observedfirstinput recorded perorigin",
+      "selectionReason": "Highest tested substantive step of sharedreal algorithm:10x rows,8.125\u219282.256MB serialized dataset,.679\u21926.875MB exported,firstinput duringindex; allpass lowerbound, no discoveredceiling",
+      "stoppingBound": "Predeclared finite1m-row browser indexing/filter/sort/page/export responsiveness question;\u22642s firstinput/\u226460sload,actualmemoryunknown. Pressure/stopping premise independently challenged before confirmation; no absolute or RAM pressure claim."
+    }
+  ],
+  "matrix": "4selectedsteps\u00d74origins\u00d7(1freshreference+2freshmodelrepeats)=16refs32selectedmodeltrials",
+  "history": "All originalscores/headers remain; linked8+async1lower4 separatepath observations only; no combinedcompleted32/24",
+  "inference": "Adaptive profile, not representativecomparison/populationestimate; nativepass alone no runtimecause;allpasslowerbound/sharedfailure/unknown/candidate distinct",
+  "independentPremise": {
+    "path": "agent-eval-boundary-confirmation-selection-premise.json.gz",
+    "verdict": "PASS4upper2;16refs32selectedmodels; no mandatoryresource3",
+    "proposedDossierSha256": "08bfc734506d4d10d237b1d879633822adeb4599c710831a848be6954722cbe5"
+  },
+  "observedResourceUpperInputRangeMs": [25.302834000001894, 50.490541999985],
+  "boundCaveat": "Input is observed during indexing;82MB is serialized dataset, not measured RAM; resourceceiling notfound. Loadclick\u2192readyassert max1.349s includes browserautomation/polling; no pure algorithm latency claim."
+}

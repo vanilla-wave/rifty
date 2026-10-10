@@ -1,3 +1,8 @@
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { REQUIRED_AXES, evaluateVerdict } from '../review/blockers.mjs';
 
@@ -367,5 +372,105 @@ describe('evaluateVerdict', () => {
     expect(
       evaluateVerdict(withBoth, [{ summary: 'No such.', ruling: 'STRETCH', by: 'critic' }]).code,
     ).toBe(2);
+  });
+});
+
+describe('historical CLI contract authority', () => {
+  const reader = resolve(dirname(fileURLToPath(import.meta.url)), '../review/blockers.mjs');
+  const contractPath = 'docs/backlog/test/history.md';
+  const row = {
+    row: 'Acceptance',
+    source: 'acceptance',
+    trace: 'I1',
+    status: 'pass',
+    citation: 'a:1',
+    note: '',
+  };
+  function fixture(
+    action: (root: string, contract: string, verdict: Record<string, unknown>) => void,
+  ) {
+    const root = mkdtempSync(join(tmpdir(), 'review-authority-'));
+    try {
+      const contract = join(root, contractPath);
+      mkdirSync(dirname(contract), { recursive: true });
+      writeFileSync(contract, '## Acceptance\n\n1. first → I1\n2. second → I2\n\n## Decisions\n');
+      const git = (args: string[]) =>
+        execFileSync('git', args, {
+          cwd: root,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }).trim();
+      git(['init', '-q']);
+      git(['add', contractPath]);
+      git([
+        '-c',
+        'user.name=Fixture',
+        '-c',
+        'user.email=fixture@example.test',
+        'commit',
+        '-qm',
+        'Freeze reviewed authority',
+      ]);
+      const verdict = {
+        checkpoint: 'Final+GREEN',
+        unit_goal_source: contractPath,
+        reviewed_sha: git(['rev-parse', 'HEAD']),
+        overall_verdict: 'pass',
+        merge_call: 'accept',
+        axes: REQUIRED_AXES.map((axis) => ({ axis, verdict: 'pass', findings: [] })),
+        coverage: [row, { ...row, trace: 'I2' }],
+        unit_residuals: [],
+        goal_residuals: [],
+        goal_complete: false,
+      };
+      action(root, contract, verdict);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+  function check(root: string, verdict: Record<string, unknown>) {
+    const artifact = join(root, 'verdict.json');
+    const bytes = JSON.stringify(verdict);
+    writeFileSync(artifact, bytes);
+    const result = spawnSync('node', [reader, artifact], { cwd: root, encoding: 'utf8' });
+    expect(readFileSync(artifact, 'utf8')).toBe(bytes);
+    return result;
+  }
+  it('validates the same original verdict after retiring the current contract', () => {
+    fixture((root, contract, verdict) => {
+      expect(check(root, verdict).status).toBe(0);
+      rmSync(contract);
+      expect(check(root, verdict).status).toBe(0);
+    });
+  });
+  it('does not substitute a changed current contract for reviewed obligations', () => {
+    fixture((root, contract, verdict) => {
+      writeFileSync(
+        contract,
+        '## Acceptance\n\n1. first → I1\n2. second → I2\n3. new → I3\n\n## Decisions\n',
+      );
+      expect(check(root, verdict).status).toBe(0);
+    });
+  });
+  it('rejects incomplete coverage even when the current contract was weakened', () => {
+    fixture((root, contract, verdict) => {
+      writeFileSync(contract, '## Acceptance\n\n1. reduced → I1\n\n## Decisions\n');
+      const result = check(root, { ...verdict, coverage: [row] });
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain('1 rows for 2 traced obligations');
+    });
+  });
+  it('rejects unavailable reviewed history without falling back to the current document', () => {
+    fixture((root, _contract, verdict) => {
+      const result = check(root, { ...verdict, reviewed_sha: '0'.repeat(40) });
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain('unreadable contract');
+    });
+  });
+  it('retains working-tree validation for an unbound review draft', () => {
+    fixture((root, _contract, verdict) => {
+      const draft = { ...verdict, reviewed_sha: undefined };
+      expect(check(root, draft).status).toBe(0);
+    });
   });
 });

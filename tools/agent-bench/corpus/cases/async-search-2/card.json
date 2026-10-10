@@ -1,0 +1,25 @@
+{
+  "id": "async-search-2",
+  "group": "feature",
+  "family": "async-search-state",
+  "split": "evaluation",
+  "origin": {
+    "type": "original-boundary-scenario",
+    "created": "2026-10-09",
+    "starter": "Vanilla JavaScript + Vite7.3.6"
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.mjs",
+  "regressionSources": ["existing minimal starter build/boot", "published engine API"],
+  "difficulty": "Extend async controller with optimistic writes amid searches/navigation, failure rollback, retry and durable undo; stale responses cannot erase a later committed write.",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "I11 async-search-state level2; public observable semantic probe, independent alternatives, no changed comparative public8; source admission pending",
+  "level": 2,
+  "boundaryDimension": "engineering",
+  "criteriaVersion": "module-pending-9",
+  "starterRegression": {
+    "buildCommand": "npm run build",
+    "heading": "Minimal JavaScript starter"
+  }
+}

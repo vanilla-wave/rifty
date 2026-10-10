@@ -1,0 +1,212 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK changed-tree Contract+RED: original substitution blocker repaired, but fix introduces four executed semantic/interface oracle defects. Repair in this unit and independently verify before case implementation; scope unchanged, whole goal open.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "6c0d7e89894e5a03ceb2eaba84c38ca239c850e4",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-corpus-expansion.md; BASE4db652200789456c597bb8a38a95d7bb12df7aae, clean reviewed HEAD 6c0d7e89894e5a03ceb2eaba84c38ca239c850e4; fresh independent reviewer /root/expansion_contract_review, read-only/nochildren/no model calls. Raw docs/backlog/epics/agent-code-quality-evaluation/goal.md scenario1-8/I1-I11/Decisions164-188; original user source docs/backlog/distribution/reference/agent-code-quality-refine-evidence.md Original request/answers7-30 and Corpus discussion215-297; public booking/expense prompts, ADR0511/0506/0507, accepted pilot final report and per-case trajectory/cost evidence, actual diff including BASE criteria inspected. RDY-6 final related-set scope/source check CLEAR: exact finite selection/domain policies are curator-owned; original20-30/mix explicitly estimates; fixed8 preserves six pilot cases and adds independent interval/capacity and financial conservation workflows, not framework-swap diversity; no user amendment or weakened user trace, ledger append-only, I10/I11 remain linked. Unknown manual authoring time honestly unknown; no new native/browser-support assertion. Premise/cheaper-route CLEAR: reuse existing loader/runner/report, no new scheduler/root dependency; accepted pilot-only rejected route does not discharge expansion. Independently current unit2RED ENOENT and native-controlRED ENOENT reproduced; initial sandbox Chromium MachPort denial rerun once unsandboxed reaches intended missing manifest (/tmp/rifty-pr341-expansion-review-unit-red.log,/tmp/rifty-pr341-expansion-review-native-red-unsandboxed.log). Native scratch substitution then proves REV5 class4 (see B1). Typecheck/backlog/refs and pilot-plan1/1PASS/gitdiffcheck independently passed. Coverage pass cells for campaign/report/retention reuse accepted unchanged baseline carriers as preparation, never claim new96/full-origin/freeze acceptance delivered now. Only missing semantic preparation is current unit residual; corpus/control/full-campaign implementation remains required goal continuation after accepted preparation. Changed-tree verification against accepted blocker@ef60485: raw final unit/public prompts/source and original evidence retained; no new user answers or scope narrowing. Independently current3RED are missing eval-v1 (/tmp/rifty-pr341-expansion-verified-current-red.log); same original scratch substitution with proper CLI dependencies now2PASS/1FAIL, precise starter-binding error vue expected3.5.18/undefined (/tmp/rifty-pr341-expansion-verified-substitution-unit.log). Updated native carrier realnpm/build/Chromium returns all8FAIL/errors0 and exits1 on substituted reference expectedtrue (/tmp/rifty-pr341-expansion-verified-substitution-native.log, physicalroot/T/rifty-workflow-controls-XxhiRa). Original B1 is corrected: intended oracle is independent of case.judge; producer guard-revert raw evidence preserved. Independent typecheck/backlog/refs/diffcheck PASS, actual tree clean. Current review does not certify current positive UI/control/origin/campaign acceptance; new helper probes settle concrete public action/payment/numeric clauses and real loader export interface at preparation. Scope/source/premise findings remain CLEAR; no app/manifest/project/fixture implementations exist.",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance2+3+5 -> I1+I3+I6; public named action/output alternatives",
+      "location": "tools/agent-bench/tests/workflow-oracles/booking.ts:27",
+      "summary": "Remove undocumented action-word order across both oracles and table/Transfer-region exclusivity in settlement discovery; real public-permitted semantic alternatives must be accepted without narrowing prompts."
+    },
+    {
+      "clause": "Acceptance1+4 -> I1+I2+I3+I6; existing named judge loader interface",
+      "location": "tools/agent-bench/tests/workflow-oracles/booking.ts:198",
+      "summary": "Certified source must expose callable judge via existing loader; verify both new cases actually load callable trusted judges, not only direct default-oracle controls."
+    },
+    {
+      "clause": "Acceptance3 -> I1+I3+I6; exact integer-cent/net/settlement arithmetic",
+      "location": "tools/agent-bench/tests/workflow-oracles/expense.ts:16",
+      "summary": "Reject excess-precision/non-cent output rather than matching a truncated prefix; sweep shared decoder across balances and table/card transfers, retain actual negative and guard-revert proof."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I1+I6+I7; expansion acceptance1-7",
+      "location": "docs/backlog/distribution/agent-eval-corpus-expansion.md:43",
+      "summary": "After preparation repair: deliver pinned new cases/semantic judges, actual positive/corruption/valid-alternative/guard-revert proof, fresh32reference+32newcase all-origin controls, freeze and separate complete96trial campaign/offline regeneration; preserve all selected outcomes. Current semantics/source binding preparation does not close any of this."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md:1",
+      "summary": "Evidence-backed command/tool/API/behavior/policy difference catalog, including recovered obstacles and effect/unknown, remains mandatory."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md:1",
+      "summary": "Executed substantive finite escalation, justified stopping bounds and fresh repeated boundary confirmation/controls remain mandatory; pilot/expanded comparison alone cannot close goal."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: separately frozen eight-case/seven-family suite; installed Vue/Svelte starters, public prompts and frozen provenance; unchanged pilot.",
+      "source": "acceptance",
+      "trace": "I1+I6+I7+I8",
+      "status": "missing",
+      "citation": "tools/agent-bench/src/corpus-expansion.test.ts:46",
+      "note": "Existing wrong-workflow substitution is now discriminated, but current intended oracle violates declared public/interface semantics: B2 action order, B3 settlement shape, B4 loader export, B5 excess-precision loss. Executed artifacts below; mandatory preparation repair, not a demand for future app/control/campaign GREEN."
+    },
+    {
+      "row": "Acceptance2: room/reservation guards, interval/capacity independence, atomicity/filter/order/reload and four real control outcomes.",
+      "source": "acceptance",
+      "trace": "I1+I3+I6",
+      "status": "missing",
+      "citation": "tools/agent-bench/tests/workflow-oracles/booking.ts:24",
+      "note": "Existing wrong-workflow substitution is now discriminated, but current intended oracle violates declared public/interface semantics: B2 action order, B3 settlement shape, B4 loader export, B5 excess-precision loss. Executed artifacts below; mandatory preparation repair, not a demand for future app/control/campaign GREEN."
+    },
+    {
+      "row": "Acceptance3: exact cents/creation-order allocation/conservation/any-clearing-settlement and mutation/reference/persistence guards.",
+      "source": "acceptance",
+      "trace": "I1+I3+I6",
+      "status": "missing",
+      "citation": "tools/agent-bench/tests/workflow-oracles/expense.ts:113",
+      "note": "Existing wrong-workflow substitution is now discriminated, but current intended oracle violates declared public/interface semantics: B2 action order, B3 settlement shape, B4 loader export, B5 excess-precision loss. Executed artifacts below; mandatory preparation repair, not a demand for future app/control/campaign GREEN."
+    },
+    {
+      "row": "Acceptance4: real locked native new-case controls, same own-origin requirements, full32 references/32 new controls; all failures retained.",
+      "source": "acceptance",
+      "trace": "I2+I3+I6",
+      "status": "missing",
+      "citation": "tools/agent-bench/src/corpus.ts:143",
+      "note": "Existing wrong-workflow substitution is now discriminated, but current intended oracle violates declared public/interface semantics: B2 action order, B3 settlement shape, B4 loader export, B5 excess-precision loss. Executed artifacts below; mandatory preparation repair, not a demand for future app/control/campaign GREEN."
+    },
+    {
+      "row": "Acceptance5: corrupted/valid-alternative controls and each guarded requirement negative/revert; public requirements only, honest authoring evidence before calls.",
+      "source": "acceptance",
+      "trace": "I6+I7",
+      "status": "missing",
+      "citation": "tools/agent-bench/tests/workflow-controls.ts:68",
+      "note": "Existing wrong-workflow substitution is now discriminated, but current intended oracle violates declared public/interface semantics: B2 action order, B3 settlement shape, B4 loader export, B5 excess-precision loss. Executed artifacts below; mandatory preparation repair, not a demand for future app/control/campaign GREEN."
+    },
+    {
+      "row": "Acceptance6: fresh fixed96 trial campaign plan with all4 origins/3 repeats/declared config and no adaptive exclusions.",
+      "source": "acceptance",
+      "trace": "I1+I2+I3+I4+I7+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-expansion.test.ts:23",
+      "note": ""
+    },
+    {
+      "row": "Acceptance7: separate complete campaign, retained own-origin evidence, conditional fixed-matrix report/offline regeneration, no equality/causal claim.",
+      "source": "acceptance",
+      "trace": "I3+I4+I7+I8+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-comparison-report-final-green.json:5",
+      "note": ""
+    },
+    {
+      "row": "Fault frozen-assumption/sibling-drift x judge: valid alternatives PASS, unmet public requirements FAIL.",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "missing",
+      "citation": "tools/agent-bench/tests/workflow-oracles/expense.ts:134",
+      "note": "Existing wrong-workflow substitution is now discriminated, but current intended oracle violates declared public/interface semantics: B2 action order, B3 settlement shape, B4 loader export, B5 excess-precision loss. Executed artifacts below; mandatory preparation repair, not a demand for future app/control/campaign GREEN."
+    },
+    {
+      "row": "Fault torn-state x invalid app mutation: prior rooms/expenses/persistence preserved.",
+      "source": "fault-matrix",
+      "trace": "I1+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracles/booking.ts:124",
+      "note": ""
+    },
+    {
+      "row": "Fault corrupt-input x amount/interval/selection: visible rejection without retained mutation.",
+      "source": "fault-matrix",
+      "trace": "I1+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracles/expense.ts:184",
+      "note": ""
+    },
+    {
+      "row": "Fault input/provenance drift x frozen version: reject mismatch/private-check leakage.",
+      "source": "fault-matrix",
+      "trace": "I6+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus.ts:96",
+      "note": ""
+    },
+    {
+      "row": "Fault setup/unsupported/interruption x matrix: retain failed/partial/missing, fresh next series.",
+      "source": "fault-matrix",
+      "trace": "I3+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-comparison-report-final-green.json:5",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/tests/workflow-oracles/booking.ts:27",
+          "summary": "New action selectors impose undocumented caption order; a named Room add action is rejected while Add room is accepted. Same ordered action grammar recurs across both oracles.",
+          "authority": "I6; Acceptance2+3+5 -> I1+I3+I6; public booking prompt20-24/expense21-26 leave named actions/DOM open; ADR0511:20-23 no undisclosed semantic or appearance requirement.",
+          "evidence": "Executed unchanged oracle helpers (only absolute context import/helper exports appended in scratch) on real Chromium, Nodev24.16.0: node --import tsx /tmp/rifty-pr341-expansion-oracle-probe.mjs; /tmp/rifty-pr341-expansion-oracle-shape-evidence.json and .log retain command/output; no full-app implementation or correctness claim. Public prompt action/output shapes are the declared oracle authority. Probe saveRoom: accessibleButtonNames[Add room] accepted; [Room add] => Missing named action /add|create/ before /room/. Expense person/create/save/edit/delete and booking row/room actions use the same order restriction. Fault frozen-assumption/sibling-drift at owned action-purpose projection; this is an executed false oracle premise under REV5, not an invented app policy."
+        },
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/tests/workflow-oracles/expense.ts:134",
+          "summary": "Settlement extraction requires table DOM or Transfer-named regions although public requirements permit other named readable payment layouts.",
+          "authority": "I6; Acceptance3+5 -> I1+I3+I6; public expense prompt14-17/21-26 permits any exact clearing settlement and open DOM/layout; ADR0511:20-23.",
+          "evidence": "Executed unchanged oracle helpers (only absolute context import/helper exports appended in scratch) on real Chromium, Nodev24.16.0: node --import tsx /tmp/rifty-pr341-expansion-oracle-probe.mjs; /tmp/rifty-pr341-expansion-oracle-shape-evidence.json and .log retain command/output; no full-app implementation or correctness claim. Public prompt action/output shapes are the declared oracle authority. Identical visible named Payer Ada/Receiver Zed/Amount4.34 and Cara/Zed/5.33 regions clear nets967/-434/-533. Region names Transfer Ada to Zed / Transfer Cara to Zed => validtrue two rows; names Payment Ada to Zed / Payment Cara to Zed => validfalse rows[], despite identical named amounts/identities. Fault frozen-assumption/sibling-drift at payment-purpose projection."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/tests/workflow-oracles/booking.ts:198",
+          "summary": "Certified oracle source exports only default, while the existing corpus loader reads named judge; both future exact-source-bound cases load with task.judge undefined.",
+          "authority": "Acceptance1+4 -> I1+I2+I3+I6; named baseline tools/agent-bench/src/corpus.ts app-loader interface; RDY-8 required usable intended semantic carrier.",
+          "evidence": "node --import tsx /tmp/rifty-pr341-expansion-oracle-export-probe.mjs, Nodev24.16.0, exit0. /tmp/rifty-pr341-expansion-oracle-export-evidence.json preserves exact command/output: real unchanged loadCorpus on scratch corpus with certified oracle source, only context path adjusted; booking-workflow and expense-settlement moduleDefault=function,moduleNamedJudge=undefined,loadedTaskJudge=undefined. Expense export at232 same sibling. Exact source binding tests omit callable task.judge; native controls directly invoke default oracle and conceal this real origin-loader mismatch. Fault export-interface mismatch; no app delivery needed to reproduce."
+        },
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/tests/workflow-oracles/expense.ts:16",
+          "summary": "Numeric decoder silently truncates excess fractional digits, allowing non-cent amounts that do not exactly clear nets to pass settlement validation.",
+          "authority": "I6; Acceptance3 -> I1+I3+I6 (broken allocation/conservation variants fail); public expense prompt8-9/14-17/26 exact integer cents and exact signed two-decimal outputs.",
+          "evidence": "Executed unchanged oracle helpers (only absolute context import/helper exports appended in scratch) on real Chromium, Nodev24.16.0: node --import tsx /tmp/rifty-pr341-expansion-oracle-probe.mjs; /tmp/rifty-pr341-expansion-oracle-shape-evidence.json and .log retain command/output; no full-app implementation or correctness claim. Public prompt action/output shapes are the declared oracle authority. Named Transfer regions amounts4.345 and5.335 produce result.valid=true with decoded434/533cents. Actual total9.680 differs from creditor9.670 and each transfer is not integer cents; regex matches only the first two fractional digits and ignores the remainder. Same cents decoder reads Paid/Owed/Net and table/card transfers; sweep both output paths. Fault lossy-aggregate/frozen-assumption at numeric-value projection."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

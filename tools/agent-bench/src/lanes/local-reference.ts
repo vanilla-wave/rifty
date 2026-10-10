@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { type ChildProcess, spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -6,17 +6,25 @@ import { redact, secretValues } from '../config.ts';
 import { readTree, writeTree } from '../files.ts';
 import { eventMetrics } from '../metrics.ts';
 import {
+  decodeProcessOutput,
   freePort,
   killProcessGroup,
   runOrThrow,
+  runToCompletion,
   spawnLoggedServer,
   waitHttpReady,
 } from '../proc.ts';
+import { runCodex } from './native-codex.ts';
 import { nativeExtension } from './native-extension.ts';
 import type { Input, Observation, Prepared } from './types.ts';
 
-export async function prepareLocal(input: Input): Promise<Prepared> {
+export async function prepareLocal(
+  input: Input,
+  participant: 'pi' | 'codex' = 'pi',
+): Promise<Prepared> {
   const { task, endpoint, config, dir, key } = input;
+  if (participant === 'codex' && !config.codex)
+    throw new Error('native-codex requires explicit config.codex');
   const secrets = secretValues(endpoint, key);
   const workspace = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-native-'));
   // Package-manager launchers can inject checkout modules into every child Node process.
@@ -28,6 +36,7 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
     cwd: workspace,
     env: nativeEnv,
     timeoutMs: 300000,
+    signal: input.signal,
   });
   await writeFile(
     join(dir, 'install.log'),
@@ -49,6 +58,17 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
     { cwd: workspace, timeoutMs: 30000 },
   );
   const before = await readTree(workspace);
+  const codexVersion =
+    participant === 'codex'
+      ? (
+          await runOrThrow('codex', ['--version'], {
+            cwd: workspace,
+            env: nativeEnv,
+            timeoutMs: 30000,
+            signal: input.signal,
+          })
+        ).stdout.trim()
+      : undefined;
   const port = await freePort();
   const previewUrl = `http://127.0.0.1:${port}/`;
   const start = () =>
@@ -62,57 +82,88 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
         detached: true,
       },
     );
-  let server = start();
+  let server = task.commandJudge ? null : start();
   let context: Awaited<ReturnType<typeof input.browser.newContext>> | undefined;
+  let agent: ChildProcess | undefined;
+  let stopped = false;
+  const stop = () => {
+    if (!agent || stopped) return;
+    stopped = true;
+    void killProcessGroup(agent, participant === 'codex' ? 'SIGINT' : 'SIGTERM');
+  };
+  input.signal?.addEventListener('abort', stop, { once: true });
   try {
-    await waitHttpReady(previewUrl, 120000, 'native dev server');
+    if (server) await waitHttpReady(previewUrl, 120000, 'native dev server');
     context = await input.browser.newContext();
     const page = await context.newPage();
     const extension = join(dir, 'native-extension.ts');
-    await writeFile(extension, nativeExtension(dir, endpoint, config.limits));
-    await writeFile(
-      join(home, 'models.json'),
-      JSON.stringify({
-        providers: {
-          [endpoint.provider]: {
-            baseUrl: endpoint.baseUrl,
-            api: 'openai-completions',
-            apiKey: endpoint.envKey ? `$${endpoint.envKey}` : 'bench-no-auth-sentinel',
-            models: [
-              (() => {
-                const {
-                  envKey: _envKey,
-                  provider: _provider,
-                  thinking: _thinking,
-                  temperature,
-                  headers: _headers,
-                  ...model
-                } = endpoint;
-                return {
-                  ...model,
-                  samplingParams: {
-                    ...(temperature === undefined ? {} : { temperature }),
-                    ...model.samplingParams,
-                  },
-                };
-              })(),
-            ],
+    if (participant === 'pi') {
+      await writeFile(extension, nativeExtension(dir, endpoint, config.limits));
+      await writeFile(
+        join(home, 'models.json'),
+        JSON.stringify({
+          providers: {
+            [endpoint.provider]: {
+              baseUrl: endpoint.baseUrl,
+              api: 'openai-completions',
+              apiKey: endpoint.envKey ? `$${endpoint.envKey}` : 'bench-no-auth-sentinel',
+              models: [
+                (() => {
+                  const {
+                    envKey: _envKey,
+                    provider: _provider,
+                    thinking: _thinking,
+                    temperature,
+                    headers: _headers,
+                    ...model
+                  } = endpoint;
+                  return {
+                    ...model,
+                    samplingParams: {
+                      ...(temperature === undefined ? {} : { temperature }),
+                      ...model.samplingParams,
+                    },
+                  };
+                })(),
+              ],
+            },
           },
-        },
-      }),
-    );
-    await writeFile(
-      join(home, 'settings.json'),
-      JSON.stringify({
-        retry: { enabled: true, maxRetries: 3, baseDelayMs: 2000, provider: { maxRetries: 0 } },
-      }),
-    );
+        }),
+      );
+      await writeFile(
+        join(home, 'settings.json'),
+        JSON.stringify({
+          retry: { enabled: true, maxRetries: 3, baseDelayMs: 2000, provider: { maxRetries: 0 } },
+        }),
+      );
+    }
     return {
       context,
       page,
       before,
       workspace,
+      codexVersion,
+      apply: (files) => writeTree(workspace, files),
+      async command(line) {
+        const result = await runToCompletion('/bin/sh', ['-c', line], {
+          cwd: workspace,
+          env: nativeEnv,
+          timeoutMs: 30000,
+          signal: input.signal,
+        });
+        return { exitCode: result.code, stdout: result.stdout, stderr: result.stderr };
+      },
       async run(): Promise<Observation> {
+        if (participant === 'codex')
+          return runCodex(
+            input,
+            workspace,
+            nativeEnv,
+            (child) => {
+              agent = child;
+            },
+            stop,
+          );
         const cli = resolve(
           'tools/agent-bench/node_modules/@earendil-works/pi-coding-agent/dist/cli.js',
         );
@@ -149,14 +200,18 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
               RIFTY_BENCH_MODEL_HEADERS: JSON.stringify(endpoint.headers ?? {}),
             },
             stdio: ['ignore', 'pipe', 'pipe'],
+            detached: true,
           },
         );
+        agent = child;
+        decodeProcessOutput(child);
+        if (input.signal?.aborted) stop();
         let stdout = '';
         let stderr = '';
-        child.stdout.on('data', (chunk: Buffer) => {
+        child.stdout.on('data', (chunk: string) => {
           stdout += chunk;
         });
-        child.stderr.on('data', (chunk: Buffer) => {
+        child.stderr.on('data', (chunk: string) => {
           stderr += chunk;
         });
         const code = await new Promise<number | null>((resolve, reject) => {
@@ -232,21 +287,23 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
         };
       },
       async preview() {
-        if (task.node) {
-          await killProcessGroup(server);
-          server = start();
-          await waitHttpReady(previewUrl, 120000, 'updated native server');
-        }
+        await killProcessGroup(server);
+        server = start();
+        await waitHttpReady(previewUrl, 120000, 'updated native server');
         await page.goto(previewUrl);
         return { view: page, previewUrl };
       },
       snapshot: () => readTree(workspace),
       async close() {
+        input.signal?.removeEventListener('abort', stop);
+        await killProcessGroup(agent ?? null, participant === 'codex' ? 'SIGINT' : 'SIGTERM');
         await context!.close();
         await killProcessGroup(server);
       },
     };
   } catch (error) {
+    input.signal?.removeEventListener('abort', stop);
+    await killProcessGroup(agent ?? null, participant === 'codex' ? 'SIGINT' : 'SIGTERM');
     await context?.close();
     await killProcessGroup(server);
     throw error;

@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Boundary case checks exercise published compiler modes/targets and controller/indexer query effects; incomplete selector implementations stay failed.
+
+- Agent benchmark retains completed eval16 comparison and adds eight substantive engineering/compiler/resource boundary candidates; admission and boundary model study remain separate.
+
+- Review CLI validates retained verdicts against their reviewed Git contract; changed or retired current documents no longer substitute authority. Missing reviewed history stays explicit.
+
 - Codex sees the `rifty-review` skill in its catalog (`allow_implicit_invocation: true`), matching Claude; verified by a fresh read-only `codex exec` listing.
 
 - ES2022 gate: recognize explicitly feature-detected Float16Array through the existing local-guard analysis (ADR-0481); unguarded constructor use/extraction stays red.

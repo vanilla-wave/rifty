@@ -397,6 +397,27 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0488 | Use npm semver subset rules for installed dependency saves |
 | 0489 | Keep reference host deployment policy outside the SDK |
 | 0490 | Keep reference host snapshot preparation explicit |
+| 0505 | Local evaluation series evidence and native Codex reference |
+| 0506 | Judge frozen project corpus in each originating environment |
+| 0507 | Report fixed corpus uncertainty without equality claims |
+| 0508 | Discover semantic captions in corrected pilot judges |
+| 0509 | Judge decoded CSV export values in a corrected pilot |
+| 0510 | Judge visible Markdown and note navigation behavior |
+| 0511 | Freeze connected workflow evaluation corpus |
+| 0512 | Accept contextual choice captions in workflow judges |
+| 0513 | Observe persisted CSV records through public export |
+| 0514 | Observe composed saved-note captions |
+| 0515 | Observe visible CSV exports before state-changing actions |
+| 0516 | Accept native calendar controls in booking judges |
+| 0517 | Use accessible names for editable judge controls |
+| 0518 | Bind editable judge controls to action context |
+| 0519 | Resolve workflow operations through observable context |
+| 0520 | Verify workflow record identity outside action captions |
+| 0521 | Corroborate record identity across caption presentation |
+| 0522 | Observe record identity through persisted effects |
+| 0523 | Observe reservations through independent public display |
+| 0524 | Project reservation fields without aggregate identity |
+| 0525 | Verify complete record observation settlement |
 
 ## Superseded (removed)
 

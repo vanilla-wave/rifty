@@ -1,0 +1,2 @@
+Fix boxed String values so serialization matches JSON.stringify strings at root and nested in objects/arrays, including empty/unicode/escaped strings. Preserve stable key ordering, cmp option, toJSON behavior, undefined/NaN/Infinity treatment, cycle rejection/opt-in cycle marker and repeated noncyclic references.
+Work in the existing project. No particular implementation shape is required. Existing source/tests remain available; trusted checks exercise these stated behaviors.

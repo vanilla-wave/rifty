@@ -1,0 +1,195 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: editable-name unit/B1 repair принят; можно продолжить fresh comparison в PR341. Full96/I10/I11/CLOSE остаются открыты.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "9b00128347bb7499b9a94f0507e28a342f9dc4db",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-editable-name-judging.md against BASE 0f66604080057aeb004b45bfe90cd84355d5dc72; accepted goal docs/backlog/epics/agent-code-quality-evaluation/goal.md unchanged; clean reviewed 9b00128347bb7499b9a94f0507e28a342f9dc4db; fresh independent SECOND ROUND, prior b836 BLOCK not accepted",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1/I2/I3/I4/I7/I8/I9: expanded matched own-environment comparison",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:5",
+      "summary": "Fresh corrected frozen full96/all4/three repeats, retained failures/uncertainty/offline regeneration and independent comparison Final remain. Current84/96 is explicitly unaccepted historical evidence."
+    },
+    {
+      "clause": "I10: evidence-backed observed operation/tool/policy difference catalog",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Actual catalog/probes including retained bootstrap and recovered/unresolved obstacles remain required; raw traces/controls alone do not close I10."
+    },
+    {
+      "clause": "I11: executed finite substantive escalation and frozen fresh repeated boundary confirmation",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Boundary diagnostics protocol/escalation/controls/fresh confirmation remain; observer controls are not the required reliability-boundary search."
+    },
+    {
+      "clause": "End-to-end accepted goal audit/CLOSE after linked obligations are independently proven",
+      "location": "docs/backlog/distribution/agent-eval-editable-name-judging.md:105",
+      "summary": "Unit independently passes at 9b001283; comparison and diagnostics remain linked. Accepted whole-goal end-to-end audit/CLOSE is not delivered by this observer unit."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Combobox: options do not erase accessible purpose",
+      "source": "fault-matrix",
+      "trace": "I3/I6/ADR-0517",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/editable-control-names.spec.ts:4",
+      "note": "Independent exact committed test: after Amber/Bay insertion role remains Reservation room; current getter selects b and real field value is b. BASE getter resolves zero after insertion. current-native.log and baseline-original-native.log."
+    },
+    {
+      "row": "Textbox: textarea prose does not become another field purpose",
+      "source": "fault-matrix",
+      "trace": "I3/I6/ADR-0517",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/editable-control-names.spec.ts:24",
+      "note": "Independent test selects/fills only Title; Markdown prose remains unchanged. BASE fails because raw label selects both controls. current-native.log and baseline-original-native.log."
+    },
+    {
+      "row": "Listbox: participant data does not become Payer purpose",
+      "source": "fault-matrix",
+      "trace": "I3/I6/ADR-0517",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/editable-control-names.spec.ts:37",
+      "note": "Independent real multiple-select chooses a,b; Payer getter uniquely has id=payer. BASE fails Participants lookup; removing listbox from current owner fails exactly this test. without-listbox-native.log."
+    },
+    {
+      "row": "Native input: native kind/role surface remains usable",
+      "source": "fault-matrix",
+      "trace": "I3/I6/ADR-0517",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/native-input-roles.spec.ts:36",
+      "note": "Actual independent BASE/current interactions: checkbox/radio check sets checked, button/image/reset/submit clicks set data-clicked=yes; external getByRole resolves exact Flag before judge getter. HTML-label-only switch also checks successfully. Previously reviewed b836 omits switch/menuitemcheckbox/menuitemradio/option and button-role siblings; unchanged new tests fail those real lookups. BASE65GREEN, b83645RED/20GREEN, current73GREEN in baseline-native.log/previous-native.log/current-native.log; original tests cover native kind fill/file/range and retain values."
+    },
+    {
+      "row": "Explicitly labelled generic contenteditable retains own purpose",
+      "source": "fault-matrix",
+      "trace": "I3/I6/ADR-0517",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/editable-control-names.spec.ts:70",
+      "note": "Independent current test fills Updated prose through aria-labelledby and reads same actual text; removing generic fallback fails count1 at this exact test. without-generic-fallback-native.log."
+    },
+    {
+      "row": "Read-only/disabled outputs remain excluded",
+      "source": "fault-matrix",
+      "trace": "I3/I6/ADR-0517",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/editable-control-names.spec.ts:119",
+      "note": "Independent current test resolves zero for disabled select, readonly textarea/input sharing Room; unchanged selector filters applied after all added roles."
+    },
+    {
+      "row": "Shortcut/placeholder alone is not named Search purpose",
+      "source": "fault-matrix",
+      "trace": "I3/I6/ADR-0517",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/editable-control-names.spec.ts:126",
+      "note": "Native external searchbox is named by shortcut; current Search purpose resolves zero despite Search placeholder. Executed unchanged negative in current-native.log."
+    },
+    {
+      "row": "Native external gold plus baseline RED before fix; three class REDs",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-editable-name-judging.md:74",
+      "note": "Raw committed history preserves actual reference original working/bare-label failing with identical accessible name; no rescoring. Independently re-executed BASE failures are reservation, textarea and multiple-select semantic assertions (not import/typecheck); baseline-original-native.log."
+    },
+    {
+      "row": "Shared owner passes native8; guard reversions RED3/1/1 and exact restore GREEN8",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-editable-name-evidence.md:10",
+      "note": "Current exact tests preserve eight originals. Independently BASE raw-label mutation fails all three semantic tests; current minus listbox and generic fallback each fails corresponding test, exact current source passes every original. Scratch source/logs in this review directory; original guard raw proof remains immutable."
+    },
+    {
+      "row": "Preserve native ARIA role overrides via external gold, real BASE interactions and role guard RED",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/native-input-roles.spec.ts:36",
+      "note": "Fresh independent same committed tests on git-show BASE preserve real actions and checked state; b836 role-family revert fails only missing projections after external native role/count premise succeeds, with getter expected1/received0. Label-only switch test at line54 reproduces original B1 and passes current actual check. New context differs from b836 only added role alternatives; previous-native.log/current-native.log."
+    },
+    {
+      "row": "Actual four-host consumer outcomes, failures, before/after and noModel proof",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/editable-name-origin-controls.ts:95",
+      "note": "Independently read each original physical before/after tree and noModel trace: exact declared patches; negative baseline/partial fail; booking class variants pass every host. Expense COI source-positive failures retain raw exact style-import CORS and never reached semantics; other hosts pass. Archived report byte-equivalent parsed original. origin-independent.json includes raw receipts. Current exact context SHA22cf and only-single-space Vue source are bound to original/bare functional probes: all room validation, persistence, intervals, filters pass; actual HMR reload retained. Original48 is b836 history, not current role-repair coverage; new native regression discriminates that changed dependency."
+    },
+    {
+      "row": "Versioned criteria/source fingerprints and immutable public inputs/history",
+      "source": "acceptance",
+      "trace": "I8/I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/eval-v7.json:1",
+      "note": "Independent BASE comparison confirms project/prompt/controls/judge bytes unchanged in both versions; other6 entries exact. Mirrors differ only relative import paths. Context SHA22cf08439cd62125f15ed13c46f1933bc8e121ddeb0660ee85de363f3ecfb53e matches new native/Vue proof. Existing corpus owner includes context dependency; no runtime/support/config changes or historical score rewrite. corpus-independent.json."
+    },
+    {
+      "row": "Frozen booking-v4 judge/control/project/prompt equal BASE booking-v3",
+      "source": "frozen-artifact",
+      "trace": "I8/I9; Acceptance versioned criteria/source hashes",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/booking-workflow-v4/judge.ts:1",
+      "note": "Independent exact BASE byte comparison of all six carriers; shared context intentionally changes resolved criterion. Mirror only relative imports; corpus-independent.json."
+    },
+    {
+      "row": "Frozen expense-v4 judge/control/project/prompt equal BASE expense-v3",
+      "source": "frozen-artifact",
+      "trace": "I8/I9; Acceptance versioned criteria/source hashes",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/expense-settlement-v4/judge.ts:1",
+      "note": "Independent exact BASE byte comparison of all six carriers; shared context intentionally changes resolved criterion. Mirror only relative imports; corpus-independent.json."
+    },
+    {
+      "row": "Interrupted eval-v6 remains unaccepted raw history, unfinished12 visible, no rescore",
+      "source": "frozen-artifact",
+      "trace": "I8/I9; Acceptance public inputs/history preserved",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-07-eval-v6-editable-label-interrupted/summary.md:23",
+      "note": "Original interrupted header/declared96 matrix, original84 persisted rows and raw source/trace archive retained. Summary explicitly says known observer defect invalidates comparative acceptance; no quality conclusion or native rescue. Existing original interruption/offline proof remains linked; full corrected campaign in goal residuals."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

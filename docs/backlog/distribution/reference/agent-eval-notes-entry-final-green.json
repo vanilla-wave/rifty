@@ -1,0 +1,206 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: accept the corrected notes-entry source/control slice; fresh complete96 comparison, I10/I11 and whole-goal audit remain mandatory.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "UNIT docs/backlog/distribution/agent-eval-notes-composed-entry-judging.md; GOAL docs/backlog/epics/agent-code-quality-evaluation/goal.md; BASE 8d9eef35a3a8f555a0902849191494adc760f228; clean independently verified HEAD 293c18962df0430365e9730128c17ab81637f812 (changed-tree verification after accepted B1 at 57337576e). Observed-defect preparation: unchanged real captured public7PASS/privateRED. Independent scratch /tmp/rifty-review-notes-b1-verify-6b71mks3: current B1 public7/old7/new7PASS, captured public7/new7PASS, eight Chromium faults and version-unitPASS; current32 physical/no-model,219+168+429 authoritative hashes,115 archive hashes,current8 support fingerprints,current27 gate binding, current32/old65 two offline regenerations verified.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1+I2+I3+I4+I7+I8+I9",
+      "location": "docs/backlog/distribution/agent-eval-expanded-comparison.md:30",
+      "summary": "After corrected source/control Final: freeze current version/plan and execute fresh complete96 comparison, retain every outcome and regenerate offline. Interrupted65 is history, not comparison completion."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:5",
+      "summary": "Linked boundary diagnostics must deliver operation/version/lane evidence catalog, recovered obstacles and measured impact/unknown."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:13",
+      "summary": "Linked finite escalating boundary search/confirmation with controls and justified stopping bounds remains required; whole-goal audit still open."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: unchanged captured programme full public workflow oldRED\u2192currentGREEN; no caption separator",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-entry-controls.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: one entry/Wiki owner, working alternatives, primary title excludes wrong-note excerpts/delete, hidden/misleading/ambiguous negatives",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-entry-controls.fault.spec.ts:46; tools/agent-bench/tests/notes-delete-icon-controls.ts:128",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: notes-only version/case/manifest; all8 public projects/prompts/locks/controls, other7 entry bytes and prior helpers/results immutable",
+      "source": "acceptance",
+      "trace": "I3+I6+I7+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-notes-entry-version.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: current controls/reference/alternative/captured in all4 real origins, physical source patches/provenance and offline regeneration; host failures retained",
+      "source": "acceptance",
+      "trace": "I2+I3+I6+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-delete-icon-origin-controls.ts:66",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: relevant gates/independent Final before fresh96; comparison/I10/I11 retained as subsequent obligations",
+      "source": "acceptance",
+      "trace": "I3+I4+I7+I8+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-notes-composed-entry-judging.md:45; /tmp/rifty-pr341-notes-delete-icon-prcheck.log:1",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: real composed title/excerpt public7 passes, old private matcher fails, unchanged programme currentGREEN",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-entry-controls.ts:143",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: alternate visible identities/field/Wiki actions keep functional regressions; hidden/wrong-note/invalid controls rejected",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-entry-controls.fault.spec.ts:46; tools/agent-bench/tests/notes-delete-icon-origin-controls.ts:75",
+      "note": ""
+    },
+    {
+      "row": "Fault frozen-assumption \u00d7 saved-entry/Wiki identity: observable title, no separator requirement",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-entry-controls.ts:77",
+      "note": ""
+    },
+    {
+      "row": "Fault lossy-aggregate \u00d7 caption composition: retain primary title, other-note excerpt is not identity",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-entry-controls.fault.spec.ts:31; tools/agent-bench/tests/notes-entry-controls.fault.spec.ts:46",
+      "note": ""
+    },
+    {
+      "row": "Fault sibling-drift \u00d7 search/reload/delete/navigation: one corrected observation owner; operation sweep and guard reversions",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-delete-icon-controls.ts:128; tools/agent-bench/tests/notes-entry-controls.fault.spec.ts:46",
+      "note": ""
+    },
+    {
+      "row": "Fault provenance-lie \u00d7 version/run/report: original criteria/65scores unchanged and fresh subsequent series",
+      "source": "fault-matrix",
+      "trace": "I3+I7+I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-notes-entry-version.test.ts:25",
+      "note": ""
+    },
+    {
+      "row": "New savedNoteEntry boundary: accessible exact title/components with wrong-title/delete exclusion and legacy fallback",
+      "source": "public-api",
+      "trace": "I3+I6+ADR-0514",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/judge/context.ts:224; tools/agent-bench/tests/notes-entry-controls.fault.spec.ts:46",
+      "note": ""
+    },
+    {
+      "row": "New wikiNoteTarget uses same note-identity boundary",
+      "source": "public-api",
+      "trace": "I3+I6+ADR-0514",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/judge/context.ts:278; tools/agent-bench/tests/notes-entry-controls.fault.spec.ts:55",
+      "note": ""
+    },
+    {
+      "row": "Frozen eval-v4 manifest changes only current notes identity/version, retained public input/other-case metadata",
+      "source": "frozen-artifact",
+      "trace": "I3+I6+I7+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/eval-v4.json:129",
+      "note": ""
+    },
+    {
+      "row": "Captured composed programme fixture identical to authoritative original notes-v3/COI1 after-tree; RED/GREEN byte identical",
+      "source": "frozen-artifact",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-entry-controls.ts:21",
+      "note": ""
+    },
+    {
+      "row": "Frozen notes-v4 workflow oracle and shipped judge identical except import path",
+      "source": "frozen-artifact",
+      "trace": "I3+I6+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-notes-entry-version.test.ts:31",
+      "note": ""
+    },
+    {
+      "row": "Frozen B1 working programme: original independent public7/old7PASS/currentRED source retained byte-for-byte; repaired current fullpublic7/old7/new7PASS and all4 origin controls",
+      "source": "frozen-artifact",
+      "trace": "I3+I6+ADR-0514",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-delete-icon-controls.ts:20; tools/agent-bench/tests/notes-delete-icon-origin-controls.ts:45",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "293c18962df0430365e9730128c17ab81637f812"
+}

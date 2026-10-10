@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { gunzipSync, gzipSync } from 'node:zlib';
@@ -7,13 +7,23 @@ import { type Config, type Endpoint, redact, redactJson } from './config.ts';
 import type { diffTrees } from './files.ts';
 import type { JudgeVerdict } from './judge/context.ts';
 import type { Lane, Observation } from './lanes/types.ts';
+import type { Plan, Trial } from './plan.ts';
+import { assertComparablePlans, deriveStatistics, statisticsLines } from './statistics.ts';
 export const caveat =
-  'Tool/context non-equivalence: shared model, Pi version and common policy do not isolate an environment-only effect. Native CLI has read/bash/edit/write and native shell; browser hosts expose their real capabilities. Full provider prompts and tool schemas are retained per run.';
+  'Tool/context non-equivalence: shared model, Pi version and common policy do not isolate an environment-only effect. Native CLI has read/bash/edit/write and native shell; browser hosts expose their real capabilities. Full provider prompts/tool schemas are retained for Pi runs. Native Codex JSONL does not expose its assembled prompt/tool schema; that context remains unobserved.';
 export interface Run extends Omit<Observation, 'trace'> {
   task: string;
   lane: Lane;
   runIndex: number;
   profile: string;
+  initialFilesSha256?: string;
+  initialLockfileSha256?: string | null;
+  attemptStartedAt?: string;
+  agentStartedAt?: string;
+  agentFinishedAt?: string;
+  judgeStartedAt?: string;
+  judgeFinishedAt?: string;
+  completedAt?: string;
   outcome: 'pass' | 'fail' | 'budget-exceeded' | 'context-exceeded';
   elapsedMs: number;
   judge: JudgeVerdict;
@@ -33,10 +43,12 @@ export interface Run extends Omit<Observation, 'trace'> {
 }
 export interface Report {
   header: {
+    purpose?: 'quality' | 'controls' | 'smoke' | 'diagnostic';
+    control?: string;
     createdAt: string;
     sourceRevision: string;
     sourceDirty: boolean;
-    versions: { node: string; piCli: string; chromium?: string };
+    versions: { node: string; piCli: string; chromium?: string; codexCli?: string };
     model: string;
     profile: string;
     taskSet: string;
@@ -46,6 +58,28 @@ export interface Report {
     runsPerTask: number;
     toolContextCaveat: string;
     unsupported: string[];
+    codex?: {
+      model: string;
+      reasoning: string;
+      cliVersion?: string;
+      sandbox: 'workspace-write';
+      approval: 'automatic review';
+      isolation: {
+        ephemeral: boolean;
+        ignoreUserConfig: boolean;
+        ignoreRules: boolean;
+        projectDocMaxBytes: number;
+      };
+      budgetAdmission: string;
+    };
+    plan?: Plan;
+    series?: {
+      status: 'running' | 'completed' | 'interrupted' | 'failed';
+      trials: Trial[];
+      active?: Trial;
+      error?: string;
+      finishedAt?: string;
+    };
   };
   runs: Run[];
 }
@@ -55,7 +89,28 @@ export function privateReport(report: Report, secrets: readonly string[]): Repor
   return {
     header: {
       ...report.header,
+      ...(report.header.plan === undefined
+        ? {}
+        : {
+            plan: {
+              ...report.header.plan,
+              config: JSON.parse(redactJson(report.header.plan.config, secrets)) as Config,
+            },
+          }),
+      ...(report.header.series === undefined
+        ? {}
+        : {
+            series: {
+              ...report.header.series,
+              ...(report.header.series.error === undefined
+                ? {}
+                : { error: text(report.header.series.error) }),
+            },
+          }),
       model: text(report.header.model),
+      ...(report.header.codex === undefined
+        ? {}
+        : { codex: { ...report.header.codex, model: text(report.header.codex.model) } }),
       endpoint: JSON.parse(redactJson(report.header.endpoint, secrets)) as Endpoint,
       ...(report.header.noCoiPolicies === undefined
         ? {}
@@ -105,13 +160,20 @@ export async function readJson<T>(dir: string, name: string): Promise<T> {
 async function writeJson(dir: string, name: string, value: unknown) {
   const text = `${JSON.stringify(value, null, 2)}\n`;
   const gzip = !existsSync(join(dir, 'report.json')) && existsSync(join(dir, 'report.json.gz'));
-  if (!gzip) return writeFile(join(dir, name), text);
+  if (!gzip) {
+    await writeFile(join(dir, `${name}.tmp`), text);
+    return rename(join(dir, `${name}.tmp`), join(dir, name));
+  }
   const bytes = gzipSync(text);
   bytes[9] = 0x03; // RFC 1952 OS byte: zlib writes host OS (macOS 0x13); pin Unix. Deflate stream: per zlib build.
-  await writeFile(join(dir, `${name}.gz`), bytes);
+  await writeFile(join(dir, `${name}.gz.tmp`), bytes);
+  await rename(join(dir, `${name}.gz.tmp`), join(dir, `${name}.gz`));
 }
-export async function writeReport(dir: string, report: Report) {
-  await writeJson(dir, 'report.json', report);
+export async function writeReport(dir: string, report: Report, persist = true) {
+  const statistics = deriveStatistics(report);
+  if (persist) await writeJson(dir, 'report.json', report);
+  if (report.header.plan || report.header.series)
+    await writeJson(dir, 'statistics.json', statistics);
   const lines = [
     `# Agent benchmark: ${report.header.model}`,
     '',
@@ -123,44 +185,87 @@ export async function writeReport(dir: string, report: Report) {
     '',
     report.header.toolContextCaveat,
     '',
-    `Excluded: ${report.header.unsupported.join('; ')}.`,
+    `Known constraints: ${report.header.unsupported.join('; ')}.`,
     '',
     'Outcomes: pass, fail, budget-exceeded, context-exceeded (separate; never counted as ordinary fail).',
     'Failure classes are manual: agent, rifty-runtime, rifty-tooling, ai-mode-ux, provider, task-bad. Unclassified stays null.',
     '',
-    '| Task | Lane | Run | Outcome | Agent | Seconds | Tools | Input tokens | Output tokens | Retries | Compactions | Repeated calls | Edit failures | Malformed calls | Class | Note |',
-    '|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|',
   ];
   const cell = (value: string | null) => value?.replaceAll('|', '\\|').replaceAll('\n', ' ') ?? '—';
-  for (const run of report.runs)
+  if (report.header.codex)
     lines.push(
-      `| ${run.task} | ${run.lane} | ${run.runIndex} | ${run.outcome} | ${run.agentStatus} | ${(run.elapsedMs / 1000).toFixed(1)} | ${run.toolCalls} | ${run.inputTokens ?? '—'} | ${run.outputTokens ?? '—'} | ${run.retries ?? '—'} | ${run.compactions ?? '—'} | ${run.repeatedCallNotices ?? '—'} | ${run.editFailures ?? '—'} | ${run.malformedToolCalls ?? '—'} | ${cell(run.failureClass)} | ${cell(run.note)} |`,
+      `Native Codex reference: ${JSON.stringify(report.header.codex)}. Separate model/context; no Pi delta.`,
+      'Native Codex counters not emitted by CLI are unknown; tokens absent on incomplete turns are unknown.',
     );
+  if (report.header.series) {
+    const series = report.header.series;
+    lines.push(
+      `Series: ${series.status}; selected ${series.trials.length}; retained ${report.runs.length}.`,
+      'Incomplete series is partial evidence; missing work is never success.',
+    );
+    if (series.error) lines.push(`Series error: ${cell(series.error)}`);
+  }
   lines.push(
     '',
-    'Per-task pass-rate delta versus local-reference (budget/context counts remain visible):',
-    '',
-    '| Task | Lane | Pass / runs | Budget | Context | Delta |',
-    '|---|---|---:|---:|---:|---:|',
+    '| Task | Lane | Run | Outcome | Agent | Seconds | Tools | Input tokens | Output tokens | Retries | Compactions | Repeated calls | Edit failures | Malformed calls | Class | Note |',
+    '|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|',
   );
-  for (const task of [...new Set(report.runs.map((run) => run.task))]) {
-    const native = report.runs.filter((run) => run.task === task && run.lane === 'local-reference');
-    const reference = native.length
-      ? native.filter((run) => run.outcome === 'pass').length / native.length
-      : null;
-    for (const lane of ['rifty', 'rifty-no-coi', 'local-reference']) {
-      const rows = report.runs.filter((run) => run.task === task && run.lane === lane);
-      if (!rows.length) continue;
-      const pass = rows.filter((run) => run.outcome === 'pass').length;
+  if (report.header.series) {
+    const series = report.header.series;
+    for (const trial of series.trials) {
+      if (
+        report.runs.some(
+          (run) =>
+            run.task === trial.task && run.lane === trial.lane && run.runIndex === trial.runIndex,
+        )
+      )
+        continue;
       lines.push(
-        `| ${task} | ${lane} | ${pass}/${rows.length} | ${rows.filter((run) => run.outcome === 'budget-exceeded').length} | ${rows.filter((run) => run.outcome === 'context-exceeded').length} | ${reference === null ? 'unavailable' : (pass / rows.length - reference).toFixed(3)} |`,
+        `| ${trial.task} | ${trial.lane} | ${trial.runIndex} | missing | ${series.active?.task === trial.task && series.active.lane === trial.lane && series.active.runIndex === trial.runIndex ? 'unfinished' : 'not started'} |`,
       );
     }
   }
+  for (const run of report.runs)
+    lines.push(
+      `| ${run.task} | ${run.lane} | ${run.runIndex} | ${run.outcome} | ${run.agentStatus} | ${(run.elapsedMs / 1000).toFixed(1)} | ${run.toolCalls} | ${metric(run, 'inputTokens')} | ${metric(run, 'outputTokens')} | ${metric(run, 'retries')} | ${metric(run, 'compactions')} | ${metric(run, 'repeatedCallNotices')} | ${metric(run, 'editFailures')} | ${metric(run, 'malformedToolCalls')} | ${cell(run.failureClass)} | ${cell(run.note)} |`,
+    );
+  if (report.header.plan) {
+    lines.push(
+      '',
+      'Frozen inputs (installed before-tree hashes per attempt below):',
+      '',
+      '| Case | Split/family | Input files | Lock | Prompt | Judge/support |',
+      '|---|---|---|---|---|---|',
+    );
+    for (const task of report.header.plan.tasks)
+      lines.push(
+        `| ${task.id} | ${task.split ?? 'smoke'}/${task.family} | ${task.filesSha256} | ${task.lockfileSha256 ?? 'unavailable'} | ${task.promptSha256} | ${task.judgeSha256} |`,
+      );
+  }
+  lines.push(
+    '',
+    'Retained attempts/artifacts; timestamps record actual phases (legacy absent = unobserved). Recorded elapsed is agent time when started, preparation time on setup failure; no campaign-wall interpretation.',
+    '',
+    '| Case/lane/run | Initial files/lock | Trace | Before/after | Timing |',
+    '|---|---|---|---|---|',
+  );
+  const artifact = (path: string | undefined) =>
+    path === undefined
+      ? 'unavailable'
+      : existsSync(join(dir, path))
+        ? `[${cell(path)}](${path})`
+        : existsSync(join(dir, 'source-artifacts.json.gz'))
+          ? `[bundle](source-artifacts.json.gz): ${cell(path)}`
+          : `${cell(path)} (not local)`;
+  for (const run of report.runs)
+    lines.push(
+      `| ${run.task}/${run.lane}/${run.runIndex} | ${run.initialFilesSha256 ?? 'unobserved'}/${run.initialLockfileSha256 ?? 'unobserved'} | ${artifact(run.artifacts.trace)} | ${artifact(run.artifacts.before)} / ${artifact(run.artifacts.after)} | ${cell(JSON.stringify({ start: run.attemptStartedAt, agentStart: run.agentStartedAt, agentEnd: run.agentFinishedAt, judgeStart: run.judgeStartedAt, judgeEnd: run.judgeFinishedAt, complete: run.completedAt }))} |`,
+    );
+  lines.push(...statisticsLines(statistics));
   await writeFile(join(dir, 'summary.md'), `${lines.join('\n')}\n`);
 }
 export async function regenerate(dir: string) {
-  await writeReport(dir, await readJson<Report>(dir, 'report.json'));
+  await writeReport(dir, await readJson<Report>(dir, 'report.json'), false);
 }
 
 const metricKeys = [
@@ -172,16 +277,14 @@ const metricKeys = [
   'editFailures',
   'malformedToolCalls',
 ] as const;
-type Summary = Record<
-  | (typeof metricKeys)[number]
-  | 'runs'
-  | 'passes'
-  | 'budgetExceeded'
-  | 'contextExceeded'
-  | 'medianSeconds'
-  | 'medianTools',
-  number
->;
+function metric(run: Run, key: (typeof metricKeys)[number]): number | string {
+  return run.unavailableMetrics?.includes(key) ? 'unknown' : (run[key] ?? '—');
+}
+type Summary = Record<(typeof metricKeys)[number], number | null> &
+  Record<
+    'runs' | 'passes' | 'budgetExceeded' | 'contextExceeded' | 'medianSeconds' | 'medianTools',
+    number
+  >;
 function summarize(runs: Run[]): Summary {
   const median = (values: number[]) => {
     values.sort((a, b) => a - b);
@@ -196,8 +299,13 @@ function summarize(runs: Run[]): Summary {
     medianSeconds: median(runs.map((run) => run.elapsedMs / 1000)),
     medianTools: median(runs.map((run) => run.toolCalls)),
     ...(Object.fromEntries(
-      metricKeys.map((key) => [key, runs.reduce((sum, run) => sum + run[key], 0)]),
-    ) as Record<(typeof metricKeys)[number], number>),
+      metricKeys.map((key) => [
+        key,
+        runs.some((run) => run.unavailableMetrics?.includes(key))
+          ? null
+          : runs.reduce((sum, run) => sum + run[key], 0),
+      ]),
+    ) as Record<(typeof metricKeys)[number], number | null>),
   };
 }
 function comparisonGroups(report: Report) {
@@ -212,7 +320,7 @@ function comparisonGroups(report: Report) {
   for (const run of report.runs) {
     if (
       !run.task ||
-      !['rifty', 'rifty-no-coi', 'local-reference'].includes(run.lane) ||
+      !['rifty', 'rifty-no-coi', 'local-reference', 'native-codex'].includes(run.lane) ||
       !Number.isInteger(run.runIndex) ||
       run.runIndex < 1 ||
       run.runIndex > report.header.runsPerTask
@@ -237,8 +345,23 @@ function comparisonGroups(report: Report) {
   return { groups, identities };
 }
 export function compareReports(before: Report, after: Report) {
-  for (const key of ['endpoint', 'limits', 'noCoiPolicies', 'taskSet', 'runsPerTask'] as const)
-    if (!isDeepStrictEqual(before.header[key], after.header[key]))
+  assertComparablePlans(before, after);
+  for (const key of [
+    'endpoint',
+    'purpose',
+    'control',
+    'codex',
+    'limits',
+    'noCoiPolicies',
+    'taskSet',
+    'runsPerTask',
+  ] as const)
+    if (
+      !isDeepStrictEqual(
+        key === 'purpose' ? (before.header.purpose ?? 'quality') : before.header[key],
+        key === 'purpose' ? (after.header.purpose ?? 'quality') : after.header[key],
+      )
+    )
       throw new Error(`Incompatible comparison configuration: ${key}`);
   const previous = comparisonGroups(before);
   const current = comparisonGroups(after);
@@ -248,7 +371,10 @@ export function compareReports(before: Report, after: Report) {
     const old = summarize(runs);
     const next = summarize(current.groups.get(key)!);
     const delta = Object.fromEntries(
-      (Object.keys(old) as (keyof Summary)[]).map((key) => [key, next[key] - old[key]]),
+      (Object.keys(old) as (keyof Summary)[]).map((key) => [
+        key,
+        next[key] === null || old[key] === null ? null : next[key] - old[key],
+      ]),
     ) as Summary;
     return {
       task: runs[0]!.task,
@@ -295,7 +421,9 @@ export async function writeComparison(current: string, baseline: string) {
       '|---|---:|---:|---:|',
     );
     for (const key of Object.keys(row.before) as (keyof Summary)[])
-      lines.push(`| ${key} | ${row.before[key]} | ${row.after[key]} | ${row.delta[key]} |`);
+      lines.push(
+        `| ${key} | ${row.before[key] ?? 'unknown'} | ${row.after[key] ?? 'unknown'} | ${row.delta[key] ?? 'unknown'} |`,
+      );
     lines.push('');
   }
   await writeJson(current, 'comparison.json', comparison);

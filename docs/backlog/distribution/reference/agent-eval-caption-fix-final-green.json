@@ -1,0 +1,291 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "\u041c\u043e\u0436\u043d\u043e \u043f\u0440\u0438\u043d\u044f\u0442\u044c \u0442\u043e\u043b\u044c\u043a\u043e caption/output defect fix; advisory \u043d\u0435 \u0431\u043b\u043e\u043a\u0438\u0440\u0443\u0435\u0442. I5/corrected72, expansion \u0438 I10/I11 \u043f\u0440\u043e\u0434\u043e\u043b\u0436\u0430\u044e\u0442\u0441\u044f.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "4b61c53e291c5ab84c271bf18c4eb5bb55dfe0d0",
+  "unit_goal_source": "PR #341 observed private caption/output oracle defect; actual clean pilot-v1 baseline03a531ab20f4f5d1a96f2b6baa93502ef53b75f3; docs/backlog/epics/agent-code-quality-evaluation/goal.md:87 (I3), :103 (I6); original public csv-workflow/prompt.md:1 and markdown-notes/prompt.md:1; ADR-0508; raw ruling docs/backlog/distribution/reference/agent-eval-caption-oracle-ruling.md. Review boundary BASE03a531ab..HEAD4b61c53e only, not comparison-report/whole goal.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I5 + I3/I4/I7/I8/I9 comparison-report acceptance",
+      "location": "docs/backlog/distribution/agent-eval-comparison-report.md:20",
+      "summary": "Fresh frozen corrected pilot-v2 full72 real quality campaign plus independent report/regeneration acceptance; retainedv1 partial/controls do not close it."
+    },
+    {
+      "clause": "I1/I6/I7 expanded evaluation corpus",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:4",
+      "summary": "Frozen expanded evaluation corpus, selection/control proof and separate campaign remain required."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Evidence-backed native/eachRifty operation/tool/API/policy difference catalog remains required."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Finite substantive beyond-pilot escalation and frozen fresh boundary confirmation remain required."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Accessible caption descriptions/domain synonyms accepted in CSV and notes, without imposing exact generic labels",
+      "source": "acceptance",
+      "trace": "I6+ADR-0508",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/caption-variants.ts:12",
+      "note": ""
+    },
+    {
+      "row": "Primary source/search purpose excludes secondary field-name mentions",
+      "source": "acceptance",
+      "trace": "I6+ADR-0508",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/judge/context.ts:72",
+      "note": ""
+    },
+    {
+      "row": "Editable CSV source distinct from readonly CSV output",
+      "source": "acceptance",
+      "trace": "I6+ADR-0508",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/judge/context.ts:75",
+      "note": ""
+    },
+    {
+      "row": "Named Import/Save/Export/Delete actions allow descriptive captions",
+      "source": "acceptance",
+      "trace": "I6+ADR-0508",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/judge/context.ts:56",
+      "note": ""
+    },
+    {
+      "row": "Named saved-note navigation allows descriptions, excludes deletion actions",
+      "source": "acceptance",
+      "trace": "I6+ADR-0508",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/judge/context.ts:79",
+      "note": ""
+    },
+    {
+      "row": "Accessible CSV output recognized by observed values or download, not an arbitrary caption",
+      "source": "acceptance",
+      "trace": "I6+ADR-0508",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/caption-controls.ts:49",
+      "note": ""
+    },
+    {
+      "row": "Quoted CSV/CRLF/blank lines retain invalid editable rows",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v2/judge.ts:30",
+      "note": ""
+    },
+    {
+      "row": "Save remains blocked for invalid email/name",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v2/judge.ts:39",
+      "note": ""
+    },
+    {
+      "row": "Correcting email leaves empty name invalid",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v2/judge.ts:47",
+      "note": ""
+    },
+    {
+      "row": "Corrected contacts persist across reload",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v2/judge.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Case-insensitive name filter limits export",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v2/judge.ts:80",
+      "note": ""
+    },
+    {
+      "row": "Case-insensitive email filter and CSV escaping retained",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v2/judge.ts:92",
+      "note": ""
+    },
+    {
+      "row": "Re-import remains a draft until Save",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v2/judge.ts:107",
+      "note": ""
+    },
+    {
+      "row": "Markdown headings/bold and literal HTML retained",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes-v2/judge.ts:28",
+      "note": ""
+    },
+    {
+      "row": "Missing linked target reported without draft loss",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes-v2/judge.ts:42",
+      "note": ""
+    },
+    {
+      "row": "Case-insensitive title search retained",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes-v2/judge.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Body search retains saved notes",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes-v2/judge.ts:63",
+      "note": ""
+    },
+    {
+      "row": "Linked saved-note navigation opens its persisted body",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes-v2/judge.ts:76",
+      "note": ""
+    },
+    {
+      "row": "Unsaved draft cannot replace persisted note",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes-v2/judge.ts:86",
+      "note": ""
+    },
+    {
+      "row": "Deletion persists without losing another note",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes-v2/judge.ts:95",
+      "note": ""
+    },
+    {
+      "row": "Both working caption controls pass in each of four actual originating environments",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-05-caption-origin-controls/README.md:3",
+      "note": ""
+    },
+    {
+      "row": "Captured programme2 reaches complete corrected workflow in unchanged originating COI tree; no native rescue",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-05-actual-programme2-replay/README.md:3",
+      "note": ""
+    },
+    {
+      "row": "Original pilot-v1 suite and both original app case bytes remain untouched",
+      "source": "frozen-artifact",
+      "trace": "I4+I7+ADR-0508",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-correction.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Corrected pilot-v2 isolates new app IDs/paths and preserves public inputs/prompts/controls, six selected tasks and family split",
+      "source": "frozen-artifact",
+      "trace": "I6+I7+ADR-0508",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-correction.test.ts:46",
+      "note": ""
+    },
+    {
+      "row": "Corrected judge and shared support bytes remain identifiable in existing experiment fingerprint",
+      "source": "frozen-artifact",
+      "trace": "I4+ADR-0508",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/plan.ts:84",
+      "note": ""
+    },
+    {
+      "row": "Original interrupted56 outcomes retained with missing16 visible; controls/replay separate from quality, no old rescoring",
+      "source": "frozen-artifact",
+      "trace": "I3+I4+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-05-pilot-caption-interrupted/README.md:3",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/tests/caption-origin-controls.ts:43",
+          "summary": "Advisory: actual2 portable replay asserts seven probes and absence of locator errors, but not judge.pass. A future functional failure completing all seven probes could remain green. Current corrected actual2 raw7/7PASS independently verified; no required fix residual.",
+          "authority": "",
+          "evidence": "Reading of caption-origin-controls.ts:41\u201346; actual committed report outcome=pass/judge.pass=true/7passing probes verified against original after-tree and fixture equality, sourceSHA757d2ea35be9f5995d1297c16a029562817330530ba5d4efba1832579b31e7b9. Independent commands: pnpm exec vitest run .../corpus-correction.test.ts ->1/1PASS (/tmp/rifty-pr341-caption-review-unit.log); node --import tsx .../caption-controls.ts pilot-v2 ->3validPASS/4functionalFAIL,errors0 (/tmp/rifty-pr341-caption-review-native.log). Driver pr:check27/27PASS and portable2/2PASS logs inspected; all6 behavioral guard reverts exit1 inspected in committed gzip. No mutant claimed executed for this advisory."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

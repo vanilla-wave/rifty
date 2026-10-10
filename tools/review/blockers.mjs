@@ -2,6 +2,7 @@
 // Read a rifty-review verdict, validate coverage + authority, print slice + goal state.
 // Rules: docs/process/rules/review.md (REV-2 authority, REV-3 severity, REV-4 coverage);
 // exit codes: docs/process/artifacts/verdict.md.
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tracedRowCount } from './contract.mjs';
@@ -27,7 +28,7 @@ function residuals(value) {
 /**
  * @param {unknown} verdict
  * @param {unknown[]|null} adjudication
- * @param {((path: string) => string|null)|null} readContract  head text of the unit contract (null = no reader)
+ * @param {((path: string) => string|null)|null} readContract  authority text of the unit contract (null = no reader)
  */
 export function evaluateVerdict(
   verdict,
@@ -66,7 +67,7 @@ export function evaluateVerdict(
   // One coverage row per traced obligation of the contract (REV-4): fewer rows than the contract
   // traces is an incomplete verdict, whatever the reviewer graded.
   const contractPath = CONTRACT_PATH_RE.exec(String(verdict?.unit_goal_source ?? ''))?.[0] ?? null;
-  // With a reader (the CLI passes the file system): a named contract must be readable and the
+  // With a reader (the CLI uses reviewed history, or the file system for unbound drafts): a named contract must be readable and the
   // coverage table at least as long as its traced obligations. Without one, the shape check only.
   const contractText = contractPath && readContract ? readContract(contractPath) : null;
   if (contractPath && readContract && contractText === null) {
@@ -254,7 +255,12 @@ function main() {
   }
   const readContract = (path) => {
     try {
-      return readFileSync(path, 'utf8');
+      if (verdict.reviewed_sha === undefined) return readFileSync(path, 'utf8');
+      if (!/^[0-9a-f]{40}$/u.test(verdict.reviewed_sha)) return null;
+      return execFileSync('git', ['show', `${verdict.reviewed_sha}:${path}`], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
     } catch {
       return null;
     }

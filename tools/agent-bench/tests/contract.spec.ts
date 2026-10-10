@@ -26,7 +26,7 @@ function getAgentPromptProfile(): AgentPromptProfile {
 const tasks = ['fix-date-sort', 'add-search', 'url-filters', 'new-issue-form', 'node-endpoint'];
 interface RunRecord {
   task: string;
-  lane: 'rifty' | 'rifty-no-coi' | 'local-reference';
+  lane: 'rifty' | 'rifty-no-coi' | 'local-reference' | 'native-codex';
   runIndex: number;
   agentStatus: string;
   outcome: string;
@@ -96,10 +96,11 @@ test('the public shared coding profile is available to browser and native CLI co
 });
 
 test('all three real mock-model lanes run the entire task set with identical judge evidence', async () => {
-  const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-smoke-'));
+  const root = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-smoke-'));
+  const out = join(root, 'series');
   // The provider lives outside the runner: report-only fabrication makes zero requests.
   const model = await observedSmokeModel();
-  const config = join(out, 'config.json');
+  const config = join(root, 'config.json');
   await writeFile(config, JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl) }));
   let result: Awaited<ReturnType<typeof cli>>;
   try {
@@ -144,18 +145,32 @@ test('all three real mock-model lanes run the entire task set with identical jud
   const report = JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as Report;
   expect(report.header.runsPerTask).toBe(1);
   expect(report.header.toolContextCaveat).toMatch(/not.*equivalent|non-equivalence/i);
-  expect(report.runs).toHaveLength(14);
+  expect(report.runs).toHaveLength(20);
   expect(report.header.profile).toBe(profile.id);
   for (const task of tasks) {
     const runs = report.runs.filter((run) => run.task === task);
     expect(runs.map((run) => run.lane).sort()).toEqual(
-      (task === 'node-endpoint'
-        ? ['rifty', 'local-reference']
-        : ['rifty', 'rifty-no-coi', 'local-reference']
-      ).sort(),
+      ['rifty', 'rifty-no-coi', 'local-reference', 'native-codex'].sort(),
     );
-    expect(new Set(runs.map((run) => JSON.stringify(run.judge))).size).toBe(1);
+    expect(
+      new Set(
+        runs
+          .filter(
+            (run) =>
+              !(task === 'node-endpoint' && run.lane === 'rifty-no-coi') &&
+              run.lane !== 'native-codex',
+          )
+          .map((run) => JSON.stringify(run.judge)),
+      ).size,
+    ).toBe(1);
     for (const run of runs) {
+      if (
+        (task === 'node-endpoint' && run.lane === 'rifty-no-coi') ||
+        run.lane === 'native-codex'
+      ) {
+        expect(run).toMatchObject({ outcome: 'fail', agentStatus: 'error', toolCalls: 0 });
+        continue;
+      }
       expect(run.runIndex).toBe(1);
       expect(run.agentStatus).toBe('done');
       // The smoke model reads the real package.json, then stops; planted task defects remain.
@@ -256,8 +271,9 @@ for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
       [{ name, args: { path: 'blocked-budget.txt', content: 'must not be executed' } }],
       'An exhausted budget must not ask for this response.',
     ]);
-    const out = await mkdtemp(join(tmpdir(), `rifty-agent-bench-${lane}-budget-`));
-    const config = join(out, 'config.json');
+    const root = await mkdtemp(join(tmpdir(), `rifty-agent-bench-${lane}-budget-`));
+    const out = join(root, 'series');
+    const config = join(root, 'config.json');
     await writeFile(
       config,
       JSON.stringify({
@@ -305,8 +321,9 @@ test('provider failure after a real UI write retains its evidence in the run rep
     ],
     { error: 'BENCH_PROVIDER_FAILURE_AFTER_WRITE' },
   ]);
-  const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-provider-'));
-  const config = join(out, 'config.json');
+  const root = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-provider-'));
+  const out = join(root, 'series');
+  const config = join(root, 'config.json');
   await writeFile(config, JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl) }));
   try {
     const result = await cli([
@@ -340,8 +357,9 @@ test('provider failure after a real UI write retains its evidence in the run rep
 test('configured key reaches only the provider and is absent from every persisted trace', async () => {
   const key = 'PR333_SYNTHETIC_BENCH_KEY';
   const model = await agentModelServer([{ error: `Rejected synthetic key ${key}` }]);
-  const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-key-'));
-  const config = join(out, 'config.json');
+  const root = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-key-'));
+  const out = join(root, 'series');
+  const config = join(root, 'config.json');
   await writeFile(
     config,
     JSON.stringify({
@@ -382,8 +400,9 @@ test('configured key reaches only the provider and is absent from every persiste
 });
 
 test('invalid configured limits fail explicitly before producing run records', async () => {
-  const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-config-'));
-  const config = join(out, 'config.json');
+  const root = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-config-'));
+  const out = join(root, 'series');
+  const config = join(root, 'config.json');
   await writeFile(config, JSON.stringify({ limits: { maxToolCalls: 0 } }));
   const result = await cli(['run', '--mock-model', '--config', config, '--output', out]);
   expect(result.code).not.toBe(0);
@@ -395,8 +414,9 @@ for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
   test(`${lane} reports the configured deadline while the model stream remains open`, async () => {
     const model = await agentModelServer(['Waiting for finish.']);
     model.holdFinal('Waiting for finish.');
-    const out = await mkdtemp(join(tmpdir(), `rifty-agent-bench-${lane}-time-`));
-    const config = join(out, 'config.json');
+    const root = await mkdtemp(join(tmpdir(), `rifty-agent-bench-${lane}-time-`));
+    const out = join(root, 'series');
+    const config = join(root, 'config.json');
     await writeFile(
       config,
       JSON.stringify({
@@ -430,8 +450,9 @@ for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
 }
 
 test('native project cannot inherit checkout dependencies when reports live in the repository', async () => {
-  const out = resolve('tools/agent-bench/reports', `isolation-${randomUUID()}`);
-  await mkdir(out, { recursive: true });
+  const root = resolve('tools/agent-bench/reports', `isolation-${randomUUID()}`);
+  await mkdir(root, { recursive: true });
+  const out = join(root, 'series');
   const model = await agentModelServer([
     [
       {
@@ -443,7 +464,7 @@ test('native project cannot inherit checkout dependencies when reports live in t
     ],
     'Dependency boundary observed.',
   ]);
-  const config = join(out, 'config.json');
+  const config = join(root, 'config.json');
   await writeFile(config, JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl) }));
   try {
     const result = await cli(
@@ -481,8 +502,9 @@ test('native project cannot inherit checkout dependencies when reports live in t
 for (const lane of ['rifty', 'local-reference'] as const) {
   test(`${lane} classifies provider context overflow separately with observed token columns`, async () => {
     const model = await agentModelServer([{ error: 'maximum context length is 32768 tokens' }]);
-    const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-context-'));
-    const config = join(out, 'config.json');
+    const root = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-context-'));
+    const out = join(root, 'series');
+    const config = join(root, 'config.json');
     await writeFile(config, JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl) }));
     try {
       const result = await cli([
@@ -521,8 +543,9 @@ test('a real credential-named file stays private in snapshot keys and report pay
     [{ name: 'write_file', args: { path: `${secret}.txt`, content: 'body' } }],
     'Done.',
   ]);
-  const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-private-path-'));
-  const config = join(out, 'input-config.json');
+  const root = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-private-path-'));
+  const out = join(root, 'series');
+  const config = join(root, 'input-config.json');
   await writeFile(
     config,
     JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl, { headers: { 'X-Key': secret } }) }),
@@ -570,8 +593,9 @@ for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
       [{ name: native ? 'read' : 'read_file', args: {} }],
       { error: 'maximum context length is 32768 tokens' },
     ]);
-    const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-private-metrics-'));
-    const config = join(out, 'input-config.json');
+    const root = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-private-metrics-'));
+    const out = join(root, 'series');
+    const config = join(root, 'input-config.json');
     await writeFile(
       config,
       JSON.stringify({
@@ -618,8 +642,9 @@ for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
 for (const lane of ['rifty', 'local-reference'] as const) {
   test(`${lane} preserves report numbers and status for numeric and protocol-like headers`, async () => {
     const model = await agentModelServer([{ error: 'Private echo: 1 error "' }]);
-    const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-header-protocol-'));
-    const config = join(out, 'input-config.json');
+    const root = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-header-protocol-'));
+    const out = join(root, 'series');
+    const config = join(root, 'input-config.json');
     await writeFile(
       config,
       JSON.stringify({
@@ -673,8 +698,9 @@ for (const lane of ['rifty', 'local-reference'] as const) {
   test(`${lane} delivers catalog headers without copying their secrets into artifacts`, async () => {
     const secret = 'CATALOG_HEADER_ONLY_SECRET';
     const model = await agentModelServer([{ error: `Rejected ${secret}` }]);
-    const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-header-'));
-    const config = join(out, 'input-config.json');
+    const root = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-header-'));
+    const out = join(root, 'series');
+    const config = join(root, 'input-config.json');
     await writeFile(
       config,
       JSON.stringify({
@@ -729,8 +755,9 @@ for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
       { error: 'rate limit', status: 429 },
       'Done after retry.',
     ]);
-    const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-retry-'));
-    const config = join(out, 'config.json');
+    const root = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-retry-'));
+    const out = join(root, 'series');
+    const config = join(root, 'config.json');
     await writeFile(config, JSON.stringify({ endpoint: catalogEndpoint(model.baseUrl) }));
     try {
       const result = await cli([
