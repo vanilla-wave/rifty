@@ -20,3 +20,10 @@ Freshnormal32+derivedpending24/fullgate/independentFinal before further models.
 Route critic checks all4 originalasync1 lower observations separately; no judge-
 bytes-unchanged claim, no combinedcompleted24/32. Linked8 and priorFinals remain
 immutable. I10/I11/escalation/freshconfirmation/CLOSE required.
+
+Current source controls complete56: normal32/16workingPASS16negativeFAIL,
+derived24/8validPASS16invalidFAIL;0setup/56physical/noModels.189originalJSON
+canonical/fivecohorts/offline2each byteexact. Independent all56 effectivepatches,
+all189 originalbytes and10offline regenerations PASS. Full current27gate PASS after first26/27lint-onlyRED. Two privateformatter changes syntax trees exact; original56 source234 headers unchanged. Fresh20 formattedguards8valid12invalidPASS.
+Proof: `agent-eval-boundary-pending-v9-controls-proof.json.gz`.
+Cleanarchive/sourceFinal next; I10/I11/CLOSE remain.

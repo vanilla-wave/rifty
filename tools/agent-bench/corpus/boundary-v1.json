@@ -83,7 +83,7 @@
       "inputsSha256": "9e3bc090bb67911cc91c6c55f1b712f3181610ce23723a10ad7267b2edab4a3e",
       "lockSha256": "342412adeb6b33ec3a754f53b1f70168b37ce9af9387bb8b82121bf282293bf4",
       "promptSha256": "c5b9b682ace5afa01c511a43717b069cb4925539a295f8a3bca5e87cff91a68b",
-      "judgeSha256": "49874812d326ca95b038935ef5a4b9133d9acfb9e57518f3b4134356c37785ac",
+      "judgeSha256": "8c8b500e56402b1bde37929d977e20a669ac76b6221d5cdae79f6f0b2783ecdf",
       "criteriaVersion": "module-pending-9",
       "starterRegression": {
         "buildCommand": "npm run build",
@@ -112,7 +112,7 @@
       "inputsSha256": "9e3bc090bb67911cc91c6c55f1b712f3181610ce23723a10ad7267b2edab4a3e",
       "lockSha256": "342412adeb6b33ec3a754f53b1f70168b37ce9af9387bb8b82121bf282293bf4",
       "promptSha256": "814acca91a49a2ee5622faab982c16719917deab6bba78767d7cf2d629792a62",
-      "judgeSha256": "0f33128b9ef4f699cdf6acd1fdd85abdaf41f3fe858b4ee922ecb0ec7221c5ea",
+      "judgeSha256": "838866d7aa6e9bcac6729bac1f91c213b6483f43bb58a3e44962f67b74477a2c",
       "criteriaVersion": "module-pending-9",
       "starterRegression": {
         "buildCommand": "npm run build",

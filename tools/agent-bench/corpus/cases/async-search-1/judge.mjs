@@ -10,7 +10,10 @@ function stateItems(state) {
 }
 function pendingStatus(state) {
   const value = state.pending;
-  assert.ok(typeof value === 'boolean' || (typeof value === 'number' && Number.isInteger(value) && value >= 0));
+  assert.ok(
+    typeof value === 'boolean' ||
+      (typeof value === 'number' && Number.isInteger(value) && value >= 0),
+  );
   return typeof value === 'number' ? value > 0 : value;
 }
 for (const selectedId of ['a', 'c']) {
