@@ -1,4 +1,4 @@
-# Pending state — source readmission pending
+# Pending state — source readmitted
 
 Actual v3 async2 public solutions expose pending requestcount0; private/common
 require booleanfalse although publicstate type unspecified/transientlayoutfree.
@@ -27,3 +27,5 @@ canonical/fivecohorts/offline2each byteexact. Independent all56 effectivepatches
 all189 originalbytes and10offline regenerations PASS. Full current27gate PASS after first26/27lint-onlyRED. Two privateformatter changes syntax trees exact; original56 source234 headers unchanged. Fresh20 formattedguards8valid12invalidPASS.
 Proof: `agent-eval-boundary-pending-v9-controls-proof.json.gz`.
 Cleanarchive/sourceFinal next; I10/I11/CLOSE remain.
+
+Independent Final+GREEN PASS @901cef3cb9b76026c1567b7a852094adad2e3768:11/11rows,8axes,0findings/unitresiduals;validator0. Sameverdict `agent-eval-boundary-pending-final-green.json`, raw `agent-eval-boundary-pending-final-green-evidence.json.gz`. I10/I11/CLOSE remain.

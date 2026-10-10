@@ -1,19 +1,24 @@
 # Boundary execution — existing CLI only
 
 Use existing plan/run/controls/report; freeze all selected provenance before
-first new call. State collection source readmission binds current criteria8.
+first new call. Pending state source readmission binds current criteria9.
 Copy pilot-comparison config into fresh exploration/config.json; sole effective
 change playgroundPort5517 avoids preexisting orphan5397 HTTP. Model/harness/
 endpoint/budgets unchanged; exact config SHA in protocol/launch. CLI runs
 override declared. All prior attempts retain original headers/scores.
 
-Exploration v3: six separate fresh series, each task/allfourorigins/runs1,
-24 model trials. Tasks: async-search1/2,compiler-dependency1/2,indexed-data1/2.
-Resolve/save all six plans and exact protocol before first call. Reuse all8
+Exploration v4: five separate fresh series, each task/allfourorigins/runs1,
+20 model trials. Tasks: async-search2,compiler-dependency1/2,indexed-data1/2.
+Resolve/save all five plans and exact protocol before first call. Reuse all8
 linked-import1/2 observations from e8e interrupted32 only as path observations
 (6PASS2FAIL); independent10/10 premise verifies unchanged effective inputs,
 while global manifest SHA changed. Original12retained20unexecuted globalcohort
-stays interrupted/unaccepted; no combined completed32, no async score reuse.
+stays interrupted/unaccepted. Also reuse all4 async1lower PASS from originalv3
+source800fa only as historical path observations: oldstrictfalse entails current
+logicalidle, independent19/19premise+12capturedreplaysPASS. Judge/card/global
+manifest changed explicitly; never claim privatebyteidentity. Originalv3
+declared24 stopped8retained5PASS3FAIL16unstarted; originalasync2scores unchanged
+and not reused. No combined completed24/32 or score/header rebinding.
 
 After observations freeze one chosen step per fourfamilies and actual rationale.
 Easy saturation without meaningful pressure requires substantive admitted

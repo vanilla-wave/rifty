@@ -5,7 +5,6 @@ title: Map observed environment differences and Rifty capability boundaries
 created: 2026-09-27
 why: Passing tasks can hide recovered obstacles; a pilot cannot locate substantive capability limits.
 epic: agent-code-quality-evaluation
-blocked_by: [distribution/agent-eval-boundary-corpus]
 sources: [ADR-0434, docs/backlog/distribution/reference/agent-eval-boundaries-refine-evidence.md, docs/backlog/distribution/reference/agent-eval-boundary-public-scenarios.md]
 code: [tools/agent-bench/src/runner.ts, tools/agent-bench/src/report.ts, tools/agent-bench/corpus/boundary-v1.json]
 ---
@@ -83,8 +82,8 @@ native quality grading, success-selected exclusion and absolute ceilings.
 
 Existing certified corpus/runner/report preparation reused; this unit executes
 and reports their real diagnostic evidence, without new product state machine.
-Original32 exploration interrupted12 retained; linked8 reused path-only. Fresh24
-six declared case series +48 confirmation =56 new model trials+16 references; extra
+Original32 exploration interrupted12 retained; linked8 reused path-only. Originalv3 async1lower4 retained path-only under semantic-entailment premise. Fresh20
+five declared case series +48 confirmation =52 new model trials+16 references; extra
 substantive escalation recorded/admitted before execution. No automatic resume.
 
 ## Decisions

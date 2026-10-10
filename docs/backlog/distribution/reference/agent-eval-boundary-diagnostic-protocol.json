@@ -1,9 +1,9 @@
 {
-  "status": "Frozen v3 diagnostic protocol after state collection source readmission; six fresh four-origin CLI series; original linked8 reused only as path observations",
+  "status": "Frozen v4 protocol after pending state source readmission; five fresh four-origin CLI series; priorlinked8 and async1lower4 separate observations",
   "authority": "goalI10/I11; samePR341; exploration separate from representative comparison",
-  "sourceRevision": "9483daa5d73a115a71e0d7b217c1224b49261f52",
+  "sourceRevision": "901cef3cb9b76026c1567b7a852094adad2e3768",
   "sourceManifest": "tools/agent-bench/corpus/boundary-v1.json",
-  "sourceManifestSha256": "0d6a1d44c710946e10485ae543cdac066b81a22662dab31d254c2871547baf5b",
+  "sourceManifestSha256": "bfcbc23ccd846bcc74b62a55f06907341457098f1a5d719adca56ec4858563bb",
   "config": "Frozen config.json within declared fresh exploration root",
   "configSha256": "be10c8fb5499ea2f604babe9b908543a74d1bad182b366dec963476eda92f8d3",
   "settings": {
@@ -74,10 +74,9 @@
     }
   ],
   "exploration": {
-    "freshModelTrials": 24,
-    "matrix": "6cases\u00d74ownorigins\u00d71freshtrial; six separately predeclared existing CLI series",
+    "freshModelTrials": 20,
+    "matrix": "5cases\u00d74ownorigins\u00d71freshtrial; five separately predeclared existing CLI series",
     "tasks": [
-      "async-search-1",
       "async-search-2",
       "compiler-dependency-1",
       "compiler-dependency-2",
@@ -93,6 +92,16 @@
       "failed": 2,
       "authority": "Independent path-reuse premise10/10PASS; effective task/card/project/lock/prompt/control/private/runner/context/config unchanged; global corpusManifest SHA changed",
       "scope": "Path-specific exploration only; original32 interrupted12/8PASS4FAIL20unexecuted remains unaccepted globally; no completed32 aggregation or score/header rebinding"
+    },
+    "reusedAsyncLowerPathObservations": {
+      "sourceRevision": "800fa763ec6123d4b7c0e5cb9d6656bc04045c83",
+      "archive": "2026-10-10-boundary-exploration-v3-async-search-1",
+      "observations": 4,
+      "passed": 4,
+      "failed": 0,
+      "authority": "Independent new-plan premise19/19PASS plus12captured unchanged oldprivate/currentprivate/currentpublic native replaysPASS",
+      "drift": "Judge/card/globalmanifest bytes changed; priorstrictfalse4PASS entails currentlogicalidle semantics; publicinputs unchanged; never claim privatebyteidentity",
+      "scope": "All4historical lowerpath observations only; original v3declared24 stopped8retained5PASS3FAIL16unstarted remains history; no completed24/32 aggregation or score/header rebinding"
     }
   },
   "confirmation": {
@@ -102,12 +111,12 @@
     "selection": "First candidate boundary with lower evidence, otherwise highest tested step; preserve exact rationale and every attempted level. New easy-path escalation admitted/frozen before confirmation."
   },
   "stopping": "For every path substantively escalate beyond pilot then reproduce candidate or justify measured bounded question. Two levels/repeats alone insufficient. Easy saturation without meaningful declared pressure requires substantive additional step/working controls. Native-pass/Rifty-fail only candidate; directed operation/host evidence required for runtime cause. Sharedfail/unknown/allpasslowerbound distinct; no absolute ceiling or representative-population claim.",
-  "cost": "Fresh24 exploration+32 confirmation modeltrials+16reference executions; original attempts retained separately. Proxy configuredprices0/actualmonetarycostunknown; usage/elapsed recorded. Freshmodelbudget56\u00d7600s maximum plus setup/judge; no invented wall deadline.",
+  "cost": "Fresh20 exploration+32confirmation modeltrials+16referenceexecutions; all originalattempts separate. Configuredproxyprices0/actualmonetarycostunknown; usage/elapsed recorded. Freshmodelbudget52\u00d7600s maximum plus setup/judge; no invented wall deadline.",
   "retention": "Every selected failure/setup/unsupported/partial attempt retained. No native rescue, success-pruning, rescoring history or automatic resume. Fresh outputs per series.",
   "admission": {
-    "reviewedRevision": "9483daa5d73a115a71e0d7b217c1224b49261f52",
-    "verdict": "agent-eval-boundary-state-collection-final-green.json",
-    "producerRevisionRule": "Actual clean launchSHA and exact admitted task/card/prompt/lock/control/judge/config bytes in all six resolved plans before first call; docs/report bookkeeping descendants allowed; no historical source/report header rebinding"
+    "reviewedRevision": "901cef3cb9b76026c1567b7a852094adad2e3768",
+    "verdict": "agent-eval-boundary-pending-final-green.json",
+    "producerRevisionRule": "Actual clean launchSHA/effectiveinputs/config and allfive resolvedplans frozen beforefirstcall; docs/report bookkeepingdescendants allowed; originalsourceheaders/scores immutable"
   },
   "configTemplate": {
     "path": "tools/agent-bench/configs/pilot-comparison.json",
@@ -131,5 +140,18 @@
     "failed": 4,
     "status": "interrupted/unaccepted globally; linked8 path-onlyreuse as declared; async4 retained unchanged and not reused",
     "archive": "2026-10-10-boundary-exploration-v2-interrupted"
+  },
+  "priorExplorationV3": {
+    "sourceRevision": "800fa763ec6123d4b7c0e5cb9d6656bc04045c83",
+    "selected": 24,
+    "retained": 8,
+    "passed": 5,
+    "failed": 3,
+    "unstarted": 16,
+    "status": "Two individual4trial series completed; overall sixseries declaration stopped due pendinglayout source defect. Async1lower4 pathonlyreuse; async2all4 originalscores retained separately, currentregressions no rescore.",
+    "archives": [
+      "2026-10-10-boundary-exploration-v3-async-search-1",
+      "2026-10-10-boundary-exploration-v3-async-search-2"
+    ]
   }
 }
