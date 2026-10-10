@@ -222,8 +222,24 @@ export async function probeBoundaryPublicScenario(prepared: Prepared, task: Task
     .poll(() => renderedValue(ctx.view.getByLabel('Matching rows', { exact: true })))
     .toBe(String(Math.ceil(count / 12)));
   await editableControl(ctx, /^Sort$/i).selectOption('cents-desc');
+  const expectedOrder: { id: number; cents: number }[] = [];
+  for (let i = 0; i < count; i += 12)
+    expectedOrder.push({ id: i + 1, cents: (i * 7919) % 1000000 });
+  expectedOrder.sort((a, b) => b.cents - a.cents || a.id - b.id);
+  const table = ctx.view.getByRole('table');
+  const headers = await table.getByRole('columnheader').allInnerTexts();
+  const idColumn = headers.findIndex((text) => /^id$/i.test(text.trim()));
+  assert.ok(idColumn >= 0, 'Published table must expose record IDs');
+  const renderedIds = async () =>
+    (await table.getByRole('cell').allInnerTexts()).filter(
+      (_, index) => index % headers.length === idColumn,
+    );
+  await expect.poll(renderedIds).toEqual(expectedOrder.slice(0, 100).map((row) => String(row.id)));
   await action(ctx, caption('Next page')).click();
   await expect.poll(() => renderedValue(ctx.view.getByLabel('Page', { exact: true }))).toBe('2');
+  await expect
+    .poll(renderedIds)
+    .toEqual(expectedOrder.slice(100, 200).map((row) => String(row.id)));
   const page = 'page' in ctx.view ? ctx.view.page() : ctx.view;
   const download = page.waitForEvent('download');
   await action(ctx, caption('Export')).click();

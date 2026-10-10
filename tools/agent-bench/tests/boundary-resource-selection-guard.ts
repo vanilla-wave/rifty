@@ -24,6 +24,7 @@ try {
   });
   try {
     const original = task.controls!.reference!['src/engine.mjs']!;
+    const main = task.files['src/main.js']!;
     await prepared.apply({ 'src/engine.mjs': original });
     const reference = await task.judge!(await prepared.preview());
     assert.equal(reference.pass, true);
@@ -39,9 +40,18 @@ try {
       rows.push({ task: task.id, fault, source, reference, judge });
       await writeFile(join(root, 'results.json'), JSON.stringify(rows, null, 2));
     }
+    const pageSource = main.replace(
+      'selected.slice((page-1)*100,page*100)',
+      'selected.slice(0,100)',
+    );
+    assert.notEqual(pageSource, main);
+    await prepared.apply({ 'src/engine.mjs': original, 'src/main.js': pageSource });
+    const pageJudge = await task.judge!(await prepared.preview());
+    rows.push({ task: task.id, fault: 'Page', source: pageSource, reference, judge: pageJudge });
+    await writeFile(join(root, 'results.json'), JSON.stringify(rows, null, 2));
     assert.ok(
       rows.every((row) => !row.judge.pass),
-      'Published Search/Region must reject omitted filtering',
+      'Published Search/Region/Page must reject omitted observable effects',
     );
     console.log(JSON.stringify({ referencePass: reference.pass, rejected: rows.length }));
   } finally {
