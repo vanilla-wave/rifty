@@ -146,7 +146,10 @@ for (const level of [1, 2]) {
         join(dir, `${checker}.mjs`),
         checker === 'private' ? await readFile(join(base, 'judge.mjs')) : linked(level === 2),
       );
-      const result = spawnSync(process.execPath, [`${checker}.mjs`], { cwd: dir, encoding: 'utf8' });
+      const result = spawnSync(process.execPath, [`${checker}.mjs`], {
+        cwd: dir,
+        encoding: 'utf8',
+      });
       rows.push({
         level,
         variant: variant.name,
