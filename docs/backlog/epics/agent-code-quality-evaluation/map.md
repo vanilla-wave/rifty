@@ -1,10 +1,11 @@
 ## Items
 
-1. `distribution/agent-eval-boundary-diagnostics` — actual operation catalog and substantive finite escalation/fresh confirmation; I10/I11 mandatory. Existing scripts/report/corpus reused.
+1. `distribution/agent-eval-boundary-corpus` — observed public-result/carrier repair; actual RED/GREEN, fresh48+24 controls/current gate/independent readmission before new models.
+2. `distribution/agent-eval-boundary-diagnostics` — actual operation catalog and substantive finite escalation/fresh confirmation; I10/I11 mandatory. Existing scripts/report/corpus reused.
 
 ## Open questions
 
-- Boundary source admitted — owner: agent — Final+GREEN PASS11c0,11/11,8axes,0findings/unit residuals; source325 current96:48working PASS/48baseline-partial FAIL,0setup/96physical/noModels. Canonical304 JSON exact/twooffline views; current27gate PASS. Compiler14files unchanged76; original compiler setup failures retained. I10/I11/CLOSE remain.
+- Boundary source previous admission reopened by actual be73 model/error-carrier evidence; public-observation repair/fresh controls/readmission pending — owner: agent — historical Final+GREEN PASS11c0,11/11,8axes,0findings/unit residuals; source325 current96:48working PASS/48baseline-partial FAIL,0setup/96physical/noModels. Canonical304 JSON exact/twooffline views; current27gate PASS. Compiler14files unchanged76; original compiler setup failures retained. I10/I11/CLOSE remain.
 
 - Record observation source accepted — owner: agent — Final+GREEN PASS37e19eb (30/30,0 findings/unit residuals). Eval16/current-own40 original21PASS19FAIL/39physical+1setup unexecuted preserved; source acceptance does not rescue failed origins. Fresh96 completed43PASS53FAIL24setup, sourceed4; comparison Final806546489 accepted6/6,0findings/unit residuals, two offline exact views. Prior96 remains unaccepted/unrescored.
 

@@ -72,10 +72,26 @@ assert.deepEqual(
 rows = rows.map((r) => (r.id === 'a' ? { ...r, value: 30 } : r));
 
 await c.search({ filter: '', page: 1, pageSize: 5, sort: 'name-asc' });
+const publicState = (s) => ({
+  query: s.query && {
+    filter: s.query.filter,
+    page: s.query.page,
+    pageSize: s.query.pageSize,
+    sort: s.query.sort,
+  },
+  items: s.items.map(({ id, name, value }) => ({ id, name, value })),
+  total: s.total,
+  pending: s.pending,
+  selectedIds: s.selectedIds,
+});
+const beforeFailure = structuredClone(publicState(c.state()));
 failNext = true;
 const failed = c.update('b', { value: 99 });
 assert.equal(c.state().items.find((r) => r.id === 'b').value, 99);
-await assert.rejects(failed, /Service unavailable/);
+try {
+  await failed;
+} catch {}
+assert.deepEqual(publicState(c.state()), beforeFailure);
 assert.equal(c.state().items.find((r) => r.id === 'b').value, 20);
 assert.deepEqual(c.state().selectedIds, ['a']);
 await c.retry();

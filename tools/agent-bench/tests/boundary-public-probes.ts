@@ -11,9 +11,21 @@ import type { Prepared } from '../src/lanes/types.ts';
 import type { Task } from '../src/tasks.ts';
 import compilerGoldens from './boundary-compiler-goldens.json';
 
+export const csvDiagnosticLocationSource = String.raw`
+function csvDiagnosticLocation(error) {
+  const text = typeof error?.message === 'string' ? error.message : '';
+  const named = /\bline\s*:?\s*(\d+)\s*[,;]?\s*(?:column|col)\s*:?\s*(\d+)/i.exec(text);
+  const compact = /(-?\d+(?:\.\d+)?)\s*:\s*(-?\d+(?:\.\d+)?)/.exec(text);
+  const position = named ?? compact;
+  if (position) return { line: Number(position[1]), column: Number(position[2]) };
+  return error ? { line: Number(error.line), column: Number(error.column) } : null;
+}
+`;
+
 export const linked = (higher: boolean) => `
 import assert from 'node:assert/strict';
 import {createWorkbook} from './src/workbook.mjs';
+${csvDiagnosticLocationSource}
 const book=createWorkbook();
 const customers='id,name\\r\\nc1,"Alpha, A"\\r\\nc2,"Beta ""B"""\\r\\n';
 const invoices='id,customer_id,amount,currency\\nc1-i,c1,100.01,USD\\nc2-i,c2,2.00,EUR\\n';
@@ -28,7 +40,7 @@ assert.deepEqual(book.snapshot(),before);
 assert.throws(()=>book.importFiles({customers,invoices:'id,customer_id,amount,currency\\nx,c1,1.005,USD\\n'}));
 assert.deepEqual(book.snapshot(),before);
 const malformed=(()=>{try{book.importFiles({customers:'id,name\\nc1,"unfinished',invoices});}catch(e){return e;}})();
-assert.equal(malformed.line,2);assert.equal(malformed.column,4);
+assert.deepEqual(csvDiagnosticLocation(malformed),{line:2,column:4});
 assert.deepEqual(book.snapshot(),before);
 const multiline='id,name\\nc1,"Alpha\\nSecond"\\nc2,Beta\\n';
 book.importFiles({customers:multiline,invoices});
@@ -43,7 +55,7 @@ const credited=structuredClone(book.snapshot());
 assert.throws(()=>book.importFiles({customers:multiline,invoices,credits:'id,invoice_id,amount\\nx,c1-i,100.02\\n'}));
 assert.deepEqual(book.snapshot(),credited);
 const restored=createWorkbook();restored.restoreJson(book.exportJson());
-assert.deepEqual(restored.snapshot(),credited);assert.equal(restored.undo(),true);
+assert.deepEqual(restored.snapshot(),credited);restored.undo();
 assert.deepEqual(restored.snapshot().totals,{USD:10001,EUR:200});
 `
     : 'const restored=createWorkbook();restored.restoreJson(book.exportJson());assert.deepEqual(restored.snapshot(),book.snapshot());'
@@ -79,9 +91,12 @@ ${
   higher
     ? `
 await c.search({filter:'',page:1,pageSize:5,sort:'name-asc'});
+const publicState=s=>({query:s.query&&{filter:s.query.filter,page:s.query.page,pageSize:s.query.pageSize,sort:s.query.sort},items:s.items.map(({id,name,value})=>({id,name,value})),total:s.total,pending:s.pending,selectedIds:s.selectedIds});
+const beforeFailure=structuredClone(publicState(c.state()));
 failNext=true;const failed=c.update('b',{value:99});
 assert.equal(c.state().items.find(r=>r.id==='b').value,99);
-await assert.rejects(failed,/Service unavailable/);
+try{await failed;}catch{}
+assert.deepEqual(publicState(c.state()),beforeFailure);
 assert.equal(c.state().items.find(r=>r.id==='b').value,20);assert.deepEqual(c.state().selectedIds,['a']);
 await c.retry();assert.equal(c.state().items.find(r=>r.id==='b').value,99);
 const reload=createController(client);reload.restoreJson(c.exportJson());await reload.undo();

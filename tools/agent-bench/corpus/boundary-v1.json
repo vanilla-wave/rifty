@@ -25,12 +25,12 @@
       "inputsSha256": "ec57cb2619e6b821e0778a336a347fdd8a8e0c68a21afbcde28077fc7fc51927",
       "lockSha256": "342412adeb6b33ec3a754f53b1f70168b37ce9af9387bb8b82121bf282293bf4",
       "promptSha256": "90b0d011c0703c7c2553d2ac0ba23d79fbd4743fd256b0a346088ffe03ad5d33",
-      "judgeSha256": "c376cd7accd49d20fefc462f1387f90fc9fb42eaead898989969fe4cc9d90d25",
+      "judgeSha256": "8a69fce6753af4e976c8f2eaa3063274e9c4b926eb7e85e3f0d29ea6128cb288",
       "starterRegression": {
         "buildCommand": "npm run build",
         "heading": "Minimal JavaScript starter"
       },
-      "criteriaVersion": "module-starter-3"
+      "criteriaVersion": "module-diagnostic-5"
     },
     {
       "id": "linked-import-2",
@@ -54,12 +54,12 @@
       "inputsSha256": "ec57cb2619e6b821e0778a336a347fdd8a8e0c68a21afbcde28077fc7fc51927",
       "lockSha256": "342412adeb6b33ec3a754f53b1f70168b37ce9af9387bb8b82121bf282293bf4",
       "promptSha256": "916cd6321eb7025fd6ce328774b49e85c7907410d89150bc07a5da162f6bc00c",
-      "judgeSha256": "da79cdfd981bfc66f22351a456eefd6887127c812c7ff8c3cdc207df32342176",
+      "judgeSha256": "b79c9c8d549181ab9aea1a6780b408c26522ef885d9d891974fab3282124dc31",
       "starterRegression": {
         "buildCommand": "npm run build",
         "heading": "Minimal JavaScript starter"
       },
-      "criteriaVersion": "module-starter-3"
+      "criteriaVersion": "module-diagnostic-5"
     },
     {
       "id": "async-search-1",
@@ -112,8 +112,8 @@
       "inputsSha256": "9e3bc090bb67911cc91c6c55f1b712f3181610ce23723a10ad7267b2edab4a3e",
       "lockSha256": "342412adeb6b33ec3a754f53b1f70168b37ce9af9387bb8b82121bf282293bf4",
       "promptSha256": "814acca91a49a2ee5622faab982c16719917deab6bba78767d7cf2d629792a62",
-      "judgeSha256": "3c07f7cc09c6c8e3a6cccc40928e3121d02ea4f0de5ee59d33cb860ab6f281a9",
-      "criteriaVersion": "module-starter-3",
+      "judgeSha256": "55c1e8485e4d16f2fb8adfaee16a56d8778f02b9ac52f14c0a04929d768c6884",
+      "criteriaVersion": "module-failure-5",
       "starterRegression": {
         "buildCommand": "npm run build",
         "heading": "Minimal JavaScript starter"

@@ -1,5 +1,15 @@
 import assert from 'node:assert/strict';
 import { createWorkbook } from './src/workbook.mjs';
+
+function csvDiagnosticLocation(error) {
+  const text = typeof error?.message === 'string' ? error.message : '';
+  const named = /\bline\s*:?\s*(\d+)\s*[,;]?\s*(?:column|col)\s*:?\s*(\d+)/i.exec(text);
+  const compact = /(-?\d+(?:\.\d+)?)\s*:\s*(-?\d+(?:\.\d+)?)/.exec(text);
+  const position = named ?? compact;
+  if (position) return { line: Number(position[1]), column: Number(position[2]) };
+  return error ? { line: Number(error.line), column: Number(error.column) } : null;
+}
+
 const book = createWorkbook();
 const customers = 'id,name\r\nc1,"Alpha, A"\r\nc2,"Beta ""B"""\r\n';
 const invoices = 'id,customer_id,amount,currency\nc1-i,c1,100.01,USD\nc2-i,c2,2.00,EUR\n';
@@ -30,8 +40,7 @@ const malformed = (() => {
     return e;
   }
 })();
-assert.equal(malformed.line, 2);
-assert.equal(malformed.column, 4);
+assert.deepEqual(csvDiagnosticLocation(malformed), { line: 2, column: 4 });
 assert.deepEqual(book.snapshot(), before);
 const multiline = 'id,name\nc1,"Alpha\nSecond"\nc2,Beta\n';
 book.importFiles({ customers: multiline, invoices });
@@ -52,7 +61,7 @@ assert.deepEqual(book.snapshot(), credited);
 const restored = createWorkbook();
 restored.restoreJson(book.exportJson());
 assert.deepEqual(restored.snapshot(), credited);
-assert.equal(restored.undo(), true);
+restored.undo();
 assert.deepEqual(restored.snapshot().totals, { USD: 10001, EUR: 200 });
 
 console.log('RIFTY_CORPUS_PASS:linked-import-2');

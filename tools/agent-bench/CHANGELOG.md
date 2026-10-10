@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Observe reported CSV coordinates, undo effects and complete async rollback independently of diagnostic/return carriers; preserve interrupted outcomes.
+
 - Preserve boundary engineering starter build/boot and independently observe indexed Region filtering/rendered pagination; prior scores retained.
 
 - Stream Git source fingerprints beyond1MiB; retain exit/deadline failures and reuse plan identity in report headers.
