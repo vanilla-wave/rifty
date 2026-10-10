@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Observe published selection membership/ordered rows independently of Array layout; exercise generic IDs and retain interrupted outcomes.
+
 - Observe complete CSV diagnostic numeric values in named/compact text, preserving readable punctuation and rejecting fractional/exponent position mismatches.
 
 - Observe reported CSV coordinates, undo effects and complete async rollback independently of diagnostic/return carriers; preserve interrupted outcomes.

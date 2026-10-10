@@ -17,7 +17,7 @@
   "selection": "I11 async-search-state level1; public observable semantic probe, independent alternatives, no changed comparative public8; source admission pending",
   "level": 1,
   "boundaryDimension": "engineering",
-  "criteriaVersion": "module-starter-3",
+  "criteriaVersion": "module-selection-8",
   "starterRegression": {
     "buildCommand": "npm run build",
     "heading": "Minimal JavaScript starter"
