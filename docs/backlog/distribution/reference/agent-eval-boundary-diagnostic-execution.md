@@ -2,7 +2,12 @@
 
 No new phase/selection wrapper required. Use existing `agent-bench plan`, `run`,
 `controls`, `report`; freeze declared selection/provenance before each fresh
-series. Source admission11c0 accepted; diagnostic ready commit precedes model calls.
+series. Source admissionc799 accepted; diagnostic v2 freeze precedes new model calls.
+Copy pilot-comparison config into fresh exploration/config.json; sole effective
+change playgroundPort5517 avoids a preexisting orphan5397 HTTP server. Endpoint/
+model/harness/budgets unchanged; exact config SHA in protocol/launch. Use that
+frozen config for exploration and all fresh confirmations; CLI runs override
+is explicitly declared. Original be73 interrupted17 remains immutable.
 
 Exploration: full boundary-v1, allfourorigins, runs1 →32 model trials. Save
 resolved plan and exact protocol under a fresh ignored .cache/pr341 root.
@@ -14,10 +19,10 @@ fresh; preserve unstarted declarations/partial runner reports on interruption.
 Exact invocation pattern:
 
 ```sh
-pnpm agent-bench plan --suite boundary-v1 --config tools/agent-bench/configs/pilot-comparison.json --runs 1 --lane all
-pnpm agent-bench run --suite boundary-v1 --config tools/agent-bench/configs/pilot-comparison.json --runs 1 --lane all --output <fresh-exploration>/models
-pnpm agent-bench controls --suite boundary-v1 --config tools/agent-bench/configs/pilot-comparison.json --task <frozen-step> --control reference --runs 1 --lane all --output <fresh-confirmation>/<family>/reference
-pnpm agent-bench run --suite boundary-v1 --config tools/agent-bench/configs/pilot-comparison.json --task <frozen-step> --runs 2 --lane all --output <fresh-confirmation>/<family>/models
+pnpm agent-bench plan --suite boundary-v1 --config <fresh-exploration>/config.json --runs 1 --lane all
+pnpm agent-bench run --suite boundary-v1 --config <fresh-exploration>/config.json --runs 1 --lane all --output <fresh-exploration>/models
+pnpm agent-bench controls --suite boundary-v1 --config <fresh-exploration>/config.json --task <frozen-step> --control reference --runs 1 --lane all --output <fresh-confirmation>/<family>/reference
+pnpm agent-bench run --suite boundary-v1 --config <fresh-exploration>/config.json --task <frozen-step> --runs 2 --lane all --output <fresh-confirmation>/<family>/models
 pnpm agent-bench report <retained-series>
 ```
 

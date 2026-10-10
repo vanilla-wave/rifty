@@ -1,11 +1,11 @@
 {
-  "status": "Frozen diagnostic ready protocol after actual source Final11c0/current27gate; no model boundary trials executed at freeze",
+  "status": "Frozen v2 diagnostic protocol after source Finalc799/current27gate; entirely fresh model series, original interrupted17 retained separately",
   "authority": "goalI10/I11; samePR341; exploration separate from representative comparison",
-  "sourceRevision": "32530444ffa7634edfec68816bb036ab0511130c",
+  "sourceRevision": "c79996bfdd2e65c6884fe8f08aaa43f93dc3f456",
   "sourceManifest": "tools/agent-bench/corpus/boundary-v1.json",
-  "sourceManifestSha256": "34c5f7a8c9bdd653c04fcf1239fb584951ebb41e3fabad7b916ff5eaafc447e4",
-  "config": "tools/agent-bench/configs/pilot-comparison.json",
-  "configSha256": "eabd5914ba0319b6956c9a934789adf0dceeb9a0feb374e40c1c2fe5b7049980",
+  "sourceManifestSha256": "8e1f1923323cf9953c03dab8c9c5a13132c333ed73d74cc9dce695e510699a3b",
+  "config": "Frozen config.json within declared fresh exploration root",
+  "configSha256": "be10c8fb5499ea2f604babe9b908543a74d1bad182b366dec963476eda92f8d3",
   "settings": {
     "endpoint": {
       "id": "gpt-6-luna",
@@ -33,7 +33,7 @@
       "runTimeoutMs": 600000
     },
     "runsPerTask": 3,
-    "playgroundPort": 5397,
+    "playgroundPort": 5517,
     "codex": {
       "model": "gpt-6.1-sol",
       "reasoning": "low"
@@ -87,8 +87,21 @@
   "cost": "Initial64 modeltrials+16 referenceexecutions; configured proxy prices0, actual monetarycost unknown; record observed usage and elapsed. Agentbudget64×600s theoretical maximum plus separate setup/judge time; no invented totalwall deadline.",
   "retention": "Every selected failure/setup/unsupported/partial attempt retained. No native rescue, success-pruning, rescoring history or automatic resume. Fresh outputs per series.",
   "admission": {
-    "reviewedRevision": "11c0b3ac6430b65fba42722f955c988eec2ffea1",
-    "verdict": "agent-eval-boundary-corpus-final-green.json",
-    "producerRevisionRule": "Record actual clean producer SHA in resolved plan before calls; input/card/prompt/lock/control/judge/config fingerprints must match admitted bytes; only documentation/report descendants permitted without new source review."
+    "reviewedRevision": "c79996bfdd2e65c6884fe8f08aaa43f93dc3f456",
+    "verdict": "agent-eval-boundary-public-observation-final-green.json",
+    "producerRevisionRule": "Actual clean launchSHA and exact admitted task/card/prompt/lock/control/judge/config bytes in resolved plan before calls; following sourcec799 docs/report bookkeeping descendants allowed. No original source/report header rebinding."
+  },
+  "configTemplate": {
+    "path": "tools/agent-bench/configs/pilot-comparison.json",
+    "sha256": "eabd5914ba0319b6956c9a934789adf0dceeb9a0feb374e40c1c2fe5b7049980",
+    "onlyEffectiveChange": "playgroundPort5397→5517 avoids preexisting orphan HTTP server; model/harness/endpoint/budget settings exact"
+  },
+  "priorExploration": {
+    "source": "be73f0d1c6ea924fdf244a1baaeeb3cd85d41aa0",
+    "selected": 32,
+    "retained": 17,
+    "unexecuted": 15,
+    "status": "interrupted/unaccepted; immutable, no resume or rescore",
+    "archive": "2026-10-10-boundary-exploration-v1-interrupted"
   }
 }
