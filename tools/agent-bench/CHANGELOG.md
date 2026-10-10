@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Accept readable CSV `at column` diagnostics and reject fractional positions without integer-prefix truncation.
+
 - Observe reported CSV coordinates, undo effects and complete async rollback independently of diagnostic/return carriers; preserve interrupted outcomes.
 
 - Preserve boundary engineering starter build/boot and independently observe indexed Region filtering/rendered pagination; prior scores retained.

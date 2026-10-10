@@ -33,6 +33,22 @@ for (const level of [1, 2]) {
       expected: true,
     },
     {
+      name: 'message-at-column',
+      source: original.replace(
+        fields,
+        'throw new Error(`${message} at line ${quoteLine||line} at column ${quoteColumn||column}`);',
+      ),
+      expected: true,
+    },
+    {
+      name: 'fractional-column',
+      source: original.replace(
+        fields,
+        'throw new Error(`${message} at line ${quoteLine||line}, column ${(quoteColumn||column)+0.5}`);',
+      ),
+      expected: false,
+    },
+    {
       name: 'message-parentheses',
       source: original.replace(
         fields,

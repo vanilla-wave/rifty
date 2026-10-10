@@ -32,3 +32,13 @@ measured across both public hosts/native. Required I10/I11/CLOSE remain linked.
 Current source changes three criteria; public tasks/projects/locks/original
 control patches fixed. Fresh48 standard four-origin controls plus24 directed
 carrier/effect controls, current full gate and independent Final remain.
+
+Independent source647 Final found two real CSV observer faults: readable
+`line 2 at column 4` rejected; incorrect `column 4.5` accepted via integer
+prefix. Both linked levels reproduce. Named coordinates now consume complete
+numeric values and allow `at`; public obligations unchanged. CSV18 guards:
+11 valid accepted/7 invalid rejected, RED→GREEN; both source647 owner reverts
+RED/fixed bytes exact. Proof: `agent-eval-boundary-csv-location-r2-proof.json.gz`.
+Original source647 controls48 interrupted after36:12PASS24FAIL/12unexecuted,
+producer1, alternative setup unstarted. Canonical120 JSON exact/two offline
+views; outcomes unchanged. Fresh48+24/current gate/Final required.

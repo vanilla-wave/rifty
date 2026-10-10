@@ -26,8 +26,8 @@ const tasks = cases.map((variant) => {
     patch[path] = original.replace(
       fields,
       variant.expected
-        ? 'throw new Error(`${message} (${quoteLine||line}:${quoteColumn||column})`);'
-        : 'throw new Error(`${message} (${quoteLine||line}:${(quoteColumn||column)+1})`);',
+        ? 'throw new Error(`${message} at line ${quoteLine||line} at column ${quoteColumn||column}`);'
+        : 'throw new Error(`${message} at line ${quoteLine||line}, column ${(quoteColumn||column)+0.5}`);',
     );
   } else if (variant.id.endsWith('undo-void')) {
     patch[path] = original.replace(
