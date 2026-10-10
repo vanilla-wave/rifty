@@ -59,3 +59,13 @@ Independent storage re-audit+actual cleanup removed30 generated dependency/
 content-cache dirs, du1.566GiB; all protected hashes exact. Live/unrelated/
 unproven orphan process ownership excluded. Evidence:
 `agent-eval-session-storage-current-audit.json.gz`.
+
+Current criteria7 source controls complete72: standard48/24workingPASS24negative
+FAIL plus carrier24/16validPASS8invalidFAIL. All72physical/noModels/0setup;
+237originalJSON canonical/fivecohorts, offline2 each exact; independently verified
+bytes/effective patches/current fingerprints/offline views. Standard baseline
+producer3cd and laterphasesd569 differ only permanentguard formatting; headers
+unchanged. Current fullgate27PASS (unit190.4s/parity115.5s); first26/27lint-only
+RED protocolJSON formatting retained, parsed protocol exact. Proof:
+`agent-eval-boundary-public-observation-v7-controls-proof.json.gz`.
+Independent Final/source readmission and actual I10/I11/CLOSE remain.

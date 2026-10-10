@@ -13,9 +13,7 @@
       "provider": "codex-proxy",
       "api": "openai-completions",
       "baseUrl": "http://127.0.0.1:10539/v1",
-      "input": [
-        "text"
-      ],
+      "input": ["text"],
       "contextWindow": 1000000,
       "maxTokens": 8192,
       "reasoning": true,
@@ -45,10 +43,7 @@
     {
       "dimension": "engineering",
       "family": "linked-data-import",
-      "tasks": [
-        "linked-import-1",
-        "linked-import-2"
-      ],
+      "tasks": ["linked-import-1", "linked-import-2"],
       "lower": "Two related CSV datasets, exact cents, keys/references, atomic invalid import/restore",
       "upper": "Third linked credits dataset, per-currency conservation/over-credit rejection, durable undo across JSON restore",
       "bound": "Three related types/two currencies/declared persisted operation history"
@@ -56,10 +51,7 @@
     {
       "dimension": "engineering",
       "family": "async-search-state",
-      "tasks": [
-        "async-search-1",
-        "async-search-2"
-      ],
+      "tasks": ["async-search-1", "async-search-2"],
       "lower": "Public module query/filter/page/sort/selection/Back and serialized navigation; newest request wins",
       "upper": "Optimistic writes, failure rollback/retry and durable undo interleaved with stale responses",
       "bound": "Three records,5/25/70ms external client latencies and declared transition interactions; no new URL/UI promise"
@@ -67,10 +59,7 @@
     {
       "dimension": "dependency",
       "family": "compiler-integration",
-      "tasks": [
-        "compiler-dependency-1",
-        "compiler-dependency-2"
-      ],
+      "tasks": ["compiler-dependency-1", "compiler-dependency-2"],
       "lower": "Actual pinned TypeScript5.9.2 transpilation/target/syntax diagnostics/result clearing",
       "upper": "Actual esbuild-wasm0.28.0 browser asset/async initialization/API added; both modes/targets",
       "bound": "Two target variants/pinned real package APIs; gojs WebAssembly, not WASI"
@@ -78,10 +67,7 @@
     {
       "dimension": "resource",
       "family": "indexed-resource",
-      "tasks": [
-        "indexed-data-1",
-        "indexed-data-2"
-      ],
+      "tasks": ["indexed-data-1", "indexed-data-2"],
       "lower": "100000 actual generated rows/index/filter/sort/page100/full export and visible navigation during indexing",
       "upper": "1000000 rows with same public engine/data/UI,10x scale; observed input phase/deadline/visible pages",
       "bound": "Serialized dataset8125023→82256260bytes; selected export679214→6875515bytes;60s load/firstinput≤2000ms; memory unknown, no RAM budget claim"
