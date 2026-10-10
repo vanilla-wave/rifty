@@ -28,3 +28,10 @@ shared corpusManifest hash changed. Independent new-plan premise10/10PASS:
 use them only as path observations; freeze separate fresh24 after readmission,
 never fabricate a combined completed32. Escalation/fresh2models+1reference/all4
 perpath and I10/I11/CLOSE remain. Raw: `boundary-path-reuse-premise` in proof.
+
+Current source controls complete64: normal32/16workingPASS16negativeFAIL,
+derived32/16validPASS16invalidFAIL;0setup/64physical/noModels.213originalJSON
+canonical/fivecohorts/offline2each byteexact. Independent all64 effectivepatches,
+all213 originalbytes and10offline regenerations PASS. Full current27gate PASS.
+Proof: `agent-eval-boundary-state-collection-v8-controls-proof.json.gz`.
+Cleanarchive/sourceFinal next; I10/I11/CLOSE remain.
