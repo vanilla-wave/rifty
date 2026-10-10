@@ -21,5 +21,5 @@
     "buildCommand": "npm run build",
     "heading": "Minimal JavaScript starter"
   },
-  "criteriaVersion": "module-diagnostic-5"
+  "criteriaVersion": "module-diagnostic-6"
 }
