@@ -4,6 +4,21 @@ Private local benchmark; four real lanes, versioned bug/feature/app corpora and
 three fresh trials by default. The original five tasks are the smoke set.
 Tool/context differences remain explicit; a delta is not a runtime-only cause.
 
+Current reference: [accepted eval-v16](../../docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-completed.md),
+96selected43PASS53FAIL/24setup. [Operation catalog](../../docs/backlog/distribution/reference/agent-eval-environment-differences.md)
+and [finite boundary profile](../../docs/backlog/distribution/reference/agent-eval-boundary-results.md)
+retain natural/directed operations, failed attempts and bounded uncertainty.
+Boundary profile:20fresh exploration plus32fresh model confirmations/16references;
+adaptive results separate from comparison. Canonical reports regenerate offline.
+
+For a new boundary study use existing plan/run/controls/report with boundary-v1,
+explicit task/runs/lane/config and fresh output directories; see
+[frozen execution](../../docs/backlog/distribution/reference/agent-eval-boundary-diagnostic-execution.md).
+Freeze selection/config/source/working references before models. Choose an
+unused playgroundPort; record its transport change. Do not resume interrupted
+series, regrade history, tune prompts to rescue failures or infer runtime cause
+from native pass. A all-pass resource bound is not an absolute ceiling.
+
 ```sh
 pnpm agent-bench plan --config tools/agent-bench/configs/gpt-6-luna.json
 pnpm agent-bench run --mock-model --runs 1 --output /tmp/agent-smoke
