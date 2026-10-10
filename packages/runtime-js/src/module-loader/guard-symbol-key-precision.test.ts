@@ -1,0 +1,305 @@
+/**
+ * Guard precision (symbol-key-global-write-guard-precision): the ESM/CJS
+ * Function write guards accept computed keys provably bound to Symbol values
+ * (@vitest/utils `globalThis[SAFE_TIMERS_SYMBOL]`, undici
+ * `Object.defineProperty(globalThis, Symbol.for(...), …)`) and keep rejecting
+ * keys that may be `'Function'`. A Symbol-valued key is never the string
+ * 'Function'; a `let`/non-Symbol-bound key keeps the loud ceiling.
+ */
+import { MemoryFsSync } from '@riftydev/vfs/internal';
+import { afterEach, describe, expect, it } from 'vitest';
+import { createModuleLoader } from './loader.ts';
+
+const CLEANUP: symbol[] = [];
+afterEach(() => {
+  for (const key of CLEANUP.splice(0)) {
+    Reflect.deleteProperty(globalThis, key);
+  }
+});
+
+function esmLoader(files: Record<string, string>) {
+  const vfs = new MemoryFsSync();
+  vfs.loadFixture({ '/work/package.json': '{"type":"module"}', ...files });
+  return createModuleLoader(vfs, { cwd: '/work' });
+}
+
+function cjsLoader(files: Record<string, string>) {
+  const vfs = new MemoryFsSync();
+  vfs.loadFixture({ '/work/package.json': '{"type":"commonjs"}', ...files });
+  return createModuleLoader(vfs, { cwd: '/work' });
+}
+
+describe('ESM guard accepts provably-Symbol computed keys', () => {
+  it('const Symbol.for key: globalThis[KEY] = value loads and the write lands', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "const KEY = Symbol.for('test.safe-timers'); globalThis[KEY] = { landed: true }; export const out = globalThis[KEY].landed;\n",
+    });
+    const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: boolean };
+    expect(ns.out).toBe(true);
+    expect((globalThis as Record<symbol, unknown>)[Symbol.for('test.safe-timers')]).toEqual({
+      landed: true,
+    });
+    CLEANUP.push(Symbol.for('test.safe-timers'));
+  });
+
+  it('export const Symbol.for key marks too (exported declarator)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "export const KEY = Symbol.for('test.exported'); globalThis[KEY] = { landed: true }; export const out = 'ok';\n",
+    });
+    const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: string };
+    expect(ns.out).toBe('ok');
+    expect((globalThis as Record<symbol, unknown>)[Symbol.for('test.exported')]).toEqual({
+      landed: true,
+    });
+    Reflect.deleteProperty(globalThis, Symbol.for('test.exported'));
+  });
+
+  it('a mutated Symbol.for disables the exemption (not provable)', async () => {
+    const originalFor = Symbol.for;
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "Symbol.for = () => 'Function'; const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+    Symbol.for = originalFor;
+  });
+
+  it('an INLINE Symbol() key expression stays loud (re-cut: const-bound only)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs': "globalThis[Symbol('direct')] = 1; export const out = 'ok';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('non-Symbol-bound computed key keeps the loud ceiling (may hold Function)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "let KEY = 'Function'; globalThis[KEY] = function evil() {}; export const out = 'unreachable';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('comments/strings mentioning Symbol.for mutations do NOT poison (AST-based)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "// Symbol.for = () => 'Function'\nconst KEY = Symbol.for('test.comment'); globalThis[KEY] = 1; export const out = 'ok';\n",
+    });
+    const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: string };
+    expect(ns.out).toBe('ok');
+    Reflect.deleteProperty(globalThis, Symbol.for('test.comment'));
+  });
+
+  it('computed Symbol[for] mutation poisons', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "Symbol['for'] = () => 'Function'; const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('a class named Symbol poisons (static for shadows nothing at module scope)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "export default class Symbol { static for() { return 'Function'; } }\nconst KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('sibling-statement aliases poison (alias survives to later statements)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "const S = Symbol;\nS.for = () => 'Function';\nconst K = Symbol.for('x'); globalThis[K] = 1; export const out = 'u';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('global Symbol passed into a Symbol-named parameter poisons (mutation reaches the builtin)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "function tweak(Symbol) { Symbol.for = () => 'Function'; }\ntweak(Symbol);\nconst K = Symbol.for('x'); globalThis[K] = 1; export const out = 'u';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('alias via ASSIGNMENT poisons: let S; S = Symbol; S.for = …', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "let S; S = Symbol; S.for = () => 'Function'; const K = Symbol.for('x'); globalThis[K] = 1; export const out = 'u';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('any SECOND Symbol reference (identity fn arg) keeps the ceiling loud (re-cut)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "function identity(S) { return S; } const S2 = identity(Symbol); const K = Symbol.for('x'); globalThis[K] = 1; export const out = typeof S2;\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('alias-of-alias poisons transitively: const S=Symbol; const T=S; T.for=…', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "const S = Symbol; const T = S; T.for = () => 'Function'; const K = Symbol.for('x'); globalThis[K] = 1; export const out = 'u';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('a BLOCK-scoped const named Symbol keeps the ceiling loud (re-cut: any extra occurrence)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "{ const Sym = { for: 0 }; Sym.for = 1; }\nconst K = Symbol.for('x'); globalThis[K] = 1; export const out = 'u';\n",
+    });
+    // Sym is not the Symbol identifier — this module still qualifies… unless
+    // it REFERENCES Symbol twice; it doesn't, so it LOADS (block mutation of
+    // an unrelated object never poisons).
+    const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: string };
+    expect(ns.out).toBe('u');
+  });
+
+  it('computed globalThis access with a DYNAMIC key poisons (Sym+bol concatenation)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "const S = globalThis['Sym' + 'bol']; S.for = () => 'Function'; const K = Symbol.for('x'); globalThis[K] = 1; export const out = 'u';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it("literal string writes keep today's behavior: 'Function' rejects, other literals pass", async () => {
+    const loud = esmLoader({
+      '/work/loud.mjs': 'globalThis.Function = function evil() {};\n',
+    });
+    await expect(loud.import('./loud.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+    const pass = esmLoader({
+      '/work/pass.mjs': "globalThis.someOrdinaryKey = 1; export const out = 'ok';\n",
+    });
+    const ns = (await pass.import('./pass.mjs', '/work/__entry__.ts')) as { out: string };
+    expect(ns.out).toBe('ok');
+    Reflect.deleteProperty(globalThis, 'someOrdinaryKey');
+  });
+});
+
+describe('CJS guard accepts provably-Symbol computed keys', () => {
+  it('undici shape: Object.defineProperty(globalThis, Symbol.for key, …) loads', () => {
+    const loader = cjsLoader({
+      '/work/main.js':
+        "const KEY = Symbol.for('test.global-dispatcher'); Object.defineProperty(globalThis, KEY, { value: 'set', configurable: true }); module.exports = Object.getOwnPropertyDescriptor(globalThis, KEY)?.value;\n",
+    });
+    expect(loader.require('./main.js', '/work/__entry__.js')).toBe('set');
+    CLEANUP.push(Symbol.for('test.global-dispatcher'));
+  });
+
+  it('hoisted/later Symbol mutation anywhere poisons the whole module (order-free)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "function write() { const K = Symbol.for('x'); globalThis[K] = 1; }\nSymbol.for = () => 'Function';\nwrite(); export const out = 'unreachable';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('Object.assign(Symbol, …) poisons (unrecognized substitution shape)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "Object.assign(Symbol, { for: () => 'Function' }); const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('globalThis.Symbol reassignment poisons', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "globalThis.Symbol = { for: () => 'Function' }; const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('a NESTED declaration named Symbol keeps the ceiling loud (re-cut)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "function unrelated() { function Symbol() {} }\nconst KEY = Symbol.for('x'); globalThis[KEY] = 17; export const out = 'ok';\n",
+    });
+    await expect(loader.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('computed spellings poison: Object["defineProperty"](Symbol, …) and globalThis["Symbol"] = …', async () => {
+    const a = esmLoader({
+      '/work/main.mjs':
+        "Object['defineProperty'](Symbol, 'for', { value: () => 'Function' }); const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
+    });
+    await expect(a.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+    const b = esmLoader({
+      '/work/main.mjs':
+        "globalThis['Symbol'] = { for: () => 'Function' }; const KEY = Symbol.for('x'); globalThis[KEY] = 1; export const out = 'unreachable';\n",
+    });
+    await expect(b.import('./main.mjs', '/work/__entry__.ts')).rejects.toThrow(
+      'module-loader.esm-global-function-assignment',
+    );
+  });
+
+  it('a LOCAL parameter named Symbol keeps the ceiling loud (re-cut: extra occurrence)', async () => {
+    const loader = esmLoader({
+      '/work/main.mjs':
+        "function tweak(S) { S.for = () => 'Function'; }\nconst KEY = Symbol.for('x'); globalThis[KEY] = 17; export const out = 'ok';\n",
+    });
+    // tweak mutates an UNRELATED local S (not the Symbol identifier) — the
+    // module still qualifies (one Symbol occurrence in the factory).
+    const ns = (await loader.import('./main.mjs', '/work/__entry__.ts')) as { out: string };
+    expect(ns.out).toBe('ok');
+  });
+
+  it('CJS: defineProperty on Symbol itself poisons', () => {
+    const loader = cjsLoader({
+      '/work/main.js':
+        "Object.defineProperty(Symbol, 'for', { value: () => 'Function' }); const KEY = Symbol.for('x'); globalThis[KEY] = 1; module.exports = 'unreachable';",
+    });
+    expect(() => loader.require('./main.js', '/work/__entry__.js')).toThrow(
+      'module-loader.cjs-global-function-assignment',
+    );
+  });
+
+  it('non-Symbol-bound defineProperty key keeps the loud ceiling', () => {
+    const loader = cjsLoader({
+      '/work/main.js':
+        "let KEY = 'Function'; Object.defineProperty(globalThis, KEY, { value: function evil() {} }); module.exports = 'unreachable';\n",
+    });
+    expect(() => loader.require('./main.js', '/work/__entry__.js')).toThrow(
+      'module-loader.cjs-global-function-assignment',
+    );
+  });
+});

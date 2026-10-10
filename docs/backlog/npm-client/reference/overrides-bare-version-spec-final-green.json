@@ -1,0 +1,117 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Unit можно принимать: 27/27 overrides+semver, 67/67 installer+registry, Chromium I1 GREEN. Advisory не блокирует; goal открыт. Полный pr:check не запускал.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "1aa6c96db20bb9cbc1ca55980ab44cbb453adc45",
+  "unit_goal_source": "docs/backlog/npm-client/overrides-bare-version-spec.md (ready) @ f52817c5061d729e7aaac7816da0877e5ab5d376; docs/backlog/epics/vitest-run-in-browser/goal.md, I1/scenario step 2; BASE 11983b694ebb5846819e786f0f56e0fe7d363106.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4+I5+I7; goal scenario steps 3–5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:45",
+      "summary": "Item 13: config-pipeline suspension; затем item 12: оба pool, reporter/pass-fail/exit и compat claims. Полный goal-e2e этим review не проверен."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: bare vite 8.0.16 → {name:vite, range:8.0.16, source:user}.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:90",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: 8.0.16, ^8.0.0, 2.x, * — same-name ranges; install goal manifest → vite 8.0.16.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:97 + packages/npm-client/src/overrides.test.ts:107 + tests/e2e/vitest-run.spec.ts:46",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: name@range, npm: aliases, name redirects, parent>child и baked overrides сохраняют parse.",
+      "source": "acceptance",
+      "trace": "scenario step 2+baseline",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:147 + packages/npm-client/src/overrides.test.ts:190",
+      "note": ""
+    },
+    {
+      "row": "Malformed override $ref остаётся package-name parse; registry 404 surfaces.",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:203 + packages/npm-client/src/registry.test.ts:191",
+      "note": ""
+    },
+    {
+      "row": "Public resolveOverride: bare range относится к key package; существующие target forms сохранены.",
+      "source": "public-api",
+      "trace": "Acceptance 1+Acceptance 3+I1+scenario step 2",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Public install: goal manifest с bare override устанавливает один vite 8.0.16.",
+      "source": "public-api",
+      "trace": "Acceptance 2+I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/overrides.test.ts:125 + tests/e2e/vitest-run.spec.ts:46",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/npm-client/src/semver.ts:137",
+          "evidence": "node --import tsx --input-type=module -e 'import {resolveOverride} from \"./packages/npm-client/src/overrides.ts\"; for (const value of [\">=8.0.0 <9.0.0\",\"<=8.0.16\"]) console.log(JSON.stringify(resolveOverride(\"vite\",undefined,{vite:value})));' → {\"name\":\">=8.0.0 <9.0.0\",\"range\":null,\"source\":\"user\"}; {\"name\":\"<=8.0.16\",\"range\":null,\"source\":\"user\"}.",
+          "summary": "Комментарий обещает comparator sets, но >=/<= regex не принимает. Вне четырёх форм Acceptance 2; advisory, scope не расширяет.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

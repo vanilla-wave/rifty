@@ -497,7 +497,9 @@ globalThis.onmessage = ({ data }) => {
       RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
     });
 
-    expect(() => new Worker('/workspace/worker.mjs', { execArgv: [] })).toThrow(
+    // Non-empty execArgv stays the loud ceiling; the explicit-empty spelling
+    // (`execArgv: []`) is accepted (worker-threads-stdio-streams-empty-exec-argv).
+    expect(() => new Worker('/workspace/worker.mjs', { execArgv: ['--experimental-foo'] })).toThrow(
       expect.objectContaining({
         name: 'NotImplementedError',
         feature: 'worker_threads.Worker.execArgv',
@@ -1063,3 +1065,21 @@ async function withProcessGlobal<T>(
     }
   }
 }
+
+describe('Worker keepalive handle (worker-threads-handle-keepalive, I2)', () => {
+  it('a live worker holds the keepalive count; unref releases; ref re-acquires; exit releases', async () => {
+    const { activeRefs } = await import('../internal/event-loop-keepalive.ts');
+    writeFileSync('/w-keepalive-handle.js', 'parentPort.on("message", () => {});');
+    const before = activeRefs();
+    const w = new Worker('/w-keepalive-handle.js');
+    // start() runs on a microtask; the script load resolves after it.
+    await new Promise((resolve) => w.on('online', resolve));
+    expect(activeRefs()).toBe(before + 1);
+    w.unref();
+    expect(activeRefs()).toBe(before);
+    w.ref();
+    expect(activeRefs()).toBe(before + 1);
+    await w.terminate(0);
+    expect(activeRefs()).toBe(before);
+  });
+});

@@ -130,6 +130,35 @@ export function matchesRange(version: string, range: string | undefined | null):
   return false;
 }
 
+// One npm range comparator token: optional operator, optional `v`, then a
+// partial version or x-range component (`1`, `1.2`, `1.2.3-pre+build`,
+// `2.x`, `x`, `*`).
+const RANGE_COMPARATOR_RE =
+  /^[=<>~^]?v?(\d+|[xX*])(\.(?![-+])(\d+|[xX*])){0,2}(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/;
+
+/**
+ * True iff `value` is range-shaped (`8.0.16`, `^8.0.0`, `2.x`, `*`,
+ * comparator sets, hyphen and `||` unions) — npm's bare-version override
+ * spelling: the KEY package at that spec. Non-range bare values stay package
+ * names (redirects); dist-tag words (`latest`) are names here, as in npa.
+ */
+export function isRangeShaped(value: string): boolean {
+  if (value === '*') return true;
+  return value.split('||').every((rawBranch) => {
+    const branch = rawBranch.trim();
+    if (!branch) return false;
+    const hyphen = branch.split(/\s+-\s+/);
+    if (hyphen.length === 2) {
+      return hyphen.every((side) => RANGE_COMPARATOR_RE.test(side.trim()));
+    }
+    const comparators = branch
+      .replace(/([<>=^~])\s+/g, '$1')
+      .split(/\s+/)
+      .filter(Boolean);
+    return comparators.length > 0 && comparators.every((cmp) => RANGE_COMPARATOR_RE.test(cmp));
+  });
+}
+
 function matchBranch(version: string, branch: string): boolean {
   // npm allows whitespace between a comparator operator and its base
   // (`>= 2.1.2 < 3` == `>=2.1.2 <3`). Without this, the split below emits four

@@ -1,0 +1,129 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Land after NOTE reception: promise and RED are sound (oracle facts verified, RED fails now for the declared reason, assertions map 1:1 to registration); fix the RED-target case-name slip in the contract at the agent's choice.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/path-posix-win32-builtins.md (status: ready) at current tree vs BASE 0c4c1b070042a7a3079888cae92f25f15db24cdf; epic docs/backlog/epics/vitest-run-in-browser, invariant I6 (goal.md:87-89, map.md:13-14)",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I6 remaining walls on the claimed path: named-export gaps (`statfsSync` on node:fs, `cwd` on node:process) and absent-builtin-member loud throws",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:15-20",
+      "summary": "Units 3-5 (builtin-static-names-prototype-methods, absent-builtin-members-loud-throws, symbol-key-global-write-guard-precision) still open; this slice only removes the first wall."
+    },
+    {
+      "clause": "I6 end-to-end: vitest 4.1.11 CLI + pool workers load and execute the exact vitest tree as under Node 24",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117-120",
+      "summary": "Goal-level acceptance not yet proven; this unit is one registration-only step toward it."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: `import { join } from 'node:path/posix'` resolves, join('a','b') === 'a/b', module is `===` to require('path').posix",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpath-posix-win32.case.ts:7-9",
+      "note": "Case asserts require('node:path/posix'), posix.join('a','b') and posix === path.posix; node side prints a/b|true|true|/ : (executed), rifty side currently fails with the declared ModuleLoadError (executed)."
+    },
+    {
+      "row": "Acceptance 2: `node:path/win32` registered the same way, `win32 === posix` posture kept",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpath-posix-win32.case.ts:6,10",
+      "note": "Case asserts win32 === path.win32 — true on both oracle (executed: true) and post-registration rifty (path.ts:131 win32 === posix). The posture itself is existing path.ts code outside this registration-only unit (Decisions, contract:60-61)."
+    },
+    {
+      "row": "Acceptance 3: require('path/posix') === require('path').posix and the named-export surface matches the existing path module",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpath-posix-win32.case.ts:9",
+      "note": "Identity assertion `posix === path.posix` transitively guarantees the whole named-export surface (sep/delimiter/join/...) matches the existing module; case also prints posix.sep and posix.delimiter ('/ :' on oracle, executed)."
+    },
+    {
+      "row": "Fault matrix: absent builtin — `import 'node:path/foo'` (unregistered subpath) stays a loud `ModuleLoadError: Built-in '...' is not implemented` (unchanged)",
+      "source": "fault-matrix",
+      "trace": "I6 + named baseline behavior (loud ModuleLoadError, unchanged)",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/path-posix-win32-builtins.md:48",
+      "note": "Executed RED demonstrates the loud throw live today (run output: error: ModuleLoadError: Built-in 'node:path/posix' is not implemented). Post-landing loudness rests on the exact-name registry the unit does not touch (packages/io/src/builtin-registry.ts:31 `name in factories`); see axis-7 concern."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/path-posix-win32-builtins.md:42",
+          "evidence": "grep of tools/node-parity-runner/cases/path/: only subpath-posix-win32.case.ts exists; no subpath-posix.case.ts",
+          "summary": "Contract Parity cases names the RED target `path/subpath-posix`, but the committed case file is `path/subpath-posix-win32.case.ts` — the cited case name does not exist. Doc-only slip, not one of the four REV-5 blocker classes.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/runtime-js/path-posix-win32-builtins.md:61",
+          "evidence": "",
+          "summary": "Contract file lacks a trailing newline (git diff: '\\ No newline at end of file').",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/path/subpath-posix-win32.case.ts:6",
+          "evidence": "pnpm test:parity path/subpath-posix-win32 → 'error: ModuleLoadError: Built-in 'node:path/posix' is not implemented' (rifty side; ModuleLoadError name is rifty-internal, node side of the exact case code executed separately: a/b|true|true|/ :)",
+          "summary": "Acceptance 1 names the ESM `import { join }` form (the actual I6 wall), but the RED case exercises only `require('node:path/posix')`. Divergence is implausible in this architecture — one exact-name registry feeds both require and ESM import through resolver.ts:138-148 with a record-owned ESM namespace (builtins/index.ts:7-9) — so the row stands pass; advisory only.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/path-posix-win32-builtins.md:48",
+          "evidence": "pnpm test:parity path/subpath-posix-win32 → 'error: ModuleLoadError: Built-in 'node:path/posix' is not implemented' (loud throw observed unchanged today)",
+          "summary": "Fault-matrix 'unchanged' row has no committed post-landing assertion that an unregistered subpath (`node:path/foo`) still throws loudly; discrimination currently rests on the exact-name registry (packages/io/src/builtin-registry.ts:31), which the unit does not touch. Advisory — no executed artifact of a plausible wrong impl (e.g. prefix-matching registration), so the row is not weak per REV-4.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": [],
+  "reviewed_sha": "24a8a8546976c82de76e4f4ef1a6d2dfad6cd9e7"
+}

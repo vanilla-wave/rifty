@@ -193,12 +193,7 @@ function assertSupportedRunOptions(options: RunningScriptOptions, feature: strin
 
 function assertSupportedScriptOptions(options: ScriptOptions, feature: string): void {
   assertSupportedRunOptions(options, feature);
-  if (options.lineOffset !== undefined && options.lineOffset !== 0) {
-    throw new NotImplementedError(`${feature}.lineOffset`);
-  }
-  if (options.columnOffset !== undefined && options.columnOffset !== 0) {
-    throw new NotImplementedError(`${feature}.columnOffset`);
-  }
+  assertIntegerOffsets(options);
   if (options.cachedData !== undefined) {
     throw new NotImplementedError(`${feature}.cachedData`);
   }
@@ -212,6 +207,12 @@ function assertSupportedScriptOptions(options: ScriptOptions, feature: string): 
 
 function assertSupportedCompileOptions(options: CompileFunctionOptions): void {
   assertSupportedScriptOptions(options, 'vm.compileFunction');
+  if ((options.lineOffset ?? 0) !== 0) {
+    throw new NotImplementedError('vm.compileFunction.lineOffset');
+  }
+  if ((options.columnOffset ?? 0) !== 0) {
+    throw new NotImplementedError('vm.compileFunction.columnOffset');
+  }
   if (options.parsingContext !== undefined) {
     throw new NotImplementedError('vm.compileFunction.parsingContext');
   }
@@ -297,6 +298,216 @@ function withSourceURL(code: string, filename?: string): string {
   return `${code}\n//# sourceURL=${filename}`;
 }
 
+/** Node validates offset options as integers (ERR_OUT_OF_RANGE otherwise). */
+function assertIntegerOffsets(options: ScriptOptions): void {
+  for (const key of ['lineOffset', 'columnOffset'] as const) {
+    const value = options[key];
+    if (value === undefined || (typeof value === 'number' && Number.isInteger(value))) continue;
+    throw Object.assign(
+      new RangeError(
+        `The value of "options.${key}" is out of range. It must be an integer. Received ${String(value)}`,
+      ),
+      { code: 'ERR_OUT_OF_RANGE' },
+    );
+  }
+}
+
+/**
+ * Shift stack-frame positions reported for `filename` while `run` executes
+ * (Node semantics, oracle-verified): `columnOffset` applies ONLY to frames on
+ * the (prefix-shifted) first line — raw, may display negative; other lines'
+ * columns never move. A negative `lineOffset` (no physical prefix possible)
+ * shifts every frame's line here. Reads inside the script and thrown errors
+ * (materialised while installed) carry the shift, as in Node.
+ */
+interface ErrorWithPrepareStackTrace {
+  prepareStackTrace?: (err: Error, frames: NodeJS.CallSite[]) => unknown;
+}
+
+// Persistent per-filename shifts (vm-run-in-this-context-offsets): Node bakes
+// offsets at COMPILE, so a wrapper function returned by the script still
+// reports shifted stacks when called LATER (vitest's evaluator shape). The
+// dispatcher wraps CallSite OBJECTS (frame-level, idempotent — no string
+// post-processing, no double-shift through chained dispatchers) and restores
+// the previous hook when the last registration resets.
+interface OffsetShift {
+  firstShiftedLine: number;
+  columnShift: number;
+  negativeLineShift: number;
+}
+const PERSISTENT_SHIFTS = new Map<string, OffsetShift>();
+let persistentHook: ((err: Error, frames: NodeJS.CallSite[]) => unknown) | null = null;
+let capturedPrevious: ((err: Error, frames: NodeJS.CallSite[]) => unknown) | undefined;
+
+interface CallSiteLike {
+  getFileName?: () => unknown;
+  getLineNumber?: () => number | null;
+  getColumnNumber?: () => number | null;
+  toString?: () => string;
+}
+
+interface ShiftLookup {
+  readonly shift: OffsetShift;
+  readonly file: string;
+}
+
+function shiftForFile(file: unknown): ShiftLookup | undefined {
+  if (typeof file !== 'string') return undefined;
+  const shift = PERSISTENT_SHIFTS.get(file);
+  return shift === undefined ? undefined : { shift, file };
+}
+
+/** Look up a shift by the trailing `<file>:<line>:<col>` of a frame render.
+ * Per-file regexes — filenames may contain parens/spaces. */
+const renderedMatchers = new Map<string, RegExp>();
+
+function shiftForRendered(text: string): ShiftLookup | undefined {
+  const trimmed = text.trim();
+  for (const file of PERSISTENT_SHIFTS.keys()) {
+    let re = renderedMatchers.get(file);
+    if (re === undefined) {
+      // Lookbehind: the file must START at a boundary — a SUFFIX collision
+      // (`/other/virtual/suffix.js` vs registered `/virtual/suffix.js`)
+      // must not shift a foreign file's frames.
+      re = new RegExp(
+        `(?<![\\w./$-])${file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:(\\d+):(\\d+)\\)?$`,
+        'u',
+      );
+      renderedMatchers.set(file, re);
+    }
+    if (re.test(trimmed)) {
+      return { shift: PERSISTENT_SHIFTS.get(file) as OffsetShift, file };
+    }
+  }
+  return undefined;
+}
+
+function uninstallPersistentHook(): void {
+  const hook = persistentHook;
+  if (hook === null) return;
+  persistentHook = null;
+  const errorCtor = Error as unknown as ErrorWithPrepareStackTrace;
+  if (errorCtor.prepareStackTrace === hook) {
+    if (capturedPrevious) errorCtor.prepareStackTrace = capturedPrevious;
+    else Reflect.deleteProperty(errorCtor, 'prepareStackTrace');
+  }
+}
+
+function installPersistentHook(): void {
+  if (persistentHook !== null) return;
+  const errorCtor = Error as unknown as ErrorWithPrepareStackTrace;
+  const previous = errorCtor.prepareStackTrace;
+  capturedPrevious = previous;
+  const hook = (err: Error, frames: NodeJS.CallSite[]): unknown => {
+    let anyShifted = false;
+    const wrapped = frames.map((frame) => {
+      const site = frame as unknown as CallSiteLike;
+      // Eval-compiled frames carry no getFileName(); the sourceURL rides in
+      // the rendered text — anchor the shift lookup on it.
+      const found = shiftForFile(site.getFileName?.()) ?? shiftForRendered(String(frame));
+      if (found === undefined) return frame;
+      anyShifted = true;
+      return wrapCallSite(site, found.shift, found.file);
+    }) as NodeJS.CallSite[];
+    if (anyShifted) {
+      // Shifted stacks render HERE (single application — no double-shift
+      // through a chained dispatcher, no `eval (` marker rebuilds). Unshifted
+      // caller frames stay in place. Known limitation: an outer source-map
+      // remapper does not re-map an already-shifted frame (Out of scope);
+      // recompiling the same filename with DIFFERENT offsets: last wins.
+      return defaultStackRender(err, wrapped);
+    }
+    // Unshifted stack: read through V8's own default — byte-identical to the
+    // pre-hook base AND cycle-free (a chained source-map dispatcher that
+    // captured this hook would otherwise re-enter it forever). Known
+    // limitation: an outer remapper does not map stacks while a vm offset
+    // registration is active (Out of scope).
+    Reflect.deleteProperty(errorCtor, 'prepareStackTrace');
+    try {
+      return err.stack;
+    } finally {
+      errorCtor.prepareStackTrace = hook;
+    }
+  };
+  persistentHook = hook;
+  errorCtor.prepareStackTrace = hook;
+}
+
+function defaultStackRender(err: Error, frames: NodeJS.CallSite[]): string {
+  return `${err.name}: ${err.message}\n${frames.map((f) => `    at ${String(f)}`).join('\n')}`;
+}
+
+/** A CallSite reporting shifted positions (Node compile-time semantics):
+ * delegates EVERY method to the original site (native/eval/origin probes),
+ * overriding only the position getters and the rendered text. */
+function wrapCallSite(site: CallSiteLike, shift: OffsetShift, fileName?: string): NodeJS.CallSite {
+  const line = site.getLineNumber?.() ?? 0;
+  const outLine = line + shift.negativeLineShift;
+  const outCol =
+    line === shift.firstShiftedLine
+      ? (site.getColumnNumber?.() ?? 0) + shift.columnShift
+      : (site.getColumnNumber?.() ?? 0);
+  const base = String(site);
+  const shiftedText = base
+    .replace(/^eval \((.*)\)$/u, '$1')
+    .replace(/:\d+:\d+(\)?)$/u, (_m, close: string) => `:${outLine}:${outCol}${close}`);
+  return new Proxy(site, {
+    get(target, prop, receiver) {
+      if (prop === 'getLineNumber') return () => outLine;
+      if (prop === 'getColumnNumber') return () => outCol;
+      if (prop === 'toString') return () => shiftedText;
+      // Node vm frames report no eval origin and carry the script name —
+      // renderers rebuilding frame text from CallSite probes must neither
+      // re-add the `eval (` marker nor lose the file.
+      if (prop === 'getEvalOrigin') return () => undefined;
+      if (prop === 'getFileName' && fileName !== undefined) return () => fileName;
+      if (prop === 'isEval') return () => false;
+      if (prop === 'getScriptNameOrSourceURL' && fileName !== undefined) return () => fileName;
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === 'function'
+        ? (value as (...a: unknown[]) => unknown).bind(target)
+        : value;
+    },
+  }) as unknown as NodeJS.CallSite;
+}
+
+/** Register the filename's shift; a zero-offset run RESETS it (back to the
+ * untouched base for that filename, Node = compile-time semantics). */
+function registerOffsetShift(
+  filename: string | undefined,
+  lineOffset: number,
+  columnOffset: number,
+): void {
+  if (filename === undefined) return;
+  if (lineOffset === 0 && columnOffset === 0) {
+    PERSISTENT_SHIFTS.delete(filename);
+    // Reset-to-base parity: with the last registration gone, restore the
+    // caller's hook immediately (and allow a fresh capture next time).
+    if (PERSISTENT_SHIFTS.size === 0) uninstallPersistentHook();
+    return;
+  }
+  PERSISTENT_SHIFTS.set(filename, {
+    firstShiftedLine: 1 + Math.max(0, lineOffset),
+    columnShift: columnOffset,
+    negativeLineShift: lineOffset < 0 ? lineOffset : 0,
+  });
+  installPersistentHook();
+}
+
+/** Apply `lineOffset`/`columnOffset` to a host-realm script run (goal I4/I5):
+ * positive lines are a physical prefix; the shift registry carries columns
+ * (and negative lines) for BOTH in-run and DEFERRED stack reads. */
+function runGlobalScriptWithOffsets(
+  code: string,
+  filename: string | undefined,
+  lineOffset: number,
+  columnOffset: number,
+): unknown {
+  const prefixed = lineOffset > 0 ? `${'\n'.repeat(lineOffset)}${code}` : code;
+  registerOffsetShift(filename, lineOffset, columnOffset);
+  return runGlobalScript(withSourceURL(prefixed, filename));
+}
+
 export function createContext<T extends Record<string, unknown> = Record<string, unknown>>(
   contextObject?: T,
   options?: CreateContextOptions,
@@ -334,7 +545,12 @@ export function isContext(value: unknown): boolean {
 export function runInThisContext(code: string, options?: VmOptions): unknown {
   const normalized = normalizeOptions(options);
   assertSupportedScriptOptions(normalized, 'vm.runInThisContext');
-  return runGlobalScript(withSourceURL(asSource(code), normalized.filename));
+  return runGlobalScriptWithOffsets(
+    asSource(code),
+    normalized.filename,
+    normalized.lineOffset ?? 0,
+    normalized.columnOffset ?? 0,
+  );
 }
 
 export function runInContext(
@@ -345,6 +561,22 @@ export function runInContext(
   const normalized = normalizeOptions(options);
   assertSupportedScriptOptions(normalized, 'vm.runInContext');
   assertContextified(contextifiedObject);
+  if ((normalized.columnOffset ?? 0) !== 0) {
+    // Engine-op path (quickjs/rewrite) — column shifting needs the host stack
+    // dispatcher, which cannot see engine frames. Loud, never silently lost.
+    throw new NotImplementedError('vm.runInContext.columnOffset');
+  }
+  if ((normalized.lineOffset ?? 0) > 0) {
+    const prefixed = `${'\n'.repeat(normalized.lineOffset ?? 0)}${asSource(code)}`;
+    return selectEngineForRun().runInContext(
+      prefixed,
+      contextifiedObject as ContextObject,
+      normalized.filename,
+    );
+  }
+  if ((normalized.lineOffset ?? 0) < 0) {
+    throw new NotImplementedError('vm.runInContext.lineOffset.negative');
+  }
   return selectEngineForRun().runInContext(
     asSource(code),
     contextifiedObject as ContextObject,
@@ -367,6 +599,8 @@ export function runInNewContext(
 export class Script {
   readonly #code: string;
   readonly #filename?: string;
+  readonly #lineOffset: number;
+  readonly #columnOffset: number;
   // Memoised compiled payload — compile once, reuse across every run of this
   // Script instance. The engine keys its own per-script state (the rewrite, a
   // quickjs handle, …) on this stable CompiledScript identity, so reuse here is
@@ -376,7 +610,12 @@ export class Script {
   constructor(code: string, options?: VmOptions) {
     const normalized = normalizeOptions(options);
     assertSupportedScriptOptions(normalized, 'vm.Script');
-    this.#code = asSource(code);
+    // Node bakes offsets at construction; a positive lineOffset is a physical
+    // newline prefix (real frame coordinates), the rest a stack shift at run.
+    this.#lineOffset = normalized.lineOffset ?? 0;
+    this.#columnOffset = normalized.columnOffset ?? 0;
+    this.#code =
+      this.#lineOffset > 0 ? `${'\n'.repeat(this.#lineOffset)}${asSource(code)}` : asSource(code);
     this.#filename = normalized.filename;
   }
 
@@ -385,14 +624,31 @@ export class Script {
     return this.#compiled;
   }
 
+  /** Sandbox (engine-op) runs cannot see the host stack dispatcher: column
+   * offsets and negative line offsets are loudly unsupported there. */
+  #assertSandboxOffsetsSupported(): void {
+    if (this.#columnOffset !== 0) {
+      throw new NotImplementedError('vm.Script.runInContext.columnOffset');
+    }
+    if (this.#lineOffset < 0) {
+      throw new NotImplementedError('vm.Script.runInContext.lineOffset.negative');
+    }
+  }
+
   runInThisContext(options?: VmOptions): unknown {
-    return runInThisContext(this.#code, { ...normalizeOptions(options), filename: this.#filename });
+    // Node ignores run-time lineOffset/columnOffset for a compiled Script
+    // (they are construction options); construction offsets apply here.
+    const normalized = normalizeOptions(options);
+    assertSupportedRunOptions(normalized, 'vm.Script');
+    registerOffsetShift(this.#filename, this.#lineOffset, this.#columnOffset);
+    return runGlobalScript(withSourceURL(this.#code, this.#filename));
   }
 
   runInContext(contextifiedObject: Record<string, unknown>, options?: VmOptions): unknown {
     const normalized = { ...normalizeOptions(options), filename: this.#filename };
     assertSupportedScriptOptions(normalized, 'vm.Script');
     assertContextified(contextifiedObject);
+    this.#assertSandboxOffsetsSupported();
     return selectEngineForRun().runCompiled(
       this.#getCompiled(),
       contextifiedObject as ContextObject,
@@ -405,6 +661,7 @@ export class Script {
     }
     const normalized = { ...normalizeOptions(options), filename: this.#filename };
     assertSupportedScriptOptions(normalized, 'vm.Script');
+    this.#assertSandboxOffsetsSupported();
     const context = createContext(contextObject === undefined ? {} : contextObject);
     return selectEngineForRun().runCompiled(this.#getCompiled(), context as ContextObject);
   }

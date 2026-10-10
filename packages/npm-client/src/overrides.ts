@@ -10,6 +10,7 @@
  * target-string parsing.
  */
 import { bakedOverrides } from '@riftydev/shadow-registry';
+import { isRangeShaped } from './semver.ts';
 
 export interface OverrideMap {
   /** Map from package name (or `parent>child`) to replacement target. */
@@ -31,20 +32,25 @@ export function resolveOverride(
 ): ResolvedOverrideTarget | null {
   const key = parent ? `${parent}>${name}` : name;
   const userMatch = userOverrides[key] ?? userOverrides[name];
-  if (userMatch) return { ...parseTarget(userMatch), source: 'user' };
+  if (userMatch) return { ...parseTarget(userMatch, name), source: 'user' };
   const builtin = bakedOverrides[name];
-  if (builtin) return { ...parseTarget(builtin), source: 'baked' };
+  if (builtin) return { ...parseTarget(builtin, name), source: 'baked' };
   return null;
 }
 
-function parseTarget(target: string): { name: string; range: string | null } {
+function parseTarget(target: string, key: string): { name: string; range: string | null } {
   // Accept formats:
   //   "bcryptjs"             → name=bcryptjs, range=null (latest)
   //   "bcryptjs@2.x"         → name=bcryptjs, range="2.x"
   //   "npm:bcryptjs@2.x"     → npm alias form, same as above
+  //   "npm:bcryptjs"         → alias to the named package (never a bare range)
+  //   "8.0.16" / "^8.0.0"    → npm bare-version spelling: the KEY package at
+  //                            that range (npm 11 `overrides` semantics)
+  const isAlias = target.startsWith('npm:');
   let str = target;
-  if (str.startsWith('npm:')) str = str.slice(4);
+  if (isAlias) str = str.slice(4);
   const at = str.lastIndexOf('@');
-  if (at <= 0) return { name: str, range: null };
-  return { name: str.slice(0, at), range: str.slice(at + 1) };
+  if (at > 0) return { name: str.slice(0, at), range: str.slice(at + 1) };
+  if (at < 0 && !isAlias && str !== '' && isRangeShaped(str)) return { name: key, range: str };
+  return { name: str, range: null };
 }

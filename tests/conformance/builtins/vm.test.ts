@@ -796,3 +796,88 @@ describe('node:vm rewrite-engine loud opt-in + telemetry wiring (T15)', () => {
     expect(snapshotTelemetry()).toEqual([]);
   });
 });
+
+describe('node:vm runInThisContext offsets (vm-run-in-this-context-offsets)', () => {
+  it('columnOffset shifts raw (no clamp) and the dispatcher restores after the run', () => {
+    const vm = loadBuiltin('vm') as {
+      runInThisContext(code: string, options?: Record<string, unknown>): unknown;
+    };
+    const captured = vm.runInThisContext('new Error().stack', {
+      filename: '/virtual/off.js',
+      columnOffset: -20,
+    }) as string;
+    expect(captured.split('\n')[1]).toBe('    at /virtual/off.js:1:-19');
+    // No dispatcher leak: a fresh stack AFTER the run keeps host coordinates.
+    const after = new Error('later').stack ?? '';
+    expect(after).not.toContain('/virtual/off.js');
+    const prepare = Reflect.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
+    expect(prepare === undefined || typeof prepare.value).toBe('function');
+  });
+
+  it('lineOffset shifts lines and strips the eval marker; fractional offset RangeErrors', () => {
+    const vm = loadBuiltin('vm') as {
+      runInThisContext(code: string, options?: Record<string, unknown>): unknown;
+      Script: new (
+        code: string,
+        options?: Record<string, unknown>,
+      ) => {
+        runInThisContext(): unknown;
+      };
+    };
+    const shifted = vm.runInThisContext('new Error().stack', {
+      filename: '/virtual/line.js',
+      lineOffset: 3,
+    }) as string;
+    expect(shifted.split('\n')[1]).toBe('    at /virtual/line.js:4:1');
+    const script = new vm.Script('function f() { return new Error().stack; }\nf();', {
+      filename: '/virtual/mod2.js',
+      lineOffset: 10,
+      columnOffset: 5,
+    });
+    expect((script.runInThisContext() as string).split('\n')[1]).toBe(
+      '    at f (/virtual/mod2.js:11:28)',
+    );
+    expect(() => vm.runInThisContext('0;', { columnOffset: 1.5 })).toThrowError(
+      expect.objectContaining({ name: 'RangeError', code: 'ERR_OUT_OF_RANGE' }),
+    );
+  });
+});
+
+describe('node:vm Script sandbox offsets stay loud (vm-run-in-this-context-offsets)', () => {
+  it('runInContext/runInNewContext reject columnOffset and negative lineOffset', () => {
+    const vm = loadBuiltin('vm') as {
+      Script: new (
+        code: string,
+        options?: Record<string, unknown>,
+      ) => {
+        runInContext(ctx: Record<string, unknown>): unknown;
+        runInNewContext(ctx?: Record<string, unknown>): unknown;
+      };
+      createContext: (obj?: Record<string, unknown>) => Record<string, unknown>;
+    };
+    const ctx = vm.createContext({});
+    const col = new vm.Script('1;', { columnOffset: 5 });
+    expect(() => col.runInContext(ctx)).toThrow('vm.Script.runInContext.columnOffset');
+    expect(() => col.runInNewContext()).toThrow('vm.Script.runInContext.columnOffset');
+    const neg = new vm.Script('1;', { lineOffset: -2 });
+    expect(() => neg.runInContext(ctx)).toThrow('vm.Script.runInContext.lineOffset.negative');
+    // Positive lineOffset is baked as a physical prefix — sandbox-safe.
+    const pos = new vm.Script('1;', { lineOffset: 3 });
+    expect(() => pos.runInContext(ctx)).not.toThrow();
+  });
+});
+
+describe('node:vm offsets survive DEFERRED reads (vitest evaluator shape)', () => {
+  it('a wrapper returned by the offset run still reports shifted stacks later', () => {
+    const vm = loadBuiltin('vm') as {
+      runInThisContext(code: string, options?: Record<string, unknown>): unknown;
+    };
+    const wrapper = vm.runInThisContext('() => new Error("deferred").stack', {
+      filename: '/virtual/wrapped.js',
+      lineOffset: 0,
+      columnOffset: 5,
+    }) as () => string;
+    const stack = wrapper();
+    expect(stack.split('\n')[1]).toBe('    at /virtual/wrapped.js:1:12');
+  });
+});

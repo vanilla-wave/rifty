@@ -25,7 +25,74 @@ interface KeepaliveState {
   nodeEvalLifecycle: NodeEvalLifecycleRecord | null;
   nodeEvalDrainOwner: object | null;
   nodeEvalDirectTerminalPending: boolean;
+  processLifecycle: ProcessLifecycleDispatcher | null;
+  dying: boolean;
   readonly hostSetTimeout: typeof globalThis.setTimeout;
+}
+
+/**
+ * Process-lifecycle seam (late binding; the keepalive layer cannot import the
+ * process builtin). `dispatchUnhandled` runs BEFORE the loud terminal path: an
+ * active NodeProcess with `uncaughtException`/`unhandledRejection` listeners
+ * takes the error and the loop continues, exactly like Node. `emitNaturalExit`
+ * fires the process `exit` event on a loop-empty drain in realms the eval
+ * lifecycle does not own (its owner terminates via `process.exit`, which emits
+ * itself — Node order: flush, then `exit`).
+ */
+export interface ProcessLifecycleDispatchOutcome {
+  readonly handled: boolean;
+  /** A handler threw — Node treats that as fatal with the NEW thrown value
+   * (present even when the value is null/undefined). */
+  readonly hasThrownValue?: boolean;
+  readonly thrownValue?: unknown;
+}
+
+export interface ProcessLifecycleDispatcher {
+  dispatchUnhandled(
+    reason: unknown,
+    origin: NodeEvalUnhandledOrigin,
+    promise?: unknown,
+  ): ProcessLifecycleDispatchOutcome;
+  /** Natural drain resolved: emit `exit` with the process's final code. */
+  emitNaturalExit(): void;
+}
+
+export function setProcessLifecycleDispatcher(dispatcher: ProcessLifecycleDispatcher | null): void {
+  keepaliveState().processLifecycle = dispatcher;
+}
+
+/**
+ * One unhandled-error intake for every trap surface (browser `self` error /
+ * unhandledrejection events, host-process rejection forwarding): process
+ * listeners first (Node: handlers take the error, loop continues), then the
+ * eval terminal claim, then the drain record. `handled` = swallow the
+ * platform event; `rethrow` = a handler threw with no lifecycle owner — the
+ * caller surfaces THAT value (Node: fatal with the new error).
+ */
+export interface UnhandledIntakeOutcome {
+  readonly handled: boolean;
+  readonly rethrow?: unknown;
+}
+
+export function intakeUnhandledError(
+  reason: unknown,
+  origin: NodeEvalUnhandledOrigin,
+  promise?: unknown,
+): UnhandledIntakeOutcome {
+  // The internal exit control signal never reaches user handlers (baseline:
+  // beginNodeEvalUnhandled excludes it too).
+  if (isRiftyProcessExit(reason)) return { handled: true };
+  const state = keepaliveState();
+  const dispatch = state.processLifecycle?.dispatchUnhandled(reason, origin, promise);
+  if (dispatch?.handled) return { handled: true };
+  // A handler throw is fatal with the NEW thrown value — null/undefined
+  // included (hasThrownValue), never conflated with "no handler".
+  const terminalReason = dispatch?.hasThrownValue === true ? dispatch.thrownValue : reason;
+  if (dispatch?.hasThrownValue === true) markRealmDying();
+  if (beginNodeEvalUnhandled(terminalReason, origin)) return { handled: true };
+  if (origin === 'rejection') recordRejection(terminalReason, 'rejection');
+  if (dispatch?.hasThrownValue === true) return { handled: false, rethrow: dispatch.thrownValue };
+  return { handled: false };
 }
 
 export interface NodeEvalDrainLifecycle {
@@ -69,6 +136,8 @@ function keepaliveState(): KeepaliveState {
         nodeEvalLifecycle: null,
         nodeEvalDrainOwner: null,
         nodeEvalDirectTerminalPending: false,
+        processLifecycle: null,
+        dying: false,
         // awaitDrain MUST use the host timer, not installTimerGlobals' ref-counted
         // wrapper. Store the first bundle's capture on the realm so later
         // node-entry chunks share both the counter and the original timer.
@@ -80,6 +149,19 @@ function keepaliveState(): KeepaliveState {
     });
   }
   return realm[KEEPALIVE_STATE] as KeepaliveState;
+}
+
+/**
+ * Node: a FATAL handler throw kills the process — pending timers and nextTick
+ * callbacks never run. Set once at the fatal dispatch; every scheduled
+ * callback surface consults it.
+ */
+export function markRealmDying(): void {
+  keepaliveState().dying = true;
+}
+
+export function isRealmDying(): boolean {
+  return keepaliveState().dying;
 }
 
 /** Increment the active-handle count (timer/immediate/import scheduled). */
@@ -290,7 +372,9 @@ export function beginNodeEvalUnhandled(reason: unknown, origin: NodeEvalUnhandle
   return true;
 }
 
-/** Test-only: reset module state between cases. */
+/** Test-only: reset module state between cases. The process-lifecycle
+ * dispatcher stays — it is registered at process.ts module load (realm-stable
+ * registration, not per-invocation run state). */
 export function resetKeepalive(): void {
   const state = keepaliveState();
   state.refCount = 0;
@@ -298,6 +382,7 @@ export function resetKeepalive(): void {
   state.nodeEvalLifecycle = null;
   state.nodeEvalDrainOwner = null;
   state.nodeEvalDirectTerminalPending = false;
+  state.dying = false;
 }
 
 /**
@@ -367,6 +452,24 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
     ): void => {
       if (terminal) return;
       terminal = true;
+      // The settle path below dispatches user handlers (exit listeners,
+      // lifecycle hooks); a listener throw must NEVER strand the promise —
+      // Node kills the process, we reject with the listener's error.
+      try {
+        finishSettled(outcome);
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+    const finishSettled = (
+      outcome:
+        | { readonly kind: 'resolved' }
+        | {
+            readonly kind: 'rejected';
+            readonly reason: unknown;
+            readonly origin: NodeEvalTerminalOrigin;
+          },
+    ): void => {
       const state = keepaliveState();
       if (nodeEvalDrainLease !== null && state.nodeEvalDrainOwner !== nodeEvalDrainLease) {
         resolve();
@@ -378,6 +481,13 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
       const record = state.nodeEvalLifecycle;
       if (record !== null) record.terminalClaimed = true;
       const lifecycle = record?.lifecycle;
+      // Realms the eval lifecycle does NOT own terminate at this drain-resolve
+      // (kernel reaps) — emit the process `exit` event HERE so listener output
+      // flushes before the worker is reaped. Eval-owned realms terminate via
+      // `process.exit`, which emits after the lifecycle flush (Node order).
+      if (record === null && outcome.kind === 'resolved') {
+        state.processLifecycle?.emitNaturalExit();
+      }
       const beforeExit = record === null ? undefined : flushNodeEvalDrainLifecycle(record);
       const settled = reflectApplyPrimordial(
         promiseResolvePrimordial,
@@ -442,6 +552,7 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
 
 interface RejectionEventLike {
   reason: unknown;
+  promise?: unknown;
   preventDefault?(): void;
 }
 interface RejectionTarget {
@@ -481,8 +592,19 @@ export function installUnhandledErrorTrap(
         : typeof event.message === 'string'
           ? new Error(event.message)
           : new Error('Worker terminated by an uncaught error');
-    if (!beginNodeEvalUnhandled(reason, 'uncaught-error')) return;
-    event.preventDefault?.();
+    const outcome = intakeUnhandledError(reason, 'uncaught-error');
+    if (outcome.handled) {
+      event.preventDefault?.();
+      return;
+    }
+    if (outcome.rethrow !== undefined || 'rethrow' in outcome) {
+      // Fatal handler throw without a lifecycle owner: surface the NEW error
+      // on the macrotask queue (Node: crash with the handler's error).
+      event.preventDefault?.();
+      keepaliveState().hostSetTimeout(() => {
+        throw outcome.rethrow;
+      }, 0);
+    }
   });
 }
 
@@ -500,11 +622,17 @@ export function installUnhandledRejectionTrap(
   target: RejectionTarget = self as unknown as RejectionTarget,
 ): void {
   target.addEventListener('unhandledrejection', (ev: RejectionEventLike) => {
-    if (beginNodeEvalUnhandled(ev.reason, 'rejection')) {
+    const outcome = intakeUnhandledError(ev.reason, 'rejection', ev.promise);
+    if (outcome.handled) {
       ev.preventDefault?.();
       return;
     }
-    recordRejection(ev.reason);
+    if ('rethrow' in outcome) {
+      ev.preventDefault?.();
+      keepaliveState().hostSetTimeout(() => {
+        throw outcome.rethrow;
+      }, 0);
+    }
   });
 }
 

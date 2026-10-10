@@ -7,7 +7,7 @@
  * tests; it is not used for threaded WASI packages such as Rolldown in-browser.
  */
 
-import { NotImplementedError } from '@riftydev/io';
+import { NotImplementedError, Readable } from '@riftydev/io';
 import {
   type ProcessHandle,
   type SpawnWorkerSpec,
@@ -32,12 +32,17 @@ import {
 } from './process-bootstrap-identity.ts';
 import { type NodeProcessContextSnapshot, snapshotNodeProcessContext } from './process-context.ts';
 import { getProcessCwd, nodeProcessWorkerIpc } from './process.ts';
+import { WorkerKeepaliveRef, pipeHandleStdioStream } from './worker-threads-lifecycle.ts';
 
 interface WorkerOptions {
   workerData?: unknown;
   env?: Record<string, string | undefined>;
   eval?: boolean;
   execArgv?: readonly string[];
+  /** Pipe the worker's stdout into `worker.stdout` (Node: `stdout: true`). */
+  stdout?: boolean;
+  /** Pipe the worker's stderr into `worker.stderr` (Node: `stderr: true`). */
+  stderr?: boolean;
 }
 
 function snapshotWorkerEnvironment(
@@ -49,6 +54,12 @@ function snapshotWorkerEnvironment(
 }
 
 type WorkerScript = string | URL;
+
+/** `execArgv: []` is vitest's explicit-empty spelling — accepted (no flags to
+ * preserve). Any non-empty array stays the inherited-execArgv loud ceiling. */
+function isExplicitEmptyExecArgv(value: unknown): boolean {
+  return Array.isArray(value) && value.length === 0;
+}
 
 type WorkerEntry =
   | { readonly kind: 'path'; readonly path: string }
@@ -86,6 +97,9 @@ export function setSameRealmWorkerModuleImporter(importer: SameRealmWorkerModule
 export class Worker extends EventEmitter {
   static isMainThread = true;
   threadId: number;
+  /** Always a stream (Node 24); piped captures only, else tee to parent. */
+  stdout: Readable = new Readable({ read() {} });
+  stderr: Readable = new Readable({ read() {} });
   private readonly entry: WorkerEntry;
   private readonly workerData: unknown;
   private readonly env: Record<string, string>;
@@ -93,6 +107,11 @@ export class Worker extends EventEmitter {
   private readonly ownerProcess: unknown;
   private readonly ownerBootstrap: ReturnType<typeof readActiveNodeProcessBootstrap>;
   private exited = false;
+  readonly #stdoutPiped: boolean;
+  readonly #stderrPiped: boolean;
+  /** ADR-0152 handle class (goal I2): a live, ref'd Worker keeps the parent's
+   * loop alive until it exits — Node parity; `unref()` releases the hold. */
+  private readonly keepaliveRef = new WorkerKeepaliveRef();
   private sameRealmContext: WorkerThreadContext | null = null;
   private sameRealmParentPort: WorkerPort | null = null;
   private sameRealmGlobalOnMessage: WorkerMessageHandler | null = null;
@@ -105,11 +124,17 @@ export class Worker extends EventEmitter {
     super();
     this.ownerProcess = (globalThis as { process?: unknown }).process;
     this.ownerBootstrap = readActiveNodeProcessBootstrap();
+    this.#stdoutPiped = opts.stdout === true;
+    this.#stderrPiped = opts.stderr === true;
     const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
     const inheritedLaunch = readNodeEntryBootstrapIfPresent()?.launch;
+    const hasOwnExecArgv = Object.prototype.hasOwnProperty.call(opts, 'execArgv');
+    // An EXPLICIT own `execArgv: []` overrides any inheritance (vitest's
+    // spelling); an own non-empty array and an inherited nonempty eval launch
+    // stay the loud ceiling.
     if (
-      Object.prototype.hasOwnProperty.call(opts, 'execArgv') ||
-      (inheritedLaunch?.kind === 'eval' && inheritedLaunch.execArgv.length > 0)
+      (hasOwnExecArgv && !isExplicitEmptyExecArgv(opts.execArgv)) ||
+      (!hasOwnExecArgv && inheritedLaunch?.kind === 'eval' && inheritedLaunch.execArgv.length > 0)
     ) {
       // TODO(backlog: runtime-js/worker-threads-inherited-exec-argv)
       throw new NotImplementedError(
@@ -134,6 +159,10 @@ export class Worker extends EventEmitter {
   }
 
   private start(): void {
+    // terminate() may have run on the queued microtask gap — never (re)acquire
+    // the keepalive ref of an already-exited worker.
+    if (this.exited) return;
+    this.keepaliveRef.acquire();
     if (this.entry.kind === 'data-url') {
       // TODO(backlog: runtime-js/worker-eval-data-url-entry)
       this.emitWorkerError(
@@ -202,6 +231,36 @@ export class Worker extends EventEmitter {
       if (handle.kind === 'worker') {
         handle.stdout().on('data', (chunk) => this.emitToOwner('stdout', chunk));
         handle.stderr().on('data', (chunk) => this.emitToOwner('stderr', chunk));
+        // Wrappers always exist (Node 24); piped captures ONLY, else tee to parent.
+        const ownerStdio =
+          (fd: 'stdout' | 'stderr') =>
+          (chunk: unknown): void => {
+            const proc = (
+              globalThis as {
+                process?: {
+                  stdout?: { write(c: unknown): unknown };
+                  stderr?: { write(c: unknown): unknown };
+                };
+              }
+            ).process;
+            proc?.[fd]?.write(chunk);
+          };
+        if (!this.#stdoutPiped)
+          pipeHandleStdioStream(
+            handle.stdout(),
+            this.stdout,
+            this.keepaliveRef,
+            ownerStdio('stdout'),
+          );
+        else pipeHandleStdioStream(handle.stdout(), this.stdout, this.keepaliveRef);
+        if (!this.#stderrPiped)
+          pipeHandleStdioStream(
+            handle.stderr(),
+            this.stderr,
+            this.keepaliveRef,
+            ownerStdio('stderr'),
+          );
+        else pipeHandleStdioStream(handle.stderr(), this.stderr, this.keepaliveRef);
         handle.on('message', (msg) => this.emitWorkerMessage(msg));
         this.flushKernelMessages(handle);
         // Node emits 'online' once the worker realm exists. Construction-start
@@ -327,10 +386,12 @@ export class Worker extends EventEmitter {
   }
 
   ref(): this {
+    this.keepaliveRef.userRef(this.exited);
     return this;
   }
 
   unref(): this {
+    this.keepaliveRef.userUnref();
     return this;
   }
 
@@ -375,6 +436,13 @@ export class Worker extends EventEmitter {
   private finish(code: number): void {
     if (this.exited) return;
     this.exited = true;
+    this.keepaliveRef.release();
+    // Same-realm piped wrappers end here; kernel-backed ones end with the
+    // handle streams (sealed output drains after the exit event).
+    if (this.workerHandle === null) {
+      this.stdout?.push(null);
+      this.stderr?.push(null);
+    }
     this.emitToOwner('exit', code);
   }
 

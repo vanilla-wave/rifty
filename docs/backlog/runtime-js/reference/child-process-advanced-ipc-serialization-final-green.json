@@ -1,0 +1,167 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Срез можно принять с NOTE: parity 14/14; vitest 22 passed, 5 skipped. Goal открыт.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "1aa6c96db20bb9cbc1ca55980ab44cbb453adc45",
+  "unit_goal_source": "docs/backlog/runtime-js/child-process-advanced-ipc-serialization.md (ready); goal: docs/backlog/epics/vitest-run-in-browser/goal.md, I4; BASE 759ae14bed86f542d06868bf8fe16078361526f4.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4 + I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:45",
+      "summary": "Закрыть config-pipeline suspension (item 13), затем доказать config.ts/TypeScript tests, выполнение модулей, forks reporter и exit codes (item 12)."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:54",
+      "summary": "Доказать те же результаты и exit codes для threads после item 13."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:54",
+      "summary": "Закрыть end-to-end acceptance, затем подтвердить итоговые compat-строки."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: fork advanced стартует; пять заявленных типов сохраняются в обе стороны.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:50",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: child.send(() => {}) бросает TypeError/ERR_INVALID_ARG_TYPE.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:75",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: disconnect → kill возвращает true; exit code=null, signal=SIGUSR2.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:81",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: неизменённый public-ipc-json остаётся GREEN.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-json.case.ts:58",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: top-level function под advanced отвергается громко.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:75",
+      "note": ""
+    },
+    {
+      "row": "node:child_process.fork: advanced запускает физический Worker.",
+      "source": "public-api",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:29",
+      "note": ""
+    },
+    {
+      "row": "node:child_process.spawn: Worker-маршрут fork передаёт выбранную serialization.",
+      "source": "public-api",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:42",
+      "note": ""
+    },
+    {
+      "row": "ChildProcess.send: advanced передаёт пять типов и отвергает top-level function.",
+      "source": "public-api",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:59",
+      "note": ""
+    },
+    {
+      "row": "process.send: advanced сохраняет пять типов child→parent.",
+      "source": "public-api",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:15",
+      "note": ""
+    },
+    {
+      "row": "Frozen expected advanced: точный JSON типов, ошибки send и lifecycle.",
+      "source": "frozen-artifact",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:93",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/internal/node-ipc-serialization.ts:40",
+          "evidence": "pnpm --config.verify-deps-before-run=false exec tsx /private/tmp/ipc-review-parent-only.ts (exit 0), Node v24.16.0: child.send({nested(){}}) → {\"thrown\":\"Error/no-code\",\"connected\":true}; rifty → {\"returned\":false,\"connected\":false}.",
+          "summary": "Вложенная функция доходит до postMessage; clone error ошибочно закрывает канал. Аналогичный catch в process.ts:834. NOTE: случай шире top-level function в Acceptance 2.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/CHANGELOG.md:11",
+          "evidence": "",
+          "summary": "CHANGELOG заявляет advanced IPC, но docs/public/compat/process.md:74 всё ещё утверждает, что advanced serialization бросает исключение.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "adjudication": []
+}

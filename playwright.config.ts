@@ -28,6 +28,9 @@ const HEAVY_SPECS = [
   '**/ai-mode.spec.ts',
   '**/preset-deep-link.spec.ts',
   '**/webpack-dev-server.spec.ts',
+  // Real vitest 4.1.11 install (~50 packages incl. wasm bindings) + two pool
+  // runs — heavy-lane budget, never parallel.
+  '**/vitest-run.spec.ts',
 ];
 
 export default defineConfig({

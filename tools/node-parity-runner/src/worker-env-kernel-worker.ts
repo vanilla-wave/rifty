@@ -2,7 +2,7 @@ import hostProcess from 'node:process';
 import { parentPort, workerData } from 'node:worker_threads';
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
-import { SyncRpcFsSync, awaitDrain } from '@riftydev/runtime-js';
+import { SyncRpcFsSync, awaitDrain, installConsole } from '@riftydev/runtime-js';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { postNodeProcessListeningControl } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
@@ -27,8 +27,7 @@ import {
 } from '../../../packages/kernel/src/worker-stdio-drain.ts';
 import { runNodeEntry } from '../../../packages/runtime-js/src/builtins/node-entry.ts';
 import {
-  beginNodeEvalUnhandled,
-  recordRejection,
+  intakeUnhandledError,
   resetKeepalive,
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { runNodeProgramLifecycle } from '../../../packages/workbench/src/workers/node-program-lifecycle.ts';
@@ -125,20 +124,22 @@ setSyncMirror(vfs);
 
 resetKeepalive();
 installTimerGlobals();
-installNodeHostRejectionEvents(hostProcess, (reason) => {
-  if (!beginNodeEvalUnhandled(reason, 'rejection')) recordRejection(reason);
+installNodeHostRejectionEvents(hostProcess, (reason, promise) => {
+  const outcome = intakeUnhandledError(reason, 'rejection', promise);
+  if ('rethrow' in outcome) throw outcome.rethrow;
 });
 const onUncaughtException = (error: unknown): void => {
   if (
-    (typeof error === 'object' &&
-      error !== null &&
-      (error as { readonly code?: unknown }).code === 'RIFTY_PROCESS_EXIT') ||
-    beginNodeEvalUnhandled(error, 'uncaught-error')
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { readonly code?: unknown }).code === 'RIFTY_PROCESS_EXIT'
   ) {
     return;
   }
+  const outcome = intakeUnhandledError(error, 'uncaught-error');
+  if (outcome.handled) return;
   hostProcess.removeListener('uncaughtException', onUncaughtException);
-  throw error;
+  throw 'rethrow' in outcome ? outcome.rethrow : error;
 };
 hostProcess.on('uncaughtException', onUncaughtException);
 let childLocalVfsAuditReported = false;
@@ -279,6 +280,25 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
   }
   const entryPath = spec.argv[1];
   if (entryPath === undefined) throw new Error('worker-env parity child has no argv[1]');
+  // Mirror node-entry-bootstrap's console wiring for worker-thread children
+  // (this lighter path skips the bootstrap): console output belongs on the
+  // child's stdio ports, not the harness realm's raw console.
+  if (launch.kind === 'worker-thread') {
+    const proc = (
+      globalThis as {
+        process?: {
+          stdout?: { write(c: unknown): unknown };
+          stderr?: { write(c: unknown): unknown };
+        };
+      }
+    ).process;
+    if (proc?.stdout && proc.stderr) {
+      installConsole({
+        stdout: (chunk) => proc.stdout?.write(chunk),
+        stderr: (chunk) => proc.stderr?.write(chunk),
+      });
+    }
+  }
   const runEntry = () =>
     runNodeEntry({
       vfs,

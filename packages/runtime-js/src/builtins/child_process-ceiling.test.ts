@@ -1,3 +1,4 @@
+import { NotImplementedError } from '@riftydev/io';
 /**
  * F09 — spawn-ceiling contract (Q-2026-05-30-063).
  *
@@ -23,7 +24,7 @@
  * substrate the impossible tools would hit.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { spawn } from './child_process.ts';
+import { spawn, spawnSync } from './child_process.ts';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
 import { writeFileSync } from './fs.ts';
 
@@ -108,5 +109,13 @@ describe('spawn ceiling (F09 / Q-2026-05-30-063) — impossible tools are walled
 
     await closed;
     expect(stdout).toBe('x');
+  });
+});
+
+describe('node:child_process.spawnSync named-loud member (absent-builtin-members-loud-throws)', () => {
+  it('exists as a function (tinyexec named import links) and CALLS loud, never fakes a result', () => {
+    expect(typeof spawnSync).toBe('function');
+    expect(() => spawnSync()).toThrow(NotImplementedError);
+    expect(() => spawnSync()).toThrow('child_process.spawnSync');
   });
 });

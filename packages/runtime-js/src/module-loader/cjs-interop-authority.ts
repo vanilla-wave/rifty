@@ -12,6 +12,21 @@ type CjsImportJob =
       readonly promise: Promise<Record<string, unknown>>;
     };
 
+// Rifty host-bridge members ride the NodeProcess prototype but are NOT part
+// of Node's process export surface — never projected as builtin export names.
+const HOST_BRIDGE_EXCLUDED = new Set([
+  'pushStdin',
+  'emitNaturalExitEvent',
+  // NodeProcess host-bridge overrides of the EventEmitter surface — Node's
+  // process exposes none of these as importable named exports.
+  'addListener',
+  'prependListener',
+  'removeListener',
+  'removeAllListeners',
+  'exitForNode',
+  'killForNode',
+]);
+
 interface StaticNameNode {
   readonly names: Set<string>;
   readonly reexports: StaticNameNode[];
@@ -66,7 +81,25 @@ export function createCjsInteropAuthority(options: {
     }
     node.names.add('default');
     if (resolved.kind === 'builtin') {
-      for (const name of Object.keys(loadBuiltin(resolved.id))) node.names.add(name);
+      // Node builtins expose prototype methods as named exports (process.cwd,
+      // fs.stat). Class-backed builtin instances keep them on the prototype;
+      // collect own keys plus the prototype chain's own property names so
+      // `import { cwd } from 'node:process'` links and binds the live member.
+      const outer = loadBuiltin(resolved.id);
+      for (const name of Object.keys(outer)) node.names.add(name);
+      // Projection = the builtin's OWN prototype level only (Node's process
+      // methods are own props; rifty keeps them on the class prototype).
+      // Inherited bases (EventEmitter/Function/Object prototypes) are NOT part
+      // of any Node builtin's export surface — and a CALLABLE builtin's
+      // immediate prototype is such a base, never a method carrier.
+      const proto: object | null =
+        typeof outer === 'function' ? null : Object.getPrototypeOf(outer);
+      if (proto !== null && proto !== Object.prototype) {
+        for (const name of Object.getOwnPropertyNames(proto)) {
+          if (name === 'constructor' || HOST_BRIDGE_EXCLUDED.has(name)) continue;
+          node.names.add(name);
+        }
+      }
       return node;
     }
     if (resolved.kind === 'json') {

@@ -40,22 +40,34 @@ recorded as `blocked_by`; the other children are independent.
     running the scenario (`vitest.config.ts`, `.ts` tests) on both pools + a
     `vitest.md` page in `docs/public/compat/`; closes the goal. After 1–11.
 
+## Items
+
+13. `runtime-js/vitest-config-pipeline-suspension` — **config-suspension** —
+    I4/I5; vite 8.0.16 `createServer({configFile, plugins})` never settles
+    (generic wall, discovered at u12 acceptance 2026-10-05; evidence in
+    `runtime-js/reference/vitest-config-pipeline-suspension-evidence.md`).
+    Blocks 12.
+
+## Landed (2026-10-05, pending goal close)
+
+Items 1–11 landed on the goal branch (re-chart lines in the ledger). Item 12
+(acceptance) is implemented — e2e spec + compat page — and RED on item 13's
+wall; it closes when 13 lands.
+
 ## Open questions
 
-- Coverage check, not a contract input: which handle vitest's cac-driven
-  `start()` awaits when rifty drains (the Worker class is proven; the vitest
-  main case may be the rolldown wasm binding's Worker or the pool child) —
-  owner: agent — instrumented run at item 8 pickup; a class outside I2 → re-chart
-  (`RDY-5`), never a widened I2 without the user.
-- ADR shape for I2/I3: correction note on ADR-0152 vs one short ADR citing it —
-  owner: agent — decided at item 7 pickup (`DEC-2`).
-- vm offsets carrier: stack remap table vs source prefix — owner: agent — item 10
-  pickup; oracle already captured (`/virtual/mod2.js:12:21`, evidence §Oracle).
-- `vitest.config.ts` loading (vite `loadConfigFromFile` → rolldown bundle of
-  the TS config) and `.ts` test transform under vitest's module runner: no
-  wall observed yet because earlier walls block — owner: agent — first
-  exercised at item 12; a wall there is a re-chart (new child), never a
-  silent narrowing of the claim.
+- ~~Which handle vitest's cac-driven `start()` awaits~~ RESOLVED 2026-10-05:
+  not a handle gap — `createVitest` suspends on a never-settling promise in
+  vite 8.0.16's configFile+plugins pipeline (item 13). Owner: agent —
+  diagnosis at item 13 pickup.
+- ~~ADR shape for I2/I3~~ RESOLVED: I2 = dated extension note on ADR-0152
+  (Worker handle class); I3 = dispatcher in the keepalive traps + process.ts
+  (no ADR-0152 contract change).
+- ~~vm offsets carrier~~ RESOLVED: hybrid — physical newline prefix (positive
+  lineOffset) + `Error.prepareStackTrace` dispatcher (columns, negative
+  lines, eval-marker normalization).
+- ~~`vitest.config.ts` loading / `.ts` transform fog~~ RESOLVED as a named
+  wall: item 13 (the predicted re-chart).
 
 ## Out of scope
 

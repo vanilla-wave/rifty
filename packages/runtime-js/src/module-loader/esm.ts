@@ -2,6 +2,22 @@ import { NotImplementedError } from '@riftydev/io';
 import type { Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
 import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
+import {
+  type FunctionGuardScope,
+  addFunctionGuardBinding as addGuardBinding,
+  collectFunctionGuardPatternBindingNames as collectGuardPatternBindingNames,
+  createFunctionGuardScope as createGuardScope,
+  declareFunctionGuardPattern as declareGuardPattern,
+  declareFunctionGuardVariable as declareGuardVariable,
+  predeclareFunctionGuardScope as predeclareGuardFunctionScope,
+  predeclareFunctionGuardLexialScope as predeclareGuardLexicalScope,
+} from './function-guard-scopes.ts';
+import {
+  type SymbolGuardContext,
+  programPoisonsSymbolProofs,
+  computedKeyProvablyNotFunction as sharedComputedKeyNotFunction,
+  isProvablySymbolValueExpression as sharedIsProvablySymbolExpression,
+} from './guard-symbol-values.ts';
 
 interface GuardNodeShape {
   readonly type: string;
@@ -10,13 +26,7 @@ interface GuardNodeShape {
   readonly [key: string]: unknown;
 }
 
-interface GuardScope {
-  readonly bindings: Set<string>;
-  readonly globalAliases: Set<string>;
-  readonly maybeFunctionAliases: Set<string>;
-  readonly maybeDerivedFunctionAliases: Set<string>;
-  readonly maybeEvalAliases: Set<string>;
-}
+type GuardScope = FunctionGuardScope;
 
 interface EsmFunctionGuardCtx {
   readonly scopes: GuardScope[];
@@ -51,7 +61,11 @@ export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): v
   const rootScope = createGuardScope();
   const body = program.body as unknown as GuardNodeShape[];
   predeclareGuardFunctionScope(body, rootScope);
-  predeclareGuardLexicalScope(body, rootScope);
+  predeclareGuardLexicalScope(body, rootScope, { imports: true });
+  guardSymbolMutation.symbolMutated = programPoisonsSymbolProofs(
+    program as unknown as GuardNodeShape,
+    (program.body as unknown as GuardNodeShape[]) ?? [],
+  );
   const ctx: EsmFunctionGuardCtx = {
     scopes: [rootScope],
     hasGlobalFunctionWrite: false,
@@ -86,16 +100,6 @@ export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): v
   }
 }
 
-function createGuardScope(): GuardScope {
-  return {
-    bindings: new Set(),
-    globalAliases: new Set(),
-    maybeFunctionAliases: new Set(),
-    maybeDerivedFunctionAliases: new Set(),
-    maybeEvalAliases: new Set(),
-  };
-}
-
 function pushGuardScope(ctx: EsmFunctionGuardCtx, scope: GuardScope = createGuardScope()): void {
   ctx.scopes.push(scope);
 }
@@ -108,15 +112,6 @@ function topGuardScope(ctx: EsmFunctionGuardCtx): GuardScope {
   const scope = ctx.scopes[ctx.scopes.length - 1];
   if (!scope) throw new Error('internal: missing ESM function guard scope');
   return scope;
-}
-
-function addGuardBinding(scope: GuardScope, name: string | undefined): void {
-  if (!name) return;
-  scope.bindings.add(name);
-  scope.globalAliases.delete(name);
-  scope.maybeFunctionAliases.delete(name);
-  scope.maybeDerivedFunctionAliases.delete(name);
-  scope.maybeEvalAliases.delete(name);
 }
 
 function isGuardShadowed(ctx: EsmFunctionGuardCtx, name: string): boolean {
@@ -248,120 +243,32 @@ function isGuardMaybeEvalAlias(ctx: EsmFunctionGuardCtx, name: string): boolean 
   return false;
 }
 
-function declareGuardPattern(scope: GuardScope, pattern: unknown): void {
-  if (!pattern || typeof pattern !== 'object') return;
-  const pat = pattern as GuardNodeShape;
-  switch (pat.type) {
-    case 'Identifier':
-      addGuardBinding(scope, (pat as unknown as { name?: string }).name);
-      return;
-    case 'ObjectPattern': {
-      const props = (pat as unknown as { properties?: unknown[] }).properties ?? [];
-      for (const prop of props) {
-        const p = prop as GuardNodeShape;
-        if (p.type === 'RestElement') declareGuardPattern(scope, p.argument);
-        else declareGuardPattern(scope, p.value);
-      }
-      return;
-    }
-    case 'ArrayPattern': {
-      const elements = (pat as unknown as { elements?: unknown[] }).elements ?? [];
-      for (const element of elements) declareGuardPattern(scope, element);
-      return;
-    }
-    case 'RestElement':
-      declareGuardPattern(scope, pat.argument);
-      return;
-    case 'AssignmentPattern':
-      declareGuardPattern(scope, pat.left);
-      return;
-    default:
-      return;
-  }
-}
-
-function declareGuardVariable(scope: GuardScope, node: GuardNodeShape): void {
-  const declarations = (node as unknown as { declarations?: unknown[] }).declarations ?? [];
-  for (const decl of declarations) {
-    declareGuardPattern(scope, (decl as GuardNodeShape).id);
-  }
-}
-
-function declareGuardImport(scope: GuardScope, node: GuardNodeShape): void {
-  const specifiers = (node as unknown as { specifiers?: GuardNodeShape[] }).specifiers ?? [];
-  for (const specifier of specifiers) {
-    addGuardBinding(scope, (specifier.local as { name?: string } | undefined)?.name);
-  }
-}
-
-function predeclareGuardFunctionScope(body: readonly GuardNodeShape[], scope: GuardScope): void {
-  for (const node of body) collectGuardFunctionScopeBindings(node, scope);
-}
-
-function collectGuardFunctionScopeBindings(node: unknown, scope: GuardScope): void {
-  if (!node || typeof node !== 'object') return;
-  const n = node as GuardNodeShape;
-  if (typeof n.type !== 'string') return;
-  switch (n.type) {
-    case 'FunctionDeclaration':
-      addGuardBinding(scope, (n.id as { name?: string } | undefined)?.name);
-      return;
-    case 'FunctionExpression':
-    case 'ArrowFunctionExpression':
-    case 'ClassExpression':
-      return;
-    case 'ClassDeclaration':
-      return;
-    case 'VariableDeclaration':
-      if ((n as unknown as { kind?: string }).kind === 'var') declareGuardVariable(scope, n);
-      return;
-    default:
-      for (const key of Object.keys(n)) {
-        if (
-          key === 'type' ||
-          key === 'start' ||
-          key === 'end' ||
-          key === 'loc' ||
-          key === 'range'
-        ) {
-          continue;
-        }
-        const value = n[key];
-        if (!value) continue;
-        if (Array.isArray(value)) {
-          for (const item of value) collectGuardFunctionScopeBindings(item, scope);
-        } else if (typeof value === 'object') {
-          collectGuardFunctionScopeBindings(value, scope);
-        }
-      }
-  }
-}
-
-function predeclareGuardLexicalScope(body: readonly GuardNodeShape[], scope: GuardScope): void {
-  for (const node of body) {
-    if (node.type === 'ImportDeclaration') {
-      declareGuardImport(scope, node);
-    } else if (
-      node.type === 'VariableDeclaration' &&
-      (node as unknown as { kind?: string }).kind !== 'var'
-    ) {
-      declareGuardVariable(scope, node);
-    } else if (node.type === 'ClassDeclaration' || node.type === 'FunctionDeclaration') {
-      addGuardBinding(scope, (node.id as { name?: string } | undefined)?.name);
-    }
-  }
-}
-
 function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
   if (!node || typeof node !== 'object') return;
   const n = node as GuardNodeShape;
   if (typeof n.type !== 'string') return;
   switch (n.type) {
-    case 'Program':
-      for (const child of (n as unknown as { body: GuardNodeShape[] }).body) {
-        walkEsmFunctionGuard(child, ctx);
+    case 'Program': {
+      const body = (n as unknown as { body: GuardNodeShape[] }).body;
+      // PRE-PASS: module-scope `class Symbol` shadows the global identifier
+      // for every module-level `Symbol.for(...)` — nothing is provable.
+      for (const raw of body) {
+        // Unwrap exporters: `export default class Symbol {...}` shadows the
+        // global identifier for module code in rifty's execution semantics.
+        let child = raw as GuardNodeShape & { declaration?: unknown };
+        if (child.type === 'ExportNamedDeclaration' || child.type === 'ExportDefaultDeclaration') {
+          const inner = child.declaration;
+          if (inner !== null && typeof inner === 'object') child = inner as typeof child;
+        }
+        if (child.type === 'ClassDeclaration' || child.type === 'FunctionDeclaration') {
+          if ((child.id as { name?: string } | undefined)?.name === 'Symbol') {
+            guardSymbolMutation.symbolMutated = true;
+          }
+        }
       }
+      for (const child of body) walkEsmFunctionGuard(child, ctx);
       return;
+    }
     case 'ImportDeclaration':
       return;
     case 'Identifier':
@@ -377,6 +284,7 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
       return;
     case 'VariableDeclaration': {
       const declarations = (n as unknown as { declarations?: GuardNodeShape[] }).declarations ?? [];
+      const isConst = (n as unknown as { kind?: string }).kind === 'const';
       for (const decl of declarations) {
         const declId = decl.id as GuardNodeShape | undefined;
         walkGuardPatternExpressions(declId, ctx);
@@ -386,6 +294,15 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
           updateGuardMaybeFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateGuardMaybeDerivedFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateGuardMaybeEvalAliasesFromPatternValue(declId, decl.init, ctx);
+          if (
+            isConst &&
+            declId?.type === 'Identifier' &&
+            isProvablySymbolValueExpression(decl.init, ctx)
+          ) {
+            topGuardScope(ctx).symbolValueBindings.add(
+              (declId as unknown as { name?: string }).name ?? '',
+            );
+          }
         }
       }
       return;
@@ -1209,37 +1126,23 @@ function collectGuardAliasNamesFromDefaults(
   }
 }
 
-function collectGuardPatternBindingNames(pattern: unknown, out: Set<string>): void {
-  if (!pattern || typeof pattern !== 'object') return;
-  const pat = pattern as GuardNodeShape;
-  switch (pat.type) {
-    case 'Identifier': {
-      const name = (pat as unknown as { name?: string }).name;
-      if (name) out.add(name);
-      return;
-    }
-    case 'ObjectPattern': {
-      const props = (pat as unknown as { properties?: unknown[] }).properties ?? [];
-      for (const prop of props) {
-        const p = prop as GuardNodeShape;
-        collectGuardPatternBindingNames(p.type === 'RestElement' ? p.argument : p.value, out);
-      }
-      return;
-    }
-    case 'ArrayPattern': {
-      const elements = (pat as unknown as { elements?: unknown[] }).elements ?? [];
-      for (const element of elements) collectGuardPatternBindingNames(element, out);
-      return;
-    }
-    case 'RestElement':
-      collectGuardPatternBindingNames(pat.argument, out);
-      return;
-    case 'AssignmentPattern':
-      collectGuardPatternBindingNames(pat.left, out);
-      return;
-    default:
-      return;
-  }
+function guardSymbolContext(ctx: EsmFunctionGuardCtx): SymbolGuardContext {
+  return {
+    scopes: ctx.scopes,
+    isShadowed: (name) => isGuardShadowed(ctx, name),
+    staticPropertyName,
+    symbolMutated: guardSymbolMutation.symbolMutated,
+  };
+}
+
+const guardSymbolMutation = { symbolMutated: false };
+
+function isProvablySymbolValueExpression(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
+  return sharedIsProvablySymbolExpression(node, guardSymbolContext(ctx));
+}
+
+function computedKeyProvablyNotFunction(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
+  return sharedComputedKeyNotFunction(node, guardSymbolContext(ctx));
 }
 
 function isGlobalObjectExpression(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
@@ -1258,7 +1161,12 @@ function isGlobalFunctionReadMember(node: GuardNodeShape, ctx: EsmFunctionGuardC
 function isGlobalFunctionWriteMember(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {
   if (!isGlobalObjectExpression(node.object, ctx)) return false;
   const propertyName = staticPropertyName(node);
-  return propertyName === 'Function' || (propertyName === undefined && isComputedMember(node));
+  return (
+    propertyName === 'Function' ||
+    (propertyName === undefined &&
+      isComputedMember(node) &&
+      !computedKeyProvablyNotFunction(node.property, ctx))
+  );
 }
 
 function guardExpressionMayBeHostFunction(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
@@ -1466,17 +1374,21 @@ function isGlobalFunctionMutationCall(node: GuardNodeShape, ctx: EsmFunctionGuar
     if (propertyName === 'defineProperties') {
       return objectMayContainFunctionKey(args[1]);
     }
-    return propertyMayBeFunction(args[1]);
+    return mutationPropertyMayBeFunction(args[1], ctx);
   }
 
   if (
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
-    return propertyMayBeFunction(args[0]);
+    return mutationPropertyMayBeFunction(args[0], ctx);
   }
 
   return false;
+}
+
+function mutationPropertyMayBeFunction(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
+  return !computedKeyProvablyNotFunction(node, ctx) && propertyMayBeFunction(node);
 }
 
 function propertyMayBeFunction(node: unknown): boolean {

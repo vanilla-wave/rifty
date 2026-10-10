@@ -8,10 +8,9 @@ import {
 } from './launch.ts';
 import {
   applyViteCliActionPatch,
-  applyViteRootUrlPatch,
   applyViteRootWatchPatch,
   viteCliActionPatchApplied,
-  viteRootUrlPatchApplied,
+  viteRootUrlPatchPolicy,
   viteRootWatchPatchApplied,
   viteRootWatchPatchPolicy,
 } from './vite-cli-install-policy.ts';
@@ -69,30 +68,41 @@ function rootWatchPatchSite(
   vitePackageRoot: string,
   fs: FsSync = syncMirror(),
 ): ViteRootWatchPatchSite {
+  const sites = rootWatchPatchSites(vitePackageRoot, fs);
+  const site = sites[0];
+  if (!site) throw new Error('vite root watcher patch failed: missing patch site');
+  return site;
+}
+
+/** Every chunk carrying the Chokidar DirEntry.add anchor (Vite 8.0.16: two). */
+function rootWatchPatchSites(
+  vitePackageRoot: string,
+  fs: FsSync = syncMirror(),
+): ViteRootWatchPatchSite[] {
   const chunks = normalizePath(`${vitePackageRoot}${VITE_CHUNKS_SUFFIX}`);
   if (!fs.existsSync(chunks)) {
     throw new Error(`vite root watcher patch failed: missing chunks directory ${chunks}`);
   }
   const sites: ViteRootWatchPatchSite[] = [];
-  let anchors = 0;
   for (const entry of fs.readdirSync(chunks)) {
     if (entry.isDirectory || !entry.name.endsWith('.js')) continue;
     const path = `${chunks}/${entry.name}`;
     const source = dec.decode(fs.readFileBytesSync(path));
+    // A chunk carrying EITHER anchor kind is a patch site (a URL-only chunk
+    // must be prepared and validated like a watch-only one).
     const count =
       occurrences(source, viteRootWatchPatchPolicy.needle) +
-      occurrences(source, viteRootWatchPatchPolicy.replacement);
+      occurrences(source, viteRootWatchPatchPolicy.replacement) +
+      occurrences(source, viteRootUrlPatchPolicy.needle) +
+      occurrences(source, viteRootUrlPatchPolicy.replacement);
     if (count > 0) sites.push({ path, source });
-    anchors += count;
   }
-  if (anchors !== 1 || sites.length !== 1) {
+  if (sites.length === 0) {
     throw new Error(
-      `vite root watcher patch failed: expected exactly one Chokidar DirEntry.add anchor; found ${anchors}`,
+      'vite root watcher patch failed: expected at least one Chokidar DirEntry.add anchor; found 0',
     );
   }
-  const site = sites[0];
-  if (!site) throw new Error('vite root watcher patch failed: missing patch site');
-  return site;
+  return sites;
 }
 
 function validateCliActionPatch(vitePackageRoot: string): void {
@@ -108,10 +118,30 @@ function validateCliActionPatch(vitePackageRoot: string): void {
 }
 
 function validateRootWatchPatch(vitePackageRoot: string): void {
-  const { path, source } = rootWatchPatchSite(vitePackageRoot);
-  if (!viteRootWatchPatchApplied(source) || !viteRootUrlPatchApplied(source)) {
+  const sites = rootWatchPatchSites(vitePackageRoot);
+  let urlReplacements = 0;
+  for (const site of sites) {
+    if (occurrences(site.source, viteRootWatchPatchPolicy.needle) > 0) {
+      // A raw watch anchor survived preparation — fail closed (ADR-0433).
+      throw new Error(
+        `vite root watcher/URL must be prepared by acquisition before promotion: ${site.path}`,
+      );
+    }
+    if (!viteRootWatchPatchApplied(site.source)) {
+      throw new Error(
+        `vite root watcher/URL must be prepared by acquisition before promotion: ${site.path}`,
+      );
+    }
+    urlReplacements += occurrences(site.source, viteRootUrlPatchPolicy.replacement);
+    if (occurrences(site.source, viteRootUrlPatchPolicy.needle) > 0) {
+      throw new Error(
+        `vite root watcher/URL must be prepared by acquisition before promotion: ${site.path}`,
+      );
+    }
+  }
+  if (urlReplacements === 0) {
     throw new Error(
-      `vite root watcher/URL must be prepared by acquisition before promotion: ${path}`,
+      'vite root watcher/URL must be prepared by acquisition before promotion: no resolved-id root slice',
     );
   }
 }
@@ -142,10 +172,28 @@ export function planViteCliAcquisitionFiles(
   const changes: InstalledFilePreparation[] = [];
   const cli = applyViteCliActionPatch(cliSource);
   if (cli !== cliSource) changes.push({ path: cliPath, bytes: enc.encode(cli) });
-  const site = rootWatchPatchSite(packageRoot, fs);
-  const watcher = applyViteRootUrlPatch(applyViteRootWatchPatch(site.source));
-  if (watcher !== site.source) changes.push({ path: site.path, bytes: enc.encode(watcher) });
+  let urlAnchors = 0;
+  for (const site of rootWatchPatchSites(packageRoot, fs)) {
+    const guarded = applyViteRootWatchPatch(site.source);
+    urlAnchors +=
+      occurrences(guarded, viteRootUrlPatchPolicy.needle) +
+      occurrences(guarded, viteRootUrlPatchPolicy.replacement);
+    // Vite 8.0.16 carries the root slice in multiple chunks — every anchor
+    // gets the root-"/" guard.
+    const watcher = applyViteRootUrlPatchEverywhere(guarded);
+    if (watcher !== site.source) changes.push({ path: site.path, bytes: enc.encode(watcher) });
+  }
+  if (urlAnchors === 0) {
+    throw new Error('vite root URL patch failed: no resolved-id root slice found');
+  }
   return changes;
+}
+
+/** Guard EVERY resolved-id root slice (Vite 8.0.16 ships two). */
+function applyViteRootUrlPatchEverywhere(source: string): string {
+  const needle = viteRootUrlPatchPolicy.needle;
+  if (!source.includes(needle)) return source;
+  return source.replaceAll(needle, viteRootUrlPatchPolicy.replacement);
 }
 
 /** Acquisition-adapter step: patch installed Vite before its stamp promotion. */

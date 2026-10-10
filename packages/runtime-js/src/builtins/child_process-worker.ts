@@ -308,6 +308,8 @@ export interface SpawnWorkerChildOptions {
   readonly cwd?: string;
   readonly env?: Record<string, string>;
   readonly fork: boolean;
+  /** `fork(..., {serialization})`: 'advanced' = structured-clone frames. */
+  readonly serialization?: 'json' | 'advanced';
 }
 
 /** Translate a validated `node <script>` launch to one real remote-FS Worker. */
@@ -320,11 +322,17 @@ export function spawnWorkerChild(
   const plan = buildChildExecutionPlan(parent.cwd, options.cwd, args[0]);
   if (plan.entryPath === undefined) throw new Error('child_process.spawn: missing Node entry path');
   const entryPath = plan.entryPath;
+  const ipc =
+    options.fork && options.serialization === 'advanced'
+      ? ('advanced' as const)
+      : options.fork
+        ? ('json' as const)
+        : ('none' as const);
   const entry = buildConfiguredNodeEntryWorkerEntry({
     kind: 'program',
     bin: false,
     remoteFs: true,
-    ipc: options.fork ? 'json' : 'none',
+    ipc,
     nodeServe: true,
   });
   const spec: SpawnWorkerSpec = {

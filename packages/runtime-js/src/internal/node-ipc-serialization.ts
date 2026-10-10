@@ -20,3 +20,28 @@ export function serializeNodeIpcMessage(message: unknown): unknown {
   }
   return JSON.parse(json) as unknown;
 }
+
+/**
+ * `serialization: 'advanced'` lane: the kernel channel structured-clones frames,
+ * so the value passes through unchanged — but functions never cross (Node
+ * throws ERR_INVALID_ARG_TYPE before any v8-serializer work).
+ */
+export function validateCloneIpcMessage(message: unknown): unknown {
+  if (message === undefined) {
+    throw Object.assign(new TypeError('The "message" argument must be specified'), {
+      code: 'ERR_MISSING_ARGS',
+    });
+  }
+  if (typeof message === 'function') {
+    throw Object.assign(new TypeError('The "message" argument must not be a function'), {
+      code: 'ERR_INVALID_ARG_TYPE',
+    });
+  }
+  return message;
+}
+
+/** One payload lane: JSON default round-trips; 'advanced' validates and passes
+ * the value to the channel's structured clone as-is. */
+export function serializeIpcPayload(jsonIpc: boolean, message: unknown): unknown {
+  return jsonIpc ? serializeNodeIpcMessage(message) : validateCloneIpcMessage(message);
+}

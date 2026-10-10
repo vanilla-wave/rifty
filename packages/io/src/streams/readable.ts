@@ -31,6 +31,7 @@ import {
 } from './callable-constructor.ts';
 import { acquireReadableFromWeb } from './from-web-validation.ts';
 import { methodNotImplementedError } from './method-not-implemented.ts';
+import { isProcessStdioDest } from './pipe-stdio-exemption.ts';
 
 export interface ReadableOptions {
   highWaterMark?: number;
@@ -765,7 +766,14 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
       this.resume();
     };
     const onEnd = (): void => {
-      if (endOnFinish) dest.end();
+      // Node exempts process.stdout/stderr from pipe's end call — the process
+      // owns their lifetime. The io layer cannot import the process builtin
+      // (layering), so recognize the guest fd 1/2 writer shape instead.
+      if (endOnFinish && !isProcessStdioDest(dest)) dest.end();
+      // Node auto-unpipes every destination when the source ends — the wiring
+      // must not outlive the source, and the stdio end-exemption must never
+      // skip this cleanup.
+      cleanup();
     };
     const onSourceError = (err: unknown): void => {
       dest.emit('error', err);

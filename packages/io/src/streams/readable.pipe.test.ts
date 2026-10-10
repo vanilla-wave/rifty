@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EventEmitter } from '../event-emitter.ts';
+import { registerProcessStdioStream } from './pipe-stdio-exemption.ts';
 import { Readable } from './readable.ts';
 import { Writable } from './writable.ts';
 
@@ -182,5 +183,119 @@ describe('Readable.pipe / Readable.unpipe', () => {
     r.pipe(w);
     await new Promise<void>((resolve) => w.once('finish', () => resolve()));
     expect(seen).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('Readable.pipe into process stdio (Node end-exemption)', () => {
+  // Guest process.stdout/stderr shape, REGISTERED through the real identity
+  // seam (the process builtin registers its writers the same way).
+  function makeStdioWriter(fd: number): EventEmitter & { fd: number; write(): boolean } {
+    const writer = Object.assign(new EventEmitter(), {
+      fd,
+      write: () => true,
+    }) as EventEmitter & { fd: number; write(): boolean };
+    registerProcessStdioStream(writer);
+    return writer;
+  }
+
+  it('stdout: source end does NOT call dest.end; pipe cleanup still detaches listeners', () => {
+    const r = new Readable({ read() {} });
+    const dest = makeStdioWriter(1);
+    const srcBefore = r.listenerCount('data') + r.listenerCount('end') + r.listenerCount('error');
+    const destBefore =
+      dest.listenerCount('drain') + dest.listenerCount('error') + dest.listenerCount('close');
+
+    r.pipe(dest as never);
+    const srcDuring = r.listenerCount('data') + r.listenerCount('end') + r.listenerCount('error');
+    const destDuring =
+      dest.listenerCount('drain') + dest.listenerCount('error') + dest.listenerCount('close');
+    expect(srcDuring).toBeGreaterThan(srcBefore);
+    expect(destDuring).toBeGreaterThan(destBefore);
+
+    r.push('a');
+    r.push(null);
+
+    return new Promise<void>((resolve) => {
+      r.on('end', () => {
+        expect(
+          dest.listenerCount('drain') + dest.listenerCount('error') + dest.listenerCount('close'),
+        ).toBe(destBefore);
+        resolve();
+      });
+    });
+  });
+
+  it('stderr: same exemption by the fd 2 writer shape', () => {
+    const r = new Readable({ read() {} });
+    const dest = makeStdioWriter(2);
+    r.pipe(dest as never);
+    r.push('x');
+    r.push(null);
+    return new Promise<void>((resolve) => {
+      r.on('end', () => {
+        // No end was called (nothing threw) and cleanup ran.
+        expect(
+          dest.listenerCount('drain') + dest.listenerCount('error') + dest.listenerCount('close'),
+        ).toBe(0);
+        resolve();
+      });
+    });
+  });
+
+  it('an UNREGISTERED fd 1/2 writer is ordinary: end() still runs (identity, not fd duck-typing)', () => {
+    const r = new Readable({ read() {} });
+    const ends: string[] = [];
+    const dest = Object.assign(new EventEmitter(), {
+      fd: 1,
+      write: () => true,
+      end: () => ends.push('end'),
+    });
+    r.pipe(dest as never);
+    r.push('a');
+    r.push(null);
+    return new Promise<void>((resolve) => {
+      r.on('end', () => {
+        expect(ends).toEqual(['end']);
+        resolve();
+      });
+    });
+  });
+
+  it('a REGISTERED writer WITH an end() method is still exempt — identity drives the exemption', () => {
+    const r = new Readable({ read() {} });
+    const ends: string[] = [];
+    const dest = Object.assign(new EventEmitter(), {
+      fd: 1,
+      write: () => true,
+      end: () => ends.push('end'),
+    });
+    registerProcessStdioStream(dest);
+    r.pipe(dest as never);
+    r.push('a');
+    r.push(null);
+    return new Promise<void>((resolve) => {
+      r.on('end', () => {
+        expect(ends).toEqual([]);
+        resolve();
+      });
+    });
+  });
+
+  it('an ordinary Writable (no fd) still gets end() on source end (baseline)', () => {
+    const r = new Readable({ read() {} });
+    const ends: string[] = [];
+    const dest = Object.assign(new EventEmitter(), {
+      write: () => true,
+      end: () => ends.push('end'),
+    }) as unknown as { write(): boolean; end(): void };
+    r.pipe(dest as never);
+    r.push('a');
+    r.push(null);
+    return new Promise<void>((resolve) => {
+      r.on('end', () => {
+        expect(ends).toEqual(['end']);
+        resolve();
+      });
+    });
   });
 });

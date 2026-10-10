@@ -264,7 +264,7 @@ describe('prepareViteCliAcquisitionFiles — rooted Chokidar catalog', () => {
     });
 
     await expect(prepareViteCliAcquisitionFiles('/app')).rejects.toThrow(
-      /expected exactly one Chokidar DirEntry\.add anchor; found 0/,
+      /expected at least one Chokidar DirEntry\.add anchor; found 0/,
     );
   });
 });

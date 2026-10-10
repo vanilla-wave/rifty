@@ -16,9 +16,13 @@ import {
   unref,
 } from './event-loop-keepalive.ts';
 
-afterEach(() => {
+afterEach(async () => {
   resetKeepalive();
   vi.useRealTimers();
+  const { setActiveNodeProcessBootstrap } = await import(
+    '../builtins/process-bootstrap-identity.ts'
+  );
+  setActiveNodeProcessBootstrap(null);
 });
 
 describe('event-loop keepalive', () => {
@@ -710,5 +714,160 @@ describe('uncaught error trap', () => {
     await Promise.resolve();
 
     expect(reasons).toEqual([undefined]);
+  });
+});
+
+describe('process lifecycle dispatcher (process-lifecycle-events-exit-code)', () => {
+  async function withRealProcess(
+    listeners: Record<'uncaughtException' | 'unhandledRejection', Array<(e: unknown) => unknown>>,
+  ): Promise<InstanceType<typeof NodeProcess>> {
+    const { NodeProcess } = await import('../builtins/process.ts');
+    const { defineLifecycleIdentity, installProcessLifecycleDispatcher } = await import(
+      '../builtins/process-lifecycle-dispatcher.ts'
+    );
+    const { setActiveNodeProcessBootstrap } = await import(
+      '../builtins/process-bootstrap-identity.ts'
+    );
+    installProcessLifecycleDispatcher();
+    const proc = new NodeProcess();
+    defineLifecycleIdentity(proc);
+    setActiveNodeProcessBootstrap(proc);
+    for (const fn of listeners.uncaughtException ?? []) proc.on('uncaughtException', fn);
+    for (const fn of listeners.unhandledRejection ?? []) proc.on('unhandledRejection', fn);
+    return proc;
+  }
+
+  it('an uncaughtException handler takes the error: no drain rejection, loop continues', async () => {
+    await withRealProcess({
+      uncaughtException: [(e) => expect((e as Error).message).toBe('boom')],
+      unhandledRejection: [],
+    });
+    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toEqual({
+      handled: true,
+    });
+    const queue: Array<() => void> = [];
+    const drain = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
+    queue.shift()!();
+    await expect(drain).resolves.toBeUndefined();
+  });
+
+  it('a throwing handler is fatal with the NEW error (loud default keeps its stderr stack)', async () => {
+    await withRealProcess({
+      uncaughtException: [
+        () => {
+          throw new Error('handler-exploded');
+        },
+      ],
+      unhandledRejection: [],
+    });
+    const terminated: unknown[] = [];
+    registerNodeEvalDrainLifecycle({
+      beforeExit: () => {},
+      projectUnhandled: (reason) => reason,
+      terminateUnhandled: (reason) => {
+        terminated.push(reason);
+        return Object.assign(new Error('process.exit(1)'), {
+          code: 'RIFTY_PROCESS_EXIT',
+          exitCode: 1,
+        });
+      },
+    });
+    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toEqual({
+      handled: true,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    // The replacement error (not the original boom) reaches the loud terminal;
+    // its stack is what the eval terminator prints to stderr.
+    expect(terminated).toHaveLength(1);
+    expect((terminated[0] as Error).message).toBe('handler-exploded');
+    expect(String((terminated[0] as Error).stack)).toContain('handler-exploded');
+  });
+
+  it('an uncaught ERROR never falls to a unhandledRejection-only handler (Node: fatal)', async () => {
+    await withRealProcess({
+      uncaughtException: [],
+      unhandledRejection: [() => {}],
+    });
+    // Not handled: the loud default (stderr + exit 1) stands, as in Node.
+    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toEqual({
+      handled: false,
+    });
+  });
+
+  it('the REAL dispatcher: a handler throwing null is fatal with null (sentinel)', async () => {
+    const { NodeProcess } = await import('../builtins/process.ts');
+    const { defineLifecycleIdentity, installProcessLifecycleDispatcher } = await import(
+      '../builtins/process-lifecycle-dispatcher.ts'
+    );
+    const { setActiveNodeProcessBootstrap } = await import(
+      '../builtins/process-bootstrap-identity.ts'
+    );
+    installProcessLifecycleDispatcher();
+    const proc = new NodeProcess();
+    defineLifecycleIdentity(proc);
+    setActiveNodeProcessBootstrap(proc);
+    proc.on('uncaughtException', () => {
+      throw null;
+    });
+    const terminated: unknown[] = [];
+    registerNodeEvalDrainLifecycle({
+      beforeExit: () => {},
+      projectUnhandled: (reason) => reason,
+      terminateUnhandled: (reason) => {
+        terminated.push(reason);
+        return Object.assign(new Error('process.exit(1)'), {
+          code: 'RIFTY_PROCESS_EXIT',
+          exitCode: 1,
+        });
+      },
+    });
+    expect(keepalive.intakeUnhandledError(new Error('boom'), 'uncaught-error')).toEqual({
+      handled: true,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(terminated).toHaveLength(1);
+    expect(terminated[0]).toBeNull();
+    setActiveNodeProcessBootstrap(null);
+  });
+
+  it('no handler: the loud default stands (unhandled → drain rejection, exit 1 path)', async () => {
+    keepalive.setProcessLifecycleDispatcher(null);
+    expect(keepalive.intakeUnhandledError(new Error('boom'), 'rejection')).toEqual({
+      handled: false,
+    });
+    const queue: Array<() => void> = [];
+    const drain = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
+    queue.shift()!();
+    await expect(drain).rejects.toThrow('boom');
+  });
+});
+
+describe('UR-handler throw routes to the UE handler (Node semantics)', () => {
+  it('a throwing UR handler with a UE handler: UE receives the UR throw, loop continues', async () => {
+    const { NodeProcess } = await import('../builtins/process.ts');
+    const { defineLifecycleIdentity, installProcessLifecycleDispatcher } = await import(
+      '../builtins/process-lifecycle-dispatcher.ts'
+    );
+    const { setActiveNodeProcessBootstrap } = await import(
+      '../builtins/process-bootstrap-identity.ts'
+    );
+    installProcessLifecycleDispatcher();
+    const proc = new NodeProcess();
+    defineLifecycleIdentity(proc);
+    setActiveNodeProcessBootstrap(proc);
+    const seen: string[] = [];
+    proc.on('unhandledRejection', () => {
+      seen.push('ur');
+      throw new Error('handler-error');
+    });
+    proc.on('uncaughtException', (e) => {
+      seen.push(`ue:${(e as Error).message}`);
+    });
+    const outcome = keepalive.intakeUnhandledError(new Error('rej'), 'rejection');
+    expect(outcome).toEqual({ handled: true });
+    expect(seen).toEqual(['ur', 'ue:handler-error']);
+    setActiveNodeProcessBootstrap(null);
   });
 });

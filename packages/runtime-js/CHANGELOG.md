@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+- `worker_threads.Worker` accepts `execArgv: []` (explicit empty) and exposes `stdout`/`stderr` Readables with `stdout: true`/`stderr: true` (construction-time streams, ending at sealed output drain; non-empty execArgv stays loud).
+
+- `vm.runInThisContext` / `vm.Script` honour `lineOffset`/`columnOffset` (raw shift, no clamping; positive lines as a physical prefix, columns via a stack dispatcher; fractional → `ERR_OUT_OF_RANGE`); `vm.runInContext` with a column offset stays a named loud throw.
+
+- A live `worker_threads.Worker` keeps the parent event loop alive (ADR-0152 handle-class extension): ref at start, release at exit; `Worker.ref()/unref()` hold the same count (goal I2).
+
+- `child_process.fork(..., {serialization: 'advanced'})` round-trips structured-clone values (Date/Map/[undefined]/Uint8Array/bigint) over the kernel channel on both legs; `child.send(fn)` throws `ERR_INVALID_ARG_TYPE`; the JSON default is unchanged.
+
+- Process lifecycle parity: `uncaughtException`/`unhandledRejection` handlers receive the error and the loop continues (dispatcher in the keepalive traps; handler throws stay fatal with the new error); `process.exit()` honours `exitCode`; the `exit` event fires exactly once with the raw final code on natural drain and explicit exit.
+
+- ESM/CJS Function write guards accept computed keys provably bound to Symbol values (`const K = Symbol.for(...)`; direct `Symbol()` expressions) — @vitest/undici global registration loads; possibly-`'Function'` keys keep the loud ceiling.
+
+- `fs.statfsSync`, `child_process.spawnSync`, `process.memoryUsage` exist as named members that throw `NotImplementedError` when called — named imports link instead of dying link-time.
+
+- Builtin static export names include prototype-chain methods (excluding `constructor`/`Object.prototype`) so `import { cwd } from 'node:process'` links and binds the live member.
+
+- Register `node:path/posix` and `node:path/win32` builtins (`win32 === posix`, POSIX-only posture).
+
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).

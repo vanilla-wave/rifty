@@ -1,0 +1,162 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Срез допускает merge с NOTE; цель не завершена.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "1aa6c96db20bb9cbc1ca55980ab44cbb453adc45",
+  "unit_goal_source": "docs/backlog/runtime-js/worker-threads-handle-keepalive.md @ 0f34cfdc2bda09d9aaf8ce651b534f045c198b84; docs/backlog/epics/vitest-run-in-browser/goal.md, I2; BASE 12d386f15893d662bfeb22f6ed074724f5c3cf58. RDY-8: observed defect; исходный RED/Node oracle — docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md:107,211. Независимый baseline RED: /private/tmp/rifty-u8-preparation-baseline-red.log. Vitest 123/123; pnpm test:parity worker-keepalive 1/1; check:arch и check:file-size PASS. PR-4: BASE и новые критерии сопоставлены, ослабления нет. Полный pr:check не перезапускался; check:contract-drift SKIPPED без origin/main. Tracked-файлы не изменены.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4+I5+I6: полный сценарий vitest с TS config/tests, обоими pools, reporter и exit codes",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:45",
+      "summary": "u13 vitest-config-pipeline-suspension блокирует u12 acceptance; end-to-end доказательство открыто."
+    },
+    {
+      "clause": "I7: доказанные ✅ I1–I6 и loud ❌ в compat",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:122",
+      "summary": "Окончательные compat claims и доказательство исключённых путей остаются за u12 после устранения u13."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: один Worker доставляет сообщение через 700 ms и exit до завершения родителя.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/worker-keepalive.case.ts:33",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: unref снимает удержание; родитель завершается после собственного 50 ms timer без позднего сообщения.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/worker_threads/worker-keepalive.case.ts:38",
+      "note": "F1: auxiliary-ref mutant проходит, удерживая физический Worker до его завершения."
+    },
+    {
+      "row": "Acceptance 3: exit Worker освобождает ref; родитель drains без cap hang.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/worker-keepalive.case.ts:44",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: ref после unref восстанавливает handle count.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/worker_threads.test.ts:1080",
+      "note": ""
+    },
+    {
+      "row": "Fault leaked ref: после сообщения и process.exit(0) родитель завершает drain без cap.",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/worker-keepalive.case.ts:44",
+      "note": ""
+    },
+    {
+      "row": "Fault over-hold: unref Worker не удерживает родителя и не даёт позднего вывода.",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/worker_threads/worker-keepalive.case.ts:38",
+      "note": "F1: stdout не различает позднее завершение родителя; мутант проходит."
+    },
+    {
+      "row": "Worker constructor: live Worker приобретает counted handle.",
+      "source": "public-api",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/worker_threads.test.ts:1074",
+      "note": ""
+    },
+    {
+      "row": "Worker.unref(): освобождает удержание живого Worker.",
+      "source": "public-api",
+      "trace": "I2",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/builtins/worker_threads.test.ts:1078",
+      "note": "F1: handle-state тест покрывает same-realm; auxiliary refs физического Worker не различает."
+    },
+    {
+      "row": "Worker.ref(): после unref возвращает удержание.",
+      "source": "public-api",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/worker_threads.test.ts:1080",
+      "note": ""
+    },
+    {
+      "row": "Frozen expected stdout: got hi / wexit 0 / parent-done / fast ok / all-done.",
+      "source": "frozen-artifact",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/worker-keepalive.case.ts:51",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/worker_threads/worker-keepalive.case.ts:38",
+          "evidence": "F1: node --import tsx /private/tmp/rifty-u8-aux-mutant.mts baseline → expectedMatches:true,1853ms; тот же command с mutant → expectedMatches:true,2513ms,acquisitions:6. acquireAux игнорирует userUnrefd, сохраняя refs до stream end; stdout идентичен frozen expected. pnpm vitest run packages/runtime-js/src/builtins/worker_threads.test.ts → 28/28 PASS; carrier не создаёт kernel aux streams.",
+          "summary": "F1: weak proof для Acceptance 2, over-hold и public unref. У unref Worker нет наблюдаемого вывода, после 50 ms создаётся другой ref’d Worker; неверное удержание не меняет stdout. NOTE по REV-4; дефект текущей реализации не установлен.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/worker_threads/worker-keepalive.case.ts:51",
+          "evidence": "node --import tsx /private/tmp/rifty-u8-exitcode-probe.mts: текущий case + process.exitCode=23 → Node rejected 'Node exited 23: got hi\\nwexit 0\\nparent-done\\nfast ok\\nall-done'; riftyResolved совпадает с frozen stdout, expectedMatches:true. run-in-rifty.ts:1884–1910 возвращает stdout без final-code проверки; ограничение существовало в BASE.",
+          "summary": "Carrier не доказывает parent exit 0 из Acceptance 1. Advisory: I2 требует lifetime/message/exit order, не точный final code; coverage I2 не понижается. Ослабления критериев по PR-4 нет.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "adjudication": []
+}

@@ -5,7 +5,11 @@
  * Node tests use a `setTimeout(fn, 0)` fallback).
  */
 
-import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import {
+  isRealmDying,
+  ref as keepaliveRef,
+  unref as keepaliveUnref,
+} from '../internal/event-loop-keepalive.ts';
 
 type ImmediateHandle = { readonly id: number };
 type HostTimeout = ReturnType<typeof globalThis.setTimeout>;
@@ -22,6 +26,7 @@ const hostSetTimeout = globalThis.setTimeout.bind(globalThis);
 const hostClearTimeout = globalThis.clearTimeout.bind(globalThis);
 const hostSetInterval = globalThis.setInterval.bind(globalThis);
 const hostClearInterval = globalThis.clearInterval.bind(globalThis);
+const hostQueueMicrotask = globalThis.queueMicrotask.bind(globalThis);
 
 let nextTimerId = 1;
 
@@ -143,6 +148,8 @@ export function setTimeout(
   const raw = hostSetTimeout(
     (...a: unknown[]) => {
       if (!box.handle?.fireTimeout()) return;
+      // Node: a fatal handler throw kills the process — pending timers never run.
+      if (isRealmDying()) return;
       fn(...a);
     },
     ms,
@@ -178,6 +185,7 @@ export function setInterval(
   const raw = hostSetInterval(
     (...a: unknown[]) => {
       if (!box.handle?.shouldRunInterval()) return;
+      if (isRealmDying()) return;
       fn(...a);
     },
     ms,
@@ -231,6 +239,7 @@ if (channel) {
     if (item === undefined) return; // cleared between message post and dispatch
     immediates.delete(id);
     keepaliveUnref();
+    if (isRealmDying()) return; // Node: fatal kill stops pending immediates
     item.fn(...item.args);
   };
 }
@@ -249,6 +258,7 @@ export function setImmediate(
       if (!item) return; // cleared before its timer fired
       immediates.delete(id);
       keepaliveUnref();
+      if (isRealmDying()) return; // Node: fatal kill stops pending immediates
       item.fn(...item.args);
     }, 0);
   return { id };
@@ -266,7 +276,7 @@ export const timers = {
   clearInterval,
   setImmediate,
   clearImmediate,
-  queueMicrotask: globalThis.queueMicrotask,
+  queueMicrotask: hostQueueMicrotask,
 };
 
 // ───────────────────────────── timers/promises ─────────────────────────────

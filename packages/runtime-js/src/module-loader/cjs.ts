@@ -6,7 +6,22 @@ import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-
 import { type Edit, applyEdits, uniqueHelperName } from './cjs-source-rewrite.ts';
 import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
+import {
+  type FunctionGuardScope,
+  addFunctionGuardBinding as addBinding,
+  createFunctionGuardScope as createScope,
+  declareFunctionGuardPattern as declarePattern,
+  declareFunctionGuardVariable as declareVariable,
+  predeclareFunctionGuardScope as predeclareFunctionScope,
+  predeclareFunctionGuardLexialScope as predeclareLexicalScope,
+} from './function-guard-scopes.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
+import {
+  type SymbolGuardContext,
+  programPoisonsSymbolProofs,
+  computedKeyProvablyNotFunction as sharedComputedKeyNotFunction,
+  isProvablySymbolValueExpression as sharedIsProvablySymbolExpression,
+} from './guard-symbol-values.ts';
 import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
@@ -118,13 +133,7 @@ interface AnyNodeShape {
   readonly [key: string]: unknown;
 }
 
-interface Scope {
-  readonly bindings: Set<string>;
-  readonly globalAliases: Set<string>;
-  readonly maybeFunctionAliases: Set<string>;
-  readonly maybeDerivedFunctionAliases: Set<string>;
-  readonly maybeEvalAliases: Set<string>;
-}
+type Scope = FunctionGuardScope;
 
 interface FunctionRewriteCtx {
   readonly edits: Edit[];
@@ -233,7 +242,12 @@ function rewriteCjsFunctionConstructorReferences(
   const rootScope = createScope();
   predeclareFunctionScope(program.body as unknown as AnyNodeShape[], rootScope);
   predeclareLexicalScope(program.body as unknown as AnyNodeShape[], rootScope);
+  guardSymbolMutation.symbolMutated = programPoisonsSymbolProofs(
+    program as unknown as AnyNodeShape,
+    (program.body as unknown as AnyNodeShape[]) ?? [],
+  );
   const ctx: FunctionRewriteCtx = {
+    ...{},
     edits: [],
     scopes: [rootScope],
     functionHelperName,
@@ -272,31 +286,12 @@ function rewriteCjsFunctionConstructorReferences(
   return applyEdits(source, ctx.edits);
 }
 
-function createScope(): Scope {
-  return {
-    bindings: new Set(),
-    globalAliases: new Set(),
-    maybeFunctionAliases: new Set(),
-    maybeDerivedFunctionAliases: new Set(),
-    maybeEvalAliases: new Set(),
-  };
-}
-
 function pushScope(ctx: FunctionRewriteCtx, scope: Scope = createScope()): void {
   ctx.scopes.push(scope);
 }
 
 function popScope(ctx: FunctionRewriteCtx): void {
   ctx.scopes.pop();
-}
-
-function addBinding(scope: Scope, name: string | undefined): void {
-  if (!name) return;
-  scope.bindings.add(name);
-  scope.globalAliases.delete(name);
-  scope.maybeFunctionAliases.delete(name);
-  scope.maybeDerivedFunctionAliases.delete(name);
-  scope.maybeEvalAliases.delete(name);
 }
 
 function isShadowed(ctx: FunctionRewriteCtx, name: string): boolean {
@@ -436,102 +431,6 @@ function isMaybeEvalAlias(ctx: FunctionRewriteCtx, name: string): boolean {
   return Boolean(ctx.scopes[0]?.maybeEvalAliases.has(name));
 }
 
-function declarePattern(scope: Scope, pattern: unknown): void {
-  if (!pattern || typeof pattern !== 'object') return;
-  const pat = pattern as AnyNodeShape;
-  switch (pat.type) {
-    case 'Identifier':
-      addBinding(scope, (pat as unknown as { name?: string }).name);
-      return;
-    case 'ObjectPattern': {
-      const props = (pat as unknown as { properties?: unknown[] }).properties ?? [];
-      for (const prop of props) {
-        const p = prop as AnyNodeShape;
-        if (p.type === 'RestElement') declarePattern(scope, p.argument);
-        else declarePattern(scope, p.value);
-      }
-      return;
-    }
-    case 'ArrayPattern': {
-      const elements = (pat as unknown as { elements?: unknown[] }).elements ?? [];
-      for (const element of elements) declarePattern(scope, element);
-      return;
-    }
-    case 'RestElement':
-      declarePattern(scope, pat.argument);
-      return;
-    case 'AssignmentPattern':
-      declarePattern(scope, pat.left);
-      return;
-    default:
-      return;
-  }
-}
-
-function declareVariable(scope: Scope, node: AnyNodeShape): void {
-  const declarations = (node as unknown as { declarations?: unknown[] }).declarations ?? [];
-  for (const decl of declarations) {
-    declarePattern(scope, (decl as AnyNodeShape).id);
-  }
-}
-
-function predeclareFunctionScope(body: readonly AnyNodeShape[], scope: Scope): void {
-  for (const node of body) collectFunctionScopeBindings(node, scope);
-}
-
-function collectFunctionScopeBindings(node: unknown, scope: Scope): void {
-  if (!node || typeof node !== 'object') return;
-  const n = node as AnyNodeShape;
-  if (typeof n.type !== 'string') return;
-
-  switch (n.type) {
-    case 'FunctionDeclaration':
-      addBinding(scope, (n.id as { name?: string } | undefined)?.name);
-      return;
-    case 'FunctionExpression':
-    case 'ArrowFunctionExpression':
-    case 'ClassExpression':
-      return;
-    case 'ClassDeclaration':
-      return;
-    case 'VariableDeclaration':
-      if ((n as unknown as { kind?: string }).kind === 'var') declareVariable(scope, n);
-      return;
-    default:
-      for (const key of Object.keys(n)) {
-        if (
-          key === 'type' ||
-          key === 'start' ||
-          key === 'end' ||
-          key === 'loc' ||
-          key === 'range'
-        ) {
-          continue;
-        }
-        const value = n[key];
-        if (!value) continue;
-        if (Array.isArray(value)) {
-          for (const item of value) collectFunctionScopeBindings(item, scope);
-        } else if (typeof value === 'object') {
-          collectFunctionScopeBindings(value, scope);
-        }
-      }
-  }
-}
-
-function predeclareLexicalScope(body: readonly AnyNodeShape[], scope: Scope): void {
-  for (const node of body) {
-    if (
-      node.type === 'VariableDeclaration' &&
-      (node as unknown as { kind?: string }).kind !== 'var'
-    ) {
-      declareVariable(scope, node);
-    } else if (node.type === 'ClassDeclaration' || node.type === 'FunctionDeclaration') {
-      addBinding(scope, (node.id as { name?: string } | undefined)?.name);
-    }
-  }
-}
-
 function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
   if (!node || typeof node !== 'object') return;
   const n = node as AnyNodeShape;
@@ -561,6 +460,7 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
 
     case 'VariableDeclaration': {
       const declarations = (n as unknown as { declarations?: AnyNodeShape[] }).declarations ?? [];
+      const isConst = (n as unknown as { kind?: string }).kind === 'const';
       for (const decl of declarations) {
         const declId = decl.id as AnyNodeShape | undefined;
         walkPatternExpressions(declId, ctx);
@@ -570,6 +470,15 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
           updateMaybeFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateMaybeDerivedFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateMaybeEvalAliasesFromPatternValue(declId, decl.init, ctx);
+          if (
+            isConst &&
+            declId?.type === 'Identifier' &&
+            isProvablySymbolValueExpression(decl.init, ctx)
+          ) {
+            topScope(ctx).symbolValueBindings.add(
+              (declId as unknown as { name?: string }).name ?? '',
+            );
+          }
         }
       }
       return;
@@ -1446,7 +1355,12 @@ function isGlobalFunctionReadMember(node: AnyNodeShape, ctx: FunctionRewriteCtx)
 function isGlobalFunctionWriteMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
   if (!isGlobalObjectExpression(node.object, ctx)) return false;
   const propertyName = staticPropertyName(node);
-  return propertyName === 'Function' || (propertyName === undefined && isComputedMember(node));
+  return (
+    propertyName === 'Function' ||
+    (propertyName === undefined &&
+      isComputedMember(node) &&
+      !computedKeyProvablyNotFunction(node.property, ctx))
+  );
 }
 
 function expressionMayBeHostFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
@@ -1621,6 +1535,25 @@ function isGlobalEvalCallMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): bo
   return propertyName === 'eval' || (propertyName === undefined && isComputedMember(node));
 }
 
+function guardSymbolContext(ctx: FunctionRewriteCtx): SymbolGuardContext {
+  return {
+    scopes: ctx.scopes,
+    isShadowed: (name) => isShadowed(ctx, name),
+    staticPropertyName,
+    symbolMutated: guardSymbolMutation.symbolMutated,
+  };
+}
+
+const guardSymbolMutation = { symbolMutated: false };
+
+function isProvablySymbolValueExpression(node: unknown, ctx: FunctionRewriteCtx): boolean {
+  return sharedIsProvablySymbolExpression(node, guardSymbolContext(ctx));
+}
+
+function computedKeyProvablyNotFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
+  return sharedComputedKeyNotFunction(node, guardSymbolContext(ctx));
+}
+
 function isGlobalObjectExpression(node: unknown, ctx: FunctionRewriteCtx): boolean {
   if (!node || typeof node !== 'object') return false;
   const n = node as AnyNodeShape;
@@ -1659,17 +1592,21 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
     if (propertyName === 'defineProperties') {
       return objectMayContainFunctionKey(args[1]);
     }
-    return propertyMayBeFunction(args[1]);
+    return mutationPropertyMayBeFunction(args[1], ctx);
   }
 
   if (
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
-    return propertyMayBeFunction(args[0]);
+    return mutationPropertyMayBeFunction(args[0], ctx);
   }
 
   return false;
+}
+
+function mutationPropertyMayBeFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
+  return !computedKeyProvablyNotFunction(node, ctx) && propertyMayBeFunction(node);
 }
 
 function propertyMayBeFunction(node: unknown): boolean {

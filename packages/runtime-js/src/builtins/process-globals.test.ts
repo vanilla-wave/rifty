@@ -1,3 +1,4 @@
+import { NotImplementedError } from '@riftydev/vfs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadBuiltin, refreshRuntimeJsProcessBuiltin } from './index.ts';
 import {
@@ -184,5 +185,67 @@ describe('installProcessGlobals', () => {
       ipc.port1.close();
       ipc.port2.close();
     }
+  });
+});
+
+describe('process.memoryUsage named-loud member (absent-builtin-members-loud-throws)', () => {
+  it('binds without throwing and CALLS loud, never fabricates heap numbers', async () => {
+    const ns = (await loadBuiltin('process')) as { memoryUsage: () => never };
+    expect(typeof ns.memoryUsage).toBe('function');
+    const bound = ns.memoryUsage.bind({}) as () => never;
+    expect(typeof bound).toBe('function');
+    expect(() => ns.memoryUsage()).toThrow(NotImplementedError);
+    expect(() => ns.memoryUsage()).toThrow('process.memoryUsage');
+  });
+});
+
+describe('process exit lifecycle (process-lifecycle-events-exit-code, I3)', () => {
+  function freshProcess(): InstanceType<typeof NodeProcess> {
+    return new NodeProcess();
+  }
+
+  it('exit() without an argument exits with process.exitCode', () => {
+    const proc = freshProcess();
+    proc.exitCode = 3;
+    let caught: unknown;
+    try {
+      proc.exit();
+    } catch (err) {
+      caught = err;
+    }
+    expect((caught as { code?: string }).code).toBe('RIFTY_PROCESS_EXIT');
+    expect((caught as { exitCode?: number }).exitCode).toBe(3);
+  });
+
+  it("'exit' fires exactly once with the RAW code, on both natural and explicit paths", async () => {
+    const proc = freshProcess();
+    proc.exitCode = 257; // OS wraps to 1; the event sees the raw value (Node oracle)
+    const codes: unknown[] = [];
+    proc.on('exit', (code) => codes.push(code));
+    // Natural-exit emission rides the keepalive dispatcher (no guest API).
+    const { emitProcessExitEvent } = await import('./process-lifecycle-dispatcher.ts');
+    emitProcessExitEvent(proc, proc.exitCode);
+    let caught: unknown;
+    try {
+      proc.exit(1);
+    } catch (err) {
+      caught = err;
+    }
+    // Natural emission already claimed the once-slot; explicit exit() after it
+    // must not emit again.
+    expect(codes).toEqual([257]);
+    expect((caught as { exitCode?: number }).exitCode).toBe(1);
+  });
+
+  it('exit() emits the exit event with its code before the terminal throw', () => {
+    const proc = freshProcess();
+    const codes: unknown[] = [];
+    proc.on('exit', (code) => codes.push(code));
+    try {
+      proc.exit(2);
+    } catch {
+      /* RIFTY_PROCESS_EXIT expected */
+    }
+    expect(codes).toEqual([2]);
   });
 });

@@ -1,3 +1,4 @@
+import { registerProcessStdioStream } from '@riftydev/io';
 /**
  * Node-compatible `process` global — the ONE `NodeProcess` class (ADR-0157).
  *
@@ -26,12 +27,15 @@ import {
 import { NotImplementedError, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import {
   beginNodeEvalExplicitExit,
+  intakeUnhandledError,
+  isRealmDying,
   ref as refEventLoop,
   unref as unrefEventLoop,
 } from '../internal/event-loop-keepalive.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
-import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import { serializeIpcPayload } from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
+import { installProcessAbsentMembers } from './absent-members.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import {
@@ -51,7 +55,7 @@ import {
   type NodeProcessRelease,
   createNodeProcessRelease,
 } from './process-identity.ts';
-
+import { defineLifecycleIdentity, emitProcessExitEvent } from './process-lifecycle-dispatcher.ts';
 const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
   'rifty.runtime-js.process-terminal-bootstrap.v1',
 );
@@ -106,20 +110,17 @@ function installProcessExitErrorTrap(): void {
 }
 
 function drainNextTicks(): void {
-  // Re-read `.length` each iteration so items enqueued mid-drain (nextTick from
-  // inside nextTick) are processed — same as the old shift()-until-empty loop.
-  // Do NOT snapshot the array.
+  // Re-read `.length` each iteration: mid-drain enqueues must process.
   while (drainHead < nextTickQueue.length) {
     const item = nextTickQueue[drainHead++];
     if (!item) continue;
+    if (isRealmDying()) break;
     try {
       item.fn(...item.args);
     } catch (err) {
-      // Surface on the ACTIVE realm process (the one user code attached handlers
-      // to): the seeded NodeProcess in a kernel child, else the REPL singleton.
-      const active = (globalThis as { process?: unknown }).process;
-      const target = active instanceof NodeProcess ? active : riftyProcess;
-      (target as unknown as EventEmitter).emit('uncaughtException', err);
+      // One intake with every other trap surface (fatal latch honored).
+      const o = intakeUnhandledError(err, 'uncaught-error');
+      if (!o.handled) throw 'rethrow' in o ? o.rethrow : err;
     }
   }
   // Fully drained: clear the array + cursor so the next nextTick sees length
@@ -261,6 +262,7 @@ function makeStdioWriter(
       return true;
     },
   }) as NodeStdioWriter;
+  registerProcessStdioStream(stream);
   return isTTY ? attachTtyControls(stream, size) : stream;
 }
 
@@ -532,6 +534,8 @@ export class NodeProcess extends EventEmitter {
   env: Record<string, string | undefined>;
   // Node-faithful: assigning an invalid exit code throws at the SETTER (loud),
   // a numeric string coerces; reads return the validated integer.
+  declare exit: (code?: unknown) => never;
+  declare kill: (pid: number, signal?: string) => boolean;
   #exitCode = 0;
   get exitCode(): number {
     return this.#exitCode;
@@ -618,6 +622,7 @@ export class NodeProcess extends EventEmitter {
       configurable: false,
       writable: false,
     });
+    defineLifecycleIdentity(this);
     if (spec) {
       attachNodeProcessBootstrapIdentity(this, spec);
       installProcessExitErrorTrap();
@@ -626,8 +631,6 @@ export class NodeProcess extends EventEmitter {
       this.argv = [...spec.argv];
       const launch = readNodeEntryBootstrapIfPresent()?.launch;
       this.execArgv = launch?.kind === 'eval' ? [...launch.execArgv] : [];
-      // Copy so per-process env mutation does not leak into the published
-      // Readonly spec (the kernel threads spec.env by reference).
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
       const terminal = processTerminalBootstrap(launch);
@@ -646,7 +649,7 @@ export class NodeProcess extends EventEmitter {
         this.#wireWorkerIpc(spec.stdio.ipc);
       } else {
         this.#publicIpc = true;
-        this.#jsonIpc = launch?.kind === 'program';
+        this.#jsonIpc = launch?.kind === 'program' && (launch.ipc ?? 'json') !== 'advanced';
         this.connected = true;
         this.channel = nodeIpcChannel('process');
         this.#wireIpc(spec.stdio.ipc);
@@ -747,13 +750,14 @@ export class NodeProcess extends EventEmitter {
     return performance.now() / 1000;
   }
 
-  exit(code: unknown = 0): never {
-    const c = coerceExitCode(code); // coerce string / throw on invalid (Node parity)
+  exitForNode(code?: unknown): never {
+    const c = coerceExitCode(code === undefined ? this.#exitCode : code);
     this.#exitCode = c;
+    emitProcessExitEvent(this, c);
     const exitCode = toUint8ExitCode(c);
     const exitError = Object.assign(new Error(`process.exit(${c})`), {
       code: RIFTY_PROCESS_EXIT,
-      exitCode, // OS-style uint8 wrap (process.exit(257) → 1)
+      exitCode, // uint8 wrap
     });
     const evalLifecycleOwned = beginNodeEvalExplicitExit(exitError, () => {
       this.#requestSelfExit(exitCode);
@@ -763,12 +767,9 @@ export class NodeProcess extends EventEmitter {
     throw exitError;
   }
 
-  kill(pid: number, signal = 'SIGTERM'): boolean {
+  killForNode(pid: number, signal: string): boolean {
     if (pid !== this.pid || signal !== 'SIGUSR2') {
-      throw new NotImplementedError(
-        'process.kill',
-        'only process.kill(process.pid, "SIGUSR2") is implemented',
-      );
+      throw new NotImplementedError('process.kill', 'only process.kill(pid,SIGUSR2)');
     }
     return this.#requestSelfSignal(signal);
   }
@@ -780,14 +781,12 @@ export class NodeProcess extends EventEmitter {
 
   #wireIpc(port: MessagePort): void {
     this.#ipcPort = port;
-    // Browsers auto-start a port only with `addEventListener('message')`; using
-    // `onmessage = …` requires an explicit `start()` (called below).
     port.onmessage = (ev: MessageEvent): void => {
       const frame = this.#receiveControlFrame(ev.data);
       if (frame === null) return;
       if (frame.kind === 'ipc:message') {
         if (this.#ipcDisconnected) return;
-        const payload = this.#jsonIpc ? serializeNodeIpcMessage(frame.payload) : frame.payload;
+        const payload = this.#jsonIpc ? serializeIpcPayload(true, frame.payload) : frame.payload;
         if (this.listenerCount('message') === 0) {
           this.#ipcBacklog.push(payload);
         } else {
@@ -827,7 +826,7 @@ export class NodeProcess extends EventEmitter {
     this.send = (message: unknown, ...unsupported: unknown[]): boolean => {
       if (unsupported.length > 0) throw new NotImplementedError('process.send.arguments');
       if (this.#ipcDisconnected) return false;
-      const payload = this.#jsonIpc ? serializeNodeIpcMessage(message) : message;
+      const payload = serializeIpcPayload(this.#jsonIpc, message);
       try {
         const frame: IpcFrame = { kind: 'ipc:message', payload };
         port.postMessage(frame);
@@ -1047,7 +1046,8 @@ export class NodeProcess extends EventEmitter {
   }
 
   #syncIpcKeepalive(): void {
-    const shouldHold = this.#jsonIpc && !this.#ipcDisconnected && this.listenerCount('message') > 0;
+    const shouldHold =
+      this.#publicIpc && !this.#ipcDisconnected && this.listenerCount('message') > 0;
     if (shouldHold === this.#ipcKeepaliveHeld) return;
     this.#ipcKeepaliveHeld = shouldHold;
     if (shouldHold) refEventLoop();
@@ -1177,6 +1177,7 @@ export function nodeProcessWorkerIpc(process: unknown): NodeProcessWorkerIpc {
 
 /** REPL/default singleton (no spec). Kernel children get their own seeded one. */
 export const riftyProcess = new NodeProcess();
+installProcessAbsentMembers(NodeProcess);
 
 /** Host bridge: deliver terminal/process stdin into the REPL Worker process. */
 export function writeProcessStdin(data: string | Uint8Array): void {

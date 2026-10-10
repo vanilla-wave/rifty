@@ -1,0 +1,142 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Срез можно принять с NOTE; merge goal — после u13/u12. Проверено: 6 path parity cases, 272 теста, Node/rifty probes.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "1aa6c96db20bb9cbc1ca55980ab44cbb453adc45",
+  "unit_goal_source": "docs/backlog/runtime-js/path-posix-win32-builtins.md (ready, неизменён относительно BASE); docs/backlog/epics/vitest-run-in-browser/goal.md:I6; BASE 72388fc6a75fb0c22e22dbdf5c7c0258b4b7c3f7. Граница: регистрация path subpaths и затронутые зависимости загрузчика.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4",
+      "location": "docs/backlog/runtime-js/vitest-config-pipeline-suspension.md:21",
+      "summary": "u13: устранить зависание vite configFile+plugins; сейчас vitest run завершается 0 без вывода."
+    },
+    {
+      "clause": "I4 + I5 + I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:108",
+      "summary": "u12: доказать TS config/tests, reporter, exit 1→0, npm test/verbose, forks/threads и весь claimed module path."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:122",
+      "summary": "После acceptance подтвердить итоговые ✅ I1–I6 и loud ❌ вне claim."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: ESM join('a','b') === 'a/b'; namespace идентичен path.posix.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/path/subpath-posix-win32.case.ts:7",
+      "note": "F1: CJS carrier пропускает join с enumerable:false; точный ESM сценарий тогда падает."
+    },
+    {
+      "row": "Acceptance 2: node:path/win32 зарегистрирован тем же способом; существующий POSIX alias сохранён.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpath-posix-win32.case.ts:9",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: bare path/posix идентичен path.posix; named leaf surface совпадает с path.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/path/subpath-posix-win32.case.ts:8",
+      "note": "F1: carrier проверяет node:-prefixed CJS, не bare spelling и ESM named surface."
+    },
+    {
+      "row": "Fault matrix: import 'node:path/foo' бросает заявленный ModuleLoadError.",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "tests/conformance/modules/resolver.test.ts:111",
+      "note": "F2: общий unknown-builtin carrier есть; ошибочная регистрация path/foo его не ломает."
+    },
+    {
+      "row": "Public API: node:path/posix и path/posix — существующий namespace для require/import (Acceptance 1/3).",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/path/subpath-posix-win32.case.ts:8",
+      "note": "F1: ESM named-import часть API не дискриминируется committed CJS carrier."
+    },
+    {
+      "row": "Public API: node:path/win32 и path/win32 зарегистрированы как path.win32 (Acceptance 2).",
+      "source": "public-api",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/subpath-posix-win32.case.ts:12",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/path/subpath-posix-win32.case.ts:8",
+          "evidence": "pnpm test:parity path/ → 6/6 match. pnpm vitest run tests/conformance/builtins/path.test.ts packages/runtime-js/src/module-loader/builtin-overrides.test.ts packages/runtime-js/src/module-loader/registry.test.ts → 12 passed; pnpm vitest run tests/conformance/modules/resolver.test.ts packages/runtime-js/src/module-loader/cjs-static-export-link.test.ts → 260 passed. node --import tsx /private/tmp/rifty-path-final-review.mjs → leafNode == leafRifty: a/b, true, true, true, true / :. Mutant Object.defineProperty(loadBuiltin('path/posix'),'join',{enumerable:false}): enumerabilityMutantCarrierEqual true; ESM → SyntaxError: does not provide an export named 'join'. Исторический RED (cwd /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-path-preparation-review-855dl2oi, git archive 24a8a854): node --import /Users/vanilla-wave/.cache/VTk9sDNb7pCg/glm-5.3/node_modules/tsx/dist/loader.mjs tools/node-parity-runner/src/cli.ts path/subpath-posix-win32 → exit 1, Built-in 'node:path/posix' is not implemented. PR-4: git diff 72388fc6 HEAD -- tools/node-parity-runner/cases/path/subpath-posix-win32.case.ts → только завершающий newline.",
+          "summary": "F1: committed carrier не различает исправную регистрацию и сломанные ESM named exports (Acceptance 1/3). Реальный сценарий работает; NOTE по REV-4.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/index.ts:75",
+          "evidence": "node --import tsx /private/tmp/rifty-path-final-review.mjs → baseline: ModuleLoadError: Built-in 'node:path/foo' is not implemented. Mutant registerBuiltin('path/foo',()=>loadBuiltin('path/posix')) → fooMutantCarrierEqual true; fooMutantGenericUnknownCarrierPass true; fooMutantESM accepted. Реальный registry использует точный factories[name] lookup.",
+          "summary": "F2: общий unknown-builtin test не дискриминирует точный path/foo fault-row; weak, NOTE по REV-4.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/index.ts:75",
+          "evidence": "node --import tsx /private/tmp/rifty-path-final-review.mjs → surfaceNode \"path-only \\n\"; surfaceRifty \"path-only posix,win32\\n\". Все заявленные leaf named exports импортируются; Node/rifty leaf stdout совпадает.",
+          "summary": "Полная namespace surface отличается: вложенные posix/win32 отсутствуют. Существующий namespace сохранён; за пределами заявленного leaf-сценария I6 — advisory.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "adjudication": []
+}
