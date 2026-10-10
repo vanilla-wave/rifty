@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Observe pending inactivity for boolean state or nonnegative request count; reject unsettled/missing state, preserve original model outcomes.
+
 - Observe published selection membership/ordered rows independently of Array layout; exercise generic IDs and retain interrupted outcomes.
 
 - Observe complete CSV diagnostic numeric values in named/compact text, preserving readable punctuation and rejecting fractional/exponent position mismatches.

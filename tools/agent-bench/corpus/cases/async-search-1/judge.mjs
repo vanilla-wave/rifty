@@ -8,6 +8,11 @@ function selectionMembership(state) {
 function stateItems(state) {
   return [...state.items];
 }
+function pendingStatus(state) {
+  const value = state.pending;
+  assert.ok(typeof value === 'boolean' || (typeof value === 'number' && Number.isInteger(value) && value >= 0));
+  return typeof value === 'number' ? value > 0 : value;
+}
 for (const selectedId of ['a', 'c']) {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   let rows = [
@@ -52,7 +57,7 @@ for (const selectedId of ['a', 'c']) {
     ['b'],
   );
   assert.equal(c.state().total, 3);
-  assert.equal(c.state().pending, false);
+  assert.equal(pendingStatus(c.state()), false);
   c.select(selectedId);
   await c.search({ filter: 'Alpha', page: 1, pageSize: 1, sort: 'name-asc' });
   assert.deepEqual(selectionMembership(c.state()), [selectedId]);

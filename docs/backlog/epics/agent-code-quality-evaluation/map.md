@@ -1,10 +1,11 @@
 ## Items
 
-1. `distribution/agent-eval-boundary-diagnostics` — actual operation catalog and substantive finite escalation/fresh confirmation; I10/I11 mandatory. Existing scripts/report/corpus reused.
+1. `distribution/agent-eval-boundary-corpus` — observed pending count repair; actualRED/GREEN/fresh56/gate/readmission before further models.
+2. `distribution/agent-eval-boundary-diagnostics` — actual operation catalog and substantive finite escalation/fresh confirmation; I10/I11 mandatory. Existing scripts/report/corpus reused.
 
 ## Open questions
 
-- Boundary statecollection source readmitted Final+GREEN PASS @9483daa5d73a115a71e0d7b217c1224b49261f52 — owner: agent —11/11rows8axes0findings/unitresiduals,current64/213JSON/offline10/full27gatePASS. Original12/32 and allpreviousFinals immutable; linked8 path-onlyreuse permitted by independentpremisePASS, sharedmanifestdrift explicit. Fresh24/escalation/confirmation and I10/I11/CLOSE remain.
+- Boundary source9483 readmission reopened by actualv3 pendingcount0 grading defect — owner: agent —20guards/3ownerreverts/inherited40/types/metadata5PASS;fresh56/gate/Finalnext. Originalv3declaration24 stoppedafter8retained5PASS3FAIL16unstarted;alloriginalsourceheaders/scoresimmutable. I10/I11/CLOSE remain.
 
 - Record observation source accepted — owner: agent — Final+GREEN PASS37e19eb (30/30,0 findings/unit residuals). Eval16/current-own40 original21PASS19FAIL/39physical+1setup unexecuted preserved; source acceptance does not rescue failed origins. Fresh96 completed43PASS53FAIL24setup, sourceed4; comparison Final806546489 accepted6/6,0findings/unit residuals, two offline exact views. Prior96 remains unaccepted/unrescored.
 

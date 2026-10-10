@@ -72,6 +72,11 @@ function selectionMembership(state) {
 function stateItems(state) {
   return [...state.items];
 }
+function pendingStatus(state) {
+  const value = state.pending;
+  assert.ok(typeof value === 'boolean' || (typeof value === 'number' && Number.isInteger(value) && value >= 0));
+  return typeof value === 'number' ? value > 0 : value;
+}
 `;
 
 export const asyncState = (higher: boolean) => `
@@ -88,7 +93,7 @@ const c=createController(client);
 const slow=c.search({filter:'Alpha',page:1,pageSize:1,sort:'name-asc'});
 const fast=c.search({filter:'',page:2,pageSize:1,sort:'value-desc'});
 await Promise.all([slow,fast]);
-assert.equal(c.state().query.page,2);assert.deepEqual(stateItems(c.state()).map(r=>r.id),['b']);assert.equal(c.state().total,3);assert.equal(c.state().pending,false);
+assert.equal(c.state().query.page,2);assert.deepEqual(stateItems(c.state()).map(r=>r.id),['b']);assert.equal(c.state().total,3);assert.equal(pendingStatus(c.state()),false);
 c.select(selectedId);await c.search({filter:'Alpha',page:1,pageSize:1,sort:'name-asc'});
 assert.deepEqual(selectionMembership(c.state()),[selectedId]);
 assert.deepEqual(stateItems(c.state()).map(r=>r.id),['a']);assert.equal(c.state().total,1);
@@ -104,7 +109,7 @@ ${
   higher
     ? `
 await c.search({filter:'',page:1,pageSize:5,sort:'name-asc'});
-const publicState=s=>({query:s.query&&{filter:s.query.filter,page:s.query.page,pageSize:s.query.pageSize,sort:s.query.sort},items:stateItems(s).map(({id,name,value})=>({id,name,value})),total:s.total,pending:s.pending,selectedIds:selectionMembership(s)});
+const publicState=s=>({query:s.query&&{filter:s.query.filter,page:s.query.page,pageSize:s.query.pageSize,sort:s.query.sort},items:stateItems(s).map(({id,name,value})=>({id,name,value})),total:s.total,pending:pendingStatus(s),selectedIds:selectionMembership(s)});
 const beforeFailure=structuredClone(publicState(c.state()));
 failNext=true;const failed=c.update('b',{value:99});
 assert.equal(stateItems(c.state()).find(r=>r.id==='b').value,99);

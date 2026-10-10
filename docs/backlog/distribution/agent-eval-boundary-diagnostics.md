@@ -5,6 +5,7 @@ title: Map observed environment differences and Rifty capability boundaries
 created: 2026-09-27
 why: Passing tasks can hide recovered obstacles; a pilot cannot locate substantive capability limits.
 epic: agent-code-quality-evaluation
+blocked_by: [distribution/agent-eval-boundary-corpus]
 sources: [ADR-0434, docs/backlog/distribution/reference/agent-eval-boundaries-refine-evidence.md, docs/backlog/distribution/reference/agent-eval-boundary-public-scenarios.md]
 code: [tools/agent-bench/src/runner.ts, tools/agent-bench/src/report.ts, tools/agent-bench/corpus/boundary-v1.json]
 ---
