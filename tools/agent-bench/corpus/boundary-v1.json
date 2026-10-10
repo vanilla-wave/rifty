@@ -25,12 +25,12 @@
       "inputsSha256": "ec57cb2619e6b821e0778a336a347fdd8a8e0c68a21afbcde28077fc7fc51927",
       "lockSha256": "342412adeb6b33ec3a754f53b1f70168b37ce9af9387bb8b82121bf282293bf4",
       "promptSha256": "90b0d011c0703c7c2553d2ac0ba23d79fbd4743fd256b0a346088ffe03ad5d33",
-      "judgeSha256": "861c06ff978afa709c575f79715e7ea8c51b2ddb38de2fe9f5ab08ccb6a1d0ba",
+      "judgeSha256": "0b4bfefd4f6cf9c2de3c68a73baffa09c4cbe0d6a6b31c77ccf9c25f2e8dfeb4",
       "starterRegression": {
         "buildCommand": "npm run build",
         "heading": "Minimal JavaScript starter"
       },
-      "criteriaVersion": "module-diagnostic-6"
+      "criteriaVersion": "module-diagnostic-7"
     },
     {
       "id": "linked-import-2",
@@ -54,12 +54,12 @@
       "inputsSha256": "ec57cb2619e6b821e0778a336a347fdd8a8e0c68a21afbcde28077fc7fc51927",
       "lockSha256": "342412adeb6b33ec3a754f53b1f70168b37ce9af9387bb8b82121bf282293bf4",
       "promptSha256": "916cd6321eb7025fd6ce328774b49e85c7907410d89150bc07a5da162f6bc00c",
-      "judgeSha256": "09d3470b53199114490c5d5c191f84f9c0c5f2c93918932814d7715b41e845e4",
+      "judgeSha256": "4de81276bf322367d7a34f8ba7b04ff88e8db8d57b73184896ab9eaae0ca4351",
       "starterRegression": {
         "buildCommand": "npm run build",
         "heading": "Minimal JavaScript starter"
       },
-      "criteriaVersion": "module-diagnostic-6"
+      "criteriaVersion": "module-diagnostic-7"
     },
     {
       "id": "async-search-1",

@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { linked } from './boundary-public-probes.ts';
 
 const root = await mkdtemp(join(resolve('.cache/pr341'), 'csv-diagnostic-controls-'));
 const rows: {
   level: number;
   variant: string;
+  checker: string;
   expected: boolean;
   actual: boolean;
   stderr: string;
@@ -45,6 +47,46 @@ for (const level of [1, 2]) {
       source: original.replace(
         fields,
         'throw new Error(`${message} at line ${quoteLine||line}, column ${(quoteColumn||column)+0.5}`);',
+      ),
+      expected: false,
+    },
+    {
+      name: 'message-sentence-period',
+      source: original.replace(
+        fields,
+        'throw new Error(`${message} at line ${quoteLine||line}, column ${quoteColumn||column}.`);',
+      ),
+      expected: true,
+    },
+    {
+      name: 'message-scientific',
+      source: original.replace(
+        fields,
+        'throw new Error(`${message} ${quoteLine||line}e0:${quoteColumn||column}e0`);',
+      ),
+      expected: true,
+    },
+    {
+      name: 'wrong-scientific-line',
+      source: original.replace(
+        fields,
+        'throw new Error(`${message} ${quoteLine||line}e2:${quoteColumn||column}`);',
+      ),
+      expected: false,
+    },
+    {
+      name: 'wrong-scientific-column',
+      source: original.replace(
+        fields,
+        'throw new Error(`${message} ${quoteLine||line}:${quoteColumn||column}e1`);',
+      ),
+      expected: false,
+    },
+    {
+      name: 'wrong-scientific-fraction',
+      source: original.replace(
+        fields,
+        'throw new Error(`${message} ${quoteLine||line}:${quoteColumn||column}e-1`);',
       ),
       expected: false,
     },
@@ -99,23 +141,29 @@ for (const level of [1, 2]) {
     const dir = join(root, `level${level}-${variant.name}`);
     await mkdir(join(dir, 'src'), { recursive: true });
     await writeFile(join(dir, 'src/workbook.mjs'), variant.source);
-    await writeFile(join(dir, 'judge.mjs'), await readFile(join(base, 'judge.mjs')));
-    const result = spawnSync(process.execPath, ['judge.mjs'], { cwd: dir, encoding: 'utf8' });
-    rows.push({
-      level,
-      variant: variant.name,
-      expected: variant.expected,
-      actual: result.status === 0,
-      stderr: result.stderr,
-    });
-    await writeFile(
-      join(dir, 'result.json'),
-      JSON.stringify(
-        { status: result.status, stdout: result.stdout, stderr: result.stderr },
-        null,
-        2,
-      ),
-    );
+    for (const checker of ['private', 'public']) {
+      await writeFile(
+        join(dir, `${checker}.mjs`),
+        checker === 'private' ? await readFile(join(base, 'judge.mjs')) : linked(level === 2),
+      );
+      const result = spawnSync(process.execPath, [`${checker}.mjs`], { cwd: dir, encoding: 'utf8' });
+      rows.push({
+        level,
+        variant: variant.name,
+        checker,
+        expected: variant.expected,
+        actual: result.status === 0,
+        stderr: result.stderr,
+      });
+      await writeFile(
+        join(dir, `${checker}-result.json`),
+        JSON.stringify(
+          { status: result.status, stdout: result.stdout, stderr: result.stderr },
+          null,
+          2,
+        ),
+      );
+    }
   }
 }
 await writeFile(join(root, 'results.json'), JSON.stringify(rows, null, 2));

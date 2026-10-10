@@ -14,8 +14,8 @@ import compilerGoldens from './boundary-compiler-goldens.json';
 export const csvDiagnosticLocationSource = String.raw`
 function csvDiagnosticLocation(error) {
   const text = typeof error?.message === 'string' ? error.message : '';
-  const named = /\bline\s*:?\s*(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)\s*[,;]?\s*(?:at\s+)?(?:column|col)\s*:?\s*(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)(?![\w.])/i.exec(text);
-  const compact = /(-?\d+(?:\.\d+)?)\s*:\s*(-?\d+(?:\.\d+)?)/.exec(text);
+  const named = /\bline\s*:?\s*(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)\s*[,;]?\s*(?:at\s+)?(?:column|col)\s*:?\s*(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)/i.exec(text);
+  const compact = /(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)\s*:\s*(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)/i.exec(text);
   const position = named ?? compact;
   if (position) return { line: Number(position[1]), column: Number(position[2]) };
   return error ? { line: Number(error.line), column: Number(error.column) } : null;

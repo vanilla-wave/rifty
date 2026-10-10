@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Accept readable CSV `at column` diagnostics and reject fractional positions without integer-prefix truncation.
+- Observe complete CSV diagnostic numeric values in named/compact text, preserving readable punctuation and rejecting fractional/exponent position mismatches.
 
 - Observe reported CSV coordinates, undo effects and complete async rollback independently of diagnostic/return carriers; preserve interrupted outcomes.
 

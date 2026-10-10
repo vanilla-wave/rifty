@@ -42,3 +42,20 @@ RED/fixed bytes exact. Proof: `agent-eval-boundary-csv-location-r2-proof.json.gz
 Original source647 controls48 interrupted after36:12PASS24FAIL/12unexecuted,
 producer1, alternative setup unstarted. Canonical120 JSON exact/two offline
 views; outcomes unchanged. Fresh48+24/current gate/Final required.
+
+Sourcec685 independent numeric sweep found trailing sentence period rejected
+and compact scientific values truncated (`2e2:4`, `2:4e1`, `2:4e-1` accepted;
+valid `2e0:4e0` rejected). Same lossy-token/carrier class. Both named/compact
+consume signed complete decimal/exponent values; punctuation unconstrained.
+Permanent28 variants execute public/private56 checks:30 valid accepted/26
+invalid rejected. Three owning checker reverts RED; types/4metadata tests PASS.
+Independent184 numeric/carrier probes GREEN. Raw:
+`agent-eval-boundary-csv-token-r3-proof.json.gz`.
+Historicalc68548 controls complete24PASS24FAIL,48physical/noModels/0setup,
+160originalJSON/twoofflineexact. Source readmission still requires new48+24,
+current gate and Final; source647/c685 outcomes never rescored.
+
+Independent storage re-audit+actual cleanup removed30 generated dependency/
+content-cache dirs, du1.566GiB; all protected hashes exact. Live/unrelated/
+unproven orphan process ownership excluded. Evidence:
+`agent-eval-session-storage-current-audit.json.gz`.
