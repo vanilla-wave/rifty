@@ -26,3 +26,9 @@ toolchain884661/267205 min/gzip bytes; all preexisting ceilings unchanged.
 
 Current fullpr:check27PASS:unit214.9s/parity112.7s, no isolated retries.
 Prior source/fixture contracts remain intact; no remoteCI claim yet.
+
+Independent unitFinal PASS @600a7db32cc34f3680c8af9960c62923ef292e67:
+7coverage/8axes/findings0; accepted broader goal not reevaluated. Exact
+`pr-341-registry-fixture-final-green.json`, raw
+`pr-341-registry-fixture-final-green-evidence.json.gz`. CommittedguardPASS.
+RemoteCI still pending next delivery.
