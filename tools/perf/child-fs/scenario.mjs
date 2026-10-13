@@ -15,6 +15,8 @@ const PACKAGE_JSON = `${JSON.stringify(
     version: '0.0.0',
     type: 'module',
     dependencies: DEPENDENCIES,
+    // Match the pinned root icons throughout this measured workload.
+    overrides: { '@gravity-ui/icons': DEPENDENCIES['@gravity-ui/icons'] },
   },
   null,
   2,
@@ -37,14 +39,14 @@ const FILES = Object.freeze({
 });
 
 const SCENARIO = Object.freeze({
-  id: 'child-fs-hot-path-v1',
+  id: 'child-fs-hot-path-v2',
   root: '/bench',
   dependencies: DEPENDENCIES,
   files: FILES,
 });
 
 const IDENTITY = Object.freeze({
-  scenarioDigest: '559e5e226348c484d542f197b442d3826e11d9e19c206d028c978d96a4595d4c',
+  scenarioDigest: '986ced6098591b0ca80e3b47a9125fd12a8055f4f29d998b09302ca8af89226a',
   dependencyDigest: 'de9e65b1ca98200f8be9b40080b3d5ac871c962786b33665d564b3da68d4b0bc',
 });
 
