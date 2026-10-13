@@ -181,6 +181,51 @@
       "tarball": "https://registry.npmjs.org/@rollup/wasm-node/-/wasm-node-4.63.2.tgz",
       "integrity": "sha512-Qj0Lrr0LNWQxWfJ/k6t6PBR4dCO6koTZ5TW8l7urr0sK4GfDdj7iLuraZo1mTmZFj1znFSWya4mukuPvnFQTVg==",
       "bytes": 822042
+    },
+    {
+      "name": "rollup",
+      "version": "4.64.5",
+      "file": "rollup-4.64.5",
+      "metadataUrl": "https://registry.npmjs.org/rollup/4.64.5",
+      "tarball": "https://registry.npmjs.org/rollup/-/rollup-4.64.5.tgz",
+      "integrity": "sha512-EAP5ZHcz2ijbgCWwPkpI7zh6bfsri2Ez5FtCy2dCp1k62duXzfG7DLGGh7RU2QQXWwavT+u4qpvDF/TWOiiGTw==",
+      "bytes": 591084
+    },
+    {
+      "name": "@rollup/wasm-node",
+      "version": "4.64.5",
+      "file": "rollup-wasm-node-4.64.5",
+      "metadataUrl": "https://registry.npmjs.org/%40rollup%2Fwasm-node/4.64.5",
+      "tarball": "https://registry.npmjs.org/@rollup/wasm-node/-/wasm-node-4.64.5.tgz",
+      "integrity": "sha512-kN33cPixKuDMgrYkRnkAW7iwiDWzRhNUgVY+IpcniQNXuIvDAAv0cFgZsaLEFP1z8eqVGhKG13dy5hFN3yBy+g==",
+      "bytes": 837859
+    },
+    {
+      "name": "postcss",
+      "version": "8.5.30",
+      "file": "postcss-8.5.30",
+      "metadataUrl": "https://registry.npmjs.org/postcss/8.5.30",
+      "tarball": "https://registry.npmjs.org/postcss/-/postcss-8.5.30.tgz",
+      "integrity": "sha512-zkd+e9S1AQHhmaBKye9zlFHWjOwVgqXl1q3ECYy8561K7qxR2cREf/STLskulBFd78k6AOFeA+ff1TtEzk9bAA==",
+      "bytes": 52903
+    },
+    {
+      "name": "nanoid",
+      "version": "3.3.20",
+      "file": "nanoid-3.3.20",
+      "metadataUrl": "https://registry.npmjs.org/nanoid/3.3.20",
+      "tarball": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.20.tgz",
+      "integrity": "sha512-uKdg2G3GNCKQn9byYOpxbGqrT2fGO5KRt5J/8b3pok8rT6qxGWF6hxMyJiEYtAf+FVyYuD9hRaDqX5uPFYJ4ZQ==",
+      "bytes": 5721
+    },
+    {
+      "name": "source-map-js",
+      "version": "1.2.2",
+      "file": "source-map-js-1.2.2",
+      "metadataUrl": "https://registry.npmjs.org/source-map-js/1.2.2",
+      "tarball": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.2.tgz",
+      "integrity": "sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==",
+      "bytes": 36349
     }
   ]
 }

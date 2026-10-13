@@ -1,0 +1,223 @@
+{
+  "bugs": {
+    "url": "https://github.com/7rulnik/source-map-js/issues"
+  },
+  "dist": {
+    "shasum": "79fb88d97535a21cb27162cb05d211b67acea4ab",
+    "tarball": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.2.tgz",
+    "fileCount": 18,
+    "integrity": "sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==",
+    "signatures": [
+      {
+        "sig": "MEUCIQCZPHMjtDeHbdrm8FkXj5rlr8cwbP4XoW93v0jVGGdWcQIgDcavClXA2dNCvB2XyxxKW7ZkgwaSlqeBeaayOtgq3ik=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "sig": "MEQCIAIRiJPeK+kn49RlwVL7LPl5GHFd6PnL/DKFgl/oQu6HAiBd4xIiwYFmu+pXEiZr7YrCXUt4BQ3XkahaDqCpu90zYA==",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "unpackedSize": 142723
+  },
+  "main": "./source-map.js",
+  "name": "source-map-js",
+  "author": {
+    "name": "Valentin 7rulnik Semirulnik",
+    "email": "v7rulnik@gmail.com"
+  },
+  "engines": {
+    "node": ">=0.10.0"
+  },
+  "gitHead": "0a1d334fd1e55a47df97fcd60a7915d46df3b08a",
+  "license": "BSD-3-Clause",
+  "scripts": {
+    "toc": "doctoc --title '## Table of Contents' README.md && doctoc --title '## Table of Contents' CONTRIBUTING.md",
+    "test": "npm run build && node test/run-tests.js",
+    "build": "webpack --color"
+  },
+  "typings": "source-map.d.ts",
+  "_npmUser": {
+    "name": "7rulnik",
+    "email": "v7rulnik@gmail.com"
+  },
+  "homepage": "https://github.com/7rulnik/source-map-js",
+  "repository": {
+    "url": "git+https://github.com/7rulnik/source-map-js.git",
+    "type": "git"
+  },
+  "_npmVersion": "11.19.1",
+  "description": "Generates and consumes source maps",
+  "directories": {},
+  "maintainers": [
+    {
+      "name": "7rulnik",
+      "email": "v7rulnik@gmail.com"
+    }
+  ],
+  "_nodeVersion": "26.10.0",
+  "contributors": [
+    {
+      "name": "Nick Fitzgerald",
+      "email": "nfitzgerald@mozilla.com"
+    },
+    {
+      "name": "Tobias Koppers",
+      "email": "tobias.koppers@googlemail.com"
+    },
+    {
+      "name": "Duncan Beevers",
+      "email": "duncan@dweebd.com"
+    },
+    {
+      "name": "Stephen Crane",
+      "email": "scrane@mozilla.com"
+    },
+    {
+      "name": "Ryan Seddon",
+      "email": "seddon.ryan@gmail.com"
+    },
+    {
+      "name": "Miles Elam",
+      "email": "miles.elam@deem.com"
+    },
+    {
+      "name": "Mihai Bazon",
+      "email": "mihai.bazon@gmail.com"
+    },
+    {
+      "name": "Michael Ficarra",
+      "email": "github.public.email@michael.ficarra.me"
+    },
+    {
+      "name": "Todd Wolfson",
+      "email": "todd@twolfson.com"
+    },
+    {
+      "name": "Alexander Solovyov",
+      "email": "alexander@solovyov.net"
+    },
+    {
+      "name": "Felix Gnass",
+      "email": "fgnass@gmail.com"
+    },
+    {
+      "name": "Conrad Irwin",
+      "email": "conrad.irwin@gmail.com"
+    },
+    {
+      "name": "usrbincc",
+      "email": "usrbincc@yahoo.com"
+    },
+    {
+      "name": "David Glasser",
+      "email": "glasser@davidglasser.net"
+    },
+    {
+      "name": "Chase Douglas",
+      "email": "chase@newrelic.com"
+    },
+    {
+      "name": "Evan Wallace",
+      "email": "evan.exe@gmail.com"
+    },
+    {
+      "name": "Heather Arthur",
+      "email": "fayearthur@gmail.com"
+    },
+    {
+      "name": "Hugh Kennedy",
+      "email": "hughskennedy@gmail.com"
+    },
+    {
+      "name": "David Glasser",
+      "email": "glasser@davidglasser.net"
+    },
+    {
+      "name": "Simon Lydell",
+      "email": "simon.lydell@gmail.com"
+    },
+    {
+      "name": "Jmeas Smith",
+      "email": "jellyes2@gmail.com"
+    },
+    {
+      "name": "Michael Z Goddard",
+      "email": "mzgoddard@gmail.com"
+    },
+    {
+      "name": "azu",
+      "email": "azu@users.noreply.github.com"
+    },
+    {
+      "name": "John Gozde",
+      "email": "john@gozde.ca"
+    },
+    {
+      "name": "Adam Kirkton",
+      "email": "akirkton@truefitinnovation.com"
+    },
+    {
+      "name": "Chris Montgomery",
+      "email": "christopher.montgomery@dowjones.com"
+    },
+    {
+      "name": "J. Ryan Stinnett",
+      "email": "jryans@gmail.com"
+    },
+    {
+      "name": "Jack Herrington",
+      "email": "jherrington@walmartlabs.com"
+    },
+    {
+      "name": "Chris Truter",
+      "email": "jeffpalentine@gmail.com"
+    },
+    {
+      "name": "Daniel Espeset",
+      "email": "daniel@danielespeset.com"
+    },
+    {
+      "name": "Jamie Wong",
+      "email": "jamie.lf.wong@gmail.com"
+    },
+    {
+      "name": "Eddy Bruël",
+      "email": "ejpbruel@mozilla.com"
+    },
+    {
+      "name": "Hawken Rives",
+      "email": "hawkrives@gmail.com"
+    },
+    {
+      "name": "Gilad Peleg",
+      "email": "giladp007@gmail.com"
+    },
+    {
+      "name": "djchie",
+      "email": "djchie.dev@gmail.com"
+    },
+    {
+      "name": "Gary Ye",
+      "email": "garysye@gmail.com"
+    },
+    {
+      "name": "Nicolas Lalevée",
+      "email": "nicolas.lalevee@hibnet.org"
+    }
+  ],
+  "clean-publish": {
+    "cleanDocs": true
+  },
+  "_hasShrinkwrap": false,
+  "devDependencies": {
+    "doctoc": "^0.15.0",
+    "webpack": "^1.12.0",
+    "clean-publish": "^3.1.0"
+  },
+  "_npmOperationalInternal": {
+    "tmp": "tmp/source-map-js_1.2.2_1790777289305_0.2979430209810914",
+    "host": "s3://npm-registry-packages-npm-production"
+  },
+  "_id": "source-map-js@1.2.2",
+  "version": "1.2.2"
+}
