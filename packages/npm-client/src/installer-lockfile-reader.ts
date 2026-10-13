@@ -149,7 +149,6 @@ export function lockfileCovers(
     const hit = pinnedEntryForParent(lockfile, name, '');
     if (!hit) return null;
     const alias = parseNpmAlias(range);
-    if (alias && hit.entry.name !== alias.name) return null;
     if (!matchesRange(hit.entry.version, alias?.range ?? range)) return null;
     pinned.set(name, hit.entry.version);
   }

@@ -196,7 +196,10 @@ export function lockfileReuseDecision(
     throw new TypeError('Companion request does not match its registry-owned declaration');
   }
   const policyFrontier = override !== null || recipe !== null || companion;
-  if (!hit || (installName !== effectiveName && hit.entry.name !== effectiveName))
+  if (
+    !hit ||
+    (override !== null && installName !== effectiveName && hit.entry.name !== effectiveName)
+  )
     return {
       kind: 'miss',
       reason: 'missing-entry',

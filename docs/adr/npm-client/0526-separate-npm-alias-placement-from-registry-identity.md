@@ -50,3 +50,10 @@ Fresh highest-possible hoisting remains ADR-0042/0303's explicit limitation;
 compare visible identity at every edge, exact paths on native lock replay.
 Runtime getter-only `module.exports` in ansi-styles is a separate captured
 failure (`backlog/runtime-js/cjs-getter-only-module-exports`).
+
+## Corrections (active)
+
+2026-10-13 — ADR-0527 supersedes target-name mismatch → metadata repair and
+same-version wrong-target guard. Independent npm oracle keeps admitted names
+without named installation intent. Alias paths, target cache identities,
+range-less alias rules and rifty substitution extensions remain active.

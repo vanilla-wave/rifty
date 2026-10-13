@@ -97,5 +97,16 @@ Browser prerequisites: ms-negative reference-control PASS in real COI and
 packed no-COI through local npm proxy, no model invocation. Actual setup,
 trusted same-origin semantic judge and teardown succeeded; cloud not used.
 
+Source authority follow-up: real npm retained same-version targets on manifest-only
+alias↔plain/alias-target edits, including lock names it did not repair.
+[ADR-0527](../../../adr/npm-client/0527-retain-npm-alias-source-identity-until-named-install.md)
+partially supersedes ADR-0526 after independent DEC-2 probes. Replay preserves
+physical/recorded source identity; named install selects the new target, without
+borrowing another target checksum. Legacy dist.shasum verifies SHA-1; corrupt
+bytes/malformed sums reject.
+[Authority proof](../../npm-client/reference/pr341-npm-alias-source-authority-evidence.md):
+275 GREEN, restored isolated14 GREEN,6 guard reversions RED. Hash-free fresh LF
+SRI remains a recorded generic metadata divergence, not claimed exact.
+
 Fresh96 through corrected proxy: pending; existing historical scores are
 never a substitute. Cloud registry availability remains an execution constraint.

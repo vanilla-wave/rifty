@@ -88,5 +88,10 @@
     "name": "ansi-styles",
     "version": "4.3.0",
     "file": "ansi-styles-4.3.0"
+  },
+  {
+    "name": "ansi-regex",
+    "version": "3.0.0",
+    "file": "ansi-regex-3.0.0"
   }
 ]

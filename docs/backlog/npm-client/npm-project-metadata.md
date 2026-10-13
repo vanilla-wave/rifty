@@ -37,3 +37,12 @@ same metadata/empty-project item. Boundary: owned projection, not transport;
 no new coordination proposed. Factual capture; no premise direction or user fork.
 
 Final check2026-09-30: independent PASS at e631e4444; native probes rerun, frozen rifty source/output verified; no findings.
+
+## Hash-free metadata evidence
+
+2026-10-13, ADR-0527: original ansi-regex3.0.0 served with no `dist.integrity`
+or `dist.shasum`; explicit native npm11.17 installation writes no lock SRI,
+rifty’s established installer computes/persists SHA-512 for cache replay.
+Target/resolved/archive bytes and installed files match; no exact unsigned
+fresh-lock claim. Carrier: `tests/integration/npm-alias.parity.test.ts`,
+`npm-client/reference/pr341-npm-alias-source-authority-evidence.md`.

@@ -15,6 +15,8 @@ import {
 import { install } from '../../packages/npm-client/src/installer.ts';
 import type { Lockfile } from '../../packages/npm-client/src/linker.ts';
 import { RegistryClient, type VersionManifest } from '../../packages/npm-client/src/registry.ts';
+import { VfsTarballCache } from '../../packages/npm-client/src/tarball-cache.ts';
+import { extractTarGz } from '../../packages/npm-client/src/unpacker.ts';
 import { createModuleLoader } from '../../packages/runtime-js/src/module-loader/index.ts';
 import { resolveBundle } from '../../services/eddy/src/resolver.ts';
 
@@ -39,7 +41,12 @@ const packages = await Promise.all(
   }),
 );
 
-async function withRegistry(run: (url: string, requests: string[]) => Promise<void>) {
+async function withRegistry(
+  run: (url: string, requests: string[]) => Promise<void>,
+  omitIntegrityFor?: string,
+  omitShasum = false,
+  fault?: 'corrupt-tarball' | 'malformed-shasum',
+) {
   const requests: string[] = [];
   let baseUrl = '';
   const server = createServer((req, res) => {
@@ -49,7 +56,14 @@ async function withRegistry(run: (url: string, requests: string[]) => Promise<vo
       ({ manifest }) => new URL(manifest.dist.tarball).pathname === pathname,
     );
     if (archive) {
-      res.end(archive.bytes);
+      const bytes = new Uint8Array(archive.bytes);
+      if (
+        fault === 'corrupt-tarball' &&
+        archive.manifest.name === 'ansi-regex' &&
+        archive.manifest.version === '3.0.0'
+      )
+        bytes[4] ^= 1;
+      res.end(bytes);
       return;
     }
     const versions = packages.filter(({ manifest }) => `/${manifest.name}` === pathname);
@@ -70,6 +84,16 @@ async function withRegistry(run: (url: string, requests: string[]) => Promise<vo
               ...manifest,
               dist: {
                 ...manifest.dist,
+                ...(omitIntegrityFor === `${manifest.name}@${manifest.version}`
+                  ? {
+                      integrity: undefined,
+                      ...(omitShasum
+                        ? { shasum: undefined }
+                        : fault === 'malformed-shasum'
+                          ? { shasum: 'not-a-sha1' }
+                          : {}),
+                    }
+                  : {}),
                 tarball: baseUrl + new URL(manifest.dist.tarball).pathname,
               },
             },
@@ -95,12 +119,13 @@ async function withRegistry(run: (url: string, requests: string[]) => Promise<vo
   }
 }
 
-async function npmInstall(dir: string, url: string) {
+async function npmInstall(dir: string, url: string, args: readonly string[] = []) {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(
       'npm',
       [
         'install',
+        ...args,
         '--ignore-scripts',
         '--no-audit',
         '--no-fund',
@@ -298,28 +323,269 @@ describe('npm alias identity faults', () => {
     }));
 
   it(
-    '[fault: poisoned-cache] repairs a retained same-version alias with the wrong target identity',
+    '[fault: provenance-lie] native no-args retains an admitted lock name (ADR-0527 supersedes the repair assumption)',
     async () =>
       withRegistry(async (url, requests) => {
+        const state = await prepareRetainedAlias(url, 'npm:string-width@4.2.3');
+        try {
+          state.native.packages['node_modules/root-alias']!.name = 'wrong-target';
+          await writeFile(join(state.dir, 'package-lock.json'), JSON.stringify(state.native));
+          requests.length = 0;
+          const native = await npmInstall(state.dir, url);
+          expect(requests).toEqual([]);
+          expect(native.packages['node_modules/root-alias']!.name).toBe('wrong-target');
+          await state.vfs.writeFile('/project/package-lock.json', JSON.stringify(state.native));
+          requests.length = 0;
+          const actual = await install({
+            vfs: state.vfs,
+            cwd: '/project',
+            registry: state.registry,
+          });
+          expect(actual.lockfile.packages['node_modules/root-alias']!.name).toBe(
+            native.packages['node_modules/root-alias']!.name,
+          );
+          expect(requests.filter((path) => !path.endsWith('.tgz'))).toEqual([]);
+          expect(
+            await state.vfs.readFileText('/project/node_modules/root-alias/package.json'),
+          ).toBe(await readFile(join(state.dir, 'node_modules/root-alias/package.json'), 'utf8'));
+          const replay = await install({ vfs: state.vfs, cwd: '/project' });
+          expect(replay.lockfile).toEqual(actual.lockfile);
+        } finally {
+          await rm(state.dir, { recursive: true, force: true });
+        }
+      }),
+    60000,
+  );
+});
+
+async function prepareRetainedAlias(url: string, spec: string, name = 'root-alias') {
+  const dir = await mkdtemp(join(tmpdir(), 'rifty-alias-retention-'));
+  const manifest = {
+    name: 'retained-alias',
+    version: '1.0.0',
+    dependencies: { [name]: spec },
+  };
+  await writeFile(join(dir, 'package.json'), JSON.stringify(manifest));
+  const native = await npmInstall(dir, url);
+  const { vfs } = createMemoryFs();
+  await vfs.mkdir('/project', { recursive: true });
+  await vfs.writeFile('/project/package.json', JSON.stringify(manifest));
+  await vfs.writeFile('/project/package-lock.json', JSON.stringify(native));
+  const registry = new RegistryClient({ baseUrl: url, maxRetries: 0 });
+  await install({ vfs, cwd: '/project', registry });
+  return { dir, manifest, native, vfs, registry };
+}
+
+const retainedAliasChanges = [
+  {
+    name: 'root-alias',
+    id: 'alias to plain same-version spec',
+    before: 'npm:string-width@4.2.3',
+    after: '4.2.3',
+  },
+  {
+    name: 'root-alias',
+    id: 'alias to another target at the same version',
+    before: 'npm:is-fullwidth-code-point@3.0.0',
+    after: 'npm:ansi-regex@3.0.0',
+  },
+  {
+    name: 'is-fullwidth-code-point',
+    id: 'plain to alias at the same version',
+    before: '3.0.0',
+    after: 'npm:ansi-regex@3.0.0',
+  },
+] as const;
+
+describe('retained npm alias source authority', () => {
+  it.each(retainedAliasChanges)(
+    '[fault: poisoned-cache / provenance-lie] native no-args retains $id and replays offline',
+    async (scenario) =>
+      withRegistry(async (url, requests) => {
+        const state = await prepareRetainedAlias(url, scenario.before, scenario.name);
+        try {
+          const manifest = { ...state.manifest, dependencies: { [scenario.name]: scenario.after } };
+          await writeFile(join(state.dir, 'package.json'), JSON.stringify(manifest));
+          await state.vfs.writeFile('/project/package.json', JSON.stringify(manifest));
+          requests.length = 0;
+          const native = await npmInstall(state.dir, url);
+          expect(requests).toEqual([]);
+          const retained = native.packages[`node_modules/${scenario.name}`]!;
+          expect(retained).toEqual(state.native.packages[`node_modules/${scenario.name}`]);
+          const actual = await install({ vfs: state.vfs, cwd: '/project' });
+          const actualEntry = actual.lockfile.packages[`node_modules/${scenario.name}`]!;
+          expect(actualEntry.name).toBe(retained.name);
+          expect(Object.hasOwn(actualEntry, 'name')).toBe(Object.hasOwn(retained, 'name'));
+          expect(actualEntry).toMatchObject({
+            version: retained.version,
+            resolved: retained.resolved,
+            integrity: retained.integrity,
+          });
+          expect(
+            await state.vfs.readFileText(`/project/node_modules/${scenario.name}/package.json`),
+          ).toBe(
+            await readFile(join(state.dir, `node_modules/${scenario.name}/package.json`), 'utf8'),
+          );
+          expect(requests).toEqual([]);
+          expect(
+            bundleCompletenessGap(
+              actual.lockfile,
+              manifest.dependencies,
+              Object.entries(actual.lockfile.packages)
+                .filter(([path]) => path)
+                .map(([path, entry]) => ({
+                  name: entry.name ?? path.slice(path.lastIndexOf('node_modules/') + 13),
+                  version: entry.version,
+                  integrity: entry.integrity!,
+                })),
+            ),
+          ).toBeNull();
+        } finally {
+          await rm(state.dir, { recursive: true, force: true });
+        }
+      }),
+    60000,
+  );
+
+  it.each([false, true])(
+    '[fault: poisoned-cache] explicit install selects a new same-version target without dist.integrity (omit shasum: %s)',
+    async (omitShasum) =>
+      withRegistry(
+        async (url, requests) => {
+          const state = await prepareRetainedAlias(url, 'npm:is-fullwidth-code-point@3.0.0');
+          try {
+            const manifest = {
+              ...state.manifest,
+              dependencies: { 'root-alias': 'npm:ansi-regex@3.0.0' },
+            };
+            await writeFile(join(state.dir, 'package.json'), JSON.stringify(manifest));
+            await state.vfs.writeFile('/project/package.json', JSON.stringify(manifest));
+            const native = await npmInstall(state.dir, url, ['root-alias@npm:ansi-regex@3.0.0']);
+            const selected = native.packages['node_modules/root-alias']!;
+            expect(selected.name).toBe('ansi-regex');
+            expect(selected.version).toBe('3.0.0');
+            expect(selected.integrity).not.toBe(
+              state.native.packages['node_modules/root-alias']!.integrity,
+            );
+            requests.length = 0;
+            const actual = await install({
+              vfs: state.vfs,
+              cwd: '/project',
+              registry: state.registry,
+              updateNames: ['root-alias'],
+            });
+            expect(actual.lockfile.packages['node_modules/root-alias']).toMatchObject({
+              name: selected.name,
+              version: selected.version,
+              resolved: selected.resolved,
+              // npm omits SRI with no hashes; rifty's established default records a computed proof.
+              integrity:
+                selected.integrity ??
+                `sha512-${createHash('sha512')
+                  .update(
+                    packages.find(
+                      ({ manifest }) =>
+                        manifest.name === 'ansi-regex' && manifest.version === '3.0.0',
+                    )!.bytes,
+                  )
+                  .digest('base64')}`,
+            });
+            expect(
+              await state.vfs.readFileText('/project/node_modules/root-alias/package.json'),
+            ).toBe(await readFile(join(state.dir, 'node_modules/root-alias/package.json'), 'utf8'));
+            const archive = packages.find(
+              ({ manifest }) => manifest.name === 'ansi-regex' && manifest.version === '3.0.0',
+            )!.bytes;
+            const integrity = actual.lockfile.packages['node_modules/root-alias']!.integrity!;
+            expect(
+              await new VfsTarballCache(state.vfs).get('ansi-regex', '3.0.0', integrity),
+            ).toEqual(new Uint8Array(archive));
+            for (const [path, bytes] of Object.entries(await extractTarGz(archive))) {
+              expect(await state.vfs.readFile(`/project/node_modules/root-alias/${path}`)).toEqual(
+                new Uint8Array(await readFile(join(state.dir, 'node_modules/root-alias', path))),
+              );
+              expect(await state.vfs.readFile(`/project/node_modules/root-alias/${path}`)).toEqual(
+                bytes,
+              );
+            }
+            expect(requests).toContain('/ansi-regex');
+            const replay = await install({ vfs: state.vfs, cwd: '/project' });
+            expect(replay.lockfile).toEqual(actual.lockfile);
+          } finally {
+            await rm(state.dir, { recursive: true, force: true });
+          }
+        },
+        'ansi-regex@3.0.0',
+        omitShasum,
+      ),
+    60000,
+  );
+});
+
+describe('legacy metadata SHA-1 authority', () => {
+  it(
+    '[fault: corrupt-input] rejects altered real archive bytes against declared shasum before publication',
+    async () =>
+      withRegistry(
+        async (url, requests) => {
+          const dir = await mkdtemp(join(tmpdir(), 'rifty-alias-corrupt-'));
+          const manifest = {
+            name: 'corrupt-alias',
+            version: '1.0.0',
+            dependencies: { alias: 'npm:ansi-regex@3.0.0' },
+          };
+          try {
+            await writeFile(join(dir, 'package.json'), JSON.stringify(manifest));
+            await expect(npmInstall(dir, url, ['--fetch-retries=0'])).rejects.toThrow('EINTEGRITY');
+            const { vfs } = createMemoryFs();
+            await vfs.mkdir('/project', { recursive: true });
+            await vfs.writeFile('/project/package.json', JSON.stringify(manifest));
+            requests.length = 0;
+            await expect(
+              install({
+                vfs,
+                cwd: '/project',
+                registry: new RegistryClient({ baseUrl: url, maxRetries: 0 }),
+              }),
+            ).rejects.toMatchObject({ code: 'EINTEGRITY' });
+            expect(await vfs.exists('/project/package-lock.json')).toBe(false);
+            expect(await vfs.exists('/project/node_modules/alias')).toBe(false);
+          } finally {
+            await rm(dir, { recursive: true, force: true });
+          }
+        },
+        'ansi-regex@3.0.0',
+        false,
+        'corrupt-tarball',
+      ),
+    60000,
+  );
+
+  it('[fault: corrupt-input / observable-order] malformed declared shasum fails before tarball acquisition', async () =>
+    withRegistry(
+      async (url, requests) => {
         const { vfs } = createMemoryFs();
         await vfs.mkdir('/project', { recursive: true });
         await vfs.writeFile(
           '/project/package.json',
           JSON.stringify({
-            name: 'root',
+            name: 'invalid-shasum',
             version: '1.0.0',
-            dependencies: { alias: 'npm:string-width@4.2.3' },
+            dependencies: { alias: 'npm:ansi-regex@3.0.0' },
           }),
         );
-        const registry = new RegistryClient({ baseUrl: url, maxRetries: 0 });
-        const first = await install({ vfs, cwd: '/project', registry });
-        first.lockfile.packages['node_modules/alias']!.name = 'wrong-target';
-        await vfs.writeFile('/project/package-lock.json', JSON.stringify(first.lockfile));
-        requests.length = 0;
-        const repaired = await install({ vfs, cwd: '/project', registry });
-        expect(repaired.lockfile.packages['node_modules/alias']?.name).toBe('string-width');
-        expect(requests).toContain('/string-width');
-      }),
-    60000,
-  );
+        await expect(
+          install({
+            vfs,
+            cwd: '/project',
+            registry: new RegistryClient({ baseUrl: url, maxRetries: 0 }),
+          }),
+        ).rejects.toThrow('Invalid SHA-1 shasum');
+        expect(requests.filter((path) => path.endsWith('.tgz'))).toEqual([]);
+        expect(await vfs.exists('/project/package-lock.json')).toBe(false);
+      },
+      'ansi-regex@3.0.0',
+      false,
+      'malformed-shasum',
+    ));
 });

@@ -39,7 +39,7 @@ import {
   syntheticResolvedIdentity,
 } from './internal/shadow/substitution.ts';
 import type { Lockfile } from './linker.ts';
-import type { Packument } from './registry.ts';
+import type { Packument, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
 import { resolveEffectivePackageRequest } from './shadow-shims.ts';
 import { Semaphore } from './utils/semaphore.ts';
@@ -158,8 +158,9 @@ function createLockfileSource(
         installName = effectiveName,
       } = resolveEffectivePackageRequest(name, range, ctx.parentName, opts.overrides);
       const hit = pinnedEntryForParent(lockfile, installName, ctx.parentLockfilePath);
+      const registryName = hit?.entry.name ?? installName;
       if (hit && typeof hit.entry.version === 'string')
-        onSelection?.({ name: effectiveName, version: hit.entry.version });
+        onSelection?.({ name: registryName, version: hit.entry.version });
       // Recorded-pin admission fact (ADR-0361); absent entry keeps the
       // request-shape throw ahead of the missing-entry EBROKENLOCK below.
       const recipe = builtinRecipeForRequest(
@@ -213,7 +214,7 @@ function createLockfileSource(
       );
       const cpu = lockfileStringArray(entry.cpu, 'cpu', effectiveName, installPath);
       const os = lockfileStringArray(entry.os, 'os', effectiveName, installPath);
-      if (!override) assertNativeSupported(effectiveName, entry.version, { cpu, os }, installPath);
+      if (!override) assertNativeSupported(registryName, entry.version, { cpu, os }, installPath);
       // Override redirected to a target NAME the lockfile pins, but a moved
       // override RANGE (e.g. the baked table bumps, or a user edits `overrides`)
       // can leave the locked version stale. The live-resolve source would pick a
@@ -273,7 +274,7 @@ function createLockfileSource(
       return {
         origin: 'lockfile',
         name: installName,
-        ...(installName === effectiveName ? {} : { registryName: effectiveName }),
+        ...(installName === registryName ? {} : { registryName }),
         version: entry.version,
         resolved: entry.resolved ?? syntheticResolvedIdentity(synthetic!),
         integrity: entry.integrity,
@@ -463,11 +464,16 @@ function createRegistrySource(
       // Prefer the manifest's integrity; fall back to the lockfile entry's so a
       // partial re-resolve still serves unchanged transitive deps from cache.
       // Neither present → `fetchAndUnpackToCache` computes it from the bytes.
-      let expectedIntegrity = manifest.dist.integrity;
+      let expectedIntegrity = manifestIntegrity(manifest, effectiveName);
       if (!expectedIntegrity) {
         const lf = await ensureLockfileLoaded();
         const pinned = lf?.packages[`node_modules/${installName}`];
-        if (pinned && pinned.version === pick && pinned.integrity) {
+        if (
+          pinned &&
+          (pinned.name ?? installName) === effectiveName &&
+          pinned.version === pick &&
+          pinned.integrity
+        ) {
           expectedIntegrity = pinned.integrity;
         }
       }
@@ -516,4 +522,16 @@ function createRegistrySource(
       };
     },
   };
+}
+
+/** npm metadata's SHA-1 shasum is an acquisition proof when SRI is absent. */
+function manifestIntegrity(manifest: VersionManifest, name: string): string | undefined {
+  if (manifest.dist.integrity !== undefined) return manifest.dist.integrity;
+  const shasum = manifest.dist.shasum;
+  if (shasum === undefined) return undefined;
+  if (typeof shasum !== 'string' || !/^[a-f\d]{40}$/i.test(shasum)) {
+    throw new TypeError(`Invalid SHA-1 shasum for ${name}@${manifest.version}`);
+  }
+  const bytes = Uint8Array.from(shasum.match(/../g)!, (pair) => Number.parseInt(pair, 16));
+  return `sha1-${btoa(String.fromCharCode(...bytes))}`;
 }
