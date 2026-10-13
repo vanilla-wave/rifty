@@ -30,7 +30,7 @@ Suite moved to `tests/integration` because acceptance exercises cross-package
 runtime/Eddy code; no source-package TypeScript root expansion.
 
 Final `pnpm exec vitest run tests/integration/npm-alias.parity.test.ts packages/npm-client/src/overrides-npm-value.contract.test.ts services/eddy/tests/resolver.test.ts`:
-3 files, 85 tests PASS; alias suite 6 PASS. Native oracle rebuilt for every
+3 files, 85 tests PASS; alias suite initially6 PASS; final range-less carrier7 PASS. Native oracle rebuilt for every
 scenario; compares every dependent's visible version/resolved/integrity/name,
 original manifest bytes, exact native-lock paths, offline replay, CJS
 string-width/strip-ansi output, alias module-instance identity. Covers root,
@@ -86,3 +86,11 @@ ansi-styles4.3.0; ordinary ansi-styles import without installer/alias reproduces
 it. Draft/probe: `runtime-js/cjs-getter-only-module-exports`; setup install
 contract does not require wrap-ansi execution. Non-registry/lifecycle/native
 ceilings remain explicit. Parent owns independent final review/full PR gate.
+
+## Independent coverage follow-up
+
+Reviewer C1: preserving the original range for a range-less npm alias override
+passed78 existing tests. Added real npm scenario: cliui strip-ansi-cjs edge
+requests ^6, override npm:string-width (fixture has4/5, no6). Native npm and
+current Rifty select target default;7 integration tests GREEN. Same reviewer
+mutant RED: `No matching version for string-width@^6.0.1`. Product code unchanged.

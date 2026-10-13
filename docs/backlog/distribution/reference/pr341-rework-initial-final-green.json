@@ -1,0 +1,329 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Source/setup/lifecycle correction slice accepted with advisory C1; continue fresh96 measurement in same PR341, do not claim campaign complete.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "bfb262163abc90a99cb64f803e3981867eb542a4",
+  "unit_goal_source": "PR341 observed repair baseline 1de162d194a52d68940f3dd64c0343068d68362a..bfb262163abc90a99cb64f803e3981867eb542a4; raw authority /tmp/pr341/handoff-pr341-rework.md items1–3,5, same-PR implementation authorization and unavailable-cloud try-without amendment; scope source/setup/lifecycle plus historical-measurement correction in docs/backlog/distribution/reference/agent-eval-pr341-rework.md. Fresh96/conditional judges are next measurement slice. ADR-0526 and accepted ADR-0042/0303/0346/0451 baseline limits applied. All changed production/tests/docs inspected; earlier accepted133 commits not reopened. PR-4: BASE has no alias parity carrier and historical report authority claimed clean accepted eval-v16; HEAD adds guards without removing assertions/gates, keeps original report/source gzip bytes unchanged and appends explicit confound qualification. Fresh edge identity versus exact native-lock paths follows existing ADR-0042/0303 exclusion rather than weakened alias defect assertion. Raw sidecar all96 rows/hash/counts recomputed independently; original571parallel/571empty,317single/0empty confirmed; 566result errors kept separate. Historical base/current regenerated reports and summaries byte-identical, v16 statistics byte-identical. Native npm original archive oracle/read-only Chromium fault probes 5files56tests PASS13.68s /tmp/pr341/source-review-probes.log; independent baseline SHA-1 revert1RED /tmp/pr341/source-review-sha1-red.log and request-shaping revert5RED /tmp/pr341/source-review-alias-red.log. Provided committed pr:check raw log27/27 PASS inspected /tmp/pr341/rework-prcheck-committed.log; real no-cloud COI ms-negative reference-control report completed/PASS inspected /tmp/pr341/browser-preflight-ms-negative/report.json. Existing ordinary snapshot-cache exclusion and getter-only module.exports/maximum fresh hoisting ceilings explicitly preserved; no CLI-total-execution claim.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "Handoff §Что делать item4: fresh frozen eval-v16 8tasks×4lanes×3 cold attempts via corrected proxy; retain/classify every attempt and evidence.",
+      "location": "docs/backlog/distribution/reference/agent-eval-pr341-rerun-protocol.md:1",
+      "summary": "Fresh96 clean comparison still pending. No-cloud browser preflight and install/protocol probes prove prerequisites only; transport difference and any failed preflight must remain explicit."
+    },
+    {
+      "clause": "Handoff §Что делать items5–6: conclusions/new reference after clean run; inspect booking/expense judge only if fresh native Codex still0/3.",
+      "location": "docs/backlog/distribution/reference/agent-eval-pr341-rework.md:95",
+      "summary": "Freeze new evidence and update comparison conclusions; then evaluate conditional booking/expense follow-up. Historical scores and shared prior failures cannot close this obligation."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Legacy supplied SHA-1 locks install through real npm-client and agree with real npm.",
+      "source": "acceptance",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md §Что делать item1; observed eval-v16 setup baseline",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-sha1.parity.test.ts:18",
+      "note": ""
+    },
+    {
+      "row": "SHA-1 cache reads reject corrupt bytes; corrupted network bytes fail EINTEGRITY in npm and Rifty.",
+      "source": "acceptance",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md §Что делать item1; AGENTS.md §Fidelity reference behavior",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-sha1.parity.test.ts:82",
+      "note": ""
+    },
+    {
+      "row": "Eddy process-private cache admits only verified SHA-1 bytes.",
+      "source": "acceptance",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md §Что делать item1; existing verified-cache baseline",
+      "status": "pass",
+      "citation": "services/eddy/tests/shared-caches.test.ts:467",
+      "note": ""
+    },
+    {
+      "row": "Public install preserves root, transitive, scoped npm alias paths and target identities.",
+      "source": "public-api",
+      "trace": "ADR-0526:16–28 + /tmp/pr341/handoff-pr341-rework.md §Что делать item2",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:155",
+      "note": ""
+    },
+    {
+      "row": "Case-insensitive aliases, omitted target range and dist-tags resolve against target registry metadata.",
+      "source": "acceptance",
+      "trace": "ADR-0526:18",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:131",
+      "note": ""
+    },
+    {
+      "row": "npm alias override preserves edge install path and chooses target identity.",
+      "source": "acceptance",
+      "trace": "ADR-0526:28",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:149",
+      "note": ""
+    },
+    {
+      "row": "Range-less npm override uses * independently of original edge range.",
+      "source": "acceptance",
+      "trace": "ADR-0526:30",
+      "status": "weak",
+      "citation": "tests/integration/npm-alias.parity.test.ts:149",
+      "note": "Finding C1: committed 78-test carrier survives restoring null range for range-less overrides; current implementation correct in direct probe, regression guard skips *."
+    },
+    {
+      "row": "Native-lock replay preserves exact paths/entries; fresh placement compares visible identity at every dependency edge.",
+      "source": "acceptance",
+      "trace": "ADR-0526:49 + ADR-0042 + ADR-0303",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:182",
+      "note": ""
+    },
+    {
+      "row": "Alias target manifest bytes remain original; aliases retain separate module instances from each other and real target.",
+      "source": "acceptance",
+      "trace": "ADR-0526:16–18,37–39",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:200",
+      "note": ""
+    },
+    {
+      "row": "Repeated alias install replays offline cache with zero registry requests.",
+      "source": "acceptance",
+      "trace": "ADR-0526:45–46",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:240",
+      "note": ""
+    },
+    {
+      "row": "Original vendored npm archives match frozen SRI before native/Rifty use.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0526:15 + AGENTS.md §Fidelity real tarballs",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:32",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input: Invalid non-registry alias target throws before HTTP.",
+      "source": "fault-matrix",
+      "trace": "docs/backlog/npm-client/reference/pr341-npm-alias-repair-evidence.md §Fault matrix → ADR-0526",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:280",
+      "note": ""
+    },
+    {
+      "row": "poisoned-cache: Wrong retained target cannot reuse same-version alias pin.",
+      "source": "fault-matrix",
+      "trace": "docs/backlog/npm-client/reference/pr341-npm-alias-repair-evidence.md §Fault matrix → ADR-0526",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:297",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie: Eddy completeness and tarball harvest use actual canonical target identity.",
+      "source": "fault-matrix",
+      "trace": "docs/backlog/npm-client/reference/pr341-npm-alias-repair-evidence.md §Fault matrix → ADR-0526",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:255",
+      "note": ""
+    },
+    {
+      "row": "observable-order: Invalid root alias admission precedes metadata/tarball calls.",
+      "source": "fault-matrix",
+      "trace": "docs/backlog/npm-client/reference/pr341-npm-alias-repair-evidence.md §Fault matrix → ADR-0526",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:280",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift: Shared request authority governs live/native-lock/offline/Eddy paths.",
+      "source": "fault-matrix",
+      "trace": "docs/backlog/npm-client/reference/pr341-npm-alias-repair-evidence.md §Fault matrix → ADR-0526",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:155",
+      "note": ""
+    },
+    {
+      "row": "frozen-assumption: Native npm oracle rebuilds each scenario against integrity-verified original archives.",
+      "source": "fault-matrix",
+      "trace": "docs/backlog/npm-client/reference/pr341-npm-alias-repair-evidence.md §Fault matrix → ADR-0526",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:165",
+      "note": ""
+    },
+    {
+      "row": "lossy-aggregate: Distinct aliases preserve module identity while Eddy deduplicates canonical target tarballs.",
+      "source": "fault-matrix",
+      "trace": "docs/backlog/npm-client/reference/pr341-npm-alias-repair-evidence.md §Fault matrix → ADR-0526",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:236",
+      "note": ""
+    },
+    {
+      "row": "unbounded-read: Excluded at pure finite string shaping boundary; no stream/progress loop.",
+      "source": "fault-matrix",
+      "trace": "docs/backlog/npm-client/reference/pr341-npm-alias-repair-evidence.md §Fault matrix → ADR-0526",
+      "status": "pass",
+      "citation": "packages/npm-client/src/npm-alias.ts:4",
+      "note": ""
+    },
+    {
+      "row": "torn-state: Excluded at shaping boundary constructing request value; existing cache/write owners unchanged.",
+      "source": "fault-matrix",
+      "trace": "docs/backlog/npm-client/reference/pr341-npm-alias-repair-evidence.md §Fault matrix → ADR-0526",
+      "status": "pass",
+      "citation": "packages/npm-client/src/shadow-shims.ts:60",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key: Excluded at synchronous pure request shaping; no shared writer introduced.",
+      "source": "fault-matrix",
+      "trace": "docs/backlog/npm-client/reference/pr341-npm-alias-repair-evidence.md §Fault matrix → ADR-0526",
+      "status": "pass",
+      "citation": "packages/npm-client/src/shadow-shims.ts:60",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail: Excluded at shaping boundary with no persistence; existing I/O owners retain loud errors.",
+      "source": "fault-matrix",
+      "trace": "docs/backlog/npm-client/reference/pr341-npm-alias-repair-evidence.md §Fault matrix → ADR-0526",
+      "status": "pass",
+      "citation": "packages/npm-client/src/npm-alias.ts:4",
+      "note": ""
+    },
+    {
+      "row": "false-fallback: Retained wrong target selects real metadata rather than wrong pin.",
+      "source": "fault-matrix",
+      "trace": "docs/backlog/npm-client/reference/pr341-npm-alias-repair-evidence.md §Fault matrix → ADR-0526",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:297",
+      "note": ""
+    },
+    {
+      "row": "Public SHA-1 IntegrityAlgorithm/parseIntegrityAlgorithm/computeIntegrity honor supplied SRI while default remains sha512.",
+      "source": "public-api",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md §Что делать item1; exported npm-client cache baseline",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-sha1.parity.test.ts:77",
+      "note": ""
+    },
+    {
+      "row": "Real SIGINT/SIGTERM during setup/judge retains started row and raw failure evidence.",
+      "source": "acceptance",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md §Что делать item3; observed runner baseline failure",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/lifecycle.fault.test.ts:14",
+      "note": ""
+    },
+    {
+      "row": "Interrupted rows omit completedAt, retain interruptedAt and are excluded from completed outcomes/quality estimates.",
+      "source": "acceptance",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md §Что делать item3 + baseline statistics fixed selected matrix",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/lifecycle.fault.test.ts:63",
+      "note": ""
+    },
+    {
+      "row": "Completed PASS survives signal during cleanup with completedAt and valid completed statistics.",
+      "source": "acceptance",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md §Что делать item3 + existing completed-outcome baseline",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/lifecycle.fault.test.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Rejected context.close reaps real preview child during normal close and failed setup.",
+      "source": "acceptance",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md §Что делать item3; observed native lifecycle baseline failure",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/lifecycle.fault.test.ts:135",
+      "note": ""
+    },
+    {
+      "row": "Historical eval-v16 report/scores/source/traces stay immutable; corrections separate diagnostics and requalify claims.",
+      "source": "frozen-artifact",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md §Что делать items4–5",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-pr341-rework.md:3",
+      "note": ""
+    },
+    {
+      "row": "All96 diagnostic rows bind original outcomes/stages/trace hashes, preserve 566 result errors versus 571 transcript calls.",
+      "source": "frozen-artifact",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md §Что делать item5; original report/source-trace baseline",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-pr341-rework.md:8",
+      "note": ""
+    },
+    {
+      "row": "External fixed proxy proves four parallel calls with four nonempty JSON arguments; does not claim completed campaign.",
+      "source": "acceptance",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md §Что делать items4–5; external proxy observed baseline",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-pr341-rework.md:35",
+      "note": ""
+    },
+    {
+      "row": "Ordinary registry aliases do not expand portable snapshot cache closure; shadow cache uses attested acquisition names.",
+      "source": "acceptance",
+      "trace": "ADR-0346 existing snapshot exclusion + ADR-0526 acquisition identity",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot.test.ts:268",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/integration/npm-alias.parity.test.ts:149",
+          "evidence": "C1: /tmp scratch overrides.ts mutation returns range:null when parseNpmAlias(...).range is *; node <reviewed-worktree>/node_modules/vitest/vitest.mjs run tests/integration/npm-alias.parity.test.ts packages/npm-client/src/overrides-npm-value.contract.test.ts → 78/78 PASS (/tmp/pr341/source-review-rangeless-mutant.log). Direct node --import tsx probe resolveEffectivePackageRequest(vite,^8.0.0,undefined,{vite:npm:string-width}) → mutant effectiveRange ^8.0.0, current effectiveRange *; violates ADR-0526:30 only in mutant. Current extra native range-less override scenario also passes (/tmp/pr341/source-review-rangeless-override.log).",
+          "summary": "C1: Weak regression guard for range-less npm overrides: exact override integration plus existing contract skip the promised * range; stale contract comment still claims old divergence. Current source correct; advisory REV-4, not product blocker.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

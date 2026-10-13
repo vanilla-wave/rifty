@@ -87,10 +87,15 @@ bytes identical; oldest report657,228/summary20,667 identical. Original gzip
 untouched. Native lifecycle fault model recorded
 in docs/process/rules/fault-classes.md.
 Aliases: [real npm proof](../../npm-client/reference/pr341-npm-alias-repair-evidence.md),
-85 GREEN plus four isolated RED revert checks. Original archive SRI verified;
+85 GREEN plus four isolated RED revert checks; additional native range-less
+override carrier7 GREEN and reviewer mutant RED. Original archive SRI verified;
 root/transitive/scoped/override paths, target identities and Eddy harvest/replay.
 Separate existing getter-only module.exports failure explicitly captured;
 registry install acceptance does not claim every installed CLI executes.
+
+Browser prerequisites: ms-negative reference-control PASS in real COI and
+packed no-COI through local npm proxy, no model invocation. Actual setup,
+trusted same-origin semantic judge and teardown succeeded; cloud not used.
 
 Fresh96 through corrected proxy: pending; existing historical scores are
 never a substitute. Cloud registry availability remains an execution constraint.

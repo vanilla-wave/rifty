@@ -150,6 +150,12 @@ const scenarios = [
     dependencies: { '@isaacs/cliui': '8.0.2' },
     overrides: { 'strip-ansi-cjs': 'npm:strip-ansi@6.0.1' },
   },
+  {
+    id: 'range-less alias override ignores the original edge range',
+    dependencies: { '@isaacs/cliui': '8.0.2' },
+    // cliui's strip-ansi alias requests ^6; string-width has no matching 6.x.
+    overrides: { 'strip-ansi-cjs': 'npm:string-width' },
+  },
 ] as const;
 
 describe('npm aliases — real npm against original tarballs over localhost', () => {
