@@ -9,6 +9,7 @@
  * `react-vite.test.ts`. Source split by file group (app / pages / components /
  * data / styles / project files) to stay inside `pnpm check:file-size`.
  */
+import { DEFAULT_VITE7_VERSION } from '../../vite-project-policy.ts';
 import type { ViteProjectSpec } from '../project-spec.ts';
 import { APP_TSX, MAIN_TSX } from './app.ts';
 import { FILTER_BAR_TSX, ISSUE_CARD_TSX, STATUS_BADGE_TSX } from './components.ts';
@@ -34,7 +35,7 @@ export const REACT_VITE_TEMPLATE: ViteProjectSpec = {
     '@types/react-dom': '^19.0.0',
     '@vitejs/plugin-react': '^5.0.0',
     typescript: '^5.0.0',
-    vite: '^7.0.0',
+    vite: DEFAULT_VITE7_VERSION,
   },
   // Standard portable scripts on top of the lifecycle-owned dev aliases.
   scripts: {

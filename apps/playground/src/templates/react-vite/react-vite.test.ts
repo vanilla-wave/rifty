@@ -34,14 +34,14 @@ describe('react-vite template portability', () => {
       'react-dom': '^19.0.0',
       'react-router-dom': '^7.0.0',
     });
-    // exact ranges: the contract pins Vite ^7 + plugin-react 5 (Fast Refresh
+    // Vite uses the exact admitted esbuild consumer; plugin-react stays 5 (Fast Refresh
     // evidence exists only there — Vite 8 HMR stays disabled, ADR-0161/0317)
     expect(pkg.devDependencies).toEqual({
       '@types/react': '^19.0.0',
       '@types/react-dom': '^19.0.0',
       '@vitejs/plugin-react': '^5.0.0',
       typescript: '^5.0.0',
-      vite: '^7.0.0',
+      vite: '7.3.6',
     });
   });
 
