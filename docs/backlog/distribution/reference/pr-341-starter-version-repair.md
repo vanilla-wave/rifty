@@ -44,3 +44,9 @@ without retries (2.0m):coldinstall/deeplink,dev/HMR,build/preview,+chat,leafedit
 Current fullpr:check27PASS (unit214.4s:one timeout passed required isolated
 retry; parity117.2s). Actual cached default/TypeScript starter tests2PASS
 (13.5s), including TypeScript entry edit→served Vite output. No browser retries.
+
+Independent Final+GREEN PASS @a41101966a732c63a0c210431d306c8ecbd4e832:
+7coverage/8axes/findings0/residuals0; unchanged accepted goal CLOSE reused.
+Exact verdict:`pr-341-starter-version-final-green.json`; raw independent
+audits:`pr-341-starter-version-final-green-evidence.json.gz`. Committedguard
+rerun5PASS. Remote CI remains pending delivery; local PASS does not assert it.

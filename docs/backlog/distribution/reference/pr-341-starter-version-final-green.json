@@ -1,0 +1,110 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS текущего CI-repair; доставка в PR341 допустима. Удалённый CI этим локальным review не утверждается.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "a41101966a732c63a0c210431d306c8ecbd4e832",
+  "unit_goal_source": "PR341 observed CI starter-version repair; BASE 3c50ca9b2801db09dde0981a03f348a7946e29d8; exact failed CI merge a2401db07 has the same tree as BASE. Fresh independent read-only reviewer /root/pr341_ci_fix_final_review inspected raw AGENTS Fidelity, ADR-0078/0135/0174, CI38072834304/38072806246/local merge RED, complete diff, real bake and owning reverts. Accepted whole-goal CLOSE (agent-code-quality-goal-final-green.json reviewed2480c0e17a71eb3241b75e5ebaf76529d9b1778c) reused only for unchanged obligations under REV-1; no new goal obligation and no measured archive/score changed. Clean source SHA verified. Current local pnpm pr:check --all terminal0/27PASS; test:run214.4s includes one 5s timeout in corpus-booking-native-calendar-version.test.ts, required isolated rerun PASS; parity117.2s. Unchanged five affected browser cases PASS without retries2.0m; cached default/TypeScript two cases PASS without retries13.5s; template/identity suite63PASS. Independent final cheap artifact audit passes: all three identities exact; changed payload package/deps/lock/actual installed Vite7.3.6, Rollup/wasm-node4.64.5, esbuild/esbuild-wasm0.28.0; Vite8 and runtime policy byte-identical BASE; all19 committed raw proof entries exact originals. Audit scripts/logs/JSON retained under .cache/pr341/ci-green-2026-10-13/independent-review; durable raw proof pr-341-starter-version-repair-proof.json.gz.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Starter resolution cannot select the unsupported later Vite patch observed in CI",
+      "source": "fault-matrix",
+      "trace": "Baseline PR341 CI38072834304/38072806246 fresh-install Vite7.3.7 rejection + ADR-0078",
+      "status": "pass",
+      "citation": "apps/playground/src/templates/vite-version.contract.test.ts:16; docs/backlog/distribution/reference/pr-341-starter-version-repair-proof.json.gz:1",
+      "note": "Real generated requests/real npm-client resolver; original5RED, owning pin revert3RED, fixed3GREEN. Runtime admission unchanged."
+    },
+    {
+      "row": "Vite, React and inherited TypeScript requests use the admitted starter Vite version",
+      "source": "fault-matrix",
+      "trace": "Baseline VITE_TEMPLATE/REACT_VITE_TEMPLATE/TYPESCRIPT_TEMPLATE seed contract + ADR-0078",
+      "status": "pass",
+      "citation": "apps/playground/src/templates/project-spec.test.ts:86; apps/playground/src/templates/project-spec.test.ts:192; apps/playground/src/templates/react-vite/react-vite.test.ts:43; apps/playground/src/templates/vite-version.contract.test.ts:16",
+      "note": "Shared existing playground policy; TypeScript retains inherited install map. Exact seed assertions remain discriminating; oldrange reversion fails3 resolver guards."
+    },
+    {
+      "row": "Changed baked request, installed Vite and snapshot identity agree",
+      "source": "fault-matrix",
+      "trace": "ADR-0135 decision7 + Baseline real baked dependency restoration",
+      "status": "pass",
+      "citation": "apps/playground/src/templates/vite-version.contract.test.ts:26; apps/playground/src/templates/baked-snapshot-identity.contract.test.ts:71; docs/backlog/distribution/reference/pr-341-starter-version-repair-proof.json.gz:1",
+      "note": "Pins-only2snapshotRED; oldpayload reversion2RED; real installer/finalizer/replay-cache bake. Independent package/lock/files/hash audit passes."
+    },
+    {
+      "row": "Vite baked artifact remains a real installed tree usable by cached default starter",
+      "source": "frozen-artifact",
+      "trace": "ADR-0135 decision7 + Baseline default project-files instant startup",
+      "status": "pass",
+      "citation": "apps/playground/public/snapshots/vite-node-modules.json.gz:1; tests/e2e/project-management.spec.ts:180; docs/backlog/distribution/reference/pr-341-starter-version-repair-proof.json.gz:1",
+      "note": "Actual cached default browser PASS; package-lock remains in Initial commit. Realregistry transitive changes retained; Rollup/wasm-node lockstep verified; exact serialized identity."
+    },
+    {
+      "row": "TypeScript baked artifact serves the actual edited entry through Vite",
+      "source": "frozen-artifact",
+      "trace": "ADR-0135 decision7 + Baseline TypeScript starter entry edit/serve scenario",
+      "status": "pass",
+      "citation": "apps/playground/public/snapshots/typescript-node-modules.json.gz:1; tests/e2e/ts-language-service.spec.ts:738; docs/backlog/distribution/reference/pr-341-starter-version-repair-proof.json.gz:1",
+      "note": "Actual cached TypeScript browser PASS in13.5s two-case run. TypeScript5.9.3 retained, Vite7.3.6 and exact payload identity independently audited."
+    },
+    {
+      "row": "Fresh installed CLI boots, renders, HMR-updates, builds and previews real React projects",
+      "source": "acceptance",
+      "trace": "Baseline five failed PR341 heavy browser scenarios + ADR-0174 installed-bin ownership",
+      "status": "pass",
+      "citation": "tests/e2e/preset-deep-link.spec.ts:19; tests/e2e/react-vite-preset.spec.ts:49; tests/e2e/react-vite-build.spec.ts:62; docs/backlog/distribution/reference/pr-341-starter-version-repair-proof.json.gz:1",
+      "note": "Unchanged original assertions5PASS without retries2.0m. No fake, wrapper or alternate CLI dispatch."
+    },
+    {
+      "row": "Agent React editing/build/preview remains observable in editor, SCM, terminal, export and live preview",
+      "source": "acceptance",
+      "trace": "Baseline PR341 ai-mode browser scenarios at70/459 + ADR-0174",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:70; tests/e2e/ai-mode.spec.ts:459; docs/backlog/distribution/reference/pr-341-starter-version-repair-proof.json.gz:1",
+      "note": "Both original affected agent cases PASS, including live leaf HMR before/after build. Historical campaign outcomes immutable."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
