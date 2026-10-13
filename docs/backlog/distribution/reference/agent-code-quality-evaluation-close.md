@@ -1,5 +1,10 @@
 # Agent code-quality evaluation — delivered
 
+2026-10-13 correction: historical closure; clean-comparison obligation reopened.
+Confirmed npm setup/proxy confounds invalidate eval-v16 as a clean reference;
+[PR341 rework](agent-eval-pr341-rework.md) records evidence and fresh-run status.
+Prior verdicts/scores remain history, not proof of the corrected comparison.
+
 PR341; accepted goal baseline51440931a, reviewed whole result2480c0e17.
 [Whole-goal Final](agent-code-quality-goal-final-green.json):I1–I11/8axes PASS,
 0findings/requiredresiduals. [Raw audit](agent-code-quality-goal-final-green-evidence.json.gz),

@@ -92,6 +92,18 @@ export async function prepareLocal(
     void killProcessGroup(agent, participant === 'codex' ? 'SIGINT' : 'SIGTERM');
   };
   input.signal?.addEventListener('abort', stop, { once: true });
+  const close = async () => {
+    input.signal?.removeEventListener('abort', stop);
+    try {
+      await killProcessGroup(agent ?? null, participant === 'codex' ? 'SIGINT' : 'SIGTERM');
+    } finally {
+      try {
+        await context?.close();
+      } finally {
+        await killProcessGroup(server);
+      }
+    }
+  };
   try {
     if (server) await waitHttpReady(previewUrl, 120000, 'native dev server');
     context = await input.browser.newContext();
@@ -294,18 +306,10 @@ export async function prepareLocal(
         return { view: page, previewUrl };
       },
       snapshot: () => readTree(workspace),
-      async close() {
-        input.signal?.removeEventListener('abort', stop);
-        await killProcessGroup(agent ?? null, participant === 'codex' ? 'SIGINT' : 'SIGTERM');
-        await context!.close();
-        await killProcessGroup(server);
-      },
+      close,
     };
   } catch (error) {
-    input.signal?.removeEventListener('abort', stop);
-    await killProcessGroup(agent ?? null, participant === 'codex' ? 'SIGINT' : 'SIGTERM');
-    await context?.close();
-    await killProcessGroup(server);
+    await close();
     throw error;
   }
 }

@@ -193,6 +193,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0435 | Follow npm tar root stripping for materialized installs |
 | 0451 | User override values follow npm's version/range reading |
 | 0504 | Preserve named install intent and optional resolution outcomes |
+| 0526 | Separate npm alias placement from registry identity |
 
 ### playground
 

@@ -298,16 +298,16 @@ export async function run(
             JSON.stringify({ stage: record.stage, error: record.error }, null, 2),
           );
       } finally {
-        if (!stop.signal.aborted) {
-          report.runs.push(record);
-          await persist(); // Completed result survives tracing/host cleanup errors.
-        }
+        if (stop.signal.aborted && record.stage !== undefined)
+          record.interruptedAt = new Date().toISOString();
+        else record.completedAt = new Date().toISOString();
+        report.runs.push(record);
+        await persist(); // Started attempt survives interruption and cleanup errors.
         if (tracing && prepared && !stop.signal.aborted) {
           await prepared.context.tracing.stop({ path: join(dir, 'browser.zip') });
           record.artifacts.browserTrace = `${name}/browser.zip`;
         }
         await prepared?.close();
-        record.completedAt = new Date().toISOString();
         active = undefined;
       }
       if (stop.signal.aborted) break;

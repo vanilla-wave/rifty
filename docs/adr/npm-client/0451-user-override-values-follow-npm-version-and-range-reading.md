@@ -116,3 +116,10 @@ Each is pre-existing or outside I1; npm's side is in the probe output:
   admission, baked redirect) — never a silent native install.
 - (+) `$name` fails with a named `NotImplementedError` instead of a 404.
 - (−) Bare words still split npm (dist-tag) and rifty (package); compat lists it.
+
+## Corrections (active)
+
+2026-10-13 — ADR-0526 separates npm alias path/target identity and uses `*`
+for range-less aliases, with case-insensitive npm prefix; closes the recorded
+alias-placement/range/classification divergences.
+Version/range interpretation and rifty replacement extensions remain active.

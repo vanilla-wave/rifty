@@ -58,6 +58,7 @@ interface Counts {
   selectedTrials: number;
   retainedTrials: number;
   missingTrials: number;
+  interruptedTrials?: number;
   passes: number;
   budgetExceeded: number;
   contextExceeded: number;
@@ -105,6 +106,7 @@ export interface Statistics {
   selectedTrials: number;
   retainedTrials: number;
   missingTrials: number;
+  interruptedTrials?: number;
   method: {
     name: string;
     confidence: number;
@@ -118,9 +120,10 @@ export interface Statistics {
 }
 const identity = (trial: Trial) => JSON.stringify([trial.task, trial.lane, trial.runIndex]);
 function counts(rows: Run[], selected: number): Counts {
+  const completed = rows.filter((row) => row.interruptedAt === undefined);
   const stages: Record<string, number> = {};
   const causes: Record<string, number> = {};
-  for (const row of rows) {
+  for (const row of completed) {
     if (row.outcome === 'pass') continue;
     const stage =
       row.stage ??
@@ -139,10 +142,13 @@ function counts(rows: Run[], selected: number): Counts {
     selectedTrials: selected,
     retainedTrials: rows.length,
     missingTrials: selected - rows.length,
-    passes: rows.filter((row) => row.outcome === 'pass').length,
-    budgetExceeded: rows.filter((row) => row.outcome === 'budget-exceeded').length,
-    contextExceeded: rows.filter((row) => row.outcome === 'context-exceeded').length,
-    ordinaryFailures: rows.filter((row) => row.outcome === 'fail').length,
+    ...(rows.length === completed.length
+      ? {}
+      : { interruptedTrials: rows.length - completed.length }),
+    passes: completed.filter((row) => row.outcome === 'pass').length,
+    budgetExceeded: completed.filter((row) => row.outcome === 'budget-exceeded').length,
+    contextExceeded: completed.filter((row) => row.outcome === 'context-exceeded').length,
+    ordinaryFailures: completed.filter((row) => row.outcome === 'fail').length,
     stages,
     causes,
     ...(Object.fromEntries(
@@ -153,8 +159,8 @@ function counts(rows: Run[], selected: number): Counts {
           : rows.reduce((sum, row) => sum + row[key], 0),
       ]),
     ) as Pick<Counts, (typeof metricKeys)[number]>),
-    medianSeconds: median(rows.map((row) => row.elapsedMs / 1000)),
-    medianTools: median(rows.map((row) => row.toolCalls)),
+    medianSeconds: median(completed.map((row) => row.elapsedMs / 1000)),
+    medianTools: median(completed.map((row) => row.toolCalls)),
   };
 }
 export function deriveStatistics(report: Report): Statistics {
@@ -210,7 +216,7 @@ export function deriveStatistics(report: Report): Statistics {
     const rows = report.runs.filter((row) => row.task === first.task && row.lane === first.lane);
     const meta = plan?.tasks.find((task) => task.id === first.task);
     const count = counts(rows, trials.length);
-    const complete = quality && count.missingTrials === 0;
+    const complete = quality && count.missingTrials === 0 && (count.interruptedTrials ?? 0) === 0;
     return {
       ...count,
       task: first.task,
@@ -307,6 +313,7 @@ export function deriveStatistics(report: Report): Statistics {
             upper: group.interval.upper - native.interval.lower,
           };
   }
+  const interrupted = report.runs.filter((row) => row.interruptedAt !== undefined).length;
   return {
     version: 1,
     purpose,
@@ -315,6 +322,7 @@ export function deriveStatistics(report: Report): Statistics {
     selectedTrials: matrix.length,
     retainedTrials: report.runs.length,
     missingTrials: matrix.length - report.runs.length,
+    ...(interrupted ? { interruptedTrials: interrupted } : {}),
     method: {
       name: 'Clopper–Pearson exact binomial; Bonferroni simultaneous finite-cell task-macro bands',
       confidence: 0.95,
@@ -337,40 +345,43 @@ export function deriveStatistics(report: Report): Statistics {
         : []),
       'Pass means the frozen functional/regression checks passed, not a universal program proof.',
       'Few repeats yield wide conditional intervals; these data do not establish equality/equivalence.',
-      'Missing selected attempts have unavailable point estimates; retained failures remain selected.',
+      interrupted
+        ? 'Missing or interrupted selected attempts have unavailable point estimates; retained completed failures remain selected.'
+        : 'Missing selected attempts have unavailable point estimates; retained failures remain selected.',
       'Native Codex is a separate model/context reference, no Pi delta.',
     ],
   };
 }
 export function statisticsLines(stats: Statistics): string[] {
+  const interrupted = stats.interruptedTrials !== undefined;
   const value = (n: number | null) => (n === null ? 'unavailable' : n.toFixed(3));
   const band = (i: Interval) => `[${i.lower.toFixed(3)}, ${i.upper.toFixed(3)}]`;
   const lines = [
     '',
     '## Fixed-matrix outcomes',
     '',
-    `Purpose: ${stats.purpose}; selected ${stats.selectedTrials}; retained ${stats.retainedTrials}; missing ${stats.missingTrials}.`,
+    `Purpose: ${stats.purpose}; selected ${stats.selectedTrials}; retained ${stats.retainedTrials}; missing ${stats.missingTrials}${interrupted ? `; interrupted ${stats.interruptedTrials}` : ''}.`,
     stats.method.name,
     ...stats.method.assumptions.map((line) => `${line}.`),
     ...stats.limitations.map((line) => `${line}`),
     '',
-    '| Task | Split/group | Lane | Pass/selected | Missing | Budget/context | Rate | CP95% | Pi delta | Simultaneous delta band | Failure stages | Tokens in/out |',
-    '|---|---|---|---:|---:|---:|---:|---|---:|---|---|---|',
+    `| Task | Split/group | Lane | Pass/selected | Missing ${interrupted ? '| Interrupted ' : ''}| Budget/context | Rate | CP95% | Pi delta | Simultaneous delta band | Failure stages | Tokens in/out |`,
+    `|---|---|---|---:|---:${interrupted ? '|---:' : ''}|---:|---:|---|---:|---|---|---|`,
   ];
   for (const cell of stats.cells)
     lines.push(
-      `| ${cell.task} | ${cell.split}/${cell.group} | ${cell.lane} | ${cell.passes}/${cell.selectedTrials} | ${cell.missingTrials} | ${cell.budgetExceeded}/${cell.contextExceeded} | ${value(cell.passRate)} | ${band(cell.interval)} | ${cell.lane === 'native-codex' ? 'separate reference' : value(cell.piDelta)} | ${cell.piDeltaInterval ? band(cell.piDeltaInterval) : 'unavailable'} | ${JSON.stringify(cell.stages)} | ${cell.inputTokens ?? 'unknown'}/${cell.outputTokens ?? 'unknown'} |`,
+      `| ${cell.task} | ${cell.split}/${cell.group} | ${cell.lane} | ${cell.passes}/${cell.selectedTrials} | ${cell.missingTrials} ${interrupted ? `| ${cell.interruptedTrials ?? 0} ` : ''}| ${cell.budgetExceeded}/${cell.contextExceeded} | ${value(cell.passRate)} | ${band(cell.interval)} | ${cell.lane === 'native-codex' ? 'separate reference' : value(cell.piDelta)} | ${cell.piDeltaInterval ? band(cell.piDeltaInterval) : 'unavailable'} | ${JSON.stringify(cell.stages)} | ${cell.inputTokens ?? 'unknown'}/${cell.outputTokens ?? 'unknown'} |`,
     );
   lines.push(
     '',
     'Task-macro by split/workload (95% simultaneous finite-cell bands; task weights equal):',
     '',
-    '| Split | Group | Lane | Tasks/families | Pass/selected | Missing | Rate | Band | Pi delta | Delta band |',
-    '|---|---|---|---:|---:|---:|---:|---|---:|---|',
+    `| Split | Group | Lane | Tasks/families | Pass/selected | Missing ${interrupted ? '| Interrupted ' : ''}| Rate | Band | Pi delta | Delta band |`,
+    `|---|---|---|---:|---:|---:${interrupted ? '|---:' : ''}|---:|---|---:|---|`,
   );
   for (const group of stats.groups)
     lines.push(
-      `| ${group.split} | ${group.group} | ${group.lane} | ${group.taskCount}/${group.familyCount} | ${group.passes}/${group.selectedTrials} | ${group.missingTrials} | ${value(group.passRate)} | ${band(group.interval)} | ${group.lane === 'native-codex' ? 'separate reference' : value(group.piDelta)} | ${group.piDeltaInterval ? band(group.piDeltaInterval) : 'unavailable'} |`,
+      `| ${group.split} | ${group.group} | ${group.lane} | ${group.taskCount}/${group.familyCount} | ${group.passes}/${group.selectedTrials} | ${group.missingTrials} ${interrupted ? `| ${group.interruptedTrials ?? 0} ` : ''}| ${value(group.passRate)} | ${band(group.interval)} | ${group.lane === 'native-codex' ? 'separate reference' : value(group.piDelta)} | ${group.piDeltaInterval ? band(group.piDeltaInterval) : 'unavailable'} |`,
     );
   return lines;
 }

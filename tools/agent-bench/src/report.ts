@@ -24,6 +24,7 @@ export interface Run extends Omit<Observation, 'trace'> {
   judgeStartedAt?: string;
   judgeFinishedAt?: string;
   completedAt?: string;
+  interruptedAt?: string;
   outcome: 'pass' | 'fail' | 'budget-exceeded' | 'context-exceeded';
   elapsedMs: number;
   judge: JudgeVerdict;
@@ -188,6 +189,9 @@ export async function writeReport(dir: string, report: Report, persist = true) {
     `Known constraints: ${report.header.unsupported.join('; ')}.`,
     '',
     'Outcomes: pass, fail, budget-exceeded, context-exceeded (separate; never counted as ordinary fail).',
+    ...(report.runs.some((run) => run.interruptedAt !== undefined)
+      ? ['Interrupted attempts retain evidence without a completed outcome.']
+      : []),
     'Failure classes are manual: agent, rifty-runtime, rifty-tooling, ai-mode-ux, provider, task-bad. Unclassified stays null.',
     '',
   ];
@@ -227,7 +231,7 @@ export async function writeReport(dir: string, report: Report, persist = true) {
   }
   for (const run of report.runs)
     lines.push(
-      `| ${run.task} | ${run.lane} | ${run.runIndex} | ${run.outcome} | ${run.agentStatus} | ${(run.elapsedMs / 1000).toFixed(1)} | ${run.toolCalls} | ${metric(run, 'inputTokens')} | ${metric(run, 'outputTokens')} | ${metric(run, 'retries')} | ${metric(run, 'compactions')} | ${metric(run, 'repeatedCallNotices')} | ${metric(run, 'editFailures')} | ${metric(run, 'malformedToolCalls')} | ${cell(run.failureClass)} | ${cell(run.note)} |`,
+      `| ${run.task} | ${run.lane} | ${run.runIndex} | ${run.interruptedAt === undefined ? run.outcome : 'interrupted'} | ${run.agentStatus} | ${(run.elapsedMs / 1000).toFixed(1)} | ${run.toolCalls} | ${metric(run, 'inputTokens')} | ${metric(run, 'outputTokens')} | ${metric(run, 'retries')} | ${metric(run, 'compactions')} | ${metric(run, 'repeatedCallNotices')} | ${metric(run, 'editFailures')} | ${metric(run, 'malformedToolCalls')} | ${cell(run.failureClass)} | ${cell(run.note)} |`,
     );
   if (report.header.plan) {
     lines.push(
@@ -259,7 +263,7 @@ export async function writeReport(dir: string, report: Report, persist = true) {
           : `${cell(path)} (not local)`;
   for (const run of report.runs)
     lines.push(
-      `| ${run.task}/${run.lane}/${run.runIndex} | ${run.initialFilesSha256 ?? 'unobserved'}/${run.initialLockfileSha256 ?? 'unobserved'} | ${artifact(run.artifacts.trace)} | ${artifact(run.artifacts.before)} / ${artifact(run.artifacts.after)} | ${cell(JSON.stringify({ start: run.attemptStartedAt, agentStart: run.agentStartedAt, agentEnd: run.agentFinishedAt, judgeStart: run.judgeStartedAt, judgeEnd: run.judgeFinishedAt, complete: run.completedAt }))} |`,
+      `| ${run.task}/${run.lane}/${run.runIndex} | ${run.initialFilesSha256 ?? 'unobserved'}/${run.initialLockfileSha256 ?? 'unobserved'} | ${artifact(run.artifacts.trace)} | ${artifact(run.artifacts.before)} / ${artifact(run.artifacts.after)} | ${cell(JSON.stringify({ start: run.attemptStartedAt, agentStart: run.agentStartedAt, agentEnd: run.agentFinishedAt, judgeStart: run.judgeStartedAt, judgeEnd: run.judgeFinishedAt, complete: run.completedAt, interrupted: run.interruptedAt }))} |`,
     );
   lines.push(...statisticsLines(statistics));
   await writeFile(join(dir, 'summary.md'), `${lines.join('\n')}\n`);

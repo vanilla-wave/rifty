@@ -4,9 +4,12 @@ Private local benchmark; four real lanes, versioned bug/feature/app corpora and
 three fresh trials by default. The original five tasks are the smoke set.
 Tool/context differences remain explicit; a delta is not a runtime-only cause.
 
-[Delivered goal](../../docs/backlog/distribution/reference/agent-code-quality-evaluation-close.md);
-current reference: [accepted eval-v16](../../docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-completed.md),
-96selected43PASS53FAIL/24setup. [Operation catalog](../../docs/backlog/distribution/reference/agent-eval-environment-differences.md)
+[Historical goal closure](../../docs/backlog/distribution/reference/agent-code-quality-evaluation-close.md);
+clean quality reference pending. [Historical eval-v16](../../docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-completed.md)
+retains96selected43PASS53FAIL/24setup, confounded by npm-client setup failures
+and external proxy parallel-tool argument loss.
+[PR341 correction/evidence](../../docs/backlog/distribution/reference/agent-eval-pr341-rework.md).
+[Operation catalog](../../docs/backlog/distribution/reference/agent-eval-environment-differences.md)
 and [finite boundary profile](../../docs/backlog/distribution/reference/agent-eval-boundary-results.md)
 retain natural/directed operations, failed attempts and bounded uncertainty.
 Boundary profile:20fresh exploration plus32fresh model confirmations/16references;
@@ -46,7 +49,7 @@ Config (no-auth example):
 {
   "endpoint": {
     "id": "gpt-6-luna", "name": "GPT-6 Luna", "provider": "codex-proxy",
-    "api": "openai-completions", "baseUrl": "http://127.0.0.1:10539/v1",
+    "api": "openai-completions", "baseUrl": "http://127.0.0.1:10530/v1",
     "contextWindow": 1000000, "maxTokens": 8192, "reasoning": true,
     "input": ["text"], "thinking": "medium", "compat": { "supportsReasoningEffort": true },
     "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
@@ -99,8 +102,9 @@ retry starts, successful compactions (including summary usage), repeated-call
 notices and errored edit/validation tool results. Counters may overlap; manual
 failure classification stays separate. Legacy reports show absent metrics as —.
 Native compaction and agent-level retries are on; provider retries remain off.
-Assign `failureClass` and `note` manually in report.json (committed summaries:
-report.json.gz), then regenerate Markdown;
+Assign `failureClass` and `note` manually in a fresh report.json before freezing,
+then regenerate Markdown. Frozen historical report/score/source files stay immutable;
+later diagnostic classifications use a separate linked sidecar, preserving outcomes.
 existing assignments survive. Classes: agent, rifty-runtime, rifty-tooling,
 ai-mode-ux, provider, task-bad. Unclassified remains null. Failed setup/judging
 retains its stage/error and previously completed records.

@@ -14,7 +14,12 @@
  * sharing: {@link layeredTarballCache}, {@link packumentOverlay}.
  */
 import { createHash } from 'node:crypto';
-import type { Packument, PackumentCacheLike, TarballCache } from '@riftydev/npm-client';
+import type {
+  IntegrityAlgorithm,
+  Packument,
+  PackumentCacheLike,
+  TarballCache,
+} from '@riftydev/npm-client';
 import { parseIntegrityAlgorithm } from '@riftydev/npm-client';
 
 export const DEFAULT_PACKUMENT_TTL_SECONDS = 300;
@@ -200,7 +205,7 @@ export class MemoryTarballCache implements TarballCache {
   }
 }
 
-function sri(bytes: Uint8Array, algorithm: 'sha256' | 'sha384' | 'sha512'): string {
+function sri(bytes: Uint8Array, algorithm: IntegrityAlgorithm): string {
   return `${algorithm}-${createHash(algorithm).update(bytes).digest('base64')}`;
 }
 

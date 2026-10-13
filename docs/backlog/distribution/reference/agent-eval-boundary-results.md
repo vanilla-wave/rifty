@@ -1,5 +1,13 @@
 # Executed finite capability profile — I11
 
+2026-10-13 qualification: external Pi proxy lost parallel tool arguments in
+the comparative evidence; [rework](agent-eval-pr341-rework.md) proves the adapter
+defect and a fixed protocol probe. No fresh clean comparison yet. Historical
+boundary outcomes below retain their scores; proxy exposure means shared Luna
+failure cannot establish a model ceiling. Independent setup errors and actual
+successful finite workloads retain their observed evidence. Prior CLOSE/Final
+records remain history; clean comparative acceptance is pending.
+
 [Profile](agent-eval-boundary-profile.json.gz), [frozen selection](agent-eval-boundary-confirmation-selection.json).
 Adaptive purposive search separate from representative eval-v16.
 Source admission901cef3c; fresh exploration sourcea0b571faa, confirmation77597a9d3.
@@ -59,5 +67,5 @@ Original interruptions/stopped declarations remain history and unavailable
 attempts remain visible. Source oracles repaired from real RED before new
 calls; every original outcome/header immutable.
 [Diagnostic Final](agent-eval-boundary-diagnostics-final-green.json) and
-[whole-goal CLOSE](agent-code-quality-evaluation-close.md) accepted; no required
-goal residual remains.
+[whole-goal CLOSE](agent-code-quality-evaluation-close.md) recorded at the time;
+the clean-comparison residual above supersedes its measurement-completion claim.

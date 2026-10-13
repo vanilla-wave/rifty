@@ -1,0 +1,95 @@
+{
+  "bugs": {
+    "url": "https://github.com/chalk/strip-ansi/issues"
+  },
+  "dist": {
+    "shasum": "9e26c63d30f53443e9489495b2105d37b67a85d9",
+    "tarball": "https://registry.npmjs.org/strip-ansi/-/strip-ansi-6.0.1.tgz",
+    "fileCount": 5,
+    "integrity": "sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==",
+    "signatures": [
+      {
+        "sig": "MEQCIEIaIvQJAMRlSerQ8cuHIzWxWLJPS6LkkF/9tMpiAXTvAiBY3tMFoj8tB0mc3dm7Th97E9p88NfZfjOdr/HKu8apLw==",
+        "keyid": "SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA"
+      }
+    ],
+    "unpackedSize": 4029
+  },
+  "name": "strip-ansi",
+  "author": {
+    "url": "sindresorhus.com",
+    "name": "Sindre Sorhus",
+    "email": "sindresorhus@gmail.com"
+  },
+  "engines": {
+    "node": ">=8"
+  },
+  "gitHead": "59533da99981f9d550de1ae0eb9d1a93c2383be3",
+  "license": "MIT",
+  "scripts": {
+    "test": "xo && ava && tsd"
+  },
+  "_npmUser": {
+    "name": "sindresorhus",
+    "email": "sindresorhus@gmail.com"
+  },
+  "homepage": "https://github.com/chalk/strip-ansi#readme",
+  "keywords": [
+    "strip",
+    "trim",
+    "remove",
+    "ansi",
+    "styles",
+    "color",
+    "colour",
+    "colors",
+    "terminal",
+    "console",
+    "string",
+    "tty",
+    "escape",
+    "formatting",
+    "rgb",
+    "256",
+    "shell",
+    "xterm",
+    "log",
+    "logging",
+    "command-line",
+    "text"
+  ],
+  "repository": {
+    "url": "git+https://github.com/chalk/strip-ansi.git",
+    "type": "git"
+  },
+  "_npmVersion": "7.5.4",
+  "description": "Strip ANSI escape codes from a string",
+  "directories": {},
+  "maintainers": [
+    {
+      "name": "sindresorhus",
+      "email": "sindresorhus@gmail.com"
+    },
+    {
+      "name": "qix",
+      "email": "josh@junon.me"
+    }
+  ],
+  "_nodeVersion": "16.9.1",
+  "dependencies": {
+    "ansi-regex": "^5.0.1"
+  },
+  "_hasShrinkwrap": false,
+  "readmeFilename": "readme.md",
+  "devDependencies": {
+    "xo": "^0.25.3",
+    "ava": "^2.4.0",
+    "tsd": "^0.10.0"
+  },
+  "_npmOperationalInternal": {
+    "tmp": "tmp/strip-ansi_6.0.1_1632414881633_0.39929061070208505",
+    "host": "s3://npm-registry-packages"
+  },
+  "_id": "strip-ansi@6.0.1",
+  "version": "6.0.1"
+}

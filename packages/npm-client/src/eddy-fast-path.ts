@@ -543,13 +543,13 @@ function analyzeLockfileRequest(
       recordOwnership(registryOwnsIncrementalMiss(decision, ctx) ? 'metadata' : 'broken');
       return;
     }
-    const { effectiveName } = resolveEffectivePackageRequest(
+    const { effectiveName, installName = effectiveName } = resolveEffectivePackageRequest(
       name,
       range,
       ctx.parentName,
       overrides,
     );
-    const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+    const hit = pinnedEntryForParent(lockfile, installName, ctx.parentLockfilePath);
     const recipe = builtinRecipeForRequest(
       name,
       range,
@@ -568,7 +568,7 @@ function analyzeLockfileRequest(
     if (reachablePaths.has(hit.installPath)) return;
     reachablePaths.add(hit.installPath);
     const childContext: ResolveContext = {
-      parentName: effectiveName,
+      parentName: installName,
       parentInstallPath: hit.installPath,
       parentLockfilePath: hit.installPath,
       parentOrigin: 'lockfile',

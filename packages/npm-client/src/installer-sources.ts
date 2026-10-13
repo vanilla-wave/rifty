@@ -152,13 +152,12 @@ function createLockfileSource(
       // Apply the same retained redirect/user override as live resolution
       // before lookup. Synthetic catalog recipes keep their source identity
       // and are validated separately against the lockfile recipe trace.
-      const { override, effectiveName } = resolveEffectivePackageRequest(
-        name,
-        range,
-        ctx.parentName,
-        opts.overrides,
-      );
-      const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+      const {
+        override,
+        effectiveName,
+        installName = effectiveName,
+      } = resolveEffectivePackageRequest(name, range, ctx.parentName, opts.overrides);
+      const hit = pinnedEntryForParent(lockfile, installName, ctx.parentLockfilePath);
       if (hit && typeof hit.entry.version === 'string')
         onSelection?.({ name: effectiveName, version: hit.entry.version });
       // Recorded-pin admission fact (ADR-0361); absent entry keeps the
@@ -273,7 +272,8 @@ function createLockfileSource(
       }
       return {
         origin: 'lockfile',
-        name: effectiveName,
+        name: installName,
+        ...(installName === effectiveName ? {} : { registryName: effectiveName }),
         version: entry.version,
         resolved: entry.resolved ?? syntheticResolvedIdentity(synthetic!),
         integrity: entry.integrity,
@@ -417,18 +417,18 @@ function createRegistrySource(
           },
         };
       }
-      const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
-        name,
-        range,
-        ctx.parentName,
-        opts.overrides,
-      );
+      const {
+        override,
+        effectiveName,
+        effectiveRange,
+        installName = effectiveName,
+      } = resolveEffectivePackageRequest(name, range, ctx.parentName, opts.overrides);
 
       const packument = await loadPackument(effectiveName);
       const versions = Object.keys(packument.versions);
       const latestTag = rangeIsUnconstrained(effectiveRange)
         ? packument['dist-tags']?.latest
-        : undefined;
+        : packument['dist-tags']?.[effectiveRange!];
       const pick = latestTag ?? pickBestVersion(versions, effectiveRange);
       if (!pick) {
         throw new Error(`No matching version for ${effectiveName}@${effectiveRange ?? '*'}`);
@@ -466,7 +466,7 @@ function createRegistrySource(
       let expectedIntegrity = manifest.dist.integrity;
       if (!expectedIntegrity) {
         const lf = await ensureLockfileLoaded();
-        const pinned = lf?.packages[`node_modules/${effectiveName}`];
+        const pinned = lf?.packages[`node_modules/${installName}`];
         if (pinned && pinned.version === pick && pinned.integrity) {
           expectedIntegrity = pinned.integrity;
         }
@@ -474,7 +474,8 @@ function createRegistrySource(
 
       return {
         origin: 'metadata',
-        name: effectiveName,
+        name: installName,
+        ...(installName === effectiveName ? {} : { registryName: effectiveName }),
         version: pick,
         resolved: manifest.dist.tarball,
         integrity: expectedIntegrity,

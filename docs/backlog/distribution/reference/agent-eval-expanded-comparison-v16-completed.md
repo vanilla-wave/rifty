@@ -1,4 +1,14 @@
-# Frozen eval16 comparison — completed
+# Frozen eval16 comparison — historical, confounded
+
+2026-10-13 correction: complete recording, invalid clean quality reference.
+24 Rifty setups never started an agent:18 SHA-1 integrity failures,4 explicit
+`npm:` alias failures,2 workspace-import timeouts (cause unisolated). All571
+parallel Pi tool calls have empty arguments;566 validation results recorded.
+External codex-proxy dropped final AI SDK tool-call input. Scores stay original;
+neither model quality nor a runtime-only gap follows from these totals.
+[Rework evidence](agent-eval-pr341-rework.md),
+[96-row classification](agent-eval-pr341-rework-classification.json.gz).
+Fresh clean comparison pending; this historical report is not the current reference.
 
 Clean source `ed4e06d29ccc4ae88eed4ed4f906f5eb42962177`; accepted judging
 source `37e19eb16776f69c5052687bc628cda2ce0af1e1`. Pre-call protocol:

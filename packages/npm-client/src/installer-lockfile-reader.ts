@@ -12,6 +12,7 @@ import {
   registryShadowEmbeddedSourcesFromLockfile,
 } from './internal/shadow/planner.ts';
 import type { Lockfile, LockfileEntry } from './linker.ts';
+import { parseNpmAlias } from './npm-alias.ts';
 import { matchesRange } from './semver.ts';
 
 export async function readExistingLockfile(vfs: Vfs, cwd: string): Promise<Lockfile | null> {
@@ -147,7 +148,9 @@ export function lockfileCovers(
     // source-level lookup the walk uses for transitives.
     const hit = pinnedEntryForParent(lockfile, name, '');
     if (!hit) return null;
-    if (!matchesRange(hit.entry.version, range)) return null;
+    const alias = parseNpmAlias(range);
+    if (alias && hit.entry.name !== alias.name) return null;
+    if (!matchesRange(hit.entry.version, alias?.range ?? range)) return null;
     pinned.set(name, hit.entry.version);
   }
   return pinned;
@@ -217,7 +220,7 @@ function bundleCompletenessGapForValidatedPaths(
   for (const [path, entry] of Object.entries(lockfile.packages)) {
     if (path === '') continue; // the root project is not a tarball
     if (!reachablePaths.has(path) || embeddedDependencyPaths.has(path)) continue;
-    const name = lockfilePathBareName(path);
+    const name = entry.name ?? lockfilePathBareName(path);
     if (!entry.version || !entry.resolved || !entry.integrity) {
       return `bundle lockfile entry ${path} lacks replay fields (resolved/integrity)`;
     }

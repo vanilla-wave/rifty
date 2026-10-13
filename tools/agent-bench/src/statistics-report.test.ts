@@ -204,6 +204,32 @@ it('does not present non-model reference controls as coding quality', async () =
   expect(statistics.qualityEstimateAvailable).toBe(false);
 }, 60000);
 
+it('keeps a retained interrupted last trial out of completed quality outcomes', async () => {
+  const report = fixture(1);
+  report.header.series!.status = 'interrupted';
+  Object.assign(report.runs.at(-1)!, {
+    interruptedAt: '2026-10-13T19:00:00.000Z',
+    outcome: 'fail',
+    stage: 'judge',
+    judge: { pass: false, probes: [] },
+  });
+  const { statistics, summary } = await generate(report);
+  expect(statistics).toMatchObject({ retainedTrials: 16, missingTrials: 0, interruptedTrials: 1 });
+  const cell = statistics.cells.find(
+    (row: { task: string; lane: string }) =>
+      row.task === 'stat-smoke' && row.lane === 'native-codex',
+  );
+  expect(cell).toMatchObject({
+    retainedTrials: 1,
+    missingTrials: 0,
+    interruptedTrials: 1,
+    passes: 0,
+    ordinaryFailures: 0,
+    passRate: null,
+  });
+  expect(summary).toMatch(/\| stat-smoke \| native-codex \| 1 \| interrupted \|/);
+}, 60000);
+
 it('matches independent Decimal60 binomial oracle on a non-boundary20/4 cell', async () => {
   const report = fixture(20);
   for (const row of report.runs.filter(

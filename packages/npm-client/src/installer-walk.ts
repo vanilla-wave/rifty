@@ -60,6 +60,7 @@ import { Semaphore } from './utils/semaphore.ts';
  * lockfile keys by it.
  */
 export type PinnedPackage = NormalizedResolvedPackage & {
+  registryName?: string;
   resolved?: string;
   integrity?: string;
   peerDependencies?: Record<string, string>;
@@ -85,6 +86,7 @@ export interface WalkAndPinResult {
  */
 export interface ResolvedPin {
   readonly origin: 'lockfile' | 'metadata';
+  readonly registryName?: string;
   readonly name: string;
   readonly version: string;
   readonly resolved: string;
@@ -172,13 +174,13 @@ export function lockfileReuseDecision(
   ctx: ResolveContext,
   overrides: OverrideMap | undefined,
 ): LockfileReuseDecision {
-  const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
-    name,
-    range,
-    ctx.parentName,
-    overrides,
-  );
-  const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+  const {
+    override,
+    effectiveName,
+    effectiveRange,
+    installName = effectiveName,
+  } = resolveEffectivePackageRequest(name, range, ctx.parentName, overrides);
+  const hit = pinnedEntryForParent(lockfile, installName, ctx.parentLockfilePath);
   const recipe = builtinRecipeForRequest(
     name,
     range,
@@ -194,7 +196,12 @@ export function lockfileReuseDecision(
     throw new TypeError('Companion request does not match its registry-owned declaration');
   }
   const policyFrontier = override !== null || recipe !== null || companion;
-  if (!hit) return { kind: 'miss', reason: 'missing-entry', policyFrontier };
+  if (!hit || (installName !== effectiveName && hit.entry.name !== effectiveName))
+    return {
+      kind: 'miss',
+      reason: 'missing-entry',
+      policyFrontier: policyFrontier || installName !== effectiveName,
+    };
   if (
     (!rangeIsUnconstrained(effectiveRange) && !matchesRange(hit.entry.version, effectiveRange)) ||
     (override?.range !== null &&
@@ -347,7 +354,7 @@ export async function walkAndPin(
         kind: 'tarball' as const,
         result: await fetchAndUnpackToCache(
           {
-            name: pin.name,
+            name: pin.registryName ?? pin.name,
             version: pin.version,
             resolved: pin.resolved,
             integrity: pin.integrity,
@@ -707,7 +714,7 @@ async function pinToPackage(
       : await extractTarGz(acquisition.result.bytes);
   const embeddedDependencies = assertRegistryShadowEmbeddedManifests(pin, files, installPath);
   const bin = normalizePackageBin(
-    pin.name,
+    pin.registryName ?? pin.name,
     pin.shadow
       ? pin.shadow.acquisition.kind === 'registry'
         ? undefined
@@ -716,6 +723,7 @@ async function pinToPackage(
   );
   const pkg: PinnedPackage = {
     name: pin.name,
+    ...(pin.registryName === undefined ? {} : { registryName: pin.registryName }),
     version: pin.version,
     files,
     dependencies: pin.dependencies,

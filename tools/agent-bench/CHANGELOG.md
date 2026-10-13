@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Retain interrupted attempts separately from completed quality outcomes; preserve observed PASS on cleanup signals; reap native preview after browser cleanup rejects, including failed setup.
+
 - Verify committed gzip/manifest evidence per artifact with unchanged seals; legacy CLI test admits its existing subprocess deadline plus readback.
 
 - Deliver observed tool/environment catalog and finite four-family boundary profile with fresh own-origin confirmations, raw archives and offline regeneration.
