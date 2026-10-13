@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Verify committed gzip/manifest evidence per artifact with unchanged seals; legacy CLI test admits its existing subprocess deadline plus readback.
+
 - Deliver observed tool/environment catalog and finite four-family boundary profile with fresh own-origin confirmations, raw archives and offline regeneration.
 
 - Observe pending inactivity for boolean state or nonnegative request count; reject unsettled/missing state, preserve original model outcomes.

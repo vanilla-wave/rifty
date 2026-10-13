@@ -126,7 +126,8 @@ it('regenerates the actual oldest report without inventing absent telemetry or r
   expect(await readFile(join(dir, 'report.json'))).toEqual(original);
   expect(await readdir(dir)).not.toContain('statistics.json');
   expect(await readFile(join(dir, 'summary.md'), 'utf8')).toMatch(/unknown|unavailable/i);
-});
+  // The real CLI already admits 30 s; leave room for fixture IO and immutable readback.
+}, 35_000);
 it('reports fixed matrix uncertainty, separate groups/Codex and honest selected/missing accounting', async () => {
   const report = fixture();
   const { statistics, summary } = await generate(report);
