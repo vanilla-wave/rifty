@@ -1,5 +1,8 @@
 # PR 341 — npm alias repair evidence
 
+Historical initial iteration; same-version target/name repair assumption later
+superseded by ADR-0527. Current authority/proof: `npm-client/reference/pr341-npm-alias-source-authority-evidence.md`.
+
 2026-10-13, Node v24.16.0/npm 11.17.0. Authority: observed setup failure;
 ADR-0526. No Rifty cloud registry. Original npm manifests/tarballs vendored;
 real npm and real rifty installer/VFS/loader use a localhost HTTP registry.
