@@ -628,6 +628,26 @@ async function collectProjectDist(page: Page): Promise<readonly DistFile[]> {
   }, sealedWorkbenchFixtureUrl);
 }
 
+function buildParityScenario() {
+  const scenario = childFsScenario();
+  const version = scenario.dependencies['@gravity-ui/icons'];
+  const packageJson = scenario.files['/package.json'];
+  if (version === undefined || packageJson === undefined) {
+    throw new Error('canonical build parity inputs missing');
+  }
+  return {
+    ...scenario,
+    files: {
+      ...scenario.files,
+      // Hold nested icons to the same root pin; fresh icon releases cannot resize this fixture.
+      '/package.json': JSON.stringify({
+        ...JSON.parse(packageJson),
+        overrides: { '@gravity-ui/icons': version },
+      }),
+    },
+  };
+}
+
 async function runCoiProduct(
   page: Page,
   onOpened: () => void,
@@ -635,7 +655,7 @@ async function runCoiProduct(
   readonly dist: readonly DistFile[];
   readonly output: string;
 }> {
-  const scenario = childFsScenario();
+  const scenario = buildParityScenario();
   await page.goto(`${coiBaseUrl}/unit-harness.html`);
   await expect(page.locator('#browser-unit-harness')).toHaveAttribute('data-status', 'ready');
   await bootOwner(page, {
@@ -675,7 +695,7 @@ async function runNoCoiProduct(page: Page): Promise<{
   readonly exitCode: number;
   readonly esbuildAdmission: unknown;
 }> {
-  const scenario = childFsScenario();
+  const scenario = buildParityScenario();
   await page.evaluate(
     async ({ files, root }) => {
       const sandbox = (
