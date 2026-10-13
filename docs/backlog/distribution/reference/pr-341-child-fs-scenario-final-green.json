@@ -1,0 +1,142 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Текущий source repair PASS; merge HOLD до remote CI/hosted smoke GREEN. Registry504 и YC PermissionDenied — отдельный внешний блокер.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "3bde4867b953a9431d4a61f2b9f750389f7c50ab",
+  "unit_goal_source": "PR341 observed CI repair; BASE 9ed42ce6835e180adc72184d631e482ded572cf4; CI38335379299/browser-unit job115094308188 + CI gate115098990644; original child-fs browser3 and no-COI baseline",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Original in-realm real Worker sequence, markers, cleanup and2180 modules retained",
+      "source": "acceptance",
+      "trace": "BASE9ed42ce6835e180adc72184d631e482ded572cf4 original in-realm anchor scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/child-fs-in-realm-lane.spec.ts:77",
+      "note": ""
+    },
+    {
+      "row": "Original sealed product install/build/Express ordering, lifecycle and2180 modules retained",
+      "source": "acceptance",
+      "trace": "BASE9ed42ce6835e180adc72184d631e482ded572cf4 original product anchor scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/child-fs-product-lane.spec.ts:88",
+      "note": ""
+    },
+    {
+      "row": "Actual CLI publishes both real lanes, original2180 counts and exact sample/provenance bytes",
+      "source": "acceptance",
+      "trace": "BASE9ed42ce6835e180adc72184d631e482ded572cf4 original bench:child-fs CLI scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/child-fs-orchestrator-cli.spec.ts:91",
+      "note": ""
+    },
+    {
+      "row": "No-COI exactdist, headerless capabilities, host interaction and esbuild recipe remain discriminating",
+      "source": "acceptance",
+      "trace": "BASE9ed42ce6835e180adc72184d631e482ded572cf4 original no-COI build parity scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2356",
+      "note": ""
+    },
+    {
+      "row": "Shared visible ordinary manifest override; program/root/direct dependency bytes preserved; new scenario bytes carry exactv2 identity",
+      "source": "acceptance",
+      "trace": "PR341 observed CI baseline9ed42ce6835e180adc72184d631e482ded572cf4 bounded shared workload and input provenance",
+      "status": "pass",
+      "citation": "tools/perf/src/child-fs-artifact.test.ts:131",
+      "note": ""
+    },
+    {
+      "row": "Unknown scenario and changed current/legacy dependency identity reject; retained identities returned unchanged",
+      "source": "acceptance",
+      "trace": "BASE9ed42ce6835e180adc72184d631e482ded572cf4 strict artifact identity baseline plus retained historical evidence",
+      "status": "pass",
+      "citation": "tools/perf/src/child-fs-artifact.test.ts:140",
+      "note": ""
+    },
+    {
+      "row": "Visible override remains valid ordinary native npm/Vite/Express input, with no claim of identical native/Rifty graphs",
+      "source": "acceptance",
+      "trace": "PR341 bounded real child-fs scenario; BASE9ed42ce6835e180adc72184d631e482ded572cf4 direct dependencies/program",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/pr-341-child-fs-scenario-repair.md:24",
+      "note": ""
+    },
+    {
+      "row": "Historical real Node v1 Vite7.3.6 golden retained exactly, native2195 not rewritten into current browser count",
+      "source": "frozen-artifact",
+      "trace": "BASE9ed42ce6835e180adc72184d631e482ded572cf4 real Node golden authority",
+      "status": "pass",
+      "citation": "tools/perf/src/child-fs-artifact.test.ts:119",
+      "note": ""
+    },
+    {
+      "row": "Frozen real one-run baseline bytes and provenance remain v1 and validate unchanged",
+      "source": "frozen-artifact",
+      "trace": "BASE9ed42ce6835e180adc72184d631e482ded572cf4 perf/child-fs-baseline.json authority",
+      "status": "pass",
+      "citation": "tools/perf/src/child-fs-orchestrator.test.ts:117",
+      "note": ""
+    },
+    {
+      "row": "Frozen real post-single-hop bytes/provenance remain v1 and validate unchanged",
+      "source": "frozen-artifact",
+      "trace": "BASE9ed42ce6835e180adc72184d631e482ded572cf4 perf/child-fs-after-single-hop.json authority",
+      "status": "pass",
+      "citation": "tools/perf/src/child-fs-orchestrator.test.ts:136",
+      "note": ""
+    },
+    {
+      "row": "Frozen real post-binary-request bytes/provenance remain v1 and validate unchanged",
+      "source": "frozen-artifact",
+      "trace": "BASE9ed42ce6835e180adc72184d631e482ded572cf4 perf/child-fs-after-binary-requests.json authority",
+      "status": "pass",
+      "citation": "tools/perf/src/child-fs-orchestrator.test.ts:208",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
