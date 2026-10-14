@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -28,6 +29,16 @@ const cases = [
   ['split-settlement', card('Ada', '2.17') + card('Ada', '2.17') + card('Cara', '5.33'), true],
   ['nested', `<div>${card('Ada', '4.34')}</div><div>${card('Cara', '5.33')}</div>`, true],
   ['named', named('Ada', '4.34') + named('Cara', '5.33'), true],
+  [
+    'named-caption',
+    named('Ada', '4.34')
+      .replace('<article>', '<article><h3>Payment</h3>')
+      .replace('</span><span aria-label="Receiver">', '</span>→<span aria-label="Receiver">') +
+      named('Cara', '5.33')
+        .replace('<article>', '<article><h3>Payment</h3>')
+        .replace('</span><span aria-label="Receiver">', '</span>→<span aria-label="Receiver">'),
+    true,
+  ],
   ['table', table(), true],
   ['mixed', named('Ada', '4.34') + card('Cara', '5.33'), true],
   [
@@ -36,6 +47,12 @@ const cases = [
     true,
   ],
   ['extra', named('Ada', '4.34') + named('Cara', '5.33') + card('Ada', '4.34'), false],
+  [
+    'nested-extra',
+    named('Ada', '4.34').replace('</article>', `${card('Ada', '4.34')}</article>`) +
+      named('Cara', '5.33'),
+    false,
+  ],
   ['duplicate', ordinary + ordinary, false],
   [
     'hidden-receiver',
@@ -55,13 +72,19 @@ function replace(text: string, before: string, after: string) {
   assert.equal(text.split(before).length, 2, `Guard seam: ${before}`);
   return text.replace(before, after);
 }
-function replaceTransfer(text: string, before: string, after: string) {
-  const start = text.indexOf('async function transfers(');
-  assert.ok(start >= 0);
-  return text.slice(0, start) + replace(text.slice(start), before, after);
-}
 const variants = [
   ['current', source],
+  [
+    'cards-first',
+    execFileSync(
+      'git',
+      [
+        'show',
+        '9f40d6f5da463e655edf295df888b644c22f018d:tools/agent-bench/corpus/cases/expense-settlement-v11/judge.ts',
+      ],
+      { encoding: 'utf8' },
+    ),
+  ],
   [
     'semantic-dedup',
     replace(
@@ -72,14 +95,10 @@ const variants = [
   ],
   [
     'exclusive-forms',
-    replaceTransfer(
-      replaceTransfer(
-        source,
-        "for (const table of await ctx.view.getByRole('table').all()) {",
-        "for (const table of await ctx.view.getByRole('table').all()) { if (cards.length) continue;",
-      ),
-      'for (const from of await ctx.view.getByLabel(/\\b(?:from|payer|debtor)\\b/i).all()) {',
-      'for (const from of await ctx.view.getByLabel(/\\b(?:from|payer|debtor)\\b/i).all()) { if (cards.length) continue;',
+    replace(
+      source,
+      'const cards = await transferCards(ctx);',
+      'const cards = rows.length ? [] : await transferCards(ctx);',
     ),
   ],
   [

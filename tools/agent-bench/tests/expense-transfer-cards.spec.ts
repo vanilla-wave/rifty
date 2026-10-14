@@ -22,6 +22,8 @@ const card =
 const named = labelled.replace(' → ', ' ').replace(': ', ' ');
 const modes = [
   ['labelled', labelled, true],
+  ['named-caption', labelled.replace('<article>', '<article><h3>Payment</h3>'), true],
+  ['nested-extra', named.replace('</article>', `${card}</article>`), false],
   ['named-only', named, true],
   ['plain-card', card, true],
   [

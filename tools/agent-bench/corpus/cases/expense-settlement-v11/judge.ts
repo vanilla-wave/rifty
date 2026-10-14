@@ -1,4 +1,4 @@
-import type { Locator } from '@playwright/test';
+import type { ElementHandle, Locator } from '@playwright/test';
 import {
   caption,
   choiceOption,
@@ -319,76 +319,95 @@ async function transferCards(ctx: JudgeContext) {
 }
 async function transfers(ctx: JudgeContext, totals: Awaited<ReturnType<typeof balances>>) {
   const remaining = new Map(totals.map((row) => [row.name, row.net]));
-  const cards = await transferCards(ctx);
-  const owners = cards.map((row) => row.index);
-  const rows = cards.map((row) => ({ from: row.from, to: row.to, cents: cents(row.amount) }));
-  const represented = (locator: Locator) =>
-    locator.evaluate((node, indexes) => {
-      const nodes = document.body.querySelectorAll('*');
-      return indexes.some((index) => nodes[index]?.contains(node) || node.contains(nodes[index]!));
-    }, owners);
-  const own = async (locator: Locator) => {
-    owners.push(
-      await locator.evaluate((node) => [...document.body.querySelectorAll('*')].indexOf(node)),
+  const fields: ElementHandle<HTMLElement | SVGElement>[][] = [];
+  const rows: { from: string; to: string; cents: number }[] = [];
+  const representedPayer = (locator: Locator) =>
+    locator.evaluate(
+      (node, payers) => payers.some((payer) => payer.contains(node) || node.contains(payer)),
+      fields.map((row) => row[0]!),
     );
+  const representedCard = (locator: Locator) =>
+    locator.evaluate(
+      (node, groups) =>
+        groups.some((group) =>
+          group.every((field) => field.contains(node) || node.contains(field)),
+        ),
+      fields,
+    );
+  const own = async (parts: Locator[]) => {
+    const group = [];
+    for (const part of parts) {
+      const element = await part.elementHandle();
+      if (!element) throw new Error('Missing rendered transfer field');
+      group.push(element);
+    }
+    fields.push(group);
   };
-  for (const table of await ctx.view.getByRole('table').all()) {
-    const headings = await Promise.all(
-      (await table.getByRole('columnheader').all()).map(renderedValue),
-    );
-    const from = headings.findIndex((text) => /\b(?:from|payer|debtor)\b/i.test(text));
-    const to = headings.findIndex((text) => /\b(?:to|receiver|creditor)\b/i.test(text));
-    const amount = headings.findIndex((text) => /\bamount\b/i.test(text));
-    if (from < 0 || to < 0 || amount < 0) continue;
-    for (const row of await table.getByRole('row').all()) {
-      if (await represented(row)) continue;
-      const cells = await Promise.all(
-        (await row.getByRole('cell').or(row.getByRole('rowheader')).all()).map(renderedValue),
+  try {
+    for (const table of await ctx.view.getByRole('table').all()) {
+      const headings = await Promise.all(
+        (await table.getByRole('columnheader').all()).map(renderedValue),
       );
-      if (cells.length !== headings.length) continue;
-      const a = cells[from]!.trim();
-      const b = cells[to]!.trim();
-      const value = cents(cells[amount]!);
-      rows.push({ from: a, to: b, cents: value });
-      await own(row);
-    }
-  }
-  for (const from of await ctx.view.getByLabel(/\b(?:from|payer|debtor)\b/i).all()) {
-    if (
-      (await represented(from)) ||
-      !(await from.isVisible()) ||
-      (await from.evaluate(
-        (node) => node.matches(':read-write') || node instanceof HTMLSelectElement,
-      ))
-    )
-      continue;
-    let container = from.locator('..');
-    while (await container.count()) {
-      const target = container.getByLabel(/\b(?:to|receiver|creditor)\b/i);
-      const amount = container.getByLabel(/\bamount\b/i);
-      if ((await target.count()) === 1 && (await amount.count()) === 1) {
-        rows.push({
-          from: (await renderedValue(from)).trim(),
-          to: (await renderedValue(target)).trim(),
-          cents: cents(await renderedValue(amount)),
-        });
-        await own(container);
-        break;
+      const from = headings.findIndex((text) => /\b(?:from|payer|debtor)\b/i.test(text));
+      const to = headings.findIndex((text) => /\b(?:to|receiver|creditor)\b/i.test(text));
+      const amount = headings.findIndex((text) => /\bamount\b/i.test(text));
+      if (from < 0 || to < 0 || amount < 0) continue;
+      for (const row of await table.getByRole('row').all()) {
+        const parts = await row.getByRole('cell').or(row.getByRole('rowheader')).all();
+        const cells = await Promise.all(parts.map(renderedValue));
+        if (cells.length !== headings.length) continue;
+        const a = cells[from]!.trim();
+        const b = cells[to]!.trim();
+        const value = cents(cells[amount]!);
+        rows.push({ from: a, to: b, cents: value });
+        await own([parts[from]!, parts[to]!, parts[amount]!]);
       }
-      if ((await container.evaluate((node) => node.tagName)) === 'HTML') break;
-      container = container.locator('..');
     }
-  }
+    for (const from of await ctx.view.getByLabel(/\b(?:from|payer|debtor)\b/i).all()) {
+      if (
+        (await representedPayer(from)) ||
+        !(await from.isVisible()) ||
+        (await from.evaluate(
+          (node) => node.matches(':read-write') || node instanceof HTMLSelectElement,
+        ))
+      )
+        continue;
+      let container = from.locator('..');
+      while (await container.count()) {
+        const target = container.getByLabel(/\b(?:to|receiver|creditor)\b/i);
+        const amount = container.getByLabel(/\bamount\b/i);
+        if ((await target.count()) === 1 && (await amount.count()) === 1) {
+          rows.push({
+            from: (await renderedValue(from)).trim(),
+            to: (await renderedValue(target)).trim(),
+            cents: cents(await renderedValue(amount)),
+          });
+          await own([from, target.first(), amount.first()]);
+          break;
+        }
+        if ((await container.evaluate((node) => node.tagName)) === 'HTML') break;
+        container = container.locator('..');
+      }
+    }
 
-  let valid = rows.length > 0;
-  for (const row of rows) {
-    const debtor = totals.find((item) => item.name === row.from);
-    const creditor = totals.find((item) => item.name === row.to);
-    valid &&= row.cents > 0 && (debtor?.net ?? 0) < 0 && (creditor?.net ?? 0) > 0;
-    remaining.set(row.from, (remaining.get(row.from) ?? 0) + row.cents);
-    remaining.set(row.to, (remaining.get(row.to) ?? 0) - row.cents);
+    const cards = await transferCards(ctx);
+    for (const row of cards) {
+      if (await representedCard(ctx.view.locator('body *').nth(row.index))) continue;
+      rows.push({ from: row.from, to: row.to, cents: cents(row.amount) });
+    }
+
+    let valid = rows.length > 0;
+    for (const row of rows) {
+      const debtor = totals.find((item) => item.name === row.from);
+      const creditor = totals.find((item) => item.name === row.to);
+      valid &&= row.cents > 0 && (debtor?.net ?? 0) < 0 && (creditor?.net ?? 0) > 0;
+      remaining.set(row.from, (remaining.get(row.from) ?? 0) + row.cents);
+      remaining.set(row.to, (remaining.get(row.to) ?? 0) - row.cents);
+    }
+    return { valid: valid && [...remaining.values()].every((value) => value === 0), rows };
+  } finally {
+    await Promise.all(fields.flat().map((field) => field.dispose()));
   }
-  return { valid: valid && [...remaining.values()].every((value) => value === 0), rows };
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 export const judge: TaskJudge = async (ctx) => {

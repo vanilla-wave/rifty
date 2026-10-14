@@ -187,7 +187,7 @@
       "inputsSha256": "2da4ba7a773f3586386a7ff8e636e0bbf83021bbea69fdcc2639dbf291e878d5",
       "lockSha256": "6d70cd33514e7dafd48313e0c35cefae22101b471cf1ccec2f66e45a01b50e6d",
       "promptSha256": "5dfed4426b8d38dc0ecda97a24414a9ebe2deba43cf1c6fd21b806429d3e6242",
-      "judgeSha256": "d3117221826c13e1cf1f88722ae0442feb9e06779375031912b3b9df1f761cca",
+      "judgeSha256": "803ab02af42e670e6327220387461cf4e6964bf5c19b3e955b4bc2c4b2d7ec07",
       "judgeSupport": "record-observation-v1",
       "correctionOf": "eval-v16/expense-settlement-v10"
     }
