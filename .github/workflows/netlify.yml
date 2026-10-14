@@ -54,6 +54,18 @@ jobs:
           set -euo pipefail
           pnpm dlx netlify@26.0.2 build --filter="@riftydev/playground" --context="$NETLIFY_BUILD_CONTEXT"
 
+      # ADR-0528: the app must use the same-origin `/npm-registry` route. A
+      # Netlify site env var (not visible in this repo) could bake a dead host
+      # back in while the route smoke below stays green.
+      - name: Refuse dead registry/eddy hosts in the built app
+        run: |
+          set -euo pipefail
+          if grep -rqE 'registry\.rifty\.dev|eddy(-cdn|-origin)?\.rifty\.dev' apps/playground/dist; then
+            grep -rlE 'registry\.rifty\.dev|eddy(-cdn|-origin)?\.rifty\.dev' apps/playground/dist
+            echo "::error::built playground references a dead Yandex host; check Netlify site env (VITE_RIFTY_REGISTRY_URL / VITE_RIFTY_RESOLVER_URL)."
+            exit 1
+          fi
+
       - name: Deploy PR preview
         id: preview
         if: github.event_name == 'pull_request'

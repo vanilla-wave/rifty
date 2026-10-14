@@ -19,9 +19,12 @@ still resolves. ADR-0528 keeps production alive on Netlify alone:
 `/npm-registry/*` is a 200 rewrite to `registry.npmjs.org`, `VITE_RIFTY_RESOLVER_URL`
 is unset, the eddy smoke left the deploy workflow. Degradation accepted there:
 
-- no owned CDN cache tier for packuments/tarballs (ADR-0176); Netlify CDN
-  caching of proxied responses is unverified;
-- 26 s Netlify proxy timeout per request (largest packuments on a slow edge);
+- no owned CDN cache tier for packuments/tarballs (ADR-0176); Netlify Edge
+  does store proxied responses per upstream `Cache-Control` (observed
+  2026-10-14), but with no operator control over it;
+- 26 s Netlify proxy timeout per request (full `vite` packument 38.9 MB
+  measured 6.5 s via the preview; the largest packuments on a slow edge are
+  the exposure);
 - no eddy fast path (`perf/benchmarks.json` eddy pass stays `unmeasured`).
 
 Open operator fork, not decidable in-repo: recreate the Yandex resources from
@@ -39,7 +42,7 @@ challenge: <pending>
 1. One recorded decision (ADR superseding or confirming ADR-0528 §5): dedicated
    proxy/resolver restored at named hosts with the live smokes back in
    `.github/workflows/netlify.yml`, OR the Netlify route declared permanent and
-   the dead-host config/docs/DNS rows removed → ADR-0528
+   the dead-host config, docs and DNS rows removed → ADR-0528
 2. If restored: `netlify.toml` sets `VITE_RIFTY_REGISTRY_URL` /
    `VITE_RIFTY_RESOLVER_URL` again only after both live smokes pass against the
    new hosts in the same PR → ADR-0528

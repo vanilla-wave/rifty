@@ -7,9 +7,11 @@ Date: 2026-10
 > stopped answering (2026-10-13: origin TCP timeout, CDN edge 504/403). The
 > production playground now installs through a same-origin `/npm-registry/*`
 > Netlify proxy rewrite to `registry.npmjs.org`; eddy is OFF in the production
-> build. Partially supersedes ADR-0163 (decisions 1, 2, 4) and ADR-0133's
-> rejection of a direct Netlify redirect. Accepted degradation: no CDN tier, no
-> fast-install path, 26 s Netlify proxy timeout per request.
+> build. Partially supersedes ADR-0163 (decisions 1 and 4 plus its "Netlify
+> static only" TL;DR clause; decisions 2, 3, 5 stand as the dedicated-proxy
+> runbook) and revisits the direct-Netlify-redirect option ADR-0133 rejected.
+> Accepted degradation: no owned CDN tier, no fast-install path, 26 s Netlify
+> proxy timeout per request, npm bytes metered as Netlify bandwidth.
 
 ## Context
 
@@ -26,14 +28,33 @@ Date: 2026-10
   smallest honest mechanism it offers is a 200 rewrite to an external URL: a
   streaming proxy on Netlify's CDN, documented 26 s per-request timeout, no
   custom response headers on proxied content, upstream cache headers honored.
-- ADR-0133 rejected exactly this ("no tested handler seam for method policy,
-  CORS/CORP headers, env-driven upstream"). Those reasons no longer bind:
+- ADR-0133 (removed; its option-B rejection was never grafted into 0163, so
+  no active rule is overturned here) rejected exactly this ("no tested handler
+  seam for method policy, CORS/CORP headers, env-driven upstream"). Those
+  reasons no longer bind:
   the route is same-origin, so the browser needs no CORS/CORP; method policy
   is moot (the client only GETs); the upstream is one static rule, which
   `tests/integration/prod-npm-registry-proxy.test.ts` pins.
 - A dead resolver is worse than none: with `VITE_RIFTY_RESOLVER_URL` set,
   every from-scratch install waits the eddy header-stall bound (ADR-0201)
   before the standard path runs. ADR-0182 makes eddy opt-in and default OFF.
+
+## Candidates
+
+- **A — Netlify 200 rewrite, same-origin `/npm-registry` (chosen).** Keeps
+  ADR-0005's dev/prod route shape and the operator-owned routing seam; live
+  smoke + browser install proof below; Netlify Edge caches per upstream
+  headers. Costs: 26 s cap, npm bytes ride Netlify bandwidth, shared egress IPs.
+- **B — `VITE_RIFTY_REGISTRY_URL=https://registry.npmjs.org` (direct).** One
+  env line; probe 2026-10-14: npmjs sends `access-control-allow-origin: *` on
+  packument and tarball, COEP `credentialless` admits CORS-mode fetches, the
+  client sends no preflight-triggering header. No 26 s cap, no Netlify
+  bandwidth, per-user npm rate buckets. Killed for now: CORS policy outside
+  operator control, ADR-0163 §Context still rejects direct browser calls, and
+  the same-origin route shape is lost. Stays the documented one-line fallback
+  if Netlify bandwidth metering becomes a cost (see Consequences).
+- **C — Netlify Function proxy (ADR-0133 shape).** Killed: buffered bodies,
+  function build state, runtime site env — machinery A delivers without.
 
 ## Decision
 
@@ -61,11 +82,21 @@ Date: 2026-10
 
 - Production installs work again with zero operator-owned infrastructure
   beyond Netlify; a PR's deploy check is green again.
-- Slower: no Yandex CDN tarball/packument cache (Netlify CDN nodes may cache
-  per upstream `Cache-Control`, unverified), no eddy fast path. A single
-  response slower than 26 s fails on Netlify's proxy timeout — real risk only
-  for the largest packuments on a slow edge; the client's retry ladder
+- Slower: no owned CDN tier (ADR-0176) and no eddy fast path. Netlify Edge
+  does store proxied responses per upstream `Cache-Control` (observed
+  `cache-status: "Netlify Edge"; … stored`, `age` growing on repeat hits), so
+  immutable tarballs and 300 s packuments still get an edge cache. A single
+  response slower than 26 s fails on Netlify's proxy timeout — the client
+  fetches FULL packuments (`docs/backlog/npm-client/abbreviated-packuments.md`),
+  so the largest ones on a slow edge are the real risk; the retry ladder
   (ADR-0201 bounds) surfaces it loudly, never silently.
+- Proxied npm bytes (a cold Vite install moves tens of MB of full packuments
+  and tarballs) are served and, per Netlify's model, metered as site bandwidth.
+  Plan limits/overage were NOT verified in this change; if they can bill, that
+  is a DEC-3 spend decision for the operator and candidate B is the switch.
+- All users egress to npm through shared Netlify IPs, so npm 429 pressure
+  rises; the client already retries 429/5xx with backoff (`RegistryClient`
+  `maxRetries`).
 - `tools/perf/bench.mjs` install passes need an explicit
   `VITE_RIFTY_REGISTRY_URL`; there is no live default origin to point at.
 - `docs/public/hosting-yandex.md` becomes a restore runbook, not a description
@@ -76,15 +107,37 @@ Date: 2026-10
 - [x] `tests/integration/prod-npm-registry-proxy.test.ts` pins: proxy rules
   precede the SPA fallback in both files, no `VITE_RIFTY_REGISTRY_URL` /
   `VITE_RIFTY_RESOLVER_URL` in `netlify.toml`, smoke targets the deploy
-  outputs, no eddy smoke step.
-- [ ] Live: PR preview deploy smoke passes against the preview origin
-  (`/npm-registry/vite` JSON + latest tarball through the Netlify rewrite).
+  outputs, no eddy smoke step; the standing ADR-0163 §3 / ADR-0176 Caddy
+  assertions stay.
+- [x] Deploy workflow fails if the built `apps/playground/dist` references
+  `registry.rifty.dev` or `eddy*.rifty.dev` (a Netlify site env var could
+  otherwise re-point the app at a dead host while the route smoke stays green).
+- [x] Smoke covers a scoped packument (`/npm-registry/@types%2Fnode`) — Netlify
+  splat handling of the encoded scope separator is platform behavior.
+- [x] Live 2026-10-14, PR #371 preview
+  `https://pr-371--rifty-playground.netlify.app`: deploy smoke
+  `npm registry proxy smoke ok: …/npm-registry/vite + vite-8.3.4.tgz`;
+  `/npm-registry/left-pad` 200 `application/vnd.npm.install-v1+json` 0.5 s,
+  upstream `access-control-allow-origin: *` passed through, no CORP (none
+  needed same-origin); tarball 200 gzip 0.4 s; full `vite` packument 38.9 MB
+  200 in 6.5 s; `/`, `/sw.js` still static; `/npm-registry` root → registry
+  JSON, not the SPA shell; scoped `/npm-registry/@types%2Fnode` → 200 JSON.
+- [x] Browser install through the route, same preview, headless Chromium
+  (`crossOriginIsolated=true`), `/?preset=real-vite&autorun=1`:
+  `npm: installed 71 package(s) in 11.5s`, 169 `/npm-registry/*` requests, 0
+  failed responses, 0 requests to `registry.rifty.dev` / `eddy*.rifty.dev`.
+  The following `npm run dev` stops on an unrelated upstream drift
+  (`vite esbuild runtime supports exact Vite 7.3.6; executed 7.3.7`, vite
+  7.3.7 published 2026-10-06; the starter requests `^7.0.0`) — already
+  repaired on open PR #341 (starters pinned to the admitted 7.3.6; evidence
+  `docs/backlog/distribution/reference/pr-341-starter-version-repair.md` on
+  that branch), not a registry-route fault.
 
 ## Reversibility classification
 
-**IRREVERSIBLE** — contradicts recorded ADR decisions (0163 §1, §2, §4;
-0133 option B rejection) and changes the production routing contract.
-Recorded per DEC-2 with a dated §Corrections note in ADR-0163.
+**IRREVERSIBLE** — contradicts recorded ADR decisions (0163 §1, §4 and its
+"Netlify static only" TL;DR clause) and changes the production routing
+contract. Recorded per DEC-2 with a dated §Corrections note in ADR-0163.
 
 ## Cited ADRs and docs
 

@@ -50,7 +50,21 @@ for (let attempt = 1; attempt <= 6; attempt += 1) {
       throw new Error(`expected gzip tarball from ${tarballUrl}`);
     }
 
-    console.log(`npm registry proxy smoke ok: ${smokeUrl} + vite-${latest}.tgz`);
+    // Scoped names travel with an encoded separator (`@types%2Fnode`); the
+    // route's splat handling of that byte is platform behavior, so it is smoked.
+    const scopedUrl = new URL('/npm-registry/@types%2Fnode', baseUrl);
+    const scoped = await fetch(scopedUrl, { headers: { accept: 'application/json' } });
+    const scopedText = await scoped.text();
+    if (!scoped.ok) {
+      throw new Error(`scoped ${scoped.status} ${scoped.statusText}: ${scopedText.slice(0, 300)}`);
+    }
+    if (JSON.parse(scopedText).name !== '@types/node') {
+      throw new Error(`expected npm metadata for @types/node, got ${scopedText.slice(0, 300)}`);
+    }
+
+    console.log(
+      `npm registry proxy smoke ok: ${smokeUrl} + vite-${latest}.tgz + ${scopedUrl.pathname}`,
+    );
     process.exit(0);
   } catch (err) {
     lastError = err instanceof Error ? err : new Error(String(err));

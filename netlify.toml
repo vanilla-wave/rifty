@@ -47,7 +47,8 @@
     Cross-Origin-Resource-Policy = "cross-origin"
 
 # Same-origin npm registry route (ADR-0528; mirror of
-# apps/playground/public/_redirects, which Netlify processes first). A 200
+# apps/playground/public/_redirects, which Netlify processes first — while that
+# file ships, its own catch-all answers before any rule here). A 200
 # rewrite to an external URL is a streaming proxy on Netlify's CDN: the browser
 # never talks to registry.npmjs.org, so the cross-origin-isolated page needs no
 # CORS/CORP from upstream. Must precede the SPA fallback or the shell would

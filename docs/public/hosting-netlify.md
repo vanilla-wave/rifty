@@ -11,8 +11,9 @@ serves the static playground artifact AND proxies the npm registry route:
 `/npm-registry/*` is a 200 rewrite to `https://registry.npmjs.org/:splat`
 (ADR-0528), so production installs are same-origin, like the Vite dev proxy.
 The rule precedes the SPA fallback in both files (`_redirects` is processed
-first). Netlify proxy limits: 26 s per request, no custom response headers on
-proxied content, cacheable upstream responses may be cached by CDN nodes. The
+first). Netlify proxy behavior (verified 2026-10-14): 26 s per request, no
+custom response headers on proxied content, upstream `Cache-Control` honored by
+Netlify Edge (`cache-status: … stored`), upstream CORS headers pass through. The
 former dedicated proxy/CDN at `registry.rifty.dev` (Yandex Cloud, ADR-0163) is
 out of service and no longer a dependency; `docs/public/hosting-yandex.md` is
 its restore runbook.
