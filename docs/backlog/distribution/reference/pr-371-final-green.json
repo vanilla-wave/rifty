@@ -1,0 +1,134 @@
+{
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "0635aafd1204557571ef7468b63469f1055aed2c",
+  "unit_goal_source": "PR #371, observed-defect fix без backlog-контракта; body прочитан через gh pr view 371. Authority: docs/adr/npm-client/0528-netlify-proxy-rewrite-serves-the-production-npm-registry-route.md. BASE f71b93fd1588dc2c13d3dad72d4b4d22c92e8df9; HEAD 0635aafd1204557571ef7468b63469f1055aed2c. Baseline повторён: обе VM TCP timeout, CDN 504 (/tmp/rifty-review-371-reverify/baseline.json). HEAD tests против BASE routing fixtures: 2 RED; pnpm test:docs-contract: 33 PASS. python3 /tmp/rifty-review-371-b1-reverify/verify.py подтвердил immutable target, missing-ID exit 1, RED прежнего workflow и deploy_url-consumer mutant. Netlify run 38587964276: HEAD deploy 6acf9da59eb6ca41e39d0bdf, immutable smoke PASS (/tmp/rifty-review-371-reverify/deploy-head.log:1306). node /private/tmp/pr371-live-reverification/probe.cjs https://6acf9da59eb6ca41e39d0bdf--rifty-playground.netlify.app exact-head: HTTP acceptance PASS; Chromium isolated=true, 71 packages, 169 registry requests, 0 registry failures/dead hosts. Raw evidence: exact-head-summary.json и exact-head/browser.json рядом. PR-4: BASE criteria прочитаны; снятые Yandex/CORS/CORP/eddy требования обоснованы ADR-0528, Caddy assertions сохранены. CI job 115934917281 упал на check:pass-binding: устаревшие reviewed_sha/contract records; raw gh api log /tmp/rifty-review-371-reverify/lint-head.log:1734. Закрытие всего goal вне scope. Tracked files не изменены; verdict validator exit 0.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/integration/prod-npm-registry-proxy.test.ts:19",
+          "evidence": "node /Users/vanilla-wave/.t3/worktrees/rifty/t3-c42cdaca/node_modules/vitest/vitest.mjs run --root /tmp/rifty-review-371-criteria/toml-status-mutant --config /tmp/rifty-review-371-criteria/toml-status-mutant/vitest.config.mjs → 3/3 PASS. Единственная мутация: оба proxy status в netlify.toml 200→302. Diff и одинаковые SHA256 теста: /tmp/rifty-review-371-criteria/toml-status-mutant-evidence.txt; output: toml-status-mutant.log.",
+          "summary": "C1: тест не закрепляет status=200 TOML mirror, объявленный ADR-0528 Decision 2. Реальные правила корректны; слабость проверки, не продуктовый blocker.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tests/integration/prod-npm-registry-proxy.test.ts:42",
+          "evidence": "python3 /tmp/rifty-review-371-b1-reverify/verify-export-mutant.py → smoke_target=https://pr-371--rifty-playground.netlify.app; integration 3/3 PASS. Единственная мутация workflow:106: echo \"permalink_url=$alias_url\". Raw outputs: /tmp/rifty-review-371-b1-reverify/mutant-alias-export.result.json и mutant-alias-export-green.log.",
+          "summary": "C2: source assertions пропускают экспорт alias под именем permalink_url. Immutable binding ADR-0528 Decision 4 покрыт слабо; actual HEAD и live CI корректны.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Acceptance 1 / Decision 2: proxy rules перед SPA в обоих файлах, status 200; registry/resolver overrides отсутствуют, eddy smoke удалён, Caddy assertions сохранены.",
+      "source": "acceptance",
+      "trace": "ADR-0528 + ADR-0163 + ADR-0176",
+      "status": "weak",
+      "citation": "tests/integration/prod-npm-registry-proxy.test.ts:19",
+      "note": "C1: TOML status=302 mutant проходит тесты. Реальное дерево корректно; advisory."
+    },
+    {
+      "row": "Acceptance 2: build gate отвергает dist со ссылками на registry.rifty.dev и известные eddy hosts.",
+      "source": "acceptance",
+      "trace": "ADR-0528",
+      "status": "pass",
+      "citation": ".github/workflows/netlify.yml:60",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3 / Decision 4: preview smoke привязан к immutable permalink; без deploy_id отказ; integration отвергает deploy_url consumer.",
+      "source": "acceptance",
+      "trace": "ADR-0528",
+      "status": "weak",
+      "citation": "tests/integration/prod-npm-registry-proxy.test.ts:42",
+      "note": "C2: alias-export mutant проходит source assertions. B1 исправлен: подтверждён реальным deploy HEAD и RED возврата consumer к deploy_url."
+    },
+    {
+      "row": "Acceptance 4: smoke проверяет scoped packument /npm-registry/@types%2Fnode.",
+      "source": "acceptance",
+      "trace": "ADR-0528",
+      "status": "pass",
+      "citation": "tools/registry/smoke-npm-registry.mjs:55",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: live metadata, gzip tarball, full vite packument, registry root и scoped route; / и /sw.js остаются static.",
+      "source": "acceptance",
+      "trace": "ADR-0528",
+      "status": "pass",
+      "citation": "docs/adr/npm-client/0528-netlify-proxy-rewrite-serves-the-production-npm-registry-route.md:123",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: Chromium crossOriginIsolated; реальная установка same-origin без registry failures и запросов к dead hosts.",
+      "source": "acceptance",
+      "trace": "ADR-0528",
+      "status": "pass",
+      "citation": "docs/adr/npm-client/0528-netlify-proxy-rewrite-serves-the-production-npm-registry-route.md:131",
+      "note": ""
+    },
+    {
+      "row": "GET /npm-registry/*: same-origin proxy npm metadata/tarballs перед SPA fallback.",
+      "source": "public-api",
+      "trace": "ADR-0528",
+      "status": "pass",
+      "citation": "tools/registry/smoke-npm-registry.mjs:20",
+      "note": ""
+    },
+    {
+      "row": "GET /npm-registry: registry JSON вместо SPA shell.",
+      "source": "public-api",
+      "trace": "ADR-0528",
+      "status": "pass",
+      "citation": "docs/adr/npm-client/0528-netlify-proxy-rewrite-serves-the-production-npm-registry-route.md:129",
+      "note": ""
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "overall_verdict": "concern",
+  "merge_call": "B1 устранён; блокеров ревью нет, 2 advisory. Мерж после устранения красного check:pass-binding и завершения CI.",
+  "adjudication": []
+}
