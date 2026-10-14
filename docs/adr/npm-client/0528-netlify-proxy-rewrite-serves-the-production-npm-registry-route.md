@@ -92,10 +92,15 @@ Date: 2026-10
   fetches FULL packuments (`docs/backlog/npm-client/abbreviated-packuments.md`),
   so the largest ones on a slow edge are the real risk; the retry ladder
   (ADR-0201 bounds) surfaces it loudly, never silently.
-- Proxied npm bytes (a cold Vite install moves tens of MB of full packuments
-  and tarballs) are served and, per Netlify's model, metered as site bandwidth.
-  Plan limits/overage were NOT verified in this change; if they can bill, that
-  is a DEC-3 spend decision for the operator and candidate B is the switch.
+- Proxied npm bytes are metered as Netlify bandwidth. Measured 2026-10-14 on
+  the preview permalink: one cold React-starter install = 169 `/npm-registry/*`
+  responses, 105.6 MB (plus 9.4 MB app assets). Netlify credit plans (docs
+  checked 2026-10-14): Free = 300 credits/month hard limit, bandwidth 20
+  credits/GB (≈ 15 GB), production deploy 15 credits, preview deploys 0; at
+  0 credits every project of the team is paused until the next cycle (the
+  landing included). ≈ 2 credits per cold install → roughly 100–140 cold
+  installs/month after deploys. Spend/risk call is the operator's (DEC-3);
+  candidate B is the one-line switch that removes npm bytes from Netlify.
 - All users egress to npm through shared Netlify IPs, so npm 429 pressure
   rises; the client already retries 429/5xx with backoff (`RegistryClient`
   `maxRetries`).

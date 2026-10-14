@@ -25,6 +25,10 @@ is unset, the eddy smoke left the deploy workflow. Degradation accepted there:
 - 26 s Netlify proxy timeout per request (full `vite` packument 38.9 MB
   measured 6.5 s via the preview; the largest packuments on a slow edge are
   the exposure);
+- npm bytes count as Netlify bandwidth: 105.6 MB per cold React-starter
+  install (measured 2026-10-14); Free plan = 300 credits/month at 20
+  credits/GB, exhaustion pauses every project of the team (ADR-0528
+  §Consequences);
 - no eddy fast path (`perf/benchmarks.json` eddy pass stays `unmeasured`).
 
 Open operator fork, not decidable in-repo: recreate the Yandex resources from

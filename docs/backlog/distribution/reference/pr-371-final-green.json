@@ -1,7 +1,7 @@
 {
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "0635aafd1204557571ef7468b63469f1055aed2c",
-  "unit_goal_source": "PR #371, observed-defect fix без backlog-контракта; body прочитан через gh pr view 371. Authority: docs/adr/npm-client/0528-netlify-proxy-rewrite-serves-the-production-npm-registry-route.md. BASE f71b93fd1588dc2c13d3dad72d4b4d22c92e8df9; HEAD 0635aafd1204557571ef7468b63469f1055aed2c. Baseline повторён: обе VM TCP timeout, CDN 504 (/tmp/rifty-review-371-reverify/baseline.json). HEAD tests против BASE routing fixtures: 2 RED; pnpm test:docs-contract: 33 PASS. python3 /tmp/rifty-review-371-b1-reverify/verify.py подтвердил immutable target, missing-ID exit 1, RED прежнего workflow и deploy_url-consumer mutant. Netlify run 38587964276: HEAD deploy 6acf9da59eb6ca41e39d0bdf, immutable smoke PASS (/tmp/rifty-review-371-reverify/deploy-head.log:1306). node /private/tmp/pr371-live-reverification/probe.cjs https://6acf9da59eb6ca41e39d0bdf--rifty-playground.netlify.app exact-head: HTTP acceptance PASS; Chromium isolated=true, 71 packages, 169 registry requests, 0 registry failures/dead hosts. Raw evidence: exact-head-summary.json и exact-head/browser.json рядом. PR-4: BASE criteria прочитаны; снятые Yandex/CORS/CORP/eddy требования обоснованы ADR-0528, Caddy assertions сохранены. CI job 115934917281 упал на check:pass-binding: устаревшие reviewed_sha/contract records; raw gh api log /tmp/rifty-review-371-reverify/lint-head.log:1734. Закрытие всего goal вне scope. Tracked files не изменены; verdict validator exit 0.",
+  "reviewed_sha": "0f4cc94f572a24386660c5c6f007ccc2b82f1611",
+  "unit_goal_source": "PR #371, observed-defect fix без backlog-контракта. Authority: docs/adr/npm-client/0528-netlify-proxy-rewrite-serves-the-production-npm-registry-route.md. BASE origin/main 9645c62bfcabeeb9bdabedd3a38189b5a4ba0615; HEAD 0f4cc94f572a24386660c5c6f007ccc2b82f1611. PR body прочитан через gh pr view 371. Baseline повторён: 93.77.177.79/89.169.128.66:443 timeout, CDN /npm-registry/left-pad HTTP 504 (/tmp/pr371-retarget-live/baseline.json). Пять routing/workflow/test файлов и patches идентичны прежним BASE f71b93fd1 / reviewed HEAD 0635aafd1; исключения: перенесённые changelog строки, очистка ADR index, добавленный verdict (/tmp/pr371-retarget-audit/equivalence.json, range-diff.txt). PR-4: прежние критерии прочитаны; изменения разрешены ADR-0528. pnpm test:docs-contract: 33 PASS; pnpm docs:check: PASS. python3 /tmp/pr371-routing-reverify/verify.py: HEAD 3 PASS, прежние BASE tests 2 PASS, HEAD tests на BASE fixtures 3 assertion RED; deploy_url-consumer mutant RED; missing deploy_id exit 1; dead-host gate clean=0, четыре dead-host fixtures=1. Netlify run 38642870723 SUCCESS; checkout подтверждает merge указанного HEAD в BASE; deploy 6acff9284b25c4ad13a7a903, immutable smoke PASS (/tmp/pr371-retarget-live/netlify-job.log:1293). node /tmp/pr371-retarget-live/probe.cjs https://6acff9284b25c4ad13a7a903--rifty-playground.netlify.app head; node /tmp/pr371-retarget-live/verify-live.cjs: 7 HTTP endpoints PASS; Chromium isolated=true, 71 установленный пакет, 169 registry requests, 0 failures/dead hosts; full Vite packument 38988699 bytes/4062 ms (/tmp/pr371-retarget-live/summary.json, head/routes.json, head/browser.json). Затем воспроизведён известный Vite 7.3.7 drift; ремонт #341 вне scope. Tracked files не изменены. Verdict validator: exit 0. Закрытие общего goal не запрошено.",
   "axes": [
     {
       "axis": "Completeness",
@@ -10,15 +10,15 @@
         {
           "severity": "concern",
           "location": "tests/integration/prod-npm-registry-proxy.test.ts:19",
-          "evidence": "node /Users/vanilla-wave/.t3/worktrees/rifty/t3-c42cdaca/node_modules/vitest/vitest.mjs run --root /tmp/rifty-review-371-criteria/toml-status-mutant --config /tmp/rifty-review-371-criteria/toml-status-mutant/vitest.config.mjs → 3/3 PASS. Единственная мутация: оба proxy status в netlify.toml 200→302. Diff и одинаковые SHA256 теста: /tmp/rifty-review-371-criteria/toml-status-mutant-evidence.txt; output: toml-status-mutant.log.",
-          "summary": "C1: тест не закрепляет status=200 TOML mirror, объявленный ADR-0528 Decision 2. Реальные правила корректны; слабость проверки, не продуктовый blocker.",
+          "evidence": "python3 /tmp/pr371-routing-reverify/verify.py: wildcard TOML status 200→302 — Tests 3 passed (3), exit 0. Артефакты: /tmp/pr371-routing-reverify/mutant-toml-status-302.toml и mutant-toml-status-302-green.log.",
+          "summary": "C1: тест не закрепляет status=200 TOML mirror из ADR-0528 Decision 2. Реальная конфигурация корректна; прежняя слабость проверки сохраняется.",
           "authority": ""
         },
         {
           "severity": "concern",
           "location": "tests/integration/prod-npm-registry-proxy.test.ts:42",
-          "evidence": "python3 /tmp/rifty-review-371-b1-reverify/verify-export-mutant.py → smoke_target=https://pr-371--rifty-playground.netlify.app; integration 3/3 PASS. Единственная мутация workflow:106: echo \"permalink_url=$alias_url\". Raw outputs: /tmp/rifty-review-371-b1-reverify/mutant-alias-export.result.json и mutant-alias-export-green.log.",
-          "summary": "C2: source assertions пропускают экспорт alias под именем permalink_url. Immutable binding ADR-0528 Decision 4 покрыт слабо; actual HEAD и live CI корректны.",
+          "evidence": "python3 /tmp/pr371-routing-reverify/verify.py: export permalink_url=$alias_url — Tests 3 passed, parser smoke_target=https://pr-371--rifty-playground.netlify.app; удаление missing-ID guard — Tests 3 passed, parser exit 0. Raw в том же каталоге: mutant-alias-export-green.log, mutant-export-parser.result.json, mutant-no-id-guard-green.log, mutant-noid-parser.result.json.",
+          "summary": "C2: source assertions пропускают неверный экспорт permalink и отсутствие missing-ID guard. Actual HEAD правильно экспортирует immutable URL и отказывает без deploy_id.",
           "authority": ""
         }
       ]
@@ -40,8 +40,16 @@
     },
     {
       "axis": "Scope",
-      "verdict": "pass",
-      "findings": []
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "apps/playground/CHANGELOG.md:5",
+          "evidence": "git range-diff f71b93fd1..0635aafd1 9645c62bf..0f4cc94f5 показывает перенос чужих changelog строк; git merge-base --is-ancestor c22c0fb59 0f4cc94f5 → exit 1. HEAD vite.ts:36 и react-vite/index.ts:37 сохраняют ^7.0.0. Raw: /tmp/pr371-retarget-audit/range-diff.txt, stale-ci-claims.json, pr.json. Live terminal подтверждает executed 7.3.7: /tmp/pr371-retarget-live/head/browser.json.",
+          "summary": "C3: retarget перенёс changelog прежней базы; строки 5–6 и CI note PR ошибочно обещают отсутствующий Vite pin/rebake. CHANGELOG.md:9–13 также содержит чужие записи. Исправить описание scope; upstream repair остаётся вне этого PR.",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Bugs",
@@ -66,7 +74,7 @@
       "trace": "ADR-0528 + ADR-0163 + ADR-0176",
       "status": "weak",
       "citation": "tests/integration/prod-npm-registry-proxy.test.ts:19",
-      "note": "C1: TOML status=302 mutant проходит тесты. Реальное дерево корректно; advisory."
+      "note": "C1: wildcard TOML status=302 mutant проходит 3/3 теста. Реальный HEAD корректен."
     },
     {
       "row": "Acceptance 2: build gate отвергает dist со ссылками на registry.rifty.dev и известные eddy hosts.",
@@ -82,7 +90,7 @@
       "trace": "ADR-0528",
       "status": "weak",
       "citation": "tests/integration/prod-npm-registry-proxy.test.ts:42",
-      "note": "C2: alias-export mutant проходит source assertions. B1 исправлен: подтверждён реальным deploy HEAD и RED возврата consumer к deploy_url."
+      "note": "C2: alias-export и удаление missing-ID guard проходят 3/3 теста. Реальный workflow корректен; новый immutable deploy и consumer RED подтверждены."
     },
     {
       "row": "Acceptance 4: smoke проверяет scoped packument /npm-registry/@types%2Fnode.",
@@ -93,7 +101,7 @@
       "note": ""
     },
     {
-      "row": "Acceptance 5: live metadata, gzip tarball, full vite packument, registry root и scoped route; / и /sw.js остаются static.",
+      "row": "Acceptance 5: live metadata, gzip tarball, full Vite packument, registry root и scoped route; / и /sw.js остаются static.",
       "source": "acceptance",
       "trace": "ADR-0528",
       "status": "pass",
@@ -129,6 +137,6 @@
   "goal_residuals": [],
   "goal_complete": false,
   "overall_verdict": "concern",
-  "merge_call": "B1 устранён; блокеров ревью нет, 2 advisory. Мерж после устранения красного check:pass-binding и завершения CI.",
+  "merge_call": "Блокеров ревью нет; merge после перепривязки verdict к 0f4cc94f5 и проверки binding. 3 advisory; общий CI не объявлен зелёным.",
   "adjudication": []
 }
