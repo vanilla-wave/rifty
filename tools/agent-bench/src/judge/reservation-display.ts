@@ -1,3 +1,4 @@
+import type { ElementHandle } from '@playwright/test';
 import type { JudgeContext } from './context.ts';
 import { publicRecordValuePattern } from './public-record-display.ts';
 import type { ReservationRecord } from './reservation-records.ts';
@@ -7,6 +8,7 @@ export async function reservationDisplay(
   ctx: JudgeContext,
   record: ReservationRecord,
   known: readonly ReservationRecord[],
+  ownedTables: readonly ElementHandle<SVGElement | HTMLElement>[] = [],
 ): Promise<{ present: boolean; count: number; position: { top: number; left: number } | null }> {
   const core = (value: ReservationRecord) =>
     [value.start, value.end, String(value.seats)].map(
@@ -19,16 +21,23 @@ export async function reservationDisplay(
       publicRecordValuePattern({ calendarDate: record.date }).source,
     ],
     peers: known.map((value) => core(value).slice(0, 2)),
+    ownedTables,
   };
   return ctx.view.locator('body').evaluate((root, query) => {
     type Atom = { owner: Element; text: string; id: number };
     type Span = { id: number; start: number; end: number };
     const atoms: Atom[] = [];
+    const ownership = {
+      includes(element: Element): boolean {
+        return query.ownedTables.some((table) => table === element || table.contains(element));
+      },
+    };
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const owner = node.parentElement;
       if (
         !owner ||
+        ownership.includes(owner) ||
         owner.closest(
           'button,a,input,textarea,select,script,style,[contenteditable],[role="button"],[role="link"]',
         )
@@ -45,6 +54,7 @@ export async function reservationDisplay(
         atoms.push({ owner, text: node.textContent ?? '', id: atoms.length });
     }
     for (const input of root.querySelectorAll('input,textarea,select')) {
+      if (ownership.includes(input)) continue;
       const style = getComputedStyle(input);
       if (
         style.display === 'none' ||

@@ -573,6 +573,15 @@ export async function actionName(action: Locator): Promise<string> {
   return name;
 }
 
+/** An editor's Cancel names its edit target; literal record identities are not verbs. */
+async function cancellationAction(action: Locator, name: string, verbs: string): Promise<boolean> {
+  if (verbs.split('|').includes('cancel') || !/^\W*cancel\b/i.test(name)) return false;
+  const visible = await action.evaluate((node) =>
+    node instanceof HTMLElement ? node.innerText : (node.textContent ?? ''),
+  );
+  return /^\W*cancel\b/i.test(visible.trim());
+}
+
 /** Pure eligibility only. Record identity is established by explicit saved effects. */
 export async function workflowCandidates(
   ctx: JudgeContext,
@@ -599,6 +608,7 @@ export async function workflowCandidates(
     if (!(await candidate.isVisible()) || !(await candidate.isEnabled())) continue;
     const name = accessibleRoot(await candidate.ariaSnapshot());
     if (name === undefined) throw new Error('Missing computed operation caption');
+    if (await cancellationAction(candidate, name, verbs)) continue;
     let eligible = actionCaption(verbs, subjects).test(name);
     if (!eligible) {
       for (const scope of (await candidate.locator('xpath=ancestor::*').all()).reverse()) {
@@ -613,7 +623,22 @@ export async function workflowCandidates(
         }
       }
     }
-    if (eligible) result = result.or(candidate);
+    if (eligible) {
+      // A new editor control can mention the same verb; it cannot rebind a saved caption.
+      const sameName = namedActions(ctx, name);
+      const element = await candidate.elementHandle();
+      if (!element) throw new Error('Operation disappeared during caption binding');
+      try {
+        const index = await sameName.evaluateAll(
+          (nodes, element) => nodes.indexOf(element),
+          element,
+        );
+        if (index < 0) throw new Error('Operation changed during caption binding');
+        result = result.or(sameName.nth(index));
+      } finally {
+        await element.dispose();
+      }
+    }
   }
   return result;
 }
@@ -645,6 +670,7 @@ export async function workflowActions(
     if (!(await node.isVisible())) continue;
     const name = accessibleRoot(await node.ariaSnapshot());
     if (name === undefined) throw new Error('Missing computed operation caption');
+    if (await cancellationAction(node, name, verbs)) continue;
     const identityText = name
       .replace(
         new RegExp(`\\b(?:${verbs.split('|').map(escapeCaption).join('|')})\\b\\s*`, 'i'),
