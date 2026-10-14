@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Boundary case checks exercise published compiler modes/targets and controller/indexer query effects; incomplete selector implementations stay failed.
+
+- Agent benchmark retains completed eval16 comparison and adds eight substantive engineering/compiler/resource boundary candidates; admission and boundary model study remain separate.
+
+- Review CLI validates retained verdicts against their reviewed Git contract; changed or retired current documents no longer substitute authority. Missing reviewed history stays explicit.
+- Production npm registry route survives the Yandex Cloud outage (ADR-0528): `play.rifty.dev/npm-registry/*` is a same-origin Netlify 200 rewrite to `registry.npmjs.org` (`_redirects` + `netlify.toml`, before the SPA fallback); `VITE_RIFTY_REGISTRY_URL` / `VITE_RIFTY_RESOLVER_URL` leave `netlify.toml` (eddy OFF); deploy smoke targets the deployed origin and the eddy smoke steps are removed. Slower (no CDN tier, 26 s proxy cap), never broken. Restore fork: `docs/backlog/distribution/restore-dedicated-registry-proxy-and-eddy.md`.
+
 - Codex sees the `rifty-review` skill in its catalog (`allow_implicit_invocation: true`), matching Claude; verified by a fresh read-only `codex exec` listing.
 
 - ES2022 gate: recognize explicitly feature-detected Float16Array through the existing local-guard analysis (ADR-0481); unguarded constructor use/extraction stays red.

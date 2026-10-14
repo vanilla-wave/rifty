@@ -1,4 +1,10 @@
 #!/usr/bin/env node
+// Live smoke for the production npm-registry route (ADR-0528): the deployed
+// playground origin must answer `/npm-registry/<pkg>` with registry JSON and
+// `/npm-registry/<pkg>/-/<pkg>-<v>.tgz` with a gzip tarball — never the SPA
+// shell (the ADR-0133 incident) and never a proxy error page. Same-origin
+// route: no CORS/CORP assertions (Netlify applies no custom headers to
+// proxied content; the browser needs none for a same-origin fetch).
 
 const baseUrl = process.argv[2];
 if (baseUrl === undefined || baseUrl.length === 0) {
@@ -8,17 +14,6 @@ if (baseUrl === undefined || baseUrl.length === 0) {
 
 const smokeUrl = new URL('/npm-registry/vite', baseUrl);
 let lastError = new Error('smoke did not run');
-
-function assertProxyHeaders(response, label) {
-  const allowOrigin = response.headers.get('access-control-allow-origin');
-  const corp = response.headers.get('cross-origin-resource-policy');
-  if (allowOrigin !== '*') {
-    throw new Error(`${label}: expected access-control-allow-origin "*", got ${allowOrigin}`);
-  }
-  if (corp !== 'cross-origin') {
-    throw new Error(`${label}: expected cross-origin-resource-policy "cross-origin", got ${corp}`);
-  }
-}
 
 for (let attempt = 1; attempt <= 6; attempt += 1) {
   try {
@@ -31,8 +26,6 @@ for (let attempt = 1; attempt <= 6; attempt += 1) {
     if (!response.ok) {
       throw new Error(`${response.status} ${response.statusText}: ${text.slice(0, 300)}`);
     }
-    assertProxyHeaders(response, String(smokeUrl));
-
     if (!contentType.includes('application/json')) {
       throw new Error(`expected JSON response, got ${contentType}: ${text.slice(0, 300)}`);
     }
@@ -52,8 +45,6 @@ for (let attempt = 1; attempt <= 6; attempt += 1) {
     if (!tarball.ok) {
       throw new Error(`tarball ${tarball.status} ${tarball.statusText}: ${tarballUrl}`);
     }
-    assertProxyHeaders(tarball, String(tarballUrl));
-
     const bytes = new Uint8Array(await tarball.arrayBuffer());
     if (bytes.length < 2 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) {
       throw new Error(`expected gzip tarball from ${tarballUrl}`);

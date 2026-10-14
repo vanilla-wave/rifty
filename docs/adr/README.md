@@ -193,6 +193,9 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0435 | Follow npm tar root stripping for materialized installs |
 | 0451 | User override values follow npm's version/range reading |
 | 0504 | Preserve named install intent and optional resolution outcomes |
+| 0526 | Separate npm alias placement from registry identity |
+| 0527 | Retain npm alias source identity until named install |
+| 0528 | Netlify proxy rewrite serves the production npm-registry route |
 
 ### playground
 
@@ -448,6 +451,7 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0163 decisions 1, 2, 4 production base / Netlify-not-owning `/npm-registry` / smoke target | 0528 / note 2026-10-14 | Yandex VMs unreachable; production registry route is a same-origin Netlify proxy rewrite to `registry.npmjs.org`, eddy OFF in the production build; Yandex config stays as runbook |
 | 0445 rule 5 control-port-only exit request; Consequences "no-COI command keeps its own settlement" | note 2026-09-25 | the drain settles with the active process's first terminal (every kernel child unchanged); no-COI command and runBin report that status, the command replaces its realm only when a live non-timer handle outlives it |
 | 0326 advanced-IPC-serialization loud-gap + launch-plan `ipc: 'none' \| 'json'` clauses | 0448 / notes 2026-09-23, 2026-09-25 | fork `serialization: 'advanced'` rides the public lane as a native structured clone with Node's view/refusal rules; handles, callbacks/options, channel `ref()`/`unref()` stay gaps; launch plan `ipc` gains `'advanced'` |
 | 0416 active node-entry v4 version | 0448 / note 2026-09-23 | v5 carries program launch `ipc: 'advanced'`; SQLite absence semantics unchanged |

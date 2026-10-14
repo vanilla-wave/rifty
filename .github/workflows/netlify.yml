@@ -87,11 +87,7 @@ jobs:
 
       - name: Smoke PR preview registry proxy
         if: github.event_name == 'pull_request'
-        run: node tools/registry/smoke-npm-registry.mjs "https://registry.rifty.dev"
-
-      - name: Smoke PR preview eddy resolver
-        if: github.event_name == 'pull_request'
-        run: node tools/eddy/smoke-eddy.mjs "https://eddy.rifty.dev"
+        run: node tools/registry/smoke-npm-registry.mjs "${{ steps.preview.outputs.deploy_url }}"
 
       - name: Comment PR preview URL
         if: github.event_name == 'pull_request'
@@ -148,11 +144,7 @@ jobs:
 
       - name: Smoke production registry proxy
         if: github.event_name == 'push'
-        run: node tools/registry/smoke-npm-registry.mjs "https://registry.rifty.dev"
-
-      - name: Smoke production eddy resolver
-        if: github.event_name == 'push'
-        run: node tools/eddy/smoke-eddy.mjs "https://eddy.rifty.dev"
+        run: node tools/registry/smoke-npm-registry.mjs "https://${NETLIFY_SITE_NAME}.netlify.app"
 
   deploy-landing:
     name: Deploy landing

@@ -7,8 +7,15 @@ the target (ADR-0073).
 
 Config: `netlify.toml` (repo root), `apps/playground/public/_headers`, and
 `apps/playground/public/_redirects` (both copied to `dist/` by Vite). Netlify
-only serves the static playground artifact; production npm registry traffic is
-sent to `https://registry.rifty.dev/npm-registry` (Yandex Cloud, ADR-0163).
+serves the static playground artifact AND proxies the npm registry route:
+`/npm-registry/*` is a 200 rewrite to `https://registry.npmjs.org/:splat`
+(ADR-0528), so production installs are same-origin, like the Vite dev proxy.
+The rule precedes the SPA fallback in both files (`_redirects` is processed
+first). Netlify proxy limits: 26 s per request, no custom response headers on
+proxied content, cacheable upstream responses may be cached by CDN nodes. The
+former dedicated proxy/CDN at `registry.rifty.dev` (Yandex Cloud, ADR-0163) is
+out of service and no longer a dependency; `docs/public/hosting-yandex.md` is
+its restore runbook.
 
 ## What gets built
 
@@ -32,9 +39,10 @@ imported with `?worker&url` (ADR-0073). A deployed REPL crashing with
   `https://pr-<number>--rifty-playground.netlify.app`;
 - each Netlify deploy still has its own immutable deploy URL, and the workflow
   writes the latest preview URL back to the PR comment.
-- both preview and production deploy jobs smoke-test
-  `https://registry.rifty.dev/npm-registry/vite` metadata and its latest
-  tarball so the production npm proxy cannot silently regress.
+- both preview and production deploy jobs smoke-test the deployed origin's
+  `/npm-registry/vite` metadata and its latest tarball
+  (`tools/registry/smoke-npm-registry.mjs`), so the registry route cannot
+  silently regress to the SPA shell or a proxy error.
 
 Required GitHub configuration:
 
