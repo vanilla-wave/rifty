@@ -193,6 +193,13 @@ export async function writeReport(dir: string, report: Report, persist = true) {
       ? ['Interrupted attempts retain evidence without a completed outcome.']
       : []),
     'Failure classes are manual: agent, rifty-runtime, rifty-tooling, ai-mode-ux, provider, task-bad. Unclassified stays null.',
+    ...(['none', 'native-tooling', 'unisolated'].some((name) =>
+      report.runs.some((run) => run.failureClass === name),
+    )
+      ? [
+          'Additional classes: none = judged PASS; native-tooling = native setup; unisolated = failed outcome cause unknown.',
+        ]
+      : []),
     '',
   ];
   const cell = (value: string | null) => value?.replaceAll('|', '\\|').replaceAll('\n', ' ') ?? '—';

@@ -5,7 +5,9 @@ three fresh trials by default. The original five tasks are the smoke set.
 Tool/context differences remain explicit; a delta is not a runtime-only cause.
 
 [Historical goal closure](../../docs/backlog/distribution/reference/agent-code-quality-evaluation-close.md);
-clean quality reference pending. [Historical eval-v16](../../docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-completed.md)
+[Current qualified eval-v16 reference](reports/summaries/2026-10-13-eval-v16-corrected/README.md):
+fresh96/51PASS45FAIL, Pi parallel arguments fixed;9setup/expense-oracle limits
+retained, clean quality pending. [Historical eval-v16](../../docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-completed.md)
 retains96selected43PASS53FAIL/24setup, confounded by npm-client setup failures
 and external proxy parallel-tool argument loss.
 [PR341 correction/evidence](../../docs/backlog/distribution/reference/agent-eval-pr341-rework.md).
@@ -105,8 +107,9 @@ Native compaction and agent-level retries are on; provider retries remain off.
 Assign `failureClass` and `note` manually in a fresh report.json before freezing,
 then regenerate Markdown. Frozen historical report/score/source files stay immutable;
 later diagnostic classifications use a separate linked sidecar, preserving outcomes.
-existing assignments survive. Classes: agent, rifty-runtime, rifty-tooling,
-ai-mode-ux, provider, task-bad. Unclassified remains null. Failed setup/judging
+Existing assignments survive. Classes: agent, rifty-runtime, rifty-tooling, native-tooling,
+ai-mode-ux, provider, task-bad; `none` for PASS, `unisolated` for an observed
+failure whose cause is not established. Unclassified remains null. Failed setup/judging
 retains its stage/error and previously completed records.
 
 Validation (serialized; heavy browser runs must not overlap):

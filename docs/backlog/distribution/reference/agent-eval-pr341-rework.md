@@ -108,5 +108,40 @@ bytes/malformed sums reject.
 275 GREEN, restored isolated14 GREEN,6 guard reversions RED. Hash-free fresh LF
 SRI remains a recorded generic metadata divergence, not claimed exact.
 
-Fresh96 through corrected proxy: pending; existing historical scores are
-never a substitute. Cloud registry availability remains an execution constraint.
+Independent [source Final+GREEN](pr341-rework-source-final-green.json) at
+42852702d:39/39 coverage,8 axes PASS,0 blockers; full gate27/27 PASS.
+[Raw independent probes/reversions/gate](agent-eval-pr341-source-verify-proof.json.gz).
+Source unit accepted; fresh96/conclusions/conditional judges remain required.
+
+Fresh96 finished through corrected proxy on clean42852702d:51PASS45FAIL,
+7983.259s, producer exit0. Same original tasks/trials; no resume/pruning/rescore.
+[Current qualified eval-v16 reference](../../../../tools/agent-bench/reports/summaries/2026-10-13-eval-v16-corrected/README.md).
+COI9/24,no-COI12/24,nativePi13/24,nativeCodex17/24; Pi301parallel/305single
+calls have nonempty arguments, reported malformed0. Native Codex malformed
+counters unavailable21started rows.9setup failures:3COIimport-timeout,
+6nativequeue ETARGET synckit^0.12.3 mirrored metadata. Public npm query succeeds;
+separate origin/cache key, post-start observation, not precall rescue.
+No SHA-1/alias setup rejection recurred. Local npm transport avoids dead cloud.
+
+Classification only modifies failureClass/note; original producer report retained.
+7agent,3ai-mode-ux,6native-tooling,4rifty-runtime,3task-bad,22unisolated failures.
+Exact after-code on real Node proves4queue ALS runtime gaps;2queue mixed defects
+remain unisolated. Native expense3finish/exit0 and fail only transfer observation:
+visible plain cards rejected by old table/getByLabel-only predicate against the
+original DOM-open prompt. Actual native1 browser replay reproduces both failures,
+visible exact-clearing payments; independent Node ledger6/6 clears initial/deleted
+nets. Frozen outcomes remain unchanged. Versioned expense-v11/eval-v17 corrects
+observation; fresh source verification/comparison required before clean-quality
+reference. Booking Codex2/3PASS, conditional correction trigger absent.
+
+[Import question](../../playground/workspace-import-success-observation-timeout.md)
+retains3COItimeouts and successful post-series reproduction; cause unisolated,
+no speculative fix. [Observer](agent-eval-pr341-import-observer.json.gz).
+Clean quality comparison remains pending; observed qualified reference replaces
+confounded historical totals without a causal model-quality claim.
+
+[Versioned expense root repair](agent-eval-pr341-expense-transfer-repair.md)
+retains original public promise, current owner guards and frozen history.
+
+[ALS continuation finding](../../runtime-js/async-local-storage-await-context.md)
+retains actual minimal Node/Rifty divergence; separate from hook-stub scope.

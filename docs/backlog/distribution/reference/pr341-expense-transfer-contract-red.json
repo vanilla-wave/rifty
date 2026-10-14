@@ -1,0 +1,88 @@
+{
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "PR341 observed expense-settlement-v10 baseline and original prompt: tools/agent-bench/corpus/cases/expense-settlement-v10/prompt.md:14-26 and judge.ts:282-341 @42852702d (unchanged through448711cfe); raw /tmp/pr341/handoff-pr341-rework.md item6, /tmp/pr341/eval-v16-corrected/report.json native-codex expense1..3; preparation only, no oracle implementation. Written import-question final check: docs/backlog/playground/workspace-import-success-observation-timeout.md against corrected raw96 and post-series observer.",
+  "overall_verdict": "concern",
+  "merge_call": "Proceed with narrow versioned expense observation repair; preparation accepted, no merge/GREEN or whole-goal claim. Import question written draft matches raw sources.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/tests/expense-transfer-cards.spec.ts:25",
+          "summary": "Entire-card hidden variant does not discriminate a future fallback that reads hidden receiver or amount descendants from textContent. Existing labeled/table conformance covers that sibling; add plain-card descendant hiding if the implementation uses ancestor extraction. No implementation exists yet.",
+          "authority": "",
+          "evidence": "Read tests/workflow-oracle-conformance.ts paymentMarkup hidden/display:none/visibility:hidden cases; current proposed card hidden wraps the complete card only. No mutant executed, advisory under REV-5."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/tests/expense-transfer-cards.spec.ts:59",
+          "summary": "Arrow-list and negative modes still running at this review. They are sensible guards for direction, cents, unknown person, duplicate, hidden and missing transfers; require their actual GREEN before final acceptance. Also assert unrelated probes remain PASS so a workflow error cannot make a negative test pass accidentally.",
+          "authority": "",
+          "evidence": "/tmp/pr341/expense-transfer-cards-red.log: labelled PASS, plain-card FAIL; no later result at review time. Plain-card judge.json has only the two intended transfer failures; other probes PASS."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Every transfer payer, receiver and amount readable and named; DOM/layout/component structure open, including ordinary visible plain cards.",
+      "source": "acceptance",
+      "trace": "expense-settlement-v10 prompt.md:17+25 (original scenario)",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/expense-transfer-cards.spec.ts:19",
+      "note": "Executed real Node/Svelte/Chromium RED: labelled reference PASS; same reference behavior with only plain-card renderer FAIL. /tmp/pr341/expense-transfer-cards-red.log; /private/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-transfer-cards-hhhkda/judge.json: only initial settlement rows=[] and after-delete settlement fail. No setup/typecheck/import cause. Original old-judge observer reproduces same two failures on actual native run1; SHA256 c1094f2aa2c16bf3d31adaab37907e1dc45d80b655495b884d21637743e89b18 matches raw after.json. Screenshot shows visible Ada pays Zed $5.01 and Cara pays Zed $5.00. Native Node24.16.0 retained calculate probes initial/afterDelete clear all exact nets in each of3 runs (/tmp/pr341/oracle-preparation-native-probe.log). Thus existing table/getByLabel-only observation is a false negative against the original prompt, not a new relaxed numerical criterion."
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "Handoff item4-5: fresh96, honest failure classification and corrected reference/conclusions.",
+      "location": "docs/backlog/distribution/reference/agent-eval-pr341-rework.md:114",
+      "summary": "Actual96 complete but classification/report packaging/conclusions still required; retain all outcomes and import/setup/native/tool/context caveats. This preparation does not accept whole comparison."
+    },
+    {
+      "clause": "Handoff item6: inspect expense if clean native Codex0/3.",
+      "location": "tools/agent-bench/corpus/cases/expense-settlement-v10/prompt.md:17",
+      "summary": "Trigger satisfied:3 native attempts done, exit0/protocolError null, all fail only transfer observation; correction implementation and independent Final+GREEN still pending. Booking2/3 passes so booking change unauthorized by this conditional instruction."
+    }
+  ],
+  "goal_complete": false
+}
