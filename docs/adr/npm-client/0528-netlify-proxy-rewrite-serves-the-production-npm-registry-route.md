@@ -130,8 +130,8 @@ Date: 2026-10
   (`vite esbuild runtime supports exact Vite 7.3.6; executed 7.3.7`, vite
   7.3.7 published 2026-10-06; the starter requests `^7.0.0`) — already
   repaired on open PR #341 (starters pinned to the admitted 7.3.6; evidence
-  `docs/backlog/distribution/reference/pr-341-starter-version-repair.md` on
-  that branch), not a registry-route fault.
+  file `pr-341-starter-version-repair.md` in that branch's
+  `distribution/reference` folder), not a registry-route fault.
 
 ## Reversibility classification
 
