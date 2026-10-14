@@ -145,3 +145,7 @@ retains original public promise, current owner guards and frozen history.
 
 [ALS continuation finding](../../runtime-js/async-local-storage-await-context.md)
 retains actual minimal Node/Rifty divergence; separate from hook-stub scope.
+
+[Corrected-v16 measurement Final](pr341-corrected-v16-final-green.json)
+PASS6/6 @9f40d6f5; [expense source Final](pr341-expense-transfer-final-green.json)
+PASS7/7 @5291f6ba. Current source accepted; fresh eval-v17 remains required.

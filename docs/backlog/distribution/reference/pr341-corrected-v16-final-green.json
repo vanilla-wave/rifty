@@ -1,0 +1,108 @@
+{
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR341 measurement/document unit, BASE448711cfed64d636e203bb48e653853acd36808d (accepted source excluded); /tmp/pr341/handoff-pr341-rework.md items4-5; immutable original eval-v16 observed baseline at1de162d; corrected campaign source42852702d56411cd554b792faf12a620527fc15a. Fresh independent raw-evidence review; no children, tracked edits, browser or model invocation.",
+  "overall_verdict": "pass",
+  "merge_call": "Measurement/document unit PASS; accept qualified corrected-v16 reference. No whole-handoff completion or source/oracle acceptance claim; independent source acceptance and new full versioned series remain.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Fresh complete original8tasks\u00d74lanes\u00d73=96 through corrected proxy, fresh output; no resume/pruning/rescoring.",
+      "source": "acceptance",
+      "trace": "Handoff item4",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-13-eval-v16-corrected/README.md:3",
+      "note": "Independent /tmp/pr341/measurement-review-audit.py -> corrected-measurement-raw-audit.json/log: exact original plan tasks/trials and row order,96 unique completed rows, sourceDirtyfalse42852702d,51PASS45FAIL, lanes9/12/13/17 of24. terminal.json exit0/7983.259s and retained run log START/END source evidence."
+    },
+    {
+      "row": "Pi parallel argument loss removed; retain unknown native CLI counters.",
+      "source": "acceptance",
+      "trace": "Handoff item4 malformedToolCalls\u22480",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-13-eval-v16-corrected/README.md:18",
+      "note": "All96 raw traces independently parsed: Pi301parallel305single,0empty arguments, reported malformed0; native Codex malformed unavailable21started rows. Summary renders unknown, avoids treating defaults as measured zeros."
+    },
+    {
+      "row": "Every selected row failure classification grounded in actual error/trace/reference observation.",
+      "source": "acceptance",
+      "trace": "Handoff item4 failureClass on all rows",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-13-eval-v16-corrected/README.md:27",
+      "note": "Independent counts none51/agent7/ai-mode-ux3/native-tooling6/rifty-runtime4/task-bad3/unisolated22. Raw setup9 retains0tools/tokens:3COI90000ms import toast,6native ETARGET synckit^0.12.3. Node exact after-code+unchanged judge rerun10:4ms formatting FAIL,4queuePASS,2queueAbortError. /tmp/pr341/corrected-measurement-node-observations.json. Notes no-COI1 draft lookup bug verified in source/pageError; nativePi2/3 second valid CSS write byte-identical after.json.22unknown roots remain unisolated; no unjustified whole-model attribution."
+    },
+    {
+      "row": "Old reports immutable; new classification changes failureClass/note only; raw evidence/provenance retained and offline reproducible.",
+      "source": "frozen-artifact",
+      "trace": "Handoff items4-5 immutable old output; benchmark README Frozen execution",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-13-eval-v16-corrected/README.md:5",
+      "note": "Independent audit compares309 original JSON carrier SHA/bytes with manifest and retained source;250small normalized records verified separately; before/after report strip(failureClass,note) identical.1330historical summary md/json.gz bytes unchanged vs1de162d (including original archive).32diagnostic originalText SHA/bytes verified; packed167external manifest/16firstparty receipts and during-series fingerprints explicitly not precall. Own two pnpm agent-bench report scratch regenerations preserve65canonical file SHA bytes; corrected-measurement-offline-observations.json. Canonical archive untouched."
+    },
+    {
+      "row": "Current reference/conclusions separate corrected observations from model-quality/runtime-only causal claims.",
+      "source": "acceptance",
+      "trace": "Handoff item5 rewrite reports and current reference",
+      "status": "pass",
+      "citation": "tools/agent-bench/README.md:8",
+      "note": "Inspected changed README/rework/environment-differences/old-v16-completed. Current qualified reference51/45 retains9setup/expense-oracle caveats, tool/context/model/installed-graph non-equivalence; historical43/53 retained. Native mirror diagnosis public-origin query different cache key, not rescue; successful isolated post-series import does not explain original timeouts. No clean-quality or billing claim."
+    },
+    {
+      "row": "Conditional judge review: booking native passes; expense old observation false negatives; frozen scores retained.",
+      "source": "acceptance",
+      "trace": "Handoff item6 conditional investigation evidence informs item5 conclusions",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-13-eval-v16-corrected/README.md:29",
+      "note": "Native booking2/3PASS, no correction trigger. Expense3 raw trace exit0/protocolErrornull/done, only two transfer probesFAIL. Original prompt17+25 leavesDOMopen; old judge282-341 onlytable/getByLabel. Actual retained browser diagnostic native1 reproduces original twoFAIL with visible Ada\u2192Zed5.01/Cara\u2192Zed5.00; App.svelteSHA matches after. Own real Node exact retained ledger initial/afterDelete6/6 clears exact conserved nets; corrected-measurement-expense-ledger.json. Native2/3 retained plain/arrow card renderers verified. Historical scores never revised; versioned oracle source outside this review."
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "Handoff item6 conditional expense investigation; new judging criteria require a fresh versioned full series (benchmark README Frozen execution).",
+      "location": "docs/backlog/distribution/reference/agent-eval-pr341-rework.md:133",
+      "summary": "Native expense0/3 investigation establishes old observation false negatives. Versioned expense-v11/eval-v17 source independent Final+GREEN and fresh full comparison are separate required continuation; this review accepts measurement/history/conclusions only."
+    }
+  ],
+  "goal_complete": false,
+  "reviewed_sha": "9f40d6f5da463e655edf295df888b644c22f018d"
+}

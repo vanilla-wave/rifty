@@ -1,0 +1,116 @@
+{
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR341 versioned expense semantic-oracle correction from accepted BASE448711cfed64d636e203bb48e653853acd36808d; original v10 prompt14-18+25 and named/table baseline unchanged. Handoff /tmp/pr341/handoff-pr341-rework.md item6. Fresh independent read-only Final+GREEN of complete source unit, including caption root repair; provisional9f is not accepted source BASE. Earlier npm/lifecycle accepted source and independently accepted measurement unit excluded absent changed dependency. Current committed5291f6ba04a23ebd3a6fecdbc90b2cd964b31cd1 source SHA256803ab02af42e670e6327220387461cf4e6964bf5c19b3e955b4bc2c4b2d7ec07; proofs docs/backlog/distribution/reference/agent-eval-pr341-caption-repair-proof.json.gz (39entries exactSHA/bytes). No code changes after independent executed proof.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Readable named transfer values in ordinary visible cards under open DOM/layout",
+      "source": "acceptance",
+      "trace": "Original expense-settlement-v10/prompt.md:17+25",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/expense-transfer-cards.spec.ts:98",
+      "note": "Initial actual Node/Svelte/Chromium old-v10 labelledPASS/plain+arrowRED accepted preparation. Historical first-root full-app18PASS/1invalid-Svelte-fixture compileFAIL35.1m + corrected tbody isolated1PASS7.7m explicitly retained as composition, not current21run. Current changed-root full-app named-caption/nested-extra2PASS5.0m in caption-full-app-green.log; independent current production-owner20/20 real Chromium probes in caption-verify-dom.log."
+    },
+    {
+      "row": "Every positive debtor\u2192creditor transfer clears all nets exactly, including mixed representations and duplicate rows",
+      "source": "acceptance",
+      "trace": "Original expense-settlement-v10/prompt.md:15-18+25",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/expense-transfer-observation-controls.ts:25",
+      "note": "Independent current actual production-owner16/16 DOM controls and8reversions killed: caption-verify-guards.log and proof directory; named/card/table mixed, nested-extra, duplicates and unknown table retain all distinct rendered transfers. Three transient payer/receiver/amount element identities mark representations of the same row; nested foreign extra intersects none of the complete triple and remains counted."
+    },
+    {
+      "row": "Preserve named readable cards/groups without prescribing a region caption",
+      "source": "acceptance",
+      "trace": "Original expense-settlement-v10/prompt.md:17+25; named baseline expense-settlement-v10/judge.ts:305",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/expense-transfer-observation-controls.ts:33",
+      "note": "Actual pre-repair15controls RED exactly named-caption, /tmp/pr341/caption-guard-red.log. Independent current20probe captionPASS, explicit prior9f cards-first mutant dies among8reversions, real Svelte full-app captionPASS; label-for/read-only output, nested labeled wrapper and table named-overlay extra probesPASS. Canonical table/named values precede generic caption text, dedup requires all3 field witnesses, finally disposes handles."
+    },
+    {
+      "row": "Exact integer-cent positive debtor\u2192creditor transfers clear every net; no fixed greedy/order algorithm",
+      "source": "acceptance",
+      "trace": "Original expense-settlement-v10/prompt.md:14-18",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/expense-transfer-observation-controls.ts:25",
+      "note": "Independent current16controls includes split2.17+2.17+5.33 valid, duplicate/extra/precision controls reject; unchanged debtor/creditor direction guard read directly, historical real full-app reverse carrier retained. Eight mutants discriminate; no prescribed greedy/order choice, every observed row exact integer cents, debtor-negative/creditor-positive and all remaining netszero. Numeric guard unchanged fromv10 except unknown table rows now cannot disappear. Own actual retained nativeApps3/3 complete current fulljudgePASS: caption-verify-native{1,2,3}.log, unique diagnostics/screens/browser zips. Whole captured workspaces equal original after.json file-by-file; SHA803ab02\u2026 in each result. Diagnostic only, no campaign rescore."
+    },
+    {
+      "row": "Readable transfer data excludes hidden receiver/amount and editable sources while allowing harmless hidden edit controls",
+      "source": "acceptance",
+      "trace": "Original expense-settlement-v10/prompt.md:17+25; baseline renderedValue context.ts:51",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/expense-transfer-cards.spec.ts:96",
+      "note": "Independent current20probes select/contenteditable/textarea and named hidden amount reject; current16 committed controls reject hidden receiver; harmless hidden editsPASS. Current inherited isVisible/innerText rendering semantics unchanged. Separate CSS clipping diagnostics show v10 and current both accept named clip-path and zero-overflow outputs; pixel-visibility guarantee not claimed. Historical full-app negative carriers retained, new actual two transfer failures required per negative test; current16controls+8reversionsGREEN."
+    },
+    {
+      "row": "Original public projects/prompts/reference/partial/alternative controls stay byte-identical; old criteria/results remain frozen",
+      "source": "frozen-artifact",
+      "trace": "Handoff /tmp/pr341/handoff-pr341-rework.md step4-6 and immutability paragraph; original v10 public prompt",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-expense-transfer-version.test.ts:6",
+      "note": "Own corpus-version testPASS, caption-verify-immutability.json: public project/prompt/reference/partial/alternative bytes identical; original v10judge/eval-v16 exact448;7sibling manifest objects exactv16. Current expense manifest judgeSha matches production803ab02af42e670e6327220387461cf4e6964bf5c19b3e955b4bc2c4b2d7ec07. No original campaign evidence/output edited, no model calls or rescoring."
+    },
+    {
+      "row": "Report supplemental failure-class qualifier preserves old rendering and all outcomes",
+      "source": "acceptance",
+      "trace": "Handoff /tmp/pr341/handoff-pr341-rework.md step4-5; BASE448711cfe writeReport rendering",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/report.ts:193",
+      "note": "Own real corrected96 report BASE448/current writer probe: null-class legacy summary byte-identical; supplemental classes only additional explanatory line. caption-verify-report-probe.log. Own corpus-version/statistics-report15testsPASS53.1s; caption-verify-units-all.log. Actual final pnpm pr:check27PASS(unit340.2s/parity129.8s), prcheck-caption-source.log; committed source4 hashes exact reviewed snapshot; proof archive39 originalText SHA/bytes verified; dataset independent review accepted at9f remains separate from source acceptance."
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "Fresh full versioned comparison after accepted expense-v11/eval-v17 source, honest reference/conclusions",
+      "location": "docs/backlog/distribution/reference/agent-eval-pr341-v17-protocol.md:4",
+      "summary": "Fresh original8tasks\u00d74lanes\u00d73=96 with committed clean reviewed source and precall protocol; no resume/rescore/model-output criterion change; independently review new raw evidence and reference before whole-handoff closure. First corrected-v16 qualified96 acceptance does not substitute this new series."
+    }
+  ],
+  "goal_complete": false,
+  "overall_verdict": "pass",
+  "merge_call": "Source oracle unit PASS at5291f6ba04a23ebd3a6fecdbc90b2cd964b31cd1; no merge/whole-goal closure: fresh full eval-v17 96 and independent measurement/reference acceptance remain.",
+  "reviewed_sha": "5291f6ba04a23ebd3a6fecdbc90b2cd964b31cd1"
+}

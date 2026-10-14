@@ -1,0 +1,59 @@
+{
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR341 RDY-6 final written-result check, factual ALS draft only: docs/backlog/runtime-js/async-local-storage-await-context.md and linked observer/compat/async-continuation boundary/rework pointer. Original /tmp/pr341/handoff-pr341-rework.md authorizes npm/proxy/oracle measurement rework, not ALS implementation; this factual existing-subset finding is outside those repairs. Fresh independent reviewer /root/als_finding_final_review; HEAD448711cfed64d636e203bb48e653853acd36808d with reviewed working-tree SHA256 in /tmp/pr341/als-finding-final-review-proof.json. Raw original sources independently read, archive hashes checked, Node24.16.0 minimal parity reproduced and exact-source unchanged-judge 6 queue observations rerun:4PASS/2AbortError. Own proof /tmp/pr341/als-finding-final-review-proof.json, /tmp/pr341/als-finding-review-observer-node-loader.log; docs gates backlog:check/refs:check exit0. No production implementation, carrier or ready scope selected; honest draft preserves open native-continuation/unsupported-behavior investigation. This is factual capture acceptance, not whole source PR or goal acceptance.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [],
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "PR341 fresh versioned full campaign and independent measurement acceptance after expense observation correction",
+      "location": "docs/backlog/distribution/reference/agent-eval-pr341-v17-protocol.md:24",
+      "summary": "eval-v17 fixed96 full series/reference switch pending; this factual ALS capture does not complete handoff."
+    }
+  ],
+  "goal_complete": false,
+  "overall_verdict": "pass",
+  "merge_call": "Factual ALS draft acceptable; preserve draft, product scope unsettled; PR341 continuation pending.",
+  "reviewed_sha": "9f40d6f5da463e655edf295df888b644c22f018d"
+}

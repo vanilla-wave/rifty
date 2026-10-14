@@ -51,7 +51,8 @@ including exact cards-first source reversion. Independent20DOM checks and
 corpus/statistics15tests PASS; v10/public inputs unchanged. Current native3
 CLI replays PASS; final full gate27PASS (unit340.2s/parity129.8s).
 [Current raw proof](agent-eval-pr341-caption-repair-proof.json.gz);
-independent reviewed-SHA verdict follows. Visibility follows
+[Independent source Final+GREEN](pr341-expense-transfer-final-green.json)
+PASS7/7coverage,8axes,0findings @5291f6ba; fresh96 required. Visibility follows
 existing rendered-value semantics; no pixel-clipping rejection claimed. New eval-v17 full96 follows
 [precall protocol](agent-eval-pr341-v17-protocol.md); diagnostic replays never
 replace fresh model calls or alter historical outcomes.
