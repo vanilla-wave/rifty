@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Read a rifty-review verdict, validate coverage + authority, print slice + goal state.
-// Rules: docs/process/rules/review.md (REV-2 authority, REV-3 severity, REV-4 coverage);
-// exit codes: docs/process/artifacts/verdict.md.
+// Rules: docs/process/README.md (REV-2 authority, REV-3 severity, REV-4 coverage);
+// exit codes: docs/process/README.md.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tracedRowCount } from './contract.mjs';
@@ -29,6 +29,20 @@ function residuals(value) {
  * @param {unknown[]|null} adjudication
  * @param {((path: string) => string|null)|null} readContract  head text of the unit contract (null = no reader)
  */
+// REV-2 admissible authorities: `I#`, a `## User scenario` line, a traced row
+// (`Acceptance 3 → I3`, parity/fault rows, or the contract cited `docs/backlog/….md:line`),
+// an active `ADR-NNNN`, named baseline behavior,
+// and the self-naming rules (AGENTS.md §Fidelity, RDY-8, REV-7, REV-10, REV-11).
+const ADMISSIBLE_AUTHORITY_RE =
+  /(?:^|[^A-Za-z0-9-])(?:I\d+|ADR-\d{4}|REV-7|REV-11|RDY-8)(?![0-9-])|REV-10[^.;]*(?:axis 3|goal drift|ledger|fork|goal\.md)|user scenario|\bscenario\b|acceptance\s*\d|parity (?:case|row)|fault[- ]matrix|baseline/iu;
+export function isAdmissibleAuthority(/** @type {string} */ authority) {
+  return (
+    ADMISSIBLE_AUTHORITY_RE.test(authority) ||
+    FIDELITY_AUTHORITY_RE.test(authority) ||
+    CONTRACT_PATH_RE.test(authority)
+  );
+}
+
 export function evaluateVerdict(
   verdict,
   adjudication = verdict?.adjudication ?? null,
@@ -148,6 +162,13 @@ export function evaluateVerdict(
     })),
   );
   const rawBlockers = findings.filter((finding) => finding.severity === 'blocker');
+  // REV-2: a blocker binds only through an admissible authority — an invariant, a scenario
+  // line, a traced row, an ADR, named baseline behavior, or a self-naming rule. Anything
+  // else (a sibling sweep, more RED beyond the row, a rule id, taste) is advisory.
+  const inadmissible = rawBlockers.filter(
+    (finding) => !isAdmissibleAuthority(String(finding.authority ?? '')),
+  );
+  const inadmissibleSummaries = new Set(inadmissible.map((finding) => finding.summary));
   const adjudicated = adjudication !== null;
   if (adjudicated) {
     const summaries = new Set(rawBlockers.map((finding) => finding.summary));
@@ -188,14 +209,18 @@ export function evaluateVerdict(
   }
   // Axis summaries mirror the original findings; only their explicit rulings can supersede them.
   const fullyRuled =
-    adjudicated &&
     rawBlockers.length > 0 &&
-    rawBlockers.every((finding) => rulings.has(finding.summary));
-  const demoted = adjudicated
-    ? rawBlockers
-        .filter((finding) => ['STRETCH', 'FALSE'].includes(rulings.get(finding.summary)))
-        .map((finding) => ({ ...finding, ruling: rulings.get(finding.summary) }))
-    : [];
+    rawBlockers.every(
+      (finding) => rulings.has(finding.summary) || inadmissibleSummaries.has(finding.summary),
+    );
+  const demoted = [
+    ...(adjudicated
+      ? rawBlockers
+          .filter((finding) => ['STRETCH', 'FALSE'].includes(rulings.get(finding.summary)))
+          .map((finding) => ({ ...finding, ruling: rulings.get(finding.summary) }))
+      : []),
+    ...inadmissible.map((finding) => ({ ...finding, ruling: 'INADMISSIBLE' })),
+  ];
   const demotedSummaries = new Set(demoted.map((finding) => finding.summary));
   // Residuals are outstanding obligations. A ruling on a finding cannot erase them;
   // the independent verification corrects or proves the residual itself.
@@ -293,7 +318,7 @@ function main() {
     for (const finding of result.concerns) console.log(line(finding));
   }
   if (result.demoted.length > 0) {
-    console.log('DEMOTED BY ADJUDICATION:');
+    console.log('DEMOTED (critic ruling or inadmissible authority, REV-2):');
     for (const finding of result.demoted)
       console.log(`  - [${finding.ruling}] ${finding.summary?.slice(0, 120)}`);
   }

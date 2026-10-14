@@ -11,6 +11,7 @@ import {
   classifyDiff,
   failedFiles,
   runChecks,
+  scopeTasks,
   selectTasks,
   workingTreePaths,
 } from './pr-check.mjs';
@@ -45,11 +46,11 @@ describe('pr:check lanes follow the diff class', () => {
 
   it('a documentation-only working tree skips exactly the source lanes and keeps every other check', () => {
     const paths = [
-      'docs/process/rules/review.md',
+      'docs/process/README.md',
       'AGENTS.md',
       'CHANGELOG.md',
       '.agents/skills/rifty-goal/SKILL.md',
-      '.claude/workflows/goal-run.js',
+      '.agents/skills/rifty-fix/SKILL.md',
     ];
     expect(classifyDiff(paths)).toBe('docs-only');
     const names = selectTasks(TASKS, 'docs-only').map((t: { name: string }) => t.name);
@@ -122,5 +123,25 @@ describe('pr:check reruns every failed file once in isolation and counts the tim
     const kept = await runChecks([fail], { retry: async () => null });
     expect(kept.ok).toBe(false);
     expect(kept.results[0].code).toBe(1);
+  });
+});
+
+describe('pr:check scopes the test lanes to the diff (PR-6)', () => {
+  it('runs related tests only and parity only when its inputs changed; unknown diff keeps the full set', () => {
+    const names = (tasks: { name: string; args?: string[] }[]) => tasks.map((t) => t.name);
+    const docsAndTool = scopeTasks(TASKS, ['tools/checks/x.mjs', 'docs/a.md'], 'abc123');
+    expect(names(docsAndTool)).not.toContain('test:parity');
+    expect(docsAndTool.find((t) => t.name === 'test:run')?.args).toEqual([
+      'run',
+      'test:run',
+      '--changed',
+      'abc123',
+    ]);
+    expect(names(scopeTasks(TASKS, ['packages/io/src/a.ts'], 'abc123'))).toContain('test:parity');
+    expect(
+      names(scopeTasks(TASKS, ['tools/node-parity-runner/cases/x.case.ts'], 'abc123')),
+    ).toContain('test:parity');
+    expect(scopeTasks(TASKS, null, 'abc123')).toBe(TASKS);
+    expect(scopeTasks(TASKS, ['packages/io/src/a.ts'], null)).toBe(TASKS);
   });
 });

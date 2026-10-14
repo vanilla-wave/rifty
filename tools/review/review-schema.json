@@ -69,7 +69,7 @@
     },
     "coverage": {
       "type": "array",
-      "description": "One row per TRACED obligation of the unit inside the review boundary (docs/process/rules/review.md REV-4): every contract `## Fault matrix` line, every Acceptance/Parity clause, every public API entry point the diff adds or changes, every frozen oracle/golden artifact \u2014 each carrying its trace. Untraced rows raise no coverage row.",
+      "description": "One row per TRACED obligation of the unit inside the review boundary (docs/process/README.md REV-4): every contract `## Fault matrix` line, every Acceptance/Parity clause, every public API entry point the diff adds or changes, every frozen oracle/golden artifact \u2014 each carrying its trace. Untraced rows raise no coverage row.",
       "items": {
         "type": "object",
         "additionalProperties": false,

@@ -14,7 +14,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - **No mocking what we build.** Real Memory VFS, real Workers/SW, real npm tarballs, real parity vs Node. Mock only unavoidable external boundaries (network egress, clock, absent browser APIs); never the unit under test or a sibling rifty package. Hard to instantiate = API smell — fix it.
 - **No undeclared adaptation.** A patch of installed package bytes or generated twin source names its class, authority and loud drift anchor (`docs/process/rules/fault-classes.md` §Guest-package adaptations); one compensating a rifty gap ships only as declared interim debt — linked platform item or ADR + kill condition — never as a silent fix.
 - **Parity = gold standard.** Never assume Node/Anthropic/StackBlitz behavior — verify via parity-runner. Found gap/bug → failing parity (or regression) test first, then fix; no fix merges without it; never edit a test to make code pass.
-- **Review checkpoints.** A planned parity/stateful unit passes Contract+RED before implementation, then Final+GREEN; an observed-defect fix carries its real baseline, RED and independent final review. One route and verdict model; preparation follows missing evidence (`RDY-8`); required discoveries stay with the work (`REV-12`). Rules: `docs/process/rules/review.md`, stops: `docs/process/rules/stops.md`.
+- **Review checkpoints.** A planned parity/stateful unit passes Contract+RED before implementation, then Final+GREEN; an observed-defect fix carries its real baseline, RED and independent final review. One route and verdict model; preparation follows missing evidence (`RDY-8`); required discoveries stay with the work (`REV-12`). Rules: `docs/process/README.md` (`REV`, `STOP`).
 
 ## Architecture — hard rules
 - Import boundaries enforced by `pnpm check:arch` (rules `tools/checks/arch-rules.cjs`): layer top-down (vfs/io/net → kernel → runtime-* → shell/terminal/npm-client → playground), no reverse imports, no cycles, no foreign `src/internal/*`, solid-js only in playground (D-002).
@@ -29,32 +29,33 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 
 ## Data sources
 - `docs/process/README.md` — the process map: one user-owned destination (`goal.md`), agent-owned path, stages, roles, closed stop list, rule ids (`DEC`/`RDY`/`REV`/`STOP`/`PR`). Read it first; cite rules by id.
-- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: user-brought idea/finding (in session) → `rifty-refine`; mid-task/agent discovery → `rifty-to-backlog`, never interview; draft → ready at pickup (`RDY-1..4`); epic missing tier/Invariants → fit it yourself (`docs/process/stages/fit.md`, in the session that has the user) — a write-up is never a blocked ask; PR review → `rifty-review`; verified discoveries route by obligation, regardless of their source (`REV-12`); observed defect → `rifty-fix`. Never implement a draft.
+- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: user-brought idea/finding (in session) → `rifty-refine`; mid-task/agent discovery → `rifty-to-backlog`, never interview; draft → ready at pickup (`RDY-1..4`); epic missing tier/Invariants → fit it yourself (`docs/process/README.md`, in the session that has the user) — a write-up is never a blocked ask; PR review → `rifty-review`; verified discoveries route by obligation, regardless of their source (`REV-12`); observed defect → `rifty-fix`. Never implement a draft.
 - `docs/adr/` — decisions + strategic choices; index + D→ADR map: `docs/adr/README.md`
 - `docs/process/traps.md` — hard-won gotchas (worktrees/git, CI, e2e, browser runtime, tooling); check before debugging a weird fail or re-proposing a rejected speedup
 - `docs/process/rules/fault-classes.md` — fault taxonomy; `docs/process/rules/testing.md` — test pyramid + why parity
 - `docs/public/` — compat matrix, publishing, hosting
 
 ## Decisions — decide, record, continue; never stop to ask
-Checklist + subagent budget: `docs/process/rules/decisions.md`. Core:
+Checklist: `docs/process/README.md` §Decisions. Core:
 - REVERSIBLE behavior-preserving → CHANGELOG line.
 - REVERSIBLE + judgment call → `docs/backlog/<area>/<slug>.md` + `// TODO(backlog: <area>/<slug>)`.
-- IRREVERSIBLE (public API / new dep / contradicts ADR / genuine design choice) → `pnpm adr:new <area> "Title"`.
-- Add a decision on a seam an ADR owns → new short ADR citing it; nothing removed, nothing grafted. Overturn a recorded decision → decision subagent → superseding ADR naming the overturned decisions; all overturned = old ADR removed + pointer in `docs/adr/README.md`, some = dated §Corrections note (`DEC-2`).
-- Confirm-first only: publish, spend, delete user data (`DEC-3`). The only user stops in a run: `docs/process/rules/stops.md` `STOP-1`.
+- IRREVERSIBLE (public API / new dep / contradicts ADR / contested default or external-semantics authority) → `pnpm adr:new <area> "Title"`. A mechanism choice is not an ADR by itself: `REV-7` challenges it at review.
+- Add a decision or correction on a seam an ADR owns → a dated line in that ADR (`DEC-2`). Overturn a recorded decision → critic → superseding ADR naming the overturned decisions; all overturned = old ADR removed + pointer in `docs/adr/README.md`, some = dated §Corrections note.
+- Confirm-first only: publish, spend, delete user data (`DEC-3`). The only user stop in a run: `docs/process/README.md` `STOP-1`.
 
 ## Goal runs
 
-A unit runs PICKUP → Contract+RED → IMPLEMENT → Final+GREEN on its own (`docs/process/README.md` §Stages); an explicit whole-ready-goal hand-off loops it over the map (`rifty-goal` routes to the stage docs; Claude: `.claude/workflows/goal-run.js`).
+A unit runs PICKUP → Contract+RED → IMPLEMENT → Final+GREEN on its own (`docs/process/README.md` §Route); an explicit whole-ready-goal hand-off loops it over the map (`rifty-goal`); a re-entry reads the PR body and the ledger tail.
 
 ## PR — unit of delivery
-One PR = one reviewable delivered behavior; rules `docs/process/rules/pr.md` (`PR-1..6`): discoveries ride the unit's branch, a draft PR opens at the first commit (one per goal by default), packaging is agent-owned, independent criteria never require a separate PR, the user's packaging wins.
+One PR = one reviewable delivered behavior; rules `docs/process/README.md` §PR (`PR-1..6`): discoveries ride the unit's branch, a draft PR opens at the first commit (one per goal by default), packaging is agent-owned, independent criteria never require a separate PR, the user's packaging wins.
 
 ## DoD (per PR)
 - [ ] no unrecorded/misclassified residuals; active-goal residuals stay linked; report slice/goal status separately
 - [ ] implementation aligned with project goal
 - [ ] no machinery the contract is deliverable without (§Simplicity, `REV-7`)
-- [ ] `pnpm pr:check` pass — lanes follow the diff: a docs-only working tree runs the doc gates and names the skipped source lanes (`--all` forces the full gate); a `test:run` red reruns its failed files once in isolation and says so (time-outs counted; a failure that reproduces stays red)
+- [ ] `pnpm pr:check` pass — lanes follow the diff since the origin/main merge-base: a docs-only tree runs the doc gates; otherwise `test:run` covers the tests related to the changed files and `test:parity` runs only when its inputs changed (`--all` forces the full gate, which CI runs on every PR push); a `test:run` red reruns its failed files once in isolation and says so (time-outs counted; a failure that reproduces stays red)
+- [ ] merged only on a green PR CI at HEAD; bot and reviewer comments on the PR are `REV-12` observations
 - [ ] touches cache/persistence/network/concurrency → traced `## Fault matrix` rows covered by fault tests (`RDY-3`)
 - [ ] shipped capability carries observable acceptance proof (e2e/parity) in the same PR — source greps, fakes, and opt-in lanes do not close acceptance
 - [ ] `CHANGELOG.md` in affected packages
