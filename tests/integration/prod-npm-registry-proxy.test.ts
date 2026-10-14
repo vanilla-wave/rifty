@@ -37,8 +37,16 @@ describe('production npm registry route (ADR-0528)', () => {
     const workflow = readFileSync('.github/workflows/netlify.yml', 'utf8');
     const smoke = readFileSync('tools/registry/smoke-npm-registry.mjs', 'utf8');
 
+    // `netlify deploy --alias` reports the mutable alias as deploy_url; the
+    // smoke binds to the deploy's immutable permalink derived from deploy_id.
     expect(workflow).toContain(
-      'node tools/registry/smoke-npm-registry.mjs "${{ steps.preview.outputs.deploy_url }}"',
+      'permalink_url="https://${deploy_id}--${NETLIFY_SITE_NAME}.netlify.app"',
+    );
+    expect(workflow).toContain(
+      'node tools/registry/smoke-npm-registry.mjs "${{ steps.preview.outputs.permalink_url }}"',
+    );
+    expect(workflow).not.toContain(
+      'smoke-npm-registry.mjs "${{ steps.preview.outputs.deploy_url }}"',
     );
     expect(workflow).toContain(
       'node tools/registry/smoke-npm-registry.mjs "https://${NETLIFY_SITE_NAME}.netlify.app"',

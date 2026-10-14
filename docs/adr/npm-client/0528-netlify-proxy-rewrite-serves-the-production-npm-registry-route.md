@@ -69,9 +69,11 @@ Date: 2026-10
 3. `VITE_RIFTY_RESOLVER_URL` is unset in the production build: eddy OFF. The
    eddy live smoke steps leave `.github/workflows/netlify.yml`.
 4. Deploy smoke (`tools/registry/smoke-npm-registry.mjs`) targets the deployed
-   playground origin itself (preview: the immutable deploy URL; production:
-   `https://<site>.netlify.app`) and asserts registry JSON + gzip tarball, no
-   CORS/CORP headers.
+   playground origin itself (preview: the deploy's immutable permalink
+   `https://<deploy_id>--<site>.netlify.app`, derived from the CLI's
+   `deploy_id` — `deploy --alias` reports the mutable alias as `deploy_url`;
+   production: `https://<site>.netlify.app`) and asserts registry JSON + gzip
+   tarball, no CORS/CORP headers.
 5. `registry.rifty.dev`, `registry-origin.rifty.dev`, `eddy*.rifty.dev` and the
    checked-in `deploy/yandex/*` configs stay as the recorded way to run a
    dedicated streaming proxy/resolver; nothing in the production path depends
@@ -112,6 +114,10 @@ Date: 2026-10
 - [x] Deploy workflow fails if the built `apps/playground/dist` references
   `registry.rifty.dev` or `eddy*.rifty.dev` (a Netlify site env var could
   otherwise re-point the app at a dead host while the route smoke stays green).
+- [x] Preview smoke binds to the immutable deploy permalink (independent
+  review B1): `https://6acf9b2edfa36cfe9616529a--rifty-playground.netlify.app/npm-registry/left-pad`
+  → 200 `application/json` (deploy of HEAD 16f4f0ec2); the workflow fails
+  without a `deploy_id`; the integration test refuses a `deploy_url` smoke.
 - [x] Smoke covers a scoped packument (`/npm-registry/@types%2Fnode`) — Netlify
   splat handling of the encoded scope separator is platform behavior.
 - [x] Live 2026-10-14, PR #371 preview
