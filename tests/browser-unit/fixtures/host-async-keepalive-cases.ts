@@ -289,6 +289,26 @@ out.getReader().read().then(() => console.log('HA|never'));
 `,
   },
   {
+    // Native pipe order on blob streams: a getter that locks the source rejects the pipe;
+    // the source stays locked through the sink's close; the body is disturbed at once.
+    name: 'pipe-native-order',
+    source: `${report}(async () => {
+  const src = new Blob(['abc']).stream();
+  const dest = new WritableStream();
+  const refused = await src.pipeTo(dest, { get preventClose() { src.getReader(); return false; } })
+    .then(() => 'ok', (e) => e.name);
+  console.log('HA|getter-lock=' + refused + ',' + dest.locked);
+  const closing = new Blob(['abc']).stream();
+  await closing.pipeTo(new WritableStream({ close() { console.log('HA|locked-in-close=' + closing.locked); } }));
+  const response = new Response(new Blob(['abc']));
+  const piped = response.body.pipeTo(new WritableStream());
+  console.log('HA|body-used-sync=' + response.bodyUsed);
+  await piped;
+  console.log('HA|content-type=' + JSON.stringify(new Response(new Blob(['x'], { type: 'text/x' })).headers.get('content-type')));
+})().catch((e) => fail('pipe-order', e));
+`,
+  },
+  {
     name: 'zlib-gzip',
     source: `${report}const zlib = require('node:zlib');
 zlib.gzip(Buffer.alloc(64 * 1024 * 1024, 65), (e, r) => (e ? fail('gzip', e) : done('gzip', r.length)));

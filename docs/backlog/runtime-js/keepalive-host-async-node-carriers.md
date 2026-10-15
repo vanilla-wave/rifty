@@ -93,7 +93,9 @@ verbatim by live Node (`process.execPath`, v24.16.0 at pickup) and by rifty
    200-step `globalThis.crypto.subtle.digest` chain print their rows → I1, scenario 1
 5. In-guest `new Response(blob).arrayBuffer()` and `new Request(url, {body: blob}).text()`
    print their rows, also through `body.pipeThrough` and `new Response(blob.stream())`;
-   a guest-stream body with a pending read holds nothing (exit 0 at once, as Node) → I1
+   a blob-backed Response keeps native lock/disturbed order and its content
+   type; a guest-stream body with a pending read holds nothing (exit 0 at once,
+   as Node) → I1
 6. `zlib.gzip` 64 MiB and a `createGzip` stream print their rows → I1
 7. A global `WebSocket` subclass to a live server prints open/message/close
    rows; a synthetic `close` event does not end the hold → I1
@@ -131,6 +133,13 @@ verbatim by live Node (`process.execPath`, v24.16.0 at pickup) and by rifty
   source locked after `pipeThrough` and locked it before native option
   reads — HOLDS; fixed (native call on the tap first, source lock after it,
   release on end/error/cancel/settle) with the `pipe-lock-lifecycle` row.
+- 2026-10-16 — Final+GREEN verify BLOCK @ 84f0ff8c8 (codex): the pipe tap
+  still diverged (getter-held lock, release before sink close, late
+  `bodyUsed`) — HOLDS; redesign instead of more emulation: `blob.stream()`
+  returns one held JS byte stream, a blob-backed Response is built natively
+  over it, the reader/iterator/tee/pipe registration and the tap are deleted;
+  `pipe-native-order` row; probes show only blob-backed bodies are host-async.
+  Explicit gap (compat ❌): in-guest Request `.body` stream reads.
 - 2026-10-16 — refuse-by-name vs hold-to-cap: every counted class has an
   observable release (settle / `close`), so none is refused; a never-settling
   one holds to the loud ADR-0152 §4 cap (ADR-0529 §5).

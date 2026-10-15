@@ -30,34 +30,33 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
 2. Counted, one ref per pending request, released on settle (fulfil or reject):
    - `Blob.prototype.arrayBuffer/bytes/text` (covers `buffer.Blob`, `File`,
      `fs.openAsBlob` results).
-   - Reads of host streams — `blob.stream()` results and the native `body`
-     of a host-backed Response/Request (identity and locking stay native):
-     a pending `read()` of a reader (`getReader()` or a direct
-     `ReadableStreamDefaultReader`/`BYOBReader` constructor; covers
-     `stream.Readable.fromWeb`), async-iterator `next()`, reads of `tee()`
-     branches. `pipeTo`/`pipeThrough` run the native pipe on a tap (options and
-     destination validated first, in native order), lock the source once the
-     tap is locked, and release it when the source ends, errors or the pipe
-     cancels/settles; only the tap's pending host read holds, so a pipe waiting
-     on a guest sink or transform holds nothing. An unread stream holds nothing,
-     as in Node.
+   - `blob.stream()` returns one JS byte stream over the native blob stream:
+     every native consumer (readers, `for await`, `tee`, `pipeTo`,
+     `pipeThrough`, `Readable.fromWeb`, a Response body) runs unchanged on it,
+     and only its pull — a pending host read — holds. An unread stream, or a
+     pipe waiting on a guest sink, holds nothing, as in Node.
+   - A `Response` with a Blob/File or FormData body is built natively over that
+     held stream (FormData encoded by a native Response first); the content type
+     native extraction sets is kept. `body`, locking, `clone()` and the consumer
+     methods stay native on it.
+   - In-guest `Request` consumer methods (`arrayBuffer/blob/bytes/formData/json/text`)
+     for Blob/File/FormData bodies, `new Request(blobBackedRequest)` and their
+     `clone()`. `init.body` is observed during the native read, never read twice.
+     The native body is kept: a stream body would change how `fetch(request)`
+     sends it.
    - `WebAssembly.compile`, `WebAssembly.instantiate` (both overloads).
      Streaming variants stay the ADR-0158 loud ceiling.
    - Every `SubtleCrypto.prototype` method (one prototype covers
      `globalThis.crypto.subtle`, `require('crypto').subtle`, `webcrypto.subtle`).
-   - `Response`/`Request` body consumers (`arrayBuffer/blob/bytes/formData/json/text`)
-     for host-backed bodies: any non-stream body or a host stream,
-     `Response.json()`, `new Request(hostBackedRequest)`, `clone()` of one.
-     `init.body` is observed during the native read, never read twice. A guest
-     `ReadableStream` body settles on guest work and holds nothing (Node exits
-     with such a read pending). Fetched responses stay ADR-0158's.
    - Global `WebSocket`: ref at construction, released on its trusted `close`
      event (always dispatched after error or close); the listener goes through
      the native `EventTarget` API, so a subclass override never runs before its
      constructor, and a synthetic `close` releases nothing.
 3. Not counted, settle on microtasks with no host task: `fs.promises`/fs
    callbacks (sync RPC), `node:zlib` over CompressionStream (Chromium transforms
-   synchronously; 64 MiB one-shot + stream rows pass unheld).
+   synchronously; 64 MiB one-shot + stream rows pass unheld), string, bytes,
+   URLSearchParams, JSON and string-only FormData bodies (64 MiB probes settle
+   unheld on `aebdd7ddd`).
 4. Out of the Node surface, not counted: `indexedDB`, `caches`,
    `navigator.locks`, `scheduler`; `EventSource` (not a default Node 24 global).
 5. A never-settling counted request (an unclosed WebSocket) holds to the loud
@@ -70,9 +69,6 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
   Node's result and exit status (browser-unit parity vs live Node).
 - (+) ADR-0152 §1 shape unchanged; the named set grows by these classes.
 - (−) A held promise settles one microtask after the native one.
-- (−) `pipeThrough(…, { preventCancel: true })` from a host stream whose
-  transform errors leaves the source locked by the tap, where the native pipe
-  releases it.
-- (−) A host stream consumed only through a native internal reader (e.g. passed
-  to `new Response(stream)` and read there) is covered by that body's consumer
-  hold, not per read.
+- (−) Explicit gap: reading the `body` stream of an in-guest blob-backed
+  `Request` directly (reader, `for await`, pipe) holds nothing; its consumer
+  methods do. Compat ❌ row in `docs/public/compat/process.md`.
