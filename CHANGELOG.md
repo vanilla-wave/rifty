@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Process: guest-package adaptations carry class + authority + loud anchor (`AGENTS.md` §Fidelity, `docs/process/rules/fault-classes.md` §Guest-package adaptations); a rifty-gap-compensating patch ships only as declared interim debt (linked platform item or ADR + kill condition). Overturns nothing recorded; adds a declaration duty on ADR-0384's inventory, its Decision untouched. Refine evidence: `docs/backlog/runtime-js/reference/guest-package-patches-refine-evidence-2026-10-15.md`.
 - Codex sees the `rifty-review` skill in its catalog (`allow_implicit_invocation: true`), matching Claude; verified by a fresh read-only `codex exec` listing.
 
 - ES2022 gate: recognize explicitly feature-detected Float16Array through the existing local-guard analysis (ADR-0481); unguarded constructor use/extraction stays red.
