@@ -262,6 +262,33 @@ out.getReader().read().then(() => console.log('HA|never'));
 `,
   },
   {
+    // Pipes keep the native lock lifecycle: options read before the lock, released at the end.
+    name: 'pipe-lock-lifecycle',
+    source: `${report}const outcome = (fn) => { try { fn(); return 'ok'; } catch (e) { return e.name; } };
+(async () => {
+  const through = new Blob(['abc']).stream();
+  const out = through.pipeThrough(new TransformStream());
+  const reader = out.getReader();
+  while (!(await reader.read()).done);
+  const settled = () => new Promise((resolve) => setTimeout(resolve, 50));
+  await settled();
+  console.log('HA|through-done-locked=' + through.locked);
+  const canceled = new Blob(['abc']).stream();
+  await canceled.pipeThrough(new TransformStream()).cancel('stop');
+  await settled();
+  console.log('HA|through-cancel-locked=' + canceled.locked);
+  const invalid = new Blob(['abc']).stream();
+  console.log('HA|through-invalid=' + outcome(() => invalid.pipeThrough({})) + ',' + invalid.locked);
+  const peeked = new Blob(['abc']).stream();
+  let total = 0;
+  await peeked.pipeTo(new WritableStream({ write(c) { total += c.byteLength; } }), {
+    get preventClose() { peeked.getReader().releaseLock(); return false; },
+  });
+  console.log('HA|pipe-to-peek=' + total + ',' + peeked.locked);
+})().catch((e) => fail('pipe-lock', e));
+`,
+  },
+  {
     name: 'zlib-gzip',
     source: `${report}const zlib = require('node:zlib');
 zlib.gzip(Buffer.alloc(64 * 1024 * 1024, 65), (e, r) => (e ? fail('gzip', e) : done('gzip', r.length)));

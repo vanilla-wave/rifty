@@ -84,7 +84,8 @@ verbatim by live Node (`process.execPath`, v24.16.0 at pickup) and by rifty
    reads (`getReader()` and direct Default/BYOB reader constructors, `for await`,
    `tee`, `pipeTo`, `Readable.fromWeb`) and `File#text` print their DONE row and
    exit 0; a `pipeTo`/`pipeThrough` whose host read is done and whose guest
-   sink/transform never settles exits 0 at once, as Node → I1, scenario 1
+   sink/transform never settles exits 0 at once, as Node; pipes read options
+   before locking and release the source lock after completion/cancel → I1, scenario 1
 2. `fs.openAsBlob(p).then(b => b.arrayBuffer())` prints its row → I1, scenario 1
 3. `WebAssembly.compile` and `WebAssembly.instantiate(bytes)` of a 6 M-nop
    module print their rows; a rejecting compile releases (exit 0) → I1, scenario 1
@@ -126,6 +127,10 @@ verbatim by live Node (`process.execPath`, v24.16.0 at pickup) and by rifty
   WebSocket subclass override called inside the constructor — all HOLDS;
   fixed (reader-constructor registration, held-read tap, native listener with
   `isTrusted`) with rows 1 and 7.
+- 2026-10-16 — Final+GREEN verify BLOCK @ c1472ee43 (codex): tap kept the
+  source locked after `pipeThrough` and locked it before native option
+  reads — HOLDS; fixed (native call on the tap first, source lock after it,
+  release on end/error/cancel/settle) with the `pipe-lock-lifecycle` row.
 - 2026-10-16 — refuse-by-name vs hold-to-cap: every counted class has an
   observable release (settle / `close`), so none is refused; a never-settling
   one holds to the loud ADR-0152 §4 cap (ADR-0529 §5).

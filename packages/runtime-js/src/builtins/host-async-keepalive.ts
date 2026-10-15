@@ -169,40 +169,59 @@ function installStreamKeepalive(target: HostAsyncTarget): void {
     if (isHost(self)) for (const branch of branches) hostStreams.add(branch);
     return branches;
   });
-  /** Lock `source` now (as the native pipe does) and expose it as a held-read tap. */
-  const tap = (source: object): { readonly tap: ReadableStream; release(): void } => {
-    const sourceReader = reflectApply(nativeGetReader, source, []) as object;
-    const tapStream = new ReadableStreamCtor(
-      {
-        pull: (controller) =>
-          reflectApply(promiseThen, hold(reflectApply(nativeRead, sourceReader, [])), [
-            ({ done, value }: ReadableStreamReadResult<unknown>) => {
-              if (done) controller.close();
-              else controller.enqueue(value);
-            },
-            (error: unknown) => controller.error(error),
-          ]) as Promise<void>,
-        cancel: (reason) => reflectApply(nativeCancel, sourceReader, [reason]) as Promise<void>,
-      },
-      { highWaterMark: 0 },
-    );
-    const release = (): void => {
-      try {
-        reflectApply(nativeReleaseLock, sourceReader, []);
-      } catch {
-        // already released by cancel/close
-      }
-    };
-    return { tap: tapStream, release };
-  };
+  /**
+   * The native pipe runs on a tap first (options and destination validated in
+   * native order); once it locked the tap, the source is locked too, as the
+   * native pipe locks it. Only the tap's pending host read holds; the source
+   * reader is released when the source ends, errors, or the pipe cancels/settles.
+   */
   const piping =
     (settle: (piped: unknown, release: () => void) => unknown) =>
     (original: AnyFunction, self: unknown, args: unknown[]): unknown => {
       if (!isHost(self) || reflectApply(lockedGetter, self, [])) {
         return reflectApply(original, self, args); // native refusal, native order
       }
-      const { tap: tapStream, release } = tap(self as object);
-      return settle(reflectApply(original, tapStream, args), release);
+      let sourceReader: object | null = null;
+      const release = (): void => {
+        if (sourceReader === null) return;
+        try {
+          reflectApply(nativeReleaseLock, sourceReader, []);
+        } catch {
+          // a pending read already settled the lock
+        }
+      };
+      const tapStream = new ReadableStreamCtor(
+        {
+          pull: (controller) =>
+            reflectApply(promiseThen, hold(reflectApply(nativeRead, sourceReader, [])), [
+              ({ done, value }: ReadableStreamReadResult<unknown>) => {
+                if (!done) {
+                  controller.enqueue(value);
+                  return;
+                }
+                release();
+                controller.close();
+              },
+              (error: unknown) => {
+                release();
+                controller.error(error);
+              },
+            ]) as Promise<void>,
+          cancel: (reason) =>
+            reflectApply(promiseThen, reflectApply(nativeCancel, sourceReader, [reason]), [
+              release,
+              (error: unknown) => {
+                release();
+                throw error;
+              },
+            ]) as Promise<void>,
+        },
+        { highWaterMark: 0 },
+      );
+      const piped = reflectApply(original, tapStream, args);
+      if (!reflectApply(lockedGetter, tapStream, [])) return piped; // rejected before locking
+      sourceReader = reflectApply(nativeGetReader, self, []) as object;
+      return settle(piped, release);
     };
   wrapMethod(
     stream,

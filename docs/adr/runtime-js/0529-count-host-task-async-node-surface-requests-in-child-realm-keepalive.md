@@ -35,9 +35,11 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
      a pending `read()` of a reader (`getReader()` or a direct
      `ReadableStreamDefaultReader`/`BYOBReader` constructor; covers
      `stream.Readable.fromWeb`), async-iterator `next()`, reads of `tee()`
-     branches. `pipeTo`/`pipeThrough` lock the source as natively and pipe
-     through a tap whose pending host read alone holds: a pipe waiting on a
-     guest sink or transform holds nothing. An unread stream holds nothing,
+     branches. `pipeTo`/`pipeThrough` run the native pipe on a tap (options and
+     destination validated first, in native order), lock the source once the
+     tap is locked, and release it when the source ends, errors or the pipe
+     cancels/settles; only the tap's pending host read holds, so a pipe waiting
+     on a guest sink or transform holds nothing. An unread stream holds nothing,
      as in Node.
    - `WebAssembly.compile`, `WebAssembly.instantiate` (both overloads).
      Streaming variants stay the ADR-0158 loud ceiling.
