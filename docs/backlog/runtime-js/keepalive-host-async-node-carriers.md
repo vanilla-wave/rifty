@@ -81,19 +81,24 @@ verbatim by live Node (`process.execPath`, v24.16.0 at pickup) and by rifty
 `node <case>.cjs`; rows, exit code and no-timeout must match.
 
 1. `buffer.Blob#arrayBuffer` 64 MiB, `Blob#text`, `Blob#bytes`, `Blob#stream`
-   reads and `File#text` print their DONE row and exit 0 → I1, scenario 1
+   reads (reader, `for await`, `tee`, `pipeTo`, `Readable.fromWeb`) and
+   `File#text` print their DONE row and exit 0 → I1, scenario 1
 2. `fs.openAsBlob(p).then(b => b.arrayBuffer())` prints its row → I1, scenario 1
 3. `WebAssembly.compile` and `WebAssembly.instantiate(bytes)` of a 6 M-nop
    module print their rows; a rejecting compile releases (exit 0) → I1, scenario 1
 4. `require('node:crypto').subtle.deriveBits` PBKDF2 3 M iterations and a
    200-step `globalThis.crypto.subtle.digest` chain print their rows → I1, scenario 1
 5. In-guest `new Response(blob).arrayBuffer()` and `new Request(url, {body: blob}).text()`
-   print their rows; a guest-stream body with a pending read holds nothing
-   (exit 0 at once, as Node) → I1
+   print their rows, also through `body.pipeThrough` and `new Response(blob.stream())`;
+   a guest-stream body with a pending read holds nothing (exit 0 at once, as Node) → I1
 6. `zlib.gzip` 64 MiB and a `createGzip` stream print their rows → I1
 7. A global `WebSocket` to a live server prints open/message/close rows → I1
 8. `Response`/`Request`/`WebSocket` keep `X.prototype.constructor === X`,
-   `instanceof`, and the wrapped functions keep Node's names → ADR-0529
+   `instanceof`, and the wrapped functions keep Node's names and native
+   `Function#toString`; `init.body` is read once; a locked body still refuses
+   `clone()`/consumers → ADR-0529
+9. An unobserved rejected `WebAssembly.compile` / `crypto.subtle.digest` stays
+   an unhandled rejection: exit 1 as Node → I1
 
 ## Out of scope
 
@@ -109,6 +114,10 @@ verbatim by live Node (`process.execPath`, v24.16.0 at pickup) and by rifty
   (`HA|top` only, silent exit 0), rows 6 and the digest chain of row 4 pass
   unheld; ADR-0529 records the counted classes; zlib stays uncounted
   (microtask-settled, Chromium CompressionStream transforms synchronously).
+- 2026-10-16 — Final+GREEN BLOCK @ 7718a8623 (codex): swallowed unhandled
+  rejections, double `init.body` read, split body lock, Proxy `toString` —
+  all HOLDS; fixed (settle-tracked promise copy, native host-stream
+  registration, observed init, `toString` mask) with rows 8-9.
 - 2026-10-16 — refuse-by-name vs hold-to-cap: every counted class has an
   observable release (settle / `close`), so none is refused; a never-settling
   one holds to the loud ADR-0152 §4 cap (ADR-0529 §5).

@@ -22,23 +22,30 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
 
 1. `installHostAsyncKeepalive()` (`packages/runtime-js/src/builtins/host-async-keepalive.ts`)
    runs beside `installFetchKeepalive()` in every kernel worker and the no-COI
-   toolchain worker. Wrappers are Proxies on the realm's own functions
-   (name/length/`toString` preserved); the observer branch never adds an
-   unhandled rejection.
+   toolchain worker. Wrappers are Proxies on the realm's own functions:
+   name/length kept, `Function#toString` reports the wrapped native text (one
+   realm mask over the wrappers), `X.prototype.constructor === X`. A held call
+   returns a settle-tracked copy of the native promise (settles one microtask
+   later): an unobserved rejection stays unhandled, as in Node.
 2. Counted, one ref per pending request, released on settle (fulfil or reject):
    - `Blob.prototype.arrayBuffer/bytes/text` (covers `buffer.Blob`, `File`,
-     `fs.openAsBlob` results); `Blob.prototype.stream()` returns a byte stream
-     whose each pending read holds — an unread stream holds nothing, as in Node.
+     `fs.openAsBlob` results).
+   - Reads of host streams — `blob.stream()` results and the native `body`
+     of a host-backed Response/Request (identity and locking stay native):
+     a pending public `reader.read()`, async-iterator `next()`, reads of
+     `tee()` branches and of a `pipeThrough()` readable (covers
+     `stream.Readable.fromWeb`); a `pipeTo()` holds until the pipe settles.
+     An unread stream holds nothing, as in Node.
    - `WebAssembly.compile`, `WebAssembly.instantiate` (both overloads).
      Streaming variants stay the ADR-0158 loud ceiling.
    - Every `SubtleCrypto.prototype` method (one prototype covers
      `globalThis.crypto.subtle`, `require('crypto').subtle`, `webcrypto.subtle`).
    - `Response`/`Request` body consumers (`arrayBuffer/blob/bytes/formData/json/text`)
-     and `body` stream reads, only for host-backed bodies: constructed with a
-     non-stream body, `Response.json()`, `new Request(hostBackedRequest)`, or
-     `clone()` of one. A guest `ReadableStream` body settles on guest work and
-     holds nothing (Node exits with such a read pending). Fetched responses
-     stay ADR-0158's.
+     for host-backed bodies: any non-stream body or a host stream,
+     `Response.json()`, `new Request(hostBackedRequest)`, `clone()` of one.
+     `init.body` is observed during the native read, never read twice. A guest
+     `ReadableStream` body settles on guest work and holds nothing (Node exits
+     with such a read pending). Fetched responses stay ADR-0158's.
    - Global `WebSocket`: ref at construction, released on its `close` event
      (always dispatched after error or close).
 3. Not counted, settle on microtasks with no host task: `fs.promises`/fs
@@ -46,17 +53,19 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
    synchronously; 64 MiB one-shot + stream rows pass unheld).
 4. Out of the Node surface, not counted: `indexedDB`, `caches`,
    `navigator.locks`, `scheduler`; `EventSource` (not a default Node 24 global).
-5. A never-settling counted request (unclosed WebSocket, never-read host body
-   read pending forever) holds to the loud ADR-0152 §4 cap, as Node holds the
-   process forever. Every counted class here has an observable release; none
-   needs a refuse-by-name ceiling.
+5. A never-settling counted request (unclosed WebSocket, a `pipeTo` into a
+   guest sink that never accepts) holds to the loud ADR-0152 §4 cap; Node holds
+   the process forever for the socket and exits for the stalled pipe. Every
+   counted class has an observable release; none needs a refuse-by-name ceiling.
 
 ## Consequences
 
 - (+) Run-to-completion programs whose last work is one of these requests print
   Node's result and exit status (browser-unit parity vs live Node).
 - (+) ADR-0152 §1 shape unchanged; the named set grows by these classes.
-- (−) `Response`/`Request` globals are Proxies: `Response.prototype.constructor
-  !== Response` in the child realm.
-- (−) A body built from a guest stream that itself waits on uncounted host work
-  is held only by that work's own ref (same as Node's chain of handles).
+- (−) A held promise settles one microtask after the native one.
+- (−) `pipeTo` from a host stream into a guest sink that stalls forever ends at
+  the drain cap (exit 1) where Node exits 0.
+- (−) A host stream consumed only through a native internal reader (e.g. passed
+  to `new Response(stream)` and read there) is covered by that body's consumer
+  hold, not per read.

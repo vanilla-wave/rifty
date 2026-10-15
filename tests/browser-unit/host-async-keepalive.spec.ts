@@ -21,7 +21,7 @@ test('host-async Node carriers hold the loop until they settle, as in Node', asy
   const oracles = new Map<string, Awaited<ReturnType<typeof runNodeOracle>>>();
   for (const fixture of hostAsyncCases) {
     const oracle = await runNodeOracle(fixture.source);
-    expect(oracle.code, `${fixture.name}: ${oracle.stderr}`).toBe(0);
+    expect(rows(oracle.stdout).length, `${fixture.name}: ${oracle.stderr}`).toBeGreaterThan(0);
     oracles.set(fixture.name, oracle);
   }
   await gotoHarness(page);

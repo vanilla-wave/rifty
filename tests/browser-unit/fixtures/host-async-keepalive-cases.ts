@@ -147,6 +147,95 @@ new Blob(['unread']).stream();
 `,
   },
   {
+    name: 'blob-stream-async-iterator',
+    source: `${report}(async () => {
+  let total = 0;
+  for await (const chunk of new Blob([Buffer.alloc(32 * 1024 * 1024, 73)]).stream()) total += chunk.byteLength;
+  done('async-iterator', total);
+})().catch((e) => fail('async-iterator', e));
+`,
+  },
+  {
+    name: 'blob-stream-tee',
+    source: `${report}const [left, right] = new Blob([Buffer.alloc(32 * 1024 * 1024, 74)]).stream().tee();
+void right.cancel();
+const reader = left.getReader();
+let total = 0;
+const pump = () => reader.read().then(({ done: end, value }) => {
+  if (end) return done('tee', total);
+  total += value.byteLength;
+  return pump();
+});
+pump().catch((e) => fail('tee', e));
+`,
+  },
+  {
+    name: 'blob-stream-pipe-to',
+    source: `${report}let total = 0;
+new Blob([Buffer.alloc(32 * 1024 * 1024, 75)]).stream()
+  .pipeTo(new WritableStream({ write(chunk) { total += chunk.byteLength; } }))
+  .then(() => done('pipe-to', total), (e) => fail('pipe-to', e));
+`,
+  },
+  {
+    name: 'response-body-pipe-through',
+    source: `${report}const reader = new Response(new Blob([Buffer.alloc(32 * 1024 * 1024, 76)])).body
+  .pipeThrough(new TransformStream()).getReader();
+let total = 0;
+const pump = () => reader.read().then(({ done: end, value }) => {
+  if (end) return done('pipe-through', total);
+  total += value.byteLength;
+  return pump();
+});
+pump().catch((e) => fail('pipe-through', e));
+`,
+  },
+  {
+    name: 'readable-from-web',
+    source: `${report}const { Readable } = require('node:stream');
+let total = 0;
+Readable.fromWeb(new Blob([Buffer.alloc(32 * 1024 * 1024, 77)]).stream())
+  .on('data', (chunk) => { total += chunk.length; })
+  .on('end', () => done('from-web', total))
+  .on('error', (e) => fail('from-web', e));
+`,
+  },
+  {
+    name: 'response-over-blob-stream',
+    source: `${report}new Response(new Blob([Buffer.alloc(32 * 1024 * 1024, 78)]).stream()).arrayBuffer()
+  .then((b) => done('response-stream', b.byteLength), (e) => fail('response-stream', e));
+`,
+  },
+  {
+    // An unobserved rejection stays unhandled: Node prints it and exits 1.
+    name: 'webassembly-compile-unhandled',
+    source: `${report}WebAssembly.compile(new Uint8Array([0]));
+`,
+  },
+  {
+    name: 'subtle-digest-unhandled',
+    source: `${report}crypto.subtle.digest('invalid-algorithm', new Uint8Array([0]));
+`,
+  },
+  {
+    // Body locking, accessor reads and reflection stay the platform's own.
+    name: 'body-and-reflection-shape',
+    source: `let reads = 0;
+new Request('http://localhost/', { method: 'POST', get body() { reads += 1; return 'abc'; } });
+console.log('HA|init-body-reads=' + reads);
+const outcome = (fn) => { try { fn(); return 'ok'; } catch (e) { return e.name; } };
+(async () => {
+  for (const make of [() => new Response('abc'), () => new Request('http://localhost/', { method: 'POST', body: 'abc' })]) {
+    const message = make();
+    message.body.getReader();
+    const text = await message.text().then(() => 'ok', (e) => e.name);
+    console.log('HA|locked=' + [message.body.locked, message.bodyUsed, outcome(() => message.clone()), text].join(','));
+  }
+  console.log('HA|to-string=' + [WebAssembly.compile, WebAssembly.instantiate, Function.prototype.toString].map((f) => Function.prototype.toString.call(f)).join('|'));
+})();
+`,
+  },
+  {
     name: 'zlib-gzip',
     source: `${report}const zlib = require('node:zlib');
 zlib.gzip(Buffer.alloc(64 * 1024 * 1024, 65), (e, r) => (e ? fail('gzip', e) : done('gzip', r.length)));

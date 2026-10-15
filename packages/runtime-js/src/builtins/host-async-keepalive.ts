@@ -4,71 +4,112 @@
  * active; in the child realm these settle on a host task, so the drain reaped
  * the realm before they settled (silent drop). Each pending request holds one
  * ref until it settles: Blob/File body reads, WebAssembly compile/instantiate,
- * SubtleCrypto, Response/Request bodies not backed by a guest stream, and an
- * unclosed global WebSocket. Microtask-settled builtins (`fs.promises` sync RPC,
- * `node:zlib` over Chromium's synchronous CompressionStream) need no ref.
+ * SubtleCrypto, reads of host-backed streams and Response/Request bodies, and
+ * an unclosed global WebSocket. Microtask-settled builtins (`fs.promises` sync
+ * RPC, `node:zlib` over Chromium's synchronous CompressionStream) need no ref.
+ *
+ * Wrappers are Proxies over the realm's own functions; `Function#toString`
+ * reports the wrapped native text. A held call returns a settle-tracked copy
+ * of the native promise, so an unhandled rejection stays the caller's.
  */
 
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 
+type AnyFunction = (...args: unknown[]) => unknown;
+type Construct = new (...args: unknown[]) => object;
+
 const promiseThen = Promise.prototype.then;
 const reflectApply = Reflect.apply;
+const reflectConstruct = Reflect.construct;
 const BODY_CONSUMERS = ['arrayBuffer', 'blob', 'bytes', 'formData', 'json', 'text'] as const;
 const BLOB_READS = ['arrayBuffer', 'bytes', 'text'] as const;
 
 interface HostAsyncTarget {
+  Function?: typeof Function;
   Blob?: typeof Blob;
   Response?: typeof Response;
   Request?: typeof Request;
+  ReadableStream?: typeof ReadableStream;
+  ReadableStreamDefaultReader?: typeof ReadableStreamDefaultReader;
+  ReadableStreamBYOBReader?: typeof ReadableStreamBYOBReader;
   WebAssembly?: Pick<typeof WebAssembly, 'compile' | 'instantiate'>;
   SubtleCrypto?: typeof SubtleCrypto;
   WebSocket?: typeof WebSocket;
 }
 
-/** Hold one ref until `value` settles; the observer branch swallows its own rejection. */
+/** Wrapper → wrapped native function, for `Function#toString`. */
+const originals = new WeakMap<object, object>();
+/** Native streams whose reads wait on host data (Blob streams, host-backed bodies). */
+const hostStreams = new WeakSet<object>();
+const hostReaders = new WeakSet<object>();
+const hostIterators = new WeakSet<object>();
+/** Response/Request objects whose body source is host data, not a guest stream. */
+const hostBodies = new WeakSet<object>();
+
+const isObject = (value: unknown): value is object =>
+  (typeof value === 'object' || typeof value === 'function') && value !== null;
+
+/** One ref until `value` settles; returns the tracked copy (rejection stays unhandled if unobserved). */
 function hold<T>(value: T): T {
-  if (typeof (value as { then?: unknown } | null)?.then !== 'function') return value;
+  if (!isObject(value) || typeof (value as { then?: unknown }).then !== 'function') return value;
   keepaliveRef();
-  const release = (): void => keepaliveUnref();
-  reflectApply(promiseThen, value, [release, release]);
-  return value;
+  return reflectApply(promiseThen, value, [
+    (result: unknown) => {
+      keepaliveUnref();
+      return result;
+    },
+    (error: unknown) => {
+      keepaliveUnref();
+      throw error;
+    },
+  ]) as T;
 }
 
-/** Replace `owner[name]` with a Proxy (name/length/`toString` preserved). */
+function wrapFunction<F extends object>(original: F, handler: ProxyHandler<F>): F {
+  const proxy = new Proxy(original, handler);
+  originals.set(proxy, original);
+  return proxy;
+}
+
 function wrapMethod(
   owner: object,
-  name: string,
-  apply: (original: (...args: unknown[]) => unknown, self: unknown, args: unknown[]) => unknown,
+  name: PropertyKey,
+  apply: (original: AnyFunction, self: unknown, args: unknown[]) => unknown,
 ): void {
   const descriptor = Object.getOwnPropertyDescriptor(owner, name);
   if (typeof descriptor?.value !== 'function') return;
   Object.defineProperty(owner, name, {
     ...descriptor,
-    value: new Proxy(descriptor.value, { apply }),
+    value: wrapFunction(descriptor.value as AnyFunction, { apply }),
   });
 }
 
-function holdMethod(owner: object, name: string, counts: (self: unknown) => boolean): void {
+function holdMethod(owner: object, name: PropertyKey, counts: (self: unknown) => boolean): void {
   wrapMethod(owner, name, (original, self, args) => {
     const result = reflectApply(original, self, args);
     return counts(self) ? hold(result) : result;
   });
 }
 
+/** Record the result of `original` in `set` when `self` is counted. */
+function registering(set: WeakSet<object>, counts: (self: unknown) => boolean) {
+  return (original: AnyFunction, self: unknown, args: unknown[]): unknown => {
+    const result = reflectApply(original, self, args);
+    if (counts(self) && isObject(result)) set.add(result);
+    return result;
+  };
+}
+
 /** Proxy a global constructor; `X.prototype.constructor === X` stays true, as in Node. */
 function wrapConstructor(
   target: HostAsyncTarget,
   name: 'Response' | 'Request' | 'WebSocket',
-  construct: (instance: object, args: unknown[]) => void,
+  construct: (original: Construct, args: unknown[], newTarget: Construct) => object,
 ): object | undefined {
-  const ctor = target[name] as (new (...args: unknown[]) => object) | undefined;
+  const ctor = target[name] as unknown as Construct | undefined;
   if (typeof ctor !== 'function') return undefined;
-  const proxy = new Proxy(ctor, {
-    construct(original, args, newTarget) {
-      const instance = Reflect.construct(original, args, newTarget) as object;
-      construct(instance, args);
-      return instance;
-    },
+  const proxy = wrapFunction(ctor, {
+    construct: (original, args, newTarget) => construct(original, args, newTarget as Construct),
   });
   (target as Record<string, unknown>)[name] = proxy;
   const prototype = ctor.prototype as object;
@@ -77,100 +118,122 @@ function wrapConstructor(
   return prototype;
 }
 
-/**
- * Byte stream over a host-backed source: each pending read holds one ref, so an
- * idle consumer holds nothing (Node: an unread stream keeps no handle).
- */
-function holdReads(
-  source: ReadableStream<Uint8Array<ArrayBuffer>>,
-): ReadableStream<Uint8Array<ArrayBuffer>> {
-  let reader: ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>> | null = null;
-  return new ReadableStream({
-    type: 'bytes',
-    pull(controller) {
-      reader ??= source.getReader();
-      const pull = (): Promise<void> =>
-        hold((reader as ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>>).read()).then(
-          ({ done, value }) => {
-            if (done) {
-              controller.close();
-              controller.byobRequest?.respond(0);
-              return;
-            }
-            if (value.byteLength === 0) return pull();
-            controller.enqueue(value);
-          },
-        );
-      return pull().catch((error: unknown) => controller.error(error));
-    },
-    cancel(reason) {
-      return reader !== null ? reader.cancel(reason) : source.cancel(reason);
-    },
-  });
+function installToStringMask(target: HostAsyncTarget): void {
+  const prototype = target.Function?.prototype;
+  if (prototype === undefined) return;
+  wrapMethod(prototype, 'toString', (original, self, args) =>
+    reflectApply(original, (isObject(self) && originals.get(self)) || self, args),
+  );
 }
 
-function holdStreamGetter(prototype: object, counts: (self: unknown) => boolean): void {
-  const descriptor = Object.getOwnPropertyDescriptor(prototype, 'body');
-  const get = descriptor?.get;
-  if (descriptor === undefined || get === undefined) return;
-  const wrapped = new WeakMap<
-    ReadableStream<Uint8Array<ArrayBuffer>>,
-    ReadableStream<Uint8Array<ArrayBuffer>>
-  >();
-  Object.defineProperty(prototype, 'body', {
-    ...descriptor,
-    get: new Proxy(get, {
-      apply(original, self, args) {
-        const source = reflectApply(original, self, args) as ReadableStream<
-          Uint8Array<ArrayBuffer>
-        > | null;
-        if (source === null || !counts(self)) return source;
-        let stream = wrapped.get(source);
-        if (stream === undefined) {
-          stream = holdReads(source);
-          wrapped.set(source, stream);
-        }
-        return stream;
-      },
-    }),
+/** Reads through public reader, async iteration, tee, pipeTo and pipeThrough of host streams. */
+function installStreamKeepalive(target: HostAsyncTarget): void {
+  const ReadableStreamCtor = target.ReadableStream;
+  if (ReadableStreamCtor === undefined) return;
+  const stream = ReadableStreamCtor.prototype;
+  const isHost = (self: unknown): boolean => isObject(self) && hostStreams.has(self);
+  wrapMethod(stream, 'getReader', registering(hostReaders, isHost));
+  for (const reader of [target.ReadableStreamDefaultReader, target.ReadableStreamBYOBReader]) {
+    if (reader !== undefined) {
+      holdMethod(reader.prototype, 'read', (self) => isObject(self) && hostReaders.has(self));
+    }
+  }
+  wrapMethod(stream, 'tee', (original, self, args) => {
+    const branches = reflectApply(original, self, args) as object[];
+    if (isHost(self)) for (const branch of branches) hostStreams.add(branch);
+    return branches;
   });
+  wrapMethod(stream, 'pipeThrough', registering(hostStreams, isHost));
+  holdMethod(stream, 'pipeTo', isHost);
+  const values = Object.getOwnPropertyDescriptor(stream, 'values')?.value as
+    | AnyFunction
+    | undefined;
+  if (typeof values !== 'function') return;
+  const iterator = Object.getPrototypeOf(
+    reflectApply(values, new ReadableStreamCtor(), []),
+  ) as object;
+  holdMethod(iterator, 'next', (self) => isObject(self) && hostIterators.has(self));
+  const sharesIterator = Reflect.get(stream, Symbol.asyncIterator) === values;
+  wrapMethod(stream, 'values', registering(hostIterators, isHost));
+  if (sharesIterator) {
+    Object.defineProperty(stream, Symbol.asyncIterator, {
+      ...Object.getOwnPropertyDescriptor(stream, Symbol.asyncIterator),
+      value: Reflect.get(stream, 'values'),
+    });
+  } else wrapMethod(stream, Symbol.asyncIterator, registering(hostIterators, isHost));
 }
 
 /**
- * Bodies whose source is host data (Blob, FormData, bytes, text) are host reads;
- * a guest `ReadableStream` body settles on the guest's own work and holds nothing.
+ * A body is host data unless it is a guest `ReadableStream` (a host stream counts):
+ * Node exits with a read pending on an idle guest stream.
  */
-function installBodyKeepalive(
-  target: HostAsyncTarget,
-  name: 'Response' | 'Request',
-  hostBacked: WeakSet<object>,
-): void {
-  const counts = (self: unknown): boolean =>
-    typeof self === 'object' && self !== null && hostBacked.has(self);
+function installBodyKeepalive(target: HostAsyncTarget, name: 'Response' | 'Request'): void {
+  const lockedGetter = Object.getOwnPropertyDescriptor(
+    target.ReadableStream?.prototype ?? {},
+    'locked',
+  )?.get as AnyFunction | undefined;
+  const isGuestStream = (body: unknown): boolean => {
+    if (lockedGetter === undefined || !isObject(body) || hostStreams.has(body)) return false;
+    try {
+      reflectApply(lockedGetter, body, []); // brand check: no Proxy trap runs
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const hostBody = (body: unknown): boolean => body != null && !isGuestStream(body);
+  const counts = (self: unknown): boolean => isObject(self) && hostBodies.has(self);
   const ctor = target[name];
-  const prototype = wrapConstructor(target, name, (instance, args) => {
-    const body = name === 'Response' ? args[0] : (args[1] as { body?: unknown } | undefined)?.body;
-    const fromInput = name === 'Request' && body === undefined && counts(args[0]);
-    if (fromInput || (body != null && !(body instanceof ReadableStream))) hostBacked.add(instance);
+  const prototype = wrapConstructor(target, name, (original, args, newTarget) => {
+    if (name === 'Response') {
+      const response = reflectConstruct(original, args, newTarget);
+      if (hostBody(args[0])) hostBodies.add(response);
+      return response;
+    }
+    // Observe the native read of `init.body` instead of reading the accessor again.
+    let body: unknown;
+    const init = args[1];
+    const observed = isObject(init)
+      ? new Proxy(init, {
+          get(source, key) {
+            const value = Reflect.get(source, key, source);
+            if (key === 'body') body = value;
+            return value;
+          },
+        })
+      : init;
+    const request = reflectConstruct(
+      original,
+      args.length > 1 ? [args[0], observed, ...args.slice(2)] : args,
+      newTarget,
+    );
+    if (body == null ? counts(args[0]) : hostBody(body)) hostBodies.add(request);
+    return request;
   });
   if (prototype === undefined || ctor === undefined) return;
-  const mark =
-    (always: boolean) =>
-    (original: (...args: unknown[]) => unknown, self: unknown, args: unknown[]): unknown => {
-      const created = reflectApply(original, self, args) as object;
-      if (always || counts(self)) hostBacked.add(created);
-      return created;
-    };
-  if (name === 'Response') wrapMethod(ctor, 'json', mark(true));
-  wrapMethod(prototype, 'clone', mark(false));
+  if (name === 'Response')
+    wrapMethod(
+      ctor,
+      'json',
+      registering(hostBodies, () => true),
+    );
+  wrapMethod(prototype, 'clone', registering(hostBodies, counts));
   for (const consumer of BODY_CONSUMERS) holdMethod(prototype, consumer, counts);
-  holdStreamGetter(prototype, counts);
+  const body = Object.getOwnPropertyDescriptor(prototype, 'body');
+  if (body?.get !== undefined) {
+    Object.defineProperty(prototype, 'body', {
+      ...body,
+      get: wrapFunction(body.get, { apply: registering(hostStreams, counts) }),
+    });
+  }
 }
 
 function installWebSocketKeepalive(target: HostAsyncTarget): void {
-  wrapConstructor(target, 'WebSocket', (socket) => {
+  wrapConstructor(target, 'WebSocket', (original, args, newTarget) => {
+    const socket = reflectConstruct(original, args, newTarget) as WebSocket;
     keepaliveRef();
-    (socket as WebSocket).addEventListener('close', () => keepaliveUnref(), { once: true });
+    socket.addEventListener('close', () => keepaliveUnref(), { once: true });
+    return socket;
   });
 }
 
@@ -178,13 +241,12 @@ function installWebSocketKeepalive(target: HostAsyncTarget): void {
 export function installHostAsyncKeepalive(
   target: HostAsyncTarget = globalThis as HostAsyncTarget,
 ): void {
+  installToStringMask(target);
   const always = (): boolean => true;
   const blob = target.Blob?.prototype;
   if (blob !== undefined) {
     for (const read of BLOB_READS) holdMethod(blob, read, always);
-    wrapMethod(blob, 'stream', (original, self, args) =>
-      holdReads(reflectApply(original, self, args) as ReadableStream<Uint8Array<ArrayBuffer>>),
-    );
+    wrapMethod(blob, 'stream', registering(hostStreams, always));
   }
   const wasm = target.WebAssembly;
   if (wasm !== undefined) {
@@ -197,8 +259,8 @@ export function installHostAsyncKeepalive(
       if (name !== 'constructor') holdMethod(subtle, name, always);
     }
   }
-  const hostBacked = new WeakSet<object>();
-  installBodyKeepalive(target, 'Response', hostBacked);
-  installBodyKeepalive(target, 'Request', hostBacked);
+  installStreamKeepalive(target);
+  installBodyKeepalive(target, 'Response');
+  installBodyKeepalive(target, 'Request');
   installWebSocketKeepalive(target);
 }
