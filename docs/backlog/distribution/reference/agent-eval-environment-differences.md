@@ -5,11 +5,13 @@ lane/version/source/hash, original outcome, recovery and impact/unknown.
 Natural comparison, pilot, adaptive search, directed probes and unverified
 contexts separate. Original scores unchanged.
 
-2026-10-13 correction: original eval-v16 is confounded history.
-[Current corrected-proxy96](../../../../tools/agent-bench/reports/summaries/2026-10-13-eval-v16-corrected/README.md)
-retains51PASS45FAIL/9setup and expense-oracle limitation; clean quality pending. [Rework evidence](agent-eval-pr341-rework.md) isolates install failures
-and external proxy argument loss. Other cohorts using that proxy also need
-qualification; directed executable results retain their actual observations.
+2026-10-15 [current qualified v18](agent-eval-pr341-v18-completed.md):96/64PASS32FAIL,
+Pi320single296parallel nonempty/0reportedmalformed; native24unknown metrics.
+Native booking3/3PASS,expense1/3PASS;2COIimport setup failures and explicit
+oracle/protocol/HMR limits retained. No clean model-quality/runtime-only delta.
+[Rework evidence](agent-eval-pr341-rework.md) separates original npm setup and
+external proxy argument loss. Earlier corrected-v16/v17 and historical cohorts
+below retain exact scores; same-proxy exposure qualifies their quality claims.
 
 | Evidence | Natural operations | Reported errors | Nonempty traces |
 |---|---:|---:|---:|
@@ -43,7 +45,7 @@ errors. Unresolved classifications remain explicit unknown, exact results retain
 | execFileSync |Absent/TypeError bothRiftyhosts; native works|Existing runtime-js/node-builtins-loud-stub-capability-gaps; measured API gap.|
 | Quoted heredoc/command substitution |Exact natural command/body replay fails bothRiftyhosts, works native|12 directed operations; direct-write recovers identical body SHA/all3final appjudgesPASS. Historical task impactunknown; existing shell-script-support-surface.|
 | Node CLI --test/module-eval |Natural public Rifty calls retain bad-option/NotImplemented results|Flag/eval surface differs; successful task may use another operation. No automatic runtime expansion.|
-| Tool validation |External codex-proxy ignored final AI SDK tool-call input;571 parallel Pi calls empty/566 validation results|Provider adapter defect; fresh96 Pi301parallel/305single nonempty, reported malformed0. Not model-generated bad arguments or Node incompatibility.|
+| Tool validation |External codex-proxy ignored final AI SDK tool-call input;571 parallel Pi calls empty/566 validation results|Provider adapter defect; currentv18 Pi296parallel/320single nonempty, reported malformed0; nativeunknown. Not model-generated bad arguments or Node incompatibility.|
 | SHA-1 integrity |18 Rifty library setups reject supplied SHA-1 locks before tools/tokens|npm-client installation boundary; original scores include setup failure, not attempted agent repair.|
 | npm aliases/import |4 explicit string-width-cjs alias failures;2 COI workspace-import timeouts on queue-clear|Alias boundary directly proven for4; timeout cause unisolated for2.|
 | Home/git/listen policies |Native Codex failed operations retained, including passing trials|Native context restricted too; not an unrestricted oracle.|
@@ -67,7 +69,7 @@ Raw catalog/source audits/probes:
 agent-eval-operation-catalog-evidence.json.gz; immutable canonical comparison/
 pilot/search reports under tools/agent-bench/reports/summaries.
 
-Fresh corrected-proxy96: no SHA-1/alias setup rejection;3COIimport timeouts,
+First corrected-v16 history: no SHA-1/alias setup rejection;3COIimport timeouts,
 6nativequeue mirror ETARGET setups. Exact Node after-code establishes4queue ALS
 runtime failures;2queue mixed failures remain unisolated. Expense native Codex3
 false negatives at visible-card observation, numerical ledger6/6PASS; original

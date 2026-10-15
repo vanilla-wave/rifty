@@ -38,3 +38,8 @@ queue-clear1/3) wait90s for the same toast, zero agent tools/tokens.
 [Exact completed recording](../distribution/reference/agent-eval-pr341-v17-completed.md).
 No original rows rescued; unrelated SHA-1/alias errors absent in observed
 errors. Cause remains unisolated; no archive/notification source change.
+
+2026-10-15 eval-v18:2COI setup failures (stringify2,queue2), same90s success-toast
+wait,0tools/tokens. Both original failure rows retained, no alias/SHA-1 error
+in those messages; root unchanged/unisolated. Raw source in current
+[recording](../distribution/reference/agent-eval-pr341-v18-completed.md).

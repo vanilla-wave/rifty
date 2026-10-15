@@ -8,8 +8,8 @@ External codex-proxy dropped final AI SDK tool-call input. Scores stay original;
 neither model quality nor a runtime-only gap follows from these totals.
 [Rework evidence](agent-eval-pr341-rework.md),
 [96-row classification](agent-eval-pr341-rework-classification.json.gz).
-[Current qualified corrected-proxy96](../../../../tools/agent-bench/reports/summaries/2026-10-13-eval-v16-corrected/README.md)
-replaces this historical reference; clean quality comparison remains pending.
+[Current qualified v18](../../../../tools/agent-bench/reports/summaries/2026-10-15-eval-v18-corrected/README.md)
+replaces this historical reference; source/oracle/protocol limits stay explicit.
 
 Clean source `ed4e06d29ccc4ae88eed4ed4f906f5eb42962177`; accepted judging
 source `37e19eb16776f69c5052687bc628cda2ce0af1e1`. Pre-call protocol:

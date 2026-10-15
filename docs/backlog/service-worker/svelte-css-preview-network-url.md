@@ -36,3 +36,15 @@ supported. PR341 measures/retains failure; its I10 diagnostics must verify exact
 compiled specifier/request and effect through both public hosts. Root cause,
 minimal organic repro and native response/provenance remain open; no prescribed
 fix or source rewrite. Capture outside evaluation implementation scope.
+
+## 2026-10-15 separate HMR observation
+
+New complete [eval-v18](../distribution/reference/agent-eval-pr341-v18-completed.md)
+COI expense3/3 blank previews, source public Addperson controls present. Original
+ZIP pageErrors read default from undefined at App.svelte26:10 / @vite/client
+queueUpdate. Raw events/SHA/screens and exact after source retained in current
+repair-diagnostics. This is new evidence at the same user-visible Svelte blank
+preview boundary, not proof of the old http://src/CORS cause or faulty layer.
+No cold-reload rescue/source repair; root remains unisolated. User path: edit
+Svelte app in ordinary workbench → HMR update → blank preview. Owner/trigger
+stay as above; source/model scores unchanged.

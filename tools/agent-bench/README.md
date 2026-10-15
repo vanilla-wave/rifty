@@ -5,9 +5,12 @@ three fresh trials by default. The original five tasks are the smoke set.
 Tool/context differences remain explicit; a delta is not a runtime-only cause.
 
 [Historical goal closure](../../docs/backlog/distribution/reference/agent-code-quality-evaluation-close.md);
-[Current qualified eval-v16 reference](reports/summaries/2026-10-13-eval-v16-corrected/README.md):
-fresh96/51PASS45FAIL, Pi parallel arguments fixed;9setup/expense-oracle limits
-retained, clean quality pending. [Historical eval-v16](../../docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-completed.md)
+[Current qualified eval-v18 reference](reports/summaries/2026-10-15-eval-v18-corrected/README.md):
+fresh96/64PASS32FAIL, Pi320single296parallel0empty/0reportedmalformed;
+booking nativeCodex3/3PASS. Two setup failures, oracle/protocol/HMR limits
+retained; no clean model-quality or runtime-only causal claim.
+[Earlier corrected-v16](reports/summaries/2026-10-13-eval-v16-corrected/README.md)
+and [v17](reports/summaries/2026-10-14-eval-v17-corrected/README.md) stay immutable history. [Historical eval-v16](../../docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-completed.md)
 retains96selected43PASS53FAIL/24setup, confounded by npm-client setup failures
 and external proxy parallel-tool argument loss.
 [PR341 correction/evidence](../../docs/backlog/distribution/reference/agent-eval-pr341-rework.md).

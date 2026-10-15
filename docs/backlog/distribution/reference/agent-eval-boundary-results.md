@@ -2,11 +2,13 @@
 
 2026-10-13 qualification: external Pi proxy lost parallel tool arguments in
 the comparative evidence; [rework](agent-eval-pr341-rework.md) proves the adapter
-defect and a fixed protocol probe. No fresh clean comparison yet. Historical
+defect and a fixed protocol probe. [Latest qualifiedv18](agent-eval-pr341-v18-completed.md)
+records96/64PASS32FAIL with nonempty Pi arguments; oracle/protocol/HMR limits
+prohibit a clean model-quality claim. Historical
 boundary outcomes below retain their scores; proxy exposure means shared Luna
 failure cannot establish a model ceiling. Independent setup errors and actual
 successful finite workloads retain their observed evidence. Prior CLOSE/Final
-records remain history; clean comparative acceptance is pending.
+records remain history; adaptive boundary cohorts were not rerun/regraded.
 
 [Profile](agent-eval-boundary-profile.json.gz), [frozen selection](agent-eval-boundary-confirmation-selection.json).
 Adaptive purposive search separate from representative eval-v16.

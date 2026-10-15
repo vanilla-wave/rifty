@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Freeze fresh v18 complete96/classifications/current reference; retain original scores and explicit protocol/oracle/HMR limits with original-byte binary parts.
+
 - Retain oversized unpublished browserZIP bytes/SHA as ordered raw parts; existing scores/published archives and original offline proofs preserved.
 
 - Preserve readonly cards beside declared native booking tables; aggregate distinct outputs while native row slots retain ownership.

@@ -155,3 +155,19 @@ Fresh v17 complete57PASS39FAIL,96selected/exit0;
 Expense native Codex2/3PASS validates current source. New booking native0/3
 activates handoff6; [native ownership repair](agent-eval-pr341-booking-native-repair.md)
 proves producer faults. Source verification/new full version still required.
+
+## Final fresh v18 recording
+
+[Current qualified reference](agent-eval-pr341-v18-completed.md):clean cf7a842a4,
+96/64PASS32FAIL,exit0/8177.203s. COI10/noCOI14/Pi19/Codex21 of24. Original
+public bytes/config/normalized order preserved; prior scores/archives immutable.
+Pi320single296parallel0empty/reportedmalformed0; native24unknown malformed.
+Booking nativeCodex3/3PASS/all120predicates; expense1/3PASS, both0/3 conditions false.
+No further oracle source revision in this handoff; current presentation limits
+are explicit questions, not a fake all-pass or coding-ceiling result.
+
+[Booking source/data Final](pr341-booking-source-final-green.json)13coverage/8axesPASS
+at3d89, actual source gate27PASS, source unchanged throughcf7 transfer merge.
+New complete archive321JSON/188binary original seals,32MiB parts; original
+producer report retained and onlyclass/note edited. New data/written conclusions
+need final offline and independent measurement acceptance before goal closure.
