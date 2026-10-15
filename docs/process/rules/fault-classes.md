@@ -50,6 +50,27 @@ fault-labelled suite; use small boundary decorators, not one framework.
 - A third mechanism guarding one file/key means no owner: stop and move the invariant to one serialized authority.
 - Porting a mechanism (quarry branch, extraction, revived past work) = adding it: the port re-states its forcing constraint; constraint gone → deletion, not port. Plan or quarry provenance never justifies machinery.
 
+## Guest-package adaptations
+
+An adaptation is any transform of installed package bytes or generated twin
+source (owner ADR-0384; inventory
+`docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md`).
+Each one records its class, its authority and a drift-loud anchor:
+
+| Class | Meaning | Authority |
+|---|---|---|
+| `substitution-environment` | a declared twin's environment (FS, startup, named gates) | the substitution ADR + compat page |
+| `handle-mapping` | a Node handle/request mapped onto the realm keepalive | ADR-0152 §1 class + the Node analogue |
+| `upstream-edge` | an upstream defect reproduced on real Node at the same version and location | the real-Node artifact (command + output + version) |
+| `backport` | an upstream fix at a named version | the upstream commit/version |
+
+`platform-gap` — a patch that makes a package work around a rifty divergence —
+is admissible only as declared interim debt: its row links the platform
+item/ADR that owns the divergence and states the kill condition; the patch
+dies when that lands. An undeclared one is debt by construction (`AGENTS.md`
+§Fidelity). A class claim without its artifact is a `frozen-assumption`; a
+second instance of one class at one boundary follows §Class-kill.
+
 ## Seam contract
 
 Two authorities exchanging lifecycle (reserve/commit/teardown, admission/close)
