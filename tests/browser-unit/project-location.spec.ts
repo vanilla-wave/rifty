@@ -73,7 +73,7 @@ async function devHmr(
         const sentinel = frame.contentWindow as (Window & { __locationSentinel?: number }) | null;
         if (sentinel === null) throw new Error('preview frame has no window');
         sentinel.__locationSentinel = 1;
-        await fixture.writeProjectText('/src/main.js', source);
+        await fixture.writeProjectText('/scratch/src/main.js', source);
         await until(() => text().includes('LOCATION-HMR'), 'HMR update');
         return {
           before,
@@ -119,7 +119,7 @@ async function devReload(page: Page, edited: string): Promise<{ before: string; 
         await loaded;
         await rendered('initial render');
         const before = text();
-        await fixture.writeProjectText('/src/main.js', source);
+        await fixture.writeProjectText('/scratch/src/main.js', source);
         loaded = load();
         frame.contentWindow?.location.reload();
         await loaded;
@@ -133,6 +133,16 @@ async function devReload(page: Page, edited: string): Promise<{ before: string; 
     },
     { fixtureUrl: sealedWorkbenchFixtureUrl, source: edited },
   );
+}
+
+async function snapshotPaths(page: Page): Promise<string[]> {
+  return page.evaluate(async (fixtureUrl) => {
+    const fixture = await import(/* @vite-ignore */ fixtureUrl);
+    return fixture
+      .currentProject()
+      .files.snapshot()
+      .entries.map((entry: { readonly path: string }) => entry.path);
+  }, sealedWorkbenchFixtureUrl);
 }
 
 async function archivePaths(page: Page): Promise<string[]> {
@@ -240,6 +250,10 @@ for (const location of [
       await execLine(page, `cd ${location.root}`);
       expect(await projectRootNames(page)).not.toEqual(expect.arrayContaining(['/tmp']));
       expect(await projectRootNames(page)).not.toEqual(expect.arrayContaining(['/home']));
+      expect(await projectRootNames(page)).not.toEqual(expect.arrayContaining(['/.npmrc']));
+      expect(
+        (await snapshotPaths(page)).filter((path) => /^\/(tmp|home|\.npmrc)(\/|$)/u.test(path)),
+      ).toEqual([]);
       expect(
         (await archivePaths(page)).filter((path) => /(^|\/)(tmp|home|\.npmrc)(\/|$)/u.test(path)),
       ).toEqual([]);
@@ -460,6 +474,7 @@ test('project-owned ~ and /tmp persist across reopen and are not shared between 
         name: 'Saved',
         definition: savedDefinition,
       });
+      await second.playground.catalog.activate({ kind: 'project', id: 'saved' });
       let saved = await second.openProject(savedDefinition);
       const carried = await run(saved, 'cat ~/.npmrc /tmp/keep.txt && echo mine > ~/.npmrc');
       await saved.close();
@@ -471,6 +486,7 @@ test('project-owned ~ and /tmp persist across reopen and are not shared between 
       const fresh = await second.openProject(freshDefinition);
       const freshListing = await run(fresh, owned);
       await fresh.close();
+      await second.playground.catalog.activate({ kind: 'project', id: 'saved' });
       saved = await second.openProject(savedDefinition);
       const back = await run(saved, 'cat ~/.npmrc');
       await saved.close();

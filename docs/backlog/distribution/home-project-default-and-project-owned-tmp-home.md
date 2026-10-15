@@ -99,6 +99,9 @@ Workbench; the parameter passed through `bootOwner`), unless named.
   concerns taken: archive row 3, Save carries `guest/` (ADR-0165 convert), ADR
   attribution, `tree/.rifty` evidence (evidence file §Location carriers), the
   switch test's lifecycle.
+- 2026-10-16 — Contract+RED BLOCK @ 7e07a27d6 (codex): B2 switch test lacked
+  `catalog.activate` for the saved project, B3 dev helpers wrote a non-fixture
+  path — both HOLDS (test bugs), fixed; Files/snapshot rows also check `/.npmrc`.
 - 2026-10-16 — carriers (map fog): Workbench option `publicProjectRoot`;
   private areas `<container>/guest/{tmp,home}`; synthetic `/` = mount
   ancestors; cross-mount rename `EXDEV`; `/` root with own `tmp`/`home` →
