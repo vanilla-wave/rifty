@@ -1,0 +1,202 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Unit PASS: F1/F2 закрыты. Принимать срез; общий merge зависит от отдельного I1-review.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "27ef470e647d10d541d41f7264e815a57e8171d7",
+  "unit_goal_source": "docs/backlog/npm-client/vite-cli-action-keepalive-hook-removal.md @27ef470e647d10d541d41f7264e815a57e8171d7; goal docs/backlog/epics/honest-guest-package-adaptations/goal.md I2, scenario 2; ADR-0530. BASE c1472ee4390f4938cb6d322c8a6db5a49bb08b87. Unit commits: 72bd575da, 7df539c0f, 27ef470e6; 84f0ff8c8 исключён. Baseline: upstream Vite 7.3.6/8.0.16; сохранённые RED на main aebdd7ddd прочитаны. F1: node node_modules/vitest/vitest.mjs run packages/runtime-js/src/index-surface.test.ts --reporter=verbose в scratch HEAD с восстановленным export → assertion RED на :8; HEAD targeted Vitest 145 PASS. Артефакты: /tmp/rifty-review-u2-r2-export-mutant-red.log, /tmp/rifty-review-u2-r2-export-mutant.patch, /tmp/rifty-review-u2-r2-targeted-vitest.log. F2: re-cut :104–111 сохраняет build/dev/preview/optimize Vite 7.3.6 и build/preview Vite 8; 2180 и поддержка 7.3.7 не входят в I2. Baseline logs /tmp/rifty-review-u2-base-{child-fs,no-coi,react-vite-build}.log подтверждают причины вне hook; no-COI trace: /tmp/rifty-review-u2/round2-recut-baseline-extract.json. RDY-5/REV-10 axis 3: смена carriers, без ослабления scope. Свежие прогоны: browser 21/21, e2e 6/6, no-COI 20/20 PASS; typecheck, snapshot/identity drift, backlog, refs PASS. Node 24.16.0/Vite 7.3.6 oracle повторён: exit 1, ожидаемый stderr. Команды и логи: /tmp/rifty-review-u2/round2-evidence.md. Полный pr:check не запускался; tracked-файлы не изменены.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/honest-guest-package-adaptations/goal.md:73",
+      "summary": "Открытые residuals отдельного runtime-js review @84f0ff8c8 (/tmp/rifty-review-u1/verdict.json); здесь не пересматривались."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/honest-guest-package-adaptations/goal.md:84",
+      "summary": "Классификация adaptation inventory остаётся следующим unit карты."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: installed CLI Vite 7.3.6/8.0.16 и snapshots равны upstream.",
+      "source": "acceptance",
+      "trace": "I2 + scenario 2",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-cli-upstream-bytes.spec.ts:57; tools/shadow-registry/src/esbuild-contract-source-pin.test.ts:115; tools/shadow-registry/src/esbuild-contract-source-pin.test.ts:166",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: оба build завершаются с HOOK=undefined.",
+      "source": "acceptance",
+      "trace": "I2 + ADR-0530",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-cli-upstream-bytes.spec.ts:64; /tmp/rifty-review-u2-r2-browser.log → PASS",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: trackKeepalivePromise отсутствует в SDK.",
+      "source": "acceptance",
+      "trace": "I2 + ADR-0530",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/index-surface.test.ts:8; /tmp/rifty-review-u2-r2-export-mutant-red.log → restored export FAIL; HEAD PASS",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: throwing config печатает ожидаемые строки и завершает build с exit 1.",
+      "source": "acceptance",
+      "trace": "I2 + ADR-0530",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-cli-upstream-bytes.spec.ts:101; /tmp/rifty-review-u2-r2-browser.log; /tmp/rifty-review-u2-r2-node-oracle.log",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: оставшиеся Vite 7.3.6 build/dev/preview/optimize и Vite 8 build/preview lanes GREEN без hook.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-vite-contract.spec.ts:1139; tests/browser-unit/esbuild-vite-contract.spec.ts:1243; tests/browser-unit/esbuild-vite-contract.spec.ts:1577; tests/e2e/vite7-build-preview.spec.ts:69; tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2422; /tmp/rifty-review-u2-r2-{browser,e2e,no-coi}.log → 21/6/20 PASS",
+      "note": ""
+    },
+    {
+      "row": "@riftydev/runtime-js: удаление публичного trackKeepalivePromise.",
+      "source": "public-api",
+      "trace": "I2 + ADR-0530",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/index-surface.test.ts:8; /tmp/rifty-review-u2-r2-export-mutant-red.log",
+      "note": ""
+    },
+    {
+      "row": "preparePackageEntryRuntime: запуск без tracker capability.",
+      "source": "public-api",
+      "trace": "ADR-0530",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-cli-upstream-bytes.spec.ts:63; tools/shadow-registry/src/runtime/vite-node-entry-edge.test.ts:8",
+      "note": ""
+    },
+    {
+      "row": "planInstalledConsumerFiles не планирует CLI transform.",
+      "source": "public-api",
+      "trace": "ADR-0530",
+      "status": "pass",
+      "citation": "tests/integration/vite-cli-prep.test.ts:159",
+      "note": ""
+    },
+    {
+      "row": "prepareInstalledConsumerFiles сохраняет upstream CLI.",
+      "source": "public-api",
+      "trace": "ADR-0530",
+      "status": "pass",
+      "citation": "tests/integration/vite-cli-prep.test.ts:161",
+      "note": ""
+    },
+    {
+      "row": "Vite 7 upstream CLI SHA256 oracle.",
+      "source": "frozen-artifact",
+      "trace": "I2 + scenario 2",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/esbuild-contract-source-pin.test.ts:111",
+      "note": ""
+    },
+    {
+      "row": "Vite 8 upstream CLI SHA256 oracle.",
+      "source": "frozen-artifact",
+      "trace": "I2 + ADR-0530",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/esbuild-contract-source-pin.test.ts:166",
+      "note": ""
+    },
+    {
+      "row": "Node 24.16.0/Vite 7.3.6 failing-config oracle.",
+      "source": "frozen-artifact",
+      "trace": "I2 + ADR-0530",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-cli-upstream-bytes.spec.ts:101; /tmp/rifty-review-u2-r2-node-oracle.log → Node v24.16.0, Vite 7.3.6, exit 1, ожидаемый stderr",
+      "note": ""
+    },
+    {
+      "row": "vite-node-modules.json.gz: upstream CLI, прежние dependency pins.",
+      "source": "frozen-artifact",
+      "trace": "I2 + ADR-0530",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/esbuild-contract-source-pin.test.ts:115; apps/playground/tools/bake-dep-snapshots.ts:125",
+      "note": ""
+    },
+    {
+      "row": "vite8-node-modules.json.gz: upstream CLI, прежние dependency pins.",
+      "source": "frozen-artifact",
+      "trace": "I2 + ADR-0530",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/esbuild-contract-source-pin.test.ts:166; apps/playground/tools/bake-dep-snapshots.ts:125",
+      "note": ""
+    },
+    {
+      "row": "typescript-node-modules.json.gz: re-bake без dependency drift.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0530",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts:65; apps/playground/tools/bake-dep-snapshots.ts:125; /tmp/rifty-review-u2-r2-snapshot-comparison.json",
+      "note": ""
+    },
+    {
+      "row": "baked-snapshot-identities.json соответствует трём snapshots.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0530",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts:65; pnpm check:snapshot-artifact-drift → current; /tmp/rifty-review-u2-r2-snapshot-comparison.json; /tmp/rifty-u2-snapshot-review/snapshot-comparison.json",
+      "note": ""
+    },
+    {
+      "row": "install-artifact-identity.json исключает CLI patch policy.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0530",
+      "status": "pass",
+      "citation": "tools/checks/install-artifact-identity.test.ts:8; pnpm exec tsx tools/shadow-registry/tools/generate-install-artifact-identity.ts --check → current",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}
