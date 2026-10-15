@@ -399,6 +399,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0488 | Use npm semver subset rules for installed dependency saves |
 | 0489 | Keep reference host deployment policy outside the SDK |
 | 0490 | Keep reference host snapshot preparation explicit |
+| 0531 | Guest namespace mounts the project at a public root with project-owned tmp and home |
 
 ## Superseded (removed)
 
@@ -502,6 +503,8 @@ superseded.
 | 0278 exact session-tools / legacy-prefix conversion clauses | 0282 / note 2026-07-16 | TS recovery, durability wait, and root-free terminal restoration are public companion semantics |
 | 0278 depth-insensitive archive `.git`/`.rifty` exclusion clause | 0286 / note 2026-07-17 | Git and nested ordinary `.rifty` round-trip; root `.rifty` remains private |
 | 0278 snapshot v2 serialized identity / templateId / stale-version proof clauses | 0346 / note 2026-08-10 | snapshotId covers canonical v3 bytes; templateId names v3; stale v2 rejects before effects |
+| 0280 Decision: public `/` = exact project tree; `/`-rooted traversal and destructive-mutation clauses | 0531 / note 2026-10-16 | the project mounts at `publicProjectRoot` (default `/home/project`) beside project-owned `/tmp`, `/home/rifty`; refusal applies to every mount point |
+| 0278 terminal-state public cwd and archive root `/` | 0531 / note 2026-10-16 | both mean the project root; a persisted cwd outside the project falls back to it |
 | 0281 package-private durability operation clause | 0282 / note 2026-07-16 | `awaitDurability()` is public but exposes no backend, report, path, owner, or transport |
 | 0276 exact-preplan-or-loud-throw Git clause | 0276 note 2026-07-15 | opaque lower-level worktree plans may use a repo replacement candidate; applied owner endpoints remain the only reset evidence |
 | 0010 every-method-throws / terminal-state clause | 0181 | client `request`/`get` route over host `fetch()`; `createServer`/`Agent`/TLS options still loud-throw |

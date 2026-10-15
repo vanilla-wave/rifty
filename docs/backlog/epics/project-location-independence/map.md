@@ -4,21 +4,13 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-1. `distribution/public-project-root-parameter` — **root-parameter** — I4
-   first half; the public root string becomes one host/SDK/template parameter
-   of the ADR-0280 projection seam with the default still `/`, a synthetic `/`
-   lists the project dir when the root is non-root, and the Vite 7 starter
-   lanes run at a second non-root location — minimal pattern (null case:
-   nothing visible changes at the default) before any flip; its ADR cites
-   ADR-0280 without overturning it.
-2. `distribution/home-project-default-and-project-owned-tmp-home` —
-   **home-project** — I1, I2, I4 second half; default flips to
-   `/home/project`; `/tmp` and `/home/rifty` are project-owned private areas
-   (reload-persistent, excluded from tree/snapshot/archive), `HOME` env set;
-   cwd literals, persisted-cwd fallback target (ADR-0278:196-204), printed
-   paths, e2e assertions, baked snapshots follow; superseding ADR for
-   ADR-0280's Decision + ADR-0278 §Corrections.
-3. `npm-client/vite-root-policies-removal-node-exact-at-root` —
+1. `distribution/home-project-default-and-project-owned-tmp-home` —
+   **home-project** — I1, I2, I4; the public root parameter
+   (`publicProjectRoot`, Workbench option) with default `/home/project`,
+   project-owned `/tmp`/`/home/rifty`, second-location and `/` lanes; merged
+   the former `public-project-root-parameter` item (re-cut 2026-10-16);
+   ADR-0531 supersedes ADR-0280's Decision + ADR-0278 §Corrections.
+2. `npm-client/vite-root-policies-removal-node-exact-at-root` —
    **node-exact-at-root** — I3; after 2; deletes `viteRootWatchPatchPolicy` /
    `viteRootUrlPatchPolicy` and their validation, installed-bytes identity
    test, and — compiled only after item 2's ADR fixes the `/tmp`/`$HOME`

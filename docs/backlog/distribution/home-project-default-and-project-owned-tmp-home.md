@@ -1,14 +1,14 @@
 ---
 area: distribution
-status: draft
-title: The default public root becomes `/home/project`, and `/tmp` and `/home/rifty` are project-owned private areas that exist, persist with the project and stay out of its visible tree, snapshots and archives
+status: ready
+title: The guest sees the active project at a public root parameter (default `/home/project`), with project-owned `/tmp` and `/home/rifty` that exist, persist with the project and stay out of its visible tree, snapshots and archives
 created: 2026-10-15
-why: at the shipped default `/` the project is the filesystem root, so `os.tmpdir()` and `os.homedir()` resolve inside the project and do not exist (`mkdtemp` → ENOENT), and upstream code takes untested root-edge paths; the user chose `/home/project` as the default with temp/home owned by the project
-user_story: As a developer, I want `pwd` to show `/home/project`, `fs.mkdtemp(os.tmpdir())` and `~/.npmrc` to work and survive a reload without polluting my project tree, snapshot or archive, but today both paths are ENOENT and would land inside the project
+why: at the shipped default `/` the project is the filesystem root, so `os.tmpdir()` and `os.homedir()` resolve inside the project and do not exist (`mkdtemp` → ENOENT), upstream code takes untested root-edge paths, and no lane can prove a program behaves the same at another location; the user chose `/home/project` as the default with temp/home owned by the project
+user_story: As a developer, I want `pwd` to show `/home/project`, `fs.mkdtemp(os.tmpdir())` and `~/.npmrc` to work and survive a reload without polluting my project tree, snapshot or archive, and my project to behave the same at another location, but today the project is `/`, both paths are ENOENT and would land inside the project
 epic: project-location-independence
-blocked_by: [distribution/public-project-root-parameter]
+blocked_by: []
 sources: [ADR-0280, ADR-0278, ADR-0165, docs/backlog/runtime-js/reference/guest-package-patches-refine-evidence-2026-10-15.md]
-code: [packages/runtime-js/src/builtins/os.ts, packages/workbench/src/workbench/project-file-boundary.ts, apps/playground/public/snapshots, apps/playground/src/generated/baked-snapshot-identities.json]
+code: [packages/workbench/src/workers/project-terminal-namespace.ts, packages/workbench/src/workers/node-entry-remote-fs.ts, packages/workbench/src/workers/workbench-project-runtime.ts, packages/workbench/src/workbench/internal/workbench-options.ts, packages/runtime-js/src/builtins/os.ts, packages/runtime-js/src/builtins/node-entry-runtime-config.ts]
 ---
 
 ## Context
@@ -18,31 +18,78 @@ Finding (2026-10-15, evidence §Location probe on `9645c62bf`): `pwd` → `/`;
 ENOENT`, `HOMEERR ENOENT` (`os.ts:13-18` returns the paths; nothing seeds
 them). User decision (goal §Decisions): physically nothing moves; the project
 is seen at `/home/project`; `/tmp` and `/home/rifty` belong to the project —
-stored in its private area (candidate: the reserved `/.rifty` prefix of
-ADR-0280, which ADR-0278 already excludes from archives), reload-persistent,
-absent from the explorer/snapshot/archive, not shared between projects —
-the persistence/exclusion derivations are the agent's (goal §Decisions).
-`process.env.HOME=/home/rifty` is set so shell `cd` (`cd.ts:14` falls back to
-`$HOME ?? '/'`) and CLIs agree with `os.homedir()`. At root `/` the areas
-stay mounted at `/tmp`/`/home/rifty`; a tree carrying its own `tmp/`/`home/`
-there is reported loudly at spawn (form in this unit's ADR). This unit
-supersedes ADR-0280's Decision ("Public `/` maps to its exact physical
-tree", `/`-rooted traversal and destructive-mutation clauses) with a
-superseding ADR naming it by number plus a dated §Corrections note on
-ADR-0280, and corrects ADR-0278 `:613-615` (archive root = project root) and
-`:196-204` (persisted-cwd fallback = project root) — DEC-2.
-
-Acceptance shape expected at pickup: default root `/home/project`; `ls /`
-shows `home`, `tmp` and no project files; scenario 2 of the goal passes as a
-browser-unit test (mkdtemp, `~/.npmrc`, reload, project switch → empty `~`);
-snapshot/archive exclusion tests; cwd literals replaced by the parameter;
-printed paths in terminal/diagnostics; e2e assertions on absolute paths and
-baked snapshots (`pnpm snapshots:bake`, `check:snapshot-artifact-drift`)
-updated; compat row for the project-owned `$HOME` (Node divergence: not shared
-across projects).
-
-Dedup: no title/`code:`/map/declined match.
+not shared between projects; the root is a host/SDK/template parameter, never a
+playground UI. Agent carriers (map fog, decided here, ADR at implementation):
+the parameter is the Workbench option `publicProjectRoot` (absolute,
+normalized; `/` allowed); the private areas live in the project container beside
+`tree/` (`<container>/guest/{tmp,home}`), so the visible tree, snapshots and
+archives (which enumerate `tree/`) exclude them by construction and a project
+switch shows a different `~`; the synthetic `/` lists only the ancestors of the
+mounts (`home`, `tmp`, first segment of a non-default root); other system paths
+stay ENOENT as today. Files/Documents/SCM/TS and terminal-state persistence keep
+project-relative paths (`/` = project root, ADR-0278).
 
 ## Challenge
 
-<!-- finding capture under a fitted goal — premise checked at the goal (README §Challenge) -->
+challenge: 2026-10-15 — clear (goal premise, `epics/project-location-independence` §Challenge)
+
+## Acceptance
+
+Carrier: `tests/browser-unit/project-location.spec.ts` (Chromium, sealed
+Workbench; the parameter passed through `bootOwner`), unless named.
+
+1. Default location, Vite 7 starter: `pwd` and `node -e "console.log(process.cwd())"`
+   print `/home/project`; `ls /` lists exactly `home tmp`; `ls /home` exactly
+   `project rifty` → I1, scenario 1
+2. The scenario-2 line prints `/tmp /home/rifty /home/project` then a created
+   `/tmp/x-??????`; `echo $HOME` → `/home/rifty`; bare `cd; pwd` → `/home/rifty`;
+   `cat ~/.npmrc` → `x` (unquoted word-initial `~`, `~/…` expand to `$HOME`, as
+   bash) → I2, scenario 2
+3. The Files API root listing contains no `tmp`/`home` entry after row 2 → I2, scenario 2
+4. Durable workspace: `~/.npmrc` and `/tmp/keep.txt` survive closing and
+   reopening the Workbench; a second project opened in the same Workbench lists
+   an empty `~` and `/tmp`, and the first still has its own after switching back → I2, scenario 2
+5. Vite 7 starter at the default and at `publicProjectRoot: '/srv/app'`:
+   `vite build` (✓ built, `dist/assets/*.js`), dev server ready + an edit of
+   `src/main.js` updates `#app` in place over HMR (no reload), `vite preview`
+   serves the built `index.html`; at `/srv/app` `pwd` → `/srv/app`, `ls /` →
+   `home srv tmp` → I4, scenario 4
+6. Vite 8 starter `vite build` + `vite preview` at the default and at `/srv/app` → I4, scenario 4
+7. `publicProjectRoot: '/'`: `pwd` → `/`; `ls /` lists the project files plus
+   `home` and `tmp`; `vite build` passes → I4
+8. `publicProjectRoot: '/'` with a project file `/tmp/own.txt`: `ls /tmp` and
+   `ls /` fail `EEXIST` naming `/tmp` instead of shadowing it → I2
+9. A guest diagnostic carries the public path: `node missing.cjs` →
+   `Cannot find module '/home/project/missing.cjs'` → I1
+10. Namespace edges: `touch /x` and `mkdir /home/x` fail `EACCES`;
+    `rm -rf /home/project` fails `EPERM`; `mv /tmp/a /home/project/a` fails
+    `EXDEV` (separate mount; `cp` works) → ADR-0531
+11. `os.homedir()`/`os.tmpdir()` follow `HOME`/`TMPDIR` as Node (`HOME=/tmp
+    node -e "…homedir()"` → `/tmp`; `TMPDIR=/home/rifty/t/` → `/home/rifty/t`) → I2
+
+## Parity cases
+
+1. Node v24.16.0: `HOME=/tmp node -e "console.log(require('os').homedir())"` →
+   `/tmp`; `TMPDIR=/x/ node -e "console.log(require('os').tmpdir())"` → `/x`
+   (trailing slash stripped) — carrier Acceptance 11 → I2
+
+## Out of scope
+
+- Repairing Vite at `/` and deleting the root policies —
+  `npm-client/vite-root-policies-removal-node-exact-at-root`.
+- `/dev/null`, `/etc`, `/usr` and other system paths: ENOENT, unchanged.
+- A playground UI for the location — goal §Decisions.
+- The no-COI SDK sandbox (`packages/rifty` `toolchain.*`): embedder-chosen
+  absolute paths, no project namespace.
+
+## Decisions
+
+- re-cut: 2026-10-16 — merged `distribution/public-project-root-parameter`
+  (parameter + second-location lanes, default unchanged) into this unit: both
+  ride one PR, the parameter's null case is proven by the same lanes at the
+  flipped default, and one Contract+RED covers the seam once — trace: none
+- 2026-10-16 — carriers (map fog): Workbench option `publicProjectRoot`;
+  private areas `<container>/guest/{tmp,home}`; synthetic `/` = mount
+  ancestors; cross-mount rename `EXDEV`; `/` root with own `tmp`/`home` →
+  loud refusal; superseding ADR names ADR-0280's Decision + ADR-0278
+  §Corrections (DEC-2).
