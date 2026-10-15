@@ -1,0 +1,118 @@
+{
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "fefe81dedccb7315552ec2d5f8b3e20597dfb762",
+  "unit_goal_source": "docs/backlog/distribution/reference/agent-eval-pr341-v18-completed.md; PR341 current measurement/documents/questions unit vs BASE cf7a842a46de48ae8dcf3ebcccdb7ba6338dd109. Original authority /tmp/pr341/handoff-pr341-rework.md items4-6 plus prior accepted source/P1/npm/expense/booking evidence for items1-3. Bounded handoff goal only; legacy agent-code-quality epic/I1-I11 and universal clean model-quality claims excluded by actual authority, not deferred obligations. Fresh independent reviewer /root/v18_measurement_final; raw own evidence /tmp/pr341/v18-review-*.",
+  "overall_verdict": "pass",
+  "merge_call": "PASS: accept qualified v18/current conclusions and honest RDY-6 draft captures. Bounded PR341 rework handoff complete; merge after saving this exact verdict and passing current binding gate. No legacy epic/universal quality closure.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Fresh full8tasks×4lanes×3=96 after accepted source; every selected outcome retained, no resume/pruning/rescoring.",
+      "source": "acceptance",
+      "trace": "Original user handoff item4; accepted booking-source Final residual fresh eval-v18",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-15-eval-v18-corrected/README.md:3",
+      "note": "Independent v18-review-audit.mjs/log/json: 96 unique completed rows exactly match frozen trial sequence, completed series/exit0/8177.203137958s; 64PASS32FAIL, lanes10/14/19/21 of24. Original producer compared structurally after removing only failureClass/note; every other field unchanged."
+    },
+    {
+      "row": "Original public projects/prompts/locks/control payloads and normalized trial order; current config/accepted source provenance.",
+      "source": "frozen-artifact",
+      "trace": "Original user handoff item4; benchmark frozen execution; accepted eval-v18 source cf7a842a46de48ae8dcf3ebcccdb7ba6338dd109",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-15-eval-v18-corrected/README.md:17",
+      "note": "Own audit compares all8 family/files/lock/prompt/control fingerprints with original report, normalized v10→v11 names and original trial order. Current execution config equals v17/first corrected-v16; original port10539→10530 and playground5397→5398 are recorded transport changes. SourceDirty=false cf7; git diff cf7..fefe has data/docs/CHANGELOG only. No parser/gate/judge/source change. Launch records local /npm-registry/public native npm/empty Eddy override; during-series16firstparty167external receipts explicitly are not precall graph identity. v18-review-additional.json."
+    },
+    {
+      "row": "Corrected proxy preserves parallel Pi arguments; malformed telemetry on all lanes honestly reported.",
+      "source": "acceptance",
+      "trace": "Original user handoff item4 malformedToolCalls approximately0",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-15-eval-v18-corrected/README.md:28",
+      "note": "All96 committed original traces parsed independently: Pi320single296parallel, zero empty args and reported malformed0; native24malformed counters explicitly unavailable. Precall retained SSE/probe proves4read_file valid argument objects; external disk hash not represented as loaded-source identity. v18-review-audit.json."
+    },
+    {
+      "row": "Every row classified from preserved actual evidence; unsupported causes remain unisolated.",
+      "source": "acceptance",
+      "trace": "Original user handoff item4 failureClass on every row",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-15-eval-v18-corrected/README.md:32",
+      "note": "Own counts none64/agent15/ai-mode-ux2/rifty-runtime4/native-tooling1/task-bad4/unisolated6. Own exact after-source+unchanged judge Node executions10 reproduce5ms formattingFAIL,4queuePASS and1mixedqueueFAIL, original SRI-verified yocto-queue dependency. Raw native three booking rows fail exactly5public Validation clauses; whole-after browser observer source hashes match for4Luna rows, regex/notes source hashes match. Original ZIP hash/every pageError line checked for notes2errors,3COI HMR default errors,noCOI2paid errors. CLI original trace503→completed/exit0+appjudgePASS/strictadapterFAIL independently matched. Glyph/private-owner source hashes/current production semantics and selected-state native checkbox source/CSS match retained diagnostics; no full task regrade or graph parity inferred. v18-review-classifications.json/additional.json; initial scratch assertion capitalization mistake corrected and complete check rerun PASS."
+    },
+    {
+      "row": "Frozen original JSON/binary bytes and older published campaigns remain immutable.",
+      "source": "frozen-artifact",
+      "trace": "Original user handoff items4-5 old reports immutable; benchmark frozen execution",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-15-eval-v18-corrected/README.md:4",
+      "note": "Own audit verifies321manifest original JSON text SHA/bytes and parsed/normalized or gzip carrier seals; all321 also equal original raw files.188binary originals match source bytes/SHA,10large ZIPs reconstructed from51ordered parts with every part and aggregate seal checked. All59diagnostic rawtext seals checked.1678previous canonical file hashes unchanged. Canonical/new source untouched; own evidence v18-review-audit.mjs/log/json."
+    },
+    {
+      "row": "Canonical campaign regenerates offline without changing frozen or derived artifacts.",
+      "source": "frozen-artifact",
+      "trace": "Original user handoff items4-5 benchmark reproducible recording; accepted eval-v18 measurement continuation",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-15-eval-v18-corrected/README.md:4",
+      "note": "Reviewer independently ran pnpm agent-bench report in two complete scratch copies; inventory294 unchanged and SHA256 of every294file byte-identical in each. Current source archive rehashed unchanged after both runs. v18-review-offline.mjs/log/json preserves commands, outputs, paths and all hashes; no model calls."
+    },
+    {
+      "row": "Current reference/report conclusions distinguish repaired observations, history and unresolved limits; honest related question captures.",
+      "source": "acceptance",
+      "trace": "Original user handoff item5 rewrite conclusions/current reference",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-pr341-v18-completed.md:17",
+      "note": "Read all changed written docs against raw current/old recordings, original public prompts and handoff. README/environment/boundary/old-v16 links select qualifiedv18; original scores and broader profile remain history. No model-quality/runtime-only causal delta/ceiling/billing claim. Fresh RDY-6 final written check by /root/v18_measurement_final at exact fefe SHA covers3newdraft questions plus2findingupdates: glyph identity, native checkbox activation and CLI terminal choices remain explicit/unsettled with owner/trigger; no prescribed implementation/ready contract/consent invented. HMR source is explicitly separate from older CORS root, import cause unisolated. Source-bound evidence/corrected observations support the capture, not an all-pass quality promise. v18-review-additional.json."
+    },
+    {
+      "row": "Review workflow judges only when fresh native Codex remains0/3; validate already accepted versioned repair on fresh series.",
+      "source": "acceptance",
+      "trace": "Original user handoff item6 conditional native Codex0/3",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-pr341-v18-completed.md:11",
+      "note": "Current native booking3/3PASS with all120original predicates PASS; expense1/3PASS. Both new0/3conditions false. Accepted source/P1/npm/expense/booking PASS records inspected and verified ancestors of cf7, so no re-review of accepted source or new oracle requirement manufactured. Remaining presentation/CLI/HMR observations are explicitly qualified limitations/questions; no silent score rescue. Fresh27/27 pr:check supplied raw log read,191.0s unit114.8s parity,no retries. Bounded original rework handoff end-to-end evidence now fulfilled; this does not close legacyI1-I11 or universal quality."
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true
+}
