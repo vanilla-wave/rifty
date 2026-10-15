@@ -77,16 +77,17 @@ failing-config row (`docs/backlog/runtime-js/reference/guest-package-patches-ref
    same bytes (`esbuild-contract-source-pin.test.ts`) → I2, scenario 2
 2. `vite build` on both starters completes with `typeof globalThis.__riftyTrackCliPromise
    === 'undefined'` in the config realm; `trackKeepalivePromise` is no longer a
-   `@riftydev/runtime-js` export → I2, ADR-0530
+   `@riftydev/runtime-js` export (`packages/runtime-js/src/index-surface.test.ts`) → I2, ADR-0530
 3. `vite build` with a throwing `vite.config.js` prints `failed to load config
    from …/vite.config.js`, `error during build:`, `Error: <message>` and exits 1,
    as real Node → I2, ADR-0530
-4. Existing lanes green without the hook: `esbuild-vite-contract`,
-   `sass-vite-contract`, `child-fs-in-realm-lane`, `vite-build-failure-containment`,
-   `workbench-vite-lifecycle`, `message-port-ref-keepalive` (Vite 8 rolldown),
-   e2e `vite7-build-preview`, `vite-command-honesty`, `react-vite-build`,
-   `vite-save-trust-rebind`, `vite-temp-trust-churn`, `instant-preset-reset`,
-   no-COI `no-coi-sandbox-build-loop` → I2
+4. Existing Vite 7.3.6 build/dev/preview/optimize and Vite 8 build/preview
+   lanes green without the hook: `esbuild-vite-contract`, `sass-vite-contract`,
+   `vite-build-failure-containment`, `workbench-vite-lifecycle`,
+   `message-port-ref-keepalive` (Vite 8 rolldown), e2e `vite7-build-preview`,
+   `vite-command-honesty`, `vite-save-trust-rebind`, `vite-temp-trust-churn`,
+   `instant-preset-reset`, no-COI `no-coi-sandbox-build-loop` except its
+   module-count row → I2
 
 Carrier: `tests/browser-unit/vite-cli-upstream-bytes.spec.ts` (rows 1-3),
 `tests/integration/vite-cli-prep.test.ts`, `tools/checks/install-artifact-identity.test.ts`.
@@ -99,6 +100,18 @@ Carrier: `tests/browser-unit/vite-cli-upstream-bytes.spec.ts` (rows 1-3),
 - Vite 7.3.7 / proven-version admission policy — separate refine.
 
 ## Decisions
+
+- re-cut: 2026-10-16 — Acceptance 4 carrier list drops three lanes red on
+  `aebdd7ddd` before this unit, for causes outside the hook: `child-fs-in-realm-lane`
+  and no-COI "build parity … designed RED" run `vite build` to completion
+  (`✓ 2990 modules transformed`, exit 0) and fail only the frozen `2180` count
+  over live transitive versions (draft `distribution/build-module-count-pins-over-live-transitives`);
+  e2e `react-vite-build` never starts Vite (fresh install resolves 7.3.7, exact-7.3.6
+  gate refuses — draft `npm-client/vite-7-3-7-from-scratch-esbuild-refusal`).
+  I2's clause stays carried by the remaining 7.3.6/Vite 8 lanes — trace: none
+- 2026-10-16 — Final+GREEN BLOCK @ 72bd575da (codex): F1 no carrier for the
+  removed export — HOLDS, fixed (`index-surface.test.ts`); F2 three named
+  lanes not green — reproduced on main, re-cut above with the evidence.
 
 - 2026-10-16 — pickup: observed undeclared adaptation with an upstream-bytes
   baseline; RED on `aebdd7ddd`; ADR-0530 removes the policy and the public
