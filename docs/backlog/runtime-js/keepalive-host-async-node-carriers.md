@@ -1,14 +1,14 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: A run-to-completion child stays alive while a host-task-async Node API request is pending (Blob, fs.openAsBlob, WebAssembly.compile, crypto.subtle), as Node's loop does
 created: 2026-10-15
 why: ADR-0152 §1 counts a named handle set; Node-surface APIs whose settlement is a host task (not a microtask) hold no ref, so a program whose last work is one of them is reaped at refCount 0 and its result is silently dropped — no stderr, exit 0 — where Node prints it
 user_story: As a Node program whose last work after top-level is `await blob.arrayBuffer()`, `WebAssembly.compile(bytes)`, `fs.openAsBlob(p)` or `crypto.subtle.deriveBits(...)`, I want the process to live until it settles like Node 24, but today rifty's drain reaps the realm before the promise resolves and nothing is printed
 epic: honest-guest-package-adaptations
 blocked_by: []
-sources: [ADR-0152, ADR-0158, ADR-0446, ADR-0447, ADR-0378, docs/backlog/runtime-js/reference/guest-package-patches-refine-evidence-2026-10-15.md]
-code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtime-js/src/builtins/buffer.ts, packages/runtime-js/src/builtins/fs.ts, packages/runtime-js/src/builtins/zlib.ts, packages/runtime-js/src/builtins/fetch-keepalive.ts]
+sources: [ADR-0529, ADR-0152, ADR-0158, ADR-0446, ADR-0447, ADR-0378, docs/backlog/runtime-js/reference/guest-package-patches-refine-evidence-2026-10-15.md]
+code: [packages/runtime-js/src/builtins/host-async-keepalive.ts, packages/workbench/src/workers/kernel-worker-entry.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts]
 ---
 
 ## Context
@@ -72,7 +72,28 @@ separate); no declined match.
 
 ## Challenge
 
-<!-- finding capture with a real-Node baseline — no premise critic at draft (README §Challenge) -->
+challenge: 2026-10-15 — clear (goal premise, `epics/honest-guest-package-adaptations` §Challenge)
+
+## Acceptance
+
+Carrier: `tests/browser-unit/host-async-keepalive.spec.ts`, each case run
+verbatim by live Node (`process.execPath`, v24.16.0 at pickup) and by rifty
+`node <case>.cjs`; rows, exit code and no-timeout must match.
+
+1. `buffer.Blob#arrayBuffer` 64 MiB, `Blob#text`, `Blob#bytes`, `Blob#stream`
+   reads and `File#text` print their DONE row and exit 0 → I1, scenario 1
+2. `fs.openAsBlob(p).then(b => b.arrayBuffer())` prints its row → I1, scenario 1
+3. `WebAssembly.compile` and `WebAssembly.instantiate(bytes)` of a 6 M-nop
+   module print their rows; a rejecting compile releases (exit 0) → I1, scenario 1
+4. `require('node:crypto').subtle.deriveBits` PBKDF2 3 M iterations and a
+   200-step `globalThis.crypto.subtle.digest` chain print their rows → I1, scenario 1
+5. In-guest `new Response(blob).arrayBuffer()` and `new Request(url, {body: blob}).text()`
+   print their rows; a guest-stream body with a pending read holds nothing
+   (exit 0 at once, as Node) → I1
+6. `zlib.gzip` 64 MiB and a `createGzip` stream print their rows → I1
+7. A global `WebSocket` to a live server prints open/message/close rows → I1
+8. `Response`/`Request`/`WebSocket` keep `X.prototype.constructor === X`,
+   `instanceof`, and the wrapped functions keep Node's names → ADR-0529
 
 ## Out of scope
 
@@ -84,6 +105,13 @@ separate); no declined match.
 
 ## Decisions
 
+- 2026-10-16 — pickup: RED on `aebdd7ddd` (Chromium 148): rows 1-5 and 7 fail
+  (`HA|top` only, silent exit 0), rows 6 and the digest chain of row 4 pass
+  unheld; ADR-0529 records the counted classes; zlib stays uncounted
+  (microtask-settled, Chromium CompressionStream transforms synchronously).
+- 2026-10-16 — refuse-by-name vs hold-to-cap: every counted class has an
+  observable release (settle / `close`), so none is refused; a never-settling
+  one holds to the loud ADR-0152 §4 cap (ADR-0529 §5).
 - 2026-10-15 — route: observed defect with a real-Node baseline (RDY-8); the
   carrier set extends ADR-0152 §1 → ADR at pickup naming the added classes
   (DEC-1 p4), precedent ADR-0158/0446/0447.

@@ -12,6 +12,7 @@ import {
   awaitDrain,
   installEventLoopKeepalive,
   installFetchKeepalive,
+  installHostAsyncKeepalive,
   trackKeepalivePromise,
 } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
@@ -458,6 +459,7 @@ void import('@riftydev/runtime-js/worker')
   .then(({ backend: vfsBackend, reason }) => {
     runtimeBackend = vfsBackend;
     installFetchKeepalive();
+    installHostAsyncKeepalive();
     self.postMessage({
       type: 'toolchain-ready',
       protocol: SANDBOX_TOOLCHAIN_PROTOCOL,

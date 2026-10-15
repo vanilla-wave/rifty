@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Kernel and no-COI toolchain workers install the host-async keepalive (ADR-0529) beside the fetch keepalive.
+
 - Named npm installs refresh selected roots while retaining unrelated pins; skipped optional dependencies no longer fail save or shell continuation (ADR-0504).
 
 - Missing-registry diagnostics follow the final executed command; recovered npm failures no longer relabel later errors or cancellation.

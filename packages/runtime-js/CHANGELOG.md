@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `installHostAsyncKeepalive()` (ADR-0529): a pending Blob/File body read, `fs.openAsBlob` result read, `WebAssembly.compile`/`instantiate`, `SubtleCrypto` call or host-backed `Response`/`Request` body read holds the child realm until it settles, and a global `WebSocket` until its `close` — such programs no longer exit silently before printing Node's result. Guest-stream bodies and unread `blob.stream()` hold nothing; constructor identity and method names stay Node's.
+
 - Carry the sandbox registry connection on command requests (toolchain protocol v6). Error cause projection avoids guest accessors, bounds prototype inspection and retains native DOMException details; failed serialization no longer strands runBin on a cause getter.
 
 - Forward native startup/snapshot progress with existing peer/request guards; distinguish observed OPFS contention under the host deadline and retain native causes (ADR-0486).

@@ -111,6 +111,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0464 | Named-loud members for charted unclaimed-mode ceilings |
 | 0480 | Refuse advanced IPC view constructor accessors |
 | 0470 | Preserve native WebAssembly in no-COI guests |
+| 0529 | Count host-task-async Node-surface requests in child-realm keepalive |
 
 ### runtime-wasi
 
@@ -544,6 +545,7 @@ superseded.
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
 | 0152 §1 named handle set | 0447 / note 2026-09-25 | a manually referenced `MessagePort` is counted (one ref per port; `unref()` or `close()` of either pair end releases; transfers that would hide a release are named throws); listener referencing stays an explicit gap; §1 shape unchanged, named set grew |
+| 0152 §1 named handle set | 0529 / note 2026-10-16 | pending host-task-async Node-surface requests are counted (Blob/File reads, WebAssembly compile/instantiate, SubtleCrypto, host-backed Response/Request bodies; global `WebSocket` until `close`); microtask-settled fs.promises/zlib stay uncounted; §1 shape unchanged, named set grew |
 | 0152 §1 first zero-ref sample settles the drain; §3 every recorded rejection is fatal | 0445 / note 2026-09-25 | a zero-ref drain settles after one more host task confirms it (late Chromium `unhandledrejection`); a rejection a process listener handles is canceled and not recorded; the no-listener default stays stderr + exit `uint8(exitCode ?? 1)` read after the `'exit'` listeners (1 unless one reassigns it), a rejection's printed and requested at the trap and the drain records that exit |
 | 0152 §1 named handle set; 0445 rule 6 natural exit (worker thread; `node <file>`, `node -e`, execSync child) | 0446 / note 2026-09-25 | a live `worker_threads.Worker` is counted through Node's own `Symbol(kHandle)`/`Symbol(kPublicPort)` references (napi-rs can neuter them), a worker realm's `parentPort` is counted while referenced by its `'message'` listeners, worker-thread realms drain uncapped then exit naturally, and no natural exit calls the reassignable `process.exit`; ADR-0445's "worker-thread natural exit stays with map item 8" gap is closed; §1 shape unchanged, named set grew |
 | 0157 §1 `exit()` clause | 0445 / note 2026-09-25 | `exitCode` starts `undefined`; `exit()` without an argument uses it, emits `'exit'` once before the kernel exit request, and natural exit calls it |

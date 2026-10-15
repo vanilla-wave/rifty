@@ -42,5 +42,6 @@ export {
   trackKeepalivePromise,
 } from './internal/event-loop-keepalive.ts';
 export { installFetchKeepalive } from './builtins/fetch-keepalive.ts';
+export { installHostAsyncKeepalive } from './builtins/host-async-keepalive.ts';
 
 export type { RuntimeProgressEvent, SnapshotProgress } from './protocol.ts';

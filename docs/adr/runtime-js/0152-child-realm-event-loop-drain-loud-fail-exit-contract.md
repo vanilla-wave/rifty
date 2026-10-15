@@ -48,6 +48,8 @@ The Vite HMR client `setInterval` was injected by the bundler into the entry chu
 
 **Extended (2026-09-25, ADR-0446):** ADR-0446 adds a handle class to §1: a live `worker_threads.Worker` holds one keepalive ref per referenced own `Symbol(kHandle)`/`Symbol(kPublicPort)` reference (released and nulled at the Worker's end), and a worker realm's `parentPort` holds while its `'message'` listeners reference it. §1's "other libuv handle classes are NOT counted" and the named set now also include these; §1's shape unchanged; §4 cap unchanged (worker realms stay `serve:true`, bootstrap drain uncapped). Listed in README "Corrections (active)".
 
+**Extended (2026-10-16, ADR-0529):** adds host-task-async Node-surface requests to §1's counted set: a pending Blob/File body read, `WebAssembly.compile`/`instantiate`, `SubtleCrypto` call or host-backed `Response`/`Request` body read holds one ref until it settles; a global `WebSocket` holds one until its `close` event. Microtask-settled builtins (`fs.promises`, `node:zlib` over CompressionStream) stay uncounted. §1's shape unchanged, named set grew. Listed in README "Corrections (active)".
+
 ## Consequences
 
 - (+) run-to-completion child exits on event-loop drain (over the counted handle set), much closer to real Node than the prior top-level-resolve reap — addresses the detached-async drop we attribute to the ADR-0150 P6a path.

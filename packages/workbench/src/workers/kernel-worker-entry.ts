@@ -26,10 +26,15 @@ import { installWorkerEntry, setKernelPreEntryHook } from '@riftydev/kernel/work
 // dependencies into a worker chunk.
 //
 // `installTimerGlobals()` + `installEventLoopKeepalive()` + `installFetchKeepalive()`
-// run at module top-level (universal — every kernel worker gets timers + the
-// drain/unhandledrejection trap + the fetch keepalive, regardless of Node-vs-WASI),
+// + `installHostAsyncKeepalive()` run at module top-level (universal — every kernel
+// worker gets timers + the drain/unhandledrejection trap + the fetch and host-async
+// keepalive, regardless of Node-vs-WASI),
 // NOT inside the pre-entry hook.
-import { installEventLoopKeepalive, installFetchKeepalive } from '@riftydev/runtime-js';
+import {
+  installEventLoopKeepalive,
+  installFetchKeepalive,
+  installHostAsyncKeepalive,
+} from '@riftydev/runtime-js';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import { installNodeRuntime } from '@riftydev/runtime-js/install-process';
 
@@ -38,4 +43,5 @@ setKernelPreEntryHook(installNodeRuntime);
 installTimerGlobals();
 installEventLoopKeepalive();
 installFetchKeepalive();
+installHostAsyncKeepalive();
 installWorkerEntry();
