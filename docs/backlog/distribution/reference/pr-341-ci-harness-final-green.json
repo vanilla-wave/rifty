@@ -1,0 +1,102 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS current harness unit; hold PR merge for remote CI/registry504 and YC PermissionDenied. No whole-goal closure claim.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "97d39d48fd7066b63395494046c0ddf2e068e154",
+  "unit_goal_source": "PR341 observed CI baseline @ BASE 5c0016ae593edba1ce8fd53e236bbb3a01ee8538; CI38330144084 unit115077937055/no-coi115077937136; current harness repair only (REV-1).",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Real legacy report CLI preserves bounded child exit, immutable report bytes, absent telemetry and honest summary",
+      "source": "acceptance",
+      "trace": "PR341 observed CI baseline @ 5c0016ae593edba1ce8fd53e236bbb3a01ee8538",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:115",
+      "note": ""
+    },
+    {
+      "row": "Every gzip remains valid JSON; report-written OS header is Unix; frozen bundles preserve original bytes",
+      "source": "frozen-artifact",
+      "trace": "PR341 observed CI baseline @ 5c0016ae593edba1ce8fd53e236bbb3a01ee8538",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/summaries-policy.test.ts:28",
+      "note": ""
+    },
+    {
+      "row": "Every manifest retains exact recorded compressed bundle and committed record sizes/SHA256",
+      "source": "frozen-artifact",
+      "trace": "PR341 observed CI baseline @ 5c0016ae593edba1ce8fd53e236bbb3a01ee8538",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/summaries-policy.test.ts:51",
+      "note": ""
+    },
+    {
+      "row": "Archive enumeration/nonempty report and manifest guards plus markdown links remain enforced",
+      "source": "acceptance",
+      "trace": "PR341 observed CI baseline @ 5c0016ae593edba1ce8fd53e236bbb3a01ee8538",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/summaries-policy.test.ts:17",
+      "note": ""
+    },
+    {
+      "row": "Canonical workload retains original root pins and both original2180 transform assertions through a visible ordinary icon override",
+      "source": "frozen-artifact",
+      "trace": "PR341 observed CI baseline @ 5c0016ae593edba1ce8fd53e236bbb3a01ee8538",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:631",
+      "note": ""
+    },
+    {
+      "row": "Real no-COI dist bytes equal liveCOI; original marker counts, capability/host and esbuild recipe/materialization assertions remain enforced",
+      "source": "acceptance",
+      "trace": "PR341 observed CI baseline @ 5c0016ae593edba1ce8fd53e236bbb3a01ee8538",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2363",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

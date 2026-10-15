@@ -1,0 +1,1 @@
+Historical source647 public-observation controls; aggregate48selected36retained12unexecuted, producer1 after driverSIGINT during alternative setup. This cohort reference: completed, 12retained/12PASS. Original outcomes/headers exact; source reopened by independently executed at-column/fractional-column faults. No accepted source/model-quality claim; ZIP/screens locally retained.

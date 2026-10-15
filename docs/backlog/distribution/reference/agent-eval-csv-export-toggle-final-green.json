@@ -1,0 +1,167 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Unit source/control принят; blocker0. NOTE: при PICKUP обновить future campaign version на eval-v5. PR341 оставить draft: fresh96 и I10/I11 открыты.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "8544ddd4ba607ee3d547b030c285a7e37c646d0b",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-csv-export-toggle-judging.md against BASE 4e0283a3060c03a7a26bdf1257447d5cae23bebd; goal docs/backlog/epics/agent-code-quality-evaluation/goal.md, unchanged accepted user sources agent-code-quality-refine-evidence.md and agent-eval-boundaries-refine-evidence.md; ADR-0513/ADR-0515.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1+I2+I3+I4+I7+I8+I9; expanded comparison Acceptance1/2",
+      "location": "docs/backlog/distribution/agent-eval-expanded-comparison.md:34",
+      "summary": "После source/control Final — новая полная eval-v5 96trial кампания; fixed inputs/settings, все собственные origin outcomes, uncertainty/usage/artifacts и offline regeneration. Исторические55/96 и40controls её не закрывают."
+    },
+    {
+      "clause": "I10; scenario7",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md:24",
+      "summary": "Обязательный каталог фактических operation/tool/API/host differences с natural/probe/candidate provenance, recovery и impact; измерения обеих Rifty hosts/native ещё открыты."
+    },
+    {
+      "clause": "I11; scenario8",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md:31",
+      "summary": "Обязательный конечный substantive multi-family escalation, bounds и frozen fresh repeated confirmation; source controls/пилот не закрывают поиск границ."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: preserve captured public7/privateRED/programme and all old selected outcomes; no native rescue/rescore",
+      "source": "acceptance",
+      "trace": "I3+I6+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-csv-export-toggle-independent-red.json.gz:1; docs/backlog/distribution/reference/agent-eval-v4-export-toggle-interrupted.json.gz:1; /tmp/rifty-csv-toggle-final-review-artifacts.json:2",
+      "note": ""
+    },
+    {
+      "row": "Acceptance2: current-filter CSV observed before/after public Export/download; unchanged exact decoded records/multiplicity and seven requirements",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v5/judge.ts:63; tools/agent-bench/tests/csv-export-toggle-controls.ts:33; docs/backlog/distribution/reference/agent-eval-csv-export-toggle-native-green.json.gz:1; /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-csv-export-toggle-controls-AqPEx2/evidence.json:2",
+      "note": ""
+    },
+    {
+      "row": "Acceptance3: actual reference/alternative/captured positives and functional negative controls, physically retained in all four origins",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/csv-export-toggle-origin-controls.ts:22; docs/backlog/distribution/reference/agent-eval-csv-export-toggle-origin-proof.json.gz:1; /tmp/rifty-csv-toggle-final-review-artifacts.json:24",
+      "note": ""
+    },
+    {
+      "row": "Acceptance4: CSVv5/eval-v5 preserves eight public inputs/controls and other seven judges; old versions immutable; fresh96 remains dependent on independent Final",
+      "source": "acceptance",
+      "trace": "I7+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-csv-export-toggle-version.test.ts:5; docs/backlog/distribution/agent-eval-expanded-comparison.md:8; docs/backlog/epics/agent-code-quality-evaluation/map.md:3; /tmp/rifty-csv-toggle-final-review-fingerprints.json:2",
+      "note": ""
+    },
+    {
+      "row": "observable-order/frozen-assumption: repeated Export closes visible output; correct current-filter values remain observable",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v5/judge.ts:69; docs/backlog/distribution/reference/agent-eval-csv-export-toggle-reversion.json.gz:1; /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-csv-export-toggle-controls-yZLqfT/evidence.json:2; /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-csv-export-toggle-controls-AqPEx2/evidence.json:2",
+      "note": ""
+    },
+    {
+      "row": "lossy-aggregate: stale/missing/duplicate records or changed multiplicity rejected",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/csv-export-toggle-controls.ts:37; docs/backlog/distribution/reference/agent-eval-csv-export-toggle-inherited-export.json.gz:1; docs/backlog/distribution/reference/agent-eval-csv-export-toggle-inherited-state.json.gz:1; /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-csv-export-toggle-controls-AqPEx2/evidence.json:2",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift: mirrored judge and all four origins use the same requirements with honest own-origin outcomes",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-csv-export-toggle-version.test.ts:31; tools/agent-bench/tests/csv-export-toggle-origin-controls.ts:51; docs/backlog/distribution/reference/agent-eval-csv-export-toggle-origin-proof.json.gz:1; /tmp/rifty-csv-toggle-final-review-fingerprints.json:2",
+      "note": ""
+    },
+    {
+      "row": "Frozen CSVv5 judge and certified workflow oracle retain the sole exportFor owner and identical semantics",
+      "source": "frozen-artifact",
+      "trace": "ADR-0515+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-csv-export-toggle-version.test.ts:31; docs/adr/distribution/0515-observe-visible-csv-exports-before-state-changing-actions.md:15; /tmp/rifty-csv-toggle-final-review-fingerprints.json:2",
+      "note": ""
+    },
+    {
+      "row": "Frozen eval-v5/case CSVv5 identity preserves original public programme/prompt/lock/control and other seven cases",
+      "source": "frozen-artifact",
+      "trace": "I7+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/eval-v5.json:1; tools/agent-bench/src/corpus-csv-export-toggle-version.test.ts:5; /tmp/rifty-csv-toggle-final-review-artifacts.json:2",
+      "note": ""
+    },
+    {
+      "row": "Frozen captured programme is exactly the two changed agent files against physical captured before/after, without runtime lock seeding",
+      "source": "frozen-artifact",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/fixtures/csv-export-toggle-programme.json.gz:1; tools/agent-bench/tests/csv-export-toggle-controls.ts:23; /tmp/rifty-csv-toggle-final-review-artifacts.json:2",
+      "note": ""
+    },
+    {
+      "row": "Frozen historical eval-v4 report/outcomes and original-byte large traces remain unchanged, with 55 retained/41 missing and interrupted status",
+      "source": "frozen-artifact",
+      "trace": "I3+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-07-eval-v4-export-toggle-interrupted/report.json.gz:1; tools/agent-bench/reports/summaries/2026-10-07-eval-v4-export-toggle-interrupted/manifest.json.gz:1; /tmp/rifty-csv-toggle-final-review-artifacts.json:14",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/distribution/agent-eval-expanded-comparison.md:34",
+          "evidence": "Read at clean8544: Acceptance1 names eval-v4; changed context:22/map:4/ADR0515:26 and actual new manifest select eval-v5. Executed /tmp/rifty-csv-toggle-final-review-fingerprints.json confirms current eval-v5 producer10tasks/40controls identity; no campaign rerun or criterion change.",
+          "summary": "Будущий campaign item всё ещё пишет eval-v4 в Acceptance1; при PICKUP до новых вызовов заменить на eval-v5, сохранив96матрицу/публичный scope. NOTE; текущий source unit доказан.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

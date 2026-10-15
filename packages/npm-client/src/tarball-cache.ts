@@ -16,10 +16,12 @@ export const TARBALL_CACHE_ROOT = '/.rifty/tarball-cache';
  * Accepted SRI algorithms. Default sha512 (npm packuments since npm@5).
  * sha256 stays supported: vendored integration fixtures (ADR-0021) use it,
  * and some private-registry mirrors serve sha256-only metadata.
+ * sha1 verifies legacy npm lock pins; new unpinned bytes still use sha512.
  */
-export type IntegrityAlgorithm = 'sha256' | 'sha384' | 'sha512';
+export type IntegrityAlgorithm = 'sha1' | 'sha256' | 'sha384' | 'sha512';
 
 const WEBCRYPTO_NAMES: Record<IntegrityAlgorithm, string> = {
+  sha1: 'SHA-1',
   sha256: 'SHA-256',
   sha384: 'SHA-384',
   sha512: 'SHA-512',
@@ -35,7 +37,8 @@ export function parseIntegrityAlgorithm(integrity: string): IntegrityAlgorithm |
   const dash = integrity.indexOf('-');
   if (dash <= 0) return null;
   const prefix = integrity.slice(0, dash);
-  if (prefix === 'sha256' || prefix === 'sha384' || prefix === 'sha512') return prefix;
+  if (prefix === 'sha1' || prefix === 'sha256' || prefix === 'sha384' || prefix === 'sha512')
+    return prefix;
   return null;
 }
 

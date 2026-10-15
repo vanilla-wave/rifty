@@ -11,9 +11,11 @@
 import { NotImplementedError } from '@riftydev/io';
 import { type InternalsShim, internalsShims } from '@riftydev/shadow-registry';
 import { type Vfs, joinPath } from '@riftydev/vfs';
+import { parseNpmAlias } from './npm-alias.ts';
 import {
   type OverrideMap,
   type ResolvedOverrideTarget,
+  hasNpmAliasOverride,
   resolveOverride,
   userOverrideSpec,
 } from './overrides.ts';
@@ -35,6 +37,7 @@ function publicName(name: string, shim: InternalsShim): string {
 export interface EffectivePackageRequest {
   readonly override: ResolvedOverrideTarget | null;
   readonly effectiveName: string;
+  readonly installName?: string;
   readonly effectiveRange: string | null;
 }
 
@@ -54,9 +57,17 @@ export function resolveEffectivePackageRequest(
 ): EffectivePackageRequest {
   const spec = userOverrideSpec(name, parent, userOverrides);
   const override = resolveOverride(name, parent, spec === null ? userOverrides : undefined);
-  const effectiveName = override?.name ?? name;
-  const effectiveRange = override?.range ?? spec ?? range;
-  return { override, effectiveName, effectiveRange };
+  const alias = parseNpmAlias(spec ?? range);
+  const effectiveName = override?.name ?? alias?.name ?? name;
+  const effectiveRange = override?.range ?? (spec === null ? alias?.range : spec) ?? range;
+  const installName =
+    hasNpmAliasOverride(name, parent, userOverrides) || (!override && alias) ? name : effectiveName;
+  return {
+    override,
+    effectiveName,
+    effectiveRange,
+    ...(installName === effectiveName ? {} : { installName }),
+  };
 }
 
 /**

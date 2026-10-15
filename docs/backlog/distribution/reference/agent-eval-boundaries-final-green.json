@@ -1,0 +1,79 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: docs-only RDY-6 final written-result review and Final+GREEN; bind to the commit matching the SHA256 manifest. No product acceptance or goal closure certified.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/epics/agent-code-quality-evaluation/goal.md; docs-only boundary amendment from BASE 0e4dd0e31b8cf7530c0490b208026fadbf29e683; original 2026-09-27 user request plus unchanged accepted BASE scope; final goal/map/ledger, all five draft children and research evidence reviewed together by fresh read-only /root/boundaries_refine_final.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1 + I6 + I7",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:77",
+      "summary": "Corpus remains unimplemented: real diverse project/starter cases, independent judges and reference controls, family-separated frozen pilot/expansion and complete selection provenance."
+    },
+    {
+      "clause": "I2 + I3",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:83",
+      "summary": "Four actual participants, isolated native Codex and honest own-environment common functional/regression judging still require implementation and real evidence."
+    },
+    {
+      "clause": "I4 + I5",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:91",
+      "summary": "Expanded identities, uncertainty, full accounting, report regeneration and real four-environment reference campaign remain open; pilot closure covers I5 only."
+    },
+    {
+      "clause": "I8 + I9",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:116",
+      "summary": "Documented deterministic local protocol, progress, interruption partial report and fresh independent series remain unimplemented and unproven."
+    },
+    {
+      "clause": "I10 + I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Operation catalog across actual native/browser environments and substantive multi-family escalation with separate adaptive exploration and fresh frozen repeated boundary confirmation remain future goal work. The scratch Shell probe and archived trace scan do not close them."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "d9057895438e9a6f78562bf1f56ec2ee028aa3ac"
+}

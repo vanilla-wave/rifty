@@ -1,0 +1,1 @@
+Directed native source control: full current booking workflow accepts textbox room selection with owned reservation relation. No model invocation or comparative quality claim. Original JSON/text/hashes retained; two offline regenerations exact. Raw ZIP/screens retained at ignored source root. Source Final and goal remain open.

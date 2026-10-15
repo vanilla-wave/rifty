@@ -1,0 +1,19 @@
+{
+  "id": "expense-settlement",
+  "group": "app",
+  "family": "expense-conservation",
+  "split": "evaluation",
+  "origin": {
+    "type": "original-scenario",
+    "created": "2026-10-06",
+    "starter": "svelte5.38.7 + @sveltejs/vite-plugin-svelte + Vite7.3.6",
+    "registryEvidence": "docs/backlog/distribution/reference/agent-eval-expansion-starter-metadata.json.gz"
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.ts",
+  "regressionSources": ["minimal installed starter build/boot"],
+  "difficulty": "Exact integer cents, creation-order remainder, payer outside participants, conservation/any-clearing settlement and atomic mutation/reference guards",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "Finite curator selection after accepted retained pilot; independent workflow family and installed framework starter, public semantic requirements only. All selected origins/failures retained; frozen before new96 calls."
+}

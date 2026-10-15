@@ -1,0 +1,112 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS scoped historical reader repair at 0ef6bf08; accept this unit. Whole PR341 remains open for fresh96, I10/I11, combined gate, retirement audit and CLOSE.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "0ef6bf08c706a2b37ce316e46c03bf493b14380c",
+  "unit_goal_source": "PR341 historical retained-verdict contract reader against observed BASE ed4e06d29ccc4ae88eed4ed4f906f5eb42962177; unit authority docs/backlog/distribution/reference/agent-eval-historical-reader-repair.md",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Substituted authority: retired/changed current contract preserves original reviewed obligations and result",
+      "source": "fault-matrix",
+      "trace": "I4+I8",
+      "status": "pass",
+      "citation": "tools/checks/review-blockers.test.ts:439",
+      "note": "Independent original 15-row verdict byte-exact to retained Git artifact: fixed-retired.log:1 and fixed-changed.log:1 accepted; BASE rejected both (baseline-retired.log:1, baseline-changed.log:1). Exact BASE owner reversion kills both committed regressions; guard-baseline.log:6; restored 22/22 in guard-restored.log:8. All logs under .cache/pr341/historical-reader-final-r1/."
+    },
+    {
+      "row": "Weakened current contract does not authorize incomplete historical coverage",
+      "source": "fault-matrix",
+      "trace": "I4+I8",
+      "status": "pass",
+      "citation": "tools/checks/review-blockers.test.ts:455",
+      "note": "Real CLI/Git original authority has 10 traced obligations: fixed-weakened-undercoverage.log:1 rejects 1/10 while baseline-weakened-undercoverage.log:1 accepts. Committed 1/2 fixture rejects with exact diagnostic; independent guard-baseline.log proves semantic RED, restored22GREEN. Logs under .cache/pr341/historical-reader-final-r1/."
+    },
+    {
+      "row": "Unavailable reviewed source remains explicitly unreadable with no current-file fallback",
+      "source": "fault-matrix",
+      "trace": "I4+I8",
+      "status": "pass",
+      "citation": "tools/checks/review-blockers.test.ts:463",
+      "note": "Actual missing Git object 0000000000000000000000000000000000000000: fixed-unavailable.log:1 returns2/unreadable contract despite present current source; baseline-unavailable.log:1 accepted0. Committed regression also RED under exact BASE owner and GREEN when restored. Logs under .cache/pr341/historical-reader-final-r1/."
+    },
+    {
+      "row": "Unbound review draft retains current-file authority",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tools/checks/review-blockers.test.ts:470",
+      "note": "Independent fixed-draft.log:1 accepted original draft; fixed-draft-undercoverage.log:1 rejected insufficient current-file coverage; fixed-draft-unreadable.log:1 rejected missing current document. BASE draft remains accepted. Actual JSON bytes unchanged after each CLI invocation; independent-scenarios.json. Logs under .cache/pr341/historical-reader-final-r1/."
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1/I2/I3/I4/I7/I8/I9 expanded own-environment comparison",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:5",
+      "summary": "Fresh frozen96 on ed4 remains active; retain original attempts, honest failures, uncertainty, offline regeneration and independent comparison Final. Reader repair does not rescore or accept this campaign."
+    },
+    {
+      "clause": "I10 operation/tool/API/policy difference catalog",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Evidence-backed actual operation catalog, recovery and measured/unknown impact remain."
+    },
+    {
+      "clause": "I11 finite substantive escalation and fresh repeated confirmation",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Declared escalation across multiple families, bounded stopping, controls and frozen fresh repeated boundary confirmation remain."
+    },
+    {
+      "clause": "I4/I8 retained evidence inspectability and end-to-end acceptance",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:12",
+      "summary": "Global completed-contract retirement audit remains; source contracts stay retained until independent acceptance and CLOSE. This review proves the CLI repair only."
+    },
+    {
+      "clause": "Whole PR341 verification and accepted goal audit/CLOSE",
+      "location": "docs/backlog/distribution/reference/agent-eval-historical-reader-repair.md:28",
+      "summary": "Combined full PR gate after physical completion of fresh96, linked obligation reviews and end-to-end goal audit/CLOSE remain. No whole-PR merge or goal-complete claim."
+    }
+  ],
+  "goal_complete": false
+}

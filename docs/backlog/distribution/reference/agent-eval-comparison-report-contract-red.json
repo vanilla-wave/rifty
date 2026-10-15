@@ -1,0 +1,171 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Preparation accepted with advisory C1; implement. Merge requires live72/regeneration evidence and fresh independent Final+GREEN. Goal continues.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "f620974430dc59dfc2a8bfc790227c6ac26dc779",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-comparison-report.md ready Acceptance1–4/Fault matrix; docs/backlog/epics/agent-code-quality-evaluation/goal.md unchanged accepted I2/I3/I4/I5/I7/I8/I9; ADR-0507. BASE baef89ee720a90128abd6b9d2105e3513dd4dac5 accepted corpus Final+GREEN22rows/all8axes. Fresh read-only reviewer /root/report_contract_review depth1/max1/nochildren: original user/refine answers, final goal/map/contract/protocol/ADR/raw artifacts/new tests and changed bookkeeping inspected. Accepted corpus/nativeCodex/runner not re-reviewed absent changed dependency/new defect. Independent RED11/11 behavioral, agent-bench typecheck PASS, old comparison17PASS, series4PASS on isolated unsandboxed rerun (initial sandbox loopback listenEPERM), PythonDecimal60 oracle. Primary NIST exact binomial and union pages read directly; no model calls or repository edits. RDY-6 final source/attribution check: actual original/refine scope matches written ready promise, no live unresolved user fork; estimand/repeats/order/models are agent-owned declared method, not invented user policy. Per-case cost gzip independently parsed6rows: manual seconds unknown, observed APFS reference timings explicit; supporting evidence, not an extra traced obligation.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3+I4+I5+I7+I8+I9",
+      "location": "docs/backlog/distribution/agent-eval-comparison-report.md:84",
+      "summary": "Current report implementation, actual72 campaign, teardown/regeneration proof and Final+GREEN remain; Contract+RED is preparation only."
+    },
+    {
+      "clause": "I1+I6+I7",
+      "location": "docs/backlog/distribution/agent-eval-corpus-expansion.md",
+      "summary": "Mandatory finite expanded version/selection/controls and own campaign after pilot trajectories."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md",
+      "summary": "Observed command/tool/API/host differences including recovery, source links and impact/unknown remain."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md",
+      "summary": "Executed substantive escalation beyond pilot and frozen fresh boundary confirmation/stopping evidence remain."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: deterministic statistics/Markdown, task/workload/split accounting, selected failure/missing visibility, controls separate and retained JSON immutable",
+      "source": "acceptance",
+      "trace": "I3+I4+I7+I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:96; tools/agent-bench/src/statistics-report.test.ts:113; tools/agent-bench/src/statistics-report.test.ts:162; tools/agent-bench/src/comparison.test.ts:207",
+      "note": "Behavioral entrypoint RED reproduced; deeper group-count/failure-breakdown assertion doubt is advisory C1, not an executed surviving mutant (REV-4)."
+    },
+    {
+      "row": "Acceptance2: conditional exact intervals, finite simultaneous task-macro/Pi bands, incomplete unknown, assumptions and separate Codex",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:113; tools/agent-bench/src/statistics-report.test.ts:171; tools/agent-bench/src/statistics-report.test.ts:188; docs/adr/distribution/0507-report-fixed-corpus-uncertainty-without-equality-claims.md:14",
+      "note": "Independent Decimal60 rerun confirms NIST90 and compiled95 oracle; current behavioral RED reproduced. C1 notes macro/band numeric assertions absent; no executed wrong implementation, therefore pass per REV-4."
+    },
+    {
+      "row": "Acceptance3: expanded identity/artifact links and comparison drift/partial-matrix rejection; intentional source changes remain visible",
+      "source": "acceptance",
+      "trace": "I2+I3+I4+I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:219; tools/agent-bench/src/comparison.test.ts:175; tools/agent-bench/src/comparison.test.ts:207; tools/agent-bench/src/plan.ts:14",
+      "note": "Five same-name hash/split drift REDs accepted exit0 now; legacy configuration/partial-matrix and intentional source-change checks independently17PASS. Accepted source/Codex provenance authority reused within REV-1."
+    },
+    {
+      "row": "Acceptance4: real on-demand pilot72 across both workloads/four origins, failures retained, frozen settings, no-model unchanged-evidence regeneration",
+      "source": "acceptance",
+      "trace": "I3+I4+I5+I7+I8+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-comparison-protocol.md:3; docs/backlog/distribution/agent-eval-comparison-report.md:100; tools/agent-bench/src/series.fault.test.ts:94; tools/agent-bench/src/comparison.test.ts:207",
+      "note": "Live72 and teardown/regeneration are explicit post-implementation acceptance targets, not pickup measurements. Existing series/regeneration carriers independently verified; live quality proof mandatory before unit Final+GREEN."
+    },
+    {
+      "row": "missing/duplicate/out-of-plan aggregate: invalid identity rejection and explicit missing selected rows",
+      "source": "fault-matrix",
+      "trace": "I3+I4+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:150; tools/agent-bench/src/statistics-report.test.ts:199",
+      "note": ""
+    },
+    {
+      "row": "input/judge/config drift comparison: reject and preserve originals",
+      "source": "fault-matrix",
+      "trace": "I4+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:219; tools/agent-bench/src/comparison.test.ts:175; tools/agent-bench/src/comparison.test.ts:207",
+      "note": ""
+    },
+    {
+      "row": "unknown telemetry totals: unavailable remains unknown",
+      "source": "fault-matrix",
+      "trace": "I2+I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:188; tools/agent-bench/src/comparison.test.ts:149",
+      "note": ""
+    },
+    {
+      "row": "interrupted/setup/provider/judge campaign: failures/partial/missing retained; fresh next series",
+      "source": "fault-matrix",
+      "trace": "I3+I5+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/series.fault.test.ts:75; tools/agent-bench/src/series.fault.test.ts:94; docs/backlog/distribution/reference/agent-eval-comparison-protocol.md:8",
+      "note": "Accepted real runner proofs reused, independently4PASS; live failure-stage evidence remains campaign target."
+    },
+    {
+      "row": "report CLI derived statistics.json/Markdown entrypoint and repeatable immutable regeneration",
+      "source": "public-api",
+      "trace": "Acceptance1 → I4+I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:96; tools/agent-bench/src/statistics-report.test.ts:148",
+      "note": ""
+    },
+    {
+      "row": "Frozen exact-binomial primary oracle: NIST N20/k4 alpha.1 and independent Decimal60 alpha.05/endpoints",
+      "source": "frozen-artifact",
+      "trace": "Acceptance2 → I4",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-comparison-report-evidence.md:9; tools/agent-bench/src/statistics-report.test.ts:171",
+      "note": "Independent Python3 Decimal60/math.comb220-bisections rerun:90%[.0713538843086181845892,.4010281173319746449859];95%[.0573339970500327577186,.4366140029966683693338]. NIST primary formulas/90% values verified directly."
+    },
+    {
+      "row": "Frozen pre-measurement pilot selection/settings/cost/estimand and primary matrix policy",
+      "source": "frozen-artifact",
+      "trace": "Acceptance4 → I3+I4+I5+I7+I8+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-comparison-protocol.md:3",
+      "note": "72=6x4x3;24 expected browser-library setup failures and48 expected agent attempts explicit. Known outcomes derive accepted corpus, not quality measurements; temporal/provider confounding and conditional iid limits explicit."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/src/statistics-report.test.ts:130; tools/agent-bench/src/statistics-report.test.ts:171",
+          "summary": "C1: current REDs discriminate missing statistics/identity drift, but do not numerically assert simultaneous Bonferroni task-macro/Pi bands, task/family counts or failure-stage breakdown. Inspect these carriers in Final+GREEN; optional deeper probes now. No executed surviving mutant, so coverage remains pass under REV-4.",
+          "authority": "",
+          "evidence": "Independent pnpm exec vitest run tools/agent-bench/src/statistics-report.test.ts:11/11 behavioral failures,8500ms; four ENOENT statistics.json after CLI exit0, duplicate/outside two exit0, same-name files/lock/prompt/judge/split five exit0. Code read shows only .some group existence and per-cell numeric assertions, no numeric macro/band/count probes. This is advisory reading, not an executed REV-5 class4 mutant."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -1,0 +1,190 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS current repair/B1 unit: можно принять исправление в PR341 и продолжать цель. Весь PR341 не завершён: fresh96 и I10/I11 обязательны.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #341 observed choice-caption repair, BASE e7d9fc850b85045241b6d74a9676c12b9d59fe71, clean reviewed HEAD f32cf65be807389354602cb00b631c41eee66f9e; independent changed-tree Final+GREEN verification of accepted B1 from c96c1547ddbb8f63dfd5573cf39256bf5b8e436d under checkpoint-run Reception3. Authority docs/backlog/epics/agent-code-quality-evaluation/goal.md I3/I6, public booking/expense prompts and ADR-0512. Original BLOCK and raw evidence remain historical; this record proves actual repaired tree, not goal completion.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1+I2+I3+I4+I7+I8+I9; expanded-comparison Acceptance 1/2; ADR-0512 before comparative acceptance",
+      "location": "docs/backlog/distribution/agent-eval-expanded-comparison.md:28",
+      "summary": "Выполнить новую frozen eval-v2 серию96:8cases×4origins×3freshrepeats, retained failures/usage/source identity/uncertainty и offline regeneration. Interrupted74/96, исторические controls48 и текущие no-model controls56 не заменяют сравнение."
+    },
+    {
+      "clause": "I10; scenario7",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Обязателен operation-level каталог реальных tool/API/policy/behavior differences, recovery/impact/source evidence, включая контролируемые SvelteCOI CSS/CORS наблюдения без выдуманной причины."
+    },
+    {
+      "clause": "I11; scenario8",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Обязательна конечная executed escalation по нескольким семействам сверх пилота, объявленные stopping bounds и fresh repeated confirmation/reference controls. Goal не закрыт."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Contextual room option captions select the real unambiguous identity rather than exact visible label.",
+      "source": "acceptance",
+      "trace": "I3+I6+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/booking-workflow-v2/judge.ts:51",
+      "note": ""
+    },
+    {
+      "row": "Contextual expense payer and multi-participant option captions retain semantic choice identity.",
+      "source": "acceptance",
+      "trace": "I3+I6+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/expense-settlement-v2/judge.ts:52",
+      "note": ""
+    },
+    {
+      "row": "Missing or duplicate named options fail loudly before selection mutation; selection uses actual option indices.",
+      "source": "acceptance",
+      "trace": "ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/choice-projection.fault.spec.ts:4",
+      "note": ""
+    },
+    {
+      "row": "Booking selected identity is canonicalized against actual edited room records, not caption suffixes.",
+      "source": "acceptance",
+      "trace": "ADR-0512+I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/booking-workflow-v2/judge.ts:88",
+      "note": ""
+    },
+    {
+      "row": "Seats primary-purpose projection excludes actual concatenated Room option context; all non-Seats fields preserve BASE predicates, including equivalent Name of room label word order.",
+      "source": "acceptance",
+      "trace": "I6+booking public prompt:20-25+named BASE booking field projection",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-choice-caption-controls.ts:30; actual fixed production projection tools/agent-bench/corpus/cases/booking-workflow-v2/judge.ts:24. Independent current command node --import tsx tools/agent-bench/tests/workflow-choice-caption-controls.ts eval-v2 --reversed-room-name, exit0:8/8 PASS/errors0; raw /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-workflow-choice-captions-vexMAE/evidence.json. Committed RED/guard reintroduction/current GREEN: reference/agent-eval-choice-room-name-{red,reversion,native-green}.json.gz; current oracle hash equals recorded restored reversion sourceSHA. Accepted B1 is repaired, not disputed or erased.",
+      "note": ""
+    },
+    {
+      "row": "Versioned booking oracle accepts plain/decorated reference and working alternative, rejects unmet baseline/plausible partial and semantic regressions.",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-controls.ts:96",
+      "note": ""
+    },
+    {
+      "row": "Versioned expense oracle accepts plain/decorated reference and working alternative, rejects unmet baseline/plausible partial and semantic regressions.",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-controls.ts:98",
+      "note": ""
+    },
+    {
+      "row": "Frozen reference/alternative positive caption controls use real installed Vue/Svelte/Vite applications and actual Chromium, with no page errors.",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-choice-caption-controls.ts:27; independent current real npm/Vite/Chromium replay8/8 PASS/errors0, root rifty-workflow-choice-captions-vexMAE; retained prior plain/decorated source controls unchanged.",
+      "note": ""
+    },
+    {
+      "row": "References/alternatives and baseline/partial controls are exercised in all four originating environments; environment failures remain visible and native cannot rescue them.",
+      "source": "acceptance",
+      "trace": "I3+I6+scenario3+scenario4+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-choice-origin-controls.ts:29; current source-bound origin proof reference/agent-eval-choice-room-name-origin-proof.json.gz:56/56 retained,36PASS20FAIL;16baseline/partial negatives and4SvelteCOI positive CSS failures remain visible; reversed-name decorated booking8/8 positive in all4 origins.",
+      "note": ""
+    },
+    {
+      "row": "Original eval-v1/cases retain original bytes; eval-v2 changes two judge identities and keeps public prompts/project/lock/controls/families/splits unchanged.",
+      "source": "frozen-artifact",
+      "trace": "I4+I6+I7+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-choice-version.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Deployed versioned judge bytes match the independently inspected certified oracle modules.",
+      "source": "frozen-artifact",
+      "trace": "I4+I6+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-choice-version.test.ts:29",
+      "note": ""
+    },
+    {
+      "row": "Plain, decorated and reversed-room-name decorated control plans bind actual input/lock/prompt/judge/control identities; all56 actual after files equal before plus declared patch.",
+      "source": "acceptance",
+      "trace": "I4+I6+I7+I8+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-choice-origin-controls.ts:106; independent node --import tsx /tmp/rifty-choice-b1-independent-audit.mts exit0: all3 current plan/task identities match,56 physical pairs match declared inputs/control patches. Raw /tmp/rifty-choice-b1-independent-audit-MPTPW2/evidence.json.",
+      "note": ""
+    },
+    {
+      "row": "Interrupted original96 retains74 original scored attempts and22 missing trials; archive cannot become corrected comparative acceptance or resumption.",
+      "source": "frozen-artifact",
+      "trace": "I3+I4+I7+I9+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-06-eval-v1-caption-interrupted/README.md:3",
+      "note": ""
+    },
+    {
+      "row": "Archived physical artifacts and large original-byte traces match inventories/manifests; offline regeneration preserves authoritative bytes and identical derived views.",
+      "source": "frozen-artifact",
+      "trace": "I3+I4+I8+I9+ADR-0512",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/report.ts:267; independent node --import tsx /tmp/rifty-choice-b1-independent-audit.mts exit0:1344 physical inventory hashes,722 manifest carriers,14 original-byte gzip traces verified;16 current/historical/ENOSPC/interrupted series offline regenerated twice, derived bytes match committed views and authoritative report unchanged. Raw /tmp/rifty-choice-b1-independent-audit-MPTPW2/evidence.json.",
+      "note": ""
+    },
+    {
+      "row": "Failed first B1 own-origin attempt remains separate immutable evidence with7/8 persisted and1 missing; no resume, overwrite or runtime-boundary attribution.",
+      "source": "frozen-artifact",
+      "trace": "I3+I4+I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-06-choice-b1-storage-failed/README.md:3; original physical inventory and report content validated and twice regenerated independently by /tmp/rifty-choice-b1-independent-audit.mts.",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "f32cf65be807389354602cb00b631c41eee66f9e"
+}

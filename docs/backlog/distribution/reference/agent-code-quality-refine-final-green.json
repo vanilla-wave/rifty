@@ -1,0 +1,79 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS документации refine/FIT; допустим status ready и записи review. Реализация I1–I5 остаётся впереди.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "61199dcf9fcca366e4504328fc1f0cc0a7eb7fbf",
+  "unit_goal_source": "Raw user request and answers supplied to /root/eval_refine_final; docs/backlog/epics/agent-code-quality-evaluation/goal.md and its map.md and ledger.md plus three seeded draft items, refine evidence and docs/ROADMAP.md; reviewed SHA256 manifest supplied with verdict; baseline 51440931aeb5e322ddfcab930e02068e7083922e.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+      "summary": "Реализовать конечный корпус реальных проектов и разных установленных стартеров с независимыми judge controls."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+      "summary": "Доказать выполнение нового корпуса через четыре среды, включая реальный native Codex."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+      "summary": "Реализовать own-environment оценку расширенного корпуса и честный учёт выбранных trials и ошибок."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+      "summary": "Реализовать расширенную идентичность эксперимента, uncertainty и сравнение с сохранёнными доказательствами."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+      "summary": "Выполнить реальный повторный reference experiment обеих групп и четырёх сред; доказать regeneration без новых model calls."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

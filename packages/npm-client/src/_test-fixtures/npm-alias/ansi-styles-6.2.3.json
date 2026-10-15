@@ -1,0 +1,91 @@
+{
+  "bugs": {
+    "url": "https://github.com/chalk/ansi-styles/issues"
+  },
+  "dist": {
+    "shasum": "c044d5dcc521a076413472597a1acb1f103c4041",
+    "tarball": "https://registry.npmjs.org/ansi-styles/-/ansi-styles-6.2.3.tgz",
+    "fileCount": 5,
+    "integrity": "sha512-4Dj6M28JB+oAH8kFkTLUo+a2jwOFkuqb3yucU0CANcRRUbxS0cP0nZYCGjcc3BNXwRIsUVmDGgzawme7zvJHvg==",
+    "signatures": [
+      {
+        "sig": "MEQCIHA4sjtv5qsR32luW7TggdqYbVN6iVf+SGaCAwuSeOvvAiB3spueFZS+jVtooBLaU1Z0w76lGrq7dUr1VJc1tL+Heg==",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "unpackedSize": 17488
+  },
+  "name": "ansi-styles",
+  "type": "module",
+  "types": "./index.d.ts",
+  "author": {
+    "url": "https://sindresorhus.com",
+    "name": "Sindre Sorhus",
+    "email": "sindresorhus@gmail.com"
+  },
+  "engines": {
+    "node": ">=12"
+  },
+  "exports": "./index.js",
+  "funding": "https://github.com/chalk/ansi-styles?sponsor=1",
+  "gitHead": "28d11988aea80a0b4fdbea5794aa45b701819995",
+  "license": "MIT",
+  "scripts": {
+    "test": "xo && ava && tsd",
+    "screenshot": "svg-term --command='node screenshot' --out=screenshot.svg --padding=3 --width=55 --height=3 --at=1000 --no-cursor"
+  },
+  "_npmUser": {
+    "name": "sindresorhus",
+    "email": "sindresorhus@gmail.com"
+  },
+  "homepage": "https://github.com/chalk/ansi-styles#readme",
+  "keywords": [
+    "ansi",
+    "styles",
+    "color",
+    "colour",
+    "colors",
+    "terminal",
+    "console",
+    "cli",
+    "string",
+    "tty",
+    "escape",
+    "formatting",
+    "rgb",
+    "256",
+    "shell",
+    "xterm",
+    "log",
+    "logging",
+    "command-line",
+    "text"
+  ],
+  "repository": {
+    "url": "git+https://github.com/chalk/ansi-styles.git",
+    "type": "git"
+  },
+  "_npmVersion": "10.9.2",
+  "description": "ANSI escape codes for styling strings in the terminal",
+  "directories": {},
+  "maintainers": [
+    {
+      "name": "sindresorhus",
+      "email": "sindresorhus@gmail.com"
+    }
+  ],
+  "_nodeVersion": "22.12.0",
+  "_hasShrinkwrap": false,
+  "devDependencies": {
+    "xo": "^0.58.0",
+    "ava": "^6.1.3",
+    "tsd": "^0.31.1",
+    "svg-term-cli": "^2.1.1"
+  },
+  "_npmOperationalInternal": {
+    "tmp": "tmp/ansi-styles_6.2.3_1757343135514_0.7903654869968921",
+    "host": "s3://npm-registry-packages-npm-production"
+  },
+  "_id": "ansi-styles@6.2.3",
+  "version": "6.2.3"
+}

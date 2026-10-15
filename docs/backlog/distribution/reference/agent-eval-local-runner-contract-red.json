@@ -1,0 +1,149 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED принят; продолжать IMPLEMENT. Merge после независимого Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "f4761b3ca0f997c39841cdbfcc4b1f750ee3a02c",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-local-runner.md @ f4761b3ca0f997c39841cdbfcc4b1f750ee3a02c; docs/backlog/epics/agent-code-quality-evaluation/goal.md I8/I9; BASE a28b37da31ca3ef128bbdcb6aa55d6109c5f7d16",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1+I6+I7",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:77",
+      "summary": "Версионированный diverse corpus, judge/reference controls, pilot и family-separated expansion ещё не доставлены."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:83",
+      "summary": "Отдельная native Codex lane и четырёхсредовое исполнение ещё не доставлены."
+    },
+    {
+      "clause": "I3+I4",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:87",
+      "summary": "Own-environment common checks нового корпуса, полный report identity и uncertainty ещё не доказаны."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:96",
+      "summary": "Реальная повторная reference campaign и regeneration proof открыты; scripted plumbing их не закрывает."
+    },
+    {
+      "clause": "I8+I9",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:116",
+      "summary": "Этот checkpoint принимает обещание и RED; реализация local runner, operator docs и Final+GREEN впереди."
+    },
+    {
+      "clause": "I10+I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Evidence-linked difference catalog и escalated boundary search открыты."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: deterministic full selected matrix, inputs/order and source/dependency/judge/config identity",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "weak",
+      "citation": "tools/agent-bench/src/series.fault.test.ts:18",
+      "note": "Исполненный постоянный plan mutant проходит: игнорирует config/task/runs, trials содержат только lane, hashes фиктивные. Advisory REV-4; assertions не различают заявленную identity/order."
+    },
+    {
+      "row": "Acceptance 2: exclusive output, pre-setup plan, progress and interrupted/setup-failure retained matrix",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/series-interruption.spec.ts:60",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: retained-evidence regeneration and fresh subsequent output/workspaces",
+      "source": "acceptance",
+      "trace": "I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/series-interruption.spec.ts:78",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key output creation rejects occupied directory and preserves prior evidence",
+      "source": "fault-matrix",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/series.fault.test.ts:33",
+      "note": ""
+    },
+    {
+      "row": "torn-state signal/setup/cleanup preserves persisted records and exposes unfinished matrix",
+      "source": "fault-matrix",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/series-interruption.spec.ts:60",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail persistence throws without retention claim",
+      "source": "fault-matrix",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/series.fault.test.ts:94",
+      "note": ""
+    },
+    {
+      "row": "unsupported selected trial remains a recorded setup failure",
+      "source": "fault-matrix",
+      "trace": "I8+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/series-interruption.spec.ts:100",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/src/series.fault.test.ts:23",
+          "summary": "Plan carrier слаб для identity/order: проверяет длину, число no-COI и форму двух hashes, но не task/run identities, порядок или зависимость от config/input. Усиление advisory; blockers нет.",
+          "authority": "",
+          "evidence": "Node v24.16.0. Original test copied to isolated scratch; only CLI path and sibling-import paths changed. CLI mutant emits constant node-endpoint/smoke/hono-api, six {lane} rows and a/b repeated 64 as hashes; ignores args and config. pnpm exec vitest run --config /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-runner-plan-mutant-j_li_144/vitest.config.mjs -t 'resolves the full selected matrix': exit 0, 1 passed/3 skipped. Baseline pnpm exec vitest run tools/agent-bench/src/series.fault.test.ts: 3 failed/1 passed (Unknown command plan; occupied run unexpectedly exits0; missing interrupted summary), 26.31s. pnpm exec playwright test --config tools/agent-bench/playwright.config.ts series-interruption.spec.ts: 2 failed (START/SIGTERM summary lacks missing; unsupported CLI exits0 with ENOENT report.json), native/packed preparation executed."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

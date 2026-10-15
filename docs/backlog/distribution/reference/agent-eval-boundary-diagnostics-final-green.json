@@ -1,0 +1,148 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS current diagnostics unit; delivery/re-chart may proceed. Goal CLOSE remains required; no goal-complete claim.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "f6348036dc311e553f07eeabd628c9796ebc81f8",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-boundary-diagnostics.md; BASE901cef3cb9b76026c1567b7a852094adad2e3768 (accepted source); fresh independent delivered-result review @f6348036dc311e553f07eeabd628c9796ebc81f8",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1–I11 end-to-end goal CLOSE and completed-contract retirement proof",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:3",
+      "summary": "Current diagnostics proven; goal map still linked. Independently verify end-to-end accepted invariant evidence and current retirement before goal closure."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: actual comparison/pilot operations, exact args/results/lane/version/source/recovery/impact",
+      "source": "acceptance",
+      "trace": "I10",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-environment-differences.md:3",
+      "note": ""
+    },
+    {
+      "row": "Acceptance2: both actual public hosts/native directed operations and exact causal heredoc/directwrite replay",
+      "source": "acceptance",
+      "trace": "I3+I10",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-environment-differences.md:29",
+      "note": ""
+    },
+    {
+      "row": "Acceptance3: admitted finite protocol before calls; substantive linked/async/compiler/resource steps in allfourorigins",
+      "source": "acceptance",
+      "trace": "I7+I8+I9+I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-results.md:5",
+      "note": ""
+    },
+    {
+      "row": "Acceptance4: substantive escalation/stopping rationale; frozen two freshmodelrepeats and workingrefs everyorigin; honest candidate/shared/unknown/lowerbound",
+      "source": "acceptance",
+      "trace": "I3+I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-results.md:20",
+      "note": ""
+    },
+    {
+      "row": "Acceptance5: committed catalog/profile/raw evidence, unchanged offline report, matrix/time/usage/cost/failures/stop; independent Final and separate CLOSE",
+      "source": "acceptance",
+      "trace": "I8+I10+I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-results.md:14",
+      "note": ""
+    },
+    {
+      "row": "Parity1: shared supplied task/project/lock/judge/settings per matched level; actual installed divergence explicit",
+      "source": "acceptance",
+      "trace": "I3+I7+I10",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-environment-differences.md:37",
+      "note": ""
+    },
+    {
+      "row": "Parity2: real public tools/native outcomes and originating references; directed external-provider probes separate from modelquality",
+      "source": "acceptance",
+      "trace": "I3+I10+I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-results.md:27",
+      "note": ""
+    },
+    {
+      "row": "Fault parser/causalambiguity×catalog: exact source/hash/cardinality, unknown preserved",
+      "source": "fault-matrix",
+      "trace": "I10",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-environment-differences.md:17",
+      "note": ""
+    },
+    {
+      "row": "Fault setup/tool/policy/resourcefailure×selection: all unsuccessful original phase/trace retained; ownorigin authoritative",
+      "source": "fault-matrix",
+      "trace": "I3+I9+I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-results.md:27",
+      "note": ""
+    },
+    {
+      "row": "Fault input/judge/settingsdrift×confirmation: fresh identity frozen; history never rescored",
+      "source": "fault-matrix",
+      "trace": "I7+I8+I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-results.md:8",
+      "note": ""
+    },
+    {
+      "row": "Fault easysaturation×stopping: substantive10x workload and measuredboundedquestion, fresh controls/confirmation",
+      "source": "fault-matrix",
+      "trace": "I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-results.md:33",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

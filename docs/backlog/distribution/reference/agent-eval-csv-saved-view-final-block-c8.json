@@ -1,0 +1,100 @@
+{
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #341 CSV persistence-check discrepancy; observed accepted CSV BASE = reviewed clean HEAD c8e43eabceec10ac8148f37bf88f82dacc6d81b0, reopened solely by newly executed eval-v2 csv-workflow-v3/rifty/3 evidence under REV-1/REV-12. Exact authority docs/backlog/epics/agent-code-quality-evaluation/goal.md:87 I3 and :103 I6; public tools/agent-bench/corpus/cases/csv-workflow-v3/prompt.md:1; current private judge/source at this HEAD. Full source gates retained 27/27 PASS at f32cf65be807389354602cb00b631c41eee66f9e (/tmp/rifty-pr341-b1-retained-prcheck.log); git diff f32cf65be..c8e43eabc docs-only, no acceptance inference from gates. Boundary excludes unrelated accepted source and whole-goal closure.",
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK — fix layout-dependent saved-data judging and independently verify; preserve current recorded FAIL and frozen campaign/archive bytes. Goal remains open.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/corpus/cases/csv-workflow-v3/judge.ts:57",
+          "summary": "Post-reload persistence probes require editable Email controls, rejecting the publicly allowed draft-editor/saved-table implementation.",
+          "authority": "I6 — docs/backlog/epics/agent-code-quality-evaluation/goal.md:103: trusted checks accept working alternatives; hidden checks add no unstated requirements or arbitrary UI structure. I3 — goal.md:87: honest own-environment result from common functional/regression requirements. tools/agent-bench/corpus/cases/csv-workflow-v3/prompt.md:1: imported invalid rows editable; corrections then Save persist all rows; re-import draft until Save; DOM/layout/architecture open; no saved-row editor-after-reload requirement.",
+          "evidence": "Executed clean-source eval-v2 own-origin trial /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-pr341-eval-v2-live-6q4hm0e3/series/report.json, task csv-workflow-v3/lane rifty/runIndex 3, Chromium 148.0.7778.96/Node v24.16.0/source c8e43eabceec10ac8148f37bf88f82dacc6d81b0: agentStatus done; outcome fail; first three probes true; corrected contacts persist false/evidence []; unsaved import leaves saved records intact false/evidence []; both filtered-export probes true. Raw /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-pr341-eval-v2-live-6q4hm0e3/series/csv-workflow-v3/rifty/3/browser.zip!trace.trace:708 enters bob@example.test; :757 enters Empty corrected; :773 Save contacts click; :789 same-origin reload; :795 Email :read-write query, :797 result 0; after New/new@example.test Import (:904/:912) and reload (:927), :934 same query, :936 result 0. Following first reload, report captures accessible CSV name,email\\nEmpty corrected,empty@example.test and name,email\\n\"Bob \"\"B\"\"\",bob@example.test; rendered body says Saved contacts/4 contacts. Final retained screen.png after unsaved import/reload still shows Saved contacts/4 contacts. Exact after.json src/main.tsx matches /tmp/rifty-pr341-csv-coi3-current-main.tsx SHA256 b9f32943245262dc31d28f4fd2f77ce57d648622671355903cdc7e0bb3d3fc60: :32 loads contacts from localStorage, :35 draft starts empty, :44 persists contacts, :52-53 Import changes draft only, :57-58 Save copies every draft row to contacts and clears draft, :77 imported fields editable, :83 saved contacts are table cells. Judge :57/:96 instead uses describedField, whose tools/agent-bench/src/judge/context.ts:141 intersects :read-write; no saved table can satisfy it. Extracted unchanged-original evidence /tmp/rifty-pr341-csv-saved-view-evidence.json. Fault class frozen-assumption (reference-shaped editor assumed to be saved-data observation); lossy-aggregate projection conflates a correct saved read-only view with missing records. Captured RED is this actual same-origin trial, not a new speculative mutant; before repair the committed regression carrier for this alternative remains missing. Sibling sweep: frozen csv-workflow/judge.ts:42/:92 and csv-workflow-v2/judge.ts:56/:106 have the same assumption; frozen v1/v2 preserved. v3 reference.json:2 and alternative.json:2 keep all row inputs forever, as do the reference-based positives in tests/csv-export-controls.ts:22; no current saved-table control. Required current-unit repair: use an observable layout-neutral persistence carrier, minimally clear Filter and Export after each reload, decode real output/download CSV, and compare the four corrected name/email pairs; prove saved-table actual app and existing editable/reference/download alternatives accepted; reject lost persistence and Import committing draft without Save. Keep existing filter/escaping/duplicate/hidden-output negatives, exercise repaired controls in each selected own-origin substrate, then independent Final+GREEN. Existing raw output does not separately enumerate all four exact pairs after second reload; this report establishes the checking violation and never overrides/rescores recorded outcomes. Inspection only: no app rerun, model calls, builds, source/criteria mutation or original-archive changes."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Persistence checks accept a working alternative with editable imported draft fields and read-only saved records across reload; no arbitrary saved editor structure.",
+      "source": "acceptance",
+      "trace": "I3 + I6 + csv-workflow-v3/prompt.md:1",
+      "status": "missing",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v3/judge.ts:57",
+      "note": "Real own-origin saved-table execution is falsely rejected; reference/alternative controls retain editable inputs. Missing committed discriminating working-alternative carrier; finding in Bugs."
+    },
+    {
+      "row": "Re-import remains a draft until Save; reload checks saved records independently of persistent editable Email fields.",
+      "source": "acceptance",
+      "trace": "I3 + I6 + csv-workflow-v3/prompt.md:1",
+      "status": "missing",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v3/judge.ts:96",
+      "note": "Second reload again tests editor existence rather than saved records. Required layout-neutral observable proof and lost-persistence/premature-save negatives remain in this unit; finding in Bugs."
+    }
+  ],
+  "unit_residuals": [
+    {
+      "clause": "I3/I6 + csv-workflow-v3/prompt.md:1 — honest layout-independent persistence/draft-isolation judging",
+      "location": "tools/agent-bench/corpus/cases/csv-workflow-v3/judge.ts:57",
+      "summary": "Fix the private judge against the captured real RED, retain original failed trial, prove saved-table and existing alternatives plus persistence/draft negatives in each selected substrate, independent Final+GREEN. No implementation undertaken by this read-only reviewer."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I3/I4/I5/I6/I7/I8 — fresh expanded reference experiment on frozen independently validated criteria",
+      "location": "docs/backlog/distribution/reference/agent-eval-expanded-comparison-v2-protocol.md:9",
+      "summary": "Fresh valid 96-trial comparison and retained-evidence regeneration remain mandatory after repaired criteria are validated/frozen. Current live eval-v2 uses the defect and is not rewritten, rescored, resumed or substituted with replayed outputs."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Evidence-backed operation/tool/API/policy difference catalog remains mandatory; this discrepancy review does not close it."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Executed finite escalated boundary search with frozen fresh repeated confirmation and working controls remains mandatory; expanded campaign alone does not close it."
+    }
+  ],
+  "goal_complete": false,
+  "reviewed_sha": "c8e43eabceec10ac8148f37bf88f82dacc6d81b0"
+}

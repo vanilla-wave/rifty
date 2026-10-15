@@ -1,0 +1,190 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED may proceed to implementation; executed REDs/reference artifacts valid. No merge recommendation before Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-codex-reference.md @ cb895686897ff09d9b8ec38e4088c086ee12b147; BASE34f9058902f10d595bf7d8aa562de917e2dddee2; accepted goal docs/backlog/epics/agent-code-quality-evaluation/goal.md I2/I3/I4 and ADR-0505",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1+I6+I7",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:77",
+      "summary": "Pinned diverse pilot/corpus, discriminating judges/reference solutions and family-split expansion remain."
+    },
+    {
+      "clause": "I2 native Codex",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:83",
+      "summary": "This checkpoint admits the promise; native adapter and real existing-task GREEN remain before slice delivery."
+    },
+    {
+      "clause": "I3+I4",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:87",
+      "summary": "New-corpus own-environment judging, expanded identity, workload summaries, uncertainty and separate Codex report remain."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:96",
+      "summary": "Repeated four-environment real campaign over both workload groups and report regeneration remain."
+    },
+    {
+      "clause": "I10+I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Observed difference catalog and executed graded escalation/confirmation remain."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: explicit model/reasoning/sandbox provenance and separate Codex reference",
+      "source": "acceptance",
+      "trace": "I2+I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/codex-reference.test.ts:8",
+      "note": ""
+    },
+    {
+      "row": "Acceptance2: real isolated ephemeral attempt, events/usage/diff and common own-environment judge",
+      "source": "acceptance",
+      "trace": "I2+I3",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/codex-reference.ts:19",
+      "note": ""
+    },
+    {
+      "row": "Acceptance3: completion, cancellation, exhaustion and corrupt/incomplete transcript handling",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/codex-reference.ts:89",
+      "note": "Executed completion assertion mutant admits turn.failed plus turn.completed. Happy/deadline carriers exist; negative protocol/tool-budget discrimination remains advisory at this preparation checkpoint."
+    },
+    {
+      "row": "Acceptance4: split UTF-8 capture and original log bytes; sibling sweep",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/proc-output.fault.test.ts:4",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × exit0 without completion: unsuccessful",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-codex-cancellation-probe.json:40",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × JSONL: unsuccessful retained transcript",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/codex-reference.ts:85",
+      "note": ""
+    },
+    {
+      "row": "unbounded-read × agent process: SIGINT deadline and retained evidence",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/codex-reference.ts:106",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × workspace/judge: common native preparation/judging",
+      "source": "fault-matrix",
+      "trace": "I2+I3",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/codex-reference.ts:80",
+      "note": ""
+    },
+    {
+      "row": "Real CLI0.159.3 sum execution/completion/usage oracle",
+      "source": "frozen-artifact",
+      "trace": "I2+I3",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-codex-execution-probe.json:103",
+      "note": ""
+    },
+    {
+      "row": "Prefix-only SIGTERM cancellation oracle with explicit capture limitation",
+      "source": "frozen-artifact",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-codex-cancellation-probe.json:41",
+      "note": ""
+    },
+    {
+      "row": "SIGTERM physical settlement oracle: detached tool alive",
+      "source": "frozen-artifact",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-codex-sigterm-settlement-probe.json:5",
+      "note": ""
+    },
+    {
+      "row": "Full EOF SIGINT oracle: unsuccessful exit1 and tool gone",
+      "source": "frozen-artifact",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-codex-sigint-settlement-probe.json:4",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/tests/codex-reference.ts:89",
+          "authority": "",
+          "summary": "Completion negatives are weak: failed-turn plus completed-turn passes the current trace assertions. Add recorded-event adapter checks for failed/cancelled/incomplete/corrupt streams and tool exhaustion before claiming Final+GREEN.",
+          "evidence": "Executed node --input-type=module: read actual execution-probe events, insert {type:'turn.failed'} before turn.completed, execute unchanged trace assertions from lines89–95 via node:vm. Output: Completion assertions PASS with turn.failed + turn.completed + exit0: failed-turn discrimination absent. This exercises the checker only; not a fabricated native acceptance run."
+        },
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/tests/codex-reference.ts:68",
+          "authority": "",
+          "summary": "Isolation assertions inspect reported flags only; working directory outside repo proves location, not instruction/history exclusion. Final review should inspect launched arguments and actual seeded workspace alongside real trial. Sandbox provenance is not asserted in the current plan/header checks.",
+          "evidence": "codex exec --help independently confirms --approve-for-me uses workspace-write and --ignore-user-config/--ignore-rules/--ephemeral semantics. This does not prove the future adapter invokes them."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

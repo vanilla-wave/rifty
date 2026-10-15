@@ -1,0 +1,139 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS for Native workflow input/field-identity/Validation source repair only; continue fresh eval-v6 comparison and I10/I11, not whole-goal closure.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "c58e2eb6e8479efc51d0626b16253cbd2d819489",
+  "unit_goal_source": "PR341 observed Native workflow input/field-identity/Validation judging defects; BASE 77ca2262ad66832aeda27ccf58da2ad7a9a22b5a; baseline booking-workflow-v2/expense-settlement-v2 public prompts and original private judges; docs/backlog/distribution/reference/agent-eval-native-input-judging-evidence.md; docs/backlog/epics/agent-code-quality-evaluation/goal.md I3/I4/I6/I7/I8; ADR-0516.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1+I2+I3+I4+I7+I8+I9",
+      "location": "docs/backlog/distribution/agent-eval-expanded-comparison.md:35",
+      "summary": "Fresh frozen complete eval-v6 comparison96 and offline retained-evidence regeneration remain required."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Executed operation/policy/recovery difference catalog remains required."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Substantive finite escalation, fresh repeated boundary confirmations and controls remain required."
+    },
+    {
+      "clause": "I1-I11 end-to-end goal acceptance",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:3",
+      "summary": "Whole-goal audit/CLOSE after comparison and diagnostics; this source repair does not close the epic."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Native Date/Time/Number representability: raw representable values fill normally; unrepresentable clears actual field before application rejection; text receives exact malformed literal.",
+      "source": "fault-matrix",
+      "trace": "I3+I6+ADR-0516",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/booking-native-calendar-controls.ts:31; tools/agent-bench/tests/expense-native-number-controls.ts:39; docs/backlog/distribution/reference/agent-eval-native-input-class-reversion.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Rejected Booking operations preserve state and expose existing named nonempty Validation before snapshots clear it.",
+      "source": "fault-matrix",
+      "trace": "I6+User scenario 3+ADR-0516",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/booking-workflow-v3/judge.ts:132; tools/agent-bench/tests/booking-native-calendar-controls.ts:42; docs/backlog/distribution/reference/agent-eval-booking-native-calendar-native-proofs.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Primary reservation/booking field purpose distinguishes Reservation room name chooser from editable Room name.",
+      "source": "fault-matrix",
+      "trace": "I6+ADR-0516",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/booking-native-calendar-controls.ts:45; docs/backlog/distribution/reference/agent-eval-booking-room-caption-independent-red.json.gz:1; docs/backlog/distribution/reference/agent-eval-booking-room-caption-reversion.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Declared private native-input owner included in both resolved judge fingerprints; unknown support profile rejects.",
+      "source": "fault-matrix",
+      "trace": "I4+I8+ADR-0516",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-booking-native-calendar-version.test.ts:10; tools/agent-bench/src/corpus-booking-native-calendar-version.test.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Shared native-input owner and two byte-certified private/oracle entries; native positives/negatives and actual four-host consumer.",
+      "source": "fault-matrix",
+      "trace": "I3+I6+ADR-0516",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-booking-native-calendar-version.test.ts:45; tools/agent-bench/tests/native-input-origin-controls.ts:28; docs/backlog/distribution/reference/agent-eval-native-input-number-consumer-proof.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Physical origin controls invoke no models; three source-positive Svelte COI bootstrap failures retain actual FAIL with current CORS evidence and no native rescue.",
+      "source": "fault-matrix",
+      "trace": "I3+I6+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/native-input-origin-controls.ts:161; tools/agent-bench/tests/native-input-origin-controls.ts:201; docs/backlog/distribution/reference/agent-eval-native-input-coi-bootstrap-proof.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "All eight public prompts/projects/locks/control bytes and other six judges remain baseline-identical; new booking-v3/expense-v3/eval-v6 criteria are versioned.",
+      "source": "acceptance",
+      "trace": "I4+I6+I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-booking-native-calendar-version.test.ts:10; docs/backlog/distribution/reference/agent-eval-native-input-final-immutability.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Original interrupted eval-v5 87/missing9 and earlier control outcomes remain immutable; reused unchanged76 plus fresh4 is labelled controls union, never rescoring or a new80/campaign success.",
+      "source": "frozen-artifact",
+      "trace": "I3+I4+I7+I8",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-v5-native-calendar-interrupted.json.gz:1; docs/backlog/distribution/reference/agent-eval-native-input-class-independent-proof.json.gz:1; docs/backlog/distribution/reference/agent-eval-native-input-judging-evidence.md:33",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -1,0 +1,110 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: fixture repair may merge after normal PR gates; prior accepted goal reused under REV-1.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "600a7db32cc34f3680c8af9960c62923ef292e67",
+  "unit_goal_source": "PR341 observed CI fixture baseline @ 384fa18ed9ebd89c5002602be757e0be2979002c; CI38328248598 job115071987677 failed Packed client bundle budgets with Missing original npm fixture rollup@4.64.5; current original-registry-input repair only",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Committed snapshot required registry versions load from real original npm metadata/archives; no omitted fixture admitted",
+      "source": "acceptance",
+      "trace": "baseline: CI38328248598/job115071987677 Packed client bundle budgets @ 384fa18ed9ebd89c5002602be757e0be2979002c; existing committed Vite snapshot v3 exact registry closure",
+      "status": "pass",
+      "citation": "tests/integration/browser-registry-fixture.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "rollup@4.64.5 original metadata/tarball retain exact manifest identity, captured npm URLs, lock SHA512 and archive bytes",
+      "source": "frozen-artifact",
+      "trace": "baseline: CI38328248598/job115071987677 Packed client bundle budgets @ 384fa18ed9ebd89c5002602be757e0be2979002c; existing committed Vite snapshot v3 exact registry closure; missing original rollup@4.64.5",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/provenance.json:186",
+      "note": ""
+    },
+    {
+      "row": "@rollup/wasm-node@4.64.5 original metadata/tarball retain exact manifest identity, captured npm URLs, lock SHA512 and archive bytes",
+      "source": "frozen-artifact",
+      "trace": "baseline: CI38328248598/job115071987677 Packed client bundle budgets @ 384fa18ed9ebd89c5002602be757e0be2979002c; existing committed Vite snapshot v3 exact registry closure; missing original @rollup/wasm-node@4.64.5",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/provenance.json:195",
+      "note": ""
+    },
+    {
+      "row": "postcss@8.5.30 original metadata/tarball retain exact manifest identity, captured npm URLs, lock SHA512 and archive bytes",
+      "source": "frozen-artifact",
+      "trace": "baseline: CI38328248598/job115071987677 Packed client bundle budgets @ 384fa18ed9ebd89c5002602be757e0be2979002c; existing committed Vite snapshot v3 exact registry closure; missing original postcss@8.5.30",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/provenance.json:204",
+      "note": ""
+    },
+    {
+      "row": "nanoid@3.3.20 original metadata/tarball retain exact manifest identity, captured npm URLs, lock SHA512 and archive bytes",
+      "source": "frozen-artifact",
+      "trace": "baseline: CI38328248598/job115071987677 Packed client bundle budgets @ 384fa18ed9ebd89c5002602be757e0be2979002c; existing committed Vite snapshot v3 exact registry closure; missing original nanoid@3.3.20",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/provenance.json:213",
+      "note": ""
+    },
+    {
+      "row": "source-map-js@1.2.2 original metadata/tarball retain exact manifest identity, captured npm URLs, lock SHA512 and archive bytes",
+      "source": "frozen-artifact",
+      "trace": "baseline: CI38328248598/job115071987677 Packed client bundle budgets @ 384fa18ed9ebd89c5002602be757e0be2979002c; existing committed Vite snapshot v3 exact registry closure; missing original source-map-js@1.2.2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/provenance.json:222",
+      "note": ""
+    },
+    {
+      "row": "Actual packed-client CI path passes original npm installation, strict TypeScript/build and Chromium loading under unchanged client budgets",
+      "source": "acceptance",
+      "trace": "baseline: .github/workflows/ci.yml:307 pnpm test:client-bundles @ 384fa18ed9ebd89c5002602be757e0be2979002c",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/pr-341-registry-fixture-repair.md:21",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

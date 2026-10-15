@@ -1,0 +1,320 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Accept the record-observation/source-identity unit; PR341 remains draft until fresh96/I10/I11/historical-reader/CLOSE.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "37e19eb16776f69c5052687bc628cda2ce0af1e1",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-record-observation-judging.md @ 37e19eb16776f69c5052687bc628cda2ce0af1e1; BASE af928a8361f64729d729067b47e5a88a3e3b917e; inherited preparation ae7e9bf9ae892297f17bb6b362dda3c86bbc11f7; accepted ADR0522/0523/0524/0525; observed I4/I8 Git ENOBUFS baseline 216da148f1c31b9089361b7d6e0934c6104d2b15; unchanged goal docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1/I2/I3/I4/I6/I7/I8/I9; scenario2\u20135: fresh frozen expanded comparison",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:5",
+      "summary": "Fresh96: same public8 \u00d7 four origins \u00d7 three fresh trials; retained honest results, uncertainty and offline report. Original96 remains unaccepted/unrescored."
+    },
+    {
+      "clause": "I10; scenario7: operation/tool/API/policy differences with observed recovery/impact",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Complete executed own-host/native catalog; directed versus natural evidence and unknown attribution remain distinct."
+    },
+    {
+      "clause": "I11; scenario8: substantive finite boundary escalation and fresh confirmation",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Complete engineering/dependency/resource escalation, reproduced boundaries or justified stopping bounds, fresh repeated controls."
+    },
+    {
+      "clause": "I4/I8; scenario5: inspect/regenerate retained evidence after historical contract retirement",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:12",
+      "summary": "Historical-reader retirement audit remains open; keep accepted source contracts/history until proven."
+    },
+    {
+      "clause": "Outcome/scenario1\u20138/I1\u2013I11: end-to-end goal proof",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:11",
+      "summary": "Whole-goal audit and CLOSE remain required; this source unit and no-model controls do not close the goal."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: real F6 variants and inherited controls retain the same private requirements/open captions, data and actions",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/operation-context-controls.ts:11; tools/agent-bench/tests/record-observation-origin-controls.ts:20; tools/agent-bench/reports/summaries/2026-10-09-record-zero-effect-origin-controls/README.md:1",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: pure discovery; explicit persisted update proof independent of draft/Validation; literal identities distinct",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-candidates.spec.ts:12; tools/agent-bench/src/judge/expense-records.ts:125; tools/agent-bench/src/judge/reservation-records.ts:120",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: aliases versus duplicate-capable records; saved identity survives sorting/rerender/repeated captions",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/record-adapter-origin-controls.ts:209",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: observation settles owned public payload/relations and respects existing control owners",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/record-settlement-origin-controls.ts:393; tools/agent-bench/tests/record-adapter-origin-controls.ts:319",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: marker apply/restore/lookup failure is explicit; primary and cleanup evidence retained",
+      "source": "acceptance",
+      "trace": "I3 + I4 + I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/record-observation-lifecycle-controls.ts:127; tools/agent-bench/tests/record-settlement-origin-controls.ts:422",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: intended Edit/Delete use confirmed logical records and verify saved effects; no enumeration by speculative deletion",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/booking-workflow-v10/judge.ts:53; tools/agent-bench/corpus/cases/booking-workflow-v10/judge.ts:236; tools/agent-bench/corpus/cases/expense-settlement-v10/judge.ts:26",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: fixed public8, versioned criteria/support, immutable historical outcomes; own origins/gates/independent Final precede fresh96",
+      "source": "acceptance",
+      "trace": "I3 + I4 + I6 + I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus.ts:85; tools/agent-bench/src/corpus.ts:123; tools/agent-bench/tests/record-observation-origin-controls.ts:79; tools/agent-bench/reports/summaries/2026-10-09-record-zero-effect-origin-controls/manifest.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: original/contextual/qualified/presentational Vue/Svelte satisfy unchanged requirements; original two qualified controls are semantic RED",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/operation-context-controls.ts:11; docs/backlog/distribution/reference/agent-eval-record-observation-contract-red.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: Cancel with valid fields/cleared id creates instead of updates; relation/Paid delta distinguishes; sticky Validation is not proof",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/record-adapter-origin-controls.ts:84; tools/agent-bench/tests/reservation-projection-origin-controls.ts:87",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: identical expenses/aliases/repeated captions/sort/rerender preserve multiplicity and each accepted binding has effect proof",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/record-adapter-origin-controls.ts:209",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: inline/dual/native form controls retain unrelated ownership; each selected origin has its own source/judge and honest outcome",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/record-adapter-origin-controls.ts:319; tools/agent-bench/tests/record-observation-origin-controls.ts:83; tools/agent-bench/reports/summaries/2026-10-09-record-zero-effect-origin-controls/README.md:1",
+      "note": ""
+    },
+    {
+      "row": "lossy-aggregate \u00d7 admission/identity: no fields or receipts as records; decline or explicit ambiguity",
+      "source": "fault-matrix",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/record-adapter-origin-controls.ts:209; tools/agent-bench/tests/record-settlement-origin-controls.ts:422",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input \u00d7 temporary identity collision: bounded allocation or explicit failure; no merge with original data",
+      "source": "fault-matrix",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/record-observation-lifecycle-controls.ts:71; tools/agent-bench/tests/record-observation-lifecycle-controls.ts:141",
+      "note": ""
+    },
+    {
+      "row": "torn-state \u00d7 marker apply/restore: no successful return with owned mutation unsettled",
+      "source": "fault-matrix",
+      "trace": "I3 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/record-observation-lifecycle-controls.ts:127; tools/agent-bench/tests/record-settlement-origin-controls.ts:422",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie \u00d7 error/cleanup: retain original failure/effect and visible cleanup outcome",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/record-observation-lifecycle-controls.ts:132; tools/agent-bench/src/judge/record-observation.ts:85",
+      "note": ""
+    },
+    {
+      "row": "poisoned-cache \u00d7 rerender/requery: stale ordinal/caption grants no record identity",
+      "source": "fault-matrix",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/record-adapter-origin-controls.ts:209; tools/agent-bench/tests/reservation-projection-origin-controls.ts:175",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift \u00d7 domains/control owners: room/booking/expense witnesses share the observation lifetime",
+      "source": "fault-matrix",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/record-settlement-origin-controls.ts:39; tools/agent-bench/tests/record-adapter-origin-controls.ts:319",
+      "note": ""
+    },
+    {
+      "row": "Frozen eval-v14: original public cases/selection families preserved; distinct criteria fingerprint and immutable prior outcomes",
+      "source": "frozen-artifact",
+      "trace": "I3 + I4 + I6 + I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/eval-v14.json:1; tools/agent-bench/src/corpus.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Frozen eval-v15: original public cases/selection families preserved; distinct criteria fingerprint and immutable prior outcomes",
+      "source": "frozen-artifact",
+      "trace": "I3 + I4 + I6 + I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/eval-v15.json:1; tools/agent-bench/src/corpus.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Frozen eval-v16: original public cases/selection families preserved; distinct criteria fingerprint and immutable prior outcomes",
+      "source": "frozen-artifact",
+      "trace": "I3 + I4 + I6 + I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/eval-v16.json:1; tools/agent-bench/src/corpus.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Frozen booking-v10 oracle: independent saved reservation/room effects, readonly projections, complete cleanup and peer preservation",
+      "source": "frozen-artifact",
+      "trace": "I3 + I6 + ADR-0522 + ADR-0523 + ADR-0524 + ADR-0525",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracles/booking-v10.ts:159; tools/agent-bench/tests/reservation-projection-origin-controls.ts:175; tools/agent-bench/tests/record-settlement-origin-controls.ts:422",
+      "note": ""
+    },
+    {
+      "row": "Frozen expense-v10 oracle: persisted Paid witness, duplicate/alias identity and complete payload/financial settlement",
+      "source": "frozen-artifact",
+      "trace": "I3 + I6 + ADR-0522 + ADR-0525",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/workflow-oracles/expense-v10.ts:218; tools/agent-bench/tests/record-adapter-origin-controls.ts:209; tools/agent-bench/tests/record-settlement-origin-controls.ts:422",
+      "note": ""
+    },
+    {
+      "row": "Inherited native28:24 positive PASS/4 negative FAIL; physical input identity/noModels; original evidence retained",
+      "source": "frozen-artifact",
+      "trace": "I3 + I4 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-09-record-observation-native-controls/README.md:1; tools/agent-bench/reports/summaries/2026-10-09-record-observation-native-controls/manifest.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Historical original own40:21 PASS/19 FAIL; runtime CSS failures retained with no native rescue",
+      "source": "frozen-artifact",
+      "trace": "I3 + I4 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-09-record-observation-origin-controls/README.md:1; tools/agent-bench/reports/summaries/2026-10-09-record-observation-origin-controls/manifest.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Historical own-v15 selected40:20 PASS/20 FAIL,38 physically completed/2 trace-only setup; original outcomes retained",
+      "source": "frozen-artifact",
+      "trace": "I3 + I4 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-09-record-settlement-origin-controls/README.md:1; tools/agent-bench/reports/summaries/2026-10-09-record-settlement-origin-controls/manifest.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Native formatted positive/chronology negative discriminate; public presentation stays open",
+      "source": "frozen-artifact",
+      "trace": "I3 + I4 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-09-reservation-public-display-controls/README.md:1; tools/agent-bench/reports/summaries/2026-10-09-reservation-public-display-controls/manifest.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Native textbox-room full workflow: actual PASS, original source/inputs/noModels retained",
+      "source": "frozen-artifact",
+      "trace": "I3 + I4 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-09-reservation-textbox-room-control/README.md:1; tools/agent-bench/reports/summaries/2026-10-09-reservation-textbox-room-control/manifest.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Observed I4/I8 source-volume baseline: complete large Git status/diff and full UTF8 digest; no synchronous1MiB cap",
+      "source": "acceptance",
+      "trace": "I4 + I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/plan-source-volume.fault.test.ts:53; tools/agent-bench/src/plan-source-volume.fault.test.ts:69; tools/agent-bench/src/plan.ts:79",
+      "note": ""
+    },
+    {
+      "row": "Observed I4/I8 source identity: failed/spawn/deadline producer cannot return a partial identity; declared deadline settles process group",
+      "source": "fault-matrix",
+      "trace": "I4 + I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/plan-source-volume.fault.test.ts:88; tools/agent-bench/src/plan-source-volume.fault.test.ts:107; tools/agent-bench/src/plan.ts:48",
+      "note": ""
+    },
+    {
+      "row": "Observed I4/I8 source identity: report header uses its resolved plan identity; old planning/series regressions remain discriminating",
+      "source": "acceptance",
+      "trace": "I4 + I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/runner.ts:46; tools/agent-bench/src/series.fault.test.ts:34",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

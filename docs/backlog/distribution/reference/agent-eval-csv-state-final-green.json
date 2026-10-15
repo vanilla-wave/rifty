@@ -1,0 +1,190 @@
+{
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "76b046b1a9ff9d0c6e2244dae4be22c80138561a",
+  "unit_goal_source": "PR #341 observed CSV saved-view correctness repair plus subsequently observed browser SIGINT ownership repair; BASE c8e43eabceec10ac8148f37bf88f82dacc6d81b0, clean reviewed HEAD 76b046b1a9ff9d0c6e2244dae4be22c80138561a. Raw authority docs/backlog/epics/agent-code-quality-evaluation/goal.md:87 I3/:103 I6/:116 I8/:124 I9, public tools/agent-bench/corpus/cases/csv-workflow-v4/prompt.md:1 (byte-identical BASE v3), ADR-0513 docs/adr/distribution/0513-observe-persisted-csv-records-through-public-export.md:11. Original accepted BLOCK retained in docs/backlog/distribution/reference/agent-eval-csv-saved-view-final-block-c8.json and raw agent-eval-csv-saved-view-observed.json.gz; Reception3 verification reads actual changed source/private criteria against BASE and actual executed artifacts. Unrelated earlier accepted work excluded (REV-1); this is the repair/control unit, not fresh96 campaign or whole-goal closure. Raw source proof52eb and clean own40 proof36739 carry identical production/test code to current HEAD; full current pnpm pr:check27/27PASS log /tmp/rifty-pr341-csv-state-retained-prcheck.log (unit191.9s/parity116.6s). Fresh reviewer commands: pnpm exec vitest run --project unit tools/agent-bench/src/csv-export.fault.test.ts tools/agent-bench/src/corpus-csv-state-version.test.ts tools/agent-bench/src/corpus-choice-version.test.ts ->7PASS; pnpm exec playwright test --config tools/agent-bench/playwright.config.ts series-interruption.spec.ts --grep 'SIGINT|SIGTERM' --workers=1 --reporter=json (local listen escalation) ->2PASS2.33s. First wrong root-config webServer fail and corrected sandbox listenEPERM failures preserved in /tmp/rifty-pr341-csv-final-review-signals{,-correct}.json as reviewer harness errors before START; no product failure, no source modification. Fresh physical/hash/archive inspection /tmp/rifty-pr341-csv-final-review-integrity.json. No real model calls, score changes, new UI demands or tracked edits by reviewer.",
+  "overall_verdict": "pass",
+  "merge_call": "PASS repair/control unit at76b046b1a9ff9d0c6e2244dae4be22c80138561a; original I3/I6 finding independently verified fixed and I8/I9 signal repair proven. Fresh96 eval-v3 and I10/I11 remain mandatory; goal open.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Accept the captured working application with draft-only editable fields and saved table records after reload.",
+      "source": "acceptance",
+      "trace": "I3 + I6 + csv-workflow-v4/prompt.md:1 + ADR-0513",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v4/judge.ts:63; docs/backlog/distribution/reference/agent-eval-csv-saved-state-native-red.json.gz → agent-eval-csv-saved-state-native-green.json.gz: captured-saved-table false→true, same authentic fixture SHA b9f32943245262dc31d28f4fd2f77ce57d648622671355903cdc7e0bb3d3fc60; current own40 captured-table passes all four origins.",
+      "note": ""
+    },
+    {
+      "row": "Re-import remains a draft until Save; both reloads prove the four corrected name/email records through required public Export.",
+      "source": "acceptance",
+      "trace": "I3 + I6 + csv-workflow-v4/prompt.md:1 + ADR-0513",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v4/judge.ts:99; docs/backlog/distribution/reference/agent-eval-csv-state-origin-proof.json.gz: captured-saved-table all4 origins returns all four exact pairs after both reloads; premature-import-commit all4 returns New/new@example.test and fails unsaved probe. Raw COI browser.zip!trace.trace:380/:391 and :576/:583 records both reloads then empty Filter.",
+      "note": ""
+    },
+    {
+      "row": "Record comparison preserves every row and multiplicity without requiring display order.",
+      "source": "acceptance",
+      "trace": "I6 + csv-workflow-v4/prompt.md:1 + ADR-0513",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/judge/context.ts:270; tools/agent-bench/src/csv-export.fault.test.ts:56; docs/backlog/distribution/reference/agent-eval-csv-state-origin-proof.json.gz: sorted table passes4, missing row fails4, duplicate export fails4. Fresh unit7 PASS /tmp/rifty-pr341-csv-final-review-unit.log; default ordered behavior retained.",
+      "note": ""
+    },
+    {
+      "row": "Reject actual lost persistence, prematurely committed import and missing/duplicate records.",
+      "source": "fault-matrix",
+      "trace": "I3 + I6 + csv-workflow-v4/prompt.md:1",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/csv-saved-state-controls.ts:45; docs/backlog/distribution/reference/agent-eval-csv-saved-state-native-green.json.gz: four functional negatives all FAIL/errors0; agent-eval-csv-state-origin-proof.json.gz: same16 own-origin functional negative runs fail their required probes.",
+      "note": ""
+    },
+    {
+      "row": "Changing either saved-record observation back to editable Email or imposing display order causes a real discriminating RED.",
+      "source": "frozen-artifact",
+      "trace": "I6 + ADR-0513",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-csv-state-reversions.json.gz: persisted-editor/unsaved-editor/display-order each exit1 and real captured/sorted-table false; restored implementation uses exports and multiset; current fresh codec7 PASS and current own40 judge source hash equals HEAD.",
+      "note": ""
+    },
+    {
+      "row": "Existing CSV parsing, validation, filtering, escaping, visible output and download alternatives remain functional.",
+      "source": "acceptance",
+      "trace": "I3 + I6 + csv-workflow-v4/prompt.md:1",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/csv-export-controls.ts:51; docs/backlog/distribution/reference/agent-eval-csv-state-inherited-controls.json.gz:14 real controls,8 positive PASS/6 negative FAIL/errors0, including headers/quoting/download, broken escaping/filter/duplicate/hidden output; new source change leaves default ordered callers unchanged.",
+      "note": ""
+    },
+    {
+      "row": "All four selected substrates exercise reference, download, captured-table and sorted-table controls; no native rescue of a browser fail.",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/csv-saved-state-origin-controls.ts:55; docs/backlog/distribution/reference/agent-eval-csv-state-origin-proof.json.gz:10 predeclared variants×4 origins=40 completed,16 positive PASS/24 negative FAIL/0 missing, all agentStatus not-run/noModelInvocation; originating COI/no-COI physical programs exercised.",
+      "note": ""
+    },
+    {
+      "row": "CSVv4/eval-v3 isolates corrected private criteria; frozen old cases, all eight public projects/prompts/locks/controls and other seven judges unchanged.",
+      "source": "frozen-artifact",
+      "trace": "I4 + I6 + I7 + ADR-0513",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-csv-state-version.test.ts:5; fresh current codec/version/choice7 PASS /tmp/rifty-pr341-csv-final-review-unit.log; git diff BASE..HEAD corpus confined to new csv-workflow-v4/eval-v3; /tmp/rifty-pr341-csv-final-review-integrity.json public CSV bytes equal BASE, oracle/private judge match.",
+      "note": ""
+    },
+    {
+      "row": "Control snapshots and retained source identity represent actual physical programs, not fabricated exported-code success.",
+      "source": "frozen-artifact",
+      "trace": "I3 + I4 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/csv-saved-state-origin-controls.ts:61; /tmp/rifty-pr341-csv-final-review-integrity.json independently recomputed40 physical before+patch/after pairs,40 no-model traces, current own40 plan combined judge hash437e58e298ef391c61815cbb3d9fedbc0108e67e70ce235502bf3247f4a2e316 equals HEAD; raw clean source36739 code-identical to reviewed HEAD.",
+      "note": ""
+    },
+    {
+      "row": "Real SIGINT interruption reaches runner-owned persistence before browser teardown exits; SIGTERM behavior preserved.",
+      "source": "fault-matrix",
+      "trace": "I8 + I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/runner.ts:100; tools/agent-bench/tests/series-interruption.spec.ts:69; docs/backlog/distribution/reference/agent-eval-browser-signal-proof.json.gz real baseline/reversion SIGINT exit130/running, SIGTERM baseline PASS, restored2PASS. Fresh reviewed-HEAD actual signal2PASS2.33s: /tmp/rifty-pr341-csv-final-review-signals-unsandboxed.json + signal-observed.json, both exit0/interrupted/planned2/0 premature results.",
+      "note": ""
+    },
+    {
+      "row": "Completed records, unfinished selected trials, trace cleanup failures and fresh next series remain inspectable.",
+      "source": "acceptance",
+      "trace": "I8 + I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/series-interruption.spec.ts:90; docs/backlog/distribution/reference/agent-eval-csv-state-final-source-proof.json.gz interruptionSuiteReport5/5PASS38.3s: both signals, completed interruption→offline regeneration→fresh root, trace cleanup failure retains completed result, selected unsupported no-COI remains failed; current source/code byte-identical to52eb proof.",
+      "note": ""
+    },
+    {
+      "row": "Existing eval-v2 failed/interrupted outcomes remain immutable history rather than rescore, resume or overwrite.",
+      "source": "frozen-artifact",
+      "trace": "I3 + I4 + I7 + I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-06-eval-v2-saved-view-interrupted/report.json.gz; docs/backlog/distribution/reference/agent-eval-v2-saved-view-interrupted-proof.json.gz:54/96 retained28PASS26FAIL42missing, original terminal130/header running preserved and explained. /tmp/rifty-pr341-csv-final-review-integrity.json: original report equals archive,356 raw hashes,202 inline JSON and6 original large-trace bytes independently match.",
+      "note": ""
+    },
+    {
+      "row": "Initial own-control ENOSPC retains selected failed/unfinished work; later controls use a separate fresh root.",
+      "source": "frozen-artifact",
+      "trace": "I3 + I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-csv-state-storage-failed-proof.json.gz: first40 selected/8 retained/32missing, runnerExit1+ENOSPC and baseline/partial reports retained separately; current40 at fresh vJHoY4 completed, no resume or overwritten results.",
+      "note": ""
+    },
+    {
+      "row": "Offline control regeneration preserves authoritative records and identical derived views.",
+      "source": "acceptance",
+      "trace": "I4 + I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-06-csv-state-final-captured-saved-table/report.json.gz; docs/backlog/distribution/reference/agent-eval-csv-state-origin-proof.json.gz:10series×2regenerations,30authoritative files unchanged each; /tmp/rifty-pr341-csv-final-review-integrity.json verifies320raw/derived hashes,170 bundled JSON equal raw and320 inventory entries.",
+      "note": ""
+    },
+    {
+      "row": "Cleanup preserves source, locks and required artifacts while removing only completed own no-model generated dependencies/caches.",
+      "source": "frozen-artifact",
+      "trace": "I4 + I8 + I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-current-control-completed-dependency-cleanup.json.gz finalCompletedCleanup:10completed, quality/model/user workspaces excluded, dependencies absent explicit; /tmp/rifty-pr341-csv-final-review-integrity.json independently verifies1250preserved SHA256 entries, own40/browser/screens/logs/raw archives retained.",
+      "note": ""
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1/I2/I3/I4/I5/I6/I7/I8/I9 — frozen fresh full expanded comparison",
+      "location": "docs/backlog/distribution/agent-eval-expanded-comparison.md:29",
+      "summary": "After accepted repair/control Final, freeze clean eval-v3/source/config/selection identity and execute NEW complete96 selected8cases×4origins×3freshrepeats; retain all failures and repeated offline regeneration. Controls, old interrupted54/96 and replay/rescore cannot replace it."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Mandatory evidence-backed actual operation/tool/API/policy difference catalog remains; this repair/control verification does not close it."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Mandatory executed finite substantive escalation and frozen fresh repeated boundary confirmation with working controls remain; comparison/control passes alone cannot close it."
+    }
+  ],
+  "goal_complete": false
+}

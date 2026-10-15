@@ -1,0 +1,209 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK unit: repair complete participant-set ownership (B3), add genuine BASE/RED/GREEN and independent Final; full goal remains open.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "87a25e8486c78746543c95fc880c472557fb167d",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-inline-editing-judging.md against BASE 5acb79d1d8359f1d340d1072352c2242ab050ba8; accepted docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance1/2 \u2192 I3/I6; Reference contract open layout; ADR-0518 native ownership; BASE-v4 participant selection",
+      "location": "tools/agent-bench/src/judge/context.ts:108",
+      "summary": "Fix B3: complete participant set independent of form.id or partial nearest subtree; same-form and non-form BASE regressions need permanent RED/GREEN, sibling sweep and fresh independent Final."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I3/I5/I6/I7 expanded comparison",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:95",
+      "summary": "Fresh accepted full96 own-environment comparison after corrected criteria; interrupted82 remains immutable/unaccepted history."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Actual operation catalog, directed probes, evidence-backed recovery/impact remain required."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Finite substantive escalation/control32 and frozen fresh48 confirmation remain required; no closure from controls/current94."
+    },
+    {
+      "clause": "End-to-end invariant proof / CLOSE",
+      "location": "docs/backlog/distribution/agent-eval-inline-editing-judging.md:112",
+      "summary": "Whole-goal audit and historical-contract retirement proof remain; this source unit cannot close epic."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "room Name/Capacity edit/read: creation+edit purposes collide",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:9; tools/agent-bench/tests/inline-editing-controls.ts:17",
+      "note": ""
+    },
+    {
+      "row": "creation while editing visible: first/edit field silently selected",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:27",
+      "note": ""
+    },
+    {
+      "row": "reservation picker/date/time/seats: same row/form context assumption",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:38; tools/agent-bench/corpus/cases/booking-workflow-v5/judge.ts:111",
+      "note": ""
+    },
+    {
+      "row": "repeated action/edit/read: stale or wrong row context",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:77; tools/agent-bench/corpus/cases/booking-workflow-v5/judge.ts:135",
+      "note": ""
+    },
+    {
+      "row": "participant toggle native form: external button native owner omitted",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:101",
+      "note": "External button repair and actual2RED/exact94GREEN verified. Executed B3 shows native form owner still ignored without id, partial group silently selected; base-single-group.log."
+    },
+    {
+      "row": "participant state/identity: pressed filter discards intended editor",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:116; tools/agent-bench/corpus/cases/expense-settlement-v5/judge.ts:81",
+      "note": ""
+    },
+    {
+      "row": "participant representation: global branch hides intended toggle/checkbox",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:161",
+      "note": "Same6 actual3RED/current94GREEN, three guard reversions verified. Executed B3: nearest nonempty ancestor truncates multi-person owned set; single-editor BASE regression survives current carriers."
+    },
+    {
+      "row": "version/report: changed criteria rescored as old",
+      "source": "fault-matrix",
+      "trace": "I8/I9",
+      "status": "pass",
+      "citation": "/tmp/rifty-pr341-action-context-final-review-r2/historical-preservation.json:1; tools/agent-bench/reports/summaries/2026-10-07-participant-group-origin-controls/summary.md:7",
+      "note": ""
+    },
+    {
+      "row": "Actual baseline/RED before code; one honest action-context owner, class sweep",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "weak",
+      "citation": "tools/agent-bench/src/judge/context.ts:102; tools/agent-bench/tests/inline-editing-controls.ts:10",
+      "note": "Real native/pinned Vue/Svelte baseline, genuine pre-code RED and original class guards verified. B3 proves root group projection still assumes first nonempty subtree represents complete set."
+    },
+    {
+      "row": "Existing reference and concurrent-editor alternatives pass, wrong-target controls fail, guards revert RED/exact restore GREEN",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/inline-editing-controls.ts:44; docs/backlog/distribution/reference/agent-eval-participant-group-proof.json.gz:1",
+      "note": "Current real4/source40 and exact94GREEN guard restoration verified. Actual BASE working single-editor layout now leaves Cara unchecked; required existing-working-alternative preservation violated (B3)."
+    },
+    {
+      "row": "All4 own-origin source controls retain failures and source/host proof separately",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context-origin-controls.ts:76; /tmp/rifty-pr341-action-context-final-review-r2/artifact-verification.json:1",
+      "note": ""
+    },
+    {
+      "row": "Public inputs/control payloads and original outcomes unchanged; criteria versions/all resolved hashes explicit",
+      "source": "acceptance",
+      "trace": "I8/I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/eval-v8.json:1; /tmp/rifty-pr341-action-context-final-review-r2/artifact-verification.json:1",
+      "note": ""
+    },
+    {
+      "row": "Full source gate and fresh independent Final before new full96",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "/tmp/rifty-pr341-participant-group-prcheck-final.log:1; docs/backlog/distribution/reference/agent-eval-participant-group-prcheck-green.log.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Versioned booking/expense-v5 public and frozen controls preserve v4; changed oracle fingerprints identify new criteria",
+      "source": "frozen-artifact",
+      "trace": "I6+I8+ADR-0518",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/booking-workflow-v5/card.json:1; tools/agent-bench/corpus/cases/expense-settlement-v5/card.json:1; /tmp/rifty-pr341-action-context-final-review-r2/artifact-verification.json:1",
+      "note": ""
+    },
+    {
+      "row": "Shared scalar/group action-context projection preserves native ownership and open DOM/layout",
+      "source": "public-api",
+      "trace": "I3+I6+ADR-0518",
+      "status": "weak",
+      "citation": "tools/agent-bench/src/judge/context.ts:146",
+      "note": "Scalar singleton/native role baseline preserved. Actual group API loses same-form and non-form members through first nonempty ancestor; executed B3."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/src/judge/context.ts:140",
+          "summary": "Participant group projection silently truncates a valid editor to the first nonempty ancestor; native ownership additionally requires form.id.",
+          "authority": "I6: trusted checks accept working alternatives; expense public prompt lines21\u201326 standard checkbox/selection/toggle choices and open DOM/layout; unit Reference contract lines29\u201332 preserves public layout freedom; Acceptance1/2 \u2192 I3/I6; ADR-0518 lines16\u201323 native form ownership and no DOM tag/class protocol; named BASE5acb79d expense-v4 participant behavior.",
+          "evidence": "Executed pnpm exec tsx /tmp/rifty-pr341-action-context-final-review-r2/base-single-group.mts and base-section-group.mts, each actualexit1; raw corresponding .log. One valid native form (without id), or one section: nested div contains Ada checkbox+Add expense action; Cara checkbox is sibling outside div, same intended editor. Exact BASE-v4 full helper scratch copy (only export/import relocation) selects Ada/Cara [true,true]; actual current-v5 participants selects [true,false]. Independent direct native interaction selects both. Additional idless-native-group.mts actualexit1/native.log: two forms preserve edit draft; same markup with ids selects [true,true,false,false], without ids [true,false,false,false], actual native .form equality true for both creation inputs. Fault class lossy aggregate/frozen assumption: formId gates native owner at108\u2013115; group count>0 at140 returns partial set, caller silently skips absent Cara at101\u2013108. Missing RED: split multi-person group in idless native form and open non-form editor. Sweep checkbox/toggle/multi-select group consumers, scalar/group shared owner and expense mirror; repair complete intended set without adding id/tag/wrapper/visibility protocol. Source remains clean87a25 throughout. Existing current94/real4 and raw class guards were genuine but do not discriminate this BASE regression."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "blocker",
+      "findings": []
+    }
+  ]
+}

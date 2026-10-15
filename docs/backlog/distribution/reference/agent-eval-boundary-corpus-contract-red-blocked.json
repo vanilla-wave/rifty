@@ -1,0 +1,182 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK Contract+RED: усилить RED новых semantic требований; source implementation/model calls пока не допускать. Whole PR341/goal остаются открыты. Verdict/raw evidence: .cache/pr341/boundary-corpus-contract-red-r1/; validator exit1 (valid BLOCK).",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "edf83dc2e5e9e00e4c0a4c797bfad1a76e7b396e",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-boundary-corpus.md @ edf83dc2e5e9e00e4c0a4c797bfad1a76e7b396e; BASE 0ef6bf08c706a2b37ce316e46c03bf493b14380c (accepted historical reader source; 9cc189ddf docs-only acceptance descendant); goal docs/backlog/epics/agent-code-quality-evaluation/goal.md scenario8/I6/I11",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance 1/2/3/4 + omission grading → I6+I11; RDY-8 semantic RED",
+      "location": "tools/agent-bench/src/corpus-boundary.test.ts:5",
+      "summary": "Before implementation, prepare executed discriminating REDs for the exact new public engineering/compiler/resource requirements; current schema RED and generic native controls accept unchanged relabelled pilot. Actual reference measurements may follow real working controls; no invented pickup bounds required."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I1/I2/I3/I4/I7/I8/I9 expanded own-environment comparison",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:3",
+      "summary": "Fresh frozen96 remains external active work; retain failures/uncertainty/evidence and verify offline regeneration/independent comparison Final. This reviewer did not touch or accept that campaign."
+    },
+    {
+      "clause": "I6/I11 new boundary source admission",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:4",
+      "summary": "After discriminating RED, author substantive pinned cases/public cards/judges/real alternatives, run actual four-origin references, measure defensible finite bounds and independent source Final before diagnostic calls."
+    },
+    {
+      "clause": "I10 evidence-backed operation difference catalog",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Actual operation/args/versions/host/source records, recovery and measured/unknown impact across native and both public Rifty hosts remain."
+    },
+    {
+      "clause": "I11 executed finite escalation/frozen fresh confirmation",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Execute substantive multiple-family search with declared matched settings, evidence-backed stopping/escalation, fresh repeated selected-step confirmations/reference controls, separate diagnostic provenance and honest shared/unknown/lower-bound interpretation."
+    },
+    {
+      "clause": "I4/I8 retained authority/evidence inspectability + whole goal CLOSE",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:11",
+      "summary": "Global completed-contract retirement audit, combined full PR gate, linked independent reviews and end-to-end accepted-invariant audit/CLOSE remain; historical reader source acceptance alone does not complete these."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: two substantive higher levels in four families; public exact requirements/deltas/provenance, same locked input",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "weak",
+      "citation": "tools/agent-bench/src/corpus-boundary.test.ts:5",
+      "note": "Executed label-only pilot mutant passes exact admission assertions (admission-mutant.log exit0; real loader and unchanged pilot task code). Carrier checks labels/counts, not this declared substantive behavior; see Completeness finding."
+    },
+    {
+      "row": "Acceptance 2: working reference/alternatives pass; unmet baseline/partials fail new requirements; four-origin evidence retained",
+      "source": "acceptance",
+      "trace": "I3+I6+I11",
+      "status": "missing",
+      "citation": "tools/agent-bench/tests/boundary-corpus-controls.ts:31",
+      "note": "New-requirement discrimination has no carrier: relabelled pilot exact native judges satisfy all 32 expected control outcomes while every new boundary scenario is absent (mutant-native-controls.log/json). See Completeness finding."
+    },
+    {
+      "row": "Acceptance 3: linked atomic imports/reference guards/credits/currency/durable undo; async stale-reply/rollback/retry interactions via public APIs",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "weak",
+      "citation": "tools/agent-bench/src/corpus-boundary.test.ts:14",
+      "note": "Executed label-only pilot mutant passes exact admission assertions (admission-mutant.log exit0; real loader and unchanged pilot task code). Carrier checks labels/counts, not this declared substantive behavior; see Completeness finding."
+    },
+    {
+      "row": "Acceptance 4: actual pinned compiler browser integration and visible indexed-resource navigation/exact outputs/measurements",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "weak",
+      "citation": "tools/agent-bench/src/corpus-boundary.test.ts:16",
+      "note": "Executed label-only pilot mutant passes exact admission assertions (admission-mutant.log exit0; real loader and unchanged pilot task code). Carrier checks labels/counts, not this declared substantive behavior; see Completeness finding."
+    },
+    {
+      "row": "Acceptance 5: reference-grounded bounded questions and finite bounds before exploration; freeze/review criteria before model calls; escalate easy saturation",
+      "source": "acceptance",
+      "trace": "I7+I8+I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-boundary-corpus.md:47",
+      "note": "Contract explicitly makes future working-control measurements acceptance targets, not pickup observations; no paid exploration/source implementation yet. Premise correction and independent source Final barrier retained. No demand for fabricated pickup timings."
+    },
+    {
+      "row": "Parity 1: real task code/common requirements in each origin; captured actual versions, no fake runtime/compiler",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-corpus-controls.ts:13",
+      "note": "Common four-origin runner route and real controls are promised; current RED fails on missing new suite, not missing external imports. Actual reference GREEN remains implementation evidence, not claimed here."
+    },
+    {
+      "row": "Parity 2: real alternative accepted through public interfaces/workflow effects, no hidden structure",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-corpus-controls.ts:38",
+      "note": "Alternative control is required in the real loader/control route. Exact new-requirement discrimination deficiency is covered separately in Acceptance2/fault omission; no hypothetical UI adapter requirement imposed."
+    },
+    {
+      "row": "Fault: source/config/control drift at admission rejects mismatched identity and freezes exact bytes",
+      "source": "fault-matrix",
+      "trace": "I6+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-validation.fault.test.ts:42",
+      "note": "Existing loader input/lock/prompt/judge hashes/card checks and experiment fingerprints reused; mutant used consistent genuine bytes/hashes and demonstrates semantic admission gap, not identity drift. Independently executed isolated corpus-validation.fault.test.ts:9/9 PASS (existing-corpus-faults.log exit0)."
+    },
+    {
+      "row": "Fault: implementation omission fails exact grading requirements for baseline/plausible partial",
+      "source": "fault-matrix",
+      "trace": "I6+I11",
+      "status": "missing",
+      "citation": "tools/agent-bench/tests/boundary-corpus-controls.ts:35",
+      "note": "New-requirement discrimination has no carrier: relabelled pilot exact native judges satisfy all 32 expected control outcomes while every new boundary scenario is absent (mutant-native-controls.log/json). See Completeness finding."
+    },
+    {
+      "row": "Fault: setup/unsupported/browser/resource control failure retained in its originating environment with unknown attribution",
+      "source": "fault-matrix",
+      "trace": "I3+I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-corpus-controls.ts:24",
+      "note": "All four selected lanes retained via existing runner reports; only native expected truth table asserts success. This promise permits honest browser failure and does not require native rescue."
+    },
+    {
+      "row": "Fault: unjustified stopping cannot claim boundary by labels/counts; measured upper-question evidence required",
+      "source": "fault-matrix",
+      "trace": "I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-boundary-corpus.md:68",
+      "note": "Independent premise explicitly corrected count-based stopping; ready contract requires measured record before exploration and prevents this source slice from claiming goal closure. Actual bounds remain future reference-grounded targets."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/src/corpus-boundary.test.ts:5",
+          "evidence": "Actual RED: node /Users/vanilla-wave/.t3/worktrees/rifty/t3code-6ef08c2c/node_modules/vitest/vitest.mjs run --project unit tools/agent-bench/src/corpus-boundary.test.ts -> exit1, ENOENT boundary-v1.json; node --import tsx tools/agent-bench/tests/boundary-corpus-controls.ts -> exit1, same ENOENT (admission-red.log, controls-red.log). Executed REV-5 class4 mutant: node /Users/vanilla-wave/.t3/worktrees/rifty/t3code-6ef08c2c/node_modules/vitest/vitest.mjs run --config .cache/pr341/boundary-corpus-contract-red-r1/vitest-mutant.config.ts -> exit0, 1/1 PASS (admission-mutant.log). Same assertions, real unmodified loadCorpus; only import/root point to reviewer scratch. Eight unchanged pilot-v4/ms-negative projects/prompts/controls renamed to four declared families and two IDs each, judge marker adjusted/rehashed. No linked import, async-state, compiler or indexed-resource scenario exists. Actual native judges give reference/alternative16 true, baseline/partial16 false, 32/32 expected truth table (mutant-native-controls.log/json). No browser/services/model calls or installs; whole four-origin controls mutant NOT run.",
+          "summary": "Новый RED принимает переименованный pilot без новых boundary-сценариев; generic control truth-table не доказывает discrimination новых требований.",
+          "authority": "RDY-8; I6 trusted checks reject unmet tasks and plausible incomplete solutions; I11 substantive escalation beyond pilot; Acceptance 1/2/3/4 → I6+I11"
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

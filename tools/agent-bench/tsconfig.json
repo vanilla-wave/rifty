@@ -1,5 +1,14 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "rootDir": "../..", "noEmit": true },
-  "include": ["src/**/*", "tasks/**/*", "tests/**/*", "playwright.config.ts"]
+  "compilerOptions": {
+    "rootDir": "../..",
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*",
+    "tasks/**/*",
+    "tests/**/*",
+    "playwright.config.ts",
+    "corpus/cases/**/judge.ts"
+  ]
 }

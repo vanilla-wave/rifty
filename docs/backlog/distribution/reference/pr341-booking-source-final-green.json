@@ -1,0 +1,164 @@
+{
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR341 frozen current source/data delivery unit: HEAD3d89b034089515bbe3b8b5e37f3b17b694ff7721 against BASEf71b93fd1588dc2c13d3dad72d4b4d22c92e8df9; /tmp/pr341/handoff-pr341-rework.md items4-6, unchanged public booking promises and accepted native booking0/3 defect baseline; docs/backlog/distribution/reference/agent-eval-pr341-booking-native-repair.md. Independent3b0cf source/native/goldens PASS reused only after own exact source/test/criteria/public byte check; accepted round1 mixed regression repaired and reexecuted. Only subsequent delivery/doc packaging changed. Named delivery baseline: publishable same GitHubPR341 originals with every v17 identity retained. Prior accepted expense/source outside boundary. Written native-confirmation/import captures remain byte-identical. Fresh full96v18 stays required goal continuation, no I1-I11 closure.",
+  "reviewed_sha": "3d89b034089515bbe3b8b5e37f3b17b694ff7721",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Foreign native form excluded from room creation; field.form association wins",
+      "source": "fault-matrix",
+      "trace": "public booking prompt.md:20-22 named Room/Reservation controls",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/booking-native-ownership-controls.ts:11",
+      "note": "Own current real Chromium26 production controls PASS; unchanged source/preparation and previous independent baseline/RED receipts verified. /tmp/pr341/booking-storage-review-controls.log, booking-storage-review-evidence-proof.json."
+    },
+    {
+      "row": "Readonly combined/separate time slots, wrong seats, duplicates, hidden/editable rows discriminate",
+      "source": "fault-matrix",
+      "trace": "public booking prompt.md:15-18 readable room/date/start/end/seats",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/booking-native-ownership-controls.ts:69",
+      "note": "Own current real Chromium26 production controls PASS; unchanged source/preparation and previous independent baseline/RED receipts verified. /tmp/pr341/booking-storage-review-controls.log, booking-storage-review-evidence-proof.json."
+    },
+    {
+      "row": "Missing original Date cannot be borrowed from another row with incomplete peer inventory",
+      "source": "fault-matrix",
+      "trace": "public booking prompt.md:12 +18 invalid edit preserves prior records; observable restore baseline",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/booking-native-ownership-controls.ts:86",
+      "note": "Own current real Chromium26 production controls PASS; unchanged source/preparation and previous independent baseline/RED receipts verified. /tmp/pr341/booking-storage-review-controls.log, booking-storage-review-evidence-proof.json."
+    },
+    {
+      "row": "New editor cancellation cannot rebind captured row edit locator; literal Cancel entity remains data",
+      "source": "fault-matrix",
+      "trace": "public booking prompt.md:21-23 named row edit; native3 baseline",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/booking-native-ownership-controls.ts:123",
+      "note": "Own current real Chromium26 production controls PASS; unchanged source/preparation and previous independent baseline/RED receipts verified. /tmp/pr341/booking-storage-review-controls.log, booking-storage-review-evidence-proof.json."
+    },
+    {
+      "row": "Equivalent form aliases and explicit commit semantics remain",
+      "source": "fault-matrix",
+      "trace": "Named baseline workflowAction caption/scope equivalence",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/booking-native-ownership-controls.ts:44",
+      "note": "Own current real Chromium26 production controls PASS; unchanged source/preparation and previous independent baseline/RED receipts verified. /tmp/pr341/booking-storage-review-controls.log, booking-storage-review-evidence-proof.json."
+    },
+    {
+      "row": "Public project/prompt/lock/control bytes and prior scoring history unchanged",
+      "source": "fault-matrix",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md:4-6 frozen execution",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-14-eval-v17-corrected/manifest.json.gz:1",
+      "note": "Own whole diff to independent3b0cf admits carrier/docs/CHANGELOG only: every source/test/criteria/public/config object byte-identical. Original v10/v11 public inputs and other7 case objects equal; plan96 order preserved. All39round2 raw receipt entries+6source snapshots and71earlier raw receipts checked. /tmp/pr341/booking-storage-review-packaging-proof.json, booking-storage-review-archive-proof.json, booking-storage-review-evidence-proof.json."
+    },
+    {
+      "row": "Full96 completed v17 records, trial order, execution config/transport retained; class/note only mutation",
+      "source": "acceptance",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md item4 fresh complete evaluation and classified rows",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-14-eval-v17-corrected/source-traces/report-before-classification.json.gz:1",
+      "note": "Own archive sweep validates all317 originalJSON and185 originalbinary size/SHA, original producer completed96/header/trial order. OnlyfailureClass/note differs:57PASS39FAIL. No source/outcome mutation. All3new attachments retain original seals through21ordered32MiB parts. /tmp/pr341/booking-storage-review-archive-proof.json, booking-storage-review-packaging-proof.json."
+    },
+    {
+      "row": "Classification facts and counters sourced from raw traces, code, original browser events and diagnostic executions",
+      "source": "acceptance",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md items4-5 evidence-based conclusions",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-14-eval-v17-corrected/source-traces/repair-diagnostics.json.gz:1",
+      "note": "Own rawtrace argument/count recomputation:Pi321single274parallel0empty/0malformed, native24UNKNOWN. Original39 failures retain agent7/UX6/runtime4/task-bad4/unisolated18. Unchanged genuine earlier independent source diagnostic raw receipts verified, including notes defaultDeleteFAIL vs exact accepted confirmPASS and written import capture byte equality; no inferred cause/source repair. /tmp/pr341/booking-storage-review-archive-proof.json, booking-storage-review-evidence-proof.json."
+    },
+    {
+      "row": "Immutable original and correctedv16; two offline report regenerations preserve all current canonical bytes",
+      "source": "frozen-artifact",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md items4-5 old immutable reports",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-pr341-v17-offline-proof.json.gz:1",
+      "note": "Own all1411 BASE tracked summaries actualGitblob bytes intact. Original249 hashes rechecked against independent3b0cf backup;245 unchanged currentfiles exact,3originalZIP seals exact, manifest only representation changed. Two own fresh realreportCLI offline runs each267canonical files byte-identical. Initial local CLI blocked by sandboxIPC, rerun via authorized escalation bothGREEN. /tmp/pr341/booking-storage-review-archive-proof.json, booking-storage-review-packaging-proof.json, booking-storage-review-offline-proof.json; raw offline-actual.log."
+    },
+    {
+      "row": "Native1/2/3 actual-source and original golden reference/alternative PASS, partial FAIL under unchanged public predicates",
+      "source": "acceptance",
+      "trace": "/tmp/pr341/handoff-pr341-rework.md item6 conditional booking0/3 repair; unchanged public booking promises",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-pr341-booking-source-proof.json.gz:1",
+      "note": "Genuine independent frozen3b0cf Vite/Chromium native1/2/3 and publicreference/alternative each40/40PASS reused after whole current source/criteria/test byte equality and own39raw diagnostic receipts+6snapshots check; all5diagnostic verdict/probe sets individually verified. Original partialFAIL retained,71earlier source receipt entries verified.9original sourceZIPs reconstructed from41parts seals. No new model attempt, regrade or200 redundant probes. /tmp/pr341/booking-storage-review-packaging-proof.json, booking-storage-review-evidence-proof.json."
+    },
+    {
+      "row": "Existing readonly non-native output remains observable alongside native tables",
+      "source": "acceptance",
+      "trace": "Named baseline reservationDisplay + public booking prompt.md:15-18,24-25 open Layout/DOM",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/booking-native-ownership-controls.ts:120",
+      "note": "Own current original card-only and native-table/card mixed probe both baseline/current count1. Real production26controls and7hostile native-slot/mixed/grouped/duplicate/missing-key probesPASS. Round1 accepted defect has permanentRED/unchanged expectation and preserved exactsource/verdict. /tmp/pr341/booking-storage-review-mixed.log, booking-storage-review-controls.log, booking-storage-review-hostile.log."
+    },
+    {
+      "row": "Original v17 browser archive can be published in the same PR without losing original byte identity",
+      "source": "frozen-artifact",
+      "trace": "Named PR341 delivery baseline + handoff item4 retained original completed recording; driver-confirmed delivery obligation",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-14-eval-v17-corrected/manifest.json.gz:1",
+      "note": "Resolved deliveryBLOCK: own3original v17ZIP reconstruction21ordered32MiBparts matches original222179665/214647952/207716736byte seals. Newmanifest agrees with retained oldmanifest except3attachment representations; source317/binary185/report/scores immutable. All534reachable added Gitobjects <=100MiB, published1411Gitbytes intact; source9ZIP41parts exact. Own current unchanged summaries-policy1296PASS51.40s; original OSheader0xffRED retained, current0x03 no test edits. Two own offline267files each exact. /tmp/pr341/booking-storage-review-packaging-proof.json, booking-storage-review-policy.log, booking-storage-review-offline-proof.json."
+    },
+    {
+      "row": "Written native-confirmation and import-setup observations retain genuine raw evidence, original outcomes and unresolved scope",
+      "source": "acceptance",
+      "trace": "Handoff items4-5 evidence-based classification/conclusions + named previously independently reviewed PR341 written observation baseline",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/native-confirmation-observation.md:17",
+      "note": "Both written captures byte-identical to independent3b0cf. Own stored native notes diagnostic receipts verify actual defaultDeleteFAIL versus exact-confirm accepted fullPASS; six importUX rows reverified90s,0tools/tokens. No new dialog/notification promise, source repair or frozen campaign rescore. /tmp/pr341/booking-storage-review-evidence-proof.json, booking-storage-review-archive-proof.json; docs/backlog/playground/workspace-import-success-observation-timeout.md:42."
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "Handoff items4-6 fresh full comparison after source acceptance",
+      "location": "tools/agent-bench/corpus/eval-v18.json:1",
+      "summary": "Required fresh full8\u00d74\u00d73=96 eval-v18 after accepted publishable source, classification/offline evidence and current-reference conclusions. Diagnostics do not substitute model campaign acceptance; no legacy I1-I11 closure or old rescore."
+    }
+  ],
+  "goal_complete": false,
+  "overall_verdict": "pass",
+  "merge_call": "PASS source/data delivery unit at3d89b034089515bbe3b8b5e37f3b17b694ff7721: prior accepted deliveryBLOCK resolved with exact originals/ordered parts and current policy+offline GREEN. Continue required fresh full96eval-v18; goal incomplete, no merge or goal-closure recommendation."
+}

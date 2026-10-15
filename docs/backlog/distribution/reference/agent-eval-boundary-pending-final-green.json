@@ -1,0 +1,158 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS pending-state source readmission only:11/11 rows,8 axes,0 findings/unit residuals;56 actual controls/current27 gate. Continue I10/I11/CLOSE; no whole-goal merge/closure.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "901cef3cb9b76026c1567b7a852094adad2e3768",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-boundary-corpus.md @901cef3cb9b76026c1567b7a852094adad2e3768; BASE 9483daa5d73a115a71e0d7b217c1224b49261f52 accepted state-collection source Final. Goal docs/backlog/epics/agent-code-quality-evaluation/goal.md I3/I6/I7/I8/I11/scenario8. Fresh independent read-only observed pending-state repair Final+GREEN. Raw public contract, whole current unit diff, real baseline/RED, own bounded semantic executions/physical56/canonical/offline evidence/current27gate/clean tree reviewed. Frozen-assumption boundary: published state\u2192hiddenboolean carrier. Unchanged accepted CSV/compiler/resource/upper-bound proof reused REV1; separately checked route premise not re-adjudicated. Original source234 control bytes remain immutable, whole actual program AST identity independently establishes formatted901 equivalence. No new public promise, source rebinding or rescoring.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I10 operation difference catalog",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Required operation difference catalog remains; recovered/unknown originating effects and installed-graph differences stay explicit."
+    },
+    {
+      "clause": "I11 finite search/escalation/fresh confirmation",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Required separate fresh study after source readmission, substantive escalation, justified per-path stopping and frozen fresh repeated model+reference confirmation. Historical8 v3 records remain unrescored, source controls cannot close I11."
+    },
+    {
+      "clause": "Whole goal CLOSE",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:3",
+      "summary": "Linked diagnostics/end-to-end invariant audit/CLOSE remain; source readmission only, goal incomplete."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: eight versioned cases/two substantive levels/four families, public APIs/deltas/provenance/regression duties and shared supplied locked project",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/boundary-v1.json:1",
+      "note": "Independent287 casefile audit:283 byte-exact vs BASE; only2async card/private pairs change. Public prompts, original starter/project/lock/controls, six other families/levels unchanged. Current2 formatted private hashes/card criterion module-pending9 exact."
+    },
+    {
+      "row": "Acceptance2: native working references/alternatives accepted; baseline/plausible partials rejected; four originating environments retain failures",
+      "source": "acceptance",
+      "trace": "I3+I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-pending-origin-controls.ts:11",
+      "note": "Independent actual normal32:16 reference/alternative PASS,16 baseline/partial FAIL; derived24:8 valid count-idle PASS,16 busy/missing FAIL, all four origins. All56 physical before+actual effective patch=after exact;0 setup,0 model calls, starter build/boot PASS. Original56 headers/source234 preserved; independent whole-program AST identity to formatted current source proves only layout changed."
+    },
+    {
+      "row": "Acceptance3: linked atomic imports/guards/integer currency/credits/durable undo and async navigation/stale replies/optimistic rollback/retry via public APIs",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/async-search-2/judge.mjs:91",
+      "note": "Pending normalized to activity only; full query/items/total/selection rollback projection retained. Own48 real full private/public Node workflows discriminate boolean/count and busy/missing/invalid status; own8 captured-model replays preserve3FAIL1PASS and expose actual rollback/retry failures. Inherited linked/CSV bodies and duties byte-exact; prior accepted proof reused REV1."
+    },
+    {
+      "row": "Acceptance4: actual TS5.9.2/esbuild-wasm0.28.0 browser compilation; responsive visible indexing and exact filter/sort/page/export/measurements",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/indexed-data-1/judge.ts:69",
+      "note": "Both compiler/resource case directories, pinned package inputs, actual browser/common app branches unchanged vs accepted BASE. Accepted real compiler/resource/pressure proof reused REV1; no changed dependency or new defect evidence. Current full27 gate GREEN."
+    },
+    {
+      "row": "Acceptance5: measured bounded questions/meaningful upper steps/finite resource and campaign bounds, frozen criteria/provenance before models, easy saturation escalates",
+      "source": "acceptance",
+      "trace": "I7+I8+I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-premise-check.md:38",
+      "note": "Accepted measured upper steps and finite bounds unchanged. Source criterion9/hash identities frozen; no new model calls before independent source Final. Original800fa v3 stopped24/8 retained5PASS3FAIL16unstarted, two4trial series terminal. Separate subsequent fresh study/confirmation required; no controls-as-ceiling, source rebinding, combined completed32 or whole-goal closure."
+    },
+    {
+      "row": "Parity1: common real requirements/oracles in originating runtimes; actual versions, no mocked runtime/VFS/Workers/compiler",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-pending-origin-controls.ts:61",
+      "note": "All56 actual originating private semantic programs/starter build/boot executed;24PASS32FAIL,0 setup. Independent physical patches and not-run/0 toolcalls, real runner control branch verified; actual Node/browser versions/header preserved. Independent189 originalJSON/bundle bytes/hash/data exact; own10 isolated offline regenerations all five views byte-exact."
+    },
+    {
+      "row": "Parity2: independently implemented working alternatives satisfy published API/workflow, no private internal/DOM structure",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-pending-state-controls.ts:27",
+      "note": "Public prompt exposes pending with transient layout free, no boolean return-type promise. Unchanged real reference projected to numeric pending state passes full published query/navigation/selection/JSON/rollback workflows, old strictfalse private/public RED; current boolean/count GREEN. Independent alternatives pass all4 origins; inherited selection Set/iterable and ordered rows controls40 GREEN."
+    },
+    {
+      "row": "Fault: source/config/control drift admission rejects mismatched identity/freezes bytes",
+      "source": "fault-matrix",
+      "trace": "I6+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus.ts:95",
+      "note": "Current2 private hashes/card criterion9/manifest independently verified. Original task/project/prompt/lock/control/source headers immutable; first source234 control programs whole-AST identical to formatted901. Independent307 prior rawproof receipts+43 current receipts exact; current189 originalJSON+bundle hashes/data/report headers exact; v3 historical32JSON exact and own4 isolated offline regenerations unchanged. Clean reviewed901, current27gate GREEN."
+    },
+    {
+      "row": "Fault: implementation omission grading rejects baseline/plausible partial exact requirements",
+      "source": "fault-matrix",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-pending-state-controls.ts:29",
+      "note": "Own48 actual commands12 accepted36 rejected all expected; includes unchanged counted-reference oldRED/currentGREEN, busy/missing/negative/NaN/fraction/null/string rejects. Three owning reverts independently audited: exactly count-idle private/common guards fail, others unchanged. Fresh formatted20 guards8valid12invalid GREEN; inherited40, metadata5 GREEN. All32 normal/derived expected negatives fail in all4 origins."
+    },
+    {
+      "row": "Fault: setup/unsupported/browser/resource failure retains originating failure/unknown cause",
+      "source": "fault-matrix",
+      "trace": "I3+I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-10-boundary-pending-v9-carrier-controls/README.md:1",
+      "note": "All56 actual selected originating records retained;0 setup, no exclusion/native rescue. Independent189 JSON canonical bytes/outcomes exact; own10 offline regenerations exact. Original800fa async1 4PASS/async2 1PASS3FAIL retain original8 terminal results/32JSON/source/header; own captured-model8 regression replays never rescore history. Earlier accepted failures preserved."
+    },
+    {
+      "row": "Fault: unjustified stopping admission forbids labels/count boundary, measures upper question",
+      "source": "fault-matrix",
+      "trace": "I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-public-scenarios.md:75",
+      "note": "Source status repair/control counts establish no runtime boundary or goal completion. Accepted actual during-indexing/upper pressure/finite-bound evidence unchanged. I10/I11/escalation/per-path stopping/frozen fresh repeated model+reference confirmation/CLOSE remain explicitly linked. No extra API promise or speculative hardening obligation introduced."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

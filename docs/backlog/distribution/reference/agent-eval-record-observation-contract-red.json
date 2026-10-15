@@ -1,0 +1,224 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted with one advisory ownership/draft-seam concern; proceed to implementation. No source/F6 GREEN or merge readiness claimed.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "ae7e9bf9ae892297f17bb6b362dda3c86bbc11f7",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-record-observation-judging.md; BASE d9ed27d5c2c726f5be1426be42fada84cd1c5220, reviewedHEAD ae7e9bf9ae892297f17bb6b362dda3c86bbc11f7. Unchanged goal docs/backlog/epics/agent-code-quality-evaluation/goal.md I3/I4/I6/I7/I9; raw public booking/expense-v9 prompts; ADR0519/0520/0521 at BASE and actual partial corrections/ADR0522; independent F6 public/native artifact; real permanent producer and decision/native/fault receipts. Fresh read-only reviewer /root/record_observation_contract_red, no children/model calls/tracked edits. Promise/reference/RED only; production observer absent.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3/I6 actual source F6 repair",
+      "location": "docs/backlog/distribution/agent-eval-record-observation-judging.md:39",
+      "summary": "Production lifecycle/domain adapters and fault/control/all-origin proof, independent Final+GREEN remain; current source still rejects qualified Edit. Reference prototypes cannot close source acceptance."
+    },
+    {
+      "clause": "I3/I4/I6/I7 fresh expanded comparison",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:5",
+      "summary": "After source Final, freeze and run fresh96 across all four origins/three repeats; fixed public inputs, immutable earlier results and own-origin failures retained."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Executed natural/directed operation catalog with versions, arguments, recovery and measured impact/unknown remains."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Substantive finite escalation, fresh confirmation/reference controls and evidence-backed stopping bounds remain."
+    },
+    {
+      "clause": "I4/I8 historical reader and whole-goal CLOSE",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:12",
+      "summary": "Historical accepted-contract reader/retirement proof and end-to-end goal closure remain. Native prototypes/source gates do not close goal."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: working F6 variants and inherited discriminating controls; literal/open alternatives",
+      "source": "acceptance",
+      "trace": "I3, I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/operation-context-controls.ts:45",
+      "note": "Independent producer terminal1:10 selected,8 inherited pass,2 semantic qualified RED; raw F6 public proof retained."
+    },
+    {
+      "row": "Acceptance2: pure candidates separated from explicit persisted savedness observation",
+      "source": "acceptance",
+      "trace": "I3, I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-record-observation-judging.md:40",
+      "note": "Decision pure-query/sticky-validation/graph/Paid-delta reference discriminate caption,load and no-op routes; production observer not claimed."
+    },
+    {
+      "row": "Acceptance3: actual saved identity preserves alias/duplicate multiplicity through rerender",
+      "source": "acceptance",
+      "trace": "I3, I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-record-observation-judging.md:41",
+      "note": "Flat receipt actual4/2 RED; repeated-marker reference3 records/6 aliases groups2+2+2; collision actual1/3 RED."
+    },
+    {
+      "row": "Acceptance4: owned observation rollback and existing control ownership preserve unrelated controls",
+      "source": "acceptance",
+      "trace": "I3, I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-record-observation-judging.md:42",
+      "note": "Inline saved-byte rollback/reference and inherited89 checks; preservation across all production adapters remains Final work. Full unrelated draft restoration after reload is not inferred from ownership clause."
+    },
+    {
+      "row": "Acceptance5: marker/error/cleanup failure cannot succeed or conceal original evidence",
+      "source": "acceptance",
+      "trace": "I3, I4, I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-record-observation-judging.md:43",
+      "note": "Actual Save applied then page-close cleanup fault RED primaryRetainedfalse; collision RED; existing series/report carriers retain failures."
+    },
+    {
+      "row": "Acceptance6: intended logical-record Edit/Delete verifies public saved effect; no speculative original-record deletion",
+      "source": "acceptance",
+      "trace": "I3, I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-record-observation-judging.md:44",
+      "note": "Reference protocol intended Delete Discard checks reload absence; inherited opaque/unpaired selection carriers remain. Production general adapter proof required at Final."
+    },
+    {
+      "row": "Acceptance7: fixed eight public inputs, new criteria identity, immutable history, own-origin/Final before fresh96",
+      "source": "acceptance",
+      "trace": "I3, I4, I6, I7",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-record-observation-judging.md:45",
+      "note": "Diff retains public corpus/cards/payloads; existing origin/version/history carriers reused; later own-origin/Final/fresh96 explicitly ordered."
+    },
+    {
+      "row": "Parity1: original/contextual/qualified/presentational Vue/Svelte; qualified semantic RED",
+      "source": "acceptance",
+      "trace": "I3, I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/operation-context-controls.ts:70",
+      "note": "Repeated producer10/8pass2fail; no import/type failure."
+    },
+    {
+      "row": "Parity2: Cancel loaded values do not certify Update; public graph/Paid delta distinguishes Create; sticky Validation",
+      "source": "acceptance",
+      "trace": "I3, I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-record-observation-judging.md:50",
+      "note": "Native graph reference genuine2/cancel3 rooms and sticky equal validation; repeated expense Cancel loads held marker but delta102."
+    },
+    {
+      "row": "Parity3: identical expenses/multiple aliases/repeated captions/sorting/full rerender retain multiplicity",
+      "source": "acceptance",
+      "trace": "I3, I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-record-observation-judging.md:51",
+      "note": "Independent repeated-marker PASS3/6 grouping2+2+2 and exact rollback; collision RED1!==3."
+    },
+    {
+      "row": "Parity4: inline/dual/native-form marker ownership preserves unrelated state; own-origin judges",
+      "source": "acceptance",
+      "trace": "I3, I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-record-observation-judging.md:52",
+      "note": "Native inline effect/rollback reference and inherited control owners discriminate current promise; source integration and all-origin result remain Final requirements."
+    },
+    {
+      "row": "lossy-aggregate × admission/identity",
+      "source": "fault-matrix",
+      "trace": "I3, I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-record-observation-judging.md:58",
+      "note": "Pure note/cancel and flat alias actual4/2; held markers separate duplicate records."
+    },
+    {
+      "row": "corrupt-input × temporary identity collision",
+      "source": "fault-matrix",
+      "trace": "I3, I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-record-observation-judging.md:59",
+      "note": "Executed collision RED records1 expected3; original-description collision, real browser entropy untouched."
+    },
+    {
+      "row": "torn-state × marker apply/restore",
+      "source": "fault-matrix",
+      "trace": "I3, I4",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-record-observation-judging.md:60",
+      "note": "Executed actual applied Save followed by actual closed-page cleanup; observation throws and cannot return a successful receipt."
+    },
+    {
+      "row": "provenance-lie × error/cleanup",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-record-observation-judging.md:61",
+      "note": "Executed cause-cleanup RED original applied-Save exception masked by cleanup; assertion explicitly requires original cause."
+    },
+    {
+      "row": "poisoned-cache × rerender/requery",
+      "source": "fault-matrix",
+      "trace": "I3, I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-record-observation-judging.md:62",
+      "note": "Executed repeated payload-following captions, sorting/full rerender; fresh queries and saved markers yield3/6 and exact rollback."
+    },
+    {
+      "row": "sibling-drift × record domains/control owners",
+      "source": "fault-matrix",
+      "trace": "I3, I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-eval-record-observation-judging.md:63",
+      "note": "Reference room graph and expense Paid witnesses plus inherited reservation/scalar/participant ownership89PASS; production adapter integration awaits Final."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/distribution/agent-eval-record-observation-judging.md:42",
+          "summary": "The inline feasibility carrier checks the unrelated creation draft before reload. It does not prove full arbitrary draft restoration after observation return; keep ownership-only evidence distinct from future production lifecycle proof. No new app draft persistence/storage requirement inferred.",
+          "authority": "",
+          "evidence": "node --experimental-strip-types .cache/pr341/inline-graph-discriminator.mts -> terminal0, exact saved rollback; independent scratch inline-draft-seam.mts -> terminal1 after original rollback path: creationName=\"\", creationCapacity=\"\" vs pre-reload draft \"Unrelated creation draft\"/\"7\". Logs .cache/pr341/record-observation-contract-review/inline.log and inline-draft-seam.log. The extra after-return assertion is deeper than the declared ownership requirement; advisory REV-3."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

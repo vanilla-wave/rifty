@@ -1,0 +1,189 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK unit: repair both participant-toggle owner defects, add genuine RED/GREEN and repeat independent Final; whole goal remains open.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "29bcaf36086a333f6146b35965f48ebb2553c4fc",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-inline-editing-judging.md against BASE 5acb79d1d8359f1d340d1072352c2242ab050ba8; accepted docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+  "unit_residuals": [
+    {
+      "clause": "ADR-0518 native form ownership + Acceptance1 → I3/I6",
+      "location": "tools/agent-bench/src/judge/context.ts:117",
+      "summary": "External HTMLButtonElement native owner requires repair, actual RED/GREEN, sibling sweep and independent final verification."
+    },
+    {
+      "clause": "creation while editing visible → I3/I6 + Reference contract intended-record preservation",
+      "location": "tools/agent-bench/corpus/cases/expense-settlement-v5/judge.ts:101",
+      "summary": "Resolve intended participant toggle before state filter; prove distinct create/edit states preserve other draft, update mirror and independently verify."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I3/I5/I6/I7 expanded comparison",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:95",
+      "summary": "Fresh accepted full96 own-environment comparison after corrected criteria; interrupted82 remains immutable/unaccepted history."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Actual operation catalog, directed probes, evidence-backed recovery/impact remain required."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Finite escalation/control32 and frozen fresh48 confirmation remain required; no closure from controls/current80."
+    },
+    {
+      "clause": "End-to-end invariant proof / CLOSE",
+      "location": "docs/backlog/distribution/agent-eval-inline-editing-judging.md:99",
+      "summary": "Whole-goal audit and historical-contract retirement proof remain; this unit cannot close epic."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "room Name/Capacity edit/read: creation+edit purposes collide",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:5",
+      "note": ""
+    },
+    {
+      "row": "creation while editing visible: first/edit field silently selected",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:24",
+      "note": "Input target-state carrier passes; executed differing-state participant toggle branch mutates edit draft (Bugs finding2, toggle-state-intent.log)."
+    },
+    {
+      "row": "reservation picker/date/time/seats: same row/form context assumption",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:33; tools/agent-bench/corpus/cases/booking-workflow-v5/judge.ts:111",
+      "note": ""
+    },
+    {
+      "row": "repeated action/edit/read: stale or wrong row context",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:72; tools/agent-bench/corpus/cases/booking-workflow-v5/judge.ts:135",
+      "note": ""
+    },
+    {
+      "row": "version/report: changed criteria rescored as old",
+      "source": "fault-matrix",
+      "trace": "I8/I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-10-07-action-context-origin-controls/summary.md:1; docs/backlog/distribution/reference/agent-eval-inline-editing-baseline.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Actual baseline/RED before code; one honest action-context owner, class sweep",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "weak",
+      "citation": "tools/agent-bench/src/judge/context.ts:102; tools/agent-bench/tests/inline-editing-controls.ts:10",
+      "note": "Real native/Vue/Svelte baseline and RED verified; existing class carriers survive missing external HTMLButton.form and pre-context pressed filtering (Bugs findings1/2)."
+    },
+    {
+      "row": "Existing reference and concurrent-editor alternatives pass; wrong-target controls fail; guard reversions RED/exact restore GREEN",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/inline-editing-controls.ts:44; tools/agent-bench/tests/action-context.spec.ts:5",
+      "note": "Original real4 and guard5/1/2/1 evidence verified, fresh native80 PASS. Named toggles class has two executed correctness gaps missed by those carriers; Bugs findings1/2."
+    },
+    {
+      "row": "All4 own-origin source controls retain failures and source/host proof separately",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context-origin-controls.ts:76; /tmp/rifty-pr341-action-context-final-review/physical-read-proof.json:1",
+      "note": ""
+    },
+    {
+      "row": "Public inputs/control payloads and original outcomes unchanged; criteria versions/all resolved hashes explicit",
+      "source": "acceptance",
+      "trace": "I8/I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/eval-v8.json:1; /tmp/rifty-pr341-action-context-final-review/equality-proof.json:1; /tmp/rifty-pr341-action-context-final-review/fingerprints.json:1",
+      "note": ""
+    },
+    {
+      "row": "Full source gate and fresh independent Final before new full96",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-action-context-prcheck-green.log.gz:1; /tmp/rifty-pr341-action-context-source-prcheck-final.log:1",
+      "note": ""
+    },
+    {
+      "row": "Versioned booking/expense v5 public and frozen control payloads preserve v4 while changed oracle fingerprints identify new criteria",
+      "source": "frozen-artifact",
+      "trace": "I6+I8+ADR-0518",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/booking-workflow-v5/card.json:1; tools/agent-bench/corpus/cases/expense-settlement-v5/card.json:1; /tmp/rifty-pr341-action-context-final-review/equality-proof.json:1",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/src/judge/context.ts:117",
+          "summary": "Native form ownership omits external HTMLButtonElement participant toggles, rejecting a valid intended action context.",
+          "authority": "ADR-0518 Decision lines16–23: native form ownership including external form-associated fields; checkbox/toggle selections use same owner. I6 + expense public prompt25 + Acceptance1 → I3/I6.",
+          "evidence": "Executed pnpm exec tsx /tmp/rifty-pr341-action-context-final-review/external-toggle.mts, actualexit1, raw /tmp/rifty-pr341-action-context-final-review/external-toggle-with-reference.log. Chromium: two actual HTMLButtons form=create/edit, native .form ids create/edit, closest(form)=null. Independent public create click GREEN changes create Ada only, edit unchanged; actual controlForAction throws ambiguity despite unique Add expense. Frozen-assumption/native-owner class; existing native80 RED/GREEN covers external input but no external button RED. Sweep HTMLButton.form alongside native inputs/select/textarea, expense participant toggle caller and oracle mirror."
+        },
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/corpus/cases/expense-settlement-v5/judge.ts:101",
+          "summary": "Filtering participant toggles by pressed state before action context can click another editor and mutate its draft.",
+          "authority": "I3/I6; unit Reference contract29–32 and creation fault row57 → I3/I6; ADR-0518 Decision23; expense public prompt25 explicitly accepts named toggle buttons.",
+          "evidence": "Executed pnpm exec tsx /tmp/rifty-pr341-action-context-final-review/toggle-state-intent.mts, actualexit1; raw /tmp/rifty-pr341-action-context-final-review/toggle-state-intent.log. Real native forms, unique Add expense; create Ada pressed=true, edit Ada pressed=false; desired creation Ada=true. Exact changed participants branch101–105 finds singleton edit (pressed=false); actual controlForAction returns singleton and clicks edit. BEFORE create=true/edit=false; AFTER create=true/edit=true; assertion Creation unexpectedly mutated edit participant draft fails. Lossy-aggregate/scalar-birth class: state filter discarded intended candidate before owner projection. Missing RED: differing create/edit toggle states. Sweep participant toggles/checkboxes/selects and mirrored expense-v5 oracle; resolve identity+action before deciding click from state."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "blocker",
+      "findings": []
+    }
+  ]
+}

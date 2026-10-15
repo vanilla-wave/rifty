@@ -1,0 +1,118 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Accept completed eval16 comparison unit; PR341 remains draft for I10/I11 source admission, executed boundary study and goal CLOSE.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "8065464894ec16515f5c6aaa5205ef4f04837410",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-expanded-comparison.md @ 8065464894ec16515f5c6aaa5205ef4f04837410; BASE ed4e06d29ccc4ae88eed4ed4f906f5eb42962177; unchanged docs/backlog/epics/agent-code-quality-evaluation/goal.md; accepted source37e19eb16776f69c5052687bc628cda2ce0af1e1. Fresh independent /root/comparison_eval16_final read raw contract/goal/protocol/PR body, BASE/current criteria, original96 and canonical294JSON/67 carriers. Executed .cache/pr341/comparison-eval16-final/{independent-archive-proof.json,criteria-plan-proof.json,matrix-statistics-proof.json,independent-offline-proof.json,offline.log,summary-policy.log,retirement-independent-proof.json}: all294 originals exact to source+manifest; actual43PASS53FAIL/24setup,96 ordered unique completed trials,32 statistic cells, separate Codex/null deltas, frozen fingerprints unchanged; two scratch-only offline regenerations reproduce committed report/statistics/summary exactly; summary-policy4PASS; owned model endpoint10539 refused connections; producer0/9312.815896583s. Actual current pr:check27PASS .cache/pr341/eval-v16-boundary-main-prcheck.log inspected; no new model calls. Independent74 CLI executions preserve37 original bound Final records at current and contracts-absent Git checkout. Other historical-reader/boundary-source changes since BASE remain their separate accepted or pending units; no source rejudging/whole-goal closure.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I10; scenario7: executed operation/tool/API/policy catalog with recovery and measured impact or unknown",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Natural and directed evidence-backed catalog remains required; comparison aggregate does not establish operation attribution."
+    },
+    {
+      "clause": "I6/I11; scenario8: admitted substantive escalation, finite stopping bounds and fresh repeated confirmation",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:4",
+      "summary": "Boundary candidates remain separate unaccepted source-admission unit; engineering/dependency/resource escalation and fresh frozen confirmation remain mandatory."
+    },
+    {
+      "clause": "Outcome/scenario1–8/I1–I11: end-to-end goal acceptance and CLOSE",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:11",
+      "summary": "Whole-goal audit/CLOSE remains after linked work. Historical reader source already accepted; independently repeated37-record retirement audit passes and need not remain an unfinished reader obligation."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: freeze corrected eval16/config/complete96 selection and costs before fresh calls; retain all selected failures",
+      "source": "acceptance",
+      "trace": "I1+I2+I3+I4+I7+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-protocol.md:3; tools/agent-bench/reports/summaries/2026-10-09-eval-v16-expanded-comparison/README.md:1",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: complete separate own-origin campaign with retained evidence, conditional reports and unchanged offline regeneration",
+      "source": "acceptance",
+      "trace": "I3+I4+I7+I8+I9",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-completed.md:7; tools/agent-bench/reports/summaries/2026-10-09-eval-v16-expanded-comparison/summary.md:234; docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-proof.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: provenance/input drift × selection/report — exact plan/source/config/control identity and mismatch rejection",
+      "source": "fault-matrix",
+      "trace": "I6+I7+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:254; tools/agent-bench/reports/summaries/2026-10-09-eval-v16-expanded-comparison/manifest.json.gz:1; docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-protocol.md:21",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: setup/provider/budget/interruption × run — retain every failed/partial/missing selection; fresh nextroot",
+      "source": "fault-matrix",
+      "trace": "I2+I3+I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/series.fault.test.ts:73; tools/agent-bench/src/series.fault.test.ts:95; tools/agent-bench/reports/summaries/2026-10-09-eval-v16-expanded-comparison/summary.md:19",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: lossy-aggregate × report — fixed-matrix conditional intervals, explicit unavailable/null and separate Codex",
+      "source": "fault-matrix",
+      "trace": "I4+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:130; tools/agent-bench/src/statistics-report.test.ts:223; tools/agent-bench/reports/summaries/2026-10-09-eval-v16-expanded-comparison/summary.md:234",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: authoritative rewrite × regeneration — source bytes/scores unchanged and derived views repeatable",
+      "source": "fault-matrix",
+      "trace": "I3+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:114; docs/backlog/distribution/reference/agent-eval-expanded-comparison-v16-proof.json.gz:1; tools/agent-bench/reports/summaries/2026-10-09-eval-v16-expanded-comparison/README.md:2",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -1,0 +1,179 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "CONCERN: 2 executed weaknesses; driver accepted FIX before source admission/model calls. Нужен отдельный Final исправленного дерева. 96 terminal; goal не завершён.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "76caef479bd2e09c14134d82362d8a982f007e51",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-boundary-corpus.md @76caef479bd2e09c14134d82362d8a982f007e51; BASE536ec383320e0dd15291f9a707216dd1ef76c1da; goal docs/backlog/epics/agent-code-quality-evaluation/goal.md I3/I6/I7/I8/I11, scenario8. Independent read-only source admission; changed criteria inspected against BASE and raw prior criteria.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I6 source admission",
+      "location": "docs/backlog/distribution/agent-eval-boundary-corpus.md:34",
+      "summary": "Driver accepted Region/starter regression weaknesses as FIX; actual changed-source RED/GREEN, controls and independent Final remain before diagnostic calls."
+    },
+    {
+      "clause": "I10 operation difference catalog",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Executed operation/args/versions/host/evidence/recovery/impact catalog remains; include actual installed-lock/shadow divergence, no identical-graph claim."
+    },
+    {
+      "clause": "I11 executed finite search and confirmation",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Actual model exploration, meaningful escalation, justified per-path stopping and frozen fresh repeated confirmation/reference controls remain. Source controls do not close I11."
+    },
+    {
+      "clause": "Whole goal CLOSE",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/map.md:3",
+      "summary": "Linked required work and end-to-end invariant audit/CLOSE remain; comparison acceptance reused, not reopened or rescored."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: eight versioned cases/two substantive levels/four families, public APIs/deltas/provenance/regression duties and shared supplied locked project",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/boundary-v1.json:1",
+      "note": "Actual cards/projects/prompts/locks read. Linked credits/history, async optimistic rollback/retry, real esbuild-wasm and 10x indexing escalate distinct interactions. Same supplied lock; installed Rifty shadow graph differs and is retained."
+    },
+    {
+      "row": "Acceptance2: native working references/alternatives accepted; baseline/plausible partials rejected; four originating environments retain failures",
+      "source": "acceptance",
+      "trace": "I3+I6+I11",
+      "status": "weak",
+      "citation": "tools/agent-bench/corpus/cases/linked-import-1/judge.mjs:42",
+      "note": "Named starter-regression mutant passes private judge despite real build failure; finding Completeness. Otherwise original128 and current96 show controls without model calls; current44PASS52FAIL,88physical/8setup."
+    },
+    {
+      "row": "Acceptance3: linked atomic imports/guards/integer currency/credits/durable undo and async navigation/stale replies/optimistic rollback/retry via public APIs",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/async-search-2/judge.mjs:75",
+      "note": "Real module judges and independent native semantic probes exercise captured state, reference rejection, restore/undo, stale replies and later writes. Controlled client boundary only; actual controller/timers/packages."
+    },
+    {
+      "row": "Acceptance4: actual TS5.9.2/esbuild-wasm0.28.0 browser compilation; responsive visible indexing and exact filter/sort/page/export/measurements",
+      "source": "acceptance",
+      "trace": "I6+I11",
+      "status": "weak",
+      "citation": "tools/agent-bench/corpus/cases/indexed-data-1/judge.ts:68",
+      "note": "Both levels/private judges/public scenario accept omitted Region because North/month1 coincide; finding Bugs. Current real compiler mode/target guards discriminate original selector omissions. Both indexing scales/all4 reference controls capture input phase=indexing; bytes/deadline/memory-unknown explicit."
+    },
+    {
+      "row": "Acceptance5: measured bounded questions/meaningful upper steps/finite resource and campaign bounds, frozen criteria/provenance before models, easy saturation escalates",
+      "source": "acceptance",
+      "trace": "I7+I8+I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-premise-check.md:38",
+      "note": "Raw .cache/pr341/boundary-admission-bounds.md and resource-native-measure.log establish interactions/dependency/10x pressure,1m finite resource maximum,100tools/600s and64 proposed model trials+16 references. Explicit escalation when easy; no count-only boundary claim. Source Final precedes models; source accepted FIXs remain."
+    },
+    {
+      "row": "Parity1: common real requirements/oracles in originating runtimes; actual versions, no mocked runtime/VFS/Workers/compiler",
+      "source": "acceptance",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-selector-origin-controls.ts:36",
+      "note": "Original four-origin128 retained; current exact76 cohort96 terminal0/24baseline,22/24reference,0/24partial,22/24alternative. Actual Node24.16.0/Chromium148/TypeScript5.9.2/esbuild-wasm0.28.0.8 bin-collision setups retained, native success never rescues browser fail."
+    },
+    {
+      "row": "Parity2: independently implemented working alternatives satisfy published API/workflow, no private internal/DOM structure",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/indexed-data-2/alternative.json:2",
+      "note": "Read actual independent CSV decoder/input history, AbortController state, compiler package imports and indexed bucket implementation. Native independent16 semantics retained; current alternatives22/24 with2 originating setups. Public supplied surfaces only, serialization/layout internals free."
+    },
+    {
+      "row": "Fault: source/config/control drift admission rejects mismatched identity/freezes bytes",
+      "source": "fault-matrix",
+      "trace": "I6+I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus.ts:95",
+      "note": "Existing loader drift faults/plan source+input/prompt/judge/control hashes unchanged. Independently audit original391+current296 canonical JSON sourceBytes/sourceSHA and bundleSHA: zero failures. Current96 manifests source76; all agentStatus not-run."
+    },
+    {
+      "row": "Fault: implementation omission grading rejects baseline/plausible partial exact requirements",
+      "source": "fault-matrix",
+      "trace": "I6+I11",
+      "status": "weak",
+      "citation": "tools/agent-bench/corpus/cases/indexed-data-2/judge.ts:68",
+      "note": "Region/starter omission counterexamples survive current criteria; findings Bugs/Completeness. Other actual baseline/partials fail, existing selection RED→GREEN and causal owning-source reversions retained. REV-4 weak advisory, no invented missing carrier/blocker."
+    },
+    {
+      "row": "Fault: setup/unsupported/browser/resource failure retains originating failure/unknown cause",
+      "source": "fault-matrix",
+      "trace": "I3+I6+I11",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-selector-origin-controls.ts:27",
+      "note": "Current96 retains8 real bin-collision setup failures,88physical executions. Original128 retains9 setups/119physical, including original COI partial import timeout. Originals unaccepted/unrescored; no pruning/native rescue."
+    },
+    {
+      "row": "Fault: unjustified stopping admission forbids labels/count boundary, measures upper question",
+      "source": "fault-matrix",
+      "trace": "I11",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-eval-boundary-public-scenarios.md:75",
+      "note": "Original blocking2500ms RED/yielding100k overlap/instant functional-no-overlap evidence retained. Actual reference timing117/1172ms native,8.125/82.256MB data,0.679/6.875MB export; browser input while indexing at both scales. Bounds explicitly require escalation on easy saturation; I11 still open."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/corpus/cases/linked-import-1/judge.mjs:42",
+          "evidence": "pnpm exec tsx .cache/pr341/boundary-source-final/starter-regression.ts exit0; referenceJudge0/referenceBuild0/mutantJudge0+RIFTY_CORPUS_PASS/mutantBuild1. Actual Native src/main.js changed only to const = ;. Raw .cache/pr341/boundary-starter-regression-yVfRl6/result.json and boundary-source-final/starter-regression.log. Existing runner command path read at tools/agent-bench/src/runner.ts:212; no build/boot observation.",
+          "summary": "Published preserve existing starter/build regression survives trusted engineering judge. Same command-only shape in four linked/async cases. REV-4 weak advisory; driver accepted FIX, unverified at76.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/corpus/cases/indexed-data-1/judge.ts:68",
+          "evidence": "pnpm exec tsx .cache/pr341/boundary-source-final/region-mutant.ts exit0: referencePasstrue/rejectedfalse; level2 region-level2-mutant.ts exit0 privatePASS/publicScenarioPASS. Remove (!region||row.region===region) only; actual index.query({region:South})120 vs30 expected,90wrong. Raw .cache/pr341/resource-region-selector-8vfRGR/result.json and resource-region-selector-es76Zw/result.json; log/scripts boundary-source-final/.",
+          "summary": "lossy-aggregate: Region filter entirely omitted passes both indexed judges/public probe because Month1 always North. No independent Region observation. REV-4 weak advisory; driver accepted FIX, unverified at76. Sibling sweep: both levels and public probe.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

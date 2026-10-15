@@ -1,0 +1,98 @@
+{
+  "bugs": {
+    "url": "https://github.com/chalk/ansi-regex/issues"
+  },
+  "dist": {
+    "shasum": "082cb2c89c9fe8659a311a53bd6a4dc5301db304",
+    "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-5.0.1.tgz",
+    "fileCount": 5,
+    "integrity": "sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==",
+    "signatures": [
+      {
+        "sig": "MEUCIQCS7XsMq0d29jMXjedcRcP044S7ZelyMVBxKjkUpCShHAIgGyiTNkLoCCh/rpMnXAisLtOsV3SGe2ftVRwhvZTAPyw=",
+        "keyid": "SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA"
+      }
+    ],
+    "unpackedSize": 5609,
+    "npm-signature": "-----BEGIN PGP SIGNATURE-----\r\nVersion: OpenPGP.js v3.0.13\r\nComment: https://openpgpjs.org\r\n\r\nwsFcBAEBCAAQBQJhQMXnCRA9TVsSAnZWagAADYYP/iz1/gbU0N9EjGpKc+Gm\nnX7qe5zf8TvcOpxBMDSFiCD5ntg/EH4YguqeUhRgW7X/nx58basGjNU2Payd\n6gIBVMEriQUWhS6MllSbiIbxY3ALKRcNhIphqER4kneujLwTqgAMOSjjnOk+\nvhPheetSO9ydRVZvb1UHC45D/4Bl0BJjPuAgF6YJlAae+bon50yImBeBUus4\nSmcbaBKSoCKT+ml4pfNidfUIJn+Zo8u0u8WI/6hfJ5oD9/eerQaSK/Fjt1hZ\nj67NmXWMsMugedkgpKbK3lZX+LucgTrb7L9QJC++LQj6FSRDQBguiODgJ912\nVxqjJN0SSqcpNRVk0dTHhI2IoOn4Mu3HVZolsrVFGXsQDMlNHWxehHUtzZ/h\ne592hb0tqcyIeMFLUMcRhcnaQZrNKTYv7XSMpfPWh73slOk5AaZFOyY/yZ2k\nIqfm7sKVsijHzRgyveZ+n1QyV6CWFMzQbxnj34t7NpnX429VY/F/ZL/E1Yfu\noJhSbp/K0+k8Gp9g9YNDANE7s5jM8pJzlSOo3XUWyaFaujRHMsAtxgtYikZB\n3uzZaYQxryjCkvuvZJFwUBMeLWJP2JKt7bpK3mv7DHvEWTxicBHSPaePhA01\nOfiQ7YzPY3pNI/Fki/jloyJgSazLpvlWv7XWAF/OhvB5G3KQbfDe/hbQg0Yq\nsUn3\r\n=I35d\r\n-----END PGP SIGNATURE-----\r\n"
+  },
+  "name": "ansi-regex",
+  "types": "./index.d.ts",
+  "author": {
+    "url": "sindresorhus.com",
+    "name": "Sindre Sorhus",
+    "email": "sindresorhus@gmail.com"
+  },
+  "engines": {
+    "node": ">=8"
+  },
+  "gitHead": "a9babce885cf19c363cf1d1c645f834592c3f7a4",
+  "license": "MIT",
+  "scripts": {
+    "test": "xo && ava && tsd",
+    "view-supported": "node fixtures/view-codes.js"
+  },
+  "_npmUser": {
+    "name": "qix",
+    "email": "josh@junon.me"
+  },
+  "homepage": "https://github.com/chalk/ansi-regex#readme",
+  "keywords": [
+    "ansi",
+    "styles",
+    "color",
+    "colour",
+    "colors",
+    "terminal",
+    "console",
+    "cli",
+    "string",
+    "tty",
+    "escape",
+    "formatting",
+    "rgb",
+    "256",
+    "shell",
+    "xterm",
+    "command-line",
+    "text",
+    "regex",
+    "regexp",
+    "re",
+    "match",
+    "test",
+    "find",
+    "pattern"
+  ],
+  "repository": {
+    "url": "git+https://github.com/chalk/ansi-regex.git",
+    "type": "git"
+  },
+  "_npmVersion": "7.23.0",
+  "description": "Regular expression for matching ANSI escape codes",
+  "directories": {},
+  "maintainers": [
+    {
+      "name": "sindresorhus",
+      "email": "sindresorhus@gmail.com"
+    },
+    {
+      "name": "qix",
+      "email": "josh@junon.me"
+    }
+  ],
+  "_nodeVersion": "16.0.0",
+  "_hasShrinkwrap": false,
+  "readmeFilename": "readme.md",
+  "devDependencies": {
+    "xo": "^0.25.3",
+    "ava": "^2.4.0",
+    "tsd": "^0.9.0"
+  },
+  "_npmOperationalInternal": {
+    "tmp": "tmp/ansi-regex_5.0.1_1631634919356_0.29996150981120184",
+    "host": "s3://npm-registry-packages"
+  },
+  "_id": "ansi-regex@5.0.1",
+  "version": "5.0.1"
+}

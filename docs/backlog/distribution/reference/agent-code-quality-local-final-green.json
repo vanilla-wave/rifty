@@ -1,0 +1,74 @@
+{
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "Docs-only local-script execution amendment to docs/backlog/epics/agent-code-quality-evaluation/goal.md, map, ledger and four draft children; BASE 6f3ecb34939fc700073558555af681ca1380ee13; original user answers in refine evidence Local script execution and reviewer task; independent RDY-6 final written-result reviewer: /root/local_runner_refine_final. Current working tree bound by docs/backlog/distribution/reference/agent-code-quality-local-review-manifest.json; no product implementation or live acceptance claimed.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [],
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1 + I3 + I6 + I7",
+      "location": "docs/backlog/distribution/agent-eval-project-corpus.md",
+      "summary": "Expanded real-project/starter corpus, own-environment judges and pilot/frozen-family validation remain draft implementation work; preserved pinned dependencies and substrate probe."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/distribution/agent-eval-codex-reference.md",
+      "summary": "Native Codex execution/configuration/isolation and four-environment comparison remain draft implementation work."
+    },
+    {
+      "clause": "I4 + I5",
+      "location": "docs/backlog/distribution/agent-eval-comparison-report.md",
+      "summary": "Expanded identities, uncertainty and real four-environment pilot campaign with retained matrix and regeneration proof remain open; pilot may close I5 as previously accepted."
+    },
+    {
+      "clause": "I8 + I9",
+      "location": "docs/backlog/distribution/agent-eval-local-runner.md",
+      "summary": "Local script-owned protocol, resolved matrix, progress, persisted partial reports, fresh series and output collision protection remain draft implementation and proof work."
+    }
+  ],
+  "goal_complete": false,
+  "overall_verdict": "pass",
+  "merge_call": "PASS docs-only amendment and RDY-6 final written-result check. User attribution, deterministic-protocol limits and fresh-series/no-resume policy are faithful; extend existing CLI/runner. pr:check docs-only 20/20 PASS; git diff --check PASS. Bind to committed content before marking ready; this does not close or implement the goal.",
+  "reviewed_sha": "f6897dc455b8fe5c0caa28680ac8833f8cbb00d0"
+}

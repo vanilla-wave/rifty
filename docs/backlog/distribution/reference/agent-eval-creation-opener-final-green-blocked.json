@@ -1,0 +1,249 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK unit: repair equivalent Save-affordance versus distinct-record action resolution (B5), retain B1–B4 behavior, prove real RED/GREEN and repeat independent Final; full goal remains open.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "c9ebe2d42928b321eb2a604ff39233036b68fb26",
+  "unit_goal_source": "docs/backlog/distribution/agent-eval-inline-editing-judging.md against BASE 5acb79d1d8359f1d340d1072352c2242ab050ba8; accepted docs/backlog/epics/agent-code-quality-evaluation/goal.md",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance1/2 → I3/I6; Reference contract open actions/layout; BASE-v4 working duplicate commit affordances",
+      "location": "tools/agent-bench/src/judge/context.ts:214",
+      "summary": "Fix B5: multiple equivalent Save controls for one editor are not distinct-record ambiguity; genuine duplicate-commit RED/GREEN, shared caller/mirror sweep and fresh independent Final remain."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I3/I5/I6/I7 expanded comparison",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:96",
+      "summary": "Fresh accepted full96 own-environment comparison after corrected criteria; interrupted82 remains immutable/unaccepted history."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:129",
+      "summary": "Actual operation catalog, directed probes, evidence-backed recovery/impact remain required."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-code-quality-evaluation/goal.md:136",
+      "summary": "Finite substantive escalation/control32 and frozen fresh48 confirmation remain required; native102/source52 do not close the goal."
+    },
+    {
+      "clause": "End-to-end invariant proof / CLOSE",
+      "location": "docs/backlog/distribution/agent-eval-inline-editing-judging.md:114",
+      "summary": "Whole-goal audit and historical-contract retirement proof remain; this source unit cannot close the epic."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "room Name/Capacity edit/read: creation+edit purposes collide",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:9; tools/agent-bench/tests/inline-editing-controls.ts:17",
+      "note": ""
+    },
+    {
+      "row": "creation while editing visible: first/edit field silently selected",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:9; tools/agent-bench/tests/action-context.spec.ts:269",
+      "note": ""
+    },
+    {
+      "row": "reservation picker/date/time/seats: same row/form context assumption",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:37; tools/agent-bench/corpus/cases/booking-workflow-v5/judge.ts:93",
+      "note": ""
+    },
+    {
+      "row": "repeated action/edit/read: stale or wrong row context",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:77; tools/agent-bench/corpus/cases/booking-workflow-v5/judge.ts:111",
+      "note": ""
+    },
+    {
+      "row": "participant toggle native form: external button native owner omitted",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:101; docs/backlog/distribution/reference/agent-eval-action-context-toggle-proof.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "participant state/identity: pressed filter discards intended editor",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:116; tools/agent-bench/corpus/cases/expense-settlement-v5/judge.ts:81",
+      "note": ""
+    },
+    {
+      "row": "participant representation: global select/checkbox branch hides intended toggle/checkbox",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:161; docs/backlog/distribution/reference/agent-eval-participant-group-proof.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "complete participant group: nearest nonempty ancestor drops sibling; native ownership pins id",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context.spec.ts:199; docs/backlog/distribution/reference/agent-eval-participant-completeness-proof.json.gz:1",
+      "note": ""
+    },
+    {
+      "row": "creation opener/commit: Add begins/resets shared editor; Save commits",
+      "source": "fault-matrix",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/creation-opener-controls.ts:15; tools/agent-bench/tests/action-context.spec.ts:258; /tmp/rifty-pr341-action-context-final-review-r4/real-openers-green.log:1",
+      "note": ""
+    },
+    {
+      "row": "version/report: changed criteria rescored as old",
+      "source": "fault-matrix",
+      "trace": "I8/I9",
+      "status": "pass",
+      "citation": "/tmp/rifty-pr341-action-context-final-review-r4/artifact-verification.json:1; /tmp/rifty-pr341-action-context-final-review-r4/fingerprints.json:1",
+      "note": ""
+    },
+    {
+      "row": "Actual baseline/RED before code; one honest action-context owner, class sweep",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "weak",
+      "citation": "docs/backlog/distribution/reference/agent-eval-creation-opener-proof.json.gz:1; tools/agent-bench/src/judge/context.ts:186",
+      "note": "Original and B1/B2/B3/B4 baseline/RED/GREEN and exact-source guards are genuine. New executed B5 is a missing equivalent-action class carrier: two same-editor Save affordances, same actual commit, BASE3PASS/current3FAIL."
+    },
+    {
+      "row": "Existing reference and real concurrent-editor alternatives pass; wrong-target fault controls fail; guards revert RED/exact restore GREEN",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/inline-editing-controls.ts:17; /tmp/rifty-pr341-action-context-final-review-r4/dual-editors-green.log:1; /tmp/rifty-pr341-action-context-final-review-r4/native-green.log:1",
+      "note": "Fresh native102/current3opener/current4single-dual PASS and historical discriminating reversions verified. B5 actual BASE working alternatives with equivalent Save buttons fail current criteria; b5-physical.json."
+    },
+    {
+      "row": "All4 own-origin source controls retain failures and source/host proof separately",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/action-context-origin-controls.ts:82; /tmp/rifty-pr341-action-context-final-review-r4/artifact-verification.json:1",
+      "note": ""
+    },
+    {
+      "row": "Public inputs/control payloads and original outcomes unchanged; criteria versions and all resolved hashes explicit",
+      "source": "acceptance",
+      "trace": "I8/I9",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/eval-v8.json:1; /tmp/rifty-pr341-action-context-final-review-r4/artifact-verification.json:1; /tmp/rifty-pr341-action-context-final-review-r4/fingerprints.json:1",
+      "note": ""
+    },
+    {
+      "row": "Full source gate and fresh independent Final before new full96",
+      "source": "acceptance",
+      "trace": "I3/I6",
+      "status": "pass",
+      "citation": "/tmp/rifty-pr341-creation-opener-prcheck-final.log:1; docs/backlog/distribution/reference/agent-eval-creation-opener-prcheck-green.log.gz:1",
+      "note": ""
+    },
+    {
+      "row": "controlForAction preserves singleton/native ownership and intended editor scalar cardinality",
+      "source": "public-api",
+      "trace": "I3+I6+ADR-0518",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/judge/context.ts:161; tools/agent-bench/tests/action-context.spec.ts:9",
+      "note": ""
+    },
+    {
+      "row": "editableControlForAction preserves accessible editable purposes and representation/exclusions",
+      "source": "public-api",
+      "trace": "I3+I6+ADR-0518",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/judge/context.ts:178; tools/agent-bench/tests/editable-control-names.spec.ts:1; tools/agent-bench/tests/native-input-roles.spec.ts:1",
+      "note": ""
+    },
+    {
+      "row": "controlsForAction scopes complete heterogeneous participant groups before representation/state",
+      "source": "public-api",
+      "trace": "I3+I6+ADR-0518",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/judge/context.ts:168; tools/agent-bench/tests/action-context.spec.ts:199",
+      "note": ""
+    },
+    {
+      "row": "workflowAction selects intended creation/editing action without imposing a UI protocol",
+      "source": "public-api",
+      "trace": "I3+I6+ADR-0518",
+      "status": "weak",
+      "citation": "tools/agent-bench/src/judge/context.ts:186",
+      "note": "B4 shared editor commit versus separate creator intent passes fresh real/native proof. B5 raw action-count uniqueness rejects multiple equivalent Save affordances for one editor/commit: executed full BASE3PASS/current3FAIL."
+    },
+    {
+      "row": "Versioned booking/expense-v5 public and frozen controls preserve v4; changed oracle fingerprints identify new criteria",
+      "source": "frozen-artifact",
+      "trace": "I6+I8+ADR-0518",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/booking-workflow-v5/card.json:1; tools/agent-bench/corpus/cases/expense-settlement-v5/card.json:1; /tmp/rifty-pr341-action-context-final-review-r4/artifact-verification.json:1",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/src/judge/context.ts:214",
+          "summary": "Raw action-count uniqueness rejects equivalent Save affordances for the same intended editor, imposing a new UI restriction and regressing working BASE workflows.",
+          "authority": "I6 lines103–109: trusted checks accept working alternatives and add no arbitrary UI structure; unit Reference contract29–32 preserves accessible actions/layout freedom, Acceptance1/2 → I3/I6; booking public prompt20–25 and expense public prompt21–26 leave layout/action structure open; named BASE5acb79d full booking-v4/expense-v4 working duplicate-commit behavior. ADR-0518 unresolved intended action ambiguity does not make two affordances of the same editor/commit different records.",
+          "evidence": "Executed node --import tsx /tmp/rifty-pr341-action-context-final-review-r4/duplicate-commit.mts and duplicate-commit-siblings.mts; both actual exit1. Raw logs and independent b5-physical.json, roots /tmp/rifty-review-duplicate-commit-5enmcm and /tmp/rifty-review-duplicate-commit-siblings-5QiMdG. Actual pinned Vue room/reservation and Svelte expense references: duplicate ONLY their existing Save button, both buttons use exactly SAME saveRoom/saveBooking/saveExpense handler, same editable draft/domain validation/commit/persistence. Exact BASE-v4 full judges all3PASS (booking40 probes); current-v5 all3FAIL with Ambiguous intended room/reservation|booking/expense action before reaching mutation. All6 physical before+patch=after, noModelInvocation=true/agentStatus=not-run, selected current c9ebe2d source clean. Raw action count at214 (and equivalent commit count at210) is mistaken for distinct intended-record ambiguity. Fault class frozen-assumption/lossy-aggregate at owned in-process action projection: equivalent affordances collapse with distinct-record actions. Missing RED: multiple equivalent commit affordances for SAME intended editor, alongside existing genuinely different-editor/different-record negative. Sweep room/reservation/expense input+commit callers and mirrors/shared workflowAction; retain genuine distinct intent ambiguity and B4 Add-opener/Save-commit discrimination, without requiring one visible Save button or button placement/order. Fresh native102/current3opener/current4real single-dual PASS/types0 and complete original B1/B2/B3/B4 raw guards verified; they do not discriminate this newly executed BASE regression. Initial review probe sandbox failures were launch EPERM, retained separately, never counted as semantic RED."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "blocker",
+      "findings": []
+    }
+  ]
+}
