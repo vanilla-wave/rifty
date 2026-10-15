@@ -32,3 +32,9 @@ coordination mechanism or ready promise.
 Owner: playground/agent-bench. Trigger: reproduce via this public path or
 change archive readiness/notification handling. Source SHA-1/alias repairs
 do not claim this UI failure resolved.
+
+V17 recurrence: six COI setups (ms-negative2/3, stringify-boxed1/3,
+queue-clear1/3) wait90s for the same toast, zero agent tools/tokens.
+[Exact completed recording](../distribution/reference/agent-eval-pr341-v17-completed.md).
+No original rows rescued; unrelated SHA-1/alias errors absent in observed
+errors. Cause remains unisolated; no archive/notification source change.
