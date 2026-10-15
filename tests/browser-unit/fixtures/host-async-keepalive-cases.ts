@@ -236,6 +236,32 @@ const outcome = (fn) => { try { fn(); return 'ok'; } catch (e) { return e.name; 
 `,
   },
   {
+    name: 'blob-stream-direct-readers',
+    source: `${report}const pump = (reader, read, total = 0) => read(reader).then(({ done: end, value }) =>
+  end ? total : pump(reader, read, total + value.byteLength));
+pump(new ReadableStreamDefaultReader(new Blob([Buffer.alloc(16 * 1024 * 1024, 79)]).stream()), (r) => r.read())
+  .then((total) => done('default-reader', total))
+  .then(() => pump(new ReadableStreamBYOBReader(new Blob([Buffer.alloc(16 * 1024 * 1024, 80)]).stream()), (r) => r.read(new Uint8Array(1024 * 1024))))
+  .then((total) => done('byob-reader', total), (e) => fail('readers', e));
+`,
+  },
+  {
+    // Host read done, guest sink pending forever: Node holds nothing and exits 0.
+    name: 'pipe-to-stalled-guest-sink',
+    source: `${report}new Blob(['abc']).stream().pipeTo(new WritableStream({
+  write(chunk) { console.log('HA|sink=' + chunk.byteLength); return new Promise(() => {}); },
+}));
+`,
+  },
+  {
+    name: 'pipe-through-stalled-guest-transform',
+    source: `${report}const out = new Blob(['abc']).stream().pipeThrough(new TransformStream({
+  transform(chunk) { console.log('HA|transform=' + chunk.byteLength); return new Promise(() => {}); },
+}));
+out.getReader().read().then(() => console.log('HA|never'));
+`,
+  },
+  {
     name: 'zlib-gzip',
     source: `${report}const zlib = require('node:zlib');
 zlib.gzip(Buffer.alloc(64 * 1024 * 1024, 65), (e, r) => (e ? fail('gzip', e) : done('gzip', r.length)));
@@ -255,12 +281,29 @@ gzip.end();
   },
 ];
 
-/** Global `WebSocket` (Node ≥22): an open socket holds the loop until its close. */
+/**
+ * Global `WebSocket` (Node ≥22): an open socket holds the loop until its close.
+ * A subclass overriding `addEventListener` constructs normally, and a synthetic
+ * `close` event does not end the socket.
+ */
 export function webSocketCase(url: string): string {
   return `console.log('HA|top');
-const socket = new WebSocket(${JSON.stringify(url)});
-socket.onopen = () => console.log('HA|open');
-socket.onmessage = (event) => console.log('HA|message=' + event.data);
-socket.onclose = (event) => console.log('HA|close=' + event.code + ':' + event.reason);
+class TrackedSocket extends WebSocket {
+  constructor(target) {
+    super(target);
+    this.listened = [];
+  }
+  addEventListener(type, listener, options) {
+    this.listened.push(type);
+    return super.addEventListener(type, listener, options);
+  }
+}
+const socket = new TrackedSocket(${JSON.stringify(url)});
+socket.addEventListener('open', () => {
+  console.log('HA|open');
+  socket.dispatchEvent(new Event('close'));
+});
+socket.addEventListener('message', (event) => console.log('HA|message=' + event.data));
+socket.addEventListener('close', (event) => console.log('HA|close=' + event.code + ':' + event.reason + ':' + socket.listened.join('+')));
 `;
 }

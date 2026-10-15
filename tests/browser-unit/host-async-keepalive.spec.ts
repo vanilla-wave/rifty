@@ -65,8 +65,9 @@ test('an open global WebSocket holds the loop until it closes, as in Node', asyn
     expect(rows(oracle.stdout), oracle.stdout).toEqual([
       'HA|top',
       'HA|open',
+      'HA|close=undefined:undefined:open+message+close',
       'HA|message=hello',
-      'HA|close=1000:bye',
+      'HA|close=1000:bye:open+message+close',
     ]);
     await gotoHarness(page);
     await bootOwner(page, {

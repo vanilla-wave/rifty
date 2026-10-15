@@ -81,8 +81,10 @@ verbatim by live Node (`process.execPath`, v24.16.0 at pickup) and by rifty
 `node <case>.cjs`; rows, exit code and no-timeout must match.
 
 1. `buffer.Blob#arrayBuffer` 64 MiB, `Blob#text`, `Blob#bytes`, `Blob#stream`
-   reads (reader, `for await`, `tee`, `pipeTo`, `Readable.fromWeb`) and
-   `File#text` print their DONE row and exit 0 → I1, scenario 1
+   reads (`getReader()` and direct Default/BYOB reader constructors, `for await`,
+   `tee`, `pipeTo`, `Readable.fromWeb`) and `File#text` print their DONE row and
+   exit 0; a `pipeTo`/`pipeThrough` whose host read is done and whose guest
+   sink/transform never settles exits 0 at once, as Node → I1, scenario 1
 2. `fs.openAsBlob(p).then(b => b.arrayBuffer())` prints its row → I1, scenario 1
 3. `WebAssembly.compile` and `WebAssembly.instantiate(bytes)` of a 6 M-nop
    module print their rows; a rejecting compile releases (exit 0) → I1, scenario 1
@@ -92,7 +94,8 @@ verbatim by live Node (`process.execPath`, v24.16.0 at pickup) and by rifty
    print their rows, also through `body.pipeThrough` and `new Response(blob.stream())`;
    a guest-stream body with a pending read holds nothing (exit 0 at once, as Node) → I1
 6. `zlib.gzip` 64 MiB and a `createGzip` stream print their rows → I1
-7. A global `WebSocket` to a live server prints open/message/close rows → I1
+7. A global `WebSocket` subclass to a live server prints open/message/close
+   rows; a synthetic `close` event does not end the hold → I1
 8. `Response`/`Request`/`WebSocket` keep `X.prototype.constructor === X`,
    `instanceof`, and the wrapped functions keep Node's names and native
    `Function#toString`; `init.body` is read once; a locked body still refuses
@@ -118,6 +121,11 @@ verbatim by live Node (`process.execPath`, v24.16.0 at pickup) and by rifty
   rejections, double `init.body` read, split body lock, Proxy `toString` —
   all HOLDS; fixed (settle-tracked promise copy, native host-stream
   registration, observed init, `toString` mask) with rows 8-9.
+- 2026-10-16 — Final+GREEN verify BLOCK @ d7460f572 (codex): direct reader
+  constructors unregistered, `pipeTo`/`pipeThrough` held through guest waits,
+  WebSocket subclass override called inside the constructor — all HOLDS;
+  fixed (reader-constructor registration, held-read tap, native listener with
+  `isTrusted`) with rows 1 and 7.
 - 2026-10-16 — refuse-by-name vs hold-to-cap: every counted class has an
   observable release (settle / `close`), so none is refused; a never-settling
   one holds to the loud ADR-0152 §4 cap (ADR-0529 §5).

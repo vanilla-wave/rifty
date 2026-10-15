@@ -32,10 +32,13 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
      `fs.openAsBlob` results).
    - Reads of host streams — `blob.stream()` results and the native `body`
      of a host-backed Response/Request (identity and locking stay native):
-     a pending public `reader.read()`, async-iterator `next()`, reads of
-     `tee()` branches and of a `pipeThrough()` readable (covers
-     `stream.Readable.fromWeb`); a `pipeTo()` holds until the pipe settles.
-     An unread stream holds nothing, as in Node.
+     a pending `read()` of a reader (`getReader()` or a direct
+     `ReadableStreamDefaultReader`/`BYOBReader` constructor; covers
+     `stream.Readable.fromWeb`), async-iterator `next()`, reads of `tee()`
+     branches. `pipeTo`/`pipeThrough` lock the source as natively and pipe
+     through a tap whose pending host read alone holds: a pipe waiting on a
+     guest sink or transform holds nothing. An unread stream holds nothing,
+     as in Node.
    - `WebAssembly.compile`, `WebAssembly.instantiate` (both overloads).
      Streaming variants stay the ADR-0158 loud ceiling.
    - Every `SubtleCrypto.prototype` method (one prototype covers
@@ -46,17 +49,18 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
      `init.body` is observed during the native read, never read twice. A guest
      `ReadableStream` body settles on guest work and holds nothing (Node exits
      with such a read pending). Fetched responses stay ADR-0158's.
-   - Global `WebSocket`: ref at construction, released on its `close` event
-     (always dispatched after error or close).
+   - Global `WebSocket`: ref at construction, released on its trusted `close`
+     event (always dispatched after error or close); the listener goes through
+     the native `EventTarget` API, so a subclass override never runs before its
+     constructor, and a synthetic `close` releases nothing.
 3. Not counted, settle on microtasks with no host task: `fs.promises`/fs
    callbacks (sync RPC), `node:zlib` over CompressionStream (Chromium transforms
    synchronously; 64 MiB one-shot + stream rows pass unheld).
 4. Out of the Node surface, not counted: `indexedDB`, `caches`,
    `navigator.locks`, `scheduler`; `EventSource` (not a default Node 24 global).
-5. A never-settling counted request (unclosed WebSocket, a `pipeTo` into a
-   guest sink that never accepts) holds to the loud ADR-0152 §4 cap; Node holds
-   the process forever for the socket and exits for the stalled pipe. Every
-   counted class has an observable release; none needs a refuse-by-name ceiling.
+5. A never-settling counted request (an unclosed WebSocket) holds to the loud
+   ADR-0152 §4 cap where Node holds the process forever. Every counted class
+   has an observable release; none needs a refuse-by-name ceiling.
 
 ## Consequences
 
@@ -64,8 +68,9 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
   Node's result and exit status (browser-unit parity vs live Node).
 - (+) ADR-0152 §1 shape unchanged; the named set grows by these classes.
 - (−) A held promise settles one microtask after the native one.
-- (−) `pipeTo` from a host stream into a guest sink that stalls forever ends at
-  the drain cap (exit 1) where Node exits 0.
+- (−) `pipeThrough(…, { preventCancel: true })` from a host stream whose
+  transform errors leaves the source locked by the tap, where the native pipe
+  releases it.
 - (−) A host stream consumed only through a native internal reader (e.g. passed
   to `new Response(stream)` and read there) is covered by that body's consumer
   hold, not per read.

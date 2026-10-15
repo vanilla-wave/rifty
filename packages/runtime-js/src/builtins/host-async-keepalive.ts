@@ -49,20 +49,25 @@ const hostBodies = new WeakSet<object>();
 const isObject = (value: unknown): value is object =>
   (typeof value === 'object' || typeof value === 'function') && value !== null;
 
-/** One ref until `value` settles; returns the tracked copy (rejection stays unhandled if unobserved). */
+/** One ref until the native promise settles; returns the tracked copy (rejection stays unhandled if unobserved). */
 function hold<T>(value: T): T {
-  if (!isObject(value) || typeof (value as { then?: unknown }).then !== 'function') return value;
+  let tracked: T;
+  try {
+    tracked = reflectApply(promiseThen, value, [
+      (result: unknown) => {
+        keepaliveUnref();
+        return result;
+      },
+      (error: unknown) => {
+        keepaliveUnref();
+        throw error;
+      },
+    ]) as T;
+  } catch {
+    return value; // not a promise: nothing pending
+  }
   keepaliveRef();
-  return reflectApply(promiseThen, value, [
-    (result: unknown) => {
-      keepaliveUnref();
-      return result;
-    },
-    (error: unknown) => {
-      keepaliveUnref();
-      throw error;
-    },
-  ]) as T;
+  return tracked;
 }
 
 function wrapFunction<F extends object>(original: F, handler: ProxyHandler<F>): F {
@@ -103,7 +108,12 @@ function registering(set: WeakSet<object>, counts: (self: unknown) => boolean) {
 /** Proxy a global constructor; `X.prototype.constructor === X` stays true, as in Node. */
 function wrapConstructor(
   target: HostAsyncTarget,
-  name: 'Response' | 'Request' | 'WebSocket',
+  name:
+    | 'Response'
+    | 'Request'
+    | 'WebSocket'
+    | 'ReadableStreamDefaultReader'
+    | 'ReadableStreamBYOBReader',
   construct: (original: Construct, args: unknown[], newTarget: Construct) => object,
 ): object | undefined {
   const ctor = target[name] as unknown as Construct | undefined;
@@ -126,25 +136,95 @@ function installToStringMask(target: HostAsyncTarget): void {
   );
 }
 
-/** Reads through public reader, async iteration, tee, pipeTo and pipeThrough of host streams. */
+/**
+ * Reads of host streams: readers (`getReader()` or direct constructors), async
+ * iteration and `tee()` branches hold per pending read. `pipeTo`/`pipeThrough`
+ * pipe through a tap that holds only while its host read is pending, so a pipe
+ * waiting on a guest sink or transform holds nothing, as in Node.
+ */
 function installStreamKeepalive(target: HostAsyncTarget): void {
   const ReadableStreamCtor = target.ReadableStream;
   if (ReadableStreamCtor === undefined) return;
   const stream = ReadableStreamCtor.prototype;
+  const nativeGetReader = stream.getReader as AnyFunction;
+  const lockedGetter = Object.getOwnPropertyDescriptor(stream, 'locked')?.get as AnyFunction;
+  const reader = target.ReadableStreamDefaultReader?.prototype;
+  if (reader === undefined) return;
+  const nativeRead = reader.read as AnyFunction;
+  const nativeCancel = reader.cancel as AnyFunction;
+  const nativeReleaseLock = reader.releaseLock as AnyFunction;
   const isHost = (self: unknown): boolean => isObject(self) && hostStreams.has(self);
+  const isHostReader = (self: unknown): boolean => isObject(self) && hostReaders.has(self);
   wrapMethod(stream, 'getReader', registering(hostReaders, isHost));
-  for (const reader of [target.ReadableStreamDefaultReader, target.ReadableStreamBYOBReader]) {
-    if (reader !== undefined) {
-      holdMethod(reader.prototype, 'read', (self) => isObject(self) && hostReaders.has(self));
-    }
+  for (const name of ['ReadableStreamDefaultReader', 'ReadableStreamBYOBReader'] as const) {
+    const prototype = wrapConstructor(target, name, (original, args, newTarget) => {
+      const created = reflectConstruct(original, args, newTarget);
+      if (isHost(args[0])) hostReaders.add(created);
+      return created;
+    });
+    if (prototype !== undefined) holdMethod(prototype, 'read', isHostReader);
   }
   wrapMethod(stream, 'tee', (original, self, args) => {
     const branches = reflectApply(original, self, args) as object[];
     if (isHost(self)) for (const branch of branches) hostStreams.add(branch);
     return branches;
   });
-  wrapMethod(stream, 'pipeThrough', registering(hostStreams, isHost));
-  holdMethod(stream, 'pipeTo', isHost);
+  /** Lock `source` now (as the native pipe does) and expose it as a held-read tap. */
+  const tap = (source: object): { readonly tap: ReadableStream; release(): void } => {
+    const sourceReader = reflectApply(nativeGetReader, source, []) as object;
+    const tapStream = new ReadableStreamCtor(
+      {
+        pull: (controller) =>
+          reflectApply(promiseThen, hold(reflectApply(nativeRead, sourceReader, [])), [
+            ({ done, value }: ReadableStreamReadResult<unknown>) => {
+              if (done) controller.close();
+              else controller.enqueue(value);
+            },
+            (error: unknown) => controller.error(error),
+          ]) as Promise<void>,
+        cancel: (reason) => reflectApply(nativeCancel, sourceReader, [reason]) as Promise<void>,
+      },
+      { highWaterMark: 0 },
+    );
+    const release = (): void => {
+      try {
+        reflectApply(nativeReleaseLock, sourceReader, []);
+      } catch {
+        // already released by cancel/close
+      }
+    };
+    return { tap: tapStream, release };
+  };
+  const piping =
+    (settle: (piped: unknown, release: () => void) => unknown) =>
+    (original: AnyFunction, self: unknown, args: unknown[]): unknown => {
+      if (!isHost(self) || reflectApply(lockedGetter, self, [])) {
+        return reflectApply(original, self, args); // native refusal, native order
+      }
+      const { tap: tapStream, release } = tap(self as object);
+      return settle(reflectApply(original, tapStream, args), release);
+    };
+  wrapMethod(
+    stream,
+    'pipeTo',
+    piping((piped, release) =>
+      reflectApply(promiseThen, piped, [
+        (result: unknown) => {
+          release();
+          return result;
+        },
+        (error: unknown) => {
+          release();
+          throw error;
+        },
+      ]),
+    ),
+  );
+  wrapMethod(
+    stream,
+    'pipeThrough',
+    piping((readable) => readable),
+  );
   const values = Object.getOwnPropertyDescriptor(stream, 'values')?.value as
     | AnyFunction
     | undefined;
@@ -229,10 +309,18 @@ function installBodyKeepalive(target: HostAsyncTarget, name: 'Response' | 'Reque
 }
 
 function installWebSocketKeepalive(target: HostAsyncTarget): void {
+  const addEventListener = EventTarget.prototype.addEventListener;
+  const removeEventListener = EventTarget.prototype.removeEventListener;
   wrapConstructor(target, 'WebSocket', (original, args, newTarget) => {
-    const socket = reflectConstruct(original, args, newTarget) as WebSocket;
+    const socket = reflectConstruct(original, args, newTarget);
+    // Native listener API: a subclass override must not run before its constructor.
+    const release = (event: Event): void => {
+      if (!event.isTrusted) return; // a synthetic `close` does not end the socket
+      reflectApply(removeEventListener, socket, ['close', release]);
+      keepaliveUnref();
+    };
+    reflectApply(addEventListener, socket, ['close', release]);
     keepaliveRef();
-    socket.addEventListener('close', () => keepaliveUnref(), { once: true });
     return socket;
   });
 }
