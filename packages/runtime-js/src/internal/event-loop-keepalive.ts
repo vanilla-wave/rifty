@@ -125,24 +125,6 @@ export function takeUnhandledRejection(): { readonly reason: unknown } | null {
   return rejection;
 }
 
-/**
- * Track a detached async task as an event-loop handle. Some real CLIs start an
- * async action without awaiting it at top level (Vite's bundled CAC does this);
- * Node stays alive because the action uses libuv-backed work. Browser/WASI
- * promises may not create such handles, so we pin the child until the promise
- * settles and surface rejection through awaitDrain.
- */
-export function trackKeepalivePromise(promise: PromiseLike<unknown>): void {
-  ref();
-  promise.then(
-    () => unref(),
-    (err) => {
-      unref();
-      handleRealmUnhandledRejection(err, promise);
-    },
-  );
-}
-
 /** Install the one eval invocation's deferred print/error work into the existing drain. */
 export function registerNodeEvalDrainLifecycle(lifecycle: NodeEvalDrainLifecycle): void {
   const state = keepaliveState();

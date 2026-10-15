@@ -20,7 +20,6 @@ import {
   emnapiCoreOrphanedReferencePatchPolicy,
 } from '../src/runtime/emnapi-core-install-policy.ts';
 import {
-  applyViteCliActionPatch,
   applyViteRootUrlPatch,
   applyViteRootWatchPatch,
   viteRootWatchPatchPolicy,
@@ -90,20 +89,6 @@ async function main(): Promise<void> {
 const decoder = new TextDecoder();
 function proveViteCliPatchInput(files: ReadonlyMap<string, Uint8Array>): void {
   proveEmnapiCorePatchInput(files);
-  const cliPaths = [...files.keys()].filter(
-    (path) =>
-      path === 'vite/dist/node/cli.js' || path.endsWith('/node_modules/vite/dist/node/cli.js'),
-  );
-  if (cliPaths.length === 0) throw new Error('snapshot contains no Vite CLI transform input');
-  for (const path of cliPaths) {
-    try {
-      applyViteCliActionPatch(decoder.decode(files.get(path)));
-    } catch (error) {
-      throw new Error(`${path} is not patchable by the current Vite CLI transform`, {
-        cause: error,
-      });
-    }
-  }
   const chunkPaths = [...files.keys()].filter(
     (path) =>
       (path.startsWith('vite/dist/node/chunks/') ||

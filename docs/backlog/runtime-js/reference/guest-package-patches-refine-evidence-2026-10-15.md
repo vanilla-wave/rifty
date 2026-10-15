@@ -261,3 +261,19 @@ resolve into it and do not exist; `process.env.HOME` is unset.
   dedup row note. Noted for pickup: child 1's ADR re-decides add-on-seam vs
   overturn-some for ADR-0280 at non-default values; "no playground UI" is
   user-observable (reported).
+
+## Item 2 oracle — failing config on real Node + Vite 7.3.6 (2026-10-16)
+
+`npm install vite@7.3.6` in `/tmp/vite736-oracle` (`"type": "module"`), `vite.config.js`
+= `throw new Error('rifty-config-boom');`, `node node_modules/vite/bin/vite.js build`,
+Node v24.16.0: exit 1, stdout empty, stderr:
+
+```
+failed to load config from /private/tmp/vite736-oracle/vite.config.js
+error during build:
+Error: rifty-config-boom
+    at file:///private/tmp/vite736-oracle/node_modules/.vite-temp/vite.config.js.timestamp-…mjs:2:7
+```
+
+Upstream `vite@8.0.16` (`npm pack`, integrity `sha512-h9bXPmJichP5fLmVQo3PyaGSDE2n3aPuomeAlVRm0JLmt4rY6zmPKd59HYI4LNW8oTK7tlTsuC7l/m7awx9Jcw==`):
+`package/dist/node/cli.js` sha256 `369e1007819411176548d14afe9635e02d31d59941c91fb0a8a34f48ef0a2c41`.

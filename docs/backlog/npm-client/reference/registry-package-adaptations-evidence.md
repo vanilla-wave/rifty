@@ -12,7 +12,7 @@ PR #314 `df3cd222f`; source baseline `c64cb2ebb`. Node v24.16.0, Vitest 2.1.9.
 |---|---|---|
 | Workbench workers | esbuild startup, installed WASM integrity, generated client and FS adapter | registry runtime |
 | runtime-js globals | exact esbuild CJS realm identity | registry runtime; facade uses same realm carrier |
-| Workbench workers | Vite CLI promise/watch patches, CLI grammar, version gate, info startup suppression, preview/env preparation | registry runtime |
+| Workbench workers | Vite CLI watch patches, CLI grammar, version gate, info startup suppression, preview/env preparation (CAC promise hook removed 2026-10-16, ADR-0530) | registry runtime |
 | Workbench workers | emnapi 1.10.0 readable/minified backport, nested lockfile dispatch | registry installed-file preparation |
 | Workbench project-definition | Vite 8 napi WASI runtime override | registry manifest preparation; visible manifest preserved |
 | Workbench owner-child-dev-server | napi-rs WASI environment | registry launch preparation |

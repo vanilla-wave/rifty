@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Node entry preparation and the no-COI toolchain worker no longer publish `__riftyTrackCliPromise`; installed Vite `cli.js` runs upstream bytes (ADR-0530). Baked snapshots re-baked: only `vite/dist/node/cli.js` and the install-artifact identity change.
+
 - Kernel and no-COI toolchain workers install the host-async keepalive (ADR-0529) beside the fetch keepalive.
 
 - Named npm installs refresh selected roots while retaining unrelated pins; skipped optional dependencies no longer fail save or shell continuation (ADR-0504).

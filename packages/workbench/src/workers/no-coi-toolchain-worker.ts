@@ -13,7 +13,6 @@ import {
   installEventLoopKeepalive,
   installFetchKeepalive,
   installHostAsyncKeepalive,
-  trackKeepalivePromise,
 } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import {
@@ -63,7 +62,6 @@ registerNetBuiltins();
 // can reassign `process.exit`.
 const nodeExit = riftyProcess.exit;
 const closeToolchainWorker = installToolchainCloseSignal();
-Reflect.set(globalThis, '__riftyTrackCliPromise', trackKeepalivePromise);
 
 let runtimeBackend: 'opfs' | 'memory' | null = null;
 let installContext: ReturnType<typeof createNoCoiInstallContext>;

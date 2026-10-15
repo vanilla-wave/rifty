@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `snapshots:bake --replay-committed-lockfile` re-bakes over each committed snapshot's lockfile pins and replay cache (fails if the pins change), so a transform change does not re-resolve ranges against today's registry.
+
 - Chat renders the agent transcript model: retain tools at budget exit, show live shell output/cancelled state and native continuation/capability notices.
 
 - Add manual browser proof page: support, real Vite install/build, durable reload and reopen, copyable device report.

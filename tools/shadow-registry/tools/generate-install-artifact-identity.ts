@@ -6,7 +6,6 @@ import { identityForRecipe, identityPolicyProjection } from '../src/install-arti
 import { builtinShadowSubstitutionCatalog } from '../src/internal/index.ts';
 import { emnapiCoreOrphanedReferencePatchPolicy } from '../src/runtime/emnapi-core-install-policy.ts';
 import {
-  viteCliActionPatchPolicy,
   viteRootUrlPatchPolicy,
   viteRootWatchPatchPolicy,
 } from '../src/runtime/vite-cli-install-policy.ts';
@@ -65,7 +64,6 @@ export async function buildInstallArtifactRecipe() {
       digest: builtinShadowSubstitutionCatalog.digest,
     },
     emnapiCoreOrphanedReferencePatch: emnapiCoreOrphanedReferencePatchPolicy,
-    viteCliActionPatch: viteCliActionPatchPolicy,
     viteRootWatchPatch: viteRootWatchPatchPolicy,
     viteRootUrlPatch: viteRootUrlPatchPolicy,
     esbuildRuntimePolicy: identityPolicyProjection(await readJson(policyUrl)),

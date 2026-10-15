@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Removed `viteCliActionPatchPolicy`, its acquisition/validation paths and the Vite action keepalive admission (ADR-0530): installed `vite/dist/node/cli.js` is the upstream tarball member; the install-artifact recipe drops the policy.
+
 - Include npm tar path layout in materialized install identity; retire authority of package-prefix-only extracted trees.
 
 

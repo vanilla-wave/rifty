@@ -6,7 +6,6 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { applyViteCliActionPatch } from './runtime/vite-cli-install-policy.ts';
 
 const require = createRequire(import.meta.url);
 const packagePath = require.resolve('esbuild-wasm/package.json');
@@ -112,8 +111,8 @@ describe('Vite 7.3.6 consumer pin', () => {
     expect(sha256Text(upstreamCli)).toBe(
       '6b9001816eb5fb0979cbe380ed2116db93e315ff22ebf7fe55a4fc60458fa067',
     );
-    // ADR-0384: baked node_modules includes the registry's acquisition transform.
-    expect(cli).toBe(applyViteCliActionPatch(upstreamCli));
+    // Goal honest-guest-package-adaptations I2: the installed CLI is the upstream member.
+    expect(cli).toBe(upstreamCli);
     for (const anchor of [
       'cli.command("[root]", "start dev server").alias("serve").alias("dev")',
       'const { createServer } = await import("./chunks/server.js");',
@@ -142,6 +141,30 @@ describe('Vite 7.3.6 consumer pin', () => {
     expect(cli).toContain('if (this.options.help && this.showHelpOnExit) {');
     expect(cli).toContain(
       'if (this.options.version && this.showVersionOnExit && this.matchedCommandName == null) {',
+    );
+  });
+});
+
+describe('Vite 8 consumer pin', () => {
+  it('bakes the upstream 8.0.16 dist/node/cli.js bytes', () => {
+    const snapshot = JSON.parse(
+      gunzipSync(
+        readFileSync(
+          new URL(
+            '../../../apps/playground/public/snapshots/vite8-node-modules.json.gz',
+            import.meta.url,
+          ),
+        ),
+      ).toString('utf8'),
+    ) as ViteSnapshot;
+    const manifest = JSON.parse(snapshotFile(snapshot, 'vite/package.json')) as {
+      readonly version?: unknown;
+    };
+    expect(manifest.version).toBe('8.0.16');
+    // `npm pack vite@8.0.16` (integrity sha512-h9bXPmJichP5fLmVQo3PyaGSDE2n3aPuomeAlVRm0JLmt4rY6zmPKd59HYI4LNW8oTK7tlTsuC7l/m7awx9Jcw==),
+    // `tar -xOzf vite-8.0.16.tgz package/dist/node/cli.js | shasum -a 256`, 2026-10-16.
+    expect(sha256Text(snapshotFile(snapshot, 'vite/dist/node/cli.js'))).toBe(
+      '369e1007819411176548d14afe9635e02d31d59941c91fb0a8a34f48ef0a2c41',
     );
   });
 });

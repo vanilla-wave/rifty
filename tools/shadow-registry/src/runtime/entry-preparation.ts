@@ -19,7 +19,6 @@ export async function preparePackageEntryRuntime(
         readonly entryPath: string;
         readonly runtimeBindings: readonly PackageRuntimeBinding[];
         readonly fs: FsSync;
-        readonly trackKeepalivePromise?: (promise: PromiseLike<unknown>) => void;
         readonly getCwd?: () => string;
         readonly refs?: { ref(): void; unref(): void };
       }
@@ -28,7 +27,6 @@ export async function preparePackageEntryRuntime(
         readonly root: string;
         readonly runtimeBindings: readonly PackageRuntimeBinding[];
         readonly fs: FsSync;
-        readonly trackKeepalivePromise?: (promise: PromiseLike<unknown>) => void;
         readonly getCwd?: () => string;
         readonly refs?: { ref(): void; unref(): void };
       },

@@ -7,10 +7,8 @@ import {
   isBinShimPath,
 } from './launch.ts';
 import {
-  applyViteCliActionPatch,
   applyViteRootUrlPatch,
   applyViteRootWatchPatch,
-  viteCliActionPatchApplied,
   viteRootUrlPatchApplied,
   viteRootWatchPatchApplied,
   viteRootWatchPatchPolicy,
@@ -23,18 +21,10 @@ export type ViteCliMode = 'dev' | 'build' | 'preview' | 'optimize' | 'info';
 const VITE_BIN_SUFFIX = '/.bin/vite';
 const VITE_CHUNKS_SUFFIX = '/dist/node/chunks';
 
-declare global {
-  // Pins detached async CLI actions (Vite's bundled CAC parse() does not await them).
-  // eslint-disable-next-line no-var
-  var __riftyTrackCliPromise: ((promise: PromiseLike<unknown>) => void) | undefined;
-}
-
 export interface ViteCliPreparation {
   readonly root: string;
   readonly mode: ViteCliMode;
   readonly executedBinPath: string;
-  /** Required for action modes; informational invocations may omit it. */
-  readonly trackKeepalivePromise?: (promise: PromiseLike<unknown>) => void;
 }
 
 /** Derive one complete Vite preparation from the executed entry + real argv. */
@@ -95,18 +85,6 @@ function rootWatchPatchSite(
   return site;
 }
 
-function validateCliActionPatch(vitePackageRoot: string): void {
-  const fs = syncMirror();
-  const path = normalizePath(`${vitePackageRoot}/dist/node/cli.js`);
-  if (!fs.existsSync(path)) {
-    throw new Error(`vite CLI trusted tree is missing prepared CLI: ${path}`);
-  }
-  const source = dec.decode(fs.readFileBytesSync(path));
-  if (!viteCliActionPatchApplied(source)) {
-    throw new Error(`vite CLI files must be prepared by acquisition before promotion: ${path}`);
-  }
-}
-
 function validateRootWatchPatch(vitePackageRoot: string): void {
   const { path, source } = rootWatchPatchSite(vitePackageRoot);
   if (!viteRootWatchPatchApplied(source) || !viteRootUrlPatchApplied(source)) {
@@ -136,12 +114,8 @@ export function planViteCliAcquisitionFiles(
   fs: FsSync = syncMirror(),
 ): readonly InstalledFilePreparation[] {
   const packageRoot = vitePackageRoot(root, executedBinPath);
-  const cliPath = normalizePath(`${packageRoot}/dist/node/cli.js`);
-  if (!fs.existsSync(cliPath)) return [];
-  const cliSource = dec.decode(fs.readFileBytesSync(cliPath));
+  if (!fs.existsSync(normalizePath(`${packageRoot}/dist/node/cli.js`))) return [];
   const changes: InstalledFilePreparation[] = [];
-  const cli = applyViteCliActionPatch(cliSource);
-  if (cli !== cliSource) changes.push({ path: cliPath, bytes: enc.encode(cli) });
   const site = rootWatchPatchSite(packageRoot, fs);
   const watcher = applyViteRootUrlPatch(applyViteRootWatchPatch(site.source));
   if (watcher !== site.source) changes.push({ path: site.path, bytes: enc.encode(watcher) });
@@ -158,27 +132,9 @@ export async function prepareViteCliAcquisitionFiles(
     fs.writeFileSync(change.path, change.bytes);
 }
 
-/** Reject an incomplete host capability before adapter startup or CLI execution. */
-export function assertViteCliKeepalive(options: ViteCliPreparation): void {
-  if (options.mode !== 'info' && typeof options.trackKeepalivePromise !== 'function') {
-    throw new TypeError('Vite CLI action requires host trackKeepalivePromise');
-  }
-}
-
 export async function prepareViteCli(options: ViteCliPreparation): Promise<void> {
-  assertViteCliKeepalive(options);
   const packageRoot = vitePackageRoot(options.root, options.executedBinPath);
-  validateCliActionPatch(packageRoot);
   validateRootWatchPatch(packageRoot);
-  await completeViteCliPreparation(options, packageRoot);
-}
-
-async function completeViteCliPreparation(
-  options: ViteCliPreparation,
-  packageRoot: string,
-): Promise<void> {
-  if (typeof options.trackKeepalivePromise === 'function')
-    globalThis.__riftyTrackCliPromise = options.trackKeepalivePromise;
   if (options.mode === 'info') return;
   const fs = syncMirror();
   await prepareViteEsbuildRuntime({

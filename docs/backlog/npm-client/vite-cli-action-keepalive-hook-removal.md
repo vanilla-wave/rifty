@@ -1,13 +1,13 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: The installed Vite `dist/node/cli.js` carries no rifty keepalive patch — the CAC action hook (`__riftyTrackCliPromise`) is removed once the Vite lanes prove it is not load-bearing
 created: 2026-10-15
 why: the hook pins Vite's whole un-awaited CAC action promise as one keepalive ref; it predates the generated esbuild client's own handle mapping (`runtime-service-refs` = upstream `child.ref()/unref()`), and a two-arm probe shows `vite build` completes identically with the hook inert — an adaptation with no named platform gap behind it is undeclared debt
 user_story: As a developer running `vite build` on the Vite 7 starter, I want the installed `cli.js` to be the upstream 7.3.6 bytes and the build to exit when its real work is done, but today rifty rewrites `this.runMatchedCommand();` and re-validates that rewrite before every CLI start
 epic: honest-guest-package-adaptations
 blocked_by: []
-sources: [ADR-0174, ADR-0226, ADR-0384, docs/backlog/runtime-js/reference/guest-package-patches-refine-evidence-2026-10-15.md]
+sources: [ADR-0530, ADR-0174, ADR-0226, ADR-0384, docs/backlog/runtime-js/reference/guest-package-patches-refine-evidence-2026-10-15.md]
 code: [tools/shadow-registry/src/runtime/vite-cli-install-policy.ts, tools/shadow-registry/src/runtime/vite-cli-prep.ts, tools/shadow-registry/src/runtime/vite-node-entry-edge.ts, packages/workbench/src/workers/node-entry-runtime-preparation.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts, packages/runtime-js/src/internal/event-loop-keepalive.ts]
 ---
 
@@ -63,7 +63,33 @@ Dedup: no title/`code:`/map/declined match.
 
 ## Challenge
 
-<!-- finding capture — no premise critic at draft (README §Challenge) -->
+challenge: 2026-10-15 — clear (goal premise, `epics/honest-guest-package-adaptations` §Challenge)
+
+## Acceptance
+
+Baseline: upstream tarball members (`vite-7.3.6.tgz` fixture; `npm pack vite@8.0.16`,
+cli.js sha256 `369e1007…2c41`) and real Node 24.16.0 + vite 7.3.6 for the
+failing-config row (`docs/backlog/runtime-js/reference/guest-package-patches-refine-evidence-2026-10-15.md`
+§Item 2 oracle). RED on `aebdd7ddd`: rows 1-2 fail (patched bytes, `HOOK=function`).
+
+1. Installed `node_modules/vite/dist/node/cli.js` of the Vite 7.3.6 and Vite 8.0.16
+   starters is byte-identical to the upstream member; baked snapshots carry the
+   same bytes (`esbuild-contract-source-pin.test.ts`) → I2, scenario 2
+2. `vite build` on both starters completes with `typeof globalThis.__riftyTrackCliPromise
+   === 'undefined'` in the config realm; `trackKeepalivePromise` is no longer a
+   `@riftydev/runtime-js` export → I2, ADR-0530
+3. `vite build` with a throwing `vite.config.js` prints `failed to load config
+   from …/vite.config.js`, `error during build:`, `Error: <message>` and exits 1,
+   as real Node → I2, ADR-0530
+4. Existing lanes green without the hook: `esbuild-vite-contract`,
+   `sass-vite-contract`, `child-fs-in-realm-lane`, `vite-build-failure-containment`,
+   `workbench-vite-lifecycle`, `message-port-ref-keepalive` (Vite 8 rolldown),
+   e2e `vite7-build-preview`, `vite-command-honesty`, `react-vite-build`,
+   `vite-save-trust-rebind`, `vite-temp-trust-churn`, `instant-preset-reset`,
+   no-COI `no-coi-sandbox-build-loop` → I2
+
+Carrier: `tests/browser-unit/vite-cli-upstream-bytes.spec.ts` (rows 1-3),
+`tests/integration/vite-cli-prep.test.ts`, `tools/checks/install-artifact-identity.test.ts`.
 
 ## Out of scope
 
@@ -73,6 +99,13 @@ Dedup: no title/`code:`/map/declined match.
 - Vite 7.3.7 / proven-version admission policy — separate refine.
 
 ## Decisions
+
+- 2026-10-16 — pickup: observed undeclared adaptation with an upstream-bytes
+  baseline; RED on `aebdd7ddd`; ADR-0530 removes the policy and the public
+  `trackKeepalivePromise` export (no consumer outside the hook, open question
+  answered by grep over packages/apps/tools/tests). Snapshots re-baked over
+  committed lockfile pins: a live re-resolve pulled Vite 7.3.7 and newer
+  transitive versions (out of scope — goal map §Out of scope).
 
 - 2026-10-15 — rejected: keep the hook as a declared "handle-mapping"
   adaptation — it maps no Node handle (CAC's un-awaited promise holds nothing
