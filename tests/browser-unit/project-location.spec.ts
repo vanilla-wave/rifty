@@ -92,6 +92,59 @@ async function devHmr(
   );
 }
 
+/** Dev server ready → `#app` text; an edit of `src/main.js` is served after a reload. */
+async function devReload(page: Page, edited: string): Promise<{ before: string; after: string }> {
+  return page.evaluate(
+    async ({ fixtureUrl, source }) => {
+      const fixture = await import(/* @vite-ignore */ fixtureUrl);
+      const run = fixture.currentProject().run();
+      const frame = document.createElement('iframe');
+      try {
+        const ready = await run.ready;
+        const load = (): Promise<void> =>
+          new Promise<void>((resolve) => {
+            frame.addEventListener('load', () => resolve(), { once: true });
+          });
+        const text = (): string => frame.contentDocument?.getElementById('app')?.textContent ?? '';
+        const rendered = async (label: string): Promise<void> => {
+          const deadline = Date.now() + 60_000;
+          while (text().length === 0) {
+            if (Date.now() > deadline) throw new Error(`${label} timed out`);
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+        };
+        let loaded = load();
+        frame.src = new URL(ready.url, location.href).href;
+        document.body.appendChild(frame);
+        await loaded;
+        await rendered('initial render');
+        const before = text();
+        await fixture.writeProjectText('/src/main.js', source);
+        loaded = load();
+        frame.contentWindow?.location.reload();
+        await loaded;
+        await rendered('reloaded render');
+        return { before, after: text() };
+      } finally {
+        frame.remove();
+        await run.stop().catch(() => {});
+        await run.close().catch(() => {});
+      }
+    },
+    { fixtureUrl: sealedWorkbenchFixtureUrl, source: edited },
+  );
+}
+
+async function archivePaths(page: Page): Promise<string[]> {
+  return page.evaluate(async (fixtureUrl) => {
+    const fixture = await import(/* @vite-ignore */ fixtureUrl);
+    const archive = JSON.parse(await fixture.currentSessionTools().archive.export()) as {
+      readonly files: readonly { readonly path: string }[];
+    };
+    return archive.files.map((file) => file.path);
+  }, sealedWorkbenchFixtureUrl);
+}
+
 /** `vite preview` on 4174 → the routed preview serves the built index.html. */
 async function previewHtml(page: Page): Promise<string> {
   return page.evaluate(async (fixtureUrl) => {
@@ -187,6 +240,9 @@ for (const location of [
       await execLine(page, `cd ${location.root}`);
       expect(await projectRootNames(page)).not.toEqual(expect.arrayContaining(['/tmp']));
       expect(await projectRootNames(page)).not.toEqual(expect.arrayContaining(['/home']));
+      expect(
+        (await archivePaths(page)).filter((path) => /(^|\/)(tmp|home|\.npmrc)(\/|$)/u.test(path)),
+      ).toEqual([]);
 
       const build = await execLine(page, 'vite build');
       expect(build.exit, build.out).toBe(0);
@@ -229,6 +285,9 @@ for (const location of [
       expect(build.out).toMatch(/✓ built in/u);
       const html = await previewHtml(page);
       expect(html).toMatch(/assets\/[^"]+\.js/u);
+      const dev = await devReload(page, EDITED_MAIN);
+      expect(dev.before).toContain('Hello from real Vite 8');
+      expect(dev.after).toBe('LOCATION-HMR');
     } finally {
       await closeOwner(page);
     }
@@ -304,6 +363,7 @@ test('project root `/`: project files plus mounts; a project `tmp` collides loud
     expect(listing).toEqual(expect.arrayContaining(['home', 'index.html', 'package.json', 'tmp']));
     const build = await execLine(page, 'vite build');
     expect(build.exit, build.out).toBe(0);
+    expect(await previewHtml(page)).toMatch(/assets\/[^"]+\.js/u);
   } finally {
     await closeOwner(page);
   }
@@ -374,43 +434,47 @@ test('project-owned ~ and /tmp persist across reopen and are not shared between 
         await terminal.close();
       }
     };
+    const owned = `node -e "const fs=require('fs');console.log('OWNED=' + JSON.stringify([fs.readdirSync('/home/rifty'), fs.readdirSync('/tmp')]))"`;
     const first = await sdk.openPlaygroundWorkbench(options);
     const scratchDefinition = first.playground.define(plan('scratch'));
     await first.playground.catalog.createScratch({ definition: scratchDefinition });
     let scratch = await first.openProject(scratchDefinition);
     const written = await run(
       scratch,
-      'echo keep > ~/.npmrc && echo tmp > /tmp/keep.txt && cat ~/.npmrc /tmp/keep.txt',
+      'echo keep > $HOME/.npmrc && echo tmp > /tmp/keep.txt && cat ~/.npmrc /tmp/keep.txt',
     );
     await scratch.close();
     await first.close();
 
     const second = await sdk.openPlaygroundWorkbench(options);
-    const openScratch = async () => {
+    try {
       const definition = second.playground.define(plan('scratch'));
       await second.playground.catalog.createScratch({ definition, preserveDirtySameStarter: true });
-      return second.openProject(definition);
-    };
-    try {
-      scratch = await openScratch();
+      scratch = await second.openProject(definition);
       const reopened = await run(scratch, 'cat ~/.npmrc /tmp/keep.txt');
       await scratch.close();
-      const otherDefinition = second.playground.define(plan('other'));
+      // Save converts the scratch into the project (ADR-0165): its ~ and /tmp come along.
+      const savedDefinition = second.playground.define(plan('saved'));
       await second.playground.catalog.saveScratch({
-        id: 'other',
-        name: 'Other',
-        definition: otherDefinition,
+        id: 'saved',
+        name: 'Saved',
+        definition: savedDefinition,
       });
-      const other = await second.openProject(otherDefinition);
-      const otherListing = await run(
-        other,
-        `node -e "const fs=require('fs');console.log('OWNED=' + JSON.stringify([fs.readdirSync('/home/rifty'), fs.readdirSync('/tmp')]))"`,
-      );
-      await other.close();
-      scratch = await openScratch();
-      const back = await run(scratch, 'cat ~/.npmrc');
-      await scratch.close();
-      return { written, reopened, otherListing, back };
+      let saved = await second.openProject(savedDefinition);
+      const carried = await run(saved, 'cat ~/.npmrc /tmp/keep.txt && echo mine > ~/.npmrc');
+      await saved.close();
+      const freshDefinition = second.playground.define({
+        ...plan('scratch'),
+        starterId: 'location-fresh',
+      });
+      await second.playground.catalog.createScratch({ definition: freshDefinition });
+      const fresh = await second.openProject(freshDefinition);
+      const freshListing = await run(fresh, owned);
+      await fresh.close();
+      saved = await second.openProject(savedDefinition);
+      const back = await run(saved, 'cat ~/.npmrc');
+      await saved.close();
+      return { written, reopened, carried, freshListing, back };
     } finally {
       await second.close();
     }
@@ -418,7 +482,9 @@ test('project-owned ~ and /tmp persist across reopen and are not shared between 
   expect(result.written.exit, result.written.out).toBe(0);
   expect(result.reopened.exit, result.reopened.out).toBe(0);
   expect(lines(result.reopened.out)).toEqual(expect.arrayContaining(['keep', 'tmp']));
-  expect(result.otherListing.exit, result.otherListing.out).toBe(0);
-  expect(lines(result.otherListing.out)).toContain('OWNED=[[],[]]');
-  expect(lines(result.back.out)).toContain('keep');
+  expect(result.carried.exit, result.carried.out).toBe(0);
+  expect(lines(result.carried.out)).toEqual(expect.arrayContaining(['keep', 'tmp']));
+  expect(result.freshListing.exit, result.freshListing.out).toBe(0);
+  expect(lines(result.freshListing.out)).toContain('OWNED=[[],[]]');
+  expect(lines(result.back.out)).toContain('mine');
 });

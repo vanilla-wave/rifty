@@ -23,8 +23,9 @@ playground UI. Agent carriers (map fog, decided here, ADR at implementation):
 the parameter is the Workbench option `publicProjectRoot` (absolute,
 normalized; `/` allowed); the private areas live in the project container beside
 `tree/` (`<container>/guest/{tmp,home}`), so the visible tree, snapshots and
-archives (which enumerate `tree/`) exclude them by construction and a project
-switch shows a different `~`; the synthetic `/` lists only the ancestors of the
+archives (which enumerate `tree/`) exclude them by construction, a project
+switch shows a different `~`, Save (convert) carries them with the scratch
+that becomes the project, and deleting a project deletes them; the synthetic `/` lists only the ancestors of the
 mounts (`home`, `tmp`, first segment of a non-default root); other system paths
 stay ENOENT as today. Files/Documents/SCM/TS and terminal-state persistence keep
 project-relative paths (`/` = project root, ADR-0278).
@@ -45,18 +46,23 @@ Workbench; the parameter passed through `bootOwner`), unless named.
    `/tmp/x-??????`; `echo $HOME` → `/home/rifty`; bare `cd; pwd` → `/home/rifty`;
    `cat ~/.npmrc` → `x` (unquoted word-initial `~`, `~/…` expand to `$HOME`, as
    bash) → I2, scenario 2
-3. The Files API root listing contains no `tmp`/`home` entry after row 2 → I2, scenario 2
+3. After row 2 the Files API root listing and the exported project archive
+   contain no `tmp`/`home` entry and no `.npmrc` → I2, scenario 2
 4. Durable workspace: `~/.npmrc` and `/tmp/keep.txt` survive closing and
-   reopening the Workbench; a second project opened in the same Workbench lists
-   an empty `~` and `/tmp`, and the first still has its own after switching back → I2, scenario 2
+   reopening the Workbench; Save (convert, ADR-0165: the scratch becomes the
+   project) carries them into the saved project; a project from a fresh scratch
+   lists an empty `~` and `/tmp`; switching back, the saved project still has its own → I2, scenario 2
 5. Vite 7 starter at the default and at `publicProjectRoot: '/srv/app'`:
    `vite build` (✓ built, `dist/assets/*.js`), dev server ready + an edit of
    `src/main.js` updates `#app` in place over HMR (no reload), `vite preview`
    serves the built `index.html`; at `/srv/app` `pwd` → `/srv/app`, `ls /` →
    `home srv tmp` → I4, scenario 4
-6. Vite 8 starter `vite build` + `vite preview` at the default and at `/srv/app` → I4, scenario 4
+6. Vite 8 starter at the default and at `/srv/app`: `vite build`, dev server
+   ready + an edit of `src/main.js` served after reload (template policy
+   `server.hmr: false`), `vite preview` serves the built `index.html` → I4, scenario 4
 7. `publicProjectRoot: '/'`: `pwd` → `/`; `ls /` lists the project files plus
-   `home` and `tmp`; `vite build` passes → I4
+   `home` and `tmp`; Vite 7 `vite build` and `vite preview` pass (dev at `/` is
+   I3, carried by `npm-client/vite-root-policies-removal-node-exact-at-root`) → I4, scenario 4
 8. `publicProjectRoot: '/'` with a project file `/tmp/own.txt`: `ls /tmp` and
    `ls /` fail `EEXIST` naming `/tmp` instead of shadowing it → I2
 9. A guest diagnostic carries the public path: `node missing.cjs` →
@@ -88,6 +94,11 @@ Workbench; the parameter passed through `bootOwner`), unless named.
   (parameter + second-location lanes, default unchanged) into this unit: both
   ride one PR, the parameter's null case is proven by the same lanes at the
   flipped default, and one Contract+RED covers the seam once — trace: none
+- 2026-10-16 — Contract+RED BLOCK @ 7b0595c24 (codex): B1 scenario 4 needs Vite 8
+  dev at both non-root locations and preview at `/` — HOLDS, rows 6-7 + RED;
+  concerns taken: archive row 3, Save carries `guest/` (ADR-0165 convert), ADR
+  attribution, `tree/.rifty` evidence (evidence file §Location carriers), the
+  switch test's lifecycle.
 - 2026-10-16 — carriers (map fog): Workbench option `publicProjectRoot`;
   private areas `<container>/guest/{tmp,home}`; synthetic `/` = mount
   ancestors; cross-mount rename `EXDEV`; `/` root with own `tmp`/`home` →

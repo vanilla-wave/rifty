@@ -277,3 +277,15 @@ Error: rifty-config-boom
 
 Upstream `vite@8.0.16` (`npm pack`, integrity `sha512-h9bXPmJichP5fLmVQo3PyaGSDE2n3aPuomeAlVRm0JLmt4rY6zmPKd59HYI4LNW8oTK7tlTsuC7l/m7awx9Jcw==`):
 `package/dist/node/cli.js` sha256 `369e1007819411176548d14afe9635e02d31d59941c91fb0a8a34f48ef0a2c41`.
+
+## Location carriers — why not `tree/.rifty` (2026-10-16, `7b0595c24`)
+
+- `packages/workbench/src/glue/vfs-snapshot-port.ts:27`: the owner file-tree
+  snapshot skips only `node_modules`, `.git`, `dist` — a `tree/.rifty/` store
+  would be walked into every page snapshot.
+- `packages/workbench/src/workbench/project-file-boundary.ts:100`: a public Files
+  path whose first segment is `.rifty` is rejected (`Invalid project path`), so a
+  Files `readdir('/')` that met `tree/.rifty` would fail instead of hiding it.
+- `packages/workbench/src/workers/playground-project-authority.ts:825`: Save's
+  convert copy drops `tree/.rifty/` — a home stored there would be lost on Save,
+  where the sibling `<container>/guest/` is copied explicitly (ADR-0531 §5).

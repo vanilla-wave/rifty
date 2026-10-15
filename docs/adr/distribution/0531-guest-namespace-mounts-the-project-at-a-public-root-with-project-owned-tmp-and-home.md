@@ -14,7 +14,9 @@ tools took root-edge code paths (two installed-Vite patches exist only for
 `/`), and no lane could run a project anywhere else (goal
 `project-location-independence`, evidence §Location probe/§Root). User
 decisions: physically nothing moves; the default is `/home/project`; temp and
-home belong to the project; the location is a host/SDK/template parameter.
+home belong to the project; the location is configurable («расположение
+проекта как будто и настраиваться может»). Who sets it — a host/SDK/template
+parameter, no playground UI — is the agent's carrier (goal §Decisions).
 
 ## Decision
 
@@ -34,9 +36,11 @@ home belong to the project; the location is a host/SDK/template parameter.
 4. With `publicRoot` `/`, a project tree carrying its own top-level `tmp` or
    `home` is refused loudly: listing `/` or touching the colliding mount fails
    `EEXIST` naming it; the mounts never silently shadow project files.
-5. Writes into the private areas persist in the owner authority, bypass project
-   publication (no Files/explorer revision), and are not copied by
-   save-as/convert (which copy `tree/`); deleting a project deletes them.
+5. Writes into the private areas persist in the owner authority and bypass
+   project publication (no Files/explorer revision). Save converts the scratch
+   into the project (ADR-0165), so `guest/` is copied with `tree/` and the
+   scratch container is tombstoned; re-seeding the scratch keeps its own;
+   deleting a project deletes them.
 6. The Shell environment gets `HOME=/home/rifty` unless the seed sets it; a bare
    `cd` goes there. `os.homedir()` returns `$HOME` and `os.tmpdir()` returns
    `$TMPDIR`/`$TMP`/`$TEMP` (trailing slash stripped) like Node, defaulting to
@@ -50,9 +54,10 @@ home belong to the project; the location is a host/SDK/template parameter.
 ## Alternatives
 
 - Private areas inside the visible tree under the reserved `/.rifty` (archives
-  already skip it): killed — `tree/.rifty` is filtered inconsistently (file-tree
-  snapshot, Files `readdir`, SCM differ) and a project-relative store would be
-  carried by convert/copy paths; the sibling `guest/` needs no filter at all.
+  already skip it): killed — `tree/.rifty` is filtered inconsistently (evidence
+  §Location carriers: file-tree snapshot excludes only `node_modules`/`.git`/`dist`,
+  Files paths reject a `.rifty` segment, Save's copy drops `tree/.rifty`); the
+  sibling `guest/` needs no filter at all.
 - Nest the project inside its physical tree (`tree/home/project`, ordinary
   `tmp/`, `home/` dirs): rejected by the goal — moves files and puts tmp/home
   into the explorer, `git status` and archives.
