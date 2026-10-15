@@ -45,11 +45,17 @@ ADR-0447 (referenced MessagePort). ADR-0378's declined realm-wide async-source
 census is not this: per-class refs through the existing `ref()/unref()`
 chokepoint, no census.
 
-Boundary (agent-owned, by mission): carriers that exist on Node's own surface
-— `buffer.Blob`/`File` body reads, `fs.openAsBlob`, `WebAssembly.compile` /
-`instantiate(bytes)`, `crypto.subtle.*`, `node:zlib` one-shot and stream
-operations over CompressionStream/DecompressionStream, in-guest `Response` /
-`Request` body consumers — are in scope. Browser-only APIs a Node program
+Boundary (user 2026-10-15: «окей, давай как рекомендовал Node-поверхность»):
+carriers that exist on Node's own surface — `buffer.Blob`/`File` body reads,
+`fs.openAsBlob`, `WebAssembly.compile` / `instantiate(bytes)`,
+`crypto.subtle.*`, `node:zlib` one-shot and stream operations over
+CompressionStream/DecompressionStream, in-guest `Response` / `Request` body
+consumers, and the Node ≥22 global `WebSocket` (a Node program with an open
+socket lives; rifty's behavior to probe at pickup) — are in scope; ~8-10
+wrappers on the one `ref()/unref()` seam. `EventSource` is NOT a default
+Node 24 global (`node -e "console.log(typeof WebSocket, typeof EventSource)"`
+→ `function undefined` on v24.16.0; a function only under
+`--experimental-eventsource`) — outside the Node-surface boundary. Browser-only APIs a Node program
 cannot call (`indexedDB`, `caches`, `navigator.locks`, `scheduler`) stay out.
 A carrier whose release rifty cannot observe: refuse by name (ADR-0447
 pattern) or hold to the loud ADR-0152 §4 cap — decided in the pickup ADR
@@ -83,3 +89,9 @@ separate); no declined match.
   (DEC-1 p4), precedent ADR-0158/0446/0447.
 - 2026-10-15 — minimal pattern first: one carrier class (`buffer.Blob` body
   reads) lands with the mechanism, then the remaining classes on the same seam.
+- 2026-10-15 — user: «окей, давай как рекомендовал Node-поверхность» — boundary
+  = Node-surface host-async carriers incl. global `WebSocket` (the
+  recommendation also named `EventSource`; corrected by probe — not a default
+  Node 24 global, excluded by the user's own criterion); rejected:
+  minimum (4 probed + zlib) — leaves the class open; all host-async incl.
+  browser-only APIs — no Node-program value, never-settling holds (ADR-0378).

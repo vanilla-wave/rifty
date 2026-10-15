@@ -13,7 +13,7 @@ tier: works
 Three things are true at once. (1) The child-realm keepalive counts
 host-task-async requests of Node-surface APIs (Blob/File body reads,
 `fs.openAsBlob`, `WebAssembly.compile`/`instantiate`, WebCrypto, zlib over
-CompressionStream, in-guest Response bodies) the way libuv counts threadpool
+CompressionStream, in-guest Response bodies, global `WebSocket`) the way libuv counts threadpool
 and platform requests, so a run-to-completion program lives until they settle
 — the smallest honest extension of ADR-0152 §1's shape (per-class refs on the
 existing `ref()/unref()` chokepoint, no realm-wide census — ADR-0378). (2) The
@@ -59,7 +59,9 @@ and (3) is the updated inventory reviewed under the principle.
           and no stderr; Node 24.16.0 prints `BDONE 67108864` / `WDONE 0` /
           `ODONE 33554432` / `PDONE 32`; control B′ (held timer) prints
           `BDONE_HELD`. No keepalive consumer in `buffer.ts`/`fs.ts` openAsBlob/
-          `zlib.ts`/crypto.
+          `zlib.ts`/crypto. The amended `WebSocket`/zlib/Response clauses have
+          no false-on-main row yet — item 1 probes them at pickup (RDY-6
+          §Amendments: recheck changed promises).
      I2 — `vite-cli-install-policy.ts:1-8` `viteCliActionPatchPolicy` rewrites
           `this.runMatchedCommand();`; `vite-cli-prep.ts:98-108` refuses an
           unpatched tree; `install-artifact-identity.json` includes the policy.
@@ -72,8 +74,8 @@ and (3) is the updated inventory reviewed under the principle.
    request of a Node-surface API settles — `buffer.Blob`/`File` body reads,
    `fs.openAsBlob`, `WebAssembly.compile`/`instantiate(bytes)`, `crypto.subtle.*`,
    `node:zlib` over CompressionStream/DecompressionStream, in-guest `Response`/
-   `Request` body consumers — printing the same output and exit status as Node
-   24.
+   `Request` body consumers, global `WebSocket` — printing the same output and
+   exit status as Node 24.
 2. I2. The installed Vite `dist/node/cli.js` (Vite 7.3.6 and the Vite 8 bundle)
    is byte-identical to its upstream tarball member; no `__riftyTrackCliPromise`
    / `trackKeepalivePromise` exists in the realm or the SDK surface; `vite
@@ -125,9 +127,9 @@ a hidden gap), I3 user-chosen — the goal's value line now says so.
 - 2026-10-15 — user: «Только внутренний инвентарь» — no public compat-page
   adaptation section; I3 lives in the ADR-0384 evidence doc.
 - 2026-10-15 — user: «Один эпик + отдельная цель для корня (Recommended)» —
-  the root is its own goal: `epics/project-location-independence` seeded
-  `draft` (default location unanswered, `STOP-1a`). User, after the location
-  explanation: «мы смешали надежность доказаность и дефолт платформы. Проекты
+  the root is its own goal: `epics/project-location-independence` (seeded
+  `draft`, fitted later the same day — see the `amend:` lines). User, after
+  the location explanation: «мы смешали надежность доказаность и дефолт платформы. Проекты
   должны уметь корректно работать где бы они не находились. … расположение
   проекта как будто и настраиваться может и это обратимое решение» — recorded
   there; this epic does not decide the location.
@@ -159,3 +161,13 @@ a hidden gap), I3 user-chosen — the goal's value line now says so.
 - rejected route: make the hook conditional on Vite version / mode — violates
   I2.
 - rejected route: public compat "Adaptations" section — user decision above.
+- amend: 2026-10-15 — user: «Снять патчи — быть Node-точным в `/` (сломанным)»
+  and «Дефолт — home-like путь (/home/project)» — the two Vite root policies'
+  kill condition is the `project-location-independence` goal (default moves
+  to `/home/project`, the patches are deleted there, a `/`-rooted project
+  behaves as real Node at `/`); I3 wording unchanged, inventory rows carry the
+  new kill condition. user: «Как записано: platform-gap только как объявленный
+  долг» — principle text confirmed. user: «окей, давай как рекомендовал
+  Node-поверхность» — I1's carrier set is the Node-surface boundary incl.
+  global `WebSocket` (item 1 §Decisions; the recommendation's `EventSource`
+  was dropped after a probe: not a default Node 24 global).

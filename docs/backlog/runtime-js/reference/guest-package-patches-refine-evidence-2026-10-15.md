@@ -100,9 +100,10 @@ handle classes NOT counted" and requires a superseding/extending ADR
 - Same axis, unpatched: `os.tmpdir()` → `/tmp`, `os.homedir()` → `/home/rifty`
   (`os.ts:13-18`) resolve inside the project tree under ADR-0280; no code
   seeds or reserves `/tmp` (`grep '/tmp'` over runtime-js/workbench/vfs/shell:
-  only `os.ts`). Unprobed: `fs.mkdtemp(path.join(os.tmpdir(),'x-'))` is
-  expected ENOENT unless the user created `tmp/` in the project.
-- Literal `=== '/'` sites in prod source: 118 (not all root-as-project);
+  only `os.ts`). `fs.mkdtemp(path.join(os.tmpdir(),'x-'))` → ENOENT, probed:
+  §Location probe.
+- Literal `=== '/'` sites in prod source: ~120 (grep over packages/apps/tools
+  excluding tests/dist; not all root-as-project);
   public cwd `'/'` literals: `pty-client.ts:182,800,919`,
   `workbench-browser-owner-spawn.ts:62,76`, `playground-terminal-state.ts:69`,
   `project-runtime-acquisition.ts:12`. Projection seam exists:
@@ -172,14 +173,31 @@ with the split Refresh identity (run 5). Both rifty root patches therefore
 compensate upstream behavior at `/`, not a rifty divergence; rifty's `/` is
 survivable only because it holds one project.
 
+## Location probe — what a program sees today (Chromium, 2026-10-15)
+
+Scratch Playwright spec over the vite starter terminal, HEAD `9645c62bf`:
+
+```
+> pwd; ls -a /
+/
+.  ..  .git  .gitignore  README.md  index.html  node_modules  package-lock.json  package.json  src  vite.config.js
+> node -e "…console.log('OS',os.tmpdir(),os.homedir(),process.cwd(),process.env.HOME);try{console.log('MK',fs.mkdtempSync(p.join(os.tmpdir(),'x-')))}catch(e){console.log('MKERR',e.code)};try{console.log('HOME',fs.statSync(os.homedir()).isDirectory())}catch(e){console.log('HOMEERR',e.code)}"
+OS /tmp /home/rifty / undefined
+MKERR ENOENT
+HOMEERR ENOENT
+```
+
+Reading: the project is the filesystem root; `os.tmpdir()`/`os.homedir()`
+resolve into it and do not exist; `process.env.HOME` is unset.
+
 ## Dedup
 
 - `runtime-js/keepalive-residual-gaps.md` — same mechanism (ADR-0152 §1 set);
   its "no behavioral gap" claim is superseded by Probe 2/3.
 - `npm-client/reference/registry-package-adaptations-evidence.md` — the
   adaptation inventory (ADR-0384); no per-adaptation class/authority column.
-- `distribution/README.md:21` lists `workbench-guest-vfs-namespace.md`, deleted
-  in `de26804b1` (resolved by ADR-0280) — stale row.
+- `distribution/README.md` listed `workbench-guest-vfs-namespace.md`, deleted
+  in `de26804b1` (resolved by ADR-0280) — stale row, removed in this refine.
 - `docs/adr/README.md` §Declined: "Realm-wide async-source census for resident
   readiness" (ADR-0378) — declines counting *all* async sources for readiness;
   does not cover per-handle-class keepalive extension (ADR-0158/0446/0447 pattern).
@@ -207,3 +225,39 @@ survivable only because it holds one project.
   CHANGELOG/AGENTS/fault-classes wording aligned; title shortened. Noted for
   pickup: I1 clauses beyond B/W/O/P rest on the consumer grep (item 1 sweep);
   root-watch authority is symptom-level (item 3).
+- 2026-10-15 — second user round after the report («мы точно обсудили всё?»):
+  default location → «Дефолт — home-like путь (/home/project)»; root patches →
+  «Снять патчи — быть Node-точным в `/` (сломанным)»; principle → «Как
+  записано: platform-gap только как объявленный долг (Recommended)»; keepalive
+  boundary → explained (HTML explainer `~/ai/rifty-guest-package-patches-problem.html`),
+  then «окей, давай как рекомендовал Node-поверхность».
+- 2026-10-15 — third user round (plain text): «А если так: физически мы
+  ничего не трогаем, но то, что видит программа стартовой директории
+  становится какой-нибудь slash Home. Тогда и TMP фактически принадлежит
+  проекту, и хоум фактически принадлежит проекту. Всё остаётся работать как
+  есть. Кроме того, что мы не спавним проект в корне файловой системы и
+  избегаем приколов с vite.» and, on the fixed `/home/project` path: «Давай так
+  и оставим.» → `project-location-independence` FIT (goal §Decisions).
+- 2026-10-15 — premise critic for `project-location-independence` (fresh
+  read-only general-purpose subagent): `challenge: 2026-10-15 — 5 problems`
+  — I4 parity-runner clause (`tools/node-parity-runner/src/types.ts:9-26` is
+  a harness knob); DEC-2 understated (ADR-0280 Decision, all of ADR-0433,
+  ADR-0278 `:613-615`/`:196-203`); I2 persistence/exclusion credited to the
+  user; root-setter persona hidden; child-3 fog (`/tmp`/`$HOME` at root `/`,
+  no Vite 8 artifact). All resolved in goal/map/children (goal §Challenge).
+- 2026-10-15 — `RDY-6` §Final check of the `project-location-independence`
+  FIT + ready-epic amendments (fresh read-only general-purpose subagent):
+  `final-check: 2026-10-15 — FAIL (1 blocking)` — `EventSource` claimed as a
+  Node ≥22 global. Probe: `node -v` → v24.16.0; `node -e "console.log(typeof
+  WebSocket, typeof EventSource)"` → `function undefined`;
+  `node --experimental-eventsource -e …` → `function`. Correction: `WebSocket`
+  stays in the Node-surface boundary, `EventSource` is excluded (not a default
+  global) in item 1, goal I1/amend line, map fog. Advisories applied: value/
+  why wording ("takes upstream's code paths", oracle = configured runs);
+  letter references → quoted words; Outcome (1) carrier list; child 2 DEC-2
+  vehicle (superseding ADR + §Corrections); ADR-0278 cite `:196-204`;
+  `os.ts` baseline authority line; I1 amended-clause note; item 3 compile
+  condition; `~120` sites + SW preview routing fog; stale "Unprobed" sentence;
+  dedup row note. Noted for pickup: child 1's ADR re-decides add-on-seam vs
+  overturn-some for ADR-0280 at non-default values; "no playground UI" is
+  user-observable (reported).

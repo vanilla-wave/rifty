@@ -21,16 +21,18 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 ## Open questions
 
 - Which further host-task-async carriers exist on Node's surface beyond the
-  four probed (zlib streams, in-guest Response bodies, `File`, `structuredClone`
-  of transferables)? — owner: agent — sweep at pickup of item 1.
+  four probed (zlib streams, in-guest Response bodies, `File`, global
+  `WebSocket`, `structuredClone` of transferables)? — owner: agent — sweep at
+  pickup of item 1 within the user-chosen Node-surface boundary
+  (`EventSource` excluded: not a default Node 24 global, evidence §Review record).
 - Does the `@riftydev/runtime-js` `trackKeepalivePromise` export have any
   consumer outside the Vite hook? — owner: agent — grep + packed-consumer lane
   at pickup of item 2.
 
 ## Out of scope
 
-- Project location default / knob — `epics/project-location-independence`
-  (separate draft goal, user 2026-10-15).
+- Project location default (`/home/project`, user 2026-10-15), the root knob,
+  and deleting the two Vite root policies — `epics/project-location-independence`.
 - Vite 7.3.7 / proven-version admission policy — separate refine (handoff §Фон).
 - Browser-only async APIs (`indexedDB`, `caches`, `navigator.locks`,
   `scheduler`) — not Node surface.
