@@ -43,6 +43,11 @@ const responseBody =
   responsePrototype && Object.getOwnPropertyDescriptor(responsePrototype, 'body')?.get;
 const responseHeaders =
   responsePrototype && Object.getOwnPropertyDescriptor(responsePrototype, 'headers')?.get;
+const requestPrototype = typeof Request === 'function' ? Request.prototype : undefined;
+const requestHeaders =
+  requestPrototype && Object.getOwnPropertyDescriptor(requestPrototype, 'headers')?.get;
+const FileReaderSyncCtor = (globalThis as { FileReaderSync?: typeof FileReaderSync })
+  .FileReaderSync;
 const headersPrototype = typeof Headers === 'function' ? Headers.prototype : undefined;
 const headersGet = headersPrototype?.get as AnyFunction | undefined;
 const headersHas = headersPrototype?.has as AnyFunction | undefined;
@@ -162,11 +167,12 @@ const isFormData = (value: unknown): value is FormData =>
  */
 function holdReads(
   ReadableStreamCtor: typeof ReadableStream,
-  source: ReadableStream<Uint8Array<ArrayBuffer>>,
+  /** Resolved at the first pull or cancel (a Response body is encoded after its init). */
+  source: () => ReadableStream<Uint8Array<ArrayBuffer>>,
 ): ReadableStream<Uint8Array<ArrayBuffer>> {
   let reader: object | null = null;
   const pull = (controller: ReadableByteStreamController): Promise<void> => {
-    reader ??= reflectApply(nativeGetReader as AnyFunction, source, []) as object;
+    reader ??= reflectApply(nativeGetReader as AnyFunction, source(), []) as object;
     return reflectApply(promiseThen, hold(reflectApply(nativeRead as AnyFunction, reader, [])), [
       ({ done, value }: ReadableStreamReadResult<Uint8Array<ArrayBuffer>>) => {
         if (done) {
@@ -186,7 +192,7 @@ function holdReads(
     pull,
     cancel: (reason) =>
       reader === null
-        ? (reflectApply(nativeStreamCancel as AnyFunction, source, [reason]) as Promise<void>)
+        ? (reflectApply(nativeStreamCancel as AnyFunction, source(), [reason]) as Promise<void>)
         : (reflectApply(nativeReaderCancel as AnyFunction, reader, [reason]) as Promise<void>),
   });
 }
@@ -197,12 +203,10 @@ function installBlobKeepalive(target: HostAsyncTarget): void {
   if (blob === undefined) return;
   for (const read of BLOB_READS) holdMethod(blob, read, () => true);
   if (ReadableStreamCtor === undefined) return;
-  wrapMethod(blob, 'stream', (original, self, args) =>
-    holdReads(
-      ReadableStreamCtor,
-      reflectApply(original, self, args) as ReadableStream<Uint8Array<ArrayBuffer>>,
-    ),
-  );
+  wrapMethod(blob, 'stream', (original, self, args) => {
+    const native = reflectApply(original, self, args) as ReadableStream<Uint8Array<ArrayBuffer>>;
+    return holdReads(ReadableStreamCtor, () => native);
+  });
 }
 
 /**
@@ -223,52 +227,74 @@ function installResponseKeepalive(target: HostAsyncTarget): void {
   }
   const headers = (response: object): object =>
     reflectApply(responseHeaders, response, []) as object;
-  wrapConstructor(target, 'Response', (original, args, newTarget) => {
-    const body = args[0];
-    let stream: ReadableStream<Uint8Array<ArrayBuffer>> | null = null;
-    let type: string | null = null;
-    if (isBlob(body)) {
-      stream = reflectApply(nativeBlobStream, body, []) as ReadableStream<Uint8Array<ArrayBuffer>>;
-      type = (reflectApply(blobType as AnyFunction, body, []) as string) || null;
-    } else if (isFormData(body)) {
-      const encoded = reflectConstruct(original, [body]);
-      stream = reflectApply(responseBody, encoded, []) as ReadableStream<Uint8Array<ArrayBuffer>>;
-      type = reflectApply(headersGet as AnyFunction, headers(encoded), ['content-type']) as
-        | string
-        | null;
-    }
-    if (stream === null) return reflectConstruct(original, args, newTarget);
-    const response = reflectConstruct(
-      original,
-      [holdReads(ReadableStreamCtor, stream), ...args.slice(1)],
-      newTarget,
-    );
+  const keepType = (response: object, type: string | null): void => {
     if (
       type !== null &&
       !reflectApply(headersHas as AnyFunction, headers(response), ['content-type'])
     ) {
       reflectApply(headersSet as AnyFunction, headers(response), ['content-type', type]);
     }
+  };
+  wrapConstructor(target, 'Response', (original, args, newTarget) => {
+    const body = args[0];
+    if (isBlob(body)) {
+      const native = reflectApply(nativeBlobStream, body, []) as ReadableStream<
+        Uint8Array<ArrayBuffer>
+      >;
+      const response = reflectConstruct(
+        original,
+        [holdReads(ReadableStreamCtor, () => native), ...args.slice(1)],
+        newTarget,
+      );
+      keepType(response, (reflectApply(blobType as AnyFunction, body, []) as string) || null);
+      return response;
+    }
+    if (!isFormData(body)) return reflectConstruct(original, args, newTarget);
+    let encoded: object | null = null;
+    const response = reflectConstruct(
+      original,
+      [
+        holdReads(
+          ReadableStreamCtor,
+          () => reflectApply(responseBody, encoded, []) as ReadableStream<Uint8Array<ArrayBuffer>>,
+        ),
+        ...args.slice(1),
+      ],
+      newTarget,
+    );
+    // Native extraction encodes after the init conversion, before the constructor
+    // returns: encode here, before any guest code can change the FormData.
+    encoded = reflectConstruct(original, [body]);
+    keepType(
+      response,
+      reflectApply(headersGet as AnyFunction, headers(encoded), ['content-type']) as string | null,
+    );
     return response;
   });
 }
 
 /**
- * An in-guest Request keeps its native body (a stream body would change how
- * `fetch(request)` sends it); its consumer methods hold for blob-backed bodies.
+ * An in-guest Request keeps a native body (a stream body would change how
+ * `fetch(request)` sends it). A Blob/File body is read synchronously
+ * (`FileReaderSync`, dedicated workers) into the same bytes plus its content
+ * type, so its reads need no host task; a FormData body holds its consumer
+ * methods. `init.body` is observed during the native read, never read twice.
  */
 function installRequestKeepalive(target: HostAsyncTarget): void {
   const counts = (self: unknown): boolean => isObject(self) && hostBodies.has(self);
   const prototype = wrapConstructor(target, 'Request', (original, args, newTarget) => {
-    // Observe the native read of `init.body` instead of reading the accessor again.
     let body: unknown;
+    let type: string | null = null;
     const init = args[1];
     const observed = isObject(init)
       ? new Proxy(init, {
           get(source, key) {
             const value = Reflect.get(source, key, source);
-            if (key === 'body') body = value;
-            return value;
+            if (key !== 'body') return value;
+            body = value;
+            if (!isBlob(value) || FileReaderSyncCtor === undefined) return value;
+            type = (reflectApply(blobType as AnyFunction, value, []) as string) || null;
+            return new FileReaderSyncCtor().readAsArrayBuffer(value);
           },
         })
       : init;
@@ -277,7 +303,14 @@ function installRequestKeepalive(target: HostAsyncTarget): void {
       args.length > 1 ? [args[0], observed, ...args.slice(2)] : args,
       newTarget,
     );
-    if (body == null ? counts(args[0]) : isBlob(body) || isFormData(body)) {
+    if (type !== null && requestHeaders !== undefined) {
+      const headers = reflectApply(requestHeaders, request, []) as object;
+      if (!reflectApply(headersHas as AnyFunction, headers, ['content-type'])) {
+        reflectApply(headersSet as AnyFunction, headers, ['content-type', type]);
+      }
+    }
+    const blobRead = isBlob(body) && FileReaderSyncCtor !== undefined;
+    if (body == null ? counts(args[0]) : !blobRead && (isBlob(body) || isFormData(body))) {
       hostBodies.add(request);
     }
     return request;

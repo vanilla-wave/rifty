@@ -140,6 +140,12 @@ verbatim by live Node (`process.execPath`, v24.16.0 at pickup) and by rifty
   over it, the reader/iterator/tee/pipe registration and the tap are deleted;
   `pipe-native-order` row; probes show only blob-backed bodies are host-async.
   Explicit gap (compat ❌): in-guest Request `.body` stream reads.
+- 2026-10-16 — Final+GREEN verify BLOCK @ 1833ba26e (codex): R5-1 Blob-bodied
+  Request `.body` reads not held — HOLDS, fixed (`FileReaderSync` bytes body,
+  `request-blob-body-stream` row); R5-2 FormData encoded before the init —
+  HOLDS, fixed (encode after the native construct, `response-formdata-order`
+  row). Remaining explicit gap narrowed to FormData-with-Blob Request `.body`
+  streams (compat ❌, ADR-0529).
 - 2026-10-16 — refuse-by-name vs hold-to-cap: every counted class has an
   observable release (settle / `close`), so none is refused; a never-settling
   one holds to the loud ADR-0152 §4 cap (ADR-0529 §5).

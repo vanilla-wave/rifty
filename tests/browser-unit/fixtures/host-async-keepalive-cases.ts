@@ -309,6 +309,30 @@ out.getReader().read().then(() => console.log('HA|never'));
 `,
   },
   {
+    // Blob-bodied in-guest Request: its body stream reads complete (reader + pipeThrough).
+    name: 'request-blob-body-stream',
+    source: `${report}const request = new Request('http://localhost/upload', { method: 'POST', body: new Blob([Buffer.alloc(32 * 1024 * 1024, 81)], { type: 'text/x' }) });
+console.log('HA|request-type=' + request.headers.get('content-type'));
+const reader = request.body.pipeThrough(new TransformStream()).getReader();
+let total = 0;
+const pump = () => reader.read().then(({ done: end, value }) => {
+  if (end) return done('request-stream', total);
+  total += value.byteLength;
+  return pump();
+});
+pump().catch((e) => fail('request-stream', e));
+`,
+  },
+  {
+    // Native order: a Response init getter runs before the FormData body is encoded.
+    name: 'response-formdata-order',
+    source: `${report}const form = new FormData();
+form.append('a', new Blob(['1']));
+const response = new Response(form, { get status() { form.append('b', '2'); return 200; } });
+response.text().then((t) => done('formdata-order', t.includes('name="a"') + ',' + t.includes('name="b"') + ',' + response.headers.get('content-type').startsWith('multipart/form-data; boundary=')), (e) => fail('formdata-order', e));
+`,
+  },
+  {
     name: 'zlib-gzip',
     source: `${report}const zlib = require('node:zlib');
 zlib.gzip(Buffer.alloc(64 * 1024 * 1024, 65), (e, r) => (e ? fail('gzip', e) : done('gzip', r.length)));

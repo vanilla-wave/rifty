@@ -36,14 +36,17 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
      and only its pull — a pending host read — holds. An unread stream, or a
      pipe waiting on a guest sink, holds nothing, as in Node.
    - A `Response` with a Blob/File or FormData body is built natively over that
-     held stream (FormData encoded by a native Response first); the content type
-     native extraction sets is kept. `body`, locking, `clone()` and the consumer
+     held stream; FormData is encoded by a native Response right after the init
+     conversion (native extraction order), and the content type native
+     extraction sets is kept. `body`, locking, `clone()` and the consumer
      methods stay native on it.
-   - In-guest `Request` consumer methods (`arrayBuffer/blob/bytes/formData/json/text`)
-     for Blob/File/FormData bodies, `new Request(blobBackedRequest)` and their
-     `clone()`. `init.body` is observed during the native read, never read twice.
-     The native body is kept: a stream body would change how `fetch(request)`
-     sends it.
+   - An in-guest `Request` keeps a native body (a stream body would change how
+     `fetch(request)` sends it): a Blob/File body is read synchronously
+     (`FileReaderSync`, dedicated workers) into the same bytes with its content
+     type, so its consumers and `body` stream need no host task; a FormData
+     body holds its consumer methods (`arrayBuffer/blob/bytes/formData/json/text`,
+     also for `new Request(formDataRequest)` and `clone()`). `init.body` is
+     observed during the native read, never read twice.
    - `WebAssembly.compile`, `WebAssembly.instantiate` (both overloads).
      Streaming variants stay the ADR-0158 loud ceiling.
    - Every `SubtleCrypto.prototype` method (one prototype covers
@@ -69,6 +72,8 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
   Node's result and exit status (browser-unit parity vs live Node).
 - (+) ADR-0152 §1 shape unchanged; the named set grows by these classes.
 - (−) A held promise settles one microtask after the native one.
-- (−) Explicit gap: reading the `body` stream of an in-guest blob-backed
-  `Request` directly (reader, `for await`, pipe) holds nothing; its consumer
-  methods do. Compat ❌ row in `docs/public/compat/process.md`.
+- (−) A Blob-bodied in-guest `Request` copies its bytes at construction.
+- (−) Explicit gap: reading the `body` stream of an in-guest `Request` whose
+  FormData holds a Blob/File directly (reader, `for await`, pipe) holds
+  nothing; its consumer methods do. No synchronous multipart encoder exists
+  short of a semantic copy. Compat ❌ row in `docs/public/compat/process.md`.
