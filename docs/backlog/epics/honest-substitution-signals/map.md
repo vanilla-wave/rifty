@@ -39,7 +39,8 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 - sass-embedded admission widening — `npm-client/sass-embedded-semver-admission`.
 - Catalog trigger-name uniqueness —
   `npm-client/shadow-catalog-trigger-name-uniqueness`; more esbuild versions —
-  `epics/esbuild-upstream-twin` (no second recipe per name).
+  `epics/esbuild-upstream-twin` (versions from the twin's range; a
+  tier-keyed recipe is open in its install-shape fog).
 - Repairing the lightningcss shim (`init()` never called) —
   `playground/vite8-lightningcss-wasm-init`; the page reports observed status.
 - npm peer placement and bin reify authorities —

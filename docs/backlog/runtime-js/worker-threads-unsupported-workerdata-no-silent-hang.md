@@ -46,6 +46,7 @@ existing `NotImplementedError('worker_threads.workerData.structuredClone')`
 synchronously from the constructor match the error timing Node gives for
 cloneable-but-unsupported data, and what does esbuild surface to the
 `transformSync` caller then (its `startWorkerThreadService` is called inside
-`transformSync`)? Is `execFileSync` a named loud member like `spawnSync`, or
-does it run over the existing `execSync` SAB path? Settled at PICKUP by Node
-+ rifty probes.
+`transformSync`)? `execFileSync` becomes a named loud member like `spawnSync`
+(goal I2: every `*Sync` route ends in a named `NotImplementedError`; running
+it over the `execSync` SAB path would be real sync — outside the goal).
+Settled at PICKUP by Node + rifty probes.

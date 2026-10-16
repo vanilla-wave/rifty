@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: esbuild runs as unmodified upstream esbuild-wasm on its Node entry — any requested version (COI)
 created: 2026-10-16
 value: A developer whose project asks for any esbuild version gets the upstream esbuild-wasm bytes of that version running through its own Node entry (proven equal to Node 24 on a declared verified set, others marked not verified), while rifty drops its generated, 0.28.0-patched esbuild client in COI and closes the Node gaps that forced it (stdio write callbacks, child ref/unref, fs on stdio fds, Stats fields) for every CLI.
@@ -201,7 +201,8 @@ direction (f1-f5 show the four gaps are the minimal set).
   ("Registry acquisition is exact", replay of the attested product version,
   acquired twin bins removed from linking — `npx esbuild` needs the bin),
   ADR-0316 (CLI gate in COI), ADR-0375 D6 (exact COI/no-COI Vite 7 bytes:
-  fixture pins or correction), ADR-0384 §Alternatives ("Fix general Node
+  kept by fixture pins; a correction dropping them loosens a proof tied to
+  the user's 2026-09-01 oracle decision and goes back to the user), ADR-0384 §Alternatives ("Fix general Node
   capabilities": the general capability is now shown, evidence
   §Discriminating layers). The ADR-0226 supersession names its D4
   "validation-before-gap" loss for COI `*Sync`: stock esbuild-wasm builds
@@ -211,10 +212,11 @@ direction (f1-f5 show the four gaps are the minimal set).
 - 2026-10-16 — agent: PR #373 (merged `aebdd7ddd`) filed
   `npm-client/guest-package-adaptation-inventory-classes` with the esbuild
   patch ids as `substitution-environment`/`handle-mapping`, kill none; this
-  evidence makes them `platform-gap` under its own `fault-classes.md`
-  §Guest-package adaptations text (COI: kill = this goal's cutover; no-COI
-  client: kill = `epics/no-coi-child-processes`) — corrected in that item in
-  this PR; ledger note in `honest-guest-package-adaptations`.
+  evidence makes the 7 Node-entry stand-in ids `platform-gap` under its own
+  `fault-classes.md` §Guest-package adaptations text (COI: kill = this goal's
+  cutover; no-COI client: kill = `epics/no-coi-child-processes`); the 5
+  `gate-*` ids and `native-target-errno` stay `substitution-environment` with
+  kill = the cutover in COI — corrected in that item in this PR; ledger note in `honest-guest-package-adaptations`.
 - amend (other goal): 2026-10-16 — `honest-substitution-signals` scenario 4
   (`esbuild@^0.21.0` refused) holds in no-COI only after this goal's cutover;
   recorded there as `amend:` citing the user's «Любая…»; its I2 (types
