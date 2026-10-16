@@ -33,7 +33,7 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 - Project location default (`/home/project`, user 2026-10-15), the root knob,
   and deleting the two Vite root policies — `epics/project-location-independence`.
-- Vite 7.3.7 / proven-version admission policy — separate refine (handoff §Фон).
+- Vite 7.3.7 / proven-version admission policy — separate refine (handoff §Фон); COI answered by `epics/esbuild-upstream-twin` I6 (exact-7.3.6 gate removed, other Vite "⚠️ not verified", user 2026-10-16), no-COI unchanged.
 - Browser-only async APIs (`indexedDB`, `caches`, `navigator.locks`,
   `scheduler`) — not Node surface.
 - `WebAssembly.compileStreaming`/`instantiateStreaming` — loud ceiling, ADR-0158.

@@ -1,0 +1,80 @@
+# Map — esbuild-upstream-twin
+
+Live plan: index, not store. Frontier = open children with `epic:` backlinks.
+
+## Items
+
+1. `runtime-js/process-stdio-write-callback` — **stdio-cb** — I3; the stock
+   entry's first deadlock; independent (the end surface stays in
+   `runtime-js/process-stdio-writable-end-surface`, not this goal).
+2. `runtime-js/child-process-ref-unref` — **child-unref** — I3; independent.
+3. `runtime-js/fs-stdio-fds` — **fd-0-2** — I3; independent.
+4. `runtime-js/fs-stats-node-fields` — **stats** — I3; independent.
+5. `runtime-js/worker-threads-unsupported-workerdata-no-silent-hang` —
+   **sync-loud** — I2 `*Sync` clause; independent.
+6. `npm-client/esbuild-upstream-twin-cutover` — **cutover** — I1, I2, I4,
+   I5, I6; blocked by 1-5; carries the version-agnostic differential suite,
+   the no-COI split, the COI Vite gate removal, the DEC-2 ADR and the compat
+   pages.
+
+## Open questions
+
+- Install shape behind the `esbuild` name (bcrypt-style redirect vs a thin
+  facade re-exporting `esbuild-wasm`; `require('esbuild/package.json')`,
+  `.bin/esbuild`; Node's equivalent is an npm alias whose `name` is
+  `esbuild-wasm` — rifty refuses `npm:` aliases, `installer-request.ts:211`)
+  and the per-tier install (COI resolves the range; no-COI keeps main's 0.28.0
+  recipe) — owner: agent — cutover pickup, ADR.
+- Older Node entries on the verified set: 0.21.x redefines `globalThis.crypto`
+  and builds `performance` from `process.hrtime`, `crypto` from
+  `randomFillSync` (evidence §Older entries); the spike ran 0.28.0 only —
+  owner: agent — probe 0.21.x/0.25.x at cutover pickup; a new gap becomes a
+  child item.
+- Offline oracle capture for the verified set in CI (Node + esbuild-wasm
+  tarballs from registry fixtures; TTY stdout for CLI rows, evidence §Stock
+  entry) — owner: agent — cutover pickup.
+- Surfaces Node's esbuild-wasm supports that rifty may not match on the first
+  run (`context().watch()`, `serve()`) — owner: agent — the differential
+  settles; each miss is a named loud gap + compat ❌ + backlog row.
+- Stock-path cost on the Vite 7.3.6 lanes (extra Worker + pipe + 13.9 MB
+  compile per service start) — owner: agent — measured at cutover; lane
+  time-outs are not silently raised.
+- Vite-side preparation that is still version-specific in COI after the
+  gate goes (I6): the three install patches throw a plain `Error` when a
+  needle is missing (`vite-cli-install-policy.ts`; needles verified in 5.4.21,
+  6.4.4, 7.3.6 only) and the CLI mode grammar is copied from 7.3.6
+  (`vite-cli-prep.ts:194-218`) — owner: agent — cutover pickup proves I6
+  holds for Vite 5/6/7 (deletion of the hook/root patches is owned by
+  `honest-guest-package-adaptations` I2 and `project-location-independence`);
+  narrowing I6's "any" goes back to the user. The root policies' inventory
+  row says "re-prove on each admitted Vite version": a Vite admitted
+  unverified under I6 runs them without a real-Node artifact until
+  `project-location-independence` deletes them — the cutover records that in
+  the inventory row.
+- Starter pin: `apps/playground/src/vite-project-policy.ts:11-12` pins the
+  starters to Vite 7.3.6 "because the esbuild runtime admits only its proven
+  Vite consumer version", and `vite-version.contract.test.ts` reads
+  `esbuild-runtime-policy.json` `consumer.version` — owner: agent — the pin
+  stays (scenario 4); its reason and test re-anchor at the cutover.
+- Oracle host: the file-stdout quirk and every CLI row were observed on
+  macOS Node 24.16.0 only; CI captures the oracle on Linux — owner: agent —
+  cutover pickup re-captures on the CI host before freezing rows.
+- `honest-substitution-signals` I2 (esbuild facade `types` = the twin's
+  `lib/main.d.ts`) must hold for every installed version after the cutover —
+  owner: agent — whichever of `npm-client/esbuild-facade-typescript-declarations`
+  and the cutover lands second carries it.
+
+## Out of scope
+
+- Real `*Sync` — `runtime-js/worker-threads-prompt-start-atomics-wait`,
+  `runtime-js/worker-threads-kernel-workerdata-structured-clone`,
+  `runtime-js/worker-threads-receive-message-on-port` (user 2026-10-16: loud
+  only).
+- No-COI child processes that load `node_modules` — separate goal
+  `epics/no-coi-child-processes` (user 2026-10-16: old runtime stays there
+  meanwhile).
+- Lockfile migration across catalog changes (user 2026-10-16).
+- Verified lanes for Vite other than 7.3.6/8.0.16 (user 2026-10-16: "⚠️ not
+  verified").
+- Rollup, LightningCSS, Sass twins.
+- `@esbuild/wasi-preview1` WASI showcase (ADR-0316) — unchanged.
