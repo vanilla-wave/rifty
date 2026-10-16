@@ -44,9 +44,11 @@ parameter, no playground UI — is the agent's carrier (goal §Decisions).
    deleting a project deletes them.
 6. The Shell environment gets `HOME=/home/rifty` unless the seed sets it; a bare
    `cd` goes there. The terminal state omits that login default while it keeps
-   its value, so a persisted state round-trips exactly (ADR-0278). `os.homedir()` returns `$HOME` and `os.tmpdir()` returns
+   its value (decided per session at its open, not by a nested lifecycle
+   shell's inherited env), so a persisted state round-trips exactly (ADR-0278). `os.homedir()` returns `$HOME` and `os.tmpdir()` returns
    `$TMPDIR`/`$TMP`/`$TEMP` (trailing slash stripped) like Node, defaulting to
-   `/home/rifty` and `/tmp`.
+   `/home/rifty` and `/tmp`; `os.userInfo().homedir` stays the account home
+   `/home/rifty` whatever `$HOME` says, as Node's passwd read.
 7. Diagnostics translate owner paths to guest paths (`publicRoot/...`,
    `/tmp/...`, `/home/rifty/...`); the owner layout stays hidden.
 8. Files, Documents, SCM, TypeScript and terminal-state persistence keep

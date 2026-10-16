@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `os.userInfo().homedir` is the account home `/home/rifty` regardless of `$HOME`, as Node (ADR-0531); stale exit-signal rejections recorded before a reused process's reset are dropped too.
+
 - An exit signal from an earlier invocation of a reused process (no-COI) no longer ends the current one when its late `unhandledrejection` arrives: after a failed `vite build`, the next build runs (ADR-0530 correction).
 
 - Guest location (ADR-0531): `process.cwd()`, module paths and diagnostics use the public project root (default `/home/project`); `os.tmpdir()`/`os.homedir()` follow `TMPDIR`/`HOME` as Node (default `/tmp`, `/home/rifty`), both existing and writable; a cross-mount rename fails `EXDEV`.

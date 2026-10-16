@@ -178,7 +178,7 @@ export function createWorkbenchProjectRuntime(
     const resolved = resolveGuestPath(layout, path);
     return resolved.kind === 'mount' ? resolved.owner : projectRoot;
   };
-  /** Per session: login defaults its seed did not bring (ADR-0531 §6). */
+  /** Per PTY session (set at `pty:open`): login defaults its seed did not bring (ADR-0531 §6). */
   const seededLogin = new Map<string, readonly string[]>();
   // An unchanged injected default stays out of the reported state, so a
   // persisted terminal state round-trips exactly (ADR-0278).
@@ -268,10 +268,6 @@ export function createWorkbenchProjectRuntime(
     seed: { readonly cwd?: string; readonly env?: Record<string, string> } | undefined,
     ptySid: string,
   ): Shell => {
-    seededLogin.set(
-      ptySid,
-      Object.keys(LOGIN_ENV).filter((key) => !Object.hasOwn(seed?.env ?? {}, key)),
-    );
     const captureOrigin = createPreviewOriginCapture(activeAdmission, ptySid);
     const childBinExecutor = createOwnerChildBinExecutor(
       options.nodeEntryWorkerUrl,
@@ -502,6 +498,14 @@ export function createWorkbenchProjectRuntime(
 
   return Object.freeze({
     handlePtyFrame(frame: PageToOwnerFrame): void | Promise<void> {
+      // The session's seed, not a nested lifecycle shell's inherited env.
+      if (frame.type === 'pty:open') {
+        const seeded = frame.env ?? {};
+        seededLogin.set(
+          frame.sid,
+          Object.keys(LOGIN_ENV).filter((key) => !Object.hasOwn(seeded, key)),
+        );
+      }
       return ptyServer.handleFrame(frame);
     },
     close,

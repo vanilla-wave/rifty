@@ -9,10 +9,12 @@ import {
   availableParallelism,
   cpus,
   devNull,
+  homedir,
   machine,
   platform,
   release,
   type,
+  userInfo,
   version,
 } from './os.ts';
 import { riftyProcess } from './process.ts';
@@ -75,5 +77,15 @@ describe('node:os ABI (ADR-0026)', () => {
     Object.defineProperty(globalThis, TOOLCHAIN_REALM, { value: true, configurable: true });
     expect(cpus()).toHaveLength(1);
     expect(availableParallelism()).toBe(1);
+  });
+});
+
+// Node v24.16.0: `HOME=/tmp node -e "…homedir(), userInfo().homedir"` → `/tmp`
+// and the account's passwd home — `$HOME` moves homedir() only.
+describe('homedir and the account home (ADR-0531)', () => {
+  it('HOME moves homedir() but not userInfo().homedir', () => {
+    vi.stubGlobal('process', { env: { HOME: '/tmp' } });
+    expect(homedir()).toBe('/tmp');
+    expect(userInfo().homedir).toBe('/home/rifty');
   });
 });

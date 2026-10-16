@@ -23,9 +23,12 @@ export function tmpdir(): string {
   return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
 }
 
-/** libuv `uv_os_homedir`: `$HOME`, else the account's home (project-owned, ADR-0531). */
+/** The guest account's home (passwd entry; project-owned, ADR-0531). */
+const ACCOUNT_HOME = '/home/rifty';
+
+/** libuv `uv_os_homedir`: `$HOME`, else the account's home. */
 export function homedir(): string {
-  return env('HOME') ?? '/home/rifty';
+  return env('HOME') ?? ACCOUNT_HOME;
 }
 
 export function hostname(): string {
@@ -119,7 +122,8 @@ export function userInfo(): {
   shell: string;
   homedir: string;
 } {
-  return { username: 'rifty', uid: 1000, gid: 1000, shell: '/bin/sh', homedir: homedir() };
+  // passwd data: `$HOME` does not move it (Node `uv_os_get_passwd`).
+  return { username: 'rifty', uid: 1000, gid: 1000, shell: '/bin/sh', homedir: ACCOUNT_HOME };
 }
 
 export const constants = {

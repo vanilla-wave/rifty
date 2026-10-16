@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The terminal state's login-`HOME` provenance is fixed at the session's open, so an `npm run` lifecycle shell no longer adds `HOME` to the snapshot (ADR-0531 §6).
+
 - Owner VFS snapshot bridge channels open the native `BroadcastChannel` (ADR-0529).
 
 - The install finalizer no longer prepares Vite (ADR-0533); installed Vite 7.3.6/8.0.16 chunks stay upstream bytes and a `/`-rooted project takes upstream Vite's own code paths there.

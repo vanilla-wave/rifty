@@ -1010,6 +1010,14 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       env: { HOME: '/home/rifty' },
     });
     expect(await exitEnv('login-seeded', 'r3', 'pwd')).toEqual({ HOME: '/home/rifty' });
+    // A nested npm lifecycle shell inherits HOME; the session's provenance stays.
+    h.authority.writeFileSync(
+      `${ROOT}/package.json`,
+      new TextEncoder().encode('{"name":"login","scripts":{"x":"echo nested"}}\n'),
+    );
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'login-npm', env: { KEEP: '1' } });
+    expect(await exitEnv('login-npm', 'r4', 'npm run x')).toEqual({ KEEP: '1' });
+    expect(await exitEnv('login-npm', 'r5', 'pwd')).toEqual({ KEEP: '1' });
     await h.runtime.close();
   });
 
