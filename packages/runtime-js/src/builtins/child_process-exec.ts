@@ -286,6 +286,11 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       },
       { once: true },
     );
+    // Node: a child starts in the parent's cwd at spawn unless `cwd` is given.
+    const childCwd =
+      a.opts.cwd ??
+      (globalThis as { process?: { cwd?: () => string } }).process?.cwd?.() ??
+      '/';
     childProcess = {
       argv: ['rifty', scriptPath, ...a.args.slice(1)],
       env: a.opts.env ?? {},
@@ -294,7 +299,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       stdin,
       stdout: { write: writeStdout },
       stderr: { write: writeStderr },
-      cwd: () => a.opts.cwd ?? '/',
+      cwd: () => childCwd,
       on(event, cb) {
         processEvents.on(event, cb);
         if (event === 'message') ipcActive = true;

@@ -1026,6 +1026,7 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
       createRuntime: (vfs) =>
         createWorkbenchProjectRuntime({
           projectRoot: materialized.projectRoot,
+          publicRoot: '/',
           packageConfig: config,
           authority,
           packageState,

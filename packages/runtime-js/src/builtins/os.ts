@@ -10,12 +10,20 @@ import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts'
 
 export const EOL = '\n';
 
-export function tmpdir(): string {
-  return '/tmp';
+function env(name: string): string | undefined {
+  const value = (globalThis as { process?: { env?: Record<string, unknown> } }).process?.env?.[name];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+/** Node POSIX: `$TMPDIR || $TMP || $TEMP || '/tmp'`, one trailing slash stripped. */
+export function tmpdir(): string {
+  const path = env('TMPDIR') ?? env('TMP') ?? env('TEMP') ?? '/tmp';
+  return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+}
+
+/** libuv `uv_os_homedir`: `$HOME`, else the account's home (project-owned, ADR-0531). */
 export function homedir(): string {
-  return '/home/rifty';
+  return env('HOME') ?? '/home/rifty';
 }
 
 export function hostname(): string {

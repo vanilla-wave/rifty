@@ -455,6 +455,7 @@ globalThis.onmessage = ({ data }) => {
         execArgv: ['-e', '42'],
         remoteFs: true,
         remoteFsRoot: REMOTE_FS_ROOT,
+        publicRoot: '/',
       },
     );
     publishKernelEntryBootstrap(parentEntry.bootstrap ?? null);
@@ -598,6 +599,7 @@ globalThis.onmessage = ({ data }) => {
         bin: false,
         remoteFs: true,
         remoteFsRoot: REMOTE_FS_ROOT,
+        publicRoot: '/',
         nodeServe: true,
       },
     );

@@ -4,6 +4,7 @@ import {
   snapshotNodeEntryRuntimeBindings,
 } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
+import type { GuestRoots } from './guest-layout.ts';
 
 export interface OwnerChildRuntimeBindingSession {
   readonly runtimeBindings: readonly NodeEntryRuntimeBinding[];
@@ -18,12 +19,13 @@ export interface OwnerChildAdmissionReservation {
 
 export type ReserveOwnerChildAdmission = (root: string) => Promise<OwnerChildAdmissionReservation>;
 
-/** Project physical owner paths into the child's existing `/` namespace. */
+/** Project physical owner paths into the child's guest namespace. */
 export function projectOwnerChildRuntimeBindings(
   bindings: readonly NodeEntryRuntimeBinding[],
-  remoteFsRoot?: string,
+  guestRoots?: GuestRoots,
 ): readonly NodeEntryRuntimeBinding[] {
-  if (remoteFsRoot === undefined) return snapshotNodeEntryRuntimeBindings(bindings);
+  if (guestRoots === undefined) return snapshotNodeEntryRuntimeBindings(bindings);
+  const { remoteFsRoot, publicRoot } = guestRoots;
   if (!isAbsolute(remoteFsRoot) || normalizePath(remoteFsRoot) !== remoteFsRoot) {
     throw new TypeError('owner child runtime binding root must be normalized and absolute');
   }
@@ -34,7 +36,11 @@ export function projectOwnerChildRuntimeBindings(
           `owner child runtime binding ${binding.packagePath} is outside ${remoteFsRoot}`,
         );
       }
-      return { ...binding, packagePath: binding.packagePath.slice(remoteFsRoot.length) };
+      const relative = binding.packagePath.slice(remoteFsRoot.length);
+      return {
+        ...binding,
+        packagePath: publicRoot === '/' ? relative : `${publicRoot}${relative}`,
+      };
     }),
   );
 }

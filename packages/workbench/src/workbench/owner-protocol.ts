@@ -1,5 +1,6 @@
 import { normalizePreviewPrefix } from '@riftydev/io';
 import type { PtyPreview, PtyPreviewReq } from '../glue/pty-protocol.ts';
+import { assertPublicProjectRoot } from '../workers/guest-layout.ts';
 import {
   type OwnerStorageConfig,
   type OwnerStorageSnapshot,
@@ -68,6 +69,8 @@ export interface WorkbenchOwnerBootConfig {
   readonly packageAcquisition: NormalizedWorkbenchPackageAcquisition;
   readonly storage: OwnerStorageConfig;
   readonly legacyWorkspacePrefix?: string;
+  /** Guest mount point of the active project (ADR-0531); omission = `/home/project`. */
+  readonly publicProjectRoot?: string;
   readonly playgroundUrlContext?: {
     readonly apiBaseUrl: string;
     readonly clientUrl: string;
@@ -231,7 +234,7 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
     optionalKeys(
       config,
       ['deployment', 'packageAcquisition', 'storage'],
-      ['legacyWorkspacePrefix', 'playgroundUrlContext'],
+      ['legacyWorkspacePrefix', 'publicProjectRoot', 'playgroundUrlContext'],
     ),
     'owner boot config',
   );
@@ -320,6 +323,9 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
     }
     legacyWorkspacePrefix = candidate;
   }
+  const publicProjectRoot = own(config, 'publicProjectRoot')
+    ? assertPublicProjectRoot(config.publicProjectRoot)
+    : undefined;
   let playgroundUrlContext: WorkbenchOwnerBootConfig['playgroundUrlContext'];
   if (own(config, 'playgroundUrlContext')) {
     const context = record(config.playgroundUrlContext, 'owner boot Playground URL context');
@@ -336,6 +342,7 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
       ...(namespace === undefined ? {} : { namespace }),
     }),
     ...(legacyWorkspacePrefix === undefined ? {} : { legacyWorkspacePrefix }),
+    ...(publicProjectRoot === undefined ? {} : { publicProjectRoot }),
     ...(playgroundUrlContext === undefined ? {} : { playgroundUrlContext }),
   });
 }

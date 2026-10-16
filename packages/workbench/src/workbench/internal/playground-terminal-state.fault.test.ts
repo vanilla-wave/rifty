@@ -149,6 +149,14 @@ describe('Playground terminal state boundary', () => {
       env: {},
     });
 
+    // ADR-0531: the project's own /tmp and ~ persist as the project root.
+    expect(
+      projectTerminalStateFromOwner(PROJECT_ROOT, {
+        cwd: '/.rifty/workbench/projects/guest/tmp/work',
+        env: {},
+      }),
+    ).toEqual({ cwd: '/', env: {} });
+
     for (const cwd of [
       '/.rifty/workbench/projects/terminal-state-other',
       '/.rifty/workbench/projects/outside',

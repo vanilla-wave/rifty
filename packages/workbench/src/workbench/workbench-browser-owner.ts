@@ -561,6 +561,9 @@ export function startBrowserWorkspaceOwner(
     ...(input.legacyWorkspacePrefix === undefined
       ? {}
       : { legacyWorkspacePrefix: input.legacyWorkspacePrefix }),
+    ...(input.publicProjectRoot === undefined
+      ? {}
+      : { publicProjectRoot: input.publicProjectRoot }),
     ...(input.playgroundUrlContext === undefined
       ? {}
       : { playgroundUrlContext: input.playgroundUrlContext }),

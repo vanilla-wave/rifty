@@ -737,6 +737,7 @@ async function harness(
     });
   const runtimeOptions = {
     projectRoot: ROOT,
+    publicRoot: '/',
     packageConfig: activePackageConfig,
     authority,
     packageState: runtimePackageState,
@@ -1151,6 +1152,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       exit: { code: null, signal: 'SIGTERM' },
       cwd: ROOT,
       env: {
+        HOME: '/home/rifty',
         USER_FLAG: 'preserved',
         RIFTY_PREVIEW_SCOPE: 'guest-forged-scope',
         NAPI_RS_FORCE_WASI: 'guest-forged-wasi',
@@ -1281,7 +1283,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       code: 7,
       exit: { code: 7, signal: null },
       cwd: ROOT,
-      env: { USER_FLAG: 'preserved' },
+      env: { HOME: '/home/rifty', USER_FLAG: 'preserved' },
     });
     await h.runtime.close();
   });
@@ -1376,6 +1378,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         'kind',
         'previewScope',
         'print',
+        'publicRoot',
         'remoteFs',
         'remoteFsRoot',
         'runtimeBindings',
@@ -2791,6 +2794,7 @@ describe('Workbench project runtime', () => {
     expect(() =>
       createWorkbenchProjectRuntime({
         projectRoot: ROOT,
+        publicRoot: '/',
         packageConfig: {
           ...packageConfig,
           cfg: { ...packageConfig.cfg, root: '/page-claimed-root' },

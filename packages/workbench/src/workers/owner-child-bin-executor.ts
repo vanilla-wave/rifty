@@ -34,12 +34,12 @@ export function buildChildSpawnSpec(
   nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
   runtimeBindings: readonly NodeEntryRuntimeBinding[] = [],
 ): SpawnWorkerSpec {
-  const projectedBindings = projectOwnerChildRuntimeBindings(runtimeBindings, req.remoteFsRoot);
+  const projectedBindings = projectOwnerChildRuntimeBindings(runtimeBindings, req.guestRoots);
   const entry = buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
     kind: 'program',
     bin: isBinShimPath(req.shimPath),
     remoteFs: true,
-    ...(req.remoteFsRoot === undefined ? {} : { remoteFsRoot: req.remoteFsRoot }),
+    ...(req.guestRoots ?? {}),
     nodeServe: true,
     ...(req.previewScope === undefined ? {} : { previewScope: req.previewScope }),
     terminal: childTerminalBootstrap(req),

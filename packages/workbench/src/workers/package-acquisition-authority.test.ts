@@ -2314,7 +2314,7 @@ describe('package-acquisition authority', () => {
     const run = createOwnerExecSyncRunner(
       'https://example.invalid/node-entry.js',
       { RIFTY_KERNEL_WORKER_URL: 'https://example.invalid/kernel.js' },
-      () => ROOT,
+      () => ({ remoteFsRoot: ROOT, publicRoot: '/' }),
       (root) => authority.reserveChildAdmission(root),
       spawn,
     );

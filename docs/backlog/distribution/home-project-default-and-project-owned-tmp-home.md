@@ -67,9 +67,10 @@ Workbench; the parameter passed through `bootOwner`), unless named.
    `ls /` fail `EEXIST` naming `/tmp` instead of shadowing it → I2
 9. A guest diagnostic carries the public path: `node missing.cjs` →
    `Cannot find module '/home/project/missing.cjs'` → I1
-10. Namespace edges: `touch /x` and `mkdir /home/x` fail `EACCES`;
-    `rm -rf /home/project` fails `EPERM`; `mv /tmp/a /home/project/a` fails
-    `EXDEV` (separate mount; `cp` works) → ADR-0531
+10. Namespace edges: `touch /x` and `mkdir /home/x` fail `EACCES` ("Permission
+    denied"); `rm -rf /home/project` fails `EPERM`; across mounts Node's
+    `fs.renameSync('/tmp/b', '/home/project/b')` fails `EXDEV` while GNU `mv`
+    copies then removes → ADR-0531
 11. `os.homedir()`/`os.tmpdir()` follow `HOME`/`TMPDIR` as Node (`HOME=/tmp
     node -e "…homedir()"` → `/tmp`; `TMPDIR=/home/rifty/t/` → `/home/rifty/t`) → I2
 
@@ -91,6 +92,7 @@ Workbench; the parameter passed through `bootOwner`), unless named.
 ## Decisions
 
 ready-verdict: 2026-10-16 — Contract+RED @ c167c3d36
+re-cut: 2026-10-16 — row 10: shell `mv` across mounts copies then removes as GNU mv does (a real cross-device `mv` succeeds); the EXDEV edge is asserted on Node's `fs.renameSync`; row 6 dev lane reloads until the watcher served the edit — trace: none
 - re-cut: 2026-10-16 — merged `distribution/public-project-root-parameter`
   (parameter + second-location lanes, default unchanged) into this unit: both
   ride one PR, the parameter's null case is proven by the same lanes at the

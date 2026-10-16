@@ -5,7 +5,7 @@ import {
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
-import type { ProjectTerminalSnapshot } from '@riftydev/workbench';
+import { DEFAULT_PUBLIC_PROJECT_ROOT, type ProjectTerminalSnapshot } from '@riftydev/workbench';
 import type {
   PlaygroundPreview,
   PlaygroundProjectPlan,
@@ -1198,7 +1198,7 @@ export function App(props: AppProps) {
   }
 
   function openTerminalLink(uri: string): void {
-    const path = pathFromTerminalFileLink(uri, '/');
+    const path = pathFromTerminalFileLink(uri, DEFAULT_PUBLIC_PROJECT_ROOT);
     if (path !== null) void openEditorFile(path);
   }
 

@@ -1,3 +1,4 @@
+import { createGuestLayout } from '../workers/guest-layout.ts';
 import {
   SabRing,
   SyncRpcDispatcher,
@@ -452,7 +453,7 @@ describe('owner sync runtime child relay views', () => {
     const projectRoot = '/private/project';
     relay.mkdirSync(projectRoot, { recursive: true });
     relay.writeFileSync(`${projectRoot}/child.mjs`, enc.encode(''));
-    const scoped = new ProjectTerminalFsSync(relay, projectRoot);
+    const scoped = new ProjectTerminalFsSync(relay, createGuestLayout('/', projectRoot));
     const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
     installOwnerSyncRuntimeHandlers(dispatcher, () => relay, undefined, {
       getVfs: () => scoped,
@@ -503,7 +504,7 @@ describe('owner sync runtime child relay views', () => {
           throw new Error('Workbench owner execSync requires an active project');
         }
         ownerReads += 1;
-        return new ProjectTerminalFsSync(authority, activeProjectRoot);
+        return new ProjectTerminalFsSync(authority, createGuestLayout('/', activeProjectRoot));
       },
       runWorker,
     });

@@ -10,6 +10,7 @@
  *
  * Supported:
  *   - Whitespace splitting outside quotes.
+ *   - Unquoted word-initial `~` / `~/…` → `$HOME` (bash tilde expansion).
  *   - Single quotes (`'…'`): literal, no expansion, no escapes.
  *   - Double quotes (`"…"`): `$VAR` / `${VAR}` expansion; escapes for
  *     `\$`, `\"`, `\\`, `` \` `` only — other backslashes are literal.
@@ -58,6 +59,7 @@ export function isOp(token: Token): token is OpToken {
 }
 
 const VAR_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
+const WORD_END = new Set([' ', '\t', '>', '<', '|', '&', ';']);
 
 /**
  * Loud gap for `$(…)` / `$((…))` / `` `…` `` — command substitution and
@@ -147,6 +149,17 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
     let buf = '';
     let quoted = false;
     let hasQuoteSyntax = false;
+    // Tilde expansion (bash): an unquoted word-initial `~` alone or before `/`
+    // is `$HOME`; `~user` and an unset HOME stay literal.
+    const after = line[i + 1];
+    if (
+      line[i] === '~' &&
+      env.HOME !== undefined &&
+      (after === undefined || after === '/' || WORD_END.has(after))
+    ) {
+      buf = env.HOME;
+      i++;
+    }
     while (
       i < n &&
       line[i] !== ' ' &&

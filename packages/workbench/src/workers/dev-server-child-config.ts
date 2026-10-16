@@ -18,6 +18,8 @@ export interface DevServerChildConfig {
   readonly cfg: NodeServerPackageConfig;
   readonly terminal: NodeEntryTerminalBootstrap;
   readonly remoteFsRoot?: string;
+  /** Guest mount point of the project (ADR-0531); present exactly with `remoteFsRoot`. */
+  readonly publicRoot?: string;
   readonly previewScope?: string;
   readonly runtimeBindings?: readonly NodeEntryRuntimeBinding[];
 }
@@ -235,7 +237,7 @@ function inspectBootstrap(value: unknown): DevServerChildConfig {
   exact(
     payload,
     ['nodeWorkerRuntime', 'cfg', 'terminal'],
-    ['previewScope', 'remoteFsRoot', 'runtimeBindings'],
+    ['previewScope', 'remoteFsRoot', 'publicRoot', 'runtimeBindings'],
     'dev-server bootstrap payload',
   );
   const cfg = snapshotPackageConfig(payload.cfg);
@@ -246,6 +248,11 @@ function inspectBootstrap(value: unknown): DevServerChildConfig {
   );
   const remoteFsRootValue = optionalOwnField(payload, 'remoteFsRoot');
   const remoteFsRoot = remoteFsRootValue === undefined ? undefined : projectRoot(remoteFsRootValue);
+  const publicRootValue = optionalOwnField(payload, 'publicRoot');
+  if ((publicRootValue === undefined) !== (remoteFsRoot === undefined)) {
+    throw new TypeError('dev-server bootstrap payload.publicRoot must accompany remoteFsRoot');
+  }
+  const publicRoot = publicRootValue === undefined ? undefined : projectRoot(publicRootValue);
   const runtimeBindingsValue = optionalOwnField(payload, 'runtimeBindings');
   const runtimeBindings =
     runtimeBindingsValue === undefined
@@ -262,6 +269,7 @@ function inspectBootstrap(value: unknown): DevServerChildConfig {
     cfg,
     terminal,
     ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
+    ...(publicRoot === undefined ? {} : { publicRoot }),
     ...(previewScope === undefined ? {} : { previewScope }),
     ...(runtimeBindings === undefined ? {} : { runtimeBindings }),
   });
@@ -275,6 +283,7 @@ export function buildDevServerChildEntry(
     readonly cfg: NodeServerPackageConfig;
     readonly terminal: NodeEntryTerminalBootstrap;
     readonly remoteFsRoot?: string;
+    readonly publicRoot?: string;
     readonly previewScope?: string;
     readonly runtimeBindings?: readonly NodeEntryRuntimeBinding[];
   },
@@ -296,6 +305,7 @@ export function buildDevServerChildEntry(
         cfg: inspected.cfg,
         terminal: inspected.terminal,
         ...(inspected.remoteFsRoot === undefined ? {} : { remoteFsRoot: inspected.remoteFsRoot }),
+        ...(inspected.publicRoot === undefined ? {} : { publicRoot: inspected.publicRoot }),
         ...(inspected.previewScope === undefined ? {} : { previewScope: inspected.previewScope }),
         ...(inspected.runtimeBindings === undefined
           ? {}

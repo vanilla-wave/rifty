@@ -48,7 +48,14 @@ function move(
   const fs = commandFileSystem(ctx);
   if (opts.noClobber && fs.existsSync(dstAbs)) return 0; // skip silently (GNU -n)
   try {
-    fs.renameSync(srcAbs, dstAbs);
+    try {
+      fs.renameSync(srcAbs, dstAbs);
+    } catch (error) {
+      // GNU mv across filesystems copies, then removes the source.
+      if (!(error instanceof VfsError) || error.code !== 'EXDEV') throw error;
+      fs.cpSync(srcAbs, dstAbs, { recursive: true });
+      fs.rmSync(srcAbs, { recursive: true });
+    }
   } catch (e) {
     if (e instanceof VfsError) {
       // GNU wording via shared strerror: a missing SRC is a stat failure, any

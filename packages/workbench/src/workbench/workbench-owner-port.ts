@@ -97,6 +97,8 @@ export interface WorkbenchOwnerStartInput {
   readonly storage: OwnerStorageConfig;
   /** First-party companion only; captured historical selection, never guest env. */
   readonly legacyWorkspacePrefix?: string;
+  /** Guest mount point of the active project (ADR-0531); omission = `/home/project`. */
+  readonly publicProjectRoot?: string;
   /** First-party companion only; one immutable page URL snapshot for definition ingress. */
   readonly playgroundUrlContext?: {
     readonly apiBaseUrl: string;

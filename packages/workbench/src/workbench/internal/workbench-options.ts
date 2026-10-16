@@ -9,6 +9,7 @@ import {
   DEFAULT_READY_TIMEOUT_MS,
   configurePreviewServiceWorkerUrl,
 } from '@riftydev/service-worker';
+import { assertPublicProjectRoot } from '../../workers/guest-layout.ts';
 import {
   type OwnerStorageConfig,
   type OwnerStoragePersistence,
@@ -64,6 +65,11 @@ export interface WorkbenchOptions {
   };
   readonly packageAcquisition: WorkbenchPackageAcquisition;
   readonly storage: OwnerStorageConfig;
+  /**
+   * Where guest programs see the active project (ADR-0531): absolute,
+   * normalized, `/` allowed; omission keeps `/home/project`.
+   */
+  readonly publicProjectRoot?: string;
 }
 
 export interface ValidatedOptions {
@@ -128,6 +134,10 @@ export function validateWorkbenchOptions(
     throw new TypeError('storage.persistence must be required, preferred, or ephemeral');
   }
   const namespace = validateOwnerStorageNamespace(storage.namespace);
+  const publicProjectRoot =
+    root.publicProjectRoot === undefined
+      ? undefined
+      : assertPublicProjectRoot(root.publicProjectRoot);
 
   const serviceWorkerUrl = riftyServiceWorkerUrl(
     serviceWorker.url,
@@ -193,6 +203,7 @@ export function validateWorkbenchOptions(
         ...(ioReportTimeoutMs === undefined ? {} : { ioReportTimeoutMs }),
       }),
       packageAcquisition,
+      ...(publicProjectRoot === undefined ? {} : { publicProjectRoot }),
     }),
     storage: Object.freeze({
       persistence,

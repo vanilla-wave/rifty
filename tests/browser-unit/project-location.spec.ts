@@ -120,10 +120,16 @@ async function devReload(page: Page, edited: string): Promise<{ before: string; 
         await rendered('initial render');
         const before = text();
         await fixture.writeProjectText('/scratch/src/main.js', source);
-        loaded = load();
-        frame.contentWindow?.location.reload();
-        await loaded;
-        await rendered('reloaded render');
+        // The dev server serves the edit once its watcher saw it; reload until then.
+        const deadline = Date.now() + 60_000;
+        for (;;) {
+          loaded = load();
+          frame.contentWindow?.location.reload();
+          await loaded;
+          await rendered('reloaded render');
+          if (text() !== before || Date.now() > deadline) break;
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
         return { before, after: text() };
       } finally {
         frame.remove();
@@ -323,21 +329,26 @@ test('namespace edges, diagnostics and Node env-driven os paths at the default',
     const missing = await execLine(page, 'node missing.cjs');
     expect(missing.exit).not.toBe(0);
     expect(missing.out).toContain("Cannot find module '/home/project/missing.cjs'");
+    // GNU coreutils wording for EACCES; a mount point refuses before rm runs (EPERM).
     const touch = await execLine(page, 'touch /x');
     expect(touch.exit).not.toBe(0);
-    expect(touch.out).toContain('EACCES');
+    expect(touch.out).toContain("touch: cannot touch '/x': Permission denied");
     const mkdir = await execLine(page, 'mkdir /home/x');
     expect(mkdir.exit).not.toBe(0);
-    expect(mkdir.out).toContain('EACCES');
+    expect(mkdir.out).toContain('Permission denied');
     const rm = await execLine(page, 'rm -rf /home/project');
     expect(rm.exit).not.toBe(0);
     expect(rm.out).toContain('EPERM');
-    expect((await execLine(page, 'echo a > /tmp/a')).exit).toBe(0);
-    const mv = await execLine(page, 'mv /tmp/a /home/project/a');
-    expect(mv.exit).not.toBe(0);
-    expect(mv.out).toContain('EXDEV');
-    expect((await execLine(page, 'cp /tmp/a /home/project/a')).exit).toBe(0);
+    // Separate mounts: Node's rename sees EXDEV; GNU mv copies then removes.
+    expect((await execLine(page, 'echo a > /tmp/a && echo b > /tmp/b')).exit).toBe(0);
+    const rename = await execLine(
+      page,
+      `node -e "try { require('fs').renameSync('/tmp/b', '/home/project/b'); console.log('RENAMED') } catch (e) { console.log('RENAME=' + e.code) }"`,
+    );
+    expect(lines(rename.out)).toContain('RENAME=EXDEV');
+    expect((await execLine(page, 'mv /tmp/a /home/project/a')).exit).toBe(0);
     expect(lines((await execLine(page, 'cat /home/project/a')).out)).toContain('a');
+    expect((await execLine(page, 'cat /tmp/a')).exit).not.toBe(0);
     // Node v24.16.0: HOME and TMPDIR drive os.homedir()/os.tmpdir() (trailing slash stripped).
     expect(
       lines(

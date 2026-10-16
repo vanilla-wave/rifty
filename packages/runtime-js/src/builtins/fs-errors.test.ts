@@ -18,6 +18,7 @@ const ALL_VFS_CODES: Record<VfsErrorCode, true> = {
   EPERM: true,
   EINVAL: true,
   EACCES: true,
+  EXDEV: true,
   EROFS: true,
   EDQUOT: true,
   EIO: true,

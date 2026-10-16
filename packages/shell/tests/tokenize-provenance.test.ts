@@ -74,3 +74,21 @@ describe('tokenize — quote provenance (ADR-0091)', () => {
     ]);
   });
 });
+
+describe('tokenize — tilde expansion (bash)', () => {
+  const env = { HOME: '/home/rifty' };
+  const words = (line: string, scope: Readonly<Record<string, string>> = env) =>
+    tokenize(line, scope).map((token) => ('value' in token ? token.value : token.op));
+
+  it('expands an unquoted word-initial ~ and ~/ to $HOME', () => {
+    expect(words('cd ~')).toEqual(['cd', '/home/rifty']);
+    expect(words('cat ~/.npmrc')).toEqual(['cat', '/home/rifty/.npmrc']);
+    expect(words('echo x > ~/out')).toEqual(['echo', 'x', '>', '/home/rifty/out']);
+    expect(words('ls ~;pwd')).toEqual(['ls', '/home/rifty', ';', 'pwd']);
+  });
+
+  it('keeps quoted, mid-word, ~user and HOME-less tildes literal', () => {
+    expect(words("echo '~' \"~/x\" a~b ~root")).toEqual(['echo', '~', '~/x', 'a~b', '~root']);
+    expect(words('echo ~/x', {})).toEqual(['echo', '~/x']);
+  });
+});

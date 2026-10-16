@@ -373,7 +373,7 @@ describe('@riftydev/workbench extraction boundary', () => {
     // ADR-0437: three diagnostic modules and four separately emitted probe assets.
     // ADR-0445: one no-COI invocation scope shared by project command and runBin.
     // ADR-0487: package JSON/spec helpers split from the ratcheted npm command.
-    expect(packageProductionFiles).toHaveLength(173);
+    expect(packageProductionFiles).toHaveLength(174);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

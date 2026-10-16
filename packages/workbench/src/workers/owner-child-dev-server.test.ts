@@ -1,3 +1,4 @@
+import { createGuestLayout } from './guest-layout.ts';
 import { EventEmitter } from 'node:events';
 import type { TerminalResizeSource, TerminalSize } from '@riftydev/shell';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
@@ -133,7 +134,7 @@ describe('buildDevServerChildSpawnSpec', () => {
       seedFiles: { '/server.mjs': 'export {}' },
     };
     const spec = buildDevServerChildSpawnSpec(
-      { ...params, cfg, remoteFsRoot },
+      { ...params, cfg, guestRoots: { remoteFsRoot, publicRoot: '/' } },
       'blob:dev-server-url',
       NODE_WORKER_RUNTIME_ENV,
     );
@@ -304,7 +305,7 @@ describe('createOwnerChildDevServer', () => {
         root: '/',
         entryPath: '/packages/nested/server.mjs',
       },
-      remoteFsRoot: '/.rifty/workbench/v2/projects/project-a/tree',
+      guestRoots: { remoteFsRoot: '/.rifty/workbench/v2/projects/project-a/tree', publicRoot: '/' },
     };
     const boot = driver.boot({
       signal: new AbortController().signal,
@@ -360,7 +361,7 @@ describe('createOwnerChildDevServer', () => {
         entryPath: '/packages/nested/server.mjs',
         seedFiles: { '/packages/nested/server.mjs': 'export {}' },
       },
-      remoteFsRoot,
+      guestRoots: { remoteFsRoot, publicRoot: '/' },
     };
     const boot = driver.boot({
       signal: new AbortController().signal,
@@ -385,7 +386,7 @@ describe('createOwnerChildDevServer', () => {
     const marker = new Uint8Array([0, 97, 115, 109]);
     ownerFs.mkdirSync(physicalPackagePath, { recursive: true });
     ownerFs.writeFileSync(`${physicalPackagePath}/esbuild.wasm`, marker);
-    const guestFs = new ProjectTerminalFsSync(ownerFs, remoteFsRoot);
+    const guestFs = new ProjectTerminalFsSync(ownerFs, createGuestLayout('/', remoteFsRoot));
     expect(guestFs.readFileBytesSync(`${runtimeBindings[0]!.packagePath}/esbuild.wasm`)).toEqual(
       marker,
     );

@@ -210,11 +210,12 @@ describe('node-entry host bootstrap config', () => {
         remoteFs: true,
         nodeServe: false,
         remoteFsRoot: REMOTE_FS_ROOT,
+        publicRoot: '/',
       } satisfies NodeEntryLaunch,
     },
     {
       kind: 'eval',
-      launch: evalLaunch({ remoteFsRoot: REMOTE_FS_ROOT }),
+      launch: evalLaunch({ remoteFsRoot: REMOTE_FS_ROOT, publicRoot: '/' }),
     },
     {
       kind: 'worker-thread',
@@ -222,6 +223,7 @@ describe('node-entry host bootstrap config', () => {
         kind: 'worker-thread',
         remoteFs: true,
         remoteFsRoot: REMOTE_FS_ROOT,
+        publicRoot: '/',
         threadId: 7,
       } satisfies NodeEntryLaunch,
     },
@@ -229,7 +231,7 @@ describe('node-entry host bootstrap config', () => {
     const entry = buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, launch);
 
     expect(entry.bootstrap?.payload).toMatchObject({
-      launch: { remoteFsRoot: REMOTE_FS_ROOT },
+      launch: { remoteFsRoot: REMOTE_FS_ROOT, publicRoot: '/' },
     });
   });
 
@@ -243,6 +245,7 @@ describe('node-entry host bootstrap config', () => {
           bin: false,
           remoteFs: true,
           remoteFsRoot: REMOTE_FS_ROOT,
+          publicRoot: '/',
           nodeServe: true,
         },
       },
@@ -256,7 +259,7 @@ describe('node-entry host bootstrap config', () => {
     ];
     for (const nestedLaunch of nestedLaunches) {
       expect(buildConfiguredNodeEntryWorkerEntry(nestedLaunch)).toMatchObject({
-        bootstrap: { payload: { launch: { remoteFsRoot: REMOTE_FS_ROOT } } },
+        bootstrap: { payload: { launch: { remoteFsRoot: REMOTE_FS_ROOT, publicRoot: '/' } } },
       });
     }
   });
@@ -271,6 +274,7 @@ describe('node-entry host bootstrap config', () => {
           bin: true,
           remoteFs: true,
           remoteFsRoot: REMOTE_FS_ROOT,
+          publicRoot: '/',
           nodeServe: true,
           previewScope: 'owner-preview',
         },
@@ -294,6 +298,7 @@ describe('node-entry host bootstrap config', () => {
             launch: {
               previewScope: 'owner-preview',
               remoteFsRoot: REMOTE_FS_ROOT,
+              publicRoot: '/',
             },
           },
         },
@@ -308,6 +313,7 @@ describe('node-entry host bootstrap config', () => {
         hostRuntime: HOST_RUNTIME,
         launch: evalLaunch({
           remoteFsRoot: REMOTE_FS_ROOT,
+          publicRoot: '/',
           previewScope: 'eval-owner-preview',
         }),
       },
@@ -327,6 +333,7 @@ describe('node-entry host bootstrap config', () => {
           launch: {
             previewScope: 'eval-owner-preview',
             remoteFsRoot: REMOTE_FS_ROOT,
+            publicRoot: '/',
           },
         },
       },
@@ -377,6 +384,7 @@ describe('node-entry host bootstrap config', () => {
         bin: false,
         remoteFs: false,
         remoteFsRoot: REMOTE_FS_ROOT,
+        publicRoot: '/',
         nodeServe: false,
       }),
     ).toThrow(/remoteFsRoot.*requires.*remoteFs.*true/i);
@@ -392,6 +400,7 @@ describe('node-entry host bootstrap config', () => {
           bin: false,
           remoteFs: true,
           remoteFsRoot: REMOTE_FS_ROOT,
+          publicRoot: '/',
           nodeServe: true,
         },
       },
@@ -403,6 +412,7 @@ describe('node-entry host bootstrap config', () => {
         kind: 'worker-thread',
         remoteFs: true,
         remoteFsRoot: '/.rifty/workbench/v1/projects/project-b/tree',
+        publicRoot: '/',
         threadId: 12,
       }),
     ).toThrow(/cannot replace.*remoteFsRoot/i);

@@ -84,13 +84,13 @@ describe('buildChildSpawnSpec', () => {
       env: { USER_VALUE: 'kept' },
       cwd: '/',
       isTTY: false,
-      remoteFsRoot: REMOTE_FS_ROOT,
+      guestRoots: { remoteFsRoot: REMOTE_FS_ROOT, publicRoot: '/' },
     };
 
     const spec = buildChildSpawnSpec(req, 'blob:node-entry-url', NODE_WORKER_RUNTIME_ENV);
 
     expect(spec.entry).toMatchObject({
-      bootstrap: { payload: { launch: { remoteFsRoot: REMOTE_FS_ROOT } } },
+      bootstrap: { payload: { launch: { remoteFsRoot: REMOTE_FS_ROOT, publicRoot: '/' } } },
     });
     expect(spec.argv).toEqual(['rifty', '/node_modules/.bin/cowsay', 'hello']);
     expect(spec.cwd).toBe('/');
@@ -169,7 +169,7 @@ describe('buildChildSpawnSpec', () => {
       env: {},
       cwd: '/',
       isTTY: false,
-      remoteFsRoot: REMOTE_FS_ROOT,
+      guestRoots: { remoteFsRoot: REMOTE_FS_ROOT, publicRoot: '/' },
     };
 
     const spec = buildChildSpawnSpec(

@@ -800,6 +800,17 @@ async function prepareStagedCatalogMutation(
         plan.after,
       );
     }
+    // ADR-0531 §5: re-seeding a project keeps its own ~ and /tmp.
+    const guest = `${projectContainer(plan.id)}/guest`;
+    if (plan.role === 'replace' && isDirectory(authority, guest)) {
+      await copyManagedTreeDurably(
+        authority,
+        claims,
+        guest,
+        `${catalogMutationStage(transaction, index, 'after')}/guest`,
+        { copyClaims: false },
+      );
+    }
     if (plan.role === 'retain-scratch') {
       await copyManagedTreeDurably(
         authority,
@@ -824,7 +835,13 @@ async function prepareStagedCatalogMutation(
             if (relative === 'definition.json') return false;
             if (relative === 'tree/.rifty' || relative.startsWith('tree/.rifty/')) return false;
             if (kind === 'file' && isInstallClaimRelative(relative)) return false;
-            return relative === 'tree' || relative.startsWith('tree/');
+            // ADR-0531 §5: Save converts the scratch, so its ~ and /tmp come along.
+            return (
+              relative === 'tree' ||
+              relative.startsWith('tree/') ||
+              relative === 'guest' ||
+              relative.startsWith('guest/')
+            );
           },
         },
       );

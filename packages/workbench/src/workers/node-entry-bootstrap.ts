@@ -101,7 +101,12 @@ if (launch.remoteFs) {
   if (syncApi === null) {
     throw new Error('node-entry: remote owner fs requested but no kernel sync call published');
   }
-  const remoteFs = installNodeEntryRemoteFs(syncApi.call, syncApi.callBinary, launch.remoteFsRoot);
+  const remoteFs = installNodeEntryRemoteFs(
+    syncApi.call,
+    syncApi.callBinary,
+    launch.remoteFsRoot,
+    launch.publicRoot,
+  );
 
   // This realm owns the dispatcher for every kernel Worker it creates. Relay
   // the upstream-authoritative mirror so a nested Worker can load its entry/fs

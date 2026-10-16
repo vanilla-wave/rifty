@@ -22,7 +22,8 @@ parameter, no playground UI — is the agent's carrier (goal §Decisions).
 
 1. One guest layout per active project: `{ publicRoot, projectRoot, privateRoot }`.
    `publicRoot` is the Workbench option `publicProjectRoot` (absolute,
-   normalized, `/` allowed; default `/home/project`), carried in the owner boot
+   normalized, `/` allowed; default `/home/project`, exported as
+   `DEFAULT_PUBLIC_PROJECT_ROOT`), carried in the owner boot
    config and in every child launch beside `remoteFsRoot`. `privateRoot` is
    `<project container>/guest`, beside `tree/` (ADR-0165 layout unchanged).
 2. Mounts: `publicRoot` → `projectRoot`; `/tmp` → `privateRoot/tmp`;

@@ -53,6 +53,7 @@ export type {
 } from './open-workbench.ts';
 export type { WorkbenchPackageAcquisition } from './internal/workbench-package-acquisition.ts';
 export type { PreviewHandle } from './preview-readiness.ts';
+export { DEFAULT_PUBLIC_PROJECT_ROOT } from '../workers/guest-layout.ts';
 export { projects } from './project-definition.ts';
 export type { ProjectDefinition } from './project-definition.ts';
 export type {
