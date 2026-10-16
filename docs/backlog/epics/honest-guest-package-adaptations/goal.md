@@ -74,8 +74,10 @@ and (3) is the updated inventory reviewed under the principle.
    request of a Node-surface API settles — `buffer.Blob`/`File` body reads,
    `fs.openAsBlob`, `WebAssembly.compile`/`instantiate(bytes)`, `crypto.subtle.*`,
    `node:zlib` over CompressionStream/DecompressionStream, in-guest `Response`/
-   `Request` body consumers, global `WebSocket` — printing the same output and
-   exit status as Node 24.
+   `Request` body consumers, global `WebSocket`, `BroadcastChannel` — printing
+   the same output and exit status as Node 24. Reads with no exact outside hold
+   (native-internal body streams, `navigator.locks`) are declared gaps with a
+   kill condition (ADR-0529 §4), never silent.
 2. I2. The installed Vite `dist/node/cli.js` (Vite 7.3.6 and the Vite 8 bundle)
    is byte-identical to its upstream tarball member; no `__riftyTrackCliPromise`
    / `trackKeepalivePromise` exists in the realm or the SDK surface; `vite
@@ -171,3 +173,9 @@ a hidden gap), I3 user-chosen — the goal's value line now says so.
   Node-поверхность» — I1's carrier set is the Node-surface boundary incl.
   global `WebSocket` (item 1 §Decisions; the recommendation's `EventSource`
   was dropped after a probe: not a default Node 24 global).
+- amend: 2026-10-16 — user: «ок» on the narrowing proposal (hold only
+  exact-by-construction classes; native-internal body reads a declared gap;
+  separate goal `epics/node-fetch-classes-in-guest` for Node's own JS Fetch
+  classes) — I1 admits declared gaps with a kill condition; agent, under the
+  user's Node-surface boundary: `BroadcastChannel` joins I1 (Node 24 global,
+  ref'd until close), `navigator.locks` (Node 24 global) is a declared gap.

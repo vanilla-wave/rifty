@@ -105,16 +105,46 @@ verbatim by live Node (`process.execPath`, v24.16.0 at pickup) and by rifty
    `clone()`/consumers → ADR-0529
 9. An unobserved rejected `WebAssembly.compile` / `crypto.subtle.digest` stays
    an unhandled rejection: exit 1 as Node → I1
+10. Body consumers hold for every in-guest body kind except a guest stream:
+    `Response.json({a:1}).clone().json()`, a 16 MiB string `clone().text()`,
+    the original after `clone()`, Blob- and string-bodied `Request.clone()`
+    consumers, a FormData-with-File Request consumer, also after
+    `new Request(request)` → I1
+11. A `BroadcastChannel` holds until `close()` (a message delivered, then
+    closed; a cloned-body read past ~2k host tasks); `unref()`/`ref()` return
+    the channel and an unref'd channel with a listener exits at once;
+    `ref.call({})` → `ERR_INVALID_THIS` → I1
+12. Uncounted work settles with no host task (MessageChannel host-task count
+    0): `fs.promises`, `zlib.gzip`/`createGzip`, uncloned string/bytes/string-
+    FormData body streams → ADR-0529 §3
 
 ## Out of scope
 
-- Browser-only async APIs (`indexedDB`, `caches`, `navigator.locks`,
-  `scheduler.postTask`) — not Node surface; no keepalive claim.
+- Browser-only async APIs (`indexedDB`, `caches`, `scheduler.postTask`) — not
+  Node surface; no keepalive claim.
+- Declared gaps (ADR-0529 §4, compat ❌): native-internal body reads (`.body`
+  after `clone()`, FormData-with-Blob Request `.body`, consumers over a guest
+  stream) — goal `epics/node-fetch-classes-in-guest`; `navigator.locks` —
+  `runtime-js/navigator-locks-node-lifetime`.
 - `WebAssembly.compileStreaming` / `instantiateStreaming` — already a loud
   `NotImplementedError` ceiling (ADR-0158 correction).
 - ADR-0152 §4 drain cap — unchanged.
 
 ## Decisions
+
+re-cut: 2026-10-16 — rows 10-12 added (clone/consumer holds, BroadcastChannel, host-task classifier); FormData-with-Blob Request `.body` stream and `fetch(request)` restore removed for a declared gap — trace: user 2026-10-16 «ок» on the narrowing proposal; Node-surface boundary («окей, давай как рекомендовал Node-поверхность») covers `BroadcastChannel`/`navigator.locks`
+- 2026-10-16 — user: «ок» on: hold only exact-by-construction classes, drop the
+  FormData stream-body emulation for a declared gap, open a separate goal for
+  Node's own JS Fetch classes (`epics/node-fetch-classes-in-guest`); scheme B
+  (JS multipart encoder over native classes) rejected — another emulation layer.
+- 2026-10-16 — fresh probes (Chromium 148, host-task counts): every Body
+  consumer takes ≥1 host task, `clone()` tees over 15-2k; RED on `9d53ebb7e`:
+  rows `response-json-clone`, `response-string-clone-text`,
+  `response-clone-original`, `request-blob-clone`, `request-string-clone` print
+  `HA|top` only. Sweep: `BroadcastChannel` (ref'd until close in Node; no
+  `ref`/`unref` natively — TypeError) and `navigator.locks` are Node 24 globals;
+  locks cannot be held exactly (Node exits with a request queued behind a
+  never-released lock) → declared gap.
 
 - 2026-10-16 — pickup: RED on `aebdd7ddd` (Chromium 148): rows 1-5 and 7 fail
   (`HA|top` only, silent exit 0), rows 6 and the digest chain of row 4 pass

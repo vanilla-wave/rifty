@@ -6,6 +6,7 @@ import { bootOwner, closeOwner, execLine, gotoHarness, writeOwnerFile } from './
 import {
   fetchFormDataCase,
   hostAsyncCases,
+  uncountedHostTaskCase,
   webSocketCase,
 } from './fixtures/host-async-keepalive-cases.ts';
 import { runNodeOracle, runOwnerCommand } from './fixtures/message-port-ref-cases.ts';
@@ -46,6 +47,36 @@ test('host-async Node carriers hold the loop until they settle, as in Node', asy
       expect.soft(rows(run.out), `${fixture.name}: ${run.out}`).toEqual(rows(oracle?.stdout ?? ''));
       expect.soft(run.exit, `${fixture.name}: ${run.out}`).toBe(oracle?.code);
     }
+  } finally {
+    await closeOwner(page);
+  }
+});
+
+// ADR-0529 §3: uncounted work settles with no host task (deterministic, not by size).
+test('uncounted Node-surface work settles with no host task', async ({ page }) => {
+  test.setTimeout(120_000);
+  await gotoHarness(page);
+  await bootOwner(page, {
+    workspaceId: 'bu-host-async-uncounted',
+    template: 'hidden-empty',
+    persistence: 'ephemeral',
+  });
+  try {
+    const install = await execLine(page, 'npm install');
+    expect(install.exit, install.out).toBe(0);
+    await writeOwnerFile(page, '/scratch/uncounted.cjs', uncountedHostTaskCase);
+    const run = await runOwnerCommand(page, 'node uncounted.cjs', 60_000);
+    expect(run.timedOut, run.out).toBe(false);
+    expect(rows(run.out), run.out).toEqual([
+      'HA|ticks:fs-promises=0',
+      'HA|ticks:zlib-gzip=0',
+      'HA|ticks:zlib-gzip-stream=0',
+      'HA|ticks:response-string-body=0',
+      'HA|ticks:response-bytes-body=0',
+      'HA|ticks:request-string-body=0',
+      'HA|ticks:request-string-formdata-body=0',
+    ]);
+    expect(run.exit, run.out).toBe(0);
   } finally {
     await closeOwner(page);
   }

@@ -4,7 +4,7 @@
 
 - **Breaking:** `trackKeepalivePromise` is no longer exported (ADR-0530): its only consumer was the removed Vite CAC hook; detached work keeps the loop through its own counted handles.
 
-- `installHostAsyncKeepalive()` (ADR-0529): a pending Blob/File body read, `fs.openAsBlob` result read, `WebAssembly.compile`/`instantiate`, `SubtleCrypto` call or host-backed `Response`/`Request` body read holds the child realm until it settles, and a global `WebSocket` until its `close` — such programs no longer exit silently before printing Node's result. Guest-stream bodies and unread `blob.stream()` hold nothing; constructor identity and method names stay Node's.
+- `installHostAsyncKeepalive()` (ADR-0529): a pending Blob/File body read, `fs.openAsBlob` result read, `WebAssembly.compile`/`instantiate`, `SubtleCrypto` call or in-guest `Response`/`Request` Body consumer (clones and `Response.json()` included) holds the child realm until it settles, a global `WebSocket` until its `close`, a `BroadcastChannel` until `close()` (Node's `ref()`/`unref()` added) — such programs no longer exit silently before printing Node's result. Guest-stream bodies and unread `blob.stream()` hold nothing; constructor identity and method names stay Node's. Declared gaps: native-internal body stream reads, `navigator.locks`.
 
 - Carry the sandbox registry connection on command requests (toolchain protocol v6). Error cause projection avoids guest accessors, bounds prototype inspection and retains native DOMException details; failed serialization no longer strands runBin on a cause getter.
 

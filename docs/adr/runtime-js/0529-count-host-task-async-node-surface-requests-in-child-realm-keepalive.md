@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-10
 
-> TL;DR: Extends ADR-0152 §1's counted set: a pending host-task-async request of a Node-surface API (Blob/File body reads, WebAssembly compile/instantiate, SubtleCrypto, host-backed Response/Request bodies) holds one keepalive ref until it settles, and a global `WebSocket` holds one until its `close` event — per-class refs on the existing `ref()/unref()` chokepoint, no realm-wide census (ADR-0378).
+> TL;DR: Extends ADR-0152 §1's counted set: a pending host-task-async request of a Node-surface API (Blob/File body reads, WebAssembly compile/instantiate, SubtleCrypto, in-guest Body consumers) holds one keepalive ref until it settles; a global `WebSocket` holds one until its `close` event, a `BroadcastChannel` until `close()` — per-class refs on the existing `ref()/unref()` chokepoint, no realm-wide census (ADR-0378). Only holds exact by construction ship; native-internal body reads and `navigator.locks` are declared gaps.
 
 ## Context
 
@@ -40,18 +40,18 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
      conversion (native extraction order), and the content type native
      extraction sets is kept. `body`, locking, `clone()` and the consumer
      methods stay native on it.
+   - Every Body consumer (`arrayBuffer/blob/bytes/formData/json/text`) of an
+     in-guest `Response` or `Request`, its clones and `Response.json()`:
+     Chromium settles each on a host task, even over an in-memory string (one
+     task; a cloned body's tee takes 15 for `Response.json({a:1}).clone()`,
+     ~2k for 16 MiB). Not over a guest `ReadableStream` body: it waits on guest
+     work, and Node exits with such a read pending. `clone()` and
+     `new Request(request)` carry that kind.
    - An in-guest `Request` with a Blob/File body reads it synchronously
      (`FileReaderSync`, dedicated workers) into the same bytes with its content
-     type: its consumers and `body` stream need no host task and
-     `fetch(request)` sends native bytes. A FormData body holding a Blob/File
-     gets the held stream over its native encoding (encoded after the init
-     conversion, `duplex: 'half'` supplied, content type kept); `clone()` and
-     `new Request(request)` keep it, and `fetch(request)` sends that encoding as
-     a Blob (same boundary) and disturbs the request body as native fetch does.
-     Inits whose `keepalive`/`mode` are accessors, keepalive and no-cors
-     requests (a stream body is refused there natively) keep the native
-     FormData body and hold its consumer methods. `init` is observed through a
-     separate Proxy target (frozen inits stay valid), `init.body` read once.
+     type, so its `body` stream needs no host task. Other bodies stay native;
+     `init` is observed through a separate Proxy target (frozen inits stay
+     valid), `init.body` read once.
    - `WebAssembly.compile`, `WebAssembly.instantiate` (both overloads).
      Streaming variants stay the ADR-0158 loud ceiling.
    - Every `SubtleCrypto.prototype` method (one prototype covers
@@ -60,15 +60,32 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
      event (always dispatched after error or close); the listener goes through
      the native `EventTarget` API, so a subclass override never runs before its
      constructor, and a synthetic `close` releases nothing.
-3. Not counted, settle on microtasks with no host task: `fs.promises`/fs
-   callbacks (sync RPC), `node:zlib` over CompressionStream (Chromium transforms
-   synchronously; 64 MiB one-shot + stream rows pass unheld), string, bytes,
-   URLSearchParams, JSON and string-only FormData bodies (64 MiB probes settle
-   unheld on `aebdd7ddd`).
-4. Out of the Node surface, not counted: `indexedDB`, `caches`,
-   `navigator.locks`, `scheduler`; `EventSource` (not a default Node 24 global).
-5. A never-settling counted request (an unclosed WebSocket) holds to the loud
-   ADR-0152 §4 cap where Node holds the process forever. Every counted class
+   - Global `BroadcastChannel`: ref'd from construction until `close()`, as in
+     Node; Node's `ref()`/`unref()` (absent natively) toggle the hold and
+     return the channel, `ERR_INVALID_THIS` off a channel.
+   Only holds exact by construction are admitted: a host-API promise held to
+   settle, the pull of a JS stream over a host source, a handle with an
+   observable release, or synchronous materialization. A hold that emulates a
+   native stream or fetch algorithm from outside is refused (seven review
+   rounds each found a new observable divergence in one).
+3. Not counted, settle with no host task (host-task count 0, deterministic
+   row `uncounted Node-surface work settles with no host task`):
+   `fs.promises`/fs callbacks (sync RPC), `node:zlib` over CompressionStream
+   (Chromium transforms within the task), `body` stream reads of uncloned
+   string, bytes and string-only FormData bodies.
+4. Declared gaps (compat ❌), Node-surface but no exact outside hold:
+   - `body` stream reads Chromium performs internally — either branch after
+     `clone()`, a Request whose FormData body holds a Blob/File — and Body
+     consumers over a guest-stream body. Kill condition: Node's own JS Fetch
+     classes in the guest (`backlog/epics/node-fetch-classes-in-guest`).
+   - `navigator.locks`: acquisition and release are host IPC, and Node exits
+     with a request queued behind a never-released lock, so no outside hold
+     matches (`backlog/runtime-js/navigator-locks-node-lifetime`).
+   Out of the Node surface, not counted: `indexedDB`, `caches`, `scheduler`
+   (absent in Node 24); `EventSource` (not a default Node 24 global).
+5. A never-settling counted request (an unclosed WebSocket or ref'd
+   BroadcastChannel) holds to the loud ADR-0152 §4 cap where Node holds the
+   process forever. Every counted class
    has an observable release; none needs a refuse-by-name ceiling.
 
 ## Consequences
@@ -76,10 +93,22 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
 - (+) Run-to-completion programs whose last work is one of these requests print
   Node's result and exit status (browser-unit parity vs live Node).
 - (+) ADR-0152 §1 shape unchanged; the named set grows by these classes.
-- (−) A held promise settles one microtask after the native one.
+- (−) A held promise settles one microtask after the native one — every Body
+  consumer of an in-guest Response/Request included.
 - (−) A Blob-bodied in-guest `Request` copies its bytes at construction.
-- (−) A FormData-with-Blob in-guest `Request` is stream-bodied internally;
-  `fetch(request)` waits for its encoding blob before dispatch.
-- (−) Explicit gap, keepalive / no-cors / accessor-flag FormData-with-Blob
-  Requests only: their `body` stream reads hold nothing (consumer methods do).
-  Compat ❌ row in `docs/public/compat/process.md`.
+- (−) Explicit gaps (compat ❌ rows in `docs/public/compat/process.md`):
+  native-internal body reads (§4) and `navigator.locks`.
+
+## Corrections
+
+- 2026-10-16 — §3 had claimed string, bytes, URLSearchParams, JSON and
+  string-only FormData bodies settle on microtasks (64 MiB probes passed
+  unheld): false — every Body consumer takes a host task and `clone()` tees
+  over many (`Response.json({a:1}).clone().json()` was lost: RED row
+  `response-json-clone`); the probes passed on drain timing only. Consumers
+  are now held (§2); §3 keeps only host-task-count-0 classes. §4 had listed
+  `navigator.locks` as outside the Node surface: false on Node 24.16.0 (a
+  global); now a declared gap. The FormData-with-Blob Request stream body,
+  its `fetch(request)` restore and the keepalive/no-cors carve-out are removed
+  (an emulated stream body diverged from native fetch normalization, R7); that
+  Request keeps its native body, its consumers held.

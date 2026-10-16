@@ -38,9 +38,9 @@ export const hostAsyncCases: readonly HostAsyncCase[] = [
     // The counted globals keep Node's observable shape (identity, names, instanceof).
     name: 'api-shape',
     source: `const body = Object.getOwnPropertyDescriptor(Response.prototype, 'body').get;
-console.log('HA|constructors=' + [Response, Request, WebSocket].map((C) => C.prototype.constructor === C).join(','));
+console.log('HA|constructors=' + [Response, Request, WebSocket, BroadcastChannel].map((C) => C.prototype.constructor === C).join(','));
 console.log('HA|instances=' + [new Response('x') instanceof Response, new Response('x').clone() instanceof Response, Response.json(1) instanceof Response, new Request('http://localhost/') instanceof Request].join(','));
-console.log('HA|names=' + [Blob.prototype.arrayBuffer, Blob.prototype.stream, WebAssembly.compile, WebAssembly.instantiate, crypto.subtle.deriveBits, Response.json, Response.prototype.text, body].map((f) => f.name).join(','));
+console.log('HA|names=' + [Blob.prototype.arrayBuffer, Blob.prototype.stream, WebAssembly.compile, WebAssembly.instantiate, crypto.subtle.deriveBits, Response.json, Response.prototype.text, body, BroadcastChannel.prototype.ref, BroadcastChannel.prototype.close].map((f) => f.name).join(','));
 `,
   },
   {
@@ -333,20 +333,55 @@ response.text().then((t) => done('formdata-order', t.includes('name="a"') + ',' 
 `,
   },
   {
-    // A FormData body holding a File: its Request body stream reads complete.
-    name: 'request-formdata-body-stream',
+    // A FormData body holding a File: its Request consumer reads the Blob on the host.
+    name: 'request-formdata-consumer',
     source: `${report}const form = new FormData();
 form.append('a', '1');
 form.append('file', new Blob([Buffer.alloc(8 * 1024 * 1024, 82)]), 'f.bin');
 const request = new Request('http://localhost/upload', { method: 'POST', body: form });
-const reader = request.body.getReader();
-let total = 0;
-const pump = () => reader.read().then(({ done: end, value }) => {
-  if (end) return done('form-stream', (total > 8 * 1024 * 1024) + ',' + /^multipart\\/form-data; boundary=/.test(request.headers.get('content-type')));
-  total += value.byteLength;
-  return pump();
-});
-pump().catch((e) => fail('form-stream', e));
+request.text().then((t) => done('form-consumer', (t.length > 8 * 1024 * 1024) + ',' + /^multipart\\/form-data; boundary=/.test(request.headers.get('content-type'))), (e) => fail('form-consumer', e));
+`,
+  },
+  {
+    // \`new Request(request)\` moves a FormData-with-File body; its consumer still holds.
+    name: 'request-copy-formdata-consumer',
+    source: `${report}const form = new FormData();
+form.append('file', new Blob([Buffer.alloc(8 * 1024 * 1024, 83)]), 'g.bin');
+new Request(new Request('http://localhost/upload', { method: 'POST', body: form })).arrayBuffer()
+  .then((b) => done('copy-form', b.byteLength > 8 * 1024 * 1024), (e) => fail('copy-form', e));
+`,
+  },
+  {
+    // Native clone() tees even an in-memory body over host tasks.
+    name: 'response-json-clone',
+    source: `${report}Response.json({ a: 1 }).clone().json()
+  .then((v) => done('json-clone', JSON.stringify(v)), (e) => fail('json-clone', e));
+`,
+  },
+  {
+    name: 'response-string-clone-text',
+    source: `${report}new Response('x'.repeat(16 * 1024 * 1024)).clone().text()
+  .then((t) => done('clone-text', t.length), (e) => fail('clone-text', e));
+`,
+  },
+  {
+    // The original of a cloned body reads its tee branch.
+    name: 'response-clone-original',
+    source: `${report}const response = new Response('y'.repeat(8 * 1024 * 1024));
+response.clone();
+response.text().then((t) => done('clone-original', t.length), (e) => fail('clone-original', e));
+`,
+  },
+  {
+    name: 'request-blob-clone',
+    source: `${report}new Request('http://localhost/upload', { method: 'POST', body: new Blob([Buffer.alloc(4 * 1024 * 1024, 84)]) }).clone().text()
+  .then((t) => done('request-clone', t.length), (e) => fail('request-clone', e));
+`,
+  },
+  {
+    name: 'request-string-clone',
+    source: `${report}new Request('http://localhost/upload', { method: 'POST', body: 'z'.repeat(4 * 1024 * 1024) }).clone().arrayBuffer()
+  .then((b) => done('request-string-clone', b.byteLength), (e) => fail('request-string-clone', e));
 `,
   },
   {
@@ -354,6 +389,46 @@ pump().catch((e) => fail('form-stream', e));
     name: 'request-frozen-init',
     source: `${report}new Request('http://localhost/', Object.freeze({ method: 'POST', body: new Blob(['frozen']) })).text()
   .then((t) => done('frozen', t), (e) => fail('frozen', e));
+`,
+  },
+  {
+    // A Node BroadcastChannel is ref'd until close(); delivery is a host task.
+    name: 'broadcast-channel-message',
+    source: `${report}const a = new BroadcastChannel('rifty-bc');
+const b = new BroadcastChannel('rifty-bc');
+b.onmessage = (event) => { done('bc', event.data); a.close(); b.close(); };
+a.postMessage('hi');
+`,
+  },
+  {
+    // An open channel holds until close(): here past ~2k unheld host tasks of a cloned body read.
+    name: 'broadcast-channel-holds-until-close',
+    source: `${report}const channel = new BroadcastChannel('rifty-bc-held');
+const reader = new Response('x'.repeat(16 * 1024 * 1024)).clone().body.getReader();
+let total = 0;
+const pump = () => reader.read().then(({ done: end, value }) => {
+  if (end) {
+    done('bc-held', total);
+    return channel.close();
+  }
+  total += value.byteLength;
+  return pump();
+});
+pump().catch((e) => fail('bc-held', e));
+`,
+  },
+  {
+    // An unref'd BroadcastChannel with a listener does not hold the loop, as in Node.
+    name: 'broadcast-channel-unref',
+    source: `${report}const channel = new BroadcastChannel('rifty-bc-unref');
+channel.onmessage = () => done('unref-message', 'unexpected');
+done('unref', channel.unref() === channel);
+done('ref', [typeof channel.ref, typeof channel.hasRef, channel.ref().unref() === channel].join(','));
+try {
+  BroadcastChannel.prototype.ref.call({});
+} catch (e) {
+  done('invalid-this', e.name + ':' + e.code + ':' + e.message);
+}
 `,
   },
   {
@@ -415,3 +490,45 @@ fetch(request)
   .then((text) => console.log('HA|fetch=' + text + ',' + request.bodyUsed), (e) => console.log('HA|fetch-error=' + e.name));
 `;
 }
+
+/**
+ * ADR-0529 §3 classifier: work left uncounted must settle with no host task.
+ * A MessageChannel ping counts host tasks while each operation runs; a timer
+ * holds the loop so a miscount reports instead of being reaped.
+ */
+export const uncountedHostTaskCase = `const zlib = require('node:zlib');
+const fsp = require('node:fs/promises');
+const keep = setTimeout(() => {}, 60000);
+const big = 16 * 1024 * 1024;
+const readAll = async (stream) => { const reader = stream.getReader(); while (!(await reader.read()).done); };
+async function ticks(label, op) {
+  let count = 0;
+  let live = true;
+  const channel = new MessageChannel();
+  channel.port1.onmessage = () => { if (live) { count += 1; channel.port2.postMessage(0); } };
+  channel.port2.postMessage(0);
+  try { await op(); } catch (e) { label += '-error:' + e.message; }
+  live = false;
+  channel.port1.close();
+  console.log('HA|ticks:' + label + '=' + count);
+}
+(async () => {
+  await ticks('fs-promises', async () => { await fsp.writeFile('ticks.bin', Buffer.alloc(big, 1)); await fsp.readFile('ticks.bin'); });
+  await ticks('zlib-gzip', () => new Promise((resolve, reject) => zlib.gzip(Buffer.alloc(big, 65), (e) => (e ? reject(e) : resolve()))));
+  await ticks('zlib-gzip-stream', () => new Promise((resolve, reject) => {
+    const gzip = zlib.createGzip();
+    gzip.on('data', () => {});
+    gzip.on('end', resolve);
+    gzip.on('error', reject);
+    for (let i = 0; i < 4; i += 1) gzip.write(Buffer.alloc(4 * 1024 * 1024, 65 + i));
+    gzip.end();
+  }));
+  await ticks('response-string-body', () => readAll(new Response('x'.repeat(big)).body));
+  await ticks('response-bytes-body', () => readAll(new Response(new Uint8Array(big)).body));
+  await ticks('request-string-body', () => readAll(new Request('http://localhost/', { method: 'POST', body: 'x'.repeat(big) }).body));
+  const form = new FormData();
+  form.append('a', 'x'.repeat(1024 * 1024));
+  await ticks('request-string-formdata-body', () => readAll(new Request('http://localhost/', { method: 'POST', body: form }).body));
+  clearTimeout(keep);
+})();
+`;

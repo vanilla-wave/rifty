@@ -34,8 +34,10 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 - Project location default (`/home/project`, user 2026-10-15), the root knob,
   and deleting the two Vite root policies — `epics/project-location-independence`.
 - Vite 7.3.7 / proven-version admission policy — separate refine (handoff §Фон).
-- Browser-only async APIs (`indexedDB`, `caches`, `navigator.locks`,
-  `scheduler`) — not Node surface.
+- Browser-only async APIs (`indexedDB`, `caches`, `scheduler`) — not Node
+  surface (`navigator.locks` is a Node 24 global: declared gap, ADR-0529 §4).
+- Node's own JS Fetch classes in the guest (kills the native-internal body
+  read gap) — `epics/node-fetch-classes-in-guest`.
 - `WebAssembly.compileStreaming`/`instantiateStreaming` — loud ceiling, ADR-0158.
 - Depth-2 nested-spawn drain guard — stays in `runtime-js/keepalive-residual-gaps`.
 - Public compat "Adaptations" section; machine gate over the inventory — user
