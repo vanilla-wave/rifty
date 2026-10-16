@@ -485,6 +485,10 @@ export function handleRealmUncaughtError(reason: unknown): boolean {
  * browser report. An exit signal is never dispatched: the drain carries its code.
  */
 export function handleRealmUnhandledRejection(reason: unknown, promise: unknown): boolean {
+  // An exit signal requested its exit when thrown; one that is not this run's
+  // terminal belongs to an earlier invocation of a reused process (no-COI) and
+  // must not end the current one. Node's exit() never rejects anything.
+  if (isRiftyProcessExit(reason) && readNodeProcessTerminal() !== reason) return true;
   const outcome = isRiftyProcessExit(reason) ? null : dispatchUnhandledRejection(reason, promise);
   if (outcome?.kind === 'handled' || outcome?.kind === 'exited') return true;
   if (beginNodeEvalUnhandled(reason, 'rejection')) return true;

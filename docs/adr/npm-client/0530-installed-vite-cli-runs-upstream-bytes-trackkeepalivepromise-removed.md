@@ -39,3 +39,14 @@ ran `vite build` identically with the hook inert. Principle: `AGENTS.md`
 - (−) Embedders that imported `trackKeepalivePromise` lose it (no known consumer).
 - A zero-ref window a Vite lane exposes is a keepalive defect routed to ADR-0529's
   carrier set, never a reason to restore a package patch.
+
+## Corrections
+
+- 2026-10-16 — the hook also observed the CAC action promise. Vite's action
+  calls `process.exit(1)` after a failed build; rifty's exit throws its signal,
+  so the action promise rejects with it, and Chromium reports that rejection
+  late. On a reused no-COI process it landed in the next invocation and ended
+  it (`tests/no-coi/no-coi-pi-agent.spec.ts`: the repaired build failed with
+  `process.exit(1)`). Fixed in the platform, not by restoring the hook: an exit
+  signal that is not the current invocation's terminal is ignored
+  (`handleRealmUnhandledRejection`; `process-exit-lifecycle.test.ts`).

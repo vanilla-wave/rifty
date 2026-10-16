@@ -275,3 +275,41 @@ describe('in-process process without a control port (ADR-0445)', () => {
     await expect(awaitDrain()).resolves.toBeUndefined();
   });
 });
+
+// Fault row (stale-state): an async caller of exit() rejects with the exit signal,
+// and Chromium reports that rejection late. On a reused no-COI process it can land
+// after the next invocation began; it must not end that invocation (Node's exit()
+// never rejects a caller).
+describe('stale exit signal on a reused process', () => {
+  it('ignores an earlier invocation exit signal and keeps the current one', async () => {
+    const { process, frames } = processWithControl();
+    let stale: unknown;
+    try {
+      process.exit(1);
+    } catch (signal) {
+      stale = signal;
+    }
+    await tick();
+    resetKeepalive();
+    resetNodeProcessExit(process);
+    frames.length = 0;
+
+    const promise = Promise.reject(stale);
+    promise.catch(() => {});
+    expect(handleRealmUnhandledRejection(stale, promise)).toBe(true);
+    await tick();
+    expect(frames).toEqual([]);
+    await expect(awaitDrain({ capMs: 1_000 })).resolves.toBeUndefined();
+
+    let current: unknown;
+    try {
+      process.exit(4);
+    } catch (signal) {
+      current = signal;
+    }
+    const pending = Promise.reject(current);
+    pending.catch(() => {});
+    handleRealmUnhandledRejection(current, pending);
+    await expect(awaitDrain({ capMs: 1_000 })).rejects.toMatchObject({ exitCode: 4 });
+  });
+});
