@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The baked `bcrypt` substitution pins `bcryptjs@3.0.3` (the requested `bcrypt` range no longer reaches `bcryptjs`, whose newest is 3.0.3); the install still fails at the lock save (`npm-client/bcrypt-substitution-install`, compat ❌). `NAPI_RS_FORCE_WASI=1` launch preparation declared (ADR-0534).
+
 - **Breaking:** Vite's bundled Chokidar root-watch and root-URL rewrites (`viteRootWatchPatchPolicy`, `viteRootUrlPatchPolicy`) and the runtime exports `planInstalledConsumerFiles`/`prepareInstalledConsumerFiles` are removed (ADR-0533, supersedes ADR-0433): installed Vite chunks are upstream bytes at every project root; the install-artifact recipe drops both entries.
 
 - Removed `viteCliActionPatchPolicy`, its acquisition/validation paths and the Vite action keepalive admission (ADR-0530): installed `vite/dist/node/cli.js` is the upstream tarball member; the install-artifact recipe drops the policy.

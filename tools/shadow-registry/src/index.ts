@@ -50,8 +50,9 @@ const registryRedirects = Object.fromEntries(
 );
 
 export const bakedOverrides: OverrideMap = {
-  // bcrypt's native bindings don't load in the browser; bcryptjs is a drop-in.
-  bcrypt: 'bcryptjs',
+  // bcrypt's native bindings don't load in the browser; bcryptjs is a drop-in,
+  // pinned: bcryptjs has no 5.x/6.x for the requested bcrypt range to reach.
+  bcrypt: 'bcryptjs@3.0.3',
   ...registryRedirects,
 };
 

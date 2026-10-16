@@ -24,10 +24,13 @@ $ npm install bcrypt@5.1.1
 npm: install failed: No matching version for bcryptjs@5.1.1
 ```
 
-Registry: `bcrypt` latest 6.0.0; `bcryptjs` newest 3.0.3. `parseTarget`
-(`overrides.ts`) keeps the edge range when the override names no range; the unit
-test pins `bcrypt: '*'` for that reason. Two defects: the range mapping and the
-latest-request lock path. Found by the inventory sweep of goal
+Registry: `bcrypt` latest 6.0.0; `bcryptjs` newest 3.0.3. The range half is
+fixed 2026-10-16 (baked override pinned to `bcryptjs@3.0.3`; before, `parseTarget`
+reused the edge range). Remaining: after the pin both requests print
+`+ bcryptjs@3.0.3` and fail `Installed package bcrypt has no top-level lock
+version` — the substitute is not installed at the requested name (npm's alias
+form `node_modules/bcrypt` with `name: bcryptjs`), so the save path finds no
+`node_modules/bcrypt` lock entry (`npm-shell-command.ts`). Found by the inventory sweep of goal
 `honest-guest-package-adaptations` I3 (the row records it). Route: `rifty-fix`
 with a real-Node baseline (`npm install bcrypt` + `bcryptjs` API parity).
 

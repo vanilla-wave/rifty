@@ -196,6 +196,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0528 | Netlify proxy rewrite serves the production npm-registry route |
 | 0530 | Installed Vite CLI runs upstream bytes; trackKeepalivePromise removed |
 | 0533 | Vite runs upstream bytes at every project root; root policies removed |
+| 0534 | napi-rs packages launch with NAPI_RS_FORCE_WASI=1 |
 
 ### playground
 
