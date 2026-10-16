@@ -9,10 +9,7 @@ import {
   emnapiCoreOrphanedReferencePatchApplied,
   emnapiCoreOrphanedReferencePatchPolicy,
 } from '../../tools/shadow-registry/src/runtime/emnapi-core-install-policy.ts';
-import {
-  viteCliActionPatchApplied,
-  viteRootWatchPatchApplied,
-} from '../../tools/shadow-registry/src/runtime/vite-cli-install-policy.ts';
+import { viteRootWatchPatchApplied } from '../../tools/shadow-registry/src/runtime/vite-cli-install-policy.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -88,7 +85,8 @@ describe('finalizePackageInstallFiles', () => {
 
     await finalizePackageInstallFiles({ root: '/scratch/nested' });
 
-    expect(viteCliActionPatchApplied(dec.decode(fsSync.readFileBytesSync(paths.cli)))).toBe(true);
+    // ADR-0530: the installed CLI stays upstream bytes.
+    expect(dec.decode(fsSync.readFileBytesSync(paths.cli))).toBe(CLI_SOURCE);
     expect(viteRootWatchPatchApplied(dec.decode(fsSync.readFileBytesSync(paths.watcher)))).toBe(
       true,
     );
@@ -121,7 +119,8 @@ describe('finalizePackageInstallFiles', () => {
     });
 
     if (!paths) throw new Error('seedTemplateFiles was not called');
-    expect(viteCliActionPatchApplied(dec.decode(fsSync.readFileBytesSync(paths.cli)))).toBe(true);
+    // ADR-0530: the installed CLI stays upstream bytes.
+    expect(dec.decode(fsSync.readFileBytesSync(paths.cli))).toBe(CLI_SOURCE);
     expect(viteRootWatchPatchApplied(dec.decode(fsSync.readFileBytesSync(paths.watcher)))).toBe(
       true,
     );
