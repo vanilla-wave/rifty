@@ -39,21 +39,30 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 - Stock-path cost on the Vite 7.3.6 lanes (extra Worker + pipe + 13.9 MB
   compile per service start) — owner: agent — measured at cutover; lane
   time-outs are not silently raised.
-- Reconcile `npm-client/guest-package-adaptation-inventory-classes` (PR #373:
-  esbuild ids as `substitution-environment`, kill none) with I4 — COI rows
-  deleted, the no-COI client one `platform-gap` row — owner: agent — whichever
-  of the two lands second.
+- Vite-side preparation that is still version-specific in COI after the
+  gate goes (I6): the three install patches throw a plain `Error` when a
+  needle is missing (`vite-cli-install-policy.ts`; needles verified in 5.4.21,
+  6.4.4, 7.3.6 only) and the CLI mode grammar is copied from 7.3.6
+  (`vite-cli-prep.ts:194-218`) — owner: agent — cutover pickup proves I6
+  holds for Vite 5/6/7 (deletion of the hook/root patches is owned by
+  `honest-guest-package-adaptations` I2 and `project-location-independence`);
+  narrowing I6's "any" goes back to the user.
+- `honest-substitution-signals` I2 (esbuild facade `types` = the twin's
+  `lib/main.d.ts`) must hold for every installed version after the cutover —
+  owner: agent — whichever of `npm-client/esbuild-facade-typescript-declarations`
+  and the cutover lands second carries it.
 
 ## Out of scope
 
 - Real `*Sync` — `runtime-js/worker-threads-prompt-start-atomics-wait`,
   `runtime-js/worker-threads-kernel-workerdata-structured-clone`,
-  `receiveMessageOnPort` (user 2026-10-16: loud only).
-- No-COI child processes that load `node_modules` —
-  `runtime-js/no-coi-child-process-node-modules` (user 2026-10-16: old runtime
-  stays there meanwhile).
+  `runtime-js/worker-threads-receive-message-on-port` (user 2026-10-16: loud
+  only).
+- No-COI child processes that load `node_modules` — separate goal
+  `epics/no-coi-child-processes` (user 2026-10-16: old runtime stays there
+  meanwhile).
 - Lockfile migration across catalog changes (user 2026-10-16).
-- Verified lanes for Vite other than 7.3.6/8.x (user 2026-10-16: "⚠️ not
+- Verified lanes for Vite other than 7.3.6/8.0.16 (user 2026-10-16: "⚠️ not
   verified").
 - Rollup, LightningCSS, Sass twins.
 - `@esbuild/wasi-preview1` WASI showcase (ADR-0316) — unchanged.

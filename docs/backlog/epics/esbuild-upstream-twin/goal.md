@@ -26,8 +26,8 @@ generated 0.28.0 client stays as declared `platform-gap` debt until no-COI
 child processes land. Faithful-runtime payoff: the 13 patches and their
 per-version anchors leave the COI path; upstream bytes run where rifty used to
 rewrite them. With the client gone, the COI Vite version gate that existed only
-to start it goes too: any installed Vite runs, Vite 7.3.6 and 8.x verified,
-others "⚠️ not verified".
+to start it goes too: any installed Vite runs, Vite 7.3.6 and 8.0.16
+verified, others "⚠️ not verified".
 
 ## User scenario
 
@@ -38,7 +38,7 @@ COI playground unless stated.
    `npm install && node build.mjs` exits 0 and `dist/out.js` equals the bytes
    Node 24 + esbuild-wasm of the same resolved version writes; installed
    `node_modules/esbuild-wasm` equals its upstream tarball.
-2. Same project with `"esbuild": "~0.21.5"` and with `"0.28.0"`; `npx esbuild
+2. Same project with `"esbuild": "~0.21.5"` and with `"^0.28.0"`; `npx esbuild
    src/index.ts --bundle` prints the same text and exit as Node with a TTY and
    a pipe stdout; `npx esbuild src/index.ts --bundle > out.js` leaves the same
    file as Node (empty on Node 24.16.0 — upstream quirk, evidence §Stock entry).
@@ -70,8 +70,8 @@ COI playground unless stated.
           Stats keys `dev,ino,mode,nlink,uid,gid,rdev,blksize,blocks,atimeMs,ctimeMs` non-number.
      I4 — the inventory has no class column; the 13 patch ids apply in no-COI and COI alike;
           no no-COI child-process item exists; a no-COI refusal names no tier.
-     I5 — a version = policy hashes + 23-24 anchors + native oracle fixtures + ~60 files
-          (evidence §Today's cost); compat says "other esbuild versions stay loud gaps"
+     I5 — a version = policy hashes + 23-24 anchors + native oracle fixtures + 66 non-doc files
+          naming 0.28.0 (evidence §Today's cost); compat says "other esbuild versions stay loud gaps"
           (`docs/public/compat/esbuild-js-api.md:49`).
      I6 — `vite-esbuild-runtime.ts:31-35` throws a plain `Error` for any Vite but 7.3.6/8.x
           (6.4.4, 5.4.21, 7.3.7); evidence §Vite. -->
@@ -101,15 +101,16 @@ COI playground unless stated.
    build bytes); any other request or locked version fails with a named
    `NotImplementedError` naming the no-COI tier; the retained generated client
    is a declared `platform-gap` adaptation whose kill condition is
-   `runtime-js/no-coi-child-process-node-modules`.
+   `epics/no-coi-child-processes`.
 5. I5. A verified version's only per-version inputs are its version string and
    upstream tarballs — the oracle is produced by running the same suite on
    Node; no hand-entered hash, patch anchor, catalog recipe or per-version
-   test edit. The compat page lists the verified versions and marks every
-   other admitted version "⚠️ not verified".
+   test edit; the verified-set differential runs in CI. The compat page lists
+   the verified versions and marks every other admitted version "⚠️ not
+   verified".
 6. I6. In COI, no rifty gate refuses a Vite version: any installed Vite runs
-   its own CLI; the compat page lists Vite 7.3.6 and 8.x as verified and every
-   other Vite version as "⚠️ not verified". In no-COI the gate stays with the
+   its own CLI; the compat page lists Vite 7.3.6 and 8.0.16 as verified and
+   every other Vite version as "⚠️ not verified". In no-COI the gate stays with the
    retained client (I4).
 
 ## Challenge
@@ -151,20 +152,25 @@ direction (f1-f5 show the four gaps are the minimal set).
 - 2026-10-16 — user: «Как esbuild-wasm на Node (Recommended)» — oracle is
   esbuild-wasm on Node 24, not native esbuild; wasm-vs-native differences
   (e.g. errno text, today patched by `native-target-errno`) surface as on Node.
-- 2026-10-16 — user: «Любая + объявленный проверенный набор (Recommended)» —
-  any resolved version installs; verified set = the option's «последние
-  0.21/0.25/0.28», pinned at cutover pickup (0.28.x latest is 0.28.2 today,
-  evidence §Registry); others "⚠️ not verified" (precedent
-  `docs/public/compat/vitest.md:36`).
+- 2026-10-16 — user: «Любая + объявленный проверенный набор (Recommended)»
+  (option: «Ставится любая версия из запрошенного диапазона. CI-матрица
+  (последние 0.21/0.25/0.28 = Vite 5/6/7) с автодиффом против Node; прочие в
+  compat — ⚠️ «не проверено»») — any resolved version installs; the verified
+  set's differential runs in CI (I5); others "⚠️ not verified" (precedent
+  `docs/public/compat/vitest.md:36`). The «= Vite 5/6/7» gloss was the
+  agent's and wrong — see the Vite line below. Agent: «последние» is pinned
+  at cutover pickup (0.28.x latest is 0.28.2 today, evidence §Registry).
 - 2026-10-16 — user, after the cost explanation: «Только «громко, не hang»
   (Recommended)» — `*Sync` stays a named loud gap; real sync is
   `runtime-js/worker-threads-prompt-start-atomics-wait` +
-  `runtime-js/worker-threads-kernel-workerdata-structured-clone` (+
-  `receiveMessageOnPort`), outside this goal.
+  `runtime-js/worker-threads-kernel-workerdata-structured-clone` +
+  `runtime-js/worker-threads-receive-message-on-port`, outside this goal.
 - 2026-10-16 — user: «Временно старый рантайм (Recommended)» (option: «В
-  no-COI остаётся нынешний esbuild 0.28.0 с патчами … Мульти-версии сразу —
-  только в COI») — no-COI keeps the generated 0.28.0 client as declared debt
-  until `runtime-js/no-coi-child-process-node-modules`. Agent reading of
+  no-COI остаётся нынешний esbuild 0.28.0 с патчами как объявленный долг;
+  kill = child-процессы в no-COI (отдельная цель). Мульти-версии сразу —
+  только в COI. Патчи умирают позже.») — no-COI keeps the generated 0.28.0
+  client as declared debt until the separate goal `epics/no-coi-child-processes`
+  (seeded draft; FIT decides feasibility, infeasible → back to the user). Agent reading of
   «остаётся нынешний»: no-COI resolution stays main's (0.28.0 for admitting
   ranges), so one manifest may resolve 0.28.2 in COI and 0.28.0 in no-COI, and
   a COI-made lock pinning another version is refused by name in no-COI.
@@ -181,7 +187,11 @@ direction (f1-f5 show the four gaps are the minimal set).
   and the three Vite install patch anchors exist in 6.4.4 and 5.4.21
   (evidence §Vite); options remove / remove + Vite 6 verified lane / keep
   with named error. User: «ок» on «Снять (рекомендую)» — COI gate removed,
-  Vite other than 7.3.6/8.x "⚠️ not verified"; no-COI gate stays.
+  Vite other than 7.3.6/8.x "⚠️ not verified"; no-COI gate stays. Agent
+  correction after the final check: compat verifies Vite 8 at exactly 8.0.16
+  (`docs/public/compat/vite-command.md`; 8.2.0-8.3.1 fail install on
+  `lightningcss ^1.33.0`, `vitest.md:36`), so "8.x" reads 8.0.16 — no new
+  verified lane, the user's choice unchanged.
 - 2026-10-16 — agent: DEC-2 at the cutover pickup — superseding ADR for
   ADR-0226 (COI client), corrections to ADR-0371 (runtime binding), ADR-0361
   ("Registry acquisition is exact", replay of the attested product version,
@@ -189,13 +199,22 @@ direction (f1-f5 show the four gaps are the minimal set).
   ADR-0316 (CLI gate in COI), ADR-0375 D6 (exact COI/no-COI Vite 7 bytes:
   fixture pins or correction), ADR-0384 §Alternatives ("Fix general Node
   capabilities": the general capability is now shown, evidence
-  §Discriminating layers).
-- 2026-10-16 — agent: PR #373's draft
-  `npm-client/guest-package-adaptation-inventory-classes` lists the esbuild
+  §Discriminating layers). The ADR-0226 supersession names its D4
+  "validation-before-gap" loss for COI `*Sync`: stock esbuild-wasm builds
+  the Worker before validating (`lib/main.js:1995-1998, 2194-2253`), so an
+  invalid-option `transformSync` gets the named gap, not Node's validation
+  error; the compat `*Sync` row reads partial.
+- 2026-10-16 — agent: PR #373 (merged `aebdd7ddd`) filed
+  `npm-client/guest-package-adaptation-inventory-classes` with the esbuild
   patch ids as `substitution-environment`/`handle-mapping`, kill none; this
-  evidence makes them `platform-gap` under #373's own text (COI: kill = this
-  goal's cutover; no-COI client: kill = `runtime-js/no-coi-child-process-node-modules`)
-  — the later-landing PR corrects the table (map §Open questions).
+  evidence makes them `platform-gap` under its own `fault-classes.md`
+  §Guest-package adaptations text (COI: kill = this goal's cutover; no-COI
+  client: kill = `epics/no-coi-child-processes`) — corrected in that item in
+  this PR; ledger note in `honest-guest-package-adaptations`.
+- amend (other goal): 2026-10-16 — `honest-substitution-signals` scenario 4
+  (`esbuild@^0.21.0` refused) holds in no-COI only after this goal's cutover;
+  recorded there as `amend:` citing the user's «Любая…»; its I2 (types
+  facade) must survive the cutover (map §Open questions).
 - 2026-10-16 — `npm-client/shadow-catalog-second-version-per-name` answered
   by the user's version and Vite-gate decisions above and deleted — versions
   come from the twin's range, not a second recipe per name;

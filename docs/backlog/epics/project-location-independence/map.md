@@ -63,4 +63,4 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 - Repairing Vite's behavior at `/` — I3 documents it as real Node's.
 - Classifying the Vite root policies — `honest-guest-package-adaptations` I3
   (their kill condition is this goal).
-- Vite 7.3.7 / proven-version policy — separate refine.
+- Vite 7.3.7 / proven-version policy — separate refine; COI answered by `epics/esbuild-upstream-twin` I6 (exact-7.3.6 gate removed, other Vite "⚠️ not verified", user 2026-10-16), no-COI unchanged.

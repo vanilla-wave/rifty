@@ -30,7 +30,9 @@ Expected: the codec asserts `trigger.name` uniqueness with the same
 chokepoint), and the catalog-v2 data-authority contract test carries the RED.
 The second-version-per-name question was answered 2026-10-16 without a second
 recipe: esbuild versions come from the upstream twin's range
-(`epics/esbuild-upstream-twin`), so one recipe per name stays true.
+(`epics/esbuild-upstream-twin`). Whether the per-tier install (COI range vs
+no-COI 0.28.0) needs a tier-keyed second recipe is open in that goal's map
+(install-shape fog).
 
 Dedup: no title/`code:`/map/declined match.
 

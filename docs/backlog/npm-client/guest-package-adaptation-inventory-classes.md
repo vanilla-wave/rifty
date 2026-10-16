@@ -26,15 +26,14 @@ Classification established by the refine (evidence file §Probe 1, §Root):
 
 | adaptation | class | authority | kill condition |
 |---|---|---|---|
-| esbuild `inline-worker-startup`, `node-callback-fs`, `channel-has-fs`, `runtime-default-wd`, `transform-temp-fs`, `native-validation-provenance`, `native-target-errno`, `gate-*` (5) | `substitution-environment` | ADR-0226 D1/D4, compat `esbuild-js-api.md` | none — declared twin environment |
-| esbuild `runtime-service-refs` | `handle-mapping` | ADR-0152 §1 via host callback (ADR-0384 D1); Node analogue `esbuild/lib/main.js:2308-2311` `child.ref()/unref()` | none |
+| esbuild `inline-worker-startup`, `node-callback-fs`, `channel-has-fs`, `runtime-default-wd`, `transform-temp-fs`, `native-validation-provenance`, `native-target-errno`, `runtime-service-refs`, `gate-*` (5) | **`platform-gap`** (corrected 2026-10-16) | the generated client exists because upstream esbuild-wasm's Node entry hits rifty gaps (stdio write callback, `ChildProcess#ref/unref`, fs on fd 0, `fs.Stats` fields; no-COI same-realm `require`) — `docs/backlog/npm-client/reference/esbuild-upstream-twin-refine-evidence-2026-10-16.md` §Discriminating layers | COI: `epics/esbuild-upstream-twin` cutover; no-COI: `epics/no-coi-child-processes` |
 | Vite CAC action hook (`viteCliActionPatchPolicy`) | **`platform-gap` / dead** | none; probe 1 | `npm-client/vite-cli-action-keepalive-hook-removal` |
 | Vite root-watch (`viteRootWatchPatchPolicy`) | `upstream-edge` | real Node 24.22.0 + Vite 7.3.6 at `/`: phantom `vite.config.js changed, restarting server…` + spurious `[file change]` for untouched files, then OOM — evidence file §Root runs 2-3 (ADR-0433 had only the isolated function; rifty symptom `de26804b1`) | deleted by `epics/project-location-independence` (user 2026-10-15: Node-exact at `/`, default `/home/project`); until then re-prove on each admitted Vite/chokidar version |
 | Vite root-URL (`viteRootUrlPatchPolicy`) | `upstream-edge` | real Node 24.22.0 + Vite 7.3.6 + plugin-react 5.2.0 at `/`: `/src/App.jsx` imports `"/@id//@react-refresh"` while the preamble uses `"/@react-refresh"`; control at `/home/node/app` uses one URL — evidence file §Root run 5; ADR-0433 | same as above |
 | emnapi 1.10.0 readable/minified backport | `backport` | upstream fix version (to be cited from the preparation source) | emnapi release carrying the fix admitted |
 | Vite 8 napi-WASI manifest override, launch-env preparation | `substitution-environment` | ADR-0384 D3, ADR-0336 D2/D3 | none |
 | nested lockfile dispatch | to classify at pickup | ADR-0384 D3 | — |
-| catalog substitutions: esbuild (ADR-0226/0316), LightningCSS, Sass (ADR-0344), Rollup, bcrypt | `substitution-environment` | their ADR + `docs/public/compat/` page (`lightningcss` page: `honest-substitution-signals` I3) | none — declared twins; a twin without a compat page is a missing-authority row |
+| catalog substitutions: esbuild (ADR-0226/0316; becomes the upstream `esbuild-wasm` twin in COI by `epics/esbuild-upstream-twin`), LightningCSS, Sass (ADR-0344), Rollup, bcrypt | `substitution-environment` | their ADR + `docs/public/compat/` page (`lightningcss` page: `honest-substitution-signals` I3) | none — declared twins; a twin without a compat page is a missing-authority row |
 
 Acceptance shape expected at pickup: the inventory table in
 `registry-package-adaptations-evidence.md` gains `class`, `authority`,
@@ -70,3 +69,7 @@ in place); no title/`code:`/map/declined match.
 - 2026-10-15 — agent: catalog substitutions included (user's framing names
   every substituted package); `platform-gap` = declared interim debt per
   `fault-classes.md` §Guest-package adaptations.
+- 2026-10-16 — agent: the 13 esbuild patch ids reclassified `platform-gap`
+  (were `substitution-environment`/`handle-mapping`, kill none) on the
+  `esbuild-upstream-twin` spike evidence: with four Node-surface gaps
+  shimmed, unmodified esbuild-wasm gives Node-identical output under COI.
