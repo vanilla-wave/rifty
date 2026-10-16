@@ -146,6 +146,11 @@ verbatim by live Node (`process.execPath`, v24.16.0 at pickup) and by rifty
   HOLDS, fixed (encode after the native construct, `response-formdata-order`
   row). Remaining explicit gap narrowed to FormData-with-Blob Request `.body`
   streams (compat ❌, ADR-0529).
+- 2026-10-16 — Final+GREEN verify BLOCK @ f4972833d (codex): R6-1 FormData-with-Blob
+  Request `.body` reads not held — HOLDS, fixed (held stream over the native
+  encoding + `fetch(request)` sends the encoding blob; rows
+  `request-formdata-body-stream`, fetch echo test); R6-2 frozen init broke the
+  Proxy invariant — HOLDS, fixed (separate Proxy target; `request-frozen-init`).
 - 2026-10-16 — refuse-by-name vs hold-to-cap: every counted class has an
   observable release (settle / `close`), so none is refused; a never-settling
   one holds to the loud ADR-0152 §4 cap (ADR-0529 §5).

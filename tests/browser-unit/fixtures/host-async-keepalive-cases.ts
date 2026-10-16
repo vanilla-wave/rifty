@@ -333,6 +333,30 @@ response.text().then((t) => done('formdata-order', t.includes('name="a"') + ',' 
 `,
   },
   {
+    // A FormData body holding a File: its Request body stream reads complete.
+    name: 'request-formdata-body-stream',
+    source: `${report}const form = new FormData();
+form.append('a', '1');
+form.append('file', new Blob([Buffer.alloc(8 * 1024 * 1024, 82)]), 'f.bin');
+const request = new Request('http://localhost/upload', { method: 'POST', body: form });
+const reader = request.body.getReader();
+let total = 0;
+const pump = () => reader.read().then(({ done: end, value }) => {
+  if (end) return done('form-stream', (total > 8 * 1024 * 1024) + ',' + /^multipart\\/form-data; boundary=/.test(request.headers.get('content-type')));
+  total += value.byteLength;
+  return pump();
+});
+pump().catch((e) => fail('form-stream', e));
+`,
+  },
+  {
+    // A frozen RequestInit with a Blob body still constructs natively.
+    name: 'request-frozen-init',
+    source: `${report}new Request('http://localhost/', Object.freeze({ method: 'POST', body: new Blob(['frozen']) })).text()
+  .then((t) => done('frozen', t), (e) => fail('frozen', e));
+`,
+  },
+  {
     name: 'zlib-gzip',
     source: `${report}const zlib = require('node:zlib');
 zlib.gzip(Buffer.alloc(64 * 1024 * 1024, 65), (e, r) => (e ? fail('gzip', e) : done('gzip', r.length)));
@@ -376,5 +400,18 @@ socket.addEventListener('open', () => {
 });
 socket.addEventListener('message', (event) => console.log('HA|message=' + event.data));
 socket.addEventListener('close', (event) => console.log('HA|close=' + event.code + ':' + event.reason + ':' + socket.listened.join('+')));
+`;
+}
+
+/** `fetch(request)` with a FormData-with-File body sends one consistent multipart body. */
+export function fetchFormDataCase(url: string): string {
+  return `console.log('HA|top');
+const form = new FormData();
+form.append('a', '1');
+form.append('file', new Blob(['hello file']), 'f.txt');
+const request = new Request(${JSON.stringify(url)}, { method: 'POST', body: form });
+fetch(request)
+  .then((response) => response.text())
+  .then((text) => console.log('HA|fetch=' + text + ',' + request.bodyUsed), (e) => console.log('HA|fetch-error=' + e.name));
 `;
 }

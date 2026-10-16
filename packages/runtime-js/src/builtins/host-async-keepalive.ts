@@ -48,6 +48,20 @@ const requestHeaders =
   requestPrototype && Object.getOwnPropertyDescriptor(requestPrototype, 'headers')?.get;
 const FileReaderSyncCtor = (globalThis as { FileReaderSync?: typeof FileReaderSync })
   .FileReaderSync;
+const requestBody =
+  requestPrototype && Object.getOwnPropertyDescriptor(requestPrototype, 'body')?.get;
+const requestBodyUsed =
+  requestPrototype && Object.getOwnPropertyDescriptor(requestPrototype, 'bodyUsed')?.get;
+const requestMode =
+  requestPrototype && Object.getOwnPropertyDescriptor(requestPrototype, 'mode')?.get;
+const requestKeepalive =
+  requestPrototype && Object.getOwnPropertyDescriptor(requestPrototype, 'keepalive')?.get;
+const NativeResponse = typeof Response === 'function' ? Response : undefined;
+const responseClone = responsePrototype?.clone as AnyFunction | undefined;
+const responseBlob = responsePrototype?.blob as AnyFunction | undefined;
+const formDataForEach = typeof FormData === 'function' ? FormData.prototype.forEach : undefined;
+const streamLocked =
+  streamPrototype && Object.getOwnPropertyDescriptor(streamPrototype, 'locked')?.get;
 const headersPrototype = typeof Headers === 'function' ? Headers.prototype : undefined;
 const headersGet = headersPrototype?.get as AnyFunction | undefined;
 const headersHas = headersPrototype?.has as AnyFunction | undefined;
@@ -67,8 +81,11 @@ interface HostAsyncTarget {
 
 /** Wrapper → wrapped native function, for `Function#toString`. */
 const originals = new WeakMap<object, object>();
-/** In-guest Requests whose body is blob-backed host data. */
+/** In-guest Requests whose body is blob-backed host data held per consumer call. */
 const hostBodies = new WeakSet<object>();
+/** In-guest Requests given a held stream for a FormData-with-Blob body → its native encoding. */
+const streamedBodies = new WeakMap<object, object>();
+const UNKNOWN = Symbol('unknown');
 
 const isObject = (value: unknown): value is object =>
   (typeof value === 'object' || typeof value === 'function') && value !== null;
@@ -273,28 +290,89 @@ function installResponseKeepalive(target: HostAsyncTarget): void {
   });
 }
 
+/** A data property read without running guest code; an accessor stays unknown. */
+function peekData(object: object, key: string): unknown {
+  let owner: object | null = object;
+  while (owner !== null) {
+    const descriptor = Reflect.getOwnPropertyDescriptor(owner, key);
+    if (descriptor !== undefined) return 'value' in descriptor ? descriptor.value : UNKNOWN;
+    owner = Reflect.getPrototypeOf(owner);
+  }
+  return undefined;
+}
+
+function hasBlobEntry(form: FormData): boolean {
+  let found = false;
+  reflectApply(formDataForEach as AnyFunction, form, [
+    (value: unknown) => {
+      if (isBlob(value)) found = true;
+    },
+  ]);
+  return found;
+}
+
 /**
- * An in-guest Request keeps a native body (a stream body would change how
- * `fetch(request)` sends it). A Blob/File body is read synchronously
- * (`FileReaderSync`, dedicated workers) into the same bytes plus its content
- * type, so its reads need no host task; a FormData body holds its consumer
- * methods. `init.body` is observed during the native read, never read twice.
+ * A stream body is refused natively for keepalive and no-cors requests; those
+ * (and inits whose flags are accessors) keep the native FormData body.
+ */
+function streamBodyAllowed(init: object, input: unknown): boolean {
+  const keepalive = peekData(init, 'keepalive');
+  const mode = peekData(init, 'mode');
+  if (keepalive === UNKNOWN || mode === UNKNOWN) return false;
+  const inputRequest = isObject(input) && branded(requestMode as AnyFunction, input);
+  const effectiveMode =
+    mode ?? (inputRequest ? reflectApply(requestMode as AnyFunction, input, []) : 'cors');
+  const effectiveKeepalive =
+    keepalive ?? (inputRequest ? reflectApply(requestKeepalive as AnyFunction, input, []) : false);
+  return !effectiveKeepalive && effectiveMode !== 'no-cors';
+}
+
+/**
+ * An in-guest Request keeps its bytes native where it can: a Blob/File body is
+ * read synchronously (`FileReaderSync`, dedicated workers) into the same bytes
+ * with its content type, so its reads need no host task. A FormData body with
+ * a Blob/File gets a held stream over its native encoding (encoded after the
+ * init conversion); `fetch(request)` sends that encoding as a Blob, as the
+ * native body would be sent. `init.body` is observed during the native read.
  */
 function installRequestKeepalive(target: HostAsyncTarget): void {
   const counts = (self: unknown): boolean => isObject(self) && hostBodies.has(self);
+  const ReadableStreamCtor = target.ReadableStream;
   const prototype = wrapConstructor(target, 'Request', (original, args, newTarget) => {
     let body: unknown;
     let type: string | null = null;
+    let form: FormData | null = null;
+    let source: ReadableStream<Uint8Array<ArrayBuffer>> | null = null;
     const init = args[1];
+    const formStreamable =
+      ReadableStreamCtor !== undefined &&
+      NativeResponse !== undefined &&
+      responseBody !== undefined;
+    // A separate Proxy target: substituting `body` never meets a frozen init's invariants.
     const observed = isObject(init)
-      ? new Proxy(init, {
-          get(source, key) {
-            const value = Reflect.get(source, key, source);
+      ? new Proxy(Object.create(null) as object, {
+          get(_target, key) {
+            const value = Reflect.get(init, key, init);
+            if (key === 'duplex' && form !== null && value === undefined) return 'half';
             if (key !== 'body') return value;
             body = value;
-            if (!isBlob(value) || FileReaderSyncCtor === undefined) return value;
-            type = (reflectApply(blobType as AnyFunction, value, []) as string) || null;
-            return new FileReaderSyncCtor().readAsArrayBuffer(value);
+            if (isBlob(value) && FileReaderSyncCtor !== undefined) {
+              type = (reflectApply(blobType as AnyFunction, value, []) as string) || null;
+              return new FileReaderSyncCtor().readAsArrayBuffer(value);
+            }
+            if (
+              formStreamable &&
+              isFormData(value) &&
+              hasBlobEntry(value) &&
+              streamBodyAllowed(init, args[0])
+            ) {
+              form = value;
+              return holdReads(
+                ReadableStreamCtor as typeof ReadableStream,
+                () => source as ReadableStream<Uint8Array<ArrayBuffer>>,
+              );
+            }
+            return value;
           },
         })
       : init;
@@ -303,15 +381,33 @@ function installRequestKeepalive(target: HostAsyncTarget): void {
       args.length > 1 ? [args[0], observed, ...args.slice(2)] : args,
       newTarget,
     );
+    if (form !== null) {
+      // Native extraction encodes after the init conversion, before the constructor returns.
+      const encoded = reflectConstruct(NativeResponse as unknown as Construct, [form]);
+      source = reflectApply(
+        responseBody as AnyFunction,
+        reflectApply(responseClone as AnyFunction, encoded, []),
+        [],
+      ) as ReadableStream<Uint8Array<ArrayBuffer>>;
+      type = reflectApply(
+        headersGet as AnyFunction,
+        reflectApply(responseHeaders as AnyFunction, encoded, []),
+        ['content-type'],
+      ) as string | null;
+      streamedBodies.set(request, encoded);
+    }
     if (type !== null && requestHeaders !== undefined) {
       const headers = reflectApply(requestHeaders, request, []) as object;
       if (!reflectApply(headersHas as AnyFunction, headers, ['content-type'])) {
         reflectApply(headersSet as AnyFunction, headers, ['content-type', type]);
       }
     }
-    const blobRead = isBlob(body) && FileReaderSyncCtor !== undefined;
-    if (body == null ? counts(args[0]) : !blobRead && (isBlob(body) || isFormData(body))) {
-      hostBodies.add(request);
+    if (body == null && isObject(args[0])) {
+      const inherited = streamedBodies.get(args[0]);
+      if (inherited !== undefined) streamedBodies.set(request, inherited);
+      else if (counts(args[0])) hostBodies.add(request);
+    } else if (form === null && (isFormData(body) ? hasBlobEntry(body) : isBlob(body))) {
+      if (!(isBlob(body) && FileReaderSyncCtor !== undefined)) hostBodies.add(request);
     }
     return request;
   });
@@ -319,9 +415,51 @@ function installRequestKeepalive(target: HostAsyncTarget): void {
   wrapMethod(prototype, 'clone', (original, self, args) => {
     const copy = reflectApply(original, self, args) as object;
     if (counts(self)) hostBodies.add(copy);
+    const encoded = isObject(self) ? streamedBodies.get(self) : undefined;
+    if (encoded !== undefined) streamedBodies.set(copy, encoded);
     return copy;
   });
   for (const consumer of BODY_CONSUMERS) holdMethod(prototype, consumer, counts);
+  installFetchRestore(target, nativeConstructor(prototype));
+}
+
+const nativeConstructor = (prototype: object): Construct =>
+  originals.get(Reflect.get(prototype, 'constructor') as object) as Construct;
+
+/** `fetch(request)` sends a held-stream FormData body as its native encoding (a Blob). */
+function installFetchRestore(target: HostAsyncTarget, NativeRequest: Construct): void {
+  wrapMethod(target, 'fetch', (fetchOriginal, self, args) => {
+    const input = args[0];
+    const encoded = isObject(input) ? streamedBodies.get(input) : undefined;
+    const init = args[1];
+    const initBody = isObject(init) ? peekData(init, 'body') : undefined;
+    if (encoded === undefined || initBody !== undefined)
+      return reflectApply(fetchOriginal, self, args);
+    const body = reflectApply(requestBody as AnyFunction, input, []) as object | null;
+    if (
+      body === null ||
+      reflectApply(requestBodyUsed as AnyFunction, input, []) ||
+      reflectApply(streamLocked as AnyFunction, body, [])
+    ) {
+      return reflectApply(fetchOriginal, self, args); // native refusal
+    }
+    // Native fetch(request) disturbs the request body.
+    void reflectApply(nativeStreamCancel as AnyFunction, body, []);
+    const blob = hold(
+      reflectApply(
+        responseBlob as AnyFunction,
+        reflectApply(responseClone as AnyFunction, encoded, []),
+        [],
+      ),
+    );
+    return reflectApply(promiseThen, blob, [
+      (bytes: Blob) =>
+        reflectApply(fetchOriginal, self, [
+          reflectConstruct(NativeRequest, [input, { body: bytes }]),
+          ...args.slice(1),
+        ]),
+    ]);
+  });
 }
 
 function installWebSocketKeepalive(target: HostAsyncTarget): void {

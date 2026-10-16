@@ -3,7 +3,11 @@ import type { AddressInfo } from 'node:net';
 import { expect, test } from '@playwright/test';
 import { WebSocketServer } from 'ws';
 import { bootOwner, closeOwner, execLine, gotoHarness, writeOwnerFile } from './fixtures.ts';
-import { hostAsyncCases, webSocketCase } from './fixtures/host-async-keepalive-cases.ts';
+import {
+  fetchFormDataCase,
+  hostAsyncCases,
+  webSocketCase,
+} from './fixtures/host-async-keepalive-cases.ts';
 import { runNodeOracle, runOwnerCommand } from './fixtures/message-port-ref-cases.ts';
 
 // Goal honest-guest-package-adaptations I1: a pending host-task-async request of
@@ -89,6 +93,56 @@ test('an open global WebSocket holds the loop until it closes, as in Node', asyn
   } finally {
     for (const client of server.clients) client.terminate();
     server.close();
+    await new Promise<void>((resolve) => http.close(() => resolve()));
+  }
+});
+
+// Echo server: checks that the multipart body carries the boundary its content-type names.
+test('fetch(request) sends a FormData-with-File body as one consistent multipart body, as in Node', async ({
+  page,
+}) => {
+  const http = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk: Buffer) => chunks.push(chunk));
+    request.on('end', () => {
+      const body = Buffer.concat(chunks).toString('latin1');
+      const boundary = /boundary=([^;]+)/u.exec(request.headers['content-type'] ?? '')?.[1];
+      response.setHeader('access-control-allow-origin', '*');
+      response.end(
+        [
+          boundary !== undefined && body.includes(`--${boundary}--`),
+          body.includes('name="a"'),
+          body.includes('hello file'),
+        ].join(':'),
+      );
+    });
+  });
+  await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${(http.address() as AddressInfo).port}/upload`;
+  try {
+    const source = fetchFormDataCase(url);
+    const oracle = await runNodeOracle(source);
+    expect(oracle.code, oracle.stderr).toBe(0);
+    expect(rows(oracle.stdout), oracle.stdout).toEqual(['HA|top', 'HA|fetch=true:true:true,true']);
+    await gotoHarness(page);
+    await bootOwner(page, {
+      workspaceId: 'bu-host-async-fetch-form',
+      template: 'hidden-empty',
+      persistence: 'ephemeral',
+    });
+    try {
+      const install = await execLine(page, 'npm install');
+      expect(install.exit, install.out).toBe(0);
+      await writeOwnerFile(page, '/scratch/fetch-form.cjs', source);
+      const run = await runOwnerCommand(page, 'node fetch-form.cjs', 20_000);
+      expect(run.timedOut, run.out).toBe(false);
+      expect(rows(run.out), run.out).toEqual(rows(oracle.stdout));
+      expect(run.exit, run.out).toBe(oracle.code);
+    } finally {
+      await closeOwner(page);
+    }
+  } finally {
+    http.closeAllConnections();
     await new Promise<void>((resolve) => http.close(() => resolve()));
   }
 });
