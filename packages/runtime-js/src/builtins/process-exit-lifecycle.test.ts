@@ -6,6 +6,7 @@ import {
   handleRealmUncaughtError,
   handleRealmUnhandledRejection,
   resetKeepalive,
+  takeUnhandledRejection,
 } from '../internal/event-loop-keepalive.ts';
 import { installNodeProcessShim } from '../ipc/install-process.ts';
 import { setActiveNodeProcessBootstrap } from './process-bootstrap-identity.ts';
@@ -311,5 +312,25 @@ describe('stale exit signal on a reused process', () => {
     pending.catch(() => {});
     handleRealmUnhandledRejection(current, pending);
     await expect(awaitDrain({ capMs: 1_000 })).rejects.toMatchObject({ exitCode: 4 });
+  });
+
+  it('drops an earlier invocation exit signal recorded before the reset', async () => {
+    const { process } = processWithControl();
+    let stale: unknown;
+    try {
+      process.exit(1);
+    } catch (signal) {
+      stale = signal;
+    }
+    const promise = Promise.reject(stale);
+    promise.catch(() => {});
+    // Late report lands after the run ended, before the next invocation resets.
+    handleRealmUnhandledRejection(stale, promise);
+    await tick();
+    resetNodeProcessExit(process);
+
+    expect(takeUnhandledRejection()).toBeNull();
+    handleRealmUnhandledRejection(stale, promise);
+    await expect(awaitDrain({ capMs: 1_000 })).resolves.toBeUndefined();
   });
 });

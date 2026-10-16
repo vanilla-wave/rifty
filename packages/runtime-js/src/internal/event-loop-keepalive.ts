@@ -114,14 +114,34 @@ export function recordRejection(
 ): void {
   if (beginNodeEvalUnhandled(reason, origin)) return;
   const state = keepaliveState();
-  if (state.rejection === null) state.rejection = { reason, origin };
+  if (currentRejection(state) === null) state.rejection = { reason, origin };
 }
 
 /** A serialized invocation reports this failure once; live handles and eval lifecycle remain. */
 export function takeUnhandledRejection(): { readonly reason: unknown } | null {
   const state = keepaliveState();
-  const rejection = state.rejection;
+  const rejection = currentRejection(state);
   state.rejection = null;
+  return rejection;
+}
+
+/**
+ * The recorded rejection, unless it is an exit signal reported as a rejection
+ * that is not this invocation's terminal: a reused process (no-COI) may record
+ * an earlier invocation's late exit-signal rejection before it is reset; it is
+ * dropped. An eval-owned explicit exit is never stale.
+ */
+function currentRejection(state: KeepaliveState): KeepaliveState['rejection'] {
+  const rejection = state.rejection;
+  if (
+    rejection !== null &&
+    rejection.origin !== 'explicit-exit' &&
+    isRiftyProcessExit(rejection.reason) &&
+    readNodeProcessTerminal() !== rejection.reason
+  ) {
+    state.rejection = null;
+    return null;
+  }
   return rejection;
 }
 
@@ -402,12 +422,9 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
         resolve();
         return;
       }
-      if (state.rejection !== null) {
-        finish({
-          kind: 'rejected',
-          reason: state.rejection.reason,
-          origin: state.rejection.origin,
-        });
+      const rejection = currentRejection(state);
+      if (rejection !== null) {
+        finish({ kind: 'rejected', reason: rejection.reason, origin: rejection.origin });
         return;
       }
       // ADR-0445: the process's first terminal ends its loop in-realm, as the
