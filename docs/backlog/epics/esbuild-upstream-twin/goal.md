@@ -3,7 +3,7 @@ kind: epic
 status: draft
 title: esbuild runs as unmodified upstream esbuild-wasm on its Node entry — any requested version (COI)
 created: 2026-10-16
-value: A developer whose project asks for any esbuild version gets the upstream esbuild-wasm bytes of that version running exactly as on Node 24, while rifty drops its generated, 0.28.0-patched esbuild client in COI and closes the Node gaps that forced it (stdio write callbacks, child ref/unref, fs on stdio fds, Stats fields) for every CLI.
+value: A developer whose project asks for any esbuild version gets the upstream esbuild-wasm bytes of that version running through its own Node entry (proven equal to Node 24 on a declared verified set, others marked not verified), while rifty drops its generated, 0.28.0-patched esbuild client in COI and closes the Node gaps that forced it (stdio write callbacks, child ref/unref, fs on stdio fds, Stats fields) for every CLI.
 user_story: As a developer with `"esbuild": "^0.25.0"` and a `build.mjs` calling `esbuild.build(...)`, I want `npm install && node build.mjs` to write the same bundle as Node 24 with esbuild-wasm, but today install fails with `Not implemented: esbuild.version (shadow recipe does not admit ^0.25.0)`
 tier: works
 ---
@@ -110,8 +110,8 @@ COI playground unless stated.
    verified".
 6. I6. In COI, no rifty gate refuses a Vite version: any installed Vite runs
    its own CLI; the compat page lists Vite 7.3.6 and 8.0.16 as verified and
-   every other Vite version as "⚠️ not verified". In no-COI the gate stays with the
-   retained client (I4).
+   every other Vite version as "⚠️ not verified". No-COI Vite runs as on main
+   (no version gate there, ADR-0375 D3; its esbuild admission is I4).
 
 ## Challenge
 
@@ -188,7 +188,11 @@ direction (f1-f5 show the four gaps are the minimal set).
   (evidence §Vite); options remove / remove + Vite 6 verified lane / keep
   with named error. User: «ок» on «Снять (рекомендую)» — COI gate removed,
   Vite other than 7.3.6/8.x "⚠️ not verified"; no-COI gate stays. Agent
-  correction after the final check: compat verifies Vite 8 at exactly 8.0.16
+  corrections after the final checks: the gate does not exist in no-COI on
+  main (`no-coi-toolchain-install.ts:43-49` prepares `kind:'eval'`, which
+  skips the Vite edge, `entry-preparation.ts:36-42`; ADR-0375 D3), so no-COI
+  Vite stays as on main, ungated — the option's «Без COI гейт остаётся» was
+  the agent's misstatement, no user scope changes; compat verifies Vite 8 at exactly 8.0.16
   (`docs/public/compat/vite-command.md`; 8.2.0-8.3.1 fail install on
   `lightningcss ^1.33.0`, `vitest.md:36`), so "8.x" reads 8.0.16 — no new
   verified lane, the user's choice unchanged.
@@ -218,8 +222,9 @@ direction (f1-f5 show the four gaps are the minimal set).
 - 2026-10-16 — `npm-client/shadow-catalog-second-version-per-name` answered
   by the user's version and Vite-gate decisions above and deleted — versions
   come from the twin's range, not a second recipe per name;
-  `npm-client/shadow-catalog-trigger-name-uniqueness` stands (one recipe per
-  name stays true).
+  `npm-client/shadow-catalog-trigger-name-uniqueness` stands unless the
+  install-shape ADR (map §Open questions, per-tier install) needs a
+  tier-keyed recipe.
 - rejected route: keep the generated client and make a version cheaper
   (all-candidates admission, scripted hashes) — violates I1 and I5.
 - rejected route: native-esbuild oracle (keep emulation patches) — violates

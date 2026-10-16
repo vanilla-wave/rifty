@@ -9,8 +9,9 @@ user_story: As a developer on a no-COI SDK host, I want `require('esbuild-wasm')
 
 ## Outcome
 
-Draft seed — the user chose the old esbuild client in no-COI as TEMPORARY
-with «kill = child-процессы в no-COI (отдельная цель)» (2026-10-16,
+Draft seed — the user chose «Временно старый рантайм (Recommended)» (option:
+«В no-COI остаётся нынешний esbuild 0.28.0 с патчами как объявленный долг;
+kill = child-процессы в no-COI (отдельная цель)…», 2026-10-16,
 `epics/esbuild-upstream-twin` §Decisions). FIT has not run: feasibility is
 open (below). A no-COI `spawn('node', script)` child gets its own realm,
 module loader and globals and can `require` the project's `node_modules`,
