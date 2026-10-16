@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Production npm registry route survives the Yandex Cloud outage (ADR-0528): `play.rifty.dev/npm-registry/*` is a same-origin Netlify 200 rewrite to `registry.npmjs.org` (`_redirects` + `netlify.toml`, before the SPA fallback); `VITE_RIFTY_REGISTRY_URL` / `VITE_RIFTY_RESOLVER_URL` leave `netlify.toml` (eddy OFF); deploy smoke targets the deployed origin and the eddy smoke steps are removed. Slower (no CDN tier, 26 s proxy cap), never broken. Restore fork: `docs/backlog/distribution/restore-dedicated-registry-proxy-and-eddy.md`.
+
 - Process: guest-package adaptations carry class + authority + loud anchor (`AGENTS.md` §Fidelity, `docs/process/rules/fault-classes.md` §Guest-package adaptations); a rifty-gap-compensating patch ships only as declared interim debt (linked platform item or ADR + kill condition). Overturns nothing recorded; adds a declaration duty on ADR-0384's inventory, its Decision untouched. Refine evidence: `docs/backlog/runtime-js/reference/guest-package-patches-refine-evidence-2026-10-15.md`.
 - Codex sees the `rifty-review` skill in its catalog (`allow_implicit_invocation: true`), matching Claude; verified by a fresh read-only `codex exec` listing.
 

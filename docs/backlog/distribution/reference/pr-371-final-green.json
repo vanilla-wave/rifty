@@ -1,0 +1,197 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Блокеров нет; перед merge — push проверенного HEAD и привязка нового verdict. Две advisory.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #371 — observed-defect fix без ready backlog-контракта. Authority: docs/adr/npm-client/0528-netlify-proxy-rewrite-serves-the-production-npm-registry-route.md; docs/backlog/distribution/reference/pr-341-starter-version-repair.md; docs/backlog/distribution/reference/pr-341-registry-fixture-repair.md; docs/backlog/distribution/reference/pr-341-ci-harness-repair.md; docs/backlog/distribution/reference/pr-341-child-fs-scenario-repair.md. BASE origin/main aebdd7ddda550759b5697d7b4a227ad29bade5df; HEAD e03f87aba086d7d24dda92a079316b30aa4679ab. Baselines: CDN 504 / unreachable origins; ^7 starters выбирают неподдержанный 7.3.7; child-fs отдельно получает nested icons 2.22.1 и 2980 вместо 2180. Прочитаны gh pr view 371, полный diff, BASE criteria и raw gzip proofs. PR-4: функциональные assertions сохранены, override явный, v1 history byteexact. Untraced repair matrices проверены без искусственных coverage rows. Только detached scratch: pnpm pr:check --all 27/27 PASS без retries; starter/fixture suite 64 PASS; old pins/payloads 5 RED; пять fixture removals — каждый RED; Chromium heavy 6 PASS, child-fs 5 PASS, no-COI exact-dist 1 PASS, без retries. Raw: /tmp/rifty-pr371-review.rC3nFb/{pr-check.log,browser-heavy.log,browser-child.log,browser-no-coi.log}; /private/tmp/rifty-review-starter-yrgBPJ/. Routing files byte-identical deployed ed68f52ed→HEAD. Immutable deploy 6acffb4a9632887ad37a7153: smoke PASS, семь HTTP endpoints 200; Chromium 148 isolated=true, 71 package / 169 registry requests / 0 failures / 0 dead hosts. Raw: routes.json, browser-live.json, netlify-job.log в основном scratch-каталоге. GitHub ещё указывает ed68f52ed: remote CI текущего HEAD не заявлен. Рабочее дерево не изменено. Verdict validator: exit 0. Общий goal не закрывается.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1 / Decision 2: status 200 и proxy перед SPA в обоих файлах; registry/resolver overrides и eddy smoke удалены; Caddy assertions сохранены.",
+      "source": "acceptance",
+      "trace": "ADR-0528+ADR-0163+ADR-0176",
+      "status": "weak",
+      "citation": "tests/integration/prod-npm-registry-proxy.test.ts:19",
+      "note": "C1: TOML status=302 mutant проходит; actual HEAD корректен."
+    },
+    {
+      "row": "Acceptance 2: build gate отвергает dist со ссылками на dead registry/eddy hosts.",
+      "source": "acceptance",
+      "trace": "ADR-0528",
+      "status": "pass",
+      "citation": ".github/workflows/netlify.yml:60",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: preview smoke привязан к immutable deploy; отсутствие deploy_id вызывает отказ; deploy_url consumer отвергается.",
+      "source": "acceptance",
+      "trace": "ADR-0528",
+      "status": "weak",
+      "citation": "tests/integration/prod-npm-registry-proxy.test.ts:42",
+      "note": "C2: alias-export и missing-ID-guard mutants проходят; deploy_url-consumer mutant даёт RED."
+    },
+    {
+      "row": "Acceptance 4: smoke проверяет scoped packument @types%2Fnode.",
+      "source": "acceptance",
+      "trace": "ADR-0528",
+      "status": "pass",
+      "citation": "tools/registry/smoke-npm-registry.mjs:55",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: live metadata, gzip tarball, full Vite packument, root/scoped routes; / и /sw.js остаются static.",
+      "source": "acceptance",
+      "trace": "ADR-0528",
+      "status": "pass",
+      "citation": "docs/adr/npm-client/0528-netlify-proxy-rewrite-serves-the-production-npm-registry-route.md:128",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: isolated Chromium устанавливает пакеты same-origin без registry failures и обращений к dead hosts.",
+      "source": "acceptance",
+      "trace": "ADR-0528",
+      "status": "pass",
+      "citation": "docs/adr/npm-client/0528-netlify-proxy-rewrite-serves-the-production-npm-registry-route.md:136",
+      "note": ""
+    },
+    {
+      "row": "GET /npm-registry/*: реальные npm metadata/tarballs вместо SPA shell.",
+      "source": "public-api",
+      "trace": "ADR-0528",
+      "status": "pass",
+      "citation": "tools/registry/smoke-npm-registry.mjs:20",
+      "note": ""
+    },
+    {
+      "row": "GET /npm-registry: registry JSON вместо SPA shell.",
+      "source": "public-api",
+      "trace": "ADR-0528",
+      "status": "pass",
+      "citation": "docs/adr/npm-client/0528-netlify-proxy-rewrite-serves-the-production-npm-registry-route.md:134",
+      "note": ""
+    },
+    {
+      "row": "Vite snapshot: admitted Vite 7.3.6, актуальные request/lock/identity и проверенный replay cache.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0135+ADR-0278+ADR-0346",
+      "status": "pass",
+      "citation": "apps/playground/src/templates/vite-version.contract.test.ts:26",
+      "note": ""
+    },
+    {
+      "row": "TypeScript snapshot: admitted Vite 7.3.6, актуальные request/lock/identity и проверенный replay cache.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0135+ADR-0278+ADR-0346",
+      "status": "pass",
+      "citation": "apps/playground/src/templates/vite-version.contract.test.ts:26",
+      "note": ""
+    },
+    {
+      "row": "baked-snapshot-identities.json: полный manifest точных SHA256 сериализованных payloads.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0278",
+      "status": "pass",
+      "citation": "apps/playground/src/templates/baked-snapshot-identity.contract.test.ts:71",
+      "note": ""
+    },
+    {
+      "row": "rollup@4.64.5: original metadata/tarball pair; identity, URL, SHA512 и размер согласованы.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0399 + pr-341-registry-fixture-repair.md:10–18",
+      "status": "pass",
+      "citation": "tests/integration/browser-registry-fixture.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "@rollup/wasm-node@4.64.5: original metadata/tarball pair; identity, URL, SHA512 и размер согласованы.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0399 + pr-341-registry-fixture-repair.md:10–18",
+      "status": "pass",
+      "citation": "tests/integration/browser-registry-fixture.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "postcss@8.5.30: original metadata/tarball pair; identity, URL, SHA512 и размер согласованы.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0399 + pr-341-registry-fixture-repair.md:10–18",
+      "status": "pass",
+      "citation": "tests/integration/browser-registry-fixture.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "nanoid@3.3.20: original metadata/tarball pair; identity, URL, SHA512 и размер согласованы.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0399 + pr-341-registry-fixture-repair.md:10–18",
+      "status": "pass",
+      "citation": "tests/integration/browser-registry-fixture.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "source-map-js@1.2.2: original metadata/tarball pair; identity, URL, SHA512 и размер согласованы.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0399 + pr-341-registry-fixture-repair.md:10–18",
+      "status": "pass",
+      "citation": "tests/integration/browser-registry-fixture.test.ts:5",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/integration/prod-npm-registry-proxy.test.ts:19",
+          "evidence": "python3 /tmp/pr371-routing-yjlbUj/verify.py: wildcard TOML status 200→302 — Tests 3 passed, exit 0; raw: mutant-toml-status-302.log. HEAD 3 PASS; HEAD tests на BASE fixtures 3 assertion RED.",
+          "summary": "C1: тест не закрепляет status=200 TOML mirror из ADR-0528. Реальная конфигурация корректна.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tests/integration/prod-npm-registry-proxy.test.ts:42",
+          "evidence": "python3 /tmp/pr371-routing-yjlbUj/verify.py: alias-export и missing-ID-guard mutants — каждый 3 PASS. python3 /tmp/pr371-routing-yjlbUj/workflow-probes.py: первый экспортирует mutable alias, второй принимает отсутствующий id с exit 0; HEAD экспортирует immutable URL и без id exit 1. Raw: results.json, workflow-results.json в том же каталоге.",
+          "summary": "C2: source assertions пропускают неверный экспорт permalink и удаление missing-deploy_id guard. Реальный workflow корректен.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "e03f87aba086d7d24dda92a079316b30aa4679ab"
+}

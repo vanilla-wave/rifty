@@ -8,6 +8,8 @@ export const VITE_CONFIG_FILENAMES = [
   'vite.config.cts',
 ] as const;
 
+// The esbuild runtime admits only its proven Vite consumer version.
+export const DEFAULT_VITE7_VERSION = '7.3.6';
 export const DEFAULT_VITE8_VERSION = '8.0.16';
 export const DEFAULT_VITE8_CONFIG_PATH = '/vite.config.js';
 export const DEFAULT_VITE8_CONFIG_JS = `export default {

@@ -41,3 +41,9 @@ WASM parser must produce an executable bundle returning42.
 2026-09-13: original Rollup/@rollup/wasm-node4.63.2 responses added for the
 current Vite snapshot regenerated after ADR-0433. Exact URL/version/SHA512 were
 checked against that producer's lock; existing manifests/locks remain unchanged.
+
+2026-10-13: five original exact-version responses added for PR341's rebaked
+Vite/TypeScript snapshots: Rollup/@rollup/wasm-node4.64.5, PostCSS8.5.30,
+nanoid3.3.20 and source-map-js1.2.2. URLs/SHA512/bytes checked against the
+committed Vite lock; prior fixtures remain byte-identical. The permanent
+browser-registry closure test rejects a bake whose required originals are absent.

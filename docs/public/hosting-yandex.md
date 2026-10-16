@@ -1,7 +1,15 @@
 # Hosting on Yandex Cloud
 
-Yandex Cloud owns DNS for `rifty.dev` and hosts services that are not just
+Yandex Cloud owns DNS for `rifty.dev` and hosted the services that are not
 static Netlify deploys.
+
+> **Status 2026-10-14: out of service.** Both Compute VMs below stopped
+> answering on 2026-10-13 (`registry-origin.rifty.dev` / `eddy.rifty.dev` TCP
+> timeout; CDN edge 504 / 403). Production no longer depends on them: the
+> playground proxies `/npm-registry/*` same-origin on Netlify and eddy is OFF
+> (ADR-0528). This page is the runbook for recreating the resources; the
+> re-enable decision is tracked in
+> `docs/backlog/distribution/restore-dedicated-registry-proxy-and-eddy.md`.
 
 ## npm registry proxy
 

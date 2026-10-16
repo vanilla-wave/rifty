@@ -54,6 +54,18 @@ jobs:
           set -euo pipefail
           pnpm dlx netlify@26.0.2 build --filter="@riftydev/playground" --context="$NETLIFY_BUILD_CONTEXT"
 
+      # ADR-0528: the app must use the same-origin `/npm-registry` route. A
+      # Netlify site env var (not visible in this repo) could bake a dead host
+      # back in while the route smoke below stays green.
+      - name: Refuse dead registry/eddy hosts in the built app
+        run: |
+          set -euo pipefail
+          if grep -rqE 'registry\.rifty\.dev|eddy(-cdn|-origin)?\.rifty\.dev' apps/playground/dist; then
+            grep -rlE 'registry\.rifty\.dev|eddy(-cdn|-origin)?\.rifty\.dev' apps/playground/dist
+            echo "::error::built playground references a dead Yandex host; check Netlify site env (VITE_RIFTY_REGISTRY_URL / VITE_RIFTY_RESOLVER_URL)."
+            exit 1
+          fi
+
       - name: Deploy PR preview
         id: preview
         if: github.event_name == 'pull_request'
@@ -75,30 +87,36 @@ jobs:
           deploy_url="$(printf '%s' "$output" | node -e 'const data = JSON.parse(require("node:fs").readFileSync(0, "utf8")); process.stdout.write(data.deploy_url ?? data.deployUrl ?? data.ssl_url ?? data.sslUrl ?? data.url ?? "");')"
           logs_url="$(printf '%s' "$output" | node -e 'const data = JSON.parse(require("node:fs").readFileSync(0, "utf8")); process.stdout.write(data.logs ?? data.deploy_logs ?? data.deployLogs ?? data.logsUrl ?? "");')"
           alias_url="https://pr-${{ github.event.pull_request.number }}--${NETLIFY_SITE_NAME}.netlify.app"
+          # `deploy --alias` reports the mutable alias as deploy_url; the deploy's
+          # immutable permalink is derived from its id (ADR-0528 §4: the smoke
+          # must bind to THIS deploy, not to whatever the alias points at later).
+          deploy_id="$(printf '%s' "$output" | node -e 'const data = JSON.parse(require("node:fs").readFileSync(0, "utf8")); process.stdout.write(data.deploy_id ?? data.deployId ?? data.id ?? "");')"
+          permalink_url="https://${deploy_id}--${NETLIFY_SITE_NAME}.netlify.app"
 
           if [ -z "$deploy_url" ]; then
             echo "::error::Netlify CLI did not return a deploy URL."
             exit 1
           fi
+          if [ -z "$deploy_id" ]; then
+            echo "::error::Netlify CLI did not return a deploy id; cannot bind the smoke to an immutable deploy."
+            exit 1
+          fi
 
           echo "deploy_url=$deploy_url" >> "$GITHUB_OUTPUT"
+          echo "permalink_url=$permalink_url" >> "$GITHUB_OUTPUT"
           echo "alias_url=$alias_url" >> "$GITHUB_OUTPUT"
           echo "logs_url=$logs_url" >> "$GITHUB_OUTPUT"
 
       - name: Smoke PR preview registry proxy
         if: github.event_name == 'pull_request'
-        run: node tools/registry/smoke-npm-registry.mjs "https://registry.rifty.dev"
-
-      - name: Smoke PR preview eddy resolver
-        if: github.event_name == 'pull_request'
-        run: node tools/eddy/smoke-eddy.mjs "https://eddy.rifty.dev"
+        run: node tools/registry/smoke-npm-registry.mjs "${{ steps.preview.outputs.permalink_url }}"
 
       - name: Comment PR preview URL
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           ALIAS_URL: ${{ steps.preview.outputs.alias_url }}
-          PREVIEW_URL: ${{ steps.preview.outputs.deploy_url }}
+          PREVIEW_URL: ${{ steps.preview.outputs.permalink_url }}
           LOGS_URL: ${{ steps.preview.outputs.logs_url }}
         run: |
           set -euo pipefail
@@ -148,11 +166,7 @@ jobs:
 
       - name: Smoke production registry proxy
         if: github.event_name == 'push'
-        run: node tools/registry/smoke-npm-registry.mjs "https://registry.rifty.dev"
-
-      - name: Smoke production eddy resolver
-        if: github.event_name == 'push'
-        run: node tools/eddy/smoke-eddy.mjs "https://eddy.rifty.dev"
+        run: node tools/registry/smoke-npm-registry.mjs "https://${NETLIFY_SITE_NAME}.netlify.app"
 
   deploy-landing:
     name: Deploy landing

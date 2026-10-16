@@ -7,11 +7,11 @@
 | `rifty.dev` | Netlify (`rifty-landing`) | Static public landing page from `apps/landing` |
 | `www.rifty.dev` | Netlify (`rifty-landing`) | Redirect to `https://rifty.dev/` |
 | `play.rifty.dev` | Netlify (`rifty-playground`) | Cross-origin-isolated playground |
-| `registry.rifty.dev` | Yandex Cloud CDN | npm registry proxy |
-| `registry-origin.rifty.dev` | Yandex Cloud | CDN origin for npm registry proxy |
-| `eddy.rifty.dev` | Yandex Cloud | Opt-in fast-install resolver (ADR-0182): POST resolve + GET-by-hash origin |
-| `eddy-origin.rifty.dev` | Yandex Cloud | VM GET fallback / rollback origin for eddy (ADR-0195) |
-| `eddy-cdn.rifty.dev` | Yandex Cloud CDN | Edge-cached `GET /bundle/<closureHash>` from the Object Storage bucket (the edge refuses POST, so the resolver stays on the VM) |
+| `registry.rifty.dev` | Yandex Cloud CDN — **out of service since 2026-10** | Former npm registry proxy (ADR-0163); production now uses the same-origin `play.rifty.dev/npm-registry/*` Netlify rewrite (ADR-0528) |
+| `registry-origin.rifty.dev` | Yandex Cloud — **out of service** | CDN origin for the former npm registry proxy |
+| `eddy.rifty.dev` | Yandex Cloud — **out of service** | Opt-in fast-install resolver (ADR-0182): POST resolve + GET-by-hash origin; OFF in the production build (ADR-0528) |
+| `eddy-origin.rifty.dev` | Yandex Cloud — **out of service** | VM GET fallback / rollback origin for eddy (ADR-0195) |
+| `eddy-cdn.rifty.dev` | Yandex Cloud CDN — **out of service** | Edge-cached `GET /bundle/<closureHash>` from the Object Storage bucket (the edge refuses POST, so the resolver stays on the VM) |
 | `api.rifty.dev` | Yandex Cloud (planned) | Future project APIs |
 
 Yandex Cloud DNS owns the public zone. Netlify remains the deploy surface for
@@ -43,8 +43,10 @@ immutable`, `Access-Control-Allow-Origin: *`, and
 `Cross-Origin-Resource-Policy: cross-origin`. When adding a CDN resource, take
 the target from `yc cdn resource get <id>` — do not assume it is per-resource.
 
-The playground production build uses
-`VITE_RIFTY_REGISTRY_URL=https://registry.rifty.dev/npm-registry`, so npm
-metadata and tarballs go through Yandex Cloud CDN in front of the streaming
-proxy recorded in ADR-0163. Local dev still uses the relative `/npm-registry`
-Vite proxy.
+The playground production build keeps the relative `/npm-registry` registry
+base: `play.rifty.dev/npm-registry/*` is a Netlify 200 rewrite to
+`registry.npmjs.org` (ADR-0528), the same shape as the local Vite proxy. The
+Yandex-hosted rows above describe infrastructure that stopped answering on
+2026-10-13 (origin TCP timeout, CDN edge 504/403); DNS records are kept so the
+hosts can be restored without a routing change
+(`docs/backlog/distribution/restore-dedicated-registry-proxy-and-eddy.md`).

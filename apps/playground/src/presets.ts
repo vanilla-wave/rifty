@@ -285,7 +285,7 @@ The terminal prestarts vite. The script under scripts/ is a project file to insp
 
 const REAL_VITE_SOURCE = `// Real npm project mode builds the project from scratch: the terminal runs a
 // visible npm install (watch the packages stream in), then boots the actual
-// dev server and previews it live. The default template is Vite (vite@^7);
+// dev server and previews it live. The default template uses proven Vite 7;
 // later runs reuse the tarball cache and the stamped node_modules.
 //
 // This is your app entry, served by the dev server at /src/main.js.

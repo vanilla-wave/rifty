@@ -83,7 +83,7 @@ describe('resolveBootstrapConfig', () => {
     expect(cfg.entryPath).toBe('/workspace/src/main.js');
     // @rollup/wasm-node is no longer hand-pinned: the installer injects it as
     // rollup's same-version shadow-shim companion (ADR-0188).
-    expect(cfg.installDeps).toEqual({ vite: '^7.0.0' });
+    expect(cfg.installDeps).toEqual({ vite: '7.3.6' });
     expect(cfg.seedFiles['/workspace/vite.config.js']).toContain('noDiscovery: true');
     expect(cfg.seedFiles['/workspace/vite.config.js']).not.toContain('hmr: false');
 
