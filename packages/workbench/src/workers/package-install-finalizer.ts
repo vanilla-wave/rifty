@@ -1,6 +1,5 @@
 import {
   type InstalledFilePreparation,
-  planInstalledConsumerFiles,
   planToolchainInstallFiles,
 } from '@riftydev/shadow-registry/runtime';
 import { syncMirror } from '@riftydev/vfs';
@@ -15,10 +14,7 @@ export function planPackageInstallFiles(
   options: PackageInstallFinalizerOptions,
 ): readonly InstalledFilePreparation[] {
   const fs = options.fs ?? syncMirror();
-  return [
-    ...planToolchainInstallFiles({ root: options.root, fs }),
-    ...planInstalledConsumerFiles(options.root, undefined, fs),
-  ];
+  return planToolchainInstallFiles({ root: options.root, fs });
 }
 
 /** Complete installed-tree mutations before the acquisition adapter returns for promotion. */

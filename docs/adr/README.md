@@ -190,12 +190,12 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0371 | Registry twins carry substituted runtime bytes in the installed tree |
 | 0384 | Registry ownership of bundled guest-package adaptations |
 | 0399 | Preserve declared companion policy through retained-lock acquisition |
-| 0433 | Preserve Vite module URLs at the filesystem root |
 | 0435 | Follow npm tar root stripping for materialized installs |
 | 0451 | User override values follow npm's version/range reading |
 | 0504 | Preserve named install intent and optional resolution outcomes |
 | 0528 | Netlify proxy rewrite serves the production npm-registry route |
 | 0530 | Installed Vite CLI runs upstream bytes; trackKeepalivePromise removed |
+| 0533 | Vite runs upstream bytes at every project root; root policies removed |
 
 ### playground
 
@@ -443,6 +443,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0321 | 0371 | strict lifecycle motive retained; the ninth correlation engine is deleted with its only consumer |
 | 0373 | 0374 | narrow install/run-bin control retained; Workbench entry ownership, nested-only URL, toolchain-only report, shared-WASM boundary and ADR-0371 registry-twin authority grafted |
 | 0374 | 0375 | explicit Worker/API/registry authority retained; Vite identity, lifecycle and build-only finalizer removed from generic no-COI control |
+| 0433 | 0533 | Vite root-URL repair removed with the root-watch policy; installed Vite is upstream bytes, a `/`-rooted project takes upstream's code paths |
 
 
 ## Corrections (active)

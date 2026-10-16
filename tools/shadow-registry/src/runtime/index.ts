@@ -10,10 +10,6 @@ export {
   finalizerPackagesFromLockfile,
   planToolchainInstallFiles,
 } from './installed-files.ts';
-export {
-  prepareViteCliAcquisitionFiles as prepareInstalledConsumerFiles,
-  planViteCliAcquisitionFiles as planInstalledConsumerFiles,
-} from './vite-cli-prep.ts';
 export { binNameOf, createPreviewScope, preparePackageServerEnvironment } from './launch.ts';
 export {
   installedBinPreviewSource,

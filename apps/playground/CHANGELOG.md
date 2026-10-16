@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Baked Vite/TypeScript snapshots re-baked over their committed lockfile pins: installed Vite chunks are upstream bytes (ADR-0533).
+
 - Starters run at `/home/project` (ADR-0531): terminal links and the companion terminal state map the public root back to project paths; `/tmp` and `~` (`/home/rifty`) are project-owned.
 
 - `snapshots:bake --replay-committed-lockfile` re-bakes over each committed snapshot's lockfile pins and replay cache (fails if the pins change), so a transform change does not re-resolve ranges against today's registry.

@@ -1,25 +1,14 @@
-import { type FsSync, normalizePath, syncMirror } from '@riftydev/vfs';
-import type { InstalledFilePreparation } from './installed-files.ts';
+import { normalizePath, syncMirror } from '@riftydev/vfs';
 import {
   type PackageBinSpawnRequest,
   binNameOf,
   createPreviewScope,
   isBinShimPath,
 } from './launch.ts';
-import {
-  applyViteRootUrlPatch,
-  applyViteRootWatchPatch,
-  viteRootUrlPatchApplied,
-  viteRootWatchPatchApplied,
-  viteRootWatchPatchPolicy,
-} from './vite-cli-install-policy.ts';
 import { prepareViteEsbuildRuntime } from './vite-esbuild-runtime.ts';
 
-const enc = new TextEncoder();
-const dec = new TextDecoder();
 export type ViteCliMode = 'dev' | 'build' | 'preview' | 'optimize' | 'info';
 const VITE_BIN_SUFFIX = '/.bin/vite';
-const VITE_CHUNKS_SUFFIX = '/dist/node/chunks';
 
 export interface ViteCliPreparation {
   readonly root: string;
@@ -46,54 +35,6 @@ export function viteCliPreparationFromArgs(options: {
       };
 }
 
-interface ViteRootWatchPatchSite {
-  readonly path: string;
-  readonly source: string;
-}
-
-function occurrences(source: string, needle: string): number {
-  return source.split(needle).length - 1;
-}
-
-function rootWatchPatchSite(
-  vitePackageRoot: string,
-  fs: FsSync = syncMirror(),
-): ViteRootWatchPatchSite {
-  const chunks = normalizePath(`${vitePackageRoot}${VITE_CHUNKS_SUFFIX}`);
-  if (!fs.existsSync(chunks)) {
-    throw new Error(`vite root watcher patch failed: missing chunks directory ${chunks}`);
-  }
-  const sites: ViteRootWatchPatchSite[] = [];
-  let anchors = 0;
-  for (const entry of fs.readdirSync(chunks)) {
-    if (entry.isDirectory || !entry.name.endsWith('.js')) continue;
-    const path = `${chunks}/${entry.name}`;
-    const source = dec.decode(fs.readFileBytesSync(path));
-    const count =
-      occurrences(source, viteRootWatchPatchPolicy.needle) +
-      occurrences(source, viteRootWatchPatchPolicy.replacement);
-    if (count > 0) sites.push({ path, source });
-    anchors += count;
-  }
-  if (anchors !== 1 || sites.length !== 1) {
-    throw new Error(
-      `vite root watcher patch failed: expected exactly one Chokidar DirEntry.add anchor; found ${anchors}`,
-    );
-  }
-  const site = sites[0];
-  if (!site) throw new Error('vite root watcher patch failed: missing patch site');
-  return site;
-}
-
-function validateRootWatchPatch(vitePackageRoot: string): void {
-  const { path, source } = rootWatchPatchSite(vitePackageRoot);
-  if (!viteRootWatchPatchApplied(source) || !viteRootUrlPatchApplied(source)) {
-    throw new Error(
-      `vite root watcher/URL must be prepared by acquisition before promotion: ${path}`,
-    );
-  }
-}
-
 function vitePackageRoot(root: string, executedBinPath?: string): string {
   if (executedBinPath === undefined) return normalizePath(`${root}/node_modules/vite`);
   const binPath = normalizePath(executedBinPath);
@@ -107,34 +48,8 @@ function vitePackageRoot(root: string, executedBinPath?: string): string {
   return `${nodeModules}/vite`;
 }
 
-/** Read-only Vite preparation shared by acquisition and snapshot source validation. */
-export function planViteCliAcquisitionFiles(
-  root: string,
-  executedBinPath?: string,
-  fs: FsSync = syncMirror(),
-): readonly InstalledFilePreparation[] {
-  const packageRoot = vitePackageRoot(root, executedBinPath);
-  if (!fs.existsSync(normalizePath(`${packageRoot}/dist/node/cli.js`))) return [];
-  const changes: InstalledFilePreparation[] = [];
-  const site = rootWatchPatchSite(packageRoot, fs);
-  const watcher = applyViteRootUrlPatch(applyViteRootWatchPatch(site.source));
-  if (watcher !== site.source) changes.push({ path: site.path, bytes: enc.encode(watcher) });
-  return changes;
-}
-
-/** Acquisition-adapter step: patch installed Vite before its stamp promotion. */
-export async function prepareViteCliAcquisitionFiles(
-  root: string,
-  executedBinPath?: string,
-  fs: FsSync = syncMirror(),
-): Promise<void> {
-  for (const change of planViteCliAcquisitionFiles(root, executedBinPath, fs))
-    fs.writeFileSync(change.path, change.bytes);
-}
-
 export async function prepareViteCli(options: ViteCliPreparation): Promise<void> {
   const packageRoot = vitePackageRoot(options.root, options.executedBinPath);
-  validateRootWatchPatch(packageRoot);
   if (options.mode === 'info') return;
   const fs = syncMirror();
   await prepareViteEsbuildRuntime({
