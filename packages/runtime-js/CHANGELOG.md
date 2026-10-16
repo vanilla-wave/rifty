@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Guest location (ADR-0531): `process.cwd()`, module paths and diagnostics use the public project root (default `/home/project`); `os.tmpdir()`/`os.homedir()` follow `TMPDIR`/`HOME` as Node (default `/tmp`, `/home/rifty`), both existing and writable; a cross-mount rename fails `EXDEV`.
+
 - **Breaking:** `trackKeepalivePromise` is no longer exported (ADR-0530): its only consumer was the removed Vite CAC hook; detached work keeps the loop through its own counted handles.
 
 - `installHostAsyncKeepalive()` (ADR-0529): a pending Blob/File body read, `fs.openAsBlob` result read, `WebAssembly.compile`/`instantiate`, `SubtleCrypto` call or in-guest `Response`/`Request` Body consumer (clones and `Response.json()` included) holds the child realm until it settles, a global `WebSocket` until its `close`, a `BroadcastChannel` until `close()` (Node's `ref()`/`unref()` added) — such programs no longer exit silently before printing Node's result. Guest-stream bodies and unread `blob.stream()` hold nothing; constructor identity and method names stay Node's. Declared gaps: native-internal body stream reads, `navigator.locks`.

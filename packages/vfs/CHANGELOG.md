@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `VfsErrorCode` gains `EXDEV` (rename across mounts, ADR-0531).
+
 - Observe native replica admission before hydration; retain actual contention cause on occupied guard expiry without changing wait/fallback semantics (ADR-0486).
 
 - Require createWritable before paired OPFS admission; identify native root acquisition failures with preserved cause (ADR-0476).
