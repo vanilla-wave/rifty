@@ -153,7 +153,9 @@ interface ContractPaths {
 }
 
 const VITE_BIN = '/scratch/node_modules/.bin/vite';
-const PUBLIC_VITE_BIN = '/node_modules/.bin/vite';
+// Guest mount of the project (ADR-0531 default `publicProjectRoot`).
+const PUBLIC_PROJECT_ROOT = '/home/project';
+const PUBLIC_VITE_BIN = `${PUBLIC_PROJECT_ROOT}/node_modules/.bin/vite`;
 const PROVEN_VITE8_WASI_RUNTIME_OVERRIDE = {
   '@napi-rs/wasm-runtime': 'npm:@napi-rs/wasm-runtime@1.1.6',
 } as const;
@@ -196,7 +198,10 @@ const shadowRequire = createRequire(
 );
 const hostEsbuild = shadowRequire('esbuild') as HostEsbuild;
 
-function pathsFor(token: string, fixtureRoot: '/scratch' | ''): ContractPaths {
+function pathsFor(
+  token: string,
+  fixtureRoot: '/scratch' | typeof PUBLIC_PROJECT_ROOT,
+): ContractPaths {
   const dir = `${fixtureRoot}/.rifty-esbuild-contract-${token}`;
   return {
     dir,
@@ -527,7 +532,7 @@ fs.writeFileSync(${JSON.stringify(resultPath)}, JSON.stringify(evidence));
 }
 
 function nativeMissingEsbuildEvidence(): ModuleNotFoundEvidence {
-  const missingRequire = createRequire('file:///missing.cjs');
+  const missingRequire = createRequire(`file://${PUBLIC_PROJECT_ROOT}/missing.cjs`);
   try {
     missingRequire.resolve('esbuild', { paths: [] });
   } catch (error) {
@@ -539,7 +544,9 @@ function nativeMissingEsbuildEvidence(): ModuleNotFoundEvidence {
       requireStack: record.requireStack,
     };
   }
-  throw new Error('native missing-module oracle unexpectedly resolved esbuild from /missing.cjs');
+  throw new Error(
+    `native missing-module oracle unexpectedly resolved esbuild from ${PUBLIC_PROJECT_ROOT}/missing.cjs`,
+  );
 }
 
 function transformErrorEvidence(error: unknown): TransformErrorEvidence {
@@ -662,7 +669,7 @@ async function runContractHarness(page: Page): Promise<{
 }> {
   const token = randomUUID();
   const fixturePaths = pathsFor(token, '/scratch');
-  const paths = pathsFor(token, '');
+  const paths = pathsFor(token, PUBLIC_PROJECT_ROOT);
   const bundle = await bundleProbe();
   const original = await readOwnerFile(page, VITE_BIN);
   expect(original.ok, original.error).toBe(true);
@@ -1276,8 +1283,8 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
       templateId: 'browser-unit:direct-esbuild',
       files: {
         '/package.json': '{"name":"direct-esbuild","private":true,"type":"module"}\n',
-        '/direct.cjs': directCjsRunner(cjsResultPath),
-        '/direct.mjs': directEsmRunner(esmResultPath),
+        '/direct.cjs': directCjsRunner(`${PUBLIC_PROJECT_ROOT}${cjsResultPath}`),
+        '/direct.mjs': directEsmRunner(`${PUBLIC_PROJECT_ROOT}${esmResultPath}`),
       },
       dependencies: { esbuild: '0.28.0' },
       firstMaterialization: { kind: 'install' },
@@ -1378,7 +1385,7 @@ test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves
       templateId: 'browser-unit:missing-esbuild',
       files: {
         '/package.json': '{"name":"missing-esbuild","private":true,"type":"commonjs"}\n',
-        '/missing.cjs': missingEsbuildRunner(resultPath),
+        '/missing.cjs': missingEsbuildRunner(`${PUBLIC_PROJECT_ROOT}${resultPath}`),
       },
       firstMaterialization: { kind: 'install' },
       entryPath: '/missing.cjs',
@@ -1607,7 +1614,7 @@ for (const ordinary of [false, true]) {
         '/scratch/.vite8-no-esbuild.cjs',
         `const fs = require('node:fs');
 const runtime = globalThis.__riftyShadowRegistry;
-fs.writeFileSync('/vite8-no-esbuild.json', JSON.stringify({
+fs.writeFileSync('/home/project/vite8-no-esbuild.json', JSON.stringify({
   runtimePresent: runtime !== undefined && Reflect.has(runtime, 'esbuild'),
   legacyBridgePresent: Reflect.has(globalThis, '__riftyEsbuildTransform'),
 }));
@@ -1615,7 +1622,11 @@ globalThis.process.stdout.write('RIFTY_VITE8_NO_ESBUILD\\n');
 `,
       );
       try {
-        await writeOwnerFile(page, VITE_BIN, launcher('/.vite8-no-esbuild.cjs'));
+        await writeOwnerFile(
+          page,
+          VITE_BIN,
+          launcher(`${PUBLIC_PROJECT_ROOT}/.vite8-no-esbuild.cjs`),
+        );
         const probe = await execLine(page, 'vite build');
         expect(probe.exit, probe.out).toBe(0);
         expect(probe.out).toContain('RIFTY_VITE8_NO_ESBUILD');
