@@ -1,6 +1,6 @@
 # Fault classes — one taxonomy for infra honesty
 
-One vocabulary across the behavioral-correctness pipeline: contract (`## Fault matrix`) → implementation (fault tests) → review (`review.md`) → unplanned defect repair (`rifty-fix`). Goal/budget/process blockers cite their violated rule id; never invent a fault class for them.
+One vocabulary across the behavioral-correctness pipeline: contract (`## Fault matrix`) → implementation (fault tests) → review (`docs/process/README.md` §Review rules) → unplanned defect repair (`rifty-fix`). Goal/budget/process blockers cite their violated rule id; never invent a fault class for them.
 
 ## Axes
 
@@ -80,4 +80,4 @@ Locally-proven ends never prove the seam.
 
 ## Review
 
-Scope, authority, severity, evidence bar: `review.md`. Stops: `stops.md`.
+Scope, authority, severity, evidence bar, stops: `docs/process/README.md` (`REV`, `STOP`).

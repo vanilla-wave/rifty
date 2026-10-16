@@ -86,12 +86,47 @@ export function selectTasks(tasks, diffClass) {
   return diffClass === 'docs-only' ? tasks.filter((t) => !SOURCE_LANES.has(t.name)) : tasks;
 }
 
+/** Paths that feed the parity runner: runtime sources and the cases themselves. */
+const PARITY_INPUT_RE = /^(packages\/|tools\/node-parity-runner\/)/u;
+
+/**
+ * Narrow the test lanes to what the diff since `base` can affect (PR-6): `test:run` covers the
+ * tests related to the changed files (`vitest --changed`), `test:parity` runs only when a
+ * runtime source or a case changed. Every other lane keeps its full input. Unknown diff → full.
+ * @param {Task[]} tasks @param {string[] | null} paths @param {string | null} base
+ */
+export function scopeTasks(tasks, paths, base) {
+  if (!paths || !base) return tasks;
+  const parityTouched = paths.some((p) => PARITY_INPUT_RE.test(p));
+  /** @type {Task[]} */
+  const scoped = [];
+  for (const t of tasks) {
+    if (t.name === 'test:run') scoped.push({ ...t, args: [...(t.args ?? []), '--changed', base] });
+    else if (t.name === 'test:parity') {
+      if (parityTouched) scoped.push(t);
+    } else scoped.push(t);
+  }
+  return scoped;
+}
+
+/** origin/main merge-base of HEAD; null when unknown. */
+export function mergeBase(cwd = process.cwd()) {
+  try {
+    return execFileSync('git', ['merge-base', 'origin/main', 'HEAD'], {
+      cwd,
+      encoding: 'utf8',
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
 /** Changed paths of the working tree (tracked + untracked) vs the origin/main merge-base; null when unknown. */
-export function workingTreePaths(cwd = process.cwd()) {
+export function workingTreePaths(cwd = process.cwd(), base = mergeBase(cwd)) {
+  if (base === null) return null;
   const git = (/** @type {string[]} */ ...args) =>
     execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
   try {
-    const base = git('merge-base', 'origin/main', 'HEAD').trim();
     const tracked = git('diff', '--name-only', '--no-renames', '-z', base, '--')
       .split('\0')
       .filter(Boolean);
@@ -169,9 +204,13 @@ export const TASKS = [
 
 async function main() {
   const cwd = process.cwd();
-  const paths = workingTreePaths(cwd);
-  const diffClass = process.argv.includes('--all') ? 'full' : classifyDiff(paths);
-  const tasks = selectTasks(TASKS, diffClass);
+  const base = mergeBase(cwd);
+  const paths = workingTreePaths(cwd, base);
+  const all = process.argv.includes('--all');
+  const diffClass = all ? 'full' : classifyDiff(paths);
+  const tasks = all
+    ? selectTasks(TASKS, 'full')
+    : scopeTasks(selectTasks(TASKS, diffClass), paths, base);
   const reportPath = join(mkdtempSync(join(tmpdir(), 'rifty-pr-check-')), 'test-run.json');
   for (const t of tasks) {
     if (t.name === 'test:run')
@@ -186,8 +225,15 @@ async function main() {
   console.log(`pr:check — ${tasks.length} checks, sequential; ${hostLoad()}`);
   if (diffClass === 'docs-only') {
     console.log(`  docs-only diff (${paths?.length ?? 0} paths): skipping ${skipped.join(', ')}`);
+  } else if (all) {
+    console.log('  --all: full gate');
   } else if (paths === null) {
     console.log('  no origin/main merge-base: full gate');
+  } else {
+    const parity = tasks.some((t) => t.name === 'test:parity');
+    console.log(
+      `  diff-scoped (${paths.length} paths since ${base.slice(0, 12)}): test:run --changed (tests importing the changed files); test:parity ${parity ? 'inputs changed' : 'skipped — no runtime source or case changed'}; --all forces the full gate (CI runs it on every non-docs PR push)`,
+    );
   }
   console.log('');
   const { results, ok } = await runChecks(tasks, {

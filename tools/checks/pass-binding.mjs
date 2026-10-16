@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Merge-time PASS binding (docs/process/rules/review.md REV-8): a PR that changes a product
+ * Merge-time PASS binding (docs/process/README.md REV-8): a PR that changes a product
  * path or a product test carries a landing verdict — `docs/backlog/<area>/reference/<slug>-final-green.json`
  * written by the runner with `reviewed_sha` — whose reviewed commit is an
  * ancestor of HEAD and from which every later change is documentation

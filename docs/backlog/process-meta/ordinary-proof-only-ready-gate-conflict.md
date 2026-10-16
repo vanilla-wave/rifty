@@ -4,7 +4,7 @@ status: draft
 title: ordinary proof-only pickup cannot satisfy the ready-contract drift gate
 created: 2026-09-04
 why: RDY-8 forbids Contract+RED lineage for ordinary units while check:contract-drift requires that lineage from a new ready unit whenever the aggregate PR contains production changes
-code: [docs/process/rules/readiness.md, docs/process/artifacts/unit.md, tools/checks/contract-drift.mjs, tools/checks/contract-drift.test.ts]
+code: [docs/process/README.md, tools/checks/contract-drift.mjs, tools/checks/contract-drift.test.ts]
 ---
 
 ## Context

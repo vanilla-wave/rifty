@@ -7,8 +7,8 @@
   valid until re-typed or closed; no new ones.
 
 Routing: `AGENTS.md` + `docs/process/README.md`; artifact shapes and
-owners: `docs/process/artifacts/`; goal lifecycle (FIT / PICKUP / RECHART /
-CLOSE): `docs/process/stages/`. Delete completed work; there is no done status.
+owners: `docs/process/README.md §Artifacts`; goal lifecycle (FIT / PICKUP / RECHART /
+CLOSE): `docs/process/README.md §Route`. Delete completed work; there is no done status.
 
 ## Shape
 
@@ -49,11 +49,11 @@ A ready item needs:
   oracle exists; a process/tooling unit has none and omits the section;
 - every Acceptance/Parity/Fault row traced (`→ I#` / `→ scenario` /
   `→ ADR-NNNN`; a `→ <rule-id>` trace is a note, never an obligation —
-  `docs/process/rules/readiness.md` `RDY-3`; gated by `backlog:check` for
+  `docs/process/README.md` `RDY-3`; gated by `backlog:check` for
   items `created ≥ 2026-09-03`); one intent, one-sentence `title` (`RDY-4`);
 - `## Out of scope`: named loud throws + compat ❌;
 - `## Decisions`: every fork resolved or ADR-linked; one-line records only
-  (`docs/process/artifacts/unit.md`);
+  (`docs/process/README.md`);
 - at pickup: record the reference/RED evidence required by `RDY-8`; a prior
   review is a reference to its artifact, never permission from a status flag.
 
@@ -75,7 +75,7 @@ the Contract+RED reviewer may do it in the same pass.
 One fresh read-only critic receives the original user request/answers, proposed
 outcome, evidence, alternatives and unresolved forks, not just the polished
 solution. It asks whether the value follows and a cheaper direct route reaches
-it, and checks for omitted material user choices by `RDY-6` §Establishing scope.
+it, and checks for omitted material user choices by `RDY-6`.
 An omission names a reachable action, consequential difference and missing
 authority; a preferred extra feature is not an omitted choice. Verify objections;
 return new scope/value choices to the current research/interview frontier.
@@ -83,13 +83,13 @@ Record the verdict verbatim in `## Challenge`, including an early draft check.
 FIT/PICKUP and goal children reuse a checked premise for unchanged promises;
 new evidence or materially changed promises need reconsideration, a new stage
 name does not. Existing-baseline repairs and just-file captures gain no premise critic.
-Every completed backlog write-up still gets `RDY-6` §Final check of the written
+Every completed backlog write-up still gets the `RDY-6` final check of the written
 result after drafting; reuse of an early premise check cannot skip it.
 
 A ready document records `challenge: <date> — clear | N problems` in
 `## Challenge`. Resolve a value/cheaper-route objection with evidence or the
 user's explicit decision before adoption; other concerns are advisory. The
-verified live user forks follow `RDY-6` / `STOP-1a` even when reported as concerns;
+verified live user forks follow `RDY-6` / `STOP-1` even when reported as concerns;
 they cannot be waved through as advice. The machine checks this record at ready,
 not when an observation is captured; `clear` alone is not scope-closure evidence.
 
@@ -106,23 +106,22 @@ or a just-file); no merge is required before FIT resumes (`PR-3`).
 `map.md` seeds order and holds `## Open questions` (fog) + `## Out of scope`;
 `ledger.md` opens empty. Seeded children stay `draft` — a ready goal hands off
 with draft children; each compiles to `ready` at its own PICKUP, never at FIT
-(`docs/process/rules/readiness.md` `RDY-1`).
+(`docs/process/README.md` `RDY-1`).
 
 A user-owned observable-scope question (what the value requires, what must
 NOT change, whose scenario counts) is asked at FIT while the user is there — a
 probe existing for its technical half is not a reason to park it
-(`docs/process/stages/fit.md` 3). Unanswered → the goal stays `draft`: a ready
+(`docs/process/README.md` §FIT 3). Unanswered → the goal stays `draft`: a ready
 goal carries no `owner: user` fog, so its run is autonomous. Fog in a ready
 map is agent-owned — `<question> — owner: agent — <what settles it>`;
 `owner: user` lives only in a `draft` goal (unanswered at FIT) or mid-run
-(`STOP-4`). A rejected rival route is recorded checkable in goal `##
+(`STOP-1`). A rejected rival route is recorded checkable in goal `##
 Decisions`: `rejected route: <route> — violates <I#|Outcome clause>` — the
-clause a later agent cites instead of re-deriving the comparison. Seed order proves the minimal pattern first (the
-null/install-only case of a shared mechanism lands before machinery for the
-maximal case); a child whose contract depends on an open question is not
-seeded. A mechanism shared by two children needs an existing owner, a first
+clause a later agent cites instead of re-deriving the comparison. The first unit is the acceptance carrier (`docs/process/README.md` §FIT 5);
+later units are the walls running it exposes; a child whose contract depends
+on an open question is not seeded. A mechanism shared by two children needs an existing owner, a first
 substrate item, or an ADR explaining separation. Procedure, incl.
-probe-or-fog and the completion report: `docs/process/stages/fit.md`.
+probe-or-fog and the completion report: `docs/process/README.md`.
 
 ## Report
 
