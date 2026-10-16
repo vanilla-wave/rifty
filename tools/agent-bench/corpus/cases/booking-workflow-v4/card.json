@@ -1,0 +1,21 @@
+{
+  "id": "booking-workflow-v4",
+  "group": "app",
+  "family": "booking-constraints",
+  "split": "evaluation",
+  "origin": {
+    "type": "original-scenario",
+    "created": "2026-10-06",
+    "starter": "vue3.5.18 + @vitejs/plugin-vue + Vite7.3.6",
+    "registryEvidence": "docs/backlog/distribution/reference/agent-eval-expansion-starter-metadata.json.gz"
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.ts",
+  "regressionSources": ["minimal installed starter build/boot"],
+  "difficulty": "Interacting exclusive half-open intervals, room capacity/reference guards, atomic editing and combined sorted filters",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "ADR0517 shared editable-control owner uses accessible role names, excluding descendant textarea/option data. Public inputs/controls/native representability unchanged; old results retained, fresh matched96 after controls/Final.",
+  "judgeSupport": "native-input-v1",
+  "correctionOf": "eval-v6/booking-workflow-v3"
+}

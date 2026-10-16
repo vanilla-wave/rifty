@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
@@ -11,6 +11,8 @@ const files = (await readdir(root, { recursive: true })).sort();
 // Frozen evidence written by the measuring run (level 9, its host OS byte); SHA256 recorded in manifest.
 const frozenBundle = 'source-artifacts.json.gz';
 const sha256 = (bytes: string | Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+const gzipFiles = files.filter((file) => file.endsWith('.json.gz'));
+const manifests = files.filter((file) => basename(file) === 'manifest.json.gz');
 
 it('commits summary machine artifacts gzip-compressed only', async () => {
   expect(files.filter((file) => file.endsWith('.json'))).toEqual([]);
@@ -18,15 +20,16 @@ it('commits summary machine artifacts gzip-compressed only', async () => {
     entry.isDirectory(),
   );
   expect(runs.length).toBeGreaterThan(0);
+  expect(gzipFiles.filter((file) => basename(file) !== frozenBundle).length).toBeGreaterThan(0);
+  expect(manifests.length).toBeGreaterThan(0);
   for (const run of runs) expect(files).toContain(join(run.name, 'report.json.gz'));
 });
 
-it('commits report-written summary gzip with the Unix OS header byte; all gzip is valid JSON', async () => {
-  // RFC 1952 byte 9 = host OS; pinned 0x03 for JSON the repo writes. Frozen bundles keep recorded bytes.
-  const gz = files.filter((file) => file.endsWith('.json.gz'));
-  expect(gz.filter((file) => basename(file) !== frozenBundle).length).toBeGreaterThan(0);
-  const bad: string[] = [];
-  for (const file of gz) {
+it.each(gzipFiles)(
+  'keeps gzip JSON and report-written OS header valid: %s',
+  async (file) => {
+    // RFC 1952 byte 9 = host OS; pinned 0x03 for JSON the repo writes. Frozen bundles keep recorded bytes.
+    const bad: string[] = [];
     const bytes = await readFile(join(root, file));
     if (basename(file) !== frozenBundle && bytes[9] !== 0x03)
       bad.push(`${file}: OS byte 0x${bytes[9]!.toString(16)}`);
@@ -35,20 +38,20 @@ it('commits report-written summary gzip with the Unix OS header byte; all gzip i
     } catch (error) {
       bad.push(`${file}: ${(error as Error).message}`);
     }
-  }
-  expect(bad).toEqual([]);
-}, 60_000);
+    expect(bad).toEqual([]);
+  },
+  60_000,
+);
 
 type Manifest = {
   bundle: { path: string; bytes: number; sha256: string };
   files: { run: string; kind: string; bytes: number; sha256: string; committed: string | null }[];
 };
 
-it('keeps every manifest-recorded size and SHA256 equal to the committed bytes', async () => {
-  const manifests = files.filter((file) => basename(file) === 'manifest.json.gz');
-  expect(manifests.length).toBeGreaterThan(0);
-  const bad: string[] = [];
-  for (const file of manifests) {
+it.each(manifests)(
+  'keeps manifest-recorded size and SHA256 exact: %s',
+  async (file) => {
+    const bad: string[] = [];
     const dir = join(root, dirname(file));
     const manifest = JSON.parse(
       gunzipSync(await readFile(join(root, file))).toString('utf8'),
@@ -75,9 +78,10 @@ it('keeps every manifest-recorded size and SHA256 equal to the committed bytes',
       )
         bad.push(`${file}: ${record.run} ${record.kind} -> ${record.committed}`);
     }
-  }
-  expect(bad).toEqual([]);
-}, 60_000);
+    expect(bad).toEqual([]);
+  },
+  60_000,
+);
 
 it('keeps summary markdown links resolvable', async () => {
   const broken: string[] = [];
@@ -88,4 +92,18 @@ it('keeps summary markdown links resolvable', async () => {
       if (!/^[a-z]+:/i.test(target!) && !existsSync(join(root, dirname(file), target!)))
         broken.push(`${file} -> ${target}`);
   expect(broken).toEqual([]);
+});
+
+// Committed summaries carry the text core only (ADR-0532): browser traces, split binary parts and
+// any attachment above the frozen-bundle ceiling stay in the local run directory, never in git.
+it('commits no binary attachments or oversized files', async () => {
+  const ceiling = 8 * 1024 * 1024;
+  const bad: string[] = [];
+  for (const file of files) {
+    if (/\.(zip|part-\d+)$/u.test(file) || /(^|\/)browser\./u.test(file))
+      bad.push(`${file}: binary attachment`);
+    const { size } = await stat(join(root, file));
+    if (size > ceiling) bad.push(`${file}: ${size} bytes`);
+  }
+  expect(bad).toEqual([]);
 });

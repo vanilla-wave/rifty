@@ -1,0 +1,19 @@
+{
+  "id": "booking-workflow-v2",
+  "group": "app",
+  "family": "booking-constraints",
+  "split": "evaluation",
+  "origin": {
+    "type": "original-scenario",
+    "created": "2026-10-06",
+    "starter": "vue3.5.18 + @vitejs/plugin-vue + Vite7.3.6",
+    "registryEvidence": "docs/backlog/distribution/reference/agent-eval-expansion-starter-metadata.json.gz"
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.ts",
+  "regressionSources": ["minimal installed starter build/boot"],
+  "difficulty": "Interacting exclusive half-open intervals, room capacity/reference guards, atomic editing and combined sorted filters",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "Same frozen public workflow/source/lock/controls as eval-v1; ADR0512 repairs contextual choice-caption projection after retained interrupted96. Full matched selection retained, fresh96 after all-origin controls."
+}

@@ -65,7 +65,7 @@ const task = {
   prompt:
     'Measure the installed project dependencies, TypeScript diagnostics, Node flags, shell commands and Vitest. Preserve each failed command result; do not fix the application.',
 };
-const out = await mkdtemp(join(tmpdir(), `rifty-bench-baseline-${lane}-`));
+const out = join(await mkdtemp(join(tmpdir(), `rifty-bench-baseline-${lane}-`)), 'series');
 console.log(`BASELINE ${lane} ${preinstalled ? 'vitest' : 'stock'} ${out}`);
 try {
   const report = await run(config, [task], [lane], out);

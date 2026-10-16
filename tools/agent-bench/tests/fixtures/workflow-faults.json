@@ -1,0 +1,198 @@
+[
+  {
+    "task": "booking-workflow",
+    "variant": "room-validation",
+    "from": "if (!name || !integer(roomForm.capacity) || state.value.rooms.some(r => r.id !== roomForm.id && r.name.toLowerCase() === name.toLowerCase()))",
+    "to": "if (false)",
+    "requirement": "Trimmed unique nonempty room names and positive integer capacity"
+  },
+  {
+    "task": "booking-workflow",
+    "variant": "room-edit",
+    "from": "state.value.rooms.map(r => r.id === roomForm.id ? row : r)",
+    "to": "state.value.rooms",
+    "requirement": "Valid room edits change the room"
+  },
+  {
+    "task": "booking-workflow",
+    "variant": "date-independence",
+    "from": "b.room === row.room && b.date === row.date &&",
+    "to": "b.room === row.room &&",
+    "requirement": "Different dates independent"
+  },
+  {
+    "task": "booking-workflow",
+    "variant": "interval-validation",
+    "from": "!validDate(row.date) || !time(row.start) || !time(row.end) || row.start >= row.end ||",
+    "to": "false ||",
+    "requirement": "Valid calendar dates and ordered valid HH:MM interval"
+  },
+  {
+    "task": "booking-workflow",
+    "variant": "seat-validation",
+    "from": "!integer(booking.seats) || row.seats > selected.capacity",
+    "to": "false",
+    "requirement": "Positive integer seats within room capacity"
+  },
+  {
+    "task": "booking-workflow",
+    "variant": "capacity-reduction",
+    "from": "if (state.value.bookings.some(b => b.room === roomForm.id && b.seats > capacity))",
+    "to": "if (false)",
+    "requirement": "Invalidating capacity reduction preserves previous state"
+  },
+  {
+    "task": "booking-workflow",
+    "variant": "room-reference",
+    "from": "if (state.value.bookings.some(b => b.room === id))",
+    "to": "if (false)",
+    "requirement": "Referenced room deletion preserves rooms and bookings"
+  },
+  {
+    "task": "booking-workflow",
+    "variant": "room-filter",
+    "from": "roomName(b.room).toLowerCase().includes(roomFilter.value.toLowerCase())",
+    "to": "roomName(b.room).includes(roomFilter.value)",
+    "requirement": "Case-insensitive room filter"
+  },
+  {
+    "task": "booking-workflow",
+    "variant": "date-filter",
+    "from": "&& b.date.includes(dateFilter.value)",
+    "to": "&& true",
+    "requirement": "Combined date filter"
+  },
+  {
+    "task": "booking-workflow",
+    "variant": "sort",
+    "from": "a.date.localeCompare(b.date) || a.start.localeCompare(b.start)",
+    "to": "0",
+    "requirement": "Sorted date/start"
+  },
+  {
+    "task": "booking-workflow",
+    "variant": "persistence",
+    "from": "localStorage.setItem(key, JSON.stringify(next));",
+    "to": "void next;",
+    "requirement": "Persistent rooms/bookings"
+  },
+  {
+    "task": "expense-settlement",
+    "variant": "person-validation",
+    "from": "if (!name || state.people.some(p => p.name.toLowerCase() === name.toLowerCase()))",
+    "to": "if (false)",
+    "requirement": "Trimmed unique nonempty people"
+  },
+  {
+    "task": "expense-settlement",
+    "variant": "description-validation",
+    "from": "if (!description.trim() || cents === null",
+    "to": "if (cents === null",
+    "requirement": "Nonempty trimmed expense description"
+  },
+  {
+    "task": "expense-settlement",
+    "variant": "positive-amount",
+    "from": "return Number.isSafeInteger(result) && result > 0 ? result : null;",
+    "to": "return Number.isSafeInteger(result) ? result : null;",
+    "requirement": "Positive cent amount; zero rejected"
+  },
+  {
+    "task": "expense-settlement",
+    "variant": "safe-amount",
+    "from": "return Number.isSafeInteger(result) && result > 0 ? result : null;",
+    "to": "return result > 0 ? result : null;",
+    "requirement": "Safe integer cent amount"
+  },
+  {
+    "task": "expense-settlement",
+    "variant": "participant-reference",
+    "from": "e.payer === id || e.participants.includes(id)",
+    "to": "e.payer === id",
+    "requirement": "Participants referenced by expenses cannot be deleted"
+  },
+  {
+    "task": "expense-settlement",
+    "variant": "payer-reference",
+    "from": "e.payer === id || e.participants.includes(id)",
+    "to": "e.participants.includes(id)",
+    "requirement": "Payer referenced by expenses cannot be deleted"
+  },
+  {
+    "task": "expense-settlement",
+    "variant": "remainder-order",
+    "from": "const selected = rows.filter(p => expense.participants.includes(p.id));",
+    "to": "const selected = rows.filter(p => expense.participants.includes(p.id)).reverse();",
+    "requirement": "Person-creation-order remainder"
+  },
+  {
+    "task": "expense-settlement",
+    "variant": "outside-payer",
+    "from": "rows.find(p => p.id === expense.payer).paid += BigInt(expense.cents);",
+    "to": "if (expense.participants.includes(expense.payer)) rows.find(p => p.id === expense.payer).paid += BigInt(expense.cents);",
+    "requirement": "Payer may be outside participants"
+  },
+  {
+    "task": "expense-settlement",
+    "variant": "empty-participants",
+    "from": "|| !selected.length",
+    "to": "|| false",
+    "requirement": "At least one participant"
+  },
+  {
+    "task": "expense-settlement",
+    "variant": "persistence",
+    "from": "localStorage.setItem(key, JSON.stringify(next));",
+    "to": "void next;",
+    "requirement": "Persistent people/expenses/order"
+  },
+  {
+    "task": "expense-settlement",
+    "variant": "hidden-transfer",
+    "from": "{money(row.cents)}</span>",
+    "to": "<span hidden>{money(row.cents)}</span></span>",
+    "requirement": "Readable transfer amounts"
+  },
+  {
+    "task": "expense-settlement",
+    "variant": "zero-transfer",
+    "from": "const cents = left < creditor.left ? left : creditor.left;",
+    "to": "const cents = 0n;",
+    "requirement": "Nonzero transfers clear all nets"
+  },
+  {
+    "task": "expense-settlement",
+    "variant": "cent-precision",
+    "from": "/^\\d+(?:\\.\\d{1,2})?$/",
+    "to": "/^\\d+(?:\\.\\d{1,3})?$/",
+    "requirement": "Reject excess fractional precision without mutation"
+  },
+  {
+    "task": "expense-settlement",
+    "variant": "decimal-syntax",
+    "from": "if (!/^\\d+(?:\\.\\d{1,2})?$/.test(value)) return null;",
+    "to": "if (false) return null;",
+    "requirement": "Reject exponent/nondecimal amounts"
+  },
+  {
+    "task": "booking-workflow",
+    "variant": "valid-booking-edit",
+    "from": "state.value.bookings.map(b => b.id === row.id ? row : b)",
+    "to": "state.value.bookings",
+    "requirement": "Valid reservation edit changes retained record"
+  },
+  {
+    "task": "booking-workflow",
+    "variant": "edit-overlap",
+    "from": "if (state.value.bookings.some(b => b.id !== row.id",
+    "to": "if (!booking.id && state.value.bookings.some(b => b.id !== row.id",
+    "requirement": "Overlap edit rejected atomically"
+  },
+  {
+    "task": "booking-workflow",
+    "variant": "visible-validation",
+    "from": "function reject(text) { message.value = text; }",
+    "to": "function reject(text) { void text; }",
+    "requirement": "Validation visible as public booking prompt requires"
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "id": "csv-workflow",
+  "group": "app",
+  "family": "contact-import",
+  "split": "evaluation",
+  "origin": {
+    "type": "original-scenario",
+    "created": "2026-10-05",
+    "starter": "React19.1.1 + TypeScript5.9.2 + Vite7.3.6"
+  },
+  "project": "project.json",
+  "prompt": "prompt.md",
+  "judge": "judge.ts",
+  "regressionSources": ["minimal starter build/boot"],
+  "difficulty": "Interacting validation/persistence/filter/export states",
+  "controls": ["baseline", "reference", "partial", "alternative"],
+  "selection": "Frozen pilot candidate before model calls; distinct user workflow, not framework-swap diversity."
+}
