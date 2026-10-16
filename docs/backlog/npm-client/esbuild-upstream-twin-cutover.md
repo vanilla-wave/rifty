@@ -30,7 +30,9 @@ and client as on main, other versions loud naming the tier, declared
 others "⚠️ not verified"). Keeps `honest-substitution-signals` I2 (facade
 `types`) true for every installed version; the ADR-0226 D4
 validation-before-gap loss for COI `*Sync` is named in the DEC-2 ADR (goal
-§Decisions).
+§Decisions). The Vite 7.3.6 starter pin (`vite-project-policy.ts:11-12`)
+stays; its esbuild-runtime reason and `vite-version.contract.test.ts` anchor
+re-point here (map §Open questions).
 
 ## Question
 

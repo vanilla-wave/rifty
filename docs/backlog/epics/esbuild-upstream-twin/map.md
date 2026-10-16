@@ -46,7 +46,19 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
   (`vite-cli-prep.ts:194-218`) — owner: agent — cutover pickup proves I6
   holds for Vite 5/6/7 (deletion of the hook/root patches is owned by
   `honest-guest-package-adaptations` I2 and `project-location-independence`);
-  narrowing I6's "any" goes back to the user.
+  narrowing I6's "any" goes back to the user. The root policies' inventory
+  row says "re-prove on each admitted Vite version": a Vite admitted
+  unverified under I6 runs them without a real-Node artifact until
+  `project-location-independence` deletes them — the cutover records that in
+  the inventory row.
+- Starter pin: `apps/playground/src/vite-project-policy.ts:11-12` pins the
+  starters to Vite 7.3.6 "because the esbuild runtime admits only its proven
+  Vite consumer version", and `vite-version.contract.test.ts` reads
+  `esbuild-runtime-policy.json` `consumer.version` — owner: agent — the pin
+  stays (scenario 4); its reason and test re-anchor at the cutover.
+- Oracle host: the file-stdout quirk and every CLI row were observed on
+  macOS Node 24.16.0 only; CI captures the oracle on Linux — owner: agent —
+  cutover pickup re-captures on the CI host before freezing rows.
 - `honest-substitution-signals` I2 (esbuild facade `types` = the twin's
   `lib/main.d.ts`) must hold for every installed version after the cutover —
   owner: agent — whichever of `npm-client/esbuild-facade-typescript-declarations`

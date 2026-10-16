@@ -34,7 +34,9 @@ Second route: esbuild-wasm `lib/main.js:1889` skips worker_threads when
 `child_process.execFileSync` (`:2177`); rifty's `child_process` exports no
 `execFileSync` (`child_process.ts:708-716`; `spawnSync` is a named loud member,
 `loud-members.ts:14-16`) — a `TypeError`, not a named gap (premise critic,
-2026-10-16, code reading).
+2026-10-16, code reading). Already listed absent in
+`runtime-js/node-builtins-loud-stub-capability-gaps`; ADR-0443's
+named-loud-member rule governs the loud form.
 
 ## Question
 
