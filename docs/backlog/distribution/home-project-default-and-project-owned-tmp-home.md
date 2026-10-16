@@ -90,6 +90,7 @@ Workbench; the parameter passed through `bootOwner`), unless named.
 
 ## Decisions
 
+ready-verdict: 2026-10-16 — Contract+RED @ c167c3d36
 - re-cut: 2026-10-16 — merged `distribution/public-project-root-parameter`
   (parameter + second-location lanes, default unchanged) into this unit: both
   ride one PR, the parameter's null case is proven by the same lanes at the

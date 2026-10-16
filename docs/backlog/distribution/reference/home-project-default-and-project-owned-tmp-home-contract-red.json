@@ -1,0 +1,188 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED принят: B2/B3 закрыты, можно IMPLEMENT. Прежний Vite 8 concern остаётся; merge — после Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "c167c3d36791bd5d714f0de2e9a8e6d3ed9cd632",
+  "unit_goal_source": "ready docs/backlog/distribution/home-project-default-and-project-owned-tmp-home.md; goal docs/backlog/epics/project-location-independence/goal.md, I1/I2/I4; BASE 3d8d64d62ff7340bff4d04e88a9e6dd42c53f8d8. Чужие units 1833ba26e/f4972833d исключены по REV-1; prior /tmp/rifty-review-loc/verdict-round{1,2}.json прочитаны. Выполнено: RIFTY_PLAYGROUND_PORT=5334 npx playwright test --config playwright.browser-unit.config.ts tests/browser-unit/project-location.spec.ts → exit 1, 7/7 ожидаемых RED: четыре cwd='/', diagnostic='/missing.cjs', root без home/tmp, lifecycle written.exit=1 с /tmp/keep.txt EREDIRECT. Лог: /tmp/rifty-review-loc-round3/red.log. RIFTY_PLAYGROUND_PORT=5335 npx playwright test --config /tmp/rifty-review-loc-round3/lifecycle/playwright.config.ts → exit 0, 1 passed: HEAD Save/activate/reopen sequence с обычными project markers; written/reopened/carried='keep\\ntmp', fresh OWNED=[false,false], back='mine'; подмена и вывод в lifecycle/{probe.diff,run.log}. Dev helpers исполнены отдельно — результат в Ecosystem UX. Node v24.16.0: HOME=/tmp node -e \"console.log(require('os').homedir())\" → /tmp; TMPDIR=/home/rifty/t/ node -e \"console.log(require('os').tmpdir())\" → /home/rifty/t. Сводный артефакт: /tmp/rifty-review-loc-round3/execution-summary.json. Вердикт /tmp/rifty-review-loc-round3/verdict-round3.json проверен tools/review/blockers.mjs: exit 0, 13 pass, 0 blockers. Tracked files не изменены.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1; scenario 1",
+      "location": "docs/backlog/epics/project-location-independence/goal.md:74",
+      "summary": "Реализация default /home/project; итоговый GREEN путей, Vite и React Refresh."
+    },
+    {
+      "clause": "I2; scenario 2",
+      "location": "docs/backlog/epics/project-location-independence/goal.md:79",
+      "summary": "Реализация private tmp/home; GREEN persistence/isolation и исключения из tree/snapshots/archives."
+    },
+    {
+      "clause": "I4; scenario 4",
+      "location": "docs/backlog/epics/project-location-independence/goal.md:89",
+      "summary": "GREEN через общий параметр на двух non-root путях и build/preview при '/'; Vite 8 сохраняет ADR-0161 HMR-off."
+    },
+    {
+      "clause": "I3; scenario 3",
+      "location": "docs/backlog/epics/project-location-independence/goal.md:84",
+      "summary": "Следующая unit vite-root-policies-removal-node-exact-at-root: удалить root policies, доказать upstream bytes и документированное Vite 7 поведение при '/'."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: default cwd; точные listings / и /home",
+      "source": "acceptance",
+      "trace": "I1+scenario 1",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:230",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: mkdtemp, HOME, bare cd, ~/.npmrc",
+      "source": "acceptance",
+      "trace": "I2+scenario 2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:239",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: Files/archive без tmp/home/.npmrc; snapshot entries также проверены",
+      "source": "acceptance",
+      "trace": "I2+scenario 2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:251",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: reopen, Save-CONVERT, fresh scratch, switch-back",
+      "source": "acceptance",
+      "trace": "I2+scenario 2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:402",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: Vite 7 build/HMR без reload/preview на двух non-root путях",
+      "source": "acceptance",
+      "trace": "I4+scenario 4",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:261",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: Vite 8 build/dev-reload/preview на двух non-root путях",
+      "source": "acceptance",
+      "trace": "I4+scenario 4",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:296",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: root '/' — cwd, listing, Vite 7 build/preview",
+      "source": "acceptance",
+      "trace": "I4+scenario 4",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:375",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: project tmp при '/' → EEXIST",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:390",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 9: diagnostic /home/project/missing.cjs",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:323",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 10: EACCES, EPERM, EXDEV; copy работает",
+      "source": "acceptance",
+      "trace": "ADR-0531",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:326",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 11: os paths следуют HOME/TMPDIR",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:341",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: HOME=/tmp; TMPDIR trailing slash удаляется",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:341",
+      "note": ""
+    },
+    {
+      "row": "Workbench publicProjectRoot: default /home/project, /srv/app и '/' через SDK",
+      "source": "public-api",
+      "trace": "ADR-0531",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/sealed-playground-workbench.ts:270",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/project-location.spec.ts:124",
+          "evidence": "RIFTY_PLAYGROUND_PORT=5336 npx playwright test --config /tmp/rifty-review-loc-round3/dev/playwright.config.ts → exit 1: 1 passed, 1 failed. Точные HEAD helpers (dev/helper-identity.json), изолированно на существующем root '/': Vite 7 HMR after='LOCATION-HMR', sameWindow=true; Vite 7/8 build и preview проходят. Vite 8 devReload возвращает before===after='Hello from real Vite 8 (Rolldown) running inside a kernel-spawned Worker — edit me, save.', assertion ожидал LOCATION-HMR. Артефакты: /tmp/rifty-review-loc-round3/dev/{carrier.spec.ts,run.log,results.json,helper-identity.json}; сводка: /tmp/rifty-review-loc-round3/execution-summary.json.",
+          "summary": "Прежний concern round 2 воспроизведён: Vite 8 reload на baseline '/' отдаёт старый текст. Ошибка fixture path устранена; причина stale результата не установлена. Это не доказательство дефекта обещанных non-root lanes и не основание для blocker по REV-5.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "adjudication": []
+}
