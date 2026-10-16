@@ -28,9 +28,9 @@ one-recipe-per-name is therefore an implicit invariant nobody enforces.
 Expected: the codec asserts `trigger.name` uniqueness with the same
 `ShadowRegistryCodecError` shape it uses for ids (data-only ratchet, one
 chokepoint), and the catalog-v2 data-authority contract test carries the RED.
-If the project later wants two versions per name
-(`npm-client/shadow-catalog-second-version-per-name`), that decision replaces
-this assertion with an explicit all-candidates lookup — not both.
+The second-version-per-name question was answered 2026-10-16 without a second
+recipe: esbuild versions come from the upstream twin's range
+(`epics/esbuild-upstream-twin`), so one recipe per name stays true.
 
 Dedup: no title/`code:`/map/declined match.
 
