@@ -62,7 +62,11 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
      constructor, and a synthetic `close` releases nothing.
    - Global `BroadcastChannel`: ref'd from construction until `close()`, as in
      Node; Node's `ref()`/`unref()` (absent natively) toggle the hold and
-     return the channel, `ERR_INVALID_THIS` off a channel.
+     return the channel, `ERR_INVALID_THIS` off a channel. rifty's own channels
+     (net cross-realm/ws/port channels, owner bridges) open the native
+     constructor the wrapper parks under `Symbol.for('rifty.host.BroadcastChannel')`
+     (`openHostBroadcastChannel`, `@riftydev/io`): infrastructure never holds a
+     guest loop.
    Only holds exact by construction are admitted: a host-API promise held to
    settle, the pull of a JS stream over a host source, a handle with an
    observable release, or synchronous materialization. A hold that emulates a

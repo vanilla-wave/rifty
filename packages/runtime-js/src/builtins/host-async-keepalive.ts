@@ -14,6 +14,7 @@
  * of the native promise, so an unhandled rejection stays the caller's.
  */
 
+import { HOST_BROADCAST_CHANNEL } from '@riftydev/io';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 
 type AnyFunction = (...args: unknown[]) => unknown;
@@ -373,6 +374,13 @@ function installWebSocketKeepalive(target: HostAsyncTarget): void {
  * Node's `ref()`/`unref()` (absent natively) toggle the hold and return the channel.
  */
 function installBroadcastChannelKeepalive(target: HostAsyncTarget): void {
+  // rifty's own channels open the native constructor (`openHostBroadcastChannel`).
+  if (
+    typeof target.BroadcastChannel === 'function' &&
+    !Object.hasOwn(target, HOST_BROADCAST_CHANNEL)
+  ) {
+    Object.defineProperty(target, HOST_BROADCAST_CHANNEL, { value: target.BroadcastChannel });
+  }
   /** true = holding, false = unref'd; absent after close. */
   const held = new WeakMap<object, boolean>();
   const prototype = wrapConstructor(target, 'BroadcastChannel', (original, args, newTarget) => {

@@ -1,3 +1,4 @@
+import { openHostBroadcastChannel } from '@riftydev/io';
 /**
  * Worker → Page VFS snapshot bridge (ADR-0076).
  *
@@ -166,7 +167,7 @@ function snapshotChannelUrl(key: OwnerBridgeKey): string {
  * install done, each watcher change), not a hot loop.
  */
 export function publishVfsSnapshot(key: OwnerBridgeKey, frame: VfsSnapshotFrame): void {
-  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(key)));
+  const channel = openHostBroadcastChannel(channelNameFor(snapshotChannelUrl(key)));
   channel.postMessage(frame);
   // Microtask close: BroadcastChannel delivery is async, a sync close cancels the send.
   queueMicrotask(() => channel.close());
@@ -180,7 +181,7 @@ export function subscribeVfsSnapshot(
   key: OwnerBridgeKey,
   onFrame: (frame: VfsSnapshotFrame) => void,
 ): () => void {
-  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(key)));
+  const channel = openHostBroadcastChannel(channelNameFor(snapshotChannelUrl(key)));
   const onMessage = (event: MessageEvent): void => {
     const frame = event.data as VfsSnapshotFrame;
     if (frame && frame.type === 'snapshot') onFrame(frame);
@@ -202,7 +203,7 @@ export function subscribeVfsSnapshot(
  * comes up first, without the old blind-retry timers.
  */
 export function requestVfsSnapshot(key: OwnerBridgeKey): void {
-  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(key)));
+  const channel = openHostBroadcastChannel(channelNameFor(snapshotChannelUrl(key)));
   channel.postMessage({ type: 'snapshot-req' } satisfies VfsSnapshotRequestFrame);
   queueMicrotask(() => channel.close());
 }
@@ -214,7 +215,7 @@ export function requestVfsSnapshot(key: OwnerBridgeKey): void {
  * teardown that closes the channel.
  */
 export function serveSnapshotRequests(key: OwnerBridgeKey, publish: () => void): () => void {
-  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(key)));
+  const channel = openHostBroadcastChannel(channelNameFor(snapshotChannelUrl(key)));
   const onMessage = (event: MessageEvent): void => {
     const frame = event.data as { readonly type?: unknown };
     if (frame && frame.type === 'snapshot-req') publish();
