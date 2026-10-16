@@ -47,7 +47,9 @@ challenge: 2026-10-15 — clear (goal premise, `epics/project-location-independe
 ## Reference contract
 
 Real Node 24.22.0 + Vite 7.3.6 (+ plugin-react 5.2.0) at project root `/` in a
-Linux container, evidence §Root runs 1-5: `vite build` works at `/`; with
+Linux container, evidence §Root runs 1-5 and run 6
+(`reference/vite-at-root-watcher-oracle-2026-10-16.md`: watcher limited to the
+project tree, no edit → `vite.config.js` restarts and root-file change events): `vite build` works at `/`; with
 `server.watch: null` + `optimizeDeps.entries: ['index.html']` (run 5) the served
 `/src/main.jsx` imports `/@id//src/App.jsx` and `/src/App.jsx` imports
 `/@id//@react-refresh` while the preamble uses `/@react-refresh` — every
@@ -72,8 +74,17 @@ Vite 8.0.16 `dist/node/chunks/node.js` sha256 `c3dd49d1…3588b` (`npm pack vite
    the same project serves one `/@react-refresh` URL → I3, scenario 3
 3. At `/`, `vite build` and `vite preview` pass (Vite 7) → I3, I4
 4. `docs/public/compat/vite-command.md` documents Vite at `/` as upstream
-   behavior (split `/@id//` URLs, watcher over the whole root), not a defect
+   behavior (split `/@id//` URLs, phantom `vite.config.js` restarts and root
+   change events with the watcher on), not a defect
    rifty repairs → I3, scenario 3
+5. With `publicProjectRoot: '/'`, the same project with the watcher on,
+   limited to the project tree (run 6 config:
+   `reference/vite-at-root-watcher-oracle-2026-10-16.md`), `vite --debug hmr`
+   with no edit prints `vite.config.js changed, restarting server` and a
+   `[file change]` for an untouched root file (`index.html`/`package.json`/
+   `package-lock.json`) as real Node + Vite 7.3.6 at `/`; at the default root
+   the same config prints neither; restart count, timing and OOM are not
+   asserted → I3, scenario 3
 
 ## Out of scope
 
@@ -82,8 +93,13 @@ Vite 8.0.16 `dist/node/chunks/node.js` sha256 `c3dd49d1…3588b` (`npm pack vite
 
 ## Decisions
 
+re-cut: 2026-10-16 — row 5 added (watcher-enabled branch of scenario 3 at `/`, run 6 oracle); the pickup decision not to assert the phantom restart withdrawn — trace: Contract+RED BLOCK @ 5aa5b7dc3 (goal scenario 3 / I3 name runs 2-3 as oracle)
+- 2026-10-16 — Contract+RED BLOCK @ 5aa5b7dc3 (codex): the contract excluded
+  the watcher-enabled branch of scenario 3 — HOLDS; the reviewer's run 6 (watcher
+  limited to the project tree, no edit: 132 restarts, root-file change events
+  in 15 s) shows it is upstream behavior at `/`, not system-file churn; row 5 +
+  RED (`watched dev server at root /` red on the current policies, default
+  control green).
 - 2026-10-16 — pickup: ADR-0433 is overturned whole (DEC-2: removed + README
   pointer); the removal decision is recorded in a short ADR at implementation;
-  the `/`-rooted lane asserts the deterministic run-5 URL split; the phantom
-  restart of runs 2-3 depends on the watcher walking a real filesystem and is
-  not asserted (rifty's `/` holds only the project).
+  the `/`-rooted lane asserts the deterministic run-5 URL split.

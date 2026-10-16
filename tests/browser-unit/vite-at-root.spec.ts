@@ -9,7 +9,9 @@ import {
   gotoHarness,
   readOwnerFile,
   sealedWorkbenchFixtureUrl,
+  writeOwnerFile,
 } from './fixtures.ts';
+import { runOwnerCommand } from './fixtures/message-port-ref-cases.ts';
 
 // Goal project-location-independence I3: installed Vite carries no root-location
 // policy, and a project placed at `/` takes the code paths real Node + Vite 7.3.6
@@ -158,6 +160,77 @@ for (const location of [
         expect(build.exit, build.out).toBe(0);
         expect(build.out).toMatch(/✓ built in/u);
       }
+    } finally {
+      await closeOwner(page);
+    }
+  });
+}
+
+// Evidence §Root run 6 (watcher on, limited to the project tree): with no edit real
+// Node + Vite 7.3.6 at `/` restarts on `vite.config.js` and re-emits root files.
+const WATCHED_CONFIG = `import path from 'node:path';
+import react from '@vitejs/plugin-react';
+const keep = /^(?:src(?:\\/|$)|index\\.html$|vite\\.config\\.js$|package(?:-lock)?\\.json$|node_modules(?:\\/|$))/;
+export default {
+  plugins: [react()],
+  optimizeDeps: { entries: ['index.html'] },
+  server: {
+    watch: {
+      ignored: (p) => {
+        const rel = path.relative(process.cwd(), p);
+        return rel !== '' && !keep.test(rel);
+      },
+    },
+  },
+};
+`;
+
+for (const location of [
+  { label: 'root /', publicProjectRoot: '/', phantom: true },
+  { label: 'default', publicProjectRoot: undefined, phantom: false },
+] as const) {
+  test(`watched dev server at ${location.label} matches real Node + Vite 7.3.6`, async ({
+    page,
+  }) => {
+    test.setTimeout(420_000);
+    await gotoHarness(page);
+    await bootOwner(page, {
+      workspaceId: `bu-vite-watch-${location.phantom ? 'root' : 'default'}`,
+      persistence: 'ephemeral',
+      ...(location.publicProjectRoot === undefined
+        ? {}
+        : { publicProjectRoot: location.publicProjectRoot }),
+      plan: {
+        kind: 'vite',
+        id: 'scratch',
+        starterId: 'vite-at-root',
+        templateId: 'vite-at-root',
+        files: REACT_FILES,
+        dependencies: { react: '19.2.0', 'react-dom': '19.2.0' },
+        devDependencies: { vite: '7.3.6', '@vitejs/plugin-react': '5.2.0' },
+        firstMaterialization: { kind: 'install' },
+        port: 5174,
+      },
+    });
+    try {
+      const install = await execLine(page, 'npm install');
+      expect(install.exit, install.out).toBe(0);
+      await writeOwnerFile(page, '/scratch/vite.config.js', WATCHED_CONFIG);
+      // No edit during the window; the oracle saw the first restart within 1 s.
+      const dev = await runOwnerCommand(page, 'vite --debug hmr', 20_000);
+      const out = dev.out
+        .replaceAll('\r', '')
+        // biome-ignore lint/suspicious/noControlCharactersInRegex: the terminal colors Vite's logger (TTY).
+        .replace(/\u001b\[[0-9;]*m/gu, '');
+      expect(out, out).toMatch(/VITE v7\.3\.6 {2}ready/u);
+      const restarts = /vite\.config\.js changed, restarting server/u.test(out);
+      const rootChange = /\[file change\] (?:index\.html|package\.json|package-lock\.json)/u.test(
+        out,
+      );
+      expect({ restarts, rootChange }, out).toEqual({
+        restarts: location.phantom,
+        rootChange: location.phantom,
+      });
     } finally {
       await closeOwner(page);
     }
