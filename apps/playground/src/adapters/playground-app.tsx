@@ -1300,16 +1300,13 @@ export function App(props: AppProps) {
     setPaletteOpen(true);
   }
 
-  const terminalModeHint = (): TerminalModeHint => {
-    const cwd = sessions().find((session) => session.id === activeSessionId())?.cwd ?? '/';
-    // Project-relative session cwd → the guest path `pwd` prints (ADR-0531).
-    const guestCwd =
-      cwd === '/' ? DEFAULT_PUBLIC_PROJECT_ROOT : `${DEFAULT_PUBLIC_PROJECT_ROOT}${cwd}`;
-    return {
-      label: 'Shell',
-      detail: `Commands run in ${guestCwd}; running programs own stdin. Use + to open another shell while a program is running.`,
-    };
-  };
+  // No cwd here: the session snapshot is project-relative and cannot name a live
+  // cwd outside the project mount (ADR-0531 §8); `pwd` prints it.
+  const terminalModeHint = (): TerminalModeHint => ({
+    label: 'Shell',
+    detail:
+      'Type shell commands; running programs own stdin. Use + to open another shell while a program is running.',
+  });
 
   const livePillLabel = (): string => {
     if (projectBusy()) return 'SWITCHING';

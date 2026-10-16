@@ -37,17 +37,17 @@ test.describe('ADR-0307 — vite temp churn leaves trust and Scratch intact', ()
     // Vacuity guard: the churn actually happened — vite's config loader used
     // node_modules/.vite-temp (the temp file itself is removed after import,
     // the directory stays). `cd` into it fails loudly if it never existed.
-    await runTerminalLineSettled(page, 'cd /node_modules/.vite-temp', 60_000);
+    await runTerminalLineSettled(page, 'cd /home/project/node_modules/.vite-temp', 60_000);
     await runTerminalLineSettled(page, 'pwd', 30_000);
-    await expectTerminalContains(page, '/node_modules/.vite-temp');
-    await runTerminalLineSettled(page, 'cd /', 30_000);
+    await expectTerminalContains(page, '/home/project/node_modules/.vite-temp');
+    await runTerminalLineSettled(page, 'cd /home/project', 30_000);
 
     // The install claim survived the churn: the revoke path would have deleted
     // the stamp file; a demote would have left it pending — cat proves it is
     // still present as a v4 claim.
     await runTerminalLineSettled(
       page,
-      'cat /node_modules/.rifty-install-stamp.json | grep version',
+      'cat /home/project/node_modules/.rifty-install-stamp.json | grep version',
       60_000,
     );
     await expectTerminalContains(page, '"version": 4');

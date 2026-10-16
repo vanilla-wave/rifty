@@ -226,17 +226,17 @@ test.describe('ADR-0165 §4 — switch coherence: surfaces follow the active pro
       timeout: 15_000,
     });
 
-    // Boot: the default Vite scratch is active at the App's logical project root.
+    // Boot: the default Vite scratch is active and its shell is bound.
     const hint = page.locator('[data-testid="terminal-mode-hint"]').first();
-    await expect(hint).toContainText('Commands run in /home/project;', { timeout: 15_000 });
+    await expect(hint).toContainText('running programs own stdin', { timeout: 15_000 });
     await expectProjectChipName(page, 'Project files scratch');
     await expectViteDevServerReady(page, 5174, 30_000);
 
-    // Pick a different starter. The chip and logical shell root must follow the
+    // Pick a different starter. The chip and the bound shell must follow the
     // newly active scratch, never the prior starter.
     await pickStarter(page, 'node-worker');
 
-    await expect(hint).toContainText('Commands run in /home/project;', { timeout: 15_000 });
+    await expect(hint).toContainText('running programs own stdin', { timeout: 15_000 });
     await expectProjectChipName(page, 'Node worker map scratch');
 
     // The switched-in scratch's dev server reboots too.
@@ -325,21 +325,21 @@ test.describe('ADR-0165 §7 — durable Save + switch round-trip (two projects)'
 
     // Write Alpha at the active project's logical root, then save it by name.
     const hint = page.locator('[data-testid="terminal-mode-hint"]').first();
-    await expect(hint).toContainText('Commands run in /home/project;', { timeout: 30_000 });
+    await expect(hint).toContainText('running programs own stdin', { timeout: 30_000 });
     await newIdleShell(page);
     await runTerminalLineSettled(page, `echo ${alphaMark} > round-trip.txt`);
     await saveScratchAs(page, alphaName);
 
     // A different starter creates Beta's fresh scratch; save its distinct marker.
     await pickStarter(page, 'node-worker');
-    await expect(hint).toContainText('Commands run in /home/project;', { timeout: 30_000 });
+    await expect(hint).toContainText('running programs own stdin', { timeout: 30_000 });
     await newIdleShell(page);
     await runTerminalLineSettled(page, `echo ${betaMark} > round-trip.txt`);
     await saveScratchAs(page, betaName);
 
     // Alpha survives a switch away and back. Read only through the active project.
     await switchToProject(page, alphaName);
-    await expect(hint).toContainText('Commands run in /home/project;', { timeout: 60_000 });
+    await expect(hint).toContainText('running programs own stdin', { timeout: 60_000 });
     await expectProjectChipName(page, alphaName);
     await newIdleShell(page);
     const alpha = await readActiveProjectText(page, 'round-trip.txt', 60_000);
@@ -349,7 +349,7 @@ test.describe('ADR-0165 §7 — durable Save + switch round-trip (two projects)'
 
     // Beta remains distinct across the second switch.
     await switchToProject(page, betaName);
-    await expect(hint).toContainText('Commands run in /home/project;', { timeout: 60_000 });
+    await expect(hint).toContainText('running programs own stdin', { timeout: 60_000 });
     await expectProjectChipName(page, betaName);
     await newIdleShell(page);
     const beta = await readActiveProjectText(page, 'round-trip.txt', 60_000);

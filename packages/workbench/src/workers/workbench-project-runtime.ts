@@ -178,9 +178,24 @@ export function createWorkbenchProjectRuntime(
     const resolved = resolveGuestPath(layout, path);
     return resolved.kind === 'mount' ? resolved.owner : projectRoot;
   };
+  /** Per session: login defaults its seed did not bring (ADR-0531 §6). */
+  const seededLogin = new Map<string, readonly string[]>();
+  // An unchanged injected default stays out of the reported state, so a
+  // persisted terminal state round-trips exactly (ADR-0278).
+  const reportedEnv = (sid: string, env: Readonly<Record<string, string>>) => {
+    const reported = { ...env };
+    for (const key of seededLogin.get(sid) ?? []) {
+      if (reported[key] === LOGIN_ENV[key]) delete reported[key];
+    }
+    return reported;
+  };
   const send = (frame: OwnerToPageFrame): void => {
     if (frame.type === 'pty:exit') {
-      options.send({ ...frame, cwd: ownerPathOrRoot(frame.cwd) });
+      options.send({
+        ...frame,
+        cwd: ownerPathOrRoot(frame.cwd),
+        env: reportedEnv(frame.sid, frame.env),
+      });
       return;
     }
     if (frame.type === 'pty:dev-server' && frame.cwd !== undefined) {
@@ -253,6 +268,10 @@ export function createWorkbenchProjectRuntime(
     seed: { readonly cwd?: string; readonly env?: Record<string, string> } | undefined,
     ptySid: string,
   ): Shell => {
+    seededLogin.set(
+      ptySid,
+      Object.keys(LOGIN_ENV).filter((key) => !Object.hasOwn(seed?.env ?? {}, key)),
+    );
     const captureOrigin = createPreviewOriginCapture(activeAdmission, ptySid);
     const childBinExecutor = createOwnerChildBinExecutor(
       options.nodeEntryWorkerUrl,
@@ -415,7 +434,6 @@ export function createWorkbenchProjectRuntime(
   const ptyServer = createPtyServer({
     send,
     makeShell,
-    loginEnv: LOGIN_ENV,
     beforeExit: options.publicationBarrier,
     onPreviewReq: () => previews.publish(),
     onDevServerReq: () => previews.publishDev(),

@@ -83,16 +83,13 @@ async function runOwnerShell(
     .toMatch(new RegExp(`${escapeRegExp(marker)}[\\s\\S]*>\\s*$`));
 }
 
+/** Waits for the active shell; editor models use project paths rooted at `/`. */
 async function activeRootFromHint(page: Page): Promise<string> {
   const hint = page
     .locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal-mode-hint"]')
     .first();
-  await expect(hint).toContainText('Commands run in ', { timeout: 30_000 });
-  const text = (await hint.textContent()) ?? '';
-  // The hint shows the guest path (ADR-0531); editor models use project paths.
-  const match = text.match(/Commands run in \/home\/project(\/[^;]*)?;/);
-  if (!match) throw new Error(`could not parse active root from mode hint: ${text}`);
-  return match[1] ?? '/';
+  await expect(hint).toContainText('running programs own stdin', { timeout: 30_000 });
+  return '/';
 }
 
 /** rifty-TS marker count for a VFS path via the EditorHost e2e hook (ADR-0166 P1.9d). */

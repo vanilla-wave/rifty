@@ -983,6 +983,36 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     await h.runtime.close();
   });
 
+  it('reports a login HOME only when the seed brought it or the shell changed it (ADR-0531 §6)', async () => {
+    const h = await harness();
+    const exitEnv = async (sid: string, rid: string, line: string) => {
+      await h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid,
+        rid,
+        line,
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      });
+      const exit = h.frames.find((frame) => frame.type === 'pty:exit' && frame.rid === rid);
+      return exit?.type === 'pty:exit' ? exit.env : undefined;
+    };
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'login-plain', env: { KEEP: '1' } });
+    expect(await exitEnv('login-plain', 'r1', 'pwd')).toEqual({ KEEP: '1' });
+    expect(await exitEnv('login-plain', 'r2', 'HOME=/elsewhere')).toEqual({
+      KEEP: '1',
+      HOME: '/elsewhere',
+    });
+    h.runtime.handlePtyFrame({
+      type: 'pty:open',
+      sid: 'login-seeded',
+      env: { HOME: '/home/rifty' },
+    });
+    expect(await exitEnv('login-seeded', 'r3', 'pwd')).toEqual({ HOME: '/home/rifty' });
+    await h.runtime.close();
+  });
+
   it('surfaces an unresolved nodemon launcher without a direct-node or dev-server fallback', async () => {
     const worker = boundaryWorker();
     const h = await harness(undefined, missingNodemonNodeServerPackageConfig);
@@ -1151,8 +1181,8 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       code: 130,
       exit: { code: null, signal: 'SIGTERM' },
       cwd: ROOT,
+      // The unchanged login HOME stays out of the reported state (ADR-0531 §6).
       env: {
-        HOME: '/home/rifty',
         USER_FLAG: 'preserved',
         RIFTY_PREVIEW_SCOPE: 'guest-forged-scope',
         NAPI_RS_FORCE_WASI: 'guest-forged-wasi',
@@ -1283,7 +1313,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       code: 7,
       exit: { code: 7, signal: null },
       cwd: ROOT,
-      env: { HOME: '/home/rifty', USER_FLAG: 'preserved' },
+      env: { USER_FLAG: 'preserved' },
     });
     await h.runtime.close();
   });
