@@ -8,16 +8,45 @@ PR #314 `df3cd222f`; source baseline `c64cb2ebb`. Node v24.16.0, Vitest 2.1.9.
 
 ## Finite inventory
 
-| Owner before | Adaptation | Owner after |
-|---|---|---|
-| Workbench workers | esbuild startup, installed WASM integrity, generated client and FS adapter | registry runtime |
-| runtime-js globals | exact esbuild CJS realm identity | registry runtime; facade uses same realm carrier |
-| Workbench workers | Vite CLI watch patches, CLI grammar, version gate, info startup suppression, preview/env preparation (CAC promise hook removed 2026-10-16, ADR-0530) | registry runtime |
-| Workbench workers | emnapi 1.10.0 readable/minified backport, nested lockfile dispatch | registry installed-file preparation |
-| Workbench project-definition | Vite 8 napi WASI runtime override | registry manifest preparation; visible manifest preserved |
-| Workbench owner-child-dev-server | napi-rs WASI environment | registry launch preparation |
-| registry catalog/index | esbuild, LightningCSS, Sass, Rollup, bcrypt substitutions/shims | unchanged registry ownership |
-| Workbench files/archive/deps/boot | `.vite` exclusion and Vite provenance on generic work | removed; ordinary files and project provenance |
+Classified 2026-10-16 under `docs/process/rules/fault-classes.md` §Guest-package
+adaptations (goal `honest-guest-package-adaptations` I3). Owner history: PR #314
+moved every row from Workbench/runtime-js to the registry; since then the `.vite`
+exclusion (PR #314), the Vite CAC hook (ADR-0530) and the Vite root-watch and
+root-URL policies (ADR-0533) are gone. `platform-gap` rows: none (the only one,
+the CAC hook, is deleted). Sweep source: `esbuild-runtime-policy.json` `patches`,
+`sass-embedded-policy.json`, the substitution catalog, `internalsShims`,
+`bakedOverrides`, installed-file and launch preparations in
+`tools/shadow-registry/src/runtime/`.
+
+### Executable adaptations (installed bytes, generated twin source)
+
+| Adaptation | Class | Authority | Loud drift anchor | Kill condition |
+|---|---|---|---|---|
+| esbuild `inline-worker-startup`, `node-callback-fs`, `channel-has-fs`, `runtime-default-wd`, `transform-temp-fs`, `native-validation-provenance`, `native-target-errno` | `substitution-environment` | ADR-0226 D1/D2/D4, ADR-0242 D1/D2, ADR-0421; compat `esbuild-js-api.md` | generation: every anchor matches once in `esbuild-wasm@0.28.0` `lib/browser.js`; `browser.js`, `esbuild.wasm` and validation-source sha256 pinned; policy ids = patcher ids (`esbuild-exact-patcher.mjs`, `generate-esbuild-runtime.ts`, `check:esbuild-runtime-drift`); runtime: installed `esbuild.wasm` length + sha256 (`runtime-adapters.ts`) | none — declared twin environment |
+| esbuild `gate-direct-lifecycle`, `gate-sync-family`, `gate-analyze-metafile`, `gate-context-watch-serve`, `gate-one-shot-build-write` | `substitution-environment` (named `NotImplementedError` gates) | ADR-0226 D4; compat `esbuild-js-api.md` | as above | the gated surface implemented |
+| esbuild `runtime-service-refs` | `handle-mapping` | ADR-0152 §1 through the host keepalive callback (ADR-0384 D1, ADR-0421); Node analogue `esbuild/lib/main.js:2308-2311` `child.ref()/unref()` | as above | none |
+| esbuild facade `esbuild@0.28.0` (`lib/main.cjs`, `bin/esbuild` → `NotImplementedError('esbuild.cli')`), realm carrier `__riftyShadowRegistry.esbuild`, package-path admission | `substitution-environment` | ADR-0226 D3, ADR-0316, ADR-0371, ADR-0384 D2; compat `esbuild-js-api.md`, `incompatible-packages.md` | file, recipe and catalog digests (`catalog:check`); a failed carrier is a throwing getter; an unknown adapter id → `NotImplementedError` | none |
+| `@emnapi/core@1.10.0` orphaned-reference guard in `napi_delete_reference`/`napi_reference_unref` (readable + minified) | `backport` | Rolldown WASI 1.1.5 child-thread cleanup: PR #270 real Node 24.16.0 + `NAPI_RS_FORCE_WASI=1` (Rolldown 1.0.3 crashes, 1.1.5 clean); no `@emnapi/core` release carries the guard (1.10.0, 1.11.0, 1.11.3, 2.0.0-beta.2 checked 2026-10-16); ADR-0384 D3 | missing file or drifted/partial anchor throws (`installed-files.ts`, `emnapi-core-install-policy.ts`); snapshot input proof (`check-dep-snapshot-artifacts.ts`); restore refuses unprepared bytes; other versions are not patched (range: `npm-client/emnapi-orphaned-reference-version-coverage`) | the admitted Vite 8 closure no longer resolves `@emnapi/core@1.10.0` |
+| Rollup `dist/native.js` → delegate to `@rollup/wasm-node/dist/native.js` (`internalsShims.rollup`) | `substitution-environment` | ADR-0027, ADR-0188, ADR-0343, ADR-0399; compat `incompatible-packages.md` | range `^4.0.0` refused outside (`shadow-shims.ts`); `@rollup/wasm-node` installed in version lockstep or refused, so the delegate re-exports the same-version upstream WASM build | none |
+| LightningCSS facade over `lightningcss-wasm@1.32.0` (recipe `rifty.shadow-substitution.lightningcss.v2`; legacy `internalsShims['lightningcss-wasm']`) | `substitution-environment` | ADR-0156, ADR-0188, ADR-0361, ADR-0371; no compat page (`toolchain-build/lightningcss-compat-matrix-page`) | admission, dependency projection, digests (`npm-client` shadow `admission.ts`/`substitution.ts`); legacy range `^1.32.0` refused outside | legacy shim: the legacy table retires; recipe: none |
+| Sass facade `sass-embedded@1.100.0` over `sass@1.100.0` (`sass-embedded-policy.json` ids `clean-export-namespace`, `embedded-info`, `exception-message-prefix`, `exception-span-url`, `absolute-file-stacks`, `embedded-alert-color-default`, `compiler-dispose-errors`, `compiler-identity`, `legacy-logger-routing`; declared divergence `sync-compile-async-importer`; bin gates) | `substitution-environment` | ADR-0344, ADR-0361; compat `sass-embedded.md` | exact-only admission, projection, digests | none |
+| Vite 8.0.16 manifest override `@napi-rs/wasm-runtime` → `npm:@napi-rs/wasm-runtime@1.1.6` (visible in the project manifest; a caller value wins) | `upstream-edge` | real npm 11.17.0 + Node, forced WASI: 1.2.0 fails, 1.1.6 works (`docs/backlog/playground/reference/vite8-wasi-runtime-closure-probe.md`); ADR-0336 D1-D5 | exact declaration `8.0.16` only; snapshot manifest equality (`check-dep-snapshot-artifacts.ts`) | the admitted Vite 8 closure imports Rolldown unmodified under forced WASI (ADR-0336 D5 re-proof) |
+
+### Catalog substitutions
+
+| Substitution | Class | Authority | Loud drift anchor | Kill condition |
+|---|---|---|---|---|
+| `esbuild` → `esbuild-wasm@0.28.0`, `lightningcss` → `lightningcss-wasm@1.32.0`, `sass-embedded` → `sass@1.100.0` (catalog-derived `bakedOverrides`) | `substitution-environment` | the recipes above | recipe admission (exact/semver), digests | none |
+| `bcrypt` → `bcryptjs` (`bakedOverrides.bcrypt`) | `substitution-environment` | ADR-0006 D-005, ADR-0051 D2; compat `incompatible-packages.md` (❌ since 2026-10-16) | none on the mapping (the requested range is reused for `bcryptjs`); every observed request fails the install loudly | **broken** (Chromium, 2026-10-16): `npm install bcrypt` → `npm: bcrypt@latest → bcryptjs@3.0.3 …` then `install failed: Installed package bcrypt has no top-level lock version`; `npm install bcrypt@5.1.1` → `install failed: No matching version for bcryptjs@5.1.1`; repair or removal: `npm-client/bcrypt-substitution-install` |
+
+### Launch preparations (no package bytes changed)
+
+Outside the principle's adaptation definition; listed so the inventory is complete.
+
+| Preparation | Authority | Loudness | Note |
+|---|---|---|---|
+| Vite CLI mode grammar (`viteCliMode`), info-mode startup suppression, version gate (`decideViteEsbuildRuntime`: 7.3.6 starts the esbuild twin, 8.x skips, other versions throw), `.bin/vite` preview scope and label | ADR-0174, ADR-0226 D2, ADR-0317, ADR-0384 D2, ADR-0173 §4, ADR-0326; compat `vite-command.md` | version gate loud; grammar pinned by Vite 7.3.6 probes (`tests/integration/vite-cli-prep.test.ts`) | — |
+| `NAPI_RS_FORCE_WASI=1` in dev-server children and `.bin/vite` spawns (`launch.ts`, `vite-cli-prep.ts`) | none deciding (ADR-0336 uses it as its real-Node probe protocol) | — | guest-visible env key Node does not set; Rolldown 1.0.3's loader already falls back to its WASI binding without it (`if (!nativeBinding \|\| process.env.NAPI_RS_FORCE_WASI)`): `npm-client/napi-rs-force-wasi-launch-env` |
 
 Runtime worker realm compatibility supplies generic Node/WebIDL globals, not package recognition. npm schema-one recipe ids preserve old persistence rejection. Public Vite project intent, templates, oracles and host build tools may name packages.
 

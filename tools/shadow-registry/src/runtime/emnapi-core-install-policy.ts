@@ -49,7 +49,7 @@ const minifiedUnref: PatchSite = {
     'napi_reference_unref:function(e,r,t){if(!e)return 1;var n=d.envStore.get(e);if(!n&&g.childThread)return 0;if(n.checkGCAccess(),!r)',
 };
 
-/** Exact upstream 1.0.3 backport; included in installArtifactIdentity. */
+/** Rolldown WASI 1.1.5's child-thread cleanup backported into @emnapi/core 1.10.0; included in installArtifactIdentity. */
 export const emnapiCoreOrphanedReferencePatchPolicy = {
   // TODO(backlog: npm-client/emnapi-orphaned-reference-version-coverage):
   // other releases carrying the upstream bug skip the patch (= real Node-WASI

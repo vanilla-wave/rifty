@@ -1,10 +1,10 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Every guest-package adaptation in the ADR-0384 inventory — executable patches and catalog substitutions — carries its class, authority, drift anchor and kill condition; a platform-gap row links its platform item
 created: 2026-10-15
 why: ADR-0384 made the registry own all adaptations and listed them, but the inventory names no class or authority per adaptation, so a patch that compensates a rifty gap (the Vite CAC hook) and a patch that is a faithful Node handle mapping (esbuild `runtime-service-refs`) read the same — the honesty debt is invisible
-user_story: As a maintainer reading `registry-package-adaptations-evidence.md`, I want each of the 13 esbuild patch ids, the 3 Vite policies, the emnapi backport, the Vite 8 napi-WASI manifest override, the launch-env preparation, the nested-lockfile dispatch and the catalog substitutions (esbuild, LightningCSS, Sass, Rollup, bcrypt) to state what kind of thing it is and what proves it, but today the table lists owners only
+user_story: As a maintainer reading `registry-package-adaptations-evidence.md`, I want each of the 13 esbuild patch ids, the Vite policies, the emnapi backport, the Vite 8 napi-WASI manifest override, the launch-env preparation, the nested-lockfile dispatch and the catalog substitutions (esbuild, LightningCSS, Sass, Rollup, bcrypt) to state what kind of thing it is and what proves it, but today the table lists owners only
 epic: honest-guest-package-adaptations
 blocked_by: [npm-client/vite-cli-action-keepalive-hook-removal]
 sources: [ADR-0384, ADR-0226, ADR-0433, ADR-0152, docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md, docs/backlog/runtime-js/reference/guest-package-patches-refine-evidence-2026-10-15.md]
@@ -22,36 +22,36 @@ the catalog-level substitutions (inventory row "esbuild, LightningCSS, Sass,
 Rollup, bcrypt substitutions/shims") — the user's concern names every
 substituted package (handoff §Диагноз), so twins are classified too.
 
-Classification established by the refine (evidence file §Probe 1, §Root):
-
-| adaptation | class | authority | kill condition |
-|---|---|---|---|
-| esbuild `inline-worker-startup`, `node-callback-fs`, `channel-has-fs`, `runtime-default-wd`, `transform-temp-fs`, `native-validation-provenance`, `native-target-errno`, `gate-*` (5) | `substitution-environment` | ADR-0226 D1/D4, compat `esbuild-js-api.md` | none — declared twin environment |
-| esbuild `runtime-service-refs` | `handle-mapping` | ADR-0152 §1 via host callback (ADR-0384 D1); Node analogue `esbuild/lib/main.js:2308-2311` `child.ref()/unref()` | none |
-| Vite CAC action hook (`viteCliActionPatchPolicy`) | **`platform-gap` / dead** | none; probe 1 | `npm-client/vite-cli-action-keepalive-hook-removal` |
-| Vite root-watch (`viteRootWatchPatchPolicy`) | `upstream-edge` | real Node 24.22.0 + Vite 7.3.6 at `/`: phantom `vite.config.js changed, restarting server…` + spurious `[file change]` for untouched files, then OOM — evidence file §Root runs 2-3 (ADR-0433 had only the isolated function; rifty symptom `de26804b1`) | deleted by `epics/project-location-independence` (user 2026-10-15: Node-exact at `/`, default `/home/project`); until then re-prove on each admitted Vite/chokidar version |
-| Vite root-URL (`viteRootUrlPatchPolicy`) | `upstream-edge` | real Node 24.22.0 + Vite 7.3.6 + plugin-react 5.2.0 at `/`: `/src/App.jsx` imports `"/@id//@react-refresh"` while the preamble uses `"/@react-refresh"`; control at `/home/node/app` uses one URL — evidence file §Root run 5; ADR-0433 | same as above |
-| emnapi 1.10.0 readable/minified backport | `backport` | upstream fix version (to be cited from the preparation source) | emnapi release carrying the fix admitted |
-| Vite 8 napi-WASI manifest override, launch-env preparation | `substitution-environment` | ADR-0384 D3, ADR-0336 D2/D3 | none |
-| nested lockfile dispatch | to classify at pickup | ADR-0384 D3 | — |
-| catalog substitutions: esbuild (ADR-0226/0316), LightningCSS, Sass (ADR-0344), Rollup, bcrypt | `substitution-environment` | their ADR + `docs/public/compat/` page (`lightningcss` page: `honest-substitution-signals` I3) | none — declared twins; a twin without a compat page is a missing-authority row |
-
-Acceptance shape expected at pickup: the inventory table in
-`registry-package-adaptations-evidence.md` gains `class`, `authority`,
-`anchor` (loud on drift: yes/no + where) and `kill condition` per row; every
-id in `esbuild-runtime-policy.json` `patches` and every exported policy in
-`vite-cli-install-policy.ts` and every catalog recipe has exactly one row;
-every `platform-gap` row links its platform item and kill condition; ADR-0384
-gains a dated note pointing at the principle (a pointer, not a DEC-2
-correction — its Decision is untouched). No machine gate (goal §Decisions);
-review enforces.
+The refine's draft classification (2026-10-15) is superseded by the final-state
+sweep of 2026-10-16 (Vite CAC hook gone, ADR-0530; both Vite root policies gone,
+ADR-0533); the classified table lives in the owner doc, not here.
 
 Dedup: `registry-package-adaptations-evidence.md` is the owner doc (updated
 in place); no title/`code:`/map/declined match.
 
 ## Challenge
 
-<!-- finding capture — no premise critic at draft (README §Challenge) -->
+challenge: 2026-10-15 — clear (goal premise, `epics/honest-guest-package-adaptations` §Challenge)
+
+## Acceptance
+
+Carrier: `docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md`
+§Finite inventory (docs unit: no product RED; independent docs review).
+
+1. Every id in `esbuild-runtime-policy.json` `patches`, every facade id in
+   `sass-embedded-policy.json`, every substitution-catalog recipe, every
+   `internalsShims`/`bakedOverrides` entry and every installed-file preparation
+   in `tools/shadow-registry/src/runtime/` has exactly one row stating its
+   class, authority, loud drift anchor (where it fails loudly) and kill
+   condition; no row names a deleted policy → I3, scenario 3
+2. A `platform-gap` row links its platform item and kill condition (none
+   remain: the CAC hook is deleted); an `upstream-edge` row cites its real-Node
+   artifact at the same version → I3
+3. A row whose behavior is broken or whose authority is missing states it and
+   links its item instead of claiming a pass; the public compat claim agrees
+   (`incompatible-packages.md` `bcrypt`) → I3, scenario 3
+4. ADR-0384 carries a dated pointer to the principle and the inventory; its
+   Decision is unchanged → I3
 
 ## Out of scope
 
@@ -63,6 +63,15 @@ in place); no title/`code:`/map/declined match.
   this epic only by user amendment.
 
 ## Decisions
+
+re-cut: 2026-10-16 — draft → ready at pickup; acceptance rows 1-4; draft table replaced by the owner-doc inventory — trace: none
+- 2026-10-16 — pickup sweep (read-only subagent + probes): 13 esbuild ids,
+  Sass/LightningCSS/esbuild facades, Rollup shim, emnapi backport, Vite 8
+  manifest override, catalog redirects; findings routed: `bcrypt` substitution
+  broken (Chromium probe, compat ❌, `npm-client/bcrypt-substitution-install`),
+  `NAPI_RS_FORCE_WASI` launch env without a deciding record
+  (`npm-client/napi-rs-force-wasi-launch-env`), emnapi policy comment corrected
+  (Rolldown WASI 1.1.5 backport, no `@emnapi/core` release carries the guard).
 
 - 2026-10-15 — user: «записать в правила проекта как принцип. С остальными
   правилами как будто работает» — principle in `AGENTS.md` + `fault-classes.md`,

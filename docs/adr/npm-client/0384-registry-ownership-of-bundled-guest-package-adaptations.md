@@ -29,3 +29,7 @@ PR #314 accepts SDK rebuilds, all existing adaptations and optional public Vite 
 - ADR-0336 D1/D4: registry owns manifest compatibility policy; Workbench delegates. D2 caller priority, D3 visible serialized manifest and D5 real-package evidence retained.
 - ADR-0278 archive clauses and ADR-0286 derived-directory list: remove only `.vite`; other validation/private-root/storage clauses remain.
 - ADR-0361 concrete consumer edges move under registry ownership; generic transport/admission still holds.
+
+## Notes
+
+- 2026-10-16 — every adaptation this ADR owns is classified (class, authority, loud drift anchor, kill condition) under `docs/process/rules/fault-classes.md` §Guest-package adaptations; inventory `docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md`. Pointer only; Decision unchanged.
