@@ -116,7 +116,8 @@ child; `globalThis.require/fs` writes stay in the child realm under COI.
 - Oracle: `esbuild-contract-oracle.test.ts` runs native `esbuild@0.28.0`;
   fixtures `esbuild-0.28.0-*.json`; probe types the oracle `'esbuild@0.28.0'`
   (`esbuild-contract-probe.ts:228,1729`).
-- `0.28.0` appears 628× in 132 tracked files.
+- `0.28.0` appears 628× in 132 tracked files; outside docs and CHANGELOGs
+  `git grep -l 0.28.0 9645c62bf -- . ':!docs' ':!**/CHANGELOG.md' | wc -l` → `66`.
 - Catalog digest sits in every lock substitution trace (`planner.ts:250-256`,
   `716-754`): any catalog change → existing lockfiles with a trace replay as
   `EBROKENLOCK` (`installer.ts:327`).

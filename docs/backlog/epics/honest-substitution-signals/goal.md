@@ -138,3 +138,10 @@ final-check: 2026-09-27 — PASS (pass 4 of 4; 3 transcription fixes applied)
   `StatusBar.tsx:33-41` since `093c5b885` 2026-06-12, `storageMode()` from
   the owner snapshot `playground-app.tsx:718` since `c413b3934`, explanation
   by `DegradedBanner.tsx:19` "Persistence is off — this session only").
+- amend: 2026-10-16 — user: «Любая + объявленный проверенный набор
+  (Recommended)» (`epics/esbuild-upstream-twin`: in COI any requested esbuild
+  version installs as upstream `esbuild-wasm`) — after that goal's cutover,
+  scenario 4's `esbuild@^0.21.0` refusal holds in no-COI only (the retained
+  0.28.0 client, `esbuild-upstream-twin` I4); I4 unchanged for every recipe
+  that still refuses; I2's facade `types` must hold for every installed
+  esbuild version (ordering in both maps).
