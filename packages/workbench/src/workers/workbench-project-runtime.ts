@@ -498,15 +498,18 @@ export function createWorkbenchProjectRuntime(
 
   return Object.freeze({
     handlePtyFrame(frame: PageToOwnerFrame): void | Promise<void> {
-      // The session's seed, not a nested lifecycle shell's inherited env.
-      if (frame.type === 'pty:open') {
+      // Provenance lives with the session: set when an open creates it (a repeated
+      // open keeps the Shell), dropped when its close settles.
+      if (frame.type === 'pty:open' && !seededLogin.has(frame.sid)) {
         const seeded = frame.env ?? {};
         seededLogin.set(
           frame.sid,
           Object.keys(LOGIN_ENV).filter((key) => !Object.hasOwn(seeded, key)),
         );
       }
-      return ptyServer.handleFrame(frame);
+      const handled = ptyServer.handleFrame(frame);
+      if (frame.type !== 'pty:close') return handled;
+      return Promise.resolve(handled).finally(() => seededLogin.delete(frame.sid));
     },
     close,
   });

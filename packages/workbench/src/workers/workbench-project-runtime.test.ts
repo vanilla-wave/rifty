@@ -1018,6 +1018,9 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'login-npm', env: { KEEP: '1' } });
     expect(await exitEnv('login-npm', 'r4', 'npm run x')).toEqual({ KEEP: '1' });
     expect(await exitEnv('login-npm', 'r5', 'pwd')).toEqual({ KEEP: '1' });
+    // A repeated open keeps the existing session and its Shell: provenance stays.
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'login-npm', env: { HOME: '/home/rifty' } });
+    expect(await exitEnv('login-npm', 'r6', 'pwd')).toEqual({ KEEP: '1' });
     await h.runtime.close();
   });
 

@@ -13,6 +13,7 @@ import {
   machine,
   platform,
   release,
+  tmpdir,
   type,
   userInfo,
   version,
@@ -87,5 +88,12 @@ describe('homedir and the account home (ADR-0531)', () => {
     vi.stubGlobal('process', { env: { HOME: '/tmp' } });
     expect(homedir()).toBe('/tmp');
     expect(userInfo().homedir).toBe('/home/rifty');
+  });
+
+  // Node v24.16.0: `HOME= node -e "…homedir()"` → "" ; `TMPDIR= …tmpdir()` → "/tmp".
+  it('an empty HOME is kept, an empty TMPDIR falls through', () => {
+    vi.stubGlobal('process', { env: { HOME: '', TMPDIR: '' } });
+    expect(homedir()).toBe('');
+    expect(tmpdir()).toBe('/tmp');
   });
 });

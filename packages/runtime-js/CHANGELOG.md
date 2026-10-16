@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `os.homedir()` keeps an explicitly empty `HOME` (`''`), as Node; `os.tmpdir()` still falls through empty `TMPDIR`/`TMP`/`TEMP`.
+
 - `os.userInfo().homedir` is the account home `/home/rifty` regardless of `$HOME`, as Node (ADR-0531); stale exit-signal rejections recorded before a reused process's reset are dropped too.
 
 - An exit signal from an earlier invocation of a reused process (no-COI) no longer ends the current one when its late `unhandledrejection` arrives: after a failed `vite build`, the next build runs (ADR-0530 correction).

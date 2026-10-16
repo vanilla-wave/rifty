@@ -333,4 +333,21 @@ describe('stale exit signal on a reused process', () => {
     handleRealmUnhandledRejection(stale, promise);
     await expect(awaitDrain({ capMs: 1_000 })).resolves.toBeUndefined();
   });
+
+  it('the drain itself skips an exit signal recorded before the reset', async () => {
+    const { process } = processWithControl();
+    let stale: unknown;
+    try {
+      process.exit(1);
+    } catch (signal) {
+      stale = signal;
+    }
+    const promise = Promise.reject(stale);
+    promise.catch(() => {});
+    handleRealmUnhandledRejection(stale, promise);
+    await tick();
+    resetNodeProcessExit(process);
+
+    await expect(awaitDrain({ capMs: 1_000 })).resolves.toBeUndefined();
+  });
 });

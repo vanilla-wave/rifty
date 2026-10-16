@@ -10,23 +10,24 @@ import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts'
 
 export const EOL = '\n';
 
+/** A set env value; `''` counts as set (callers apply Node's own empty rule). */
 function env(name: string): string | undefined {
   const value = (globalThis as { process?: { env?: Record<string, unknown> } }).process?.env?.[
     name
   ];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
+  return typeof value === 'string' ? value : undefined;
 }
 
 /** Node POSIX: `$TMPDIR || $TMP || $TEMP || '/tmp'`, one trailing slash stripped. */
 export function tmpdir(): string {
-  const path = env('TMPDIR') ?? env('TMP') ?? env('TEMP') ?? '/tmp';
+  const path = env('TMPDIR') || env('TMP') || env('TEMP') || '/tmp';
   return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
 }
 
 /** The guest account's home (passwd entry; project-owned, ADR-0531). */
 const ACCOUNT_HOME = '/home/rifty';
 
-/** libuv `uv_os_homedir`: `$HOME`, else the account's home. */
+/** libuv `uv_os_homedir`: `$HOME` (an empty one too), else the account's home. */
 export function homedir(): string {
   return env('HOME') ?? ACCOUNT_HOME;
 }
