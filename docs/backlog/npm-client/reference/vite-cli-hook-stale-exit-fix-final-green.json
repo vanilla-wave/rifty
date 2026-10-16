@@ -1,0 +1,133 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Принимать unit: R9-B1 закрыт; два advisory. Goal не закрыт.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "8adc397cd49b806649da2da71908843b33dc05e3",
+  "unit_goal_source": "docs/backlog/npm-client/vite-cli-action-keepalive-hook-removal.md; ADR-0530 §Corrections; docs/backlog/epics/honest-guest-package-adaptations/goal.md I2. Принятый BASE 27ef470e647d10d541d41f7264e815a57e8171d7; round1 B @da3c23a8b7c44d5400438f4c4b0757c21aa9a90c; ответ 45d40ffd42589ad0907bd56e961b568a217a4eac. Неизменённая приёмка переиспользована по REV-1; part A и другие units исключены. Проверено: runtime-js 919 passed/4 skipped; запрошенный Chromium no-COI 23/23; исходные R9-B1 runBin repros 2/2 — exit7→0, failed Vite1→repaired build0. Sweep всех четырёх reuse paths и shared-state probes PASS: текущий async exit, обычные ошибки и eval-owned explicit exits сохраняются. Отключение правила даёт RED новой строки. Production-потребителей удалённого hook не найдено. Артефакты: /tmp/rifty-review-u1-r2-evidence.md, /tmp/rifty-review-u1-r10-probes/evidence.md, /tmp/rifty-r10-reuse-evidence.md. Tracked-файлы неизменны; verdict validator PASS. Полный pr:check/CI не запускался.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/honest-guest-package-adaptations/goal.md:86",
+      "summary": "Независимая приёмка adaptation inventory и итоговое end-to-end закрытие goal остаются вне этого checkpoint."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: CLI Vite7.3.6/8.0.16 и snapshots сохраняют upstream bytes.",
+      "source": "acceptance",
+      "trace": "I2 + scenario 2",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-cli-upstream-bytes.spec.ts:57; tools/shadow-registry/src/esbuild-contract-source-pin.test.ts:115; tools/shadow-registry/src/esbuild-contract-source-pin.test.ts:166",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: build обоих starters без hook; trackKeepalivePromise отсутствует в SDK.",
+      "source": "acceptance",
+      "trace": "I2 + ADR-0530",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-cli-upstream-bytes.spec.ts:64; packages/runtime-js/src/index-surface.test.ts:8",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: throwing config печатает ошибку и завершает build с exit1.",
+      "source": "acceptance",
+      "trace": "I2 + ADR-0530",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-cli-upstream-bytes.spec.ts:101",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: принятые Vite7/8 lanes сохраняются без hook; no-COI повторно GREEN.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:192; tests/no-coi/no-coi-dev-hmr.spec.ts:664; tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2343",
+      "note": ""
+    },
+    {
+      "row": "Поздний exit после reset не завершает новый invocation; текущий exit сохраняет код.",
+      "source": "acceptance",
+      "trace": "I2 + ADR-0530",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:285",
+      "note": ""
+    },
+    {
+      "row": "Exit, записанный до reset, не отравляет следующий invocation.",
+      "source": "acceptance",
+      "trace": "I2 + ADR-0530",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:317",
+      "note": "R2-C2: RED различает take-path, но drain-only mutant проходит committed carriers; HEAD и исходный browser repro GREEN."
+    },
+    {
+      "row": "awaitDrain: фильтрует stale exit; сохраняет текущий exit, обычную ошибку и eval-owned explicit exit.",
+      "source": "public-api",
+      "trace": "ADR-0530 + ADR-0445",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:285; packages/runtime-js/src/internal/event-loop-keepalive.test.ts:108; packages/runtime-js/src/internal/event-loop-keepalive.test.ts:211",
+      "note": "R2-C2: для pre-reset direct-drain порядка дискриминирующая probe пока только в scratch; остальные ветки PASS."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:332",
+          "evidence": "В /tmp/rifty-review-u1-r10-probes: node /tmp/rifty-rev-u1/node_modules/vitest/vitest.mjs run packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts packages/runtime-js/src/internal/event-loop-keepalive.test.ts --reporter=verbose --reporter=json --outputFile=/tmp/rifty-review-u1-r10-probes/tick-mutant-targeted-committed.json → 39 passed при замене только drain currentRejection(state) на state.rejection. Отдельная current-rejection.probe.test.ts -t 'stale pre-reset record is cleared by drain without take' → FAIL: process.exit(7) instead of resolving. HEAD probe PASS. Команды и patch: evidence.md, tick-disabled.diff.",
+          "summary": "R2-C2: новый RED вызывает take перед drain и пропускает отсутствие фильтра в самом drain. Текущий код исправен, исходный runBin reproducer GREEN; слабость committed coverage, advisory.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/internal/event-loop-keepalive.ts:508",
+          "evidence": "Scratch: node /tmp/rifty-rev-u1/node_modules/vitest/vitest.mjs run packages/runtime-js/src/builtins/current-rejection.probe.test.ts -t 'sentinel shape collision' → canceled=true, drain=resolved для Error(REAL_FAILURE) с code=RIFTY_PROCESS_EXIT, exitCode=7 без process.exit. Node v24.16.0 → exit1, REAL_FAILURE. /tmp/rifty-review-u1-r10-probes/{evidence.md,shape-collision.log}.",
+          "summary": "R9-C1 сохраняется: настоящий Error, совпавший с private sentinel shape, подавляется. Обычные ошибки сохраняются; усиление branding остаётся advisory по REV-2/3.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

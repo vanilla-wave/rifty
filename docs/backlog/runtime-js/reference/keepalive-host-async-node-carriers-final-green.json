@@ -1,0 +1,252 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Срез можно принять с advisory: carrier 4/4 PASS; fetch sweep 6/6 PASS. R7-1/R7-3 легитимно сняты, R7-2 исправлен. Goal I3 открыт.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "91b40e7d79f3c77e6ec2033fcc8cbc3956cfa21f",
+  "unit_goal_source": "docs/backlog/runtime-js/keepalive-host-async-node-carriers.md (ready, re-cut 2026-10-16) + docs/backlog/epics/honest-guest-package-adaptations/goal.md I1 (user amend 2026-10-16); BASE aebdd7ddda550759b5697d7b4a227ad29bade5df. Проверены только указанные unit files; исключённые units не переоценивались.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/honest-guest-package-adaptations/goal.md:86",
+      "summary": "Классификация adaptation inventory и итоговое end-to-end доказательство goal остаются отдельной работой. Fetch/locks gaps явно перенесены решением пользователя; их устранение текущий I1 не требует."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Blob/File reads и streams завершаются; guest-only pipe waits не удерживают; native options/lock lifecycle",
+      "source": "acceptance",
+      "trace": "I1 + scenario 1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:47",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: fs.openAsBlob().arrayBuffer() печатает результат",
+      "source": "acceptance",
+      "trace": "I1 + scenario 1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: Wasm compile/instantiate(bytes) завершаются; reject освобождает ref",
+      "source": "acceptance",
+      "trace": "I1 + scenario 1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:94",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: PBKDF2 deriveBits и цепочка 200 digest завершаются",
+      "source": "acceptance",
+      "trace": "I1 + scenario 1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:106",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: Response/Request Blob consumers и streams; native lock/disturbed order и content type; idle guest body не удерживает",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:313",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: zlib.gzip и createGzip stream печатают результат",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:435",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: WebSocket subclass печатает open/message/close; synthetic close не снимает hold",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/host-async-keepalive.spec.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: constructor identity, instanceof, names/native toString; init.body один раз; locked body запрещает clone/consumers",
+      "source": "acceptance",
+      "trace": "ADR-0529",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:222",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 9: unhandled Wasm/WebCrypto rejection даёт exit 1",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:211",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 10: Body consumers, Response.json/clone, оригинал после clone, Request.clone и FormData Request copy; guest-stream исключение",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "weak",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:337",
+      "note": "R8-C2: suite пропускает mutant без guest-stream propagation; HEAD подтверждён отдельным probe. Advisory REV-4."
+    },
+    {
+      "row": "Acceptance 11: BroadcastChannel держит до close, доставляет message; ref/unref возвращают channel; unref допускает exit; ref.call({}) даёт ERR_INVALID_THIS",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:396",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 12: uncounted fs/zlib и string/bytes/string-FormData streams имеют host-task count 0",
+      "source": "acceptance",
+      "trace": "ADR-0529 §3",
+      "status": "pass",
+      "citation": "tests/browser-unit/host-async-keepalive.spec.ts:56",
+      "note": ""
+    },
+    {
+      "row": "installHostAsyncKeepalive(): публичный installer учёта host-async requests в worker",
+      "source": "public-api",
+      "trace": "ADR-0529",
+      "status": "pass",
+      "citation": "tests/browser-unit/host-async-keepalive.spec.ts:24",
+      "note": ""
+    },
+    {
+      "row": "Response.clone(): consumers удерживаются, guest-stream kind переносится",
+      "source": "public-api",
+      "trace": "ADR-0529",
+      "status": "weak",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:356",
+      "note": "R8-C2: suite пропускает mutant без guest-stream propagation; HEAD подтверждён отдельным probe. Advisory REV-4."
+    },
+    {
+      "row": "Request.clone(): consumers удерживаются, guest-stream kind переносится",
+      "source": "public-api",
+      "trace": "ADR-0529",
+      "status": "weak",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:376",
+      "note": "R8-C2: suite пропускает mutant без guest-stream propagation; HEAD подтверждён отдельным probe. Advisory REV-4."
+    },
+    {
+      "row": "new Request(request): Body consumer удерживается с сохранением guest-stream исключения",
+      "source": "public-api",
+      "trace": "ADR-0529",
+      "status": "weak",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:347",
+      "note": "R8-C2: suite пропускает mutant без guest-stream propagation; HEAD подтверждён отдельным probe. Advisory REV-4."
+    },
+    {
+      "row": "new BroadcastChannel(): referenced с момента construction",
+      "source": "public-api",
+      "trace": "ADR-0529",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:405",
+      "note": ""
+    },
+    {
+      "row": "BroadcastChannel.close(): освобождает hold",
+      "source": "public-api",
+      "trace": "ADR-0529",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:396",
+      "note": ""
+    },
+    {
+      "row": "BroadcastChannel.ref(): возвращает channel; receiver {} даёт ERR_INVALID_THIS",
+      "source": "public-api",
+      "trace": "ADR-0529",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:426",
+      "note": ""
+    },
+    {
+      "row": "BroadcastChannel.unref(): возвращает channel, listener не мешает natural exit",
+      "source": "public-api",
+      "trace": "ADR-0529",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:422",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:143",
+          "evidence": "HEAD: RIFTY_PLAYGROUND_PORT=5331 npx playwright test --config playwright.browser-unit.config.ts tests/browser-unit/host-async-keepalive.spec.ts — 4 passed (23.2s), /tmp/ha-r8-main.log. Mutant: npx playwright test --config /tmp/rifty-r8-coverage-mutant/playwright.config.cjs — 4 passed (17.9s) без guest-stream propagation clone/copy. Дополнительные прогоны с /tmp/rifty-r8-coverage-mutant/head.config.cjs и mutant.config.cjs: HEAD/Node v24.16.0 exit 0, HA|top; mutant timeout 40s, exit null. Артефакты: /tmp/rifty-r8-coverage-mutant/{binding.json,loaded.log,run.log,head-artifacts.json,mutant-artifacts.json,head-probe.log,mutant-probe.log}.",
+          "summary": "R8-C2: guest-stream exclusion проверяется только на прямом Response. Удаление переноса признака через Response/Request.clone() и new Request(request) проходит committed suite, хотя вызывает over-hold. HEAD корректен в дополнительном probe; покрытие weak, advisory REV-4.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/runtime-js/keepalive-host-async-node-carriers.md:58",
+          "evidence": "",
+          "summary": "Context ещё относит navigator.locks к browser-only API; актуальные I1, Out of scope и ADR-0529 правильно объявляют Node-surface gap.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/host-async-keepalive.ts:90",
+          "evidence": "node --experimental-transform-types /tmp/rifty-r5-species/probe.mjs raw; node --experimental-transform-types /tmp/rifty-r5-species/probe.mjs installed — exit 0, Node v24.16.0. speciesReads: 0 → 1; thenReads=0, refs=0 после await. /tmp/ha-r8-species-{raw,installed}.log.",
+          "summary": "R5-C1 сохраняется: hold вызывает guest Promise species getter; его throw отключает hold через catch. Прежний advisory.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/host-async-keepalive.ts:386",
+          "evidence": "npx playwright test --config /tmp/rifty-r8-adversarial/playwright.config.cjs — 1 failed исключительно на Proxy receiver; 9 из 10 сценариев совпали с Node v24.16.0. ref/unref.call(new Proxy(channel, {})): Node принимает receiver, HEAD бросает TypeError:ERR_INVALID_THIS. Guest-stream clone/copy, replacement body, closed ref/unref и descriptors совпали. /tmp/rifty-r8-adversarial/{probe.spec.ts,artifacts.json,run.log}.",
+          "summary": "R8-C3: ref/unref отвергают прозрачный Proxy над BroadcastChannel, допустимый в Node. Дополнительный receiver-паритет сверх Acceptance 11; concern по REV-2/REV-3.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

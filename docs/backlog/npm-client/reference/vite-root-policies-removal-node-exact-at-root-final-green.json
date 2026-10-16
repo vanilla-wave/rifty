@@ -1,0 +1,218 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "U5 принят с одним advisory; merge после общего GREEN CI и проверки остальных units. Goal открыт.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "832e6ad314d216b30ef17e6c459c66ea8fa22a8f",
+  "unit_goal_source": "docs/backlog/npm-client/vite-root-policies-removal-node-exact-at-root.md, ready; BASE c2e76d6d4002832fb6b431a18137b228f6423eb6; Contract+RED PASS /tmp/rifty-review-u5-r2/verdict.json @0c1c8541d83592adbd7fcef501339192d8ac07a6. Goal docs/backlog/epics/project-location-independence/goal.md: I3/scenario 3, I4 '/' leg. Implementation 51f2e515a0f2480b6c1bc48ecfa79f3246589d3d; остальные units исключены. Проверено на HEAD: RIFTY_PLAYGROUND_PORT=5487 npx playwright test --config playwright.browser-unit.config.ts tests/browser-unit/vite-at-root.spec.ts tests/browser-unit/vite-cli-upstream-bytes.spec.ts --output=/tmp/rifty-u5-final-review/browser-results --reporter=list → 9 passed; project-location.spec.ts --grep 'project root' → 1 passed. Логи /tmp/rifty-u5-final-review/{browser-5487,root-build-preview}.log. Vitest: 11 files/257 passed, /tmp/rifty-u5-review-{acquisition-vitest,acquisition-extra-vitest,acquisition-entry-vitest,snapshot-tests}.log. pnpm typecheck; pnpm lint → exit 0. Оба artifact-drift gate → exit 0. node /tmp/rifty-u5-snapshot-audit/probe.mjs → три upstream-exact snapshots, lockfiles/cache сохранены, изменён только соответствующий Vite chunk; /tmp/rifty-u5-review-snapshot-bytes.log. Source/replacement sweep пустой: /tmp/rifty-u5-review-source-sweep.log. Удалённая trusted-entry проверка касалась patch anchors; metadata/version/esbuild и MODULE_NOT_FOUND/malformed-bin loud checks сохранены. DEC-2: ADR-0433 отменён целиком, ADR-0533 и README:446 pointer присутствуют. Node oracle повторно не запускался: использованы проверенные неизменённые Contract+RED artifacts. CI 38938572704 ещё in_progress; Netlify success; полный pnpm pr:check локально не запускался. Tracked tree чистое. /tmp/rifty-u5-final-review/verdict.json валиден: tools/review/blockers.mjs → exit 0.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1 + I2 + I4 / scenarios 1, 2, 4",
+      "location": "docs/backlog/epics/project-location-independence/map.md:7",
+      "summary": "Location-unit и полное end-to-end закрытие goal требуют собственной проверки; U5 доказывает I3 и Vite 7 '/' build/preview/dev."
+    },
+    {
+      "clause": "Связанный goal honest-guest-package-adaptations I3: финальный inventory",
+      "location": "docs/backlog/epics/honest-guest-package-adaptations/map.md:16",
+      "summary": "Старые Vite inventory rows ещё существуют; обновление закреплено за npm-client/guest-package-adaptation-inventory-classes. Связанное продолжение, не residual U5."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Vite 7 config.js и Vite 8 node.js в snapshots/стартерах идентичны upstream.",
+      "source": "acceptance",
+      "trace": "I3+scenario 3",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-at-root.spec.ts:38",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 1: install-artifact recipe не содержит Vite policy.",
+      "source": "acceptance",
+      "trace": "I3+scenario 3",
+      "status": "weak",
+      "citation": "tools/checks/install-artifact-identity.test.ts:5",
+      "note": "C1: assertions проходят с возвращёнными root-policy descriptors; текущая recipe корректна."
+    },
+    {
+      "row": "Acceptance 2: при '/' split Refresh/component URLs соответствуют run 5; default использует обычные URL.",
+      "source": "acceptance",
+      "trace": "I3+scenario 3",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-at-root.spec.ts:149",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: Vite 7 build и preview работают при '/'.",
+      "source": "acceptance",
+      "trace": "I3+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:389",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: compat описывает split URLs, phantom restarts и root events как upstream behavior.",
+      "source": "acceptance",
+      "trace": "I3+scenario 3",
+      "status": "pass",
+      "citation": "docs/public/compat/vite-command.md:20; tests/browser-unit/vite-at-root.spec.ts:150; tests/browser-unit/vite-at-root.spec.ts:225",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: без правок watcher при '/' печатает config restart/root-file change; default не печатает оба симптома.",
+      "source": "acceptance",
+      "trace": "I3+scenario 3",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-at-root.spec.ts:218",
+      "note": ""
+    },
+    {
+      "row": "planInstalledConsumerFiles удалён; install planning больше не готовит Vite bytes.",
+      "source": "public-api",
+      "trace": "ADR-0533+I3",
+      "status": "pass",
+      "citation": "tests/integration/package-install-finalizer.test.ts:80; tools/shadow-registry/src/runtime/index.ts:7",
+      "note": ""
+    },
+    {
+      "row": "prepareInstalledConsumerFiles удалён; acquisition finalizer сохраняет upstream Vite bytes.",
+      "source": "public-api",
+      "trace": "ADR-0533+I3",
+      "status": "pass",
+      "citation": "tests/integration/package-install-finalizer.test.ts:103; tools/shadow-registry/src/runtime/index.ts:7",
+      "note": ""
+    },
+    {
+      "row": "preparePackageEntryRuntime: trusted Vite entry принимает upstream дерево без root-policy validation/перезаписи.",
+      "source": "public-api",
+      "trace": "ADR-0533+I3",
+      "status": "pass",
+      "citation": "tests/integration/vite-cli-prep.test.ts:115; tests/browser-unit/vite-at-root.spec.ts:149",
+      "note": ""
+    },
+    {
+      "row": "Frozen Vite 7.3.6 config.js oracle: SHA256 c2fcfa51…24ba3.",
+      "source": "frozen-artifact",
+      "trace": "I3+scenario 3",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-at-root.spec.ts:20",
+      "note": ""
+    },
+    {
+      "row": "Frozen Vite 8.0.16 node.js oracle: SHA256 c3dd49d1…3588b.",
+      "source": "frozen-artifact",
+      "trace": "I3+scenario 3",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-at-root.spec.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Frozen Node 24.22.0/Vite 7.3.6 §Root oracle: build и run-5 URL split/control.",
+      "source": "frozen-artifact",
+      "trace": "I3+scenario 3+I4",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/guest-package-patches-refine-evidence-2026-10-15.md:114; tests/browser-unit/vite-at-root.spec.ts:149",
+      "note": ""
+    },
+    {
+      "row": "Frozen run-6 oracle: watcher ограничен проектом; restart/root-file events без правок, без count/timing/OOM обещания.",
+      "source": "frozen-artifact",
+      "trace": "I3+scenario 3",
+      "status": "pass",
+      "citation": "docs/backlog/npm-client/reference/vite-at-root-watcher-oracle-2026-10-16.md:20; tests/browser-unit/vite-at-root.spec.ts:171",
+      "note": ""
+    },
+    {
+      "row": "typescript-node-modules.json.gz: rebake сохраняет pins и upstream Vite 7 chunk.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0533+I3",
+      "status": "pass",
+      "citation": "apps/playground/src/templates/baked-snapshot-identity.contract.test.ts:71",
+      "note": ""
+    },
+    {
+      "row": "vite-node-modules.json.gz: rebake сохраняет pins и upstream Vite 7 chunk.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0533+I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-at-root.spec.ts:38; apps/playground/src/templates/baked-snapshot-identity.contract.test.ts:71",
+      "note": ""
+    },
+    {
+      "row": "vite8-node-modules.json.gz: rebake сохраняет pins и upstream Vite 8 chunk.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0533+I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-at-root.spec.ts:38; apps/playground/src/templates/baked-snapshot-identity.contract.test.ts:71",
+      "note": ""
+    },
+    {
+      "row": "baked-snapshot-identities.json точно связывает три regenerated snapshots.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0533",
+      "status": "pass",
+      "citation": "apps/playground/src/templates/baked-snapshot-identity.contract.test.ts:71",
+      "note": ""
+    },
+    {
+      "row": "install-artifact-identity.json соответствует текущей recipe.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0533",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/generate-install-artifact-identity.ts:73",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/shadow-registry/tools/generate-install-artifact-identity.ts:62",
+          "evidence": "Scratch /tmp/rifty-u5-final-review/recipe-mutant/generator-mutant.ts возвращает прежние viteRootWatchPatch и viteRootUrlPatch descriptors. Копия tools/checks/install-artifact-identity.test.ts меняет только import на mutant, assertions неизменны. Исполнено из /tmp/rifty-u5-final-review/recipe-mutant: npx vitest run --config vitest.config.ts → exit 0, 1 passed; /tmp/rifty-u5-final-review/recipe-mutant.log. Tracked файлы не менялись.",
+          "summary": "C1: recipe-тест проверяет только /cli/i и CLI hook marker; возврат root-policy записей проходит. Текущая recipe корректна; слабость защиты Acceptance 1 — advisory, не blocker.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}
