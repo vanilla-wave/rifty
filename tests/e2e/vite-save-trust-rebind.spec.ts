@@ -77,7 +77,7 @@ test('trusted Scratch Save and A→B→A reopen stay exact with acquisition offl
   await openShellTerminal(page);
   await runTerminalLineSettled(
     page,
-    `mkdir -p /node_modules/.vite-save-red && echo ${markerText} > /node_modules/.vite-save-red/marker.txt`,
+    `mkdir -p /home/project/node_modules/.vite-save-red && echo ${markerText} > /home/project/node_modules/.vite-save-red/marker.txt`,
     30_000,
   );
 
