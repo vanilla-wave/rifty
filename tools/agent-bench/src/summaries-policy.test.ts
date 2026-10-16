@@ -94,16 +94,29 @@ it('keeps summary markdown links resolvable', async () => {
   expect(broken).toEqual([]);
 });
 
-// Committed summaries carry the text core only (ADR-0532): browser traces, split binary parts and
-// any attachment above the frozen-bundle ceiling stay in the local run directory, never in git.
-it('commits no binary attachments or oversized files', async () => {
+// Committed summaries carry the text core only (ADR-0532): Markdown, gzip JSON and PNG screens;
+// browser traces, split parts, workspace archives and anything above the frozen-bundle ceiling stay local.
+it('commits only text-core files below the size ceiling', async () => {
   const ceiling = 8 * 1024 * 1024;
   const bad: string[] = [];
   for (const file of files) {
-    if (/\.(zip|part-\d+)$/u.test(file) || /(^|\/)browser\./u.test(file))
-      bad.push(`${file}: binary attachment`);
-    const { size } = await stat(join(root, file));
-    if (size > ceiling) bad.push(`${file}: ${size} bytes`);
+    const info = await stat(join(root, file));
+    if (info.isDirectory()) continue;
+    if (!/\.(md|json\.gz|png)$/u.test(file) || /(^|\/)browser\./u.test(file))
+      bad.push(`${file}: not a text-core file`);
+    if (info.size > ceiling) bad.push(`${file}: ${info.size} bytes`);
   }
   expect(bad).toEqual([]);
 });
+
+// The producer report of a frozen campaign never changes after its recording (ADR-0532 §2).
+const frozenReports: Record<string, string> = {
+  '2026-10-15-eval-v18-corrected/report.json.gz':
+    '25e93c3bf98210b029d100594db3f90bb7aaaf38092e2909bd54f5efd0a6f56f',
+};
+it.each(Object.entries(frozenReports))(
+  'keeps the frozen producer report exact: %s',
+  async (file, digest) => {
+    expect(sha256(await readFile(join(root, file)))).toBe(digest);
+  },
+);

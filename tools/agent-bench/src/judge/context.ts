@@ -1,4 +1,12 @@
 import type { Frame, Locator, Page } from '@playwright/test';
+import {
+  cancellationAction,
+  caption,
+  escapeCaption,
+  recordScopeByIdentity,
+} from './record-context.ts';
+
+export { caption } from './record-context.ts';
 export interface JudgeContext {
   view: Frame | Page;
   previewUrl: string;
@@ -245,14 +253,6 @@ export async function workflowAction(
     if (choices.length > 1) throw new Error(`Ambiguous intended ${subjects} action`);
   }
   throw new Error(`Missing intended ${subjects} action`);
-}
-
-const escapeCaption = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-export function caption(name: string): RegExp {
-  return new RegExp(
-    `${/^\w/.test(name) ? '\\b' : ''}${escapeCaption(name)}${/\w$/.test(name) ? '\\b' : ''}`,
-    'i',
-  );
 }
 
 export async function optionLabel(option: Locator): Promise<string> {
@@ -573,15 +573,6 @@ export async function actionName(action: Locator): Promise<string> {
   return name;
 }
 
-/** An editor's Cancel names its edit target; literal record identities are not verbs. */
-async function cancellationAction(action: Locator, name: string, verbs: string): Promise<boolean> {
-  if (verbs.split('|').includes('cancel') || !/^\W*cancel\b/i.test(name)) return false;
-  const visible = await action.evaluate((node) =>
-    node instanceof HTMLElement ? node.innerText : (node.textContent ?? ''),
-  );
-  return /^\W*cancel\b/i.test(visible.trim());
-}
-
 /** Pure eligibility only. Record identity is established by explicit saved effects. */
 export async function workflowCandidates(
   ctx: JudgeContext,
@@ -608,7 +599,11 @@ export async function workflowCandidates(
     if (!(await candidate.isVisible()) || !(await candidate.isEnabled())) continue;
     const name = accessibleRoot(await candidate.ariaSnapshot());
     if (name === undefined) throw new Error('Missing computed operation caption');
-    if (await cancellationAction(candidate, name, verbs)) continue;
+    // Pure eligibility keeps every affordance, cancellations included (ADR-0522); only
+    // workflowActions resolves record context. A caption that starts with a destructive verb
+    // matches a non-destructive request only through the record's literal identity and must
+    // never be executed as an observation load.
+    if (!/\b(?:delete|remove)\b/i.test(verbs) && /^\W*(?:delete|remove)\b/i.test(name)) continue;
     let eligible = actionCaption(verbs, subjects).test(name);
     if (!eligible) {
       for (const scope of (await candidate.locator('xpath=ancestor::*').all()).reverse()) {
@@ -670,7 +665,7 @@ export async function workflowActions(
     if (!(await node.isVisible())) continue;
     const name = accessibleRoot(await node.ariaSnapshot());
     if (name === undefined) throw new Error('Missing computed operation caption');
-    if (await cancellationAction(node, name, verbs)) continue;
+    const cancellation = await cancellationAction(node, name, verbs);
     const identityText = name
       .replace(
         new RegExp(`\\b(?:${verbs.split('|').map(escapeCaption).join('|')})\\b\\s*`, 'i'),
@@ -713,41 +708,11 @@ export async function workflowActions(
     // Record operations need identity evidence outside their own action caption.
     if (/\b(?:edit|delete)\b/.test(verbs) && !record) {
       if (!identityText) continue;
-      for (const scope of scopes) {
-        const local = scope
-          .getByRole('button', { name: requested })
-          .or(scope.getByRole('link', { name: requested }));
-        if ((await local.count()) !== 1) continue;
-        const text = await scope.evaluate((owner) => {
-          const walker = document.createTreeWalker(owner, NodeFilter.SHOW_TEXT);
-          const values: string[] = [];
-          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-            const parent = node.parentElement;
-            if (
-              !parent ||
-              parent.closest(
-                'button,a,input,textarea,select,[contenteditable], [role="button"],[role="link"]',
-              )
-            )
-              continue;
-            const style = getComputedStyle(parent);
-            if (
-              style.display === 'none' ||
-              style.visibility === 'hidden' ||
-              !parent.getClientRects().length
-            )
-              continue;
-            values.push(node.textContent ?? '');
-          }
-          return values.join(' ').replace(/\s+/g, ' ').trim();
-        });
-        if (identityEvidence.test(text)) {
-          record = scope;
-          break;
-        }
-      }
+      record = await recordScopeByIdentity(node, requested, identityEvidence);
       if (!record) continue;
     }
+    // A cancellation caption without record context is not a workflow action (ADR-0519).
+    if (cancellation && !record) continue;
     let accepted = actionCaption(verbs, subjects, identity).test(name);
     if (!accepted) {
       for (const scope of scopes) {

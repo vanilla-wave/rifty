@@ -37,9 +37,11 @@ it('versions native input interaction, preserving eight public tasks and six oth
       expect(await readFile(next.judgeFiles![0]!)).toEqual(await readFile(task.judgeFiles![0]!));
       expect(next.judgeFiles).toEqual(task.judgeFiles);
     } else {
+      // Listed support files first, then the judge's import closure (record-context via context.ts).
       expect(next.judgeFiles!.slice(1)).toEqual([
         'tools/agent-bench/src/judge/context.ts',
         'tools/agent-bench/src/judge/native-input.ts',
+        'tools/agent-bench/src/judge/record-context.ts',
       ]);
       const files = await Promise.all(next.judgeFiles!.map((path) => readFile(path, 'utf8')));
       expect(plan.tasks.find((row) => row.id === id)!.judgeSha256).toBe(digest(files.join('\n')));

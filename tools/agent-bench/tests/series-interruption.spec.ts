@@ -80,7 +80,10 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const)
       });
       expect(report.header.series!.status, result.stdout + result.stderr).toBe('interrupted');
       expect(report.header.series!.trials).toHaveLength(2);
-      expect(report.runs).toHaveLength(0);
+      // The started attempt survives the signal as an interrupted row; the unstarted trial stays missing.
+      expect(report.runs).toHaveLength(1);
+      expect(report.runs[0]!.interruptedAt).toBeDefined();
+      expect(report.runs[0]!.completedAt).toBeUndefined();
       expect(await readFile(join(output, 'summary.md'), 'utf8')).toContain('missing');
     } finally {
       await rm(root, { recursive: true, force: true });

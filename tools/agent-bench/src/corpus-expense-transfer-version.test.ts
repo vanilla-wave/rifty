@@ -1,6 +1,6 @@
-import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
+import { frozenDigest, sha256 } from './_fixtures/frozen-corpus.ts';
 import { loadCorpus } from './corpus.ts';
 
 it('versions transfer observation without changing public tasks or frozen criteria', async () => {
@@ -20,10 +20,10 @@ it('versions transfer observation without changing public tasks or frozen criter
     'alternative.json',
   ]) {
     const path = `tools/agent-bench/corpus/cases/expense-settlement-v10/${file}`;
-    expect(await readFile(path)).toEqual(execFileSync('git', ['show', `448711cfe:${path}`]));
+    expect(sha256(await readFile(path))).toBe(frozenDigest('448711cfe', path));
   }
   const path = 'tools/agent-bench/corpus/eval-v16.json';
-  expect(await readFile(path)).toEqual(execFileSync('git', ['show', `448711cfe:${path}`]));
+  expect(sha256(await readFile(path))).toBe(frozenDigest('448711cfe', path));
   expect(current.find((task) => task.family === 'expense-conservation')?.id).toBe(
     'expense-settlement-v11',
   );

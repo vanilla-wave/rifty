@@ -21,7 +21,7 @@ in the report describe the run directory, not this repository.
 | ms-negative | 3 | 3 | 3 | 3 | — |
 | ms-weeks | 0 | 1 | 3 | 3 | agent: formatting regression reproduces on Node; asymmetry vs native Pi unexplained |
 | stringify-boxed | 2 | 3 | 3 | 3 | 1 COI import-toast setup timeout |
-| queue-clear | 0 | 0 | 3 | 3 | AsyncLocalStorage after `await` (runtime gap); 1 import-toast setup timeout |
+| queue-clear | 0 | 0 | 3 | 3 | 4 rifty-runtime: AsyncLocalStorage after `await`; 1 unisolated (Node fails too); 1 import-toast setup timeout |
 | csv-workflow-v5 | 2 | 3 | 3 | 2 | 1 unisolated; Codex: CLI 503 reconnect, app judge PASS |
 | markdown-notes-v4 | 3 | 2 | 3 | 3 | 1 agent TypeError |
 | booking-workflow-v11 | 0 | 0 | 0 | 3 | agent (Luna): public Validation/date-time regex defects in all Pi lanes |
@@ -33,7 +33,9 @@ task-bad 4, unisolated 6.
 ## What it says about Rifty
 
 - `AsyncLocalStorage` context is lost across `await`: 6/6 queue-clear attempts fail
-  in Rifty, exact after-source passes on Node — `docs/backlog/runtime-js/async-local-storage-await-context.md`.
+  in Rifty — 4 where the exact after-source passes on Node (rifty-runtime), 1 mixed
+  (Node fails too, unisolated), 1 import-toast setup timeout —
+  `docs/backlog/runtime-js/async-local-storage-await-context.md`.
 - Svelte starter preview goes blank under HMR in COI (3/3 expense attempts, roots
   unisolated) — `docs/backlog/service-worker/svelte-css-preview-network-url.md`.
 - Workspace-import success toast missing after 90 s before the agent starts (2 setup
@@ -44,6 +46,13 @@ task-bad 4, unisolated 6.
   checkbox, native CLI 503 status) — captured as `docs/backlog/distribution/*-observation.md`.
 
 ## Limits
+
+Judge code changed after this recording: `judge/context.ts` (caption-only Cancel
+exclusion removed from candidates; destructive captions never loaded as edits) and
+the judge fingerprint now covers the import closure, so a new plan is not
+fingerprint-comparable with this report (`report --compare` flags judge drift by
+design). Compare new runs against each other, not against v18. Known judge limit:
+`docs/backlog/distribution/agent-bench-identity-remainder-interior-tokens.md`.
 
 Models, contexts, tools and installed graphs differ between lanes; no causal
 model-quality or runtime-only delta is claimed. Proxy prices are 0, not spend.

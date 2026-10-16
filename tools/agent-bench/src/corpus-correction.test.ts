@@ -1,7 +1,8 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
+import { frozenDigest, sha256 } from './_fixtures/frozen-corpus.ts';
 
 it('retains every original frozen app byte and isolates corrected cases without dropping selected families', async () => {
   const original = '03a531ab20f4f5d1a96f2b6baa93502ef53b75f3';
@@ -9,7 +10,7 @@ it('retains every original frozen app byte and isolates corrected cases without 
     const dir = `tools/agent-bench/corpus/cases/${id}`;
     for (const file of await readdir(dir)) {
       const path = join(dir, file);
-      expect(await readFile(path)).toEqual(execFileSync('git', ['show', `${original}:${path}`]));
+      expect(sha256(await readFile(path))).toBe(frozenDigest(original, path));
     }
     for (const file of [
       'project.json',
@@ -23,7 +24,7 @@ it('retains every original frozen app byte and isolates corrected cases without 
       );
   }
   const path = 'tools/agent-bench/corpus/pilot-v1.json';
-  expect(await readFile(path)).toEqual(execFileSync('git', ['show', `${original}:${path}`]));
+  expect(sha256(await readFile(path))).toBe(frozenDigest(original, path));
   const child = spawnSync(
     process.execPath,
     [

@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import type { FileTree } from './files.ts';
@@ -21,6 +21,25 @@ interface Card {
   promptSha256: string;
   judgeSha256: string;
 }
+const RELATIVE_IMPORT = /(?:from|import)\s*\(?\s*['"](\.[^'"]+\.ts)['"]/g;
+
+/** Every agent-bench `.ts` file a judge reaches through relative imports; criteria live in all of them. */
+export async function judgeImportClosure(entry: string): Promise<string[]> {
+  const seen = new Set<string>();
+  const queue = [entry];
+  while (queue.length) {
+    const file = queue.shift()!;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    for (const match of (await readFile(file, 'utf8')).matchAll(RELATIVE_IMPORT)) {
+      const target = relative(process.cwd(), resolve(dirname(file), match[1]!));
+      if (target.startsWith('tools/agent-bench/')) queue.push(target);
+    }
+  }
+  seen.delete(entry);
+  return [...seen].sort();
+}
+
 export function validateFiles(value: unknown): asserts value is FileTree {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error('Corpus files must be a text tree');
@@ -129,26 +148,31 @@ export async function loadCorpus(
       corpusManifestSha256: digest(manifestText),
       caseCardSha256: digest(cardText),
       controls,
-      judgeFiles: [
-        join(dir, card.judge),
-        'tools/agent-bench/src/judge/context.ts',
-        ...(card.starterRegression
-          ? ['tools/agent-bench/src/runner.ts', 'tools/agent-bench/src/corpus.ts']
-          : []),
-        ...(card.judgeSupport === 'record-observation-v1'
-          ? [
-              'tools/agent-bench/src/judge/record-observation.ts',
-              'tools/agent-bench/src/judge/record-candidates.ts',
-              'tools/agent-bench/src/judge/record-action-binding.ts',
-              'tools/agent-bench/src/judge/public-record-display.ts',
-              'tools/agent-bench/src/judge/reservation-records.ts',
-              'tools/agent-bench/src/judge/reservation-display.ts',
-              'tools/agent-bench/src/judge/expense-records.ts',
-              'tools/agent-bench/src/judge/room-records.ts',
-            ]
-          : []),
-        ...(card.judgeSupport ? ['tools/agent-bench/src/judge/native-input.ts'] : []),
-      ],
+      judgeFiles: await (async () => {
+        const listed = [
+          join(dir, card.judge),
+          'tools/agent-bench/src/judge/context.ts',
+          ...(card.starterRegression
+            ? ['tools/agent-bench/src/runner.ts', 'tools/agent-bench/src/corpus.ts']
+            : []),
+          ...(card.judgeSupport === 'record-observation-v1'
+            ? [
+                'tools/agent-bench/src/judge/record-observation.ts',
+                'tools/agent-bench/src/judge/record-candidates.ts',
+                'tools/agent-bench/src/judge/record-action-binding.ts',
+                'tools/agent-bench/src/judge/public-record-display.ts',
+                'tools/agent-bench/src/judge/reservation-records.ts',
+                'tools/agent-bench/src/judge/reservation-display.ts',
+                'tools/agent-bench/src/judge/expense-records.ts',
+                'tools/agent-bench/src/judge/room-records.ts',
+              ]
+            : []),
+          ...(card.judgeSupport ? ['tools/agent-bench/src/judge/native-input.ts'] : []),
+        ];
+        // Every file the judge reaches by import carries criteria (ADR-0506/0507); listed order is kept.
+        const reached = await judgeImportClosure(join(dir, card.judge));
+        return [...listed, ...reached.filter((file) => !listed.includes(file))];
+      })(),
       ...(app
         ? {
             judge: (
