@@ -11,7 +11,9 @@ import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts'
 export const EOL = '\n';
 
 function env(name: string): string | undefined {
-  const value = (globalThis as { process?: { env?: Record<string, unknown> } }).process?.env?.[name];
+  const value = (globalThis as { process?: { env?: Record<string, unknown> } }).process?.env?.[
+    name
+  ];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 

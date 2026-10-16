@@ -93,9 +93,9 @@ test('vite build with a throwing config prints the error and exits 1, as in Node
       "throw new Error('rifty-config-boom');\n",
     );
     const build = await execLine(page, 'vite build');
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: the terminal colors Vite's logger (TTY).
     const lines = build.out
       .replaceAll('\r', '')
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: the terminal colors Vite's logger (TTY).
       .replace(/\u001b\[[0-9;]*m/gu, '')
       .split('\n');
     const first = lines.findIndex((line) => line.startsWith('failed to load config from '));

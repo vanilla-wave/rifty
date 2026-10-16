@@ -1,4 +1,3 @@
-import { createGuestLayout } from '../workers/guest-layout.ts';
 import {
   SabRing,
   SyncRpcDispatcher,
@@ -12,6 +11,7 @@ import type { VfsMutationGuard, VfsMutationIntent } from '@riftydev/vfs';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import type { OwnerProjectVfsFrame } from '../workbench/project-vfs-protocol.ts';
+import { createGuestLayout } from '../workers/guest-layout.ts';
 import { createOwnerVfsAuthorityComposition } from '../workers/owner-vfs-authority.ts';
 import {
   type PackageAcquisitionProject,

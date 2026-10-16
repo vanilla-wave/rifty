@@ -88,7 +88,7 @@ describe('tokenize — tilde expansion (bash)', () => {
   });
 
   it('keeps quoted, mid-word, ~user and HOME-less tildes literal', () => {
-    expect(words("echo '~' \"~/x\" a~b ~root")).toEqual(['echo', '~', '~/x', 'a~b', '~root']);
+    expect(words('echo \'~\' "~/x" a~b ~root')).toEqual(['echo', '~', '~/x', 'a~b', '~root']);
     expect(words('echo ~/x', {})).toEqual(['echo', '~/x']);
   });
 });

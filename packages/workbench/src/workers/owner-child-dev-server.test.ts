@@ -1,4 +1,3 @@
-import { createGuestLayout } from './guest-layout.ts';
 import { EventEmitter } from 'node:events';
 import type { TerminalResizeSource, TerminalSize } from '@riftydev/shell';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
@@ -7,6 +6,7 @@ import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
 import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
 import { resolveDevServerChildConfig } from './dev-server-child-config.ts';
 import { createDevServerController } from './dev-server-controller.ts';
+import { createGuestLayout } from './guest-layout.ts';
 import type { ReserveOwnerChildAdmission } from './owner-child-admission.ts';
 import {
   type DevServerChildHandle,
