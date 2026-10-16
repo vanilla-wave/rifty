@@ -159,3 +159,12 @@ child; `globalThis.require/fs` writes stay in the child realm under COI.
 - 0.25.12 `wasm_exec_node.js:17-19` uses `??=` like 0.28.0.
 - Both `lib/main.js` call `child.unref()` (`:1814`), `execFileSync` (`:1887`)
   and `receiveMessageOnPort` (`:1947`). The spike ran 0.28.0 only.
+
+## Side observations (filed as separate items)
+
+- COI terminal: `ls node_modules | head -40; ls node_modules/esbuild-wasm; echo EXIT=$?`
+  → `head: invalid option -- '40'` … `EXIT=$?` (literal) —
+  `shell/head-numeric-count-option`, `shell/special-parameter-exit-status`.
+- No-COI, consecutive `project.run` calls in one held toolchain Worker: run
+  N+1 (`require('./pre2n.cjs')`) prints `[f1] spawned …` / `[f1] child exit 1 null`
+  from run N's `pre1.cjs` spawn wrapper — `runtime-js/no-coi-toolchain-run-builtin-state-leak`.
