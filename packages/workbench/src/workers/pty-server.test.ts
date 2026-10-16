@@ -702,6 +702,37 @@ describe('pty-server', () => {
     gate.resolve();
   });
 
+  it('omits an unchanged login default from reported state, keeps a seeded or changed one', async () => {
+    const out: OwnerToPageFrame[] = [];
+    const loginEnv = { HOME: '/home/rifty' };
+    const server = createPtyServer({
+      send: (frame) => out.push(frame),
+      makeShell: (seed) => new Shell({ cwd: '/', env: { ...loginEnv, ...(seed?.env ?? {}) } }),
+      loginEnv,
+    });
+    const exitEnv = async (sid: string, rid: string, line: string) => {
+      await server.handleFrame({
+        type: 'pty:exec',
+        sid,
+        rid,
+        line,
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      });
+      const exit = out.find((frame) => frame.type === 'pty:exit' && frame.rid === rid);
+      return exit?.type === 'pty:exit' ? exit.env : undefined;
+    };
+    server.handleFrame({ type: 'pty:open', sid: 'plain', env: { KEEP: '1' } });
+    expect(await exitEnv('plain', 'r1', 'echo x')).toEqual({ KEEP: '1' });
+    expect(await exitEnv('plain', 'r2', 'HOME=/elsewhere')).toEqual({
+      KEEP: '1',
+      HOME: '/elsewhere',
+    });
+    server.handleFrame({ type: 'pty:open', sid: 'seeded', env: { HOME: '/home/rifty' } });
+    expect(await exitEnv('seeded', 'r3', 'echo x')).toEqual({ HOME: '/home/rifty' });
+  });
+
   it('claims one run synchronously before an awaited gate', async () => {
     const gate = deferred();
     const out: OwnerToPageFrame[] = [];

@@ -76,7 +76,7 @@ test.describe('M1 - terminal shell', () => {
     await expect(terminalTab(page, primary)).toBeVisible();
     await expect(page.locator('[data-testid="problems-tab"]')).toBeVisible();
     await expect(page.locator('[data-testid="terminal-mode-hint"]')).toContainText(
-      'Commands run in /;',
+      'Commands run in /home/project;',
     );
     await expect(page.locator('[data-testid="terminal-mode-hint"]')).toContainText(
       'Use + to open another shell while a program is running.',

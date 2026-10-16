@@ -221,7 +221,7 @@ test.describe('M0 — Foundation', () => {
     const modeHint = page.locator(
       `.rf-terminal-slot[data-session-id="${shell.sessionId}"] [data-testid="terminal-mode-hint"]`,
     );
-    await expect(modeHint).toContainText('Commands run in /;', { timeout: 30_000 });
+    await expect(modeHint).toContainText('Commands run in /home/project;', { timeout: 30_000 });
     await insertTerminalLineSettled(page, `echo ${marker}`, 30_000, shell);
     await expectSessionContains(page, shell, marker);
     await expect.poll(() => terminalBuffer(page, shell)).not.toContain('Choose a project before');

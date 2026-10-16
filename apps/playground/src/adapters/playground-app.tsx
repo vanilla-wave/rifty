@@ -1302,9 +1302,12 @@ export function App(props: AppProps) {
 
   const terminalModeHint = (): TerminalModeHint => {
     const cwd = sessions().find((session) => session.id === activeSessionId())?.cwd ?? '/';
+    // Project-relative session cwd → the guest path `pwd` prints (ADR-0531).
+    const guestCwd =
+      cwd === '/' ? DEFAULT_PUBLIC_PROJECT_ROOT : `${DEFAULT_PUBLIC_PROJECT_ROOT}${cwd}`;
     return {
       label: 'Shell',
-      detail: `Commands run in ${cwd}; running programs own stdin. Use + to open another shell while a program is running.`,
+      detail: `Commands run in ${guestCwd}; running programs own stdin. Use + to open another shell while a program is running.`,
     };
   };
 

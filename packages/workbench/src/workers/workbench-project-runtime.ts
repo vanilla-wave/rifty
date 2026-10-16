@@ -86,6 +86,9 @@ interface CloseFailure {
   readonly error: unknown;
 }
 
+/** Login-shell defaults a restored terminal seed may override (ADR-0531 §6). */
+const LOGIN_ENV: Readonly<Record<string, string>> = Object.freeze({ HOME: GUEST_HOME });
+
 const CLOSE_PHASE_ORDER: Readonly<Record<CloseFailure['phase'], number>> = Object.freeze({
   pty: 0,
   'preview-fence': 1,
@@ -287,7 +290,7 @@ export function createWorkbenchProjectRuntime(
         layout.publicRoot,
       ),
       // A login-shell HOME unless the seed brings its own (ADR-0531 §6).
-      env: { HOME: GUEST_HOME, ...(seed?.env ?? {}) },
+      env: { ...LOGIN_ENV, ...(seed?.env ?? {}) },
       execBin: executeInstalledBin,
       fileSystem: namespace.fileSystem,
       mutationGuard: namespace.mutationGuard,
@@ -412,6 +415,7 @@ export function createWorkbenchProjectRuntime(
   const ptyServer = createPtyServer({
     send,
     makeShell,
+    loginEnv: LOGIN_ENV,
     beforeExit: options.publicationBarrier,
     onPreviewReq: () => previews.publish(),
     onDevServerReq: () => previews.publishDev(),

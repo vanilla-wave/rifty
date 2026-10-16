@@ -1,3 +1,16 @@
+/// <reference lib="webworker" />
+/**
+ * Supervised dev-server child entry (ADR-0150 P6b) — a kind:'url' worker the
+ * OWNER spawns (serve:true) to run the dev server out of the owner thread. It
+ * reads+writes the owner store over fs.* sync-RPC (RIFTY_REMOTE_FS=1, like
+ * node-entry-bootstrap), owns listen() + serveCrossRealmPreview, and talks to
+ * the owner over fork-IPC (rifty:dev-ready/error/snapshot/ports from here).
+ *
+ * NOT here: initBackend()/OPFS (child reads via RPC — single-writer is the owner);
+ * the pty server / shell / owner serve-bridges (those stay on the owner).
+ * Env is read from readKernelProcessSpec() (the installProcessGlobals clobber-safe
+ * source), never globalThis.process.env.
+ */
 import { getKernelDispatcher, readKernelProcessSpec, readKernelSyncApi } from '@riftydev/kernel';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
@@ -12,19 +25,6 @@ import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { bootDevServer } from './dev-server-boot.ts';
 import { readDevServerChildConfig } from './dev-server-child-config.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
-/// <reference lib="webworker" />
-/**
- * Supervised dev-server child entry (ADR-0150 P6b) — a kind:'url' worker the
- * OWNER spawns (serve:true) to run the dev server out of the owner thread. It
- * reads+writes the owner store over fs.* sync-RPC (RIFTY_REMOTE_FS=1, like
- * node-entry-bootstrap), owns listen() + serveCrossRealmPreview, and talks to
- * the owner over fork-IPC (rifty:dev-ready/error/snapshot/ports from here).
- *
- * NOT here: initBackend()/OPFS (child reads via RPC — single-writer is the owner);
- * the pty server / shell / owner serve-bridges (those stay on the owner).
- * Env is read from readKernelProcessSpec() (the installProcessGlobals clobber-safe
- * source), never globalThis.process.env.
- */
 import { createGuestLayout } from './guest-layout.ts';
 import { prepareNodeEntryRuntime } from './node-entry-runtime-preparation.ts';
 import { installNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';

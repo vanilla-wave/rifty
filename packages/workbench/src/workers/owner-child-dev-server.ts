@@ -1,3 +1,10 @@
+/**
+ * Owner-realm supervised dev-server child (ADR-0150 P6b): the dev server runs in
+ * a serve:true child worker reading+writing the owner store over fs.* sync-RPC
+ * (RIFTY_REMOTE_FS=1). The owner stays a free async supervisor — blocking work
+ * (module loading and user code) left its thread. Mirrors owner-child-bin-executor.ts,
+ * but the child is a long-lived SERVER (serve:true), not run-to-completion.
+ */
 import {
   type SpawnWorkerSpec,
   globalProcessManager,
@@ -20,13 +27,6 @@ import {
   DevServerRunError,
   type SupervisedDevServerHandle,
 } from './dev-server-controller.ts';
-/**
- * Owner-realm supervised dev-server child (ADR-0150 P6b): the dev server runs in
- * a serve:true child worker reading+writing the owner store over fs.* sync-RPC
- * (RIFTY_REMOTE_FS=1). The owner stays a free async supervisor — blocking work
- * (module loading and user code) left its thread. Mirrors owner-child-bin-executor.ts,
- * but the child is a long-lived SERVER (serve:true), not run-to-completion.
- */
 import type { GuestRoots } from './guest-layout.ts';
 import type { NodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import {

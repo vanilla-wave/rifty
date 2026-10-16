@@ -1,10 +1,10 @@
-import { getSystemErrorMap } from 'node:util';
 /**
  * FS_ERRNO must cover every code the VFS can emit (review 2026-07-05 handoff:
  * EPERM/EDQUOT/EIO crossed the boundary without errno/description). The
  * `Record<VfsErrorCode, true>` literal makes a VfsErrorCode union growth a
  * COMPILE error here, forcing the table update.
  */
+import { getSystemErrorMap } from 'node:util';
 import { VfsError, type VfsErrorCode } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import { FS_ERRNO, fsError, toNodeFsError } from './fs-errors.ts';

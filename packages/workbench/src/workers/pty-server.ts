@@ -130,6 +130,12 @@ export interface PtyServerDeps {
   /** Builds a session Shell (owner npm builtin + in-realm execBin), seeded with cwd/env. */
   readonly makeShell: (seed: ShellSeed | undefined, sid: string) => Shell;
   /**
+   * Login defaults `makeShell` adds when the seed lacks them (ADR-0531 §6). The
+   * reported terminal state omits one while it keeps its default value, so a
+   * persisted state round-trips exactly (ADR-0278).
+   */
+  readonly loginEnv?: Readonly<Record<string, string>>;
+  /**
    * Owner re-publishes dev-server state on a page request (ADR-0148 — co-resident
    * dev server runs inside the owner). Wired by
    * the bootstrap to the dev-server controller; the pty-server stays
@@ -191,15 +197,30 @@ class PtySessionActor {
   readonly #sid: string;
   readonly #shell: Shell;
   readonly #deps: PtyServerDeps;
+  readonly #seedEnv: Readonly<Record<string, string>>;
   #dimensions: TerminalSize = { cols: 80, rows: 24 };
   #active: RunState | null = null;
   #state: 'open' | 'closing' | 'closed' = 'open';
   #shutdownPromise: Promise<void> | undefined;
 
-  constructor(sid: string, shell: Shell, deps: PtyServerDeps) {
+  constructor(
+    sid: string,
+    shell: Shell,
+    deps: PtyServerDeps,
+    seedEnv: Readonly<Record<string, string>> = {},
+  ) {
     this.#sid = sid;
     this.#shell = shell;
     this.#deps = deps;
+    this.#seedEnv = seedEnv;
+  }
+
+  #reportedEnv(): Record<string, string> {
+    const env = { ...this.#shell.envSnapshot() };
+    for (const [key, value] of Object.entries(this.#deps.loginEnv ?? {})) {
+      if (env[key] === value && !Object.hasOwn(this.#seedEnv, key)) delete env[key];
+    }
+    return env;
   }
 
   openError(): string | undefined {
@@ -458,7 +479,7 @@ class PtySessionActor {
       code,
       exit,
       cwd: this.#shell.cwd,
-      env: { ...this.#shell.envSnapshot() },
+      env: this.#reportedEnv(),
       ...(error === undefined ? {} : { error }),
     });
   }
@@ -486,7 +507,7 @@ class PtySessionActor {
       code: 1,
       exit: { code: 1, signal: null },
       cwd: this.#shell.cwd,
-      env: { ...this.#shell.envSnapshot() },
+      env: this.#reportedEnv(),
       error,
     });
   }
@@ -656,6 +677,7 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
             frame.sid,
             deps.makeShell({ cwd: frame.cwd, env: frame.env }, frame.sid),
             deps,
+            frame.env,
           ),
         );
         deps.send({ type: 'pty:ready', sid: frame.sid });

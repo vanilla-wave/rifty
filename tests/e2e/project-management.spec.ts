@@ -45,7 +45,9 @@ async function bootScratch(page: Page): Promise<void> {
     timeout: 15_000,
   });
   await pickStarterFromLauncher(page, 'project-files');
-  await expect(hintLocator(page)).toContainText('Commands run in /;', { timeout: 30_000 });
+  await expect(hintLocator(page)).toContainText('Commands run in /home/project;', {
+    timeout: 30_000,
+  });
 }
 
 function hintLocator(page: Page) {
@@ -169,7 +171,7 @@ async function bootDirtyScratchWithSavedAlpha(
   await runTerminalLineSettled(page, `echo ${alphaMarker} > project-proof.txt`, 30_000);
   const alphaProjectId = await saveScratchAs(page, alphaName);
   await pickStarter(page, 'node-worker');
-  await expect(hint).toContainText('Commands run in /;', { timeout: 30_000 });
+  await expect(hint).toContainText('Commands run in /home/project;', { timeout: 30_000 });
   const dirtyMarker = await dirtyScratchViaEditor(page);
   return Object.freeze({ alphaMarker, dirtyMarker, alphaProjectId });
 }
@@ -276,7 +278,7 @@ test.describe('ADR-0165 §9 — dirty-scratch switch dialog', () => {
     await dialog.getByRole('button', { name: 'Discard & continue' }).click();
     await expect(dialog).toHaveCount(0, { timeout: 5_000 });
     await expectProjectChipName(page, alphaName);
-    await expect(hint).toContainText('Commands run in /;', { timeout: OWNER_TIMEOUT });
+    await expect(hint).toContainText('Commands run in /home/project;', { timeout: OWNER_TIMEOUT });
     await newShell(page);
     expect(await readActiveProjectText(page, 'project-proof.txt', OWNER_TIMEOUT)).toEqual({
       exists: true,
@@ -312,7 +314,7 @@ test.describe('ADR-0165 §9 — dirty-scratch switch dialog', () => {
     await expect(dialog).toHaveCount(0, { timeout: 10_000 });
 
     await expectProjectChipName(page, alphaName);
-    await expect(hint).toContainText('Commands run in /;', { timeout: OWNER_TIMEOUT });
+    await expect(hint).toContainText('Commands run in /home/project;', { timeout: OWNER_TIMEOUT });
     await expectSavedProject(page, gammaName);
     await newShell(page);
     expect(await readActiveProjectText(page, 'project-proof.txt', OWNER_TIMEOUT)).toEqual({
@@ -386,7 +388,7 @@ test.describe('ADR-0165 §6 — named-project Reset is a real project-tree resto
     const activeScratchProof = `active-scratch-${tag}`;
     await runTerminalLineSettled(page, `echo ${activeScratchProof} > active-scratch-proof.txt`);
     await resetProjectViaMenu(page, projName);
-    await expect(hint).toContainText('Commands run in /;', { timeout: 30_000 });
+    await expect(hint).toContainText('Commands run in /home/project;', { timeout: 30_000 });
     await newShell(page);
     expect(await readActiveProjectText(page, 'active-scratch-proof.txt', OWNER_TIMEOUT)).toEqual({
       exists: true,
@@ -396,7 +398,7 @@ test.describe('ADR-0165 §6 — named-project Reset is a real project-tree resto
     // Activate the reset target and inspect it through the public active-project
     // shell boundary. Reset must wipe the stray and restore the starter baseline.
     await switchToSavedProject(page, projName, { discardDirtyScratch: true });
-    await expect(hint).toContainText('Commands run in /;', { timeout: OWNER_TIMEOUT });
+    await expect(hint).toContainText('Commands run in /home/project;', { timeout: OWNER_TIMEOUT });
     await newShell(page);
     expect(await readActiveProjectText(page, 'stray.txt', OWNER_TIMEOUT)).toEqual({
       exists: false,

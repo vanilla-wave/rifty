@@ -43,7 +43,8 @@ parameter, no playground UI — is the agent's carrier (goal §Decisions).
    scratch container is tombstoned; re-seeding the scratch keeps its own;
    deleting a project deletes them.
 6. The Shell environment gets `HOME=/home/rifty` unless the seed sets it; a bare
-   `cd` goes there. `os.homedir()` returns `$HOME` and `os.tmpdir()` returns
+   `cd` goes there. The terminal state omits that login default while it keeps
+   its value, so a persisted state round-trips exactly (ADR-0278). `os.homedir()` returns `$HOME` and `os.tmpdir()` returns
    `$TMPDIR`/`$TMP`/`$TEMP` (trailing slash stripped) like Node, defaulting to
    `/home/rifty` and `/tmp`.
 7. Diagnostics translate owner paths to guest paths (`publicRoot/...`,

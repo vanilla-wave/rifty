@@ -21,7 +21,7 @@ test.describe('Terminal command blocks UX', () => {
       `.rf-terminal-slot[data-session-id="${shell.sessionId}"] [data-testid="terminal-mode-hint"]`,
     );
     await expect(modeHint).toContainText('Shell');
-    await expect(modeHint).toContainText('Commands run in /;');
+    await expect(modeHint).toContainText('Commands run in /home/project;');
   });
 
   test('terminal commands run without legacy command overlays', async ({ page }) => {
@@ -39,7 +39,7 @@ test.describe('Terminal command blocks UX', () => {
       page.locator(
         `.rf-terminal-slot[data-session-id="${shell.sessionId}"] [data-testid="terminal-mode-hint"]`,
       ),
-    ).toContainText('Commands run in /;');
+    ).toContainText('Commands run in /home/project;');
 
     await runTerminalLineSettled(
       page,

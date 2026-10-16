@@ -147,6 +147,16 @@ new Blob(['unread']).stream();
 `,
   },
   {
+    // clone() and new Request(request) keep a guest-stream body unheld (Node exits at once).
+    name: 'guest-stream-copies-hold-nothing',
+    source: `${report}const idle = () => new ReadableStream({ start() {} });
+new Response(idle()).clone().text().then(() => done('response-clone', 'settled'));
+const request = new Request('http://localhost/', { method: 'POST', body: idle(), duplex: 'half' });
+request.clone().text().then(() => done('request-clone', 'settled'));
+new Request(request).text().then(() => done('request-copy', 'settled'));
+`,
+  },
+  {
     name: 'blob-stream-async-iterator',
     source: `${report}(async () => {
   let total = 0;
