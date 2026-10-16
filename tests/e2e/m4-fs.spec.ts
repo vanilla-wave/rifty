@@ -22,14 +22,20 @@ test.describe('M4 — FileSystem', () => {
   test('mkdir recursive + ls', async ({ page }) => {
     await bootShell(page);
     await openShellTerminal(page);
-    await runTerminalLine(page, 'mkdir -p /a/b/c && echo L > /a/b/c/leaf.txt && ls /a/b/c');
+    await runTerminalLine(
+      page,
+      'mkdir -p /home/project/a/b/c && echo L > /home/project/a/b/c/leaf.txt && ls /home/project/a/b/c',
+    );
     await expectTerminalContains(page, 'leaf.txt');
   });
 
   test('wc reports file size', async ({ page }) => {
     await bootShell(page);
     await openShellTerminal(page);
-    await runTerminalLine(page, 'mkdir -p /t && printf abc > /t/x.txt && wc -c /t/x.txt');
-    await expectTerminalContains(page, /3\s+\/t\/x\.txt/);
+    await runTerminalLine(
+      page,
+      'mkdir -p /home/project/t && printf abc > /home/project/t/x.txt && wc -c /home/project/t/x.txt',
+    );
+    await expectTerminalContains(page, /3\s+\/home\/project\/t\/x\.txt/);
   });
 });

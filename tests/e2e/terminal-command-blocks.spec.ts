@@ -34,7 +34,7 @@ test.describe('Terminal command blocks UX', () => {
     await runTerminalLineSettled(page, 'pwd');
     const output = await terminalBuffer(page, shell);
     const pwdBlock = output.slice(output.lastIndexOf('> pwd'));
-    expect(pwdBlock).toMatch(/> pwd\r?\n\/\r?\n>\s*$/u);
+    expect(pwdBlock).toMatch(/> pwd\r?\n\/home\/project\r?\n>\s*$/u);
     await expect(
       page.locator(
         `.rf-terminal-slot[data-session-id="${shell.sessionId}"] [data-testid="terminal-mode-hint"]`,
@@ -43,12 +43,12 @@ test.describe('Terminal command blocks UX', () => {
 
     await runTerminalLineSettled(
       page,
-      'echo \'import fs from "node:fs"; console.log("CWD=" + process.cwd()); console.log("PKG_READ=" + (JSON.parse(fs.readFileSync("/package.json", "utf8")).private === true));\' > namespace-proof.mjs',
+      'echo \'import fs from "node:fs"; console.log("CWD=" + process.cwd()); console.log("PKG_READ=" + (JSON.parse(fs.readFileSync("/home/project/package.json", "utf8")).private === true));\' > namespace-proof.mjs',
     );
     await runTerminalLineSettled(page, 'node namespace-proof.mjs', 60_000);
     const nodeOutput = await terminalBuffer(page, shell);
     const nodeBlock = nodeOutput.slice(nodeOutput.lastIndexOf('> node namespace-proof.mjs'));
-    expect(nodeBlock).toMatch(/CWD=\/\r?\nPKG_READ=true/u);
+    expect(nodeBlock).toMatch(/CWD=\/home\/project\r?\nPKG_READ=true/u);
     expect(nodeBlock).not.toContain('/.rifty/workbench');
 
     await expect(page.locator('.rf-terminal-blockrail__item')).toHaveCount(0);
