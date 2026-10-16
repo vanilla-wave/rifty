@@ -61,7 +61,7 @@ unanswered (`STOP-1`): a ready goal carries no `owner: user` fog, its run is
 autonomous. FIT resumes when the answer arrives — here (§3) or at the next
 hand-off (`rifty-goal`); no merge is required in between (`PR-3`). A
 ready `goal.md` is amended in place (`RDY-6`). One `RDY-6` final written-result check in a
-fresh context on the actual final drafts (fit.md 8 for an epic); FIT/PICKUP
+fresh context on the actual final drafts (`docs/process/README.md` §FIT 8 for an epic); FIT/PICKUP
 reuse it only for an unchanged result. Item `draft → ready` stays with PICKUP
 (`RDY-1`). The driver delivers `docs/backlog/README.md` §Report before
 implementation; a build authorized in this session continues to PICKUP on

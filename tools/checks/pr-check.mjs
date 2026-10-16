@@ -122,11 +122,11 @@ export function mergeBase(cwd = process.cwd()) {
 }
 
 /** Changed paths of the working tree (tracked + untracked) vs the origin/main merge-base; null when unknown. */
-export function workingTreePaths(cwd = process.cwd()) {
+export function workingTreePaths(cwd = process.cwd(), base = mergeBase(cwd)) {
+  if (base === null) return null;
   const git = (/** @type {string[]} */ ...args) =>
     execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
   try {
-    const base = git('merge-base', 'origin/main', 'HEAD').trim();
     const tracked = git('diff', '--name-only', '--no-renames', '-z', base, '--')
       .split('\0')
       .filter(Boolean);
@@ -204,10 +204,10 @@ export const TASKS = [
 
 async function main() {
   const cwd = process.cwd();
-  const paths = workingTreePaths(cwd);
+  const base = mergeBase(cwd);
+  const paths = workingTreePaths(cwd, base);
   const all = process.argv.includes('--all');
   const diffClass = all ? 'full' : classifyDiff(paths);
-  const base = all ? null : mergeBase(cwd);
   const tasks = all
     ? selectTasks(TASKS, 'full')
     : scopeTasks(selectTasks(TASKS, diffClass), paths, base);
@@ -225,12 +225,14 @@ async function main() {
   console.log(`pr:check — ${tasks.length} checks, sequential; ${hostLoad()}`);
   if (diffClass === 'docs-only') {
     console.log(`  docs-only diff (${paths?.length ?? 0} paths): skipping ${skipped.join(', ')}`);
-  } else if (paths === null || base === null) {
+  } else if (all) {
+    console.log('  --all: full gate');
+  } else if (paths === null) {
     console.log('  no origin/main merge-base: full gate');
-  } else if (!all) {
+  } else {
     const parity = tasks.some((t) => t.name === 'test:parity');
     console.log(
-      `  diff-scoped (${paths.length} paths since ${base.slice(0, 12)}): test:run --changed (tests importing the changed files); test:parity ${parity ? 'inputs changed' : 'skipped — no runtime source or case changed'}; --all forces the full gate (CI runs it on every PR push)`,
+      `  diff-scoped (${paths.length} paths since ${base.slice(0, 12)}): test:run --changed (tests importing the changed files); test:parity ${parity ? 'inputs changed' : 'skipped — no runtime source or case changed'}; --all forces the full gate (CI runs it on every non-docs PR push)`,
     );
   }
   console.log('');

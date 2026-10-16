@@ -63,6 +63,7 @@ challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
      line is the Contract+RED verdict, copied verbatim:
      ready-verdict: <date> — Contract+RED @ <sha>
      re-cut: <date> — <what> — trace: none               (RDY-5)
-     Evidence blocks go to reference/<slug>-evidence.md, never here (RDY-4). -->
+     Evidence lives in the carrier and the verdict (REV-8); run state in the
+     ledger, or the PR body without a goal (RDY-4) — never here. -->
 
 <Every fork resolved, or linked to its ADR. No open "Decide X".>

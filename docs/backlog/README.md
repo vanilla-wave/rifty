@@ -115,7 +115,7 @@ probe existing for its technical half is not a reason to park it
 goal carries no `owner: user` fog, so its run is autonomous. Fog in a ready
 map is agent-owned — `<question> — owner: agent — <what settles it>`;
 `owner: user` lives only in a `draft` goal (unanswered at FIT) or mid-run
-(`STOP-4`). A rejected rival route is recorded checkable in goal `##
+(`STOP-1`). A rejected rival route is recorded checkable in goal `##
 Decisions`: `rejected route: <route> — violates <I#|Outcome clause>` — the
 clause a later agent cites instead of re-deriving the comparison. The first unit is the acceptance carrier (`docs/process/README.md` §FIT 5);
 later units are the walls running it exposes; a child whose contract depends

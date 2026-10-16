@@ -142,12 +142,14 @@ run); a surviving technical problem follows `STOP-3..4`, never a fake GREEN.
 
 ### RECHART — make the map match the run
 
-Immediately after a slice, an impasse or a fact that changes the route.
+Immediately after a slice, an impasse, a fact that changes the route, or the
+hand-off of a goal with no carrier.
 
 1. Record decisions and useful observations once in the ledger; history does
    not become an obligation because it was written down.
 2. Run the acceptance carrier on the landed tree. The next unit is the first
-   wall it hits; resolve known questions and dependencies on the way. Route
+   wall it hits; with no carrier yet (a goal fitted before carrier-first), the
+   carrier itself. Resolve known questions and dependencies on the way. Route
    verified work by `REV-12`; scope changes follow `RDY-6`.
 3. Required unfinished work stays linked to the goal with the next probe or
    design that can settle it; continue independent work. Revert unsafe partial
@@ -226,9 +228,7 @@ violation, and blocking on a demand no declared authority makes.
   `goal.md`, an edited ledger line, a user-traced row dropped or weakened
   without `fork:`). A sibling sweep, more RED outside the cited row, a stricter
   assertion or extra hardening is advice: file it as a concern naming the path
-  and the row it would protect, so reception reads it (`REV-12`);
-  `blockers.mjs` downgrades a blocker without such an authority, and reception
-  stays the check.
+  and the row it would protect, so reception reads it (`REV-12`).
 - **REV-3 Severity.** `blocker` = violates a cited authority or a traced
   obligation has no carrier → FIX in this slice before the verify pass.
   `concern` = advisory (weak evidence, deeper mutant, hardening, premise doubt,
@@ -257,14 +257,17 @@ violation, and blocking on a demand no declared authority makes.
   is a concern that goes to the user (`STOP-1`), never a blocker; a goal
   `rejected route:` line answers it by citation.
 - **REV-7 Design.** Repeat: the same fault class at one boundary after a fix,
-  or a review change adding a state owner → redesign/split
-  (`rules/fault-classes.md` §Class-kill), not another fix. External API:
+  or a review change adding a state owner → redesign/split at one chokepoint
+  (`rules/fault-classes.md` §Class-kill), never a bigger mechanism for the
+  same promise; when only a bigger one would hold it, trim the promise
+  (`RDY-5`; an `I#`/scenario row → a `STOP-1` line, the run continues). A
+  blocker, not a stall (`STOP-3`). External API:
   proxy/wrapper semantic copy requires an ADR + differential suite. Testing:
   the same scenario runs against reference and rifty; a fake cannot close
   acceptance. Approach cost: machinery the contract is deliverable without →
   blocker, ported/carried machinery included (a port re-states its forcing
   constraint); pure code shrinkage → goal residual or capture.
-- **REV-8 One review record, bound to the result.** The reviewer adds
+- **REV-8 One review record, bound to the result.** The driver adds
   `reviewed_sha` after a pass; the JSON is posted on the PR, referenced by the
   unit's `ready-verdict:` line or the ledger's `re-chart after …` line — the
   reference is not the proof. Evidence lives in the carrier and the verdict,
@@ -320,7 +323,8 @@ violation, and blocking on a demand no declared authority makes.
   `backlog:check` requires traces on ready items.
 - **RDY-4 Size.** A ready unit is one intent its `title` states in one
   sentence; two intents are two units (`RDY-5`). Run state never lives in the
-  contract: diagnoses and fork narratives go to the ledger; `## Decisions`
+  contract: diagnoses and fork narratives go to the ledger (no goal: the PR
+  body); `## Decisions`
   holds one-line records. Sufficient, not exhaustive: a clause the scenario
   does not need is a clause the reviewer will grade.
 - **RDY-5 Re-cut.** The agent may trim, split, merge, re-order or demote rows at
@@ -329,7 +333,7 @@ violation, and blocking on a demand no declared authority makes.
   already certified inherits: `ready-verdict: <date> — inherited from
   <predecessor> @ <sha>`). Dropping or weakening a row traced to `I#` or
   `scenario` is the user's (`STOP-1`): demote to `draft`, record the fork and
-  the row verbatim, ask via `rifty-refine`; the resolution lands as `re-cut:
+  the row verbatim, ask per `STOP-1`; the resolution lands as `re-cut:
   <date> — fork: <what> — trace: I#`. ADR-traced rows leave only with the ADR
   named. `check:contract-drift` enforces the records.
 - **RDY-6 Authority and amendments.** The user owns observable scope; the
@@ -374,8 +378,9 @@ violation, and blocking on a demand no declared authority makes.
   Process decisions land here + a CHANGELOG line naming what they overturn.
 - **DEC-2 Reconsidering.** A new decision or correction on a seam an ADR owns
   is a dated line under that ADR's `## Decisions` / `§Corrections`, edited in
-  place. Overturning an active ADR/dependency gets a critic (`DEC-5`) and a
-  superseding ADR naming the overturned decisions: all overturned → remove the
+  place; an ADR not yet on main is simply edited. Overturning an active
+  ADR/dependency gets a critic (`DEC-5`) and a superseding ADR naming the
+  overturned decisions: all overturned → remove the
   old ADR and add the old→new pointer in `docs/adr/README.md`; some → the old
   ADR stays active with a dated §Corrections note pointing at the successor.
 - **DEC-3 Confirm-first.** Only publish, spend, delete user data. Everything
@@ -406,10 +411,10 @@ violation, and blocking on a demand no declared authority makes.
   satisfy the letter of an invariant. A stop names what the user decides that
   the agent cannot; anything else is a status line.
 - **STOP-3 Stall.** A FIX blocker surviving a fix + verify pass unchanged
-  (same authority, same summary), or the same fault class at the same boundary
-  after a fix (`REV-7` Repeat), is a stall → `STOP-4`, never another fix.
+  (same authority, same summary) is a stall → `STOP-4`, never another fix.
   Passes are not counted; a new real defect at a verify pass is the review
-  doing its job. A blocker on a row the previous pass graded `pass` goes
+  doing its job, also of a recurring fault class (`REV-7` Repeat blocks the
+  mechanism, not the bug). A blocker on a row the previous pass graded `pass` goes
   through reception like any finding.
 - **STOP-4 Change the approach, keep the obligation.** Check the authority and
   diagnosis, trim unsupported demands, choose a materially different design or
@@ -441,12 +446,15 @@ violation, and blocking on a demand no declared authority makes.
   the baseline rule from git.
 - **PR-5** The user's requested packaging wins.
 - **PR-6 DoD.** `AGENTS.md` §DoD: `pnpm pr:check` (locally the test lanes
-  follow the diff since the origin/main merge-base; `--all` or CI runs the
-  full set on every PR push), real acceptance proof, root-cause repairs,
-  package CHANGELOGs. `check:pass-binding` runs after final review, before
-  merge and in ready-PR CI; it consumes the review, never turns a BLOCK into
-  PASS. Done = merged on a green PR CI at HEAD; `goal_complete` is set only
-  after CI is green.
+  follow the diff since the origin/main merge-base; `--all`, or CI on every
+  PR push that is not docs-only, runs the full set), real acceptance proof,
+  root-cause repairs, package CHANGELOGs. `check:pass-binding` runs after
+  final review, before merge and in ready-PR CI; it consumes the review, never
+  turns a BLOCK into PASS. A product/test commit after `reviewed_sha` (a
+  CI-red fix included) gets a verify pass and a re-bound verdict (`REV-8`).
+  Done = merged on a green PR CI at HEAD: before reporting done or merging,
+  the driver waits for `gh pr checks` at HEAD; a red lane → `rifty-fix`.
+  `goal_complete` is the CLOSE reviewer's end-to-end claim.
 
 ## Artifacts
 
@@ -462,8 +470,8 @@ observed baseline; required residuals block until proved or corrected.
 
 - `backlog:check`: schema, links, ready sections, trace, premise at pickup.
 - `check:contract-drift`: changes to accepted scope carry their decision record.
-- `tools/review/blockers.mjs`: the one verdict validator; coverage, authority
-  admissibility (`REV-2`), Fidelity rulings.
+- `tools/review/blockers.mjs`: the one verdict validator; coverage, a declared
+  authority on every blocker, Fidelity rulings.
 - `check:pass-binding`: the same validator plus the reviewed version at merge.
 - `refs:check`: durable documentation links.
 

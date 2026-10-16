@@ -54,8 +54,8 @@ One PR = one reviewable delivered behavior; rules `docs/process/README.md` §PR 
 - [ ] no unrecorded/misclassified residuals; active-goal residuals stay linked; report slice/goal status separately
 - [ ] implementation aligned with project goal
 - [ ] no machinery the contract is deliverable without (§Simplicity, `REV-7`)
-- [ ] `pnpm pr:check` pass — lanes follow the diff since the origin/main merge-base: a docs-only tree runs the doc gates; otherwise `test:run` covers the tests related to the changed files and `test:parity` runs only when its inputs changed (`--all` forces the full gate, which CI runs on every PR push); a `test:run` red reruns its failed files once in isolation and says so (time-outs counted; a failure that reproduces stays red)
-- [ ] merged only on a green PR CI at HEAD; bot and reviewer comments on the PR are `REV-12` observations
+- [ ] `pnpm pr:check` pass — lanes follow the diff since the origin/main merge-base: a docs-only tree runs the doc gates; otherwise `test:run` covers the tests related to the changed files and `test:parity` runs only when its inputs changed (`--all` forces the full gate, which CI runs on every non-docs PR push); a `test:run` red reruns its failed files once in isolation and says so (time-outs counted; a failure that reproduces stays red)
+- [ ] merged only on a green PR CI at HEAD (`gh pr checks`, not a local gate); bot and reviewer comments on the PR are `REV-12` observations
 - [ ] touches cache/persistence/network/concurrency → traced `## Fault matrix` rows covered by fault tests (`RDY-3`)
 - [ ] shipped capability carries observable acceptance proof (e2e/parity) in the same PR — source greps, fakes, and opt-in lanes do not close acceptance
 - [ ] `CHANGELOG.md` in affected packages

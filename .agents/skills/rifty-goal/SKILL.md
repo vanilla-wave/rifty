@@ -10,13 +10,14 @@ interview (`rifty-refine`), unplanned defects (`rifty-fix`), and intake
 
 Detect the mode from state. A whole-goal hand-off runs the README §Route loop
 — PICKUP → Contract+RED → IMPLEMENT → Final+GREEN → RECHART until the map is
-empty, then CLOSE — in this session (`DEC-5`), parking a `STOP-1` question on the map and continuing; the end of a stage is never the end of a turn; a re-entry reads the PR
+empty, then CLOSE, ending on `gh pr checks` green at HEAD (`PR-6`) — in this session (`DEC-5`), parking a `STOP-1` question on the map and continuing; the end of a stage is never the end of a turn; a re-entry reads the PR
 body and the ledger tail. A single-mode ask ("fit X",
 "re-chart", "close") runs that mode only:
 
 | State | Mode → procedure |
 |---|---|
 | No goal dir — a hand-off naming an outcome, or a legacy single-file epic — or a `draft` goal dir (e.g. left on an unanswered user question or a just-file) | FIT → `docs/process/README.md` §FIT |
+| Ready goal whose map has no acceptance carrier | RECHART → `docs/process/README.md` §RECHART 2 (the carrier is the next unit) |
 | Ready goal with an open frontier | PICKUP → `docs/process/README.md` §PICKUP |
 | A slice of this goal just landed (Final+GREEN PASS on the goal branch), a unit left the path (`STOP-4`), or new facts arrived | RECHART → `docs/process/README.md` §RECHART |
 | Map `## Items` empty and invariants provable | CLOSE → `docs/process/README.md` §CLOSE |

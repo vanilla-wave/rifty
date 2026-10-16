@@ -63,7 +63,7 @@ Index, not store: one line + link per entry; content lives on items/ledger.
      contract depends on an open question is not seeded. Don't pre-slice fog.
      A user-owned question is ASKED at FIT (README §FIT 3); unanswered →
      the goal stays draft, the question recorded here as owner: user. A ready
-     map is agent-owned; owner: user otherwise only mid-run (STOP-4). Split a
+     map is agent-owned; owner: user otherwise only mid-run (STOP-1). Split a
      mixed question by owner. -->
 
 - <question> — owner: agent — <what settles it: probe/spike/design>
