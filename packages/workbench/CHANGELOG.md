@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The install finalizer no longer prepares Vite (ADR-0533); installed Vite 7.3.6/8.0.16 chunks stay upstream bytes and a `/`-rooted project takes upstream Vite's own code paths there.
+
 - `publicProjectRoot` Workbench option (ADR-0531, default `/home/project`): the guest sees the project there, `/` is a synthetic root of the mount ancestors, and `/tmp` + `/home/rifty` are project-owned private mounts (`<container>/guest/{tmp,home}`) persisted with the project, carried by Save and excluded from the tree, snapshots and archives; `/` remains selectable; a `/`-rooted project carrying its own `tmp`/`home` fails `EEXIST` instead of being shadowed.
 
 - Node entry preparation and the no-COI toolchain worker no longer publish `__riftyTrackCliPromise`; installed Vite `cli.js` runs upstream bytes (ADR-0530). Baked snapshots re-baked: only `vite/dist/node/cli.js` and the install-artifact identity change.

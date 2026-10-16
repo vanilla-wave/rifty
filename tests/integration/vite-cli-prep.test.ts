@@ -10,10 +10,8 @@ import {
   readRuntimeEsbuild,
 } from '../../tools/shadow-registry/src/runtime/realm.ts';
 import {
-  planViteCliAcquisitionFiles,
   prepareViteBinSpawnRequest,
   prepareViteCli,
-  prepareViteCliAcquisitionFiles,
   viteCliMode,
   viteCliPreparationFromArgs,
 } from '../../tools/shadow-registry/src/runtime/vite-cli-prep.ts';
@@ -26,7 +24,6 @@ import { decideViteEsbuildRuntime } from '../../tools/shadow-registry/src/runtim
 
 const dec = new TextDecoder();
 const CLI_PATH = '/app/node_modules/vite/dist/node/cli.js';
-const CONFIG_PATH = '/app/node_modules/vite/dist/node/chunks/config.js';
 const VITE_PACKAGE_JSON = '/app/node_modules/vite/package.json';
 const VITE_BIN = '/app/node_modules/.bin/vite';
 
@@ -46,25 +43,8 @@ const CAC_CALL_SITE = [
   '}',
 ].join('\n');
 
-const CHOKIDAR_DIR_ENTRY_CALL_SITE = [
-  'const EMPTY_STR = "";',
-  'const ONE_DOT = ".";',
-  'const TWO_DOTS = "..";',
-  'class TestDirEntry {',
-  '  constructor() { this.items = new Set(); }',
-  '  add(item) {',
-  '    const { items } = this;',
-  '    if (!items) return;',
-  '    if (item !== ONE_DOT && item !== TWO_DOTS) items.add(item);',
-  '  }',
-  '}',
-  'globalThis.__riftyTestDirEntry = TestDirEntry;',
-  'function normalizedId(root, resolved) { return resolved.id.slice(root.length); }',
-].join('\n');
-
 interface TestGlobals {
   __riftyShadowRegistry?: { esbuild?: unknown };
-  __riftyTestDirEntry?: new () => { items: Set<string>; add(item: string): void };
 }
 const g = globalThis as TestGlobals;
 
@@ -75,21 +55,7 @@ function clearEsbuildRuntimeSlot(): void {
 function bootFs(files: Record<string, string> = {}): MemoryFsSync {
   const { vfs, fsSync } = createMemoryFs();
   setSyncMirror(fsSync, { async: vfs });
-  const fixture = { '/app/package.json': '{}', ...files };
-  for (const path of Object.keys(fixture)) {
-    const suffix = '/dist/node/cli.js';
-    if (!path.endsWith(suffix) || !path.includes('/node_modules/vite/')) continue;
-    const packageRoot = path.slice(0, -suffix.length);
-    const hasChunk = Object.keys(fixture).some((candidate) =>
-      candidate.startsWith(`${packageRoot}/dist/node/chunks/`),
-    );
-    if (!hasChunk) {
-      Object.assign(fixture, {
-        [`${packageRoot}/dist/node/chunks/config.js`]: CHOKIDAR_DIR_ENTRY_CALL_SITE,
-      });
-    }
-  }
-  fsSync.loadFixture(fixture);
+  fsSync.loadFixture({ '/app/package.json': '{}', ...files });
   return fsSync;
 }
 
@@ -107,17 +73,7 @@ function captureWritePaths(fsSync: MemoryFsSync): string[] {
   return writes;
 }
 
-function walkTree(fsSync: MemoryFsSync, dir: string, out: string[] = []): string[] {
-  for (const entry of fsSync.readdirSync(dir)) {
-    const path = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
-    out.push(path);
-    if (entry.isDirectory) walkTree(fsSync, path, out);
-  }
-  return out;
-}
-
 afterEach(() => {
-  g.__riftyTestDirEntry = undefined;
   resetSyncMirror();
 });
 
@@ -147,153 +103,24 @@ describe('viteCliPreparationFromArgs — executed entry authority', () => {
   });
 });
 
-describe('prepareViteCliAcquisitionFiles — upstream CLI bytes', () => {
+describe('vite-cli-prep module', () => {
   it('module parses and loads (a stray backtick in a template-literal comment breaks the worker fetch)', async () => {
     await expect(
       import('../../tools/shadow-registry/src/runtime/vite-cli-prep.ts'),
     ).resolves.toBeDefined();
   });
-
-  it('plans no change to the installed cli.js and leaves its bytes upstream', async () => {
-    const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    expect(planViteCliAcquisitionFiles('/app').map((change) => change.path)).toEqual([CONFIG_PATH]);
-    await prepareViteCliAcquisitionFiles('/app');
-    expect(readText(fsSync, CLI_PATH)).toBe(CAC_CALL_SITE);
-    expect(Reflect.has(globalThis, '__riftyTrackCliPromise')).toBe(false);
-  });
-
-  it('tolerates a project without a vite CLI file', async () => {
-    const fsSync = bootFs();
-    await prepareViteCliAcquisitionFiles('/app');
-    expect(fsSync.existsSync(CLI_PATH)).toBe(false);
-  });
-});
-
-describe('prepareViteCliAcquisitionFiles — rooted Chokidar catalog', () => {
-  it.each(['config.js', 'node.js'])(
-    'rejects the impossible empty self-entry in %s without dropping real root children',
-    async (bundle) => {
-      const fsSync = bootFs({
-        [CLI_PATH]: CAC_CALL_SITE,
-        [`/app/node_modules/vite/dist/node/chunks/${bundle}`]: CHOKIDAR_DIR_ENTRY_CALL_SITE,
-      });
-
-      await prepareViteCliAcquisitionFiles('/app');
-      const once = readText(fsSync, `/app/node_modules/vite/dist/node/chunks/${bundle}`);
-      await prepareViteCliAcquisitionFiles('/app');
-      expect(readText(fsSync, `/app/node_modules/vite/dist/node/chunks/${bundle}`)).toBe(once);
-      new Function(once)();
-
-      const DirEntry = g.__riftyTestDirEntry;
-      if (!DirEntry) throw new Error('fixture config.js did not register TestDirEntry');
-      const root = new DirEntry();
-      root.add('');
-      root.add('.');
-      root.add('..');
-      root.add('vite.config.js');
-
-      expect([...root.items]).toEqual(['vite.config.js']);
-    },
-  );
-
-  it('fails loudly when the bundled Chokidar anchor drifts', async () => {
-    bootFs({
-      [CLI_PATH]: CAC_CALL_SITE,
-      [CONFIG_PATH]: 'export const changedUpstreamShape = true;',
-    });
-
-    await expect(prepareViteCliAcquisitionFiles('/app')).rejects.toThrow(
-      /expected exactly one Chokidar DirEntry\.add anchor; found 0/,
-    );
-  });
-});
-
-it('trusted Vite entry refuses a tree whose URL preparation was lost', async () => {
-  const fs = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-  await prepareViteCliAcquisitionFiles('/app');
-  fs.writeFileSync(
-    CONFIG_PATH,
-    new TextEncoder().encode(
-      readText(fs, CONFIG_PATH).replace(
-        'resolved.id.slice(root === "/" ? 0 : root.length)',
-        'resolved.id.slice(root.length)',
-      ),
-    ),
-  );
-  await expect(
-    prepareViteCli({ root: '/app', executedBinPath: VITE_BIN, mode: 'info' }),
-  ).rejects.toThrow('vite root watcher/URL must be prepared by acquisition');
 });
 
 describe('prepareViteCli — trusted child preparation is read-only', () => {
-  it('performs zero VFS writes on the first child launch over a prepared trusted tree', async () => {
+  it('performs zero VFS writes and leaves installed bytes upstream on a child launch', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    await prepareViteCliAcquisitionFiles('/app');
-    const prepared = readText(fsSync, CLI_PATH);
     const writes = captureWritePaths(fsSync);
 
     await prepareVite('info');
 
     expect(writes).toEqual([]);
-    expect(readText(fsSync, CLI_PATH)).toBe(prepared);
-    expect(Reflect.has(globalThis, '__riftyTrackCliPromise')).toBe(false);
-  });
-
-  it('loud-rejects an unprepared trusted CLI without silently patching it', async () => {
-    const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    const writes = captureWritePaths(fsSync);
-
-    await expect(prepareVite('info')).rejects.toThrow(/before promotion/i);
-
-    expect(writes).toEqual([]);
     expect(readText(fsSync, CLI_PATH)).toBe(CAC_CALL_SITE);
-  });
-
-  it('loud-rejects a missing executed CLI without creating node_modules bytes', async () => {
-    const fsSync = bootFs();
-    const writes = captureWritePaths(fsSync);
-
-    await expect(prepareVite('info')).rejects.toThrow(/missing chunks directory/i);
-
-    expect(writes).toEqual([]);
-    expect(fsSync.existsSync(CLI_PATH)).toBe(false);
-  });
-});
-
-describe('prepareViteCliAcquisitionFiles — real Vite config ownership', () => {
-  it('leaves the preview command bytes upstream', async () => {
-    const oldPreviewNeedle = [
-      'configFile: options.config,',
-      '\t\t\tconfigLoader: options.configLoader,',
-      '\t\t\tlogLevel: options.logLevel,',
-      '\t\t\tmode: options.mode,',
-      '\t\t\tbuild: { outDir: options.outDir },',
-      '\t\t\tpreview: {',
-      '\t\t\t\tport: options.port,',
-      '\t\t\t\tstrictPort: options.strictPort,',
-      '\t\t\t\thost: options.host,',
-      '\t\t\t\topen: options.open',
-      '\t\t\t}',
-    ].join('\n');
-    const fsSync = bootFs({ [CLI_PATH]: `${CAC_CALL_SITE}\n${oldPreviewNeedle}` });
-    await prepareViteCliAcquisitionFiles('/app');
-    expect(readText(fsSync, CLI_PATH)).toBe(`${CAC_CALL_SITE}\n${oldPreviewNeedle}`);
-  });
-
-  it('does not pre-scan or reject project-root config', async () => {
-    bootFs({
-      [CLI_PATH]: CAC_CALL_SITE,
-      '/app/vite.config.ts': 'export default { preview: { cors: true } };\n',
-    });
-    await expect(prepareViteCliAcquisitionFiles('/app')).resolves.toBeUndefined();
-  });
-
-  it('never writes the retired hidden wrapper in any mode', async () => {
-    const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
-    const before = walkTree(fsSync, '/').sort();
-    await prepareViteCliAcquisitionFiles('/app');
-    expect(walkTree(fsSync, '/').sort()).toEqual(before);
-    expect(fsSync.existsSync('/app/.rifty/vite-cli.config.mjs')).toBe(false);
+    expect(Reflect.has(globalThis, '__riftyTrackCliPromise')).toBe(false);
   });
 });
 
@@ -460,10 +287,6 @@ describe('Vite esbuild runtime startup policy', () => {
     expect(
       decideViteEsbuildRuntime({ fs: fsSync, packageRoot: '/workspace/node_modules/vite' }),
     ).toBe('start');
-    await prepareViteCliAcquisitionFiles('/workspace/packages/app', bin);
-    expect(readText(fsSync, '/workspace/node_modules/vite/dist/node/chunks/config.js')).toContain(
-      'item !== EMPTY_STR',
-    );
     expect(readText(fsSync, hoistedCli)).toBe(CAC_CALL_SITE);
   });
 
@@ -472,7 +295,6 @@ describe('Vite esbuild runtime startup policy', () => {
       [CLI_PATH]: CAC_CALL_SITE,
       [VITE_PACKAGE_JSON]: manifest('7.3.6'),
     });
-    await prepareViteCliAcquisitionFiles('/app');
     const outer = Object.freeze({ version: '0.28.0' });
     publishRuntimeEsbuild(outer);
     const savedFetch = globalThis.fetch;
@@ -507,7 +329,6 @@ describe('Vite esbuild runtime startup policy', () => {
       expect(decideViteEsbuildRuntime({ fs: fsSync, packageRoot: '/app/node_modules/vite' })).toBe(
         'skip-rolldown',
       );
-      await prepareViteCliAcquisitionFiles('/app');
       await prepareVite('build');
       expect(fetchCalls).toBe(0);
       expect(
@@ -519,7 +340,7 @@ describe('Vite esbuild runtime startup policy', () => {
     }
   });
 
-  it('info mode validates prepared files but never consults or starts the esbuild runtime', async () => {
+  it('info mode never consults or starts the esbuild runtime', async () => {
     const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
     const savedFetch = globalThis.fetch;
     let fetchCalls = 0;
@@ -529,7 +350,6 @@ describe('Vite esbuild runtime startup policy', () => {
     };
     clearEsbuildRuntimeSlot();
     try {
-      await prepareViteCliAcquisitionFiles('/app');
       await prepareVite('info');
       expect(readText(fsSync, CLI_PATH)).toBe(CAC_CALL_SITE);
       expect(fetchCalls).toBe(0);
@@ -551,7 +371,6 @@ describe('Vite esbuild runtime startup policy', () => {
       return Promise.reject(new Error('version gate must run first'));
     };
     try {
-      await prepareViteCliAcquisitionFiles('/app');
       await expect(prepareVite('dev')).rejects.toThrow('supports exact Vite 7.3.6; executed 7.3.5');
       expect(fetchCalls).toBe(0);
     } finally {
@@ -585,7 +404,6 @@ describe('prepareViteCli — mode-independent esbuild admission fault (ADR-0308)
     clearEsbuildRuntimeSlot();
 
     try {
-      await prepareViteCliAcquisitionFiles('/app');
       await expect(prepareVite('build')).rejects.toThrow('vite.esbuild.runtime');
       expect(fetchCalls).toBe(0);
       expect(

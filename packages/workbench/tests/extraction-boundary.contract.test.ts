@@ -297,10 +297,10 @@ async function runtimeBearingSourcesOutsideBuild(): Promise<readonly string[]> {
 }
 
 describe('@riftydev/workbench extraction boundary', () => {
-  it('pins the retained 224-file move, including all 107 tests and three fixtures', () => {
-    expect(EXTRACTION_MAP).toHaveLength(224);
-    expect(new Set(EXTRACTION_MAP.map(([source]) => source)).size).toBe(224);
-    expect(new Set(EXTRACTION_MAP.map(([, target]) => target)).size).toBe(224);
+  it('pins the retained 223-file move, including all 107 tests and three fixtures', () => {
+    expect(EXTRACTION_MAP).toHaveLength(223);
+    expect(new Set(EXTRACTION_MAP.map(([source]) => source)).size).toBe(223);
+    expect(new Set(EXTRACTION_MAP.map(([, target]) => target)).size).toBe(223);
     expect(
       EXTRACTION_MAP.filter(([, target]) =>
         /(?:[\\/]test-fixtures[\\/]|(?:\.(?:contract\.)?(?:fault\.)?test|\.test-fixture)\.[cm]?[jt]sx?$)/u.test(

@@ -19,11 +19,6 @@ import {
   applyEmnapiCoreOrphanedReferencePatch,
   emnapiCoreOrphanedReferencePatchPolicy,
 } from '../src/runtime/emnapi-core-install-policy.ts';
-import {
-  applyViteRootUrlPatch,
-  applyViteRootWatchPatch,
-  viteRootWatchPatchPolicy,
-} from '../src/runtime/vite-cli-install-policy.ts';
 import { assertSnapshotArtifactCurrent } from '../src/snapshot-artifact-check.ts';
 
 const publicDir = fileURLToPath(new URL('../../../apps/playground/public/', import.meta.url));
@@ -72,7 +67,7 @@ async function main(): Promise<void> {
       deps,
       shims: internalsShims,
       canonicalize: serializeDepSnapshot,
-      validateInstallFiles: proveViteCliPatchInput,
+      validateInstallFiles: proveEmnapiCorePatchInput,
     });
     try {
       await verifyDepSnapshotReplayCache(snapshot);
@@ -87,37 +82,6 @@ async function main(): Promise<void> {
 }
 
 const decoder = new TextDecoder();
-function proveViteCliPatchInput(files: ReadonlyMap<string, Uint8Array>): void {
-  proveEmnapiCorePatchInput(files);
-  const chunkPaths = [...files.keys()].filter(
-    (path) =>
-      (path.startsWith('vite/dist/node/chunks/') ||
-        path.includes('/node_modules/vite/dist/node/chunks/')) &&
-      path.endsWith('.js'),
-  );
-  const candidates = chunkPaths.filter((path) => {
-    const source = decoder.decode(files.get(path));
-    return (
-      source.includes(viteRootWatchPatchPolicy.needle) ||
-      source.includes(viteRootWatchPatchPolicy.replacement)
-    );
-  });
-  if (candidates.length !== 1) {
-    throw new Error(
-      `snapshot must contain one Vite root watcher input; found ${candidates.length}`,
-    );
-  }
-  for (const path of candidates) {
-    try {
-      applyViteRootUrlPatch(applyViteRootWatchPatch(decoder.decode(files.get(path))));
-    } catch (error) {
-      throw new Error(`${path} is not patchable by the current Vite root watcher transform`, {
-        cause: error,
-      });
-    }
-  }
-}
-
 function proveEmnapiCorePatchInput(files: ReadonlyMap<string, Uint8Array>): void {
   const manifests = [...files.keys()].filter((path) => path.endsWith('@emnapi/core/package.json'));
   for (const manifestPath of manifests) {

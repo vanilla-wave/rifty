@@ -9,7 +9,6 @@ import {
   emnapiCoreOrphanedReferencePatchApplied,
   emnapiCoreOrphanedReferencePatchPolicy,
 } from '../../tools/shadow-registry/src/runtime/emnapi-core-install-policy.ts';
-import { viteRootWatchPatchApplied } from '../../tools/shadow-registry/src/runtime/vite-cli-install-policy.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -78,18 +77,16 @@ describe('finalizePackageInstallFiles', () => {
     ]);
   });
 
-  it('patches Vite at an arbitrary non-preset project root before promotion can follow', async () => {
+  it('leaves installed Vite bytes upstream at an arbitrary non-preset project root', async () => {
     const { vfs, fsSync } = createMemoryFs();
     setSyncMirror(fsSync, { async: vfs });
     const paths = seedViteFiles(fsSync, '/scratch/nested');
 
     await finalizePackageInstallFiles({ root: '/scratch/nested' });
 
-    // ADR-0530: the installed CLI stays upstream bytes.
+    // ADR-0530: the CLI; ADR-0533: the bundled Chokidar/URL chunk.
     expect(dec.decode(fsSync.readFileBytesSync(paths.cli))).toBe(CLI_SOURCE);
-    expect(viteRootWatchPatchApplied(dec.decode(fsSync.readFileBytesSync(paths.watcher)))).toBe(
-      true,
-    );
+    expect(dec.decode(fsSync.readFileBytesSync(paths.watcher))).toBe(ROOT_WATCH_SOURCE);
   });
 
   it('generic finalization leaves Vite bytes untouched', () => {
@@ -101,12 +98,9 @@ describe('finalizePackageInstallFiles', () => {
 
     expect(dec.decode(fsSync.readFileBytesSync(paths.cli))).toBe(CLI_SOURCE);
     expect(dec.decode(fsSync.readFileBytesSync(paths.watcher))).toBe(ROOT_WATCH_SOURCE);
-    expect(viteRootWatchPatchApplied(dec.decode(fsSync.readFileBytesSync(paths.watcher)))).toBe(
-      false,
-    );
   });
 
-  it('seeds template files before preparing the installed Vite CLI', async () => {
+  it('seeds template files before finalizing the installed tree', async () => {
     const { vfs, fsSync } = createMemoryFs();
     setSyncMirror(fsSync, { async: vfs });
     let paths: { cli: string; watcher: string } | undefined;
@@ -119,11 +113,8 @@ describe('finalizePackageInstallFiles', () => {
     });
 
     if (!paths) throw new Error('seedTemplateFiles was not called');
-    // ADR-0530: the installed CLI stays upstream bytes.
     expect(dec.decode(fsSync.readFileBytesSync(paths.cli))).toBe(CLI_SOURCE);
-    expect(viteRootWatchPatchApplied(dec.decode(fsSync.readFileBytesSync(paths.watcher)))).toBe(
-      true,
-    );
+    expect(dec.decode(fsSync.readFileBytesSync(paths.watcher))).toBe(ROOT_WATCH_SOURCE);
   });
 
   it('patches every pinned @emnapi/core 1.10 copy at its real hoisted or nested path', async () => {
