@@ -22,13 +22,14 @@
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
   # Monaco's worker bundle is memory-hungry under Vite/Rollup.
   NODE_OPTIONS = "--max-old-space-size=4096"
-  # Production registry proxy is Yandex Cloud Compute; local dev keeps the Vite
-  # `/npm-registry` proxy from apps/playground/vite.config.ts.
-  VITE_RIFTY_REGISTRY_URL = "https://registry.rifty.dev/npm-registry"
-  # Opt-in fast-install resolver (ADR-0182). Deployed on Yandex Cloud; the
-  # playground seam (glue/resolver-config.ts) reads it → from-scratch presets
-  # install via eddy with auto-fallback. Local dev leaves it unset (eddy OFF).
-  VITE_RIFTY_RESOLVER_URL = "https://eddy.rifty.dev"
+  # Registry base stays the relative `/npm-registry` default (ADR-0528): the
+  # same-origin route below proxies it on Netlify, mirroring the Vite dev
+  # proxy in apps/playground/vite.config.ts. The Yandex Cloud proxy/CDN
+  # (`registry.rifty.dev`, ADR-0163) is out of service since 2026-10 and is
+  # no longer a production dependency. VITE_RIFTY_RESOLVER_URL stays unset:
+  # eddy (ADR-0182) ran on the same dead infrastructure; a configured dead
+  # resolver costs every from-scratch install its header-stall timeout before
+  # the standard path runs, so opt-in is OFF until a live resolver exists.
   # The workspace build includes the landing package even though this Netlify
   # site publishes only playground/dist. Keep its required public URL contract
   # explicit so the shared build cannot emit false SEO or navigation links.
@@ -44,6 +45,23 @@
     Cross-Origin-Opener-Policy = "same-origin"
     Cross-Origin-Embedder-Policy = "credentialless"
     Cross-Origin-Resource-Policy = "cross-origin"
+
+# Same-origin npm registry route (ADR-0528; mirror of
+# apps/playground/public/_redirects, which Netlify processes first — while that
+# file ships, its own catch-all answers before any rule here). A 200
+# rewrite to an external URL is a streaming proxy on Netlify's CDN: the browser
+# never talks to registry.npmjs.org, so the cross-origin-isolated page needs no
+# CORS/CORP from upstream. Must precede the SPA fallback or the shell would
+# answer `/npm-registry/*` with HTML (the ADR-0133 incident).
+[[redirects]]
+  from = "/npm-registry/*"
+  to = "https://registry.npmjs.org/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/npm-registry"
+  to = "https://registry.npmjs.org/"
+  status = 200
 
 # Self-hosted fonts and the SW are real files in dist and are served directly;
 # any other unmatched path falls back to the single-page app shell. (Netlify

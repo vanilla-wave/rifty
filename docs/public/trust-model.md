@@ -51,8 +51,9 @@ URL via env-config (D-004); standard `npm install` is untouched and is the alway
   doing so would re-introduce the metadata waterfall eddy exists to remove. Fast mode therefore
   trusts the eddy operator **exactly as you already trust a registry mirror / proxy** (the
   ADR-0163 boundary). On rifty.dev, eddy resolves directly against
-  `https://registry.npmjs.org` while the browser standard install path still uses the
-  CORS-clean `registry.rifty.dev` proxy; both are operator-controlled routing choices, not a
+  `https://registry.npmjs.org` while the browser standard install path uses the same-origin
+  `/npm-registry` proxy route (Netlify rewrite, ADR-0528; eddy itself is OFF in the production
+  build while its host is down); both are operator-controlled routing choices, not a
   client-side source-of-truth recheck. A dishonest eddy could serve a
   different-but-internally-consistent closure; it cannot serve corrupted bytes (integrity catches
   that), and it cannot make an install silently wrong-and-undetected any more than a malicious

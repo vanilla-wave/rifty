@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 - `snapshots:bake --replay-committed-lockfile` re-bakes over each committed snapshot's lockfile pins and replay cache (fails if the pins change), so a transform change does not re-resolve ranges against today's registry.
+- Production installs route same-origin through a Netlify `/npm-registry/*` proxy rewrite (ADR-0528); the dead `registry.rifty.dev` / `eddy.rifty.dev` origins are no longer configured, eddy fast install is OFF in production.
+- Pin Vite 7 starters to admitted 7.3.6; fresh installs no longer select unsupported patch releases. Rebake Vite/TypeScript snapshots.
+- Retain the rebaked Vite graph's original npm registry fixtures; permanent closure guard catches missing packed-browser inputs.
 
 - Chat renders the agent transcript model: retain tools at budget exit, show live shell output/cancelled state and native continuation/capability notices.
 

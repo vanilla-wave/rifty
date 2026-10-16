@@ -8,6 +8,15 @@ Date: 2026-06
 > running Caddy as a streaming reverse proxy at `https://registry.rifty.dev`.
 > Netlify stays the static deploy target for the landing/playground only.
 
+## Corrections (active)
+
+- 2026-10-14 — ADR-0528 supersedes decisions 1 and 4 and the TL;DR clause
+  "Netlify stays the static deploy target only": the Yandex VMs went
+  unreachable; production registry traffic is a same-origin Netlify proxy
+  rewrite (`/npm-registry/*` → `registry.npmjs.org`), the deploy smoke targets
+  the deployed playground origin. Decisions 2, 3 and 5 and the checked-in
+  Yandex config stand as the dedicated-proxy runbook.
+
 ## Context
 
 - The playground is still cross-origin-isolated (ADR-0002), so registry

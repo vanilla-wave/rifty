@@ -31,6 +31,7 @@ const PACKAGE_JSON = `${JSON.stringify(
     version: '0.0.0',
     type: 'module',
     dependencies: DEPENDENCIES,
+    overrides: { '@gravity-ui/icons': DEPENDENCIES['@gravity-ui/icons'] },
   },
   null,
   2,
@@ -53,7 +54,7 @@ const FILES = Object.freeze({
 });
 
 const CANONICAL_SCENARIO = Object.freeze({
-  id: 'child-fs-hot-path-v1',
+  id: 'child-fs-hot-path-v2',
   root: '/bench',
   dependencies: DEPENDENCIES,
   files: FILES,
@@ -115,7 +116,7 @@ async function subject() {
 }
 
 describe('child fs canonical scenario and artifact authority', () => {
-  it('pins real Vite 7.3.6 output for the exact canonical dependency set', () => {
+  it('preserves historical v1 real Vite 7.3.6 output for the direct dependency set', () => {
     expect(VITE_GOLDEN).toEqual({
       schemaVersion: 1,
       scenarioId: 'child-fs-hot-path-v1',
@@ -134,6 +135,28 @@ describe('child fs canonical scenario and artifact authority', () => {
       scenarioDigest: sha256(CANONICAL_SCENARIO),
       dependencyDigest: sha256(DEPENDENCIES),
     });
+  });
+
+  it('keeps v1 evidence distinct from current v2 bytes and rejects a changed legacy dependency digest', async () => {
+    const [{ childFsScenarioIdentity }, { buildChildFsArtifact, validateChildFsArtifact }] =
+      await subject();
+    const legacyScenarioDigest = '559e5e226348c484d542f197b442d3826e11d9e19c206d028c978d96a4595d4c';
+    const artifact = buildChildFsArtifact({
+      generatedAt: '2026-10-13T00:00:00.000Z',
+      gitSha: 'c'.repeat(40),
+      browserVersion: 'Chromium 148.0.7778.96',
+      runs: 1,
+      samples: completeSamples(1),
+    });
+    expect(artifact.scenarioDigest).toBe(childFsScenarioIdentity().scenarioDigest);
+    expect(artifact.scenarioDigest).not.toBe(legacyScenarioDigest);
+    expect(() =>
+      validateChildFsArtifact({
+        ...artifact,
+        scenarioDigest: legacyScenarioDigest,
+        dependencyDigest: 'e'.repeat(64),
+      }),
+    ).toThrow();
   });
 
   it('derives raw anchor facts and preserves every unrounded sample/provenance field', async () => {
