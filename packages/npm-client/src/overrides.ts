@@ -10,6 +10,7 @@
  * target-string parsing.
  */
 import { bakedOverrides } from '@riftydev/shadow-registry';
+import { parseNpmAlias } from './npm-alias.ts';
 import { isLooseSemverRange } from './semver-loose-range.ts';
 
 export interface OverrideMap {
@@ -68,7 +69,7 @@ function userOverride(
   // npm keeps the edge's own spec for '' and '*' (Arborist override-set/edge).
   if (value === undefined || value === '' || value === '*') return null;
   // `npm:` aliases and the rifty `name@range` spelling name a package.
-  if (value.startsWith('npm:') || value.lastIndexOf('@') > 0) return { target: parseTarget(value) };
+  if (/^npm:/i.test(value) || value.lastIndexOf('@') > 0) return { target: parseTarget(value) };
   const spec = value.trim();
   if (spec === 'latest' || isLooseSemverRange(spec)) return { spec };
   return { target: parseTarget(value) };
@@ -79,9 +80,22 @@ function parseTarget(target: string): { name: string; range: string | null } {
   //   "bcryptjs"             → name=bcryptjs, range=null (keeps the edge range)
   //   "bcryptjs@2.x"         → name=bcryptjs, range="2.x"
   //   "npm:bcryptjs@2.x"     → npm alias form, same as above
-  let str = target;
-  if (str.startsWith('npm:')) str = str.slice(4);
+  const alias = parseNpmAlias(target);
+  if (alias) return alias;
+  const str = target;
   const at = str.lastIndexOf('@');
   if (at <= 0) return { name: str, range: null };
   return { name: str.slice(0, at), range: str.slice(at + 1) };
+}
+
+/** npm aliases override the edge spec while preserving its install name. */
+export function hasNpmAliasOverride(
+  name: string,
+  parent: string | undefined,
+  overrides: OverrideMap = {},
+): boolean {
+  return (
+    parseNpmAlias(overrides[parent ? `${parent}>${name}` : name] ?? overrides[name] ?? null) !==
+    null
+  );
 }

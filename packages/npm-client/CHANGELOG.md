@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Preserve native same-version alias source names/cache keys on no-args replay, including alias→plain manifests; named installs use selected metadata SHA-1 shasum or exact-target pinned proofs (ADR-0527).
+
+- Install root/transitive/scoped npm aliases under alias paths; preserve target manifests, lock identities, override placement and Eddy cache acquisition (ADR-0526).
+- Verify legacy SHA-1 lockfile SRI with WebCrypto; reject corrupted archives/cache bytes before install.
+
 - Preserve named root update intent across lock reuse; expose actual skipped optional resolution facts for native saves (ADR-0504).
 
 - Match native npm root dev/optional/prod precedence in direct and Eddy installs; normalize optional duplicates in root lock dependency maps.

@@ -543,13 +543,13 @@ function analyzeLockfileRequest(
       recordOwnership(registryOwnsIncrementalMiss(decision, ctx) ? 'metadata' : 'broken');
       return;
     }
-    const { effectiveName } = resolveEffectivePackageRequest(
+    const { effectiveName, installName = effectiveName } = resolveEffectivePackageRequest(
       name,
       range,
       ctx.parentName,
       overrides,
     );
-    const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+    const hit = pinnedEntryForParent(lockfile, installName, ctx.parentLockfilePath);
     const recipe = builtinRecipeForRequest(
       name,
       range,
@@ -564,11 +564,12 @@ function analyzeLockfileRequest(
       recordOwnership('broken');
       return;
     }
-    assertShimSupported(effectiveName, hit.entry.version);
+    const registryName = hit.entry.name ?? installName;
+    assertShimSupported(registryName, hit.entry.version);
     if (reachablePaths.has(hit.installPath)) return;
     reachablePaths.add(hit.installPath);
     const childContext: ResolveContext = {
-      parentName: effectiveName,
+      parentName: installName,
       parentInstallPath: hit.installPath,
       parentLockfilePath: hit.installPath,
       parentOrigin: 'lockfile',
@@ -579,7 +580,7 @@ function analyzeLockfileRequest(
       visit(childName, childRange, childContext);
     }
     for (const [companionName, companionRange] of Object.entries(
-      companionRequestsFor(effectiveName, hit.entry.version),
+      companionRequestsFor(registryName, hit.entry.version),
     )) {
       visit(companionName, companionRange, {
         ...childContext,

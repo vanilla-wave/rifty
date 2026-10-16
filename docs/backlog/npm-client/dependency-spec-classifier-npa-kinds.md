@@ -1,9 +1,9 @@
 ---
 area: npm-client
 status: draft
-title: Dependency and override spec classification follows npm-package-arg for case-insensitive `npm:`, tarball files and `@scope/pkg` directories
+title: Dependency and override spec classification follows npm-package-arg for tarball files and `@scope/pkg` directories
 created: 2026-09-24
-why: `unsupportedDependencySpec` checks only lowercase `npm:` and has no tarball-file or `@scope/…` directory reading, so specs npm reads as alias/file/directory reach the registry path and fail as a misleading `No matching version`/404 instead of the named non-registry ceiling
+why: `unsupportedDependencySpec` has no tarball-file or `@scope/…` directory reading, so specs npm reads as file/directory reach the registry path and fail as a misleading `No matching version`/404 instead of the named non-registry ceiling
 sources: [docs/adr/npm-client/0451-user-override-values-follow-npm-version-and-range-reading.md, docs/backlog/npm-client/reference/overrides-bare-version-spec-evidence.md, docs/backlog/npm-client/tar-symlink-and-nonregistry-dep-tracking.md, docs/public/compat/package-tooling.md]
 code: [packages/npm-client/src/installer-request.ts, packages/npm-client/src/overrides.ts]
 ---
@@ -43,12 +43,18 @@ matches no version against it, `8.0.16` included); non-version names 404.
 `@scope/pkg` as an override value is also a rifty-dialect question (`npm-client/overrides-rifty-dialect-vs-npm`); as a dependency
 spec it has no rifty meaning.
 
+## Alias repair
+
+2026-10-13: ADR-0526 and `tests/integration/npm-alias.parity.test.ts` resolve
+case-insensitive npm aliases, target identity and alias placement. Historical
+classifier probe above remains evidence; file/directory rows remain open.
+
 ## Next
 
 Owner npm-client. Trigger: a manifest using one of these spellings, or
 the next dependency-spec unit (`npm-client/tar-symlink-and-nonregistry-dep-tracking`
 owns the supported-install contract). Parity first: npa type per spelling
-→ rifty's named `npm-client.dependency-spec.<npm-alias|file>` ceiling
+→ rifty's named `npm-client.dependency-spec.file` ceiling
 before any registry read. In `overrides.ts` `userOverride` the npa-kind
 check runs before `isLooseSemverRange`: npa tests file extensions before
 semver (`npa.js` `resolve`: `isFileType` ahead of `fromRegistry`).

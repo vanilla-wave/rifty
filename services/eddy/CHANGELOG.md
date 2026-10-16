@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Harvest npm alias tarballs by registry target identity; preserve alias paths in bundle locks.
+
+- Retain verified legacy SHA-1 tarballs in the shared cache; use npm-client's algorithm type.
+
 ### Fixed
 
 - **Eddy has a bounded process memory envelope.** Shared packuments now use an

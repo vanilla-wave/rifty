@@ -112,7 +112,9 @@ export async function resolveBundle(
   const tarballs: Array<{ entry: EddyBundleTarballEntry; bytes: Uint8Array }> = [];
   for (const pkg of result.packages) {
     throwIfAborted(deps.signal);
-    const key = `${pkg.name}@${pkg.version}`;
+    const name =
+      result.lockfile.packages[pkg.installPath ?? `node_modules/${pkg.name}`]?.name ?? pkg.name;
+    const key = `${name}@${pkg.version}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const integrity = (pkg as { integrity?: string }).integrity;
@@ -123,7 +125,7 @@ export async function resolveBundle(
         message: `no integrity for ${key}`,
       };
     }
-    const bytes = await tarballCache.get(pkg.name, pkg.version, integrity);
+    const bytes = await tarballCache.get(name, pkg.version, integrity);
     throwIfAborted(deps.signal);
     if (!bytes) {
       return {
@@ -132,8 +134,8 @@ export async function resolveBundle(
         message: `tarball absent from cache for ${key}`,
       };
     }
-    const file = `tarballs/${pkg.name.replace(/\//g, '__')}-${pkg.version}.tgz`;
-    const entry: EddyBundleTarballEntry = { file, name: pkg.name, version: pkg.version, integrity };
+    const file = `tarballs/${name.replace(/\//g, '__')}-${pkg.version}.tgz`;
+    const entry: EddyBundleTarballEntry = { file, name, version: pkg.version, integrity };
     entries.push(entry);
     tarballs.push({ entry, bytes });
   }
