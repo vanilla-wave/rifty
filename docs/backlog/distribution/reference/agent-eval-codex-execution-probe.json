@@ -1,0 +1,113 @@
+{
+  "version": "codex-cli 0.159.3",
+  "node": "v24.16.0",
+  "command": "codex exec --ignore-user-config --ignore-rules --ephemeral --json --skip-git-repo-check --approve-for-me -m gpt-6.1-sol -c model_reasoning_effort=low -C <fresh /tmp workspace> <sum prompt>",
+  "exitCode": 0,
+  "events": [
+    {
+      "type": "thread.started",
+      "thread_id": "01a10ba7-a8e2-7880-82ea-b897f47716b3"
+    },
+    {
+      "type": "turn.started"
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "item_0",
+        "type": "agent_message",
+        "text": "\u0421\u043e\u0437\u0434\u0430\u043c sum.mjs \u0438 \u043f\u0440\u043e\u0432\u0435\u0440\u044e \u0447\u0435\u0440\u0435\u0437 Node.\n"
+      }
+    },
+    {
+      "type": "item.started",
+      "item": {
+        "id": "item_1",
+        "type": "command_execution",
+        "command": "/bin/zsh -lc 'pwd; git status --short; git remote -v; ls -a'",
+        "aggregated_output": "",
+        "exit_code": null,
+        "status": "in_progress"
+      }
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "item_1",
+        "type": "command_execution",
+        "command": "/bin/zsh -lc 'pwd; git status --short; git remote -v; ls -a'",
+        "aggregated_output": "/private/tmp/rifty-pr341-codex-probe\nfatal: not a git repository (or any of the parent directories): .git\nfatal: not a git repository (or any of the parent directories): .git\n.\n..\nevents.jsonl\nstderr.log\n",
+        "exit_code": 0,
+        "status": "completed"
+      }
+    },
+    {
+      "type": "item.started",
+      "item": {
+        "id": "item_2",
+        "type": "file_change",
+        "changes": [
+          {
+            "path": "/tmp/rifty-pr341-codex-probe/sum.mjs",
+            "kind": "add"
+          }
+        ],
+        "status": "in_progress"
+      }
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "item_2",
+        "type": "file_change",
+        "changes": [
+          {
+            "path": "/tmp/rifty-pr341-codex-probe/sum.mjs",
+            "kind": "add"
+          }
+        ],
+        "status": "completed"
+      }
+    },
+    {
+      "type": "item.started",
+      "item": {
+        "id": "item_3",
+        "type": "command_execution",
+        "command": "/bin/zsh -lc \"node --input-type=module -e 'import { sum } from \\\"./sum.mjs\\\"; import assert from \\\"node:assert/strict\\\"; assert.equal(sum(2, 3), 5); console.log(\\\"sum(2,3) = 5\\\");'\"",
+        "aggregated_output": "",
+        "exit_code": null,
+        "status": "in_progress"
+      }
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "item_3",
+        "type": "command_execution",
+        "command": "/bin/zsh -lc \"node --input-type=module -e 'import { sum } from \\\"./sum.mjs\\\"; import assert from \\\"node:assert/strict\\\"; assert.equal(sum(2, 3), 5); console.log(\\\"sum(2,3) = 5\\\");'\"",
+        "aggregated_output": "sum(2,3) = 5\n",
+        "exit_code": 0,
+        "status": "completed"
+      }
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "item_4",
+        "type": "agent_message",
+        "text": "\u0421\u043e\u0437\u0434\u0430\u043d sum.mjs \u0441 \u044d\u043a\u0441\u043f\u043e\u0440\u0442\u043e\u043c sum(a,b). \u041f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043e Node: sum(2,3) === 5. \u041e\u0441\u0442\u0430\u0442\u043e\u043a: \u043d\u0435\u0442."
+      }
+    },
+    {
+      "type": "turn.completed",
+      "usage": {
+        "input_tokens": 51043,
+        "cached_input_tokens": 41216,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 249,
+        "reasoning_output_tokens": 0
+      }
+    }
+  ]
+}

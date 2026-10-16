@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Agent coding comparison lands as text core only (ADR-0532): npm-client accepts SHA-1 lock integrity and installs `npm:` aliases with real-npm parity (ADR-0526/0527); the four-lane `tools/agent-bench` runner, Codex adapter, versioned corpus and judges; eval-v18 result 96 trials / 64 PASS / 32 FAIL classified in `tools/agent-bench/reports/summaries/2026-10-15-eval-v18-corrected/`. Campaign binaries, historical v1–v17 archives and proof archives are not committed; details come from a fresh run. Findings captured as backlog drafts (ALS across `await`, Svelte HMR blank preview, import-toast timeout, judge presentation limits).
+- Review CLI validates retained verdicts against their reviewed Git contract; changed or retired current documents no longer substitute authority. Missing reviewed history stays explicit.
+
 - Production npm registry route survives the Yandex Cloud outage (ADR-0528): `play.rifty.dev/npm-registry/*` is a same-origin Netlify 200 rewrite to `registry.npmjs.org` (`_redirects` + `netlify.toml`, before the SPA fallback); `VITE_RIFTY_REGISTRY_URL` / `VITE_RIFTY_RESOLVER_URL` leave `netlify.toml` (eddy OFF); deploy smoke targets the deployed origin and the eddy smoke steps are removed. Slower (no CDN tier, 26 s proxy cap), never broken. Restore fork: `docs/backlog/distribution/restore-dedicated-registry-proxy-and-eddy.md`.
 
 - Process: guest-package adaptations carry class + authority + loud anchor (`AGENTS.md` §Fidelity, `docs/process/rules/fault-classes.md` §Guest-package adaptations); a rifty-gap-compensating patch ships only as declared interim debt (linked platform item or ADR + kill condition). Overturns nothing recorded; adds a declaration duty on ADR-0384's inventory, its Decision untouched. Refine evidence: `docs/backlog/runtime-js/reference/guest-package-patches-refine-evidence-2026-10-15.md`.
