@@ -21,7 +21,7 @@
  * transport that keeps rifty-hosted dev servers reachable across realms.
  */
 
-import { EventEmitter } from '@riftydev/io';
+import { EventEmitter, openHostBroadcastChannel } from '@riftydev/io';
 import { channelNameFor, portChannelNameFor } from './channel.ts';
 import { CloseEventCtor } from './close-event.ts';
 import { State, type WsMessage, isControlOpcode, messageDataForBinaryType } from './in-process.ts';
@@ -107,7 +107,7 @@ export class BridgedWebSocketServer extends EventEmitter {
 
   constructor(public readonly url: string) {
     super();
-    this.channel = new BroadcastChannel(channelNameFor(url));
+    this.channel = openHostBroadcastChannel(channelNameFor(url));
     this.channel.addEventListener('message', this.onMessage);
   }
 
@@ -215,7 +215,7 @@ export class BridgedWebSocket extends EventTarget {
     this.timeoutMs = options.connectTimeoutMs ?? 1000;
     this.cid = nextCid();
     for (const channelName of new Set([channelNameFor(url), portChannelNameFor(url)])) {
-      const channel = new BroadcastChannel(channelName);
+      const channel = openHostBroadcastChannel(channelName);
       channel.addEventListener('message', this.onMessage);
       this.channels.push(channel);
     }
@@ -425,4 +425,4 @@ export function createCrossRealmBridge(): {
   return { WebSocket: BridgedWebSocket, WebSocketServer: BridgedWebSocketServer };
 }
 
-export { channelNameFor, portChannelNameFor } from './channel.ts';
+export { channelNameFor, openHostBroadcastChannel, portChannelNameFor } from './channel.ts';

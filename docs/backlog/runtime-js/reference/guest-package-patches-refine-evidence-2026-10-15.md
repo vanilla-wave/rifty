@@ -261,3 +261,97 @@ resolve into it and do not exist; `process.env.HOME` is unset.
   dedup row note. Noted for pickup: child 1's ADR re-decides add-on-seam vs
   overturn-some for ADR-0280 at non-default values; "no playground UI" is
   user-observable (reported).
+
+## Item 2 oracle — failing config on real Node + Vite 7.3.6 (2026-10-16)
+
+`npm install vite@7.3.6` in `/tmp/vite736-oracle` (`"type": "module"`), `vite.config.js`
+= `throw new Error('rifty-config-boom');`, `node node_modules/vite/bin/vite.js build`,
+Node v24.16.0: exit 1, stdout empty, stderr:
+
+```
+failed to load config from /private/tmp/vite736-oracle/vite.config.js
+error during build:
+Error: rifty-config-boom
+    at file:///private/tmp/vite736-oracle/node_modules/.vite-temp/vite.config.js.timestamp-…mjs:2:7
+```
+
+Upstream `vite@8.0.16` (`npm pack`, integrity `sha512-h9bXPmJichP5fLmVQo3PyaGSDE2n3aPuomeAlVRm0JLmt4rY6zmPKd59HYI4LNW8oTK7tlTsuC7l/m7awx9Jcw==`):
+`package/dist/node/cli.js` sha256 `369e1007819411176548d14afe9635e02d31d59941c91fb0a8a34f48ef0a2c41`.
+
+## Location carriers — why not `tree/.rifty` (2026-10-16, `7b0595c24`)
+
+- `packages/workbench/src/glue/vfs-snapshot-port.ts:27`: the owner file-tree
+  snapshot skips only `node_modules`, `.git`, `dist` — a `tree/.rifty/` store
+  would be walked into every page snapshot.
+- `packages/workbench/src/workbench/project-file-boundary.ts:100`: a public Files
+  path whose first segment is `.rifty` is rejected (`Invalid project path`), so a
+  Files `readdir('/')` that met `tree/.rifty` would fail instead of hiding it.
+- `packages/workbench/src/workers/playground-project-authority.ts:825`: Save's
+  convert copy drops `tree/.rifty/` — a home stored there would be lost on Save,
+  where the sibling `<container>/guest/` is copied explicitly (ADR-0531 §5).
+
+## Goal records (CLOSE 2026-10-16, PR #374)
+
+Both goals were refined together here and delivered in one PR (user
+packaging). Goal and child contracts are removed at close; these lines, the
+ADRs and the verdicts below are the record.
+
+### honest-guest-package-adaptations
+
+- I1 — ADR-0529: exact-by-construction holds only (Blob/File reads, the
+  `blob.stream()` pull, every Body consumer except over a guest-stream body,
+  WebAssembly compile/instantiate, SubtleCrypto, `WebSocket` until `close`,
+  `BroadcastChannel` until `close()` with Node's `ref()`/`unref()`; rifty's own
+  channels open the native constructor). Proof:
+  `tests/browser-unit/host-async-keepalive.spec.ts` (live Node 24.16.0 parity +
+  host-task-count row). Declared gaps (user amend 2026-10-16): native-internal
+  body reads → goal `epics/node-fetch-classes-in-guest`; `navigator.locks` →
+  `runtime-js/navigator-locks-node-lifetime`. Verdict:
+  `docs/backlog/runtime-js/reference/keepalive-host-async-node-carriers-final-green.json`
+  (round 8; round 9 re-checked the host-constructor seam, concern-only).
+- I2 — ADR-0530 (+ §Corrections): installed Vite `cli.js` is upstream bytes;
+  the hook had masked a platform gap — a late exit-signal rejection ended the
+  next invocation of a reused no-COI process — fixed in runtime-js, not by the
+  hook. Proof: `tests/browser-unit/vite-cli-upstream-bytes.spec.ts`,
+  `tests/no-coi/no-coi-pi-agent.spec.ts`,
+  `packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts`. Verdicts:
+  `docs/backlog/npm-client/reference/vite-cli-action-keepalive-hook-removal-final-green.json`,
+  `docs/backlog/npm-client/reference/vite-cli-hook-stale-exit-fix-final-green.json`.
+- I3 — classified inventory:
+  `docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md`
+  §Finite inventory (ADR-0533 deleted the root policies; ADR-0534 declares
+  `NAPI_RS_FORCE_WASI`). Verdict:
+  `docs/backlog/npm-client/reference/guest-package-adaptation-inventory-classes-final-green.json`.
+  Routed residuals: `npm-client/bcrypt-substitution-install`,
+  `npm-client/napi-rs-force-wasi-launch-env`,
+  `npm-client/emnapi-orphaned-reference-version-coverage`,
+  `toolchain-build/lightningcss-compat-matrix-page`.
+
+### project-location-independence
+
+- I1/I2/I4 — ADR-0531 (+ notes on ADR-0278/0280): the project at
+  `publicProjectRoot` (default `/home/project`), project-owned `/tmp` and
+  `/home/rifty`, `/` selectable. Proof: `tests/browser-unit/project-location.spec.ts`
+  (rows 1-11), `tests/browser-unit/workbench-playground-companion.spec.ts`,
+  `packages/shell/tests/mv.test.ts`, the guest-path e2e sweep. Verdict:
+  `docs/backlog/distribution/reference/home-project-default-and-project-owned-tmp-home-final-green.json`.
+- I3 — ADR-0533 (ADR-0433 removed): Vite runs upstream bytes at every root; a
+  `/`-rooted project takes upstream's code paths (run 5 URL split, run 6
+  watcher restarts: `docs/backlog/npm-client/reference/vite-at-root-watcher-oracle-2026-10-16.md`).
+  Proof: `tests/browser-unit/vite-at-root.spec.ts`. Verdict:
+  `docs/backlog/npm-client/reference/vite-root-policies-removal-node-exact-at-root-final-green.json`.
+
+Deferred, outside both goals (owner: agent via `rifty-refine` at the user's
+next pick; trigger as listed):
+
+- `epics/node-fetch-classes-in-guest` — FIT with the user (draft goal); kills the
+  ADR-0529 §4 body-read gap.
+- `runtime-js/navigator-locks-node-lifetime` — a program whose last work is a
+  lock request; or the fetch-classes goal's sweep.
+- `runtime-js/broadcast-channel-guest-scope` — first parity row (two processes,
+  one channel name).
+- `npm-client/bcrypt-substitution-install` — `rifty-fix` (observed, compat ❌).
+- `npm-client/napi-rs-force-wasi-launch-env` — the ADR-0534 kill probe.
+- `runtime-js/fetch-keepalive-response-clone-lifecycle` (ADR-0158 lock split),
+  `distribution/build-module-count-pins-over-live-transitives`,
+  `npm-client/vite-7-3-7-from-scratch-esbuild-refusal` — existing drafts.

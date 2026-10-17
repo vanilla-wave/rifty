@@ -75,3 +75,4 @@ export {
   synthesizePreviewUrl,
   parsePreviewPath,
 } from './preview-protocol.ts';
+export { HOST_BROADCAST_CHANNEL, openHostBroadcastChannel } from './host-broadcast-channel.ts';

@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+- `os.homedir()` keeps an explicitly empty `HOME` (`''`), as Node; `os.tmpdir()` still falls through empty `TMPDIR`/`TMP`/`TEMP`.
+
+- `os.userInfo().homedir` is the account home `/home/rifty` regardless of `$HOME`, as Node (ADR-0531); stale exit-signal rejections recorded before a reused process's reset are dropped too.
+
+- An exit signal from an earlier invocation of a reused process (no-COI) no longer ends the current one when its late `unhandledrejection` arrives: after a failed `vite build`, the next build runs (ADR-0530 correction).
+
+- Guest location (ADR-0531): `process.cwd()`, module paths and diagnostics use the public project root (default `/home/project`); `os.tmpdir()`/`os.homedir()` follow `TMPDIR`/`HOME` as Node (default `/tmp`, `/home/rifty`), both existing and writable; a cross-mount rename fails `EXDEV`.
+
+- **Breaking:** `trackKeepalivePromise` is no longer exported (ADR-0530): its only consumer was the removed Vite CAC hook; detached work keeps the loop through its own counted handles.
+
+- `installHostAsyncKeepalive()` (ADR-0529): a pending Blob/File body read, `fs.openAsBlob` result read, `WebAssembly.compile`/`instantiate`, `SubtleCrypto` call or in-guest `Response`/`Request` Body consumer (clones and `Response.json()` included) holds the child realm until it settles, a global `WebSocket` until its `close`, a `BroadcastChannel` until `close()` (Node's `ref()`/`unref()` added) — such programs no longer exit silently before printing Node's result. Guest-stream bodies and unread `blob.stream()` hold nothing; constructor identity and method names stay Node's. Declared gaps: native-internal body stream reads, `navigator.locks`.
+
 - Carry the sandbox registry connection on command requests (toolchain protocol v6). Error cause projection avoids guest accessors, bounds prototype inspection and retains native DOMException details; failed serialization no longer strands runBin on a cause getter.
 
 - Forward native startup/snapshot progress with existing peer/request guards; distinguish observed OPFS contention under the host deadline and retain native causes (ADR-0486).

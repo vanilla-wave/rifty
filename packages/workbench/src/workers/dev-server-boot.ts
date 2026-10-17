@@ -58,8 +58,8 @@ async function bootNodeServer(
   };
   (globalThis as { console: unknown }).console = new Console(termWriter, termWriter);
 
-  const projectEntryPath = cfg.root === '/' ? cfg.entryPath : cfg.entryPath.slice(cfg.root.length);
-  log(`[workbench/worker] starting server ${projectEntryPath} on port ${cfg.port}…\n`);
+  // `cfg` carries guest paths (ADR-0531): the entry as `pwd`/diagnostics name it.
+  log(`[workbench/worker] starting server ${cfg.entryPath} on port ${cfg.port}…\n`);
   await loader.import(cfg.entryPath, `${cfg.root}/__entry__.mjs`);
   await waitForListeningPort(cfg.port, 10_000);
   log(`[workbench/worker] server is listening on internal port ${cfg.port}\n`);

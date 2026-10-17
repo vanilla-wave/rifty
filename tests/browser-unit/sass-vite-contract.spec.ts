@@ -194,8 +194,8 @@ function directCjsContractRunner(probeBundle: string): string {
   return `${probeBundle}
 const fs = require('node:fs');
 const cjs = require('sass-embedded');
-const compilerPath = '/.sass-compiler.scss';
-const compilerUrl = 'file:///.sass-compiler.scss';
+const compilerPath = '/home/project/.sass-compiler.scss';
+const compilerUrl = 'file:///home/project/.sass-compiler.scss';
 
 void (async () => {
   const outputPath = process.argv[2];
@@ -224,8 +224,8 @@ ${probeBundle}
 const require = createRequire(import.meta.url);
 const cjs = require('sass-embedded');
 const esm = await import('sass-embedded');
-const compilerPath = '/.sass-compiler.scss';
-const compilerUrl = 'file:///.sass-compiler.scss';
+const compilerPath = '/home/project/.sass-compiler.scss';
+const compilerUrl = 'file:///home/project/.sass-compiler.scss';
 const outputPath = process.argv[2];
 if (!outputPath) throw new Error('missing Sass ESM contract output path');
 const transcript = await RiftySassContractProbe.probeSassContract(
@@ -369,7 +369,7 @@ async function readText(page: Page, path: string): Promise<string> {
 }
 
 async function inspectSassTree(page: Page): Promise<SassTreeEvidence> {
-  const guestOutputPath = '/.sass-tree-evidence.json';
+  const guestOutputPath = '/home/project/.sass-tree-evidence.json';
   const ownerOutputPath = '/scratch/.sass-tree-evidence.json';
   const inspected = await execLine(page, `node .inspect-sass-tree.cjs ${guestOutputPath}`);
   expect(inspected.exit, inspected.out).toBe(0);

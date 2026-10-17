@@ -45,6 +45,7 @@ function envelope(
     readonly terminal?: unknown;
     readonly previewScope?: unknown;
     readonly remoteFsRoot?: unknown;
+    readonly publicRoot?: unknown;
     readonly runtimeBindings?: unknown;
   } = {},
 ): unknown {
@@ -59,6 +60,9 @@ function envelope(
         : {}),
       ...(Object.prototype.hasOwnProperty.call(input, 'remoteFsRoot')
         ? { remoteFsRoot: input.remoteFsRoot }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(input, 'publicRoot')
+        ? { publicRoot: input.publicRoot }
         : {}),
       ...(Object.prototype.hasOwnProperty.call(input, 'runtimeBindings')
         ? { runtimeBindings: input.runtimeBindings }
@@ -79,10 +83,12 @@ describe('dev-server entry bootstrap', () => {
       seedFiles: { '/server.mjs': 'export {}' },
     };
 
-    expect(resolveDevServerChildConfig(envelope({ cfg, remoteFsRoot }))).toMatchObject({
-      cfg,
-      remoteFsRoot,
-    });
+    expect(
+      resolveDevServerChildConfig(envelope({ cfg, remoteFsRoot, publicRoot: '/' })),
+    ).toMatchObject({ cfg, remoteFsRoot, publicRoot: '/' });
+    expect(() => resolveDevServerChildConfig(envelope({ cfg, remoteFsRoot }))).toThrow(
+      /publicRoot must accompany remoteFsRoot/,
+    );
   });
 
   it('preserves omitted SQLite in the dev-server host snapshot', () => {

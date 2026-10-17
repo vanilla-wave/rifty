@@ -6,6 +6,7 @@ import {
   handleRealmUncaughtError,
   handleRealmUnhandledRejection,
   resetKeepalive,
+  takeUnhandledRejection,
 } from '../internal/event-loop-keepalive.ts';
 import { installNodeProcessShim } from '../ipc/install-process.ts';
 import { setActiveNodeProcessBootstrap } from './process-bootstrap-identity.ts';
@@ -273,5 +274,80 @@ describe('in-process process without a control port (ADR-0445)', () => {
     resetNodeProcessExit(process);
 
     await expect(awaitDrain()).resolves.toBeUndefined();
+  });
+});
+
+// Fault row (stale-state): an async caller of exit() rejects with the exit signal,
+// and Chromium reports that rejection late. On a reused no-COI process it can land
+// after the next invocation began; it must not end that invocation (Node's exit()
+// never rejects a caller).
+describe('stale exit signal on a reused process', () => {
+  it('ignores an earlier invocation exit signal and keeps the current one', async () => {
+    const { process, frames } = processWithControl();
+    let stale: unknown;
+    try {
+      process.exit(1);
+    } catch (signal) {
+      stale = signal;
+    }
+    await tick();
+    resetKeepalive();
+    resetNodeProcessExit(process);
+    frames.length = 0;
+
+    const promise = Promise.reject(stale);
+    promise.catch(() => {});
+    expect(handleRealmUnhandledRejection(stale, promise)).toBe(true);
+    await tick();
+    expect(frames).toEqual([]);
+    await expect(awaitDrain({ capMs: 1_000 })).resolves.toBeUndefined();
+
+    let current: unknown;
+    try {
+      process.exit(4);
+    } catch (signal) {
+      current = signal;
+    }
+    const pending = Promise.reject(current);
+    pending.catch(() => {});
+    handleRealmUnhandledRejection(current, pending);
+    await expect(awaitDrain({ capMs: 1_000 })).rejects.toMatchObject({ exitCode: 4 });
+  });
+
+  it('drops an earlier invocation exit signal recorded before the reset', async () => {
+    const { process } = processWithControl();
+    let stale: unknown;
+    try {
+      process.exit(1);
+    } catch (signal) {
+      stale = signal;
+    }
+    const promise = Promise.reject(stale);
+    promise.catch(() => {});
+    // Late report lands after the run ended, before the next invocation resets.
+    handleRealmUnhandledRejection(stale, promise);
+    await tick();
+    resetNodeProcessExit(process);
+
+    expect(takeUnhandledRejection()).toBeNull();
+    handleRealmUnhandledRejection(stale, promise);
+    await expect(awaitDrain({ capMs: 1_000 })).resolves.toBeUndefined();
+  });
+
+  it('the drain itself skips an exit signal recorded before the reset', async () => {
+    const { process } = processWithControl();
+    let stale: unknown;
+    try {
+      process.exit(1);
+    } catch (signal) {
+      stale = signal;
+    }
+    const promise = Promise.reject(stale);
+    promise.catch(() => {});
+    handleRealmUnhandledRejection(stale, promise);
+    await tick();
+    resetNodeProcessExit(process);
+
+    await expect(awaitDrain({ capMs: 1_000 })).resolves.toBeUndefined();
   });
 });

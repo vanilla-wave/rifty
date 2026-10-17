@@ -4,7 +4,7 @@ import { builtinShadowSubstitutionCatalog } from './internal/index.ts';
 
 describe('shadow-registry', () => {
   it('bakedOverrides contains the bcrypt → bcryptjs entry', () => {
-    expect(bakedOverrides.bcrypt).toBe('bcryptjs');
+    expect(bakedOverrides.bcrypt).toBe('bcryptjs@3.0.3');
   });
 
   it('derives the exact esbuild registry twin without the legacy internal shim', () => {
@@ -34,7 +34,7 @@ describe('shadow-registry', () => {
       ),
     );
 
-    expect(bakedOverrides).toEqual({ bcrypt: 'bcryptjs', ...registryRedirects });
+    expect(bakedOverrides).toEqual({ bcrypt: 'bcryptjs@3.0.3', ...registryRedirects });
   });
 
   it('internalsShims are keyed by installed trigger with package-relative file paths', () => {

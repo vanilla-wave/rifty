@@ -27,6 +27,7 @@ import {
   DevServerRunError,
   type SupervisedDevServerHandle,
 } from './dev-server-controller.ts';
+import type { GuestRoots } from './guest-layout.ts';
 import type { NodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import {
   type ReserveOwnerChildAdmission,
@@ -37,7 +38,7 @@ import {
 export interface DevServerChildSpawnParams extends ChildTerminalContext {
   readonly cfg: NodeServerPackageConfig;
   readonly env: Readonly<Record<string, string>>;
-  readonly remoteFsRoot?: string;
+  readonly guestRoots?: GuestRoots;
   readonly previewScope?: string;
 }
 
@@ -48,12 +49,12 @@ export function buildDevServerChildSpawnSpec(
   nodeWorkerRuntime: NodeWorkerRuntimeConfig,
   runtimeBindings: readonly NodeEntryRuntimeBinding[] = [],
 ): SpawnWorkerSpec {
-  const projectedBindings = projectOwnerChildRuntimeBindings(runtimeBindings, params.remoteFsRoot);
+  const projectedBindings = projectOwnerChildRuntimeBindings(runtimeBindings, params.guestRoots);
   const entry = buildDevServerChildEntry(devServerWorkerUrl, {
     nodeWorkerRuntime,
     cfg: params.cfg,
     terminal: childTerminalBootstrap(params),
-    ...(params.remoteFsRoot === undefined ? {} : { remoteFsRoot: params.remoteFsRoot }),
+    ...(params.guestRoots ?? {}),
     ...(params.previewScope === undefined ? {} : { previewScope: params.previewScope }),
     ...(projectedBindings.length === 0 ? {} : { runtimeBindings: projectedBindings }),
   });

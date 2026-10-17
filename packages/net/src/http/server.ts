@@ -17,7 +17,7 @@
  * preview `BroadcastChannel` (`cross-realm/preview-port.ts`, ADR-0180).
  */
 
-import { Buffer, EventEmitter, NotImplementedError } from '@riftydev/io';
+import { Buffer, EventEmitter, NotImplementedError, openHostBroadcastChannel } from '@riftydev/io';
 import { claimPort, releasePort } from '../cross-realm/port-claim.ts';
 import { dispatchCrossRealmLoopback } from '../cross-realm/preview-port.ts';
 import {
@@ -197,7 +197,7 @@ export class HttpServer extends EventEmitter {
 
   private listenForWebSocketUpgrades(port: number): void {
     if (typeof BroadcastChannel === 'undefined') return;
-    const channel = new BroadcastChannel(portChannelNameForPort(port));
+    const channel = openHostBroadcastChannel(portChannelNameForPort(port));
     channel.addEventListener('message', this.onWebSocketBridgeMessage);
     this.upgradeChannels.push(channel);
   }
@@ -704,8 +704,8 @@ function openWebSocketClientUpgrade(opts: {
   }
   const protocols = splitHeaderList(headerValue(opts.headers, 'sec-websocket-protocol'));
   const origin = headerValue(opts.headers, 'origin');
-  const channels = [...new Set([channelNameFor(wsUrl), portChannelNameFor(wsUrl)])].map(
-    (name) => new BroadcastChannel(name),
+  const channels = [...new Set([channelNameFor(wsUrl), portChannelNameFor(wsUrl)])].map((name) =>
+    openHostBroadcastChannel(name),
   );
   let activeChannel: BroadcastChannel | null = null;
   let opened = false;

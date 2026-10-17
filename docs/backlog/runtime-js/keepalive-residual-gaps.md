@@ -1,7 +1,7 @@
 ---
 area: runtime-js
 status: draft
-title: Event-loop keepalive — detached fetch + nested-spawn backstop SHIPPED (ADR-0158); residual = depth-2 end-to-end drain guard, blocked on nested node-spawn reachability (host-async carriers: see keepalive-host-async-node-carriers)
+title: Event-loop keepalive — detached fetch + nested-spawn backstop SHIPPED (ADR-0158); residual = depth-2 end-to-end drain guard, blocked on nested node-spawn reachability (host-async carriers SHIPPED: ADR-0529)
 created: 2026-06-20
 why: ADR-0152 §1 counts a narrow handle set; gap-d (detached fetch uncounted) and gap-e (dispatcher backstop counted) are now closed by ADR-0158. The only residual is verifying the gap-e fix END-TO-END at recursion depth ≥ 2, which is unreachable today (execSync of a node command is EUNSUPPORTED).
 user_story: As a Node program detaching a `fetch()` after top-level (`fetch(u).then(r=>r.text()).then(write)`) in a run-to-completion child, I want the realm to stay alive until the response settles (Node parity).
@@ -33,7 +33,7 @@ The gap-e mechanism is proven by the unit guard (backstop is uncounted at any de
 **Corrected (2026-10-15):** "no behavioral gap remains" was false — host-task-async
 Node APIs (`buffer.Blob` reads, `fs.openAsBlob`, `WebAssembly.compile`, `crypto.subtle`)
 hold no ref and are reaped silently; Node baseline + rifty probes in
-`reference/guest-package-patches-refine-evidence-2026-10-15.md` §Probe 2/3; tracked by
-`runtime-js/keepalive-host-async-node-carriers` (epic `honest-guest-package-adaptations`).
+`reference/guest-package-patches-refine-evidence-2026-10-15.md` §Probe 2/3; closed by
+ADR-0529 (`installHostAsyncKeepalive`, browser-unit `host-async-keepalive.spec.ts`).
 
 Related: ADR-0152 and package-tooling e2e `tests/e2e/owner-shell-prettier-eslint.spec.ts`.

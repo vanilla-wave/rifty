@@ -27,6 +27,7 @@ export const FS_ERRNO: Record<string, { errno: number; description: string }> = 
   ENOTDIR: { errno: -20, description: 'not a directory' },
   ENOTEMPTY: { errno: -39, description: 'directory not empty' },
   EPERM: { errno: -1, description: 'operation not permitted' },
+  EXDEV: { errno: -18, description: 'cross-device link not permitted' },
 };
 
 // Syscalls Node renders WITHOUT a path (fd-level ops + opendir). Enforced

@@ -3,6 +3,7 @@ import type { CommandContext, ProcessExit } from '@riftydev/shell';
 import type { BinExecutorDeps, BinSpawnRequest } from '../glue/bin-executor.ts';
 import type { OwnerPtyRunAdmission } from '../glue/pty-protocol.ts';
 import { type DevServerController, runDevServerShellCommand } from './dev-server-controller.ts';
+import type { GuestRoots } from './guest-layout.ts';
 import type { NodeRunHooks } from './owner-child-node-executor.ts';
 import {
   HOST_PREVIEW_ORIGIN,
@@ -110,13 +111,13 @@ export function createNodePreviewRunHooks(options: {
   readonly cwd: string;
   readonly sid: string;
   readonly previewScope: string;
-  readonly remoteFsRoot?: string;
+  readonly guestRoots?: GuestRoots;
 }): NodeRunHooks {
   const origin = options.captureOrigin();
   return {
     sid: options.sid,
     previewScope: options.previewScope,
-    ...(options.remoteFsRoot === undefined ? {} : { remoteFsRoot: options.remoteFsRoot }),
+    ...(options.guestRoots === undefined ? {} : { guestRoots: options.guestRoots }),
     onListening: (sid, pid, ports, previewScope) =>
       options.previews.addNode(sid, ports, previewScope ?? options.previewScope, {
         pid,

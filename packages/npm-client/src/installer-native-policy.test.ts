@@ -190,13 +190,13 @@ describe('install — native-dependency policy (ADR-0051)', () => {
     // `bcrypt` is in bakedOverrides → bcryptjs; the native bcrypt is never even
     // fetched (the override redirects before the manifest read). bcryptjs is
     // pure-JS (no cpu) and installs cleanly.
-    // The baked `bcrypt → bcryptjs` override carries no range, so the request
-    // range is reused — use `*` so it matches the vendored bcryptjs version.
-    const registry = new FakeRegistry(db([await entry('bcryptjs', '2.4.3')]));
+    // The baked override pins `bcryptjs@3.0.3`: a current `bcrypt` range
+    // (bcryptjs has no 5.x) still resolves the pinned target.
+    const registry = new FakeRegistry(db([await entry('bcryptjs', '3.0.3')]));
     const result = await install(
       'root',
       '1.0.0',
-      { bcrypt: '*' },
+      { bcrypt: '^5.1.1' },
       { vfs: new MemoryVfs(), cwd: '/app', registry },
     );
     const names = result.packages.map((p) => p.name);

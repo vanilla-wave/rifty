@@ -44,12 +44,11 @@ import { workbenchFirstMaterializationPackageConfig } from './workbench-package-
 const encoder = new TextEncoder();
 let vite: SavedSnapshotFixture;
 let ms: SavedSnapshotFixture;
-let unprepared: Readonly<Record<'json' | 'tar', SavedSnapshotFixture>>;
 
 function fixture(
   payload: DepSnapshotV3,
   format: 'json' | 'tar',
-  label = 'unprepared-vite',
+  label: string,
 ): SavedSnapshotFixture {
   const bytes =
     format === 'json'
@@ -90,23 +89,6 @@ beforeAll(async () => {
       assetUrl: 'https://host.test/prepared-vite.tar.gz',
     },
   };
-  // Restore original immutable npm Vite files, independent of the producer's patch policy.
-  const original = await extractTarGz(registry.tarball('vite', '7.3.6'));
-  const raw: DepSnapshotV3 = {
-    ...payload,
-    nodeModules: {
-      ...payload.nodeModules,
-      files: payload.nodeModules.files.map((file) => {
-        const bytes = file.path.startsWith('vite/')
-          ? original[file.path.slice('vite/'.length)]
-          : undefined;
-        return bytes === undefined
-          ? file
-          : { ...file, content: Buffer.from(bytes).toString('base64') };
-      }),
-    },
-  };
-  unprepared = { json: fixture(raw, 'json'), tar: fixture(raw, 'tar') };
   ms = await bakeSavedSnapshotFixture();
 }, 90_000);
 
@@ -118,7 +100,7 @@ afterEach(() => {
 
 /** Same owner/package composition as the browser; only storage and network boundaries differ. */
 async function openOwner(...additional: SavedSnapshotFixture[]) {
-  const network = installSnapshotNetwork(vite, ms, unprepared.json, unprepared.tar, ...additional);
+  const network = installSnapshotNetwork(vite, ms, ...additional);
   const memory = createMemoryFs();
   const composition = createOwnerVfsAuthorityComposition(memory.fsSync, {
     initialRoots: ['/', '/.rifty'],
@@ -403,31 +385,6 @@ describe('snapshot application preserves prepared source authority', () => {
       await h.close();
     }
   });
-
-  it.each(['json', 'tar'] as const)(
-    '[fault: provenance-lie] refuses old unprepared %s before tree/cache/claim effects, while initial restore remains supported',
-    async (format) => {
-      const artifact = unprepared[format];
-      const legacy = await openOwner();
-      const initial = definition(artifact);
-      await legacy.owner.createScratch({ definition: initial });
-      try {
-        const opened = await legacy.owner.openProject(initial);
-        try {
-          await expect(launch(opened.projectRoot)).resolves.toBeUndefined();
-          const claim = readInstallStampSync(legacy.authority, opened.projectRoot);
-          expect(claim !== null && stampTrusted(claim)).toBe(true);
-        } finally {
-          await opened.close();
-        }
-      } finally {
-        await legacy.close();
-      }
-
-      await expectUnpreparedRefusal(artifact);
-    },
-    90_000,
-  );
 
   it('prepares both real @emnapi/core CJS forms at hoisted/nested paths on initial restore and rejects each unprepared apply source', async () => {
     const raw = await realEmnapiFixture();

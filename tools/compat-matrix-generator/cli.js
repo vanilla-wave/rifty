@@ -308,6 +308,11 @@ const viteCommandMatrix = {
       'A cold Chromium install has no esbuild package/asset request, no installed esbuild delegate, and no published esbuild runtime before the Vite 8 entry; Rolldown owns its path.',
     ],
     [
+      "Vite at project root `/` (`publicProjectRoot: '/'`)",
+      '⚠️',
+      "Installed Vite runs its upstream bytes at every root, so a `/`-rooted project takes upstream's own code paths, as real Node 24 + Vite 7.3.6 at `/`: every resolved id is served as `/@id//<path>` (the React Refresh preamble `/@react-refresh` and the component's `/@id//@react-refresh` are two module instances), and with the watcher on Vite restarts on `vite.config.js` and re-emits root files with no edit. `vite build`/`preview` work. Not repaired by rifty (ADR-0533); the default root `/home/project` has neither edge. Vite 8 at `/`: byte identity only.",
+    ],
+    [
       'Server-capable non-Vite `.bin` commands',
       '✅',
       'The same generic child/port/preview lifecycle is browser-proven with a non-Vite server.',
@@ -319,6 +324,7 @@ const viteCommandMatrix = {
     '`apps/playground/src/glue/vite-config-seed.fault.test.ts`',
     '`tests/browser-unit/owner-publish-and-persistence.spec.ts`',
     '`tests/browser-unit/esbuild-vite-contract.spec.ts`',
+    '`tests/browser-unit/vite-at-root.spec.ts`',
     '`tests/e2e/vite-command-honesty.spec.ts`',
     '`tests/e2e/vite7-build-preview.spec.ts`',
     '`tests/e2e/m7-preview-sw.spec.ts`',

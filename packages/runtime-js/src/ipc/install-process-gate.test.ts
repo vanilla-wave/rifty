@@ -225,6 +225,7 @@ describe('pre-entry gate (ADR-0157)', () => {
         bin: false,
         remoteFs: true,
         remoteFsRoot,
+        publicRoot: '/',
         nodeServe: true,
       },
     );

@@ -1050,12 +1050,12 @@ describe('shadow substitutions — registry twins + retained legacy redirects', 
   it('prints a redirect line for a plain baked redirect without an internals shim (bcrypt)', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const registry = new FakeRegistry(db(['bcryptjs', await makeEntry('bcryptjs', '2.4.3')]));
+    const registry = new FakeRegistry(db(['bcryptjs', await makeEntry('bcryptjs', '3.0.3')]));
     const lines: string[] = [];
     await install(
       'root',
       '1.0.0',
-      { bcrypt: '*' },
+      { bcrypt: '^5.1.1' },
       {
         vfs,
         cwd: '/proj',
@@ -1064,7 +1064,7 @@ describe('shadow substitutions — registry twins + retained legacy redirects', 
       },
     );
     expect(lines).toContain(
-      'npm: bcrypt@* → bcryptjs@2.4.3 (substituted from shadow registry, ADR-0051)',
+      'npm: bcrypt@^5.1.1 → bcryptjs@3.0.3 (substituted from shadow registry, ADR-0051)',
     );
     expect(lines.filter((l) => l.includes('internals patched'))).toEqual([]);
   });

@@ -29,3 +29,6 @@ export function portChannelNameFor(url: string): string {
 export function portChannelNameForPort(port: number): string {
   return channelNameFor(`ws://websocket-port.local:${port}/__rifty_ws`);
 }
+
+/** rifty's own channels never hold a guest event loop (ADR-0529). */
+export { openHostBroadcastChannel } from '@riftydev/io';

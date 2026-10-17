@@ -310,10 +310,6 @@ export const EXTRACTION_MAP = [
   ['workers/ts-lsp-owner-relay.contract.test.ts', 'workers/ts-lsp-owner-relay.contract.test.ts'],
   ['workers/ts-lsp-owner-relay.ts', 'workers/ts-lsp-owner-relay.ts'],
   ['workers/ts-lsp-worker-entry.ts', 'workers/ts-lsp-worker-entry.ts'],
-  [
-    'workers/vite-cli-install-policy.ts',
-    '../../../tools/shadow-registry/src/runtime/vite-cli-install-policy.ts',
-  ],
   ['workers/vite-cli-prep.test.ts', '../../../tests/integration/vite-cli-prep.test.ts'],
   ['workers/vite-cli-prep.ts', '../../../tools/shadow-registry/src/runtime/vite-cli-prep.ts'],
   [

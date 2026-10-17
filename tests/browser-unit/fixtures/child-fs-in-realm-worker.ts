@@ -8,7 +8,6 @@ import {
   installConsole,
   installEventLoopKeepalive,
   installFetchKeepalive,
-  trackKeepalivePromise,
 } from '@riftydev/runtime-js';
 import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
@@ -299,7 +298,7 @@ async function dispatch(value: unknown): Promise<unknown> {
       executedBinPath: entryPath,
     });
     if (preparation === null) throw new Error('installed Vite command did not produce preparation');
-    await prepareViteCli({ ...preparation, trackKeepalivePromise });
+    await prepareViteCli(preparation);
     const outcome = await capturedNodeRun({ args, bin: true, entryPath, root });
     phase = 'vited';
     return { kind: 'vite', ...outcome };

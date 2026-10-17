@@ -1,3 +1,4 @@
+import { openHostBroadcastChannel } from '@riftydev/io';
 /**
  * Cross-realm bind-claim for `listen(port)` (ADR-0186).
  *
@@ -82,7 +83,7 @@ export function claimPort(
   opts: { readonly windowMs?: number } = {},
 ): Promise<boolean> {
   const windowMs = opts.windowMs ?? defaultClaimWindowMs;
-  const channel = new BroadcastChannel(channelNameFor(previewPortChannelUrl(port)));
+  const channel = openHostBroadcastChannel(channelNameFor(previewPortChannelUrl(port)));
   const myId = nextClaimId();
 
   return new Promise<boolean>((resolve) => {

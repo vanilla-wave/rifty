@@ -1,4 +1,3 @@
-import { Writable } from '@riftydev/io';
 /**
  * Same-realm fallback contract for `worker_threads.Worker`.
  *
@@ -9,6 +8,7 @@ import { Writable } from '@riftydev/io';
  * (workerData/parentPort propagation) is unchanged and stays covered by
  * `tests/conformance/builtins/worker_threads.test.ts`.
  */
+import { Writable } from '@riftydev/io';
 import {
   KERNEL_PROCESS_SPEC_KEY,
   type ProcessHandle,
@@ -455,6 +455,7 @@ globalThis.onmessage = ({ data }) => {
         execArgv: ['-e', '42'],
         remoteFs: true,
         remoteFsRoot: REMOTE_FS_ROOT,
+        publicRoot: '/',
       },
     );
     publishKernelEntryBootstrap(parentEntry.bootstrap ?? null);
@@ -598,6 +599,7 @@ globalThis.onmessage = ({ data }) => {
         bin: false,
         remoteFs: true,
         remoteFsRoot: REMOTE_FS_ROOT,
+        publicRoot: '/',
         nodeServe: true,
       },
     );

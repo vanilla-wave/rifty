@@ -737,6 +737,7 @@ async function harness(
     });
   const runtimeOptions = {
     projectRoot: ROOT,
+    publicRoot: '/',
     packageConfig: activePackageConfig,
     authority,
     packageState: runtimePackageState,
@@ -982,6 +983,47 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     await h.runtime.close();
   });
 
+  it('reports a login HOME only when the seed brought it or the shell changed it (ADR-0531 §6)', async () => {
+    const h = await harness();
+    const exitEnv = async (sid: string, rid: string, line: string) => {
+      await h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid,
+        rid,
+        line,
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      });
+      const exit = h.frames.find((frame) => frame.type === 'pty:exit' && frame.rid === rid);
+      return exit?.type === 'pty:exit' ? exit.env : undefined;
+    };
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'login-plain', env: { KEEP: '1' } });
+    expect(await exitEnv('login-plain', 'r1', 'pwd')).toEqual({ KEEP: '1' });
+    expect(await exitEnv('login-plain', 'r2', 'HOME=/elsewhere')).toEqual({
+      KEEP: '1',
+      HOME: '/elsewhere',
+    });
+    h.runtime.handlePtyFrame({
+      type: 'pty:open',
+      sid: 'login-seeded',
+      env: { HOME: '/home/rifty' },
+    });
+    expect(await exitEnv('login-seeded', 'r3', 'pwd')).toEqual({ HOME: '/home/rifty' });
+    // A nested npm lifecycle shell inherits HOME; the session's provenance stays.
+    h.authority.writeFileSync(
+      `${ROOT}/package.json`,
+      new TextEncoder().encode('{"name":"login","scripts":{"x":"echo nested"}}\n'),
+    );
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'login-npm', env: { KEEP: '1' } });
+    expect(await exitEnv('login-npm', 'r4', 'npm run x')).toEqual({ KEEP: '1' });
+    expect(await exitEnv('login-npm', 'r5', 'pwd')).toEqual({ KEEP: '1' });
+    // A repeated open keeps the existing session and its Shell: provenance stays.
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'login-npm', env: { HOME: '/home/rifty' } });
+    expect(await exitEnv('login-npm', 'r6', 'pwd')).toEqual({ KEEP: '1' });
+    await h.runtime.close();
+  });
+
   it('surfaces an unresolved nodemon launcher without a direct-node or dev-server fallback', async () => {
     const worker = boundaryWorker();
     const h = await harness(undefined, missingNodemonNodeServerPackageConfig);
@@ -1150,6 +1192,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       code: 130,
       exit: { code: null, signal: 'SIGTERM' },
       cwd: ROOT,
+      // The unchanged login HOME stays out of the reported state (ADR-0531 §6).
       env: {
         USER_FLAG: 'preserved',
         RIFTY_PREVIEW_SCOPE: 'guest-forged-scope',
@@ -1376,6 +1419,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         'kind',
         'previewScope',
         'print',
+        'publicRoot',
         'remoteFs',
         'remoteFsRoot',
         'runtimeBindings',
@@ -2791,6 +2835,7 @@ describe('Workbench project runtime', () => {
     expect(() =>
       createWorkbenchProjectRuntime({
         projectRoot: ROOT,
+        publicRoot: '/',
         packageConfig: {
           ...packageConfig,
           cfg: { ...packageConfig.cfg, root: '/page-claimed-root' },

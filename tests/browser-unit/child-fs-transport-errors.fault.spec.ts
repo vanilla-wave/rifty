@@ -18,7 +18,7 @@ test('real owner→kernel-child fs errors retain Node errno/syscall identity', a
         '/scratch/errors.cjs',
         [
           "const fs = require('node:fs');",
-          "const paths = ['/missing.txt', '/dir', '/plain.txt/child'];",
+          "const paths = ['/home/project/missing.txt', '/home/project/dir', '/home/project/plain.txt/child'];",
           'const errors = paths.map((path) => {',
           '  try {',
           '    fs.readFileSync(path);',
@@ -62,16 +62,16 @@ test('real owner→kernel-child fs errors retain Node errno/syscall identity', a
   expect(observed).toEqual({
     errors: [
       {
-        input: '/missing.txt',
+        input: '/home/project/missing.txt',
         name: 'Error',
         code: 'ENOENT',
         errno: -2,
         syscall: 'open',
-        path: '/missing.txt',
-        message: "ENOENT: no such file or directory, open '/missing.txt'",
+        path: '/home/project/missing.txt',
+        message: "ENOENT: no such file or directory, open '/home/project/missing.txt'",
       },
       {
-        input: '/dir',
+        input: '/home/project/dir',
         name: 'Error',
         code: 'EISDIR',
         errno: -21,
@@ -80,13 +80,13 @@ test('real owner→kernel-child fs errors retain Node errno/syscall identity', a
         message: 'EISDIR: illegal operation on a directory, read',
       },
       {
-        input: '/plain.txt/child',
+        input: '/home/project/plain.txt/child',
         name: 'Error',
         code: 'ENOTDIR',
         errno: -20,
         syscall: 'open',
-        path: '/plain.txt/child',
-        message: "ENOTDIR: not a directory, open '/plain.txt/child'",
+        path: '/home/project/plain.txt/child',
+        message: "ENOTDIR: not a directory, open '/home/project/plain.txt/child'",
       },
     ],
     exitCode: 0,

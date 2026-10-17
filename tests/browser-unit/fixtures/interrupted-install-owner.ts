@@ -1,8 +1,10 @@
 /// <reference lib="webworker" />
+import { openHostBroadcastChannel } from '../../../packages/io/src/index.ts';
 import { nativeSegmentRecords, nativeWriteBytes } from './native-replica-observer.ts';
 
 // Pause actual HEAD close containing a real npm file; all owner/npm code remains real.
-const channel = new BroadcastChannel('pr323-interrupted-install');
+// Owner-realm infrastructure: rifty's own channels never hold the realm (ADR-0529).
+const channel = openHostBroadcastChannel('pr323-interrupted-install');
 let boundary: 'before' | 'after' = 'after';
 channel.onmessage = ({ data }) => {
   if (data.boundary !== 'before' && data.boundary !== 'after') return;

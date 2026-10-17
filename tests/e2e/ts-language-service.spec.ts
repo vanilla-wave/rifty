@@ -60,6 +60,11 @@ function projectPath(root: string, relative: string): string {
   return root === '/' ? `/${suffix}` : `${root}/${suffix}`;
 }
 
+/** A project path as the guest shell names it (ADR-0531 `/home/project` mount). */
+function shellPath(path: string): string {
+  return path === '/' ? '/home/project' : `/home/project${path}`;
+}
+
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -78,15 +83,13 @@ async function runOwnerShell(
     .toMatch(new RegExp(`${escapeRegExp(marker)}[\\s\\S]*>\\s*$`));
 }
 
+/** Waits for the active shell; editor models use project paths rooted at `/`. */
 async function activeRootFromHint(page: Page): Promise<string> {
   const hint = page
     .locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal-mode-hint"]')
     .first();
-  await expect(hint).toContainText('Commands run in ', { timeout: 30_000 });
-  const text = (await hint.textContent()) ?? '';
-  const match = text.match(/Commands run in ([^;]+);/);
-  if (!match) throw new Error(`could not parse active root from mode hint: ${text}`);
-  return match[1];
+  await expect(hint).toContainText('running programs own stdin', { timeout: 30_000 });
+  return '/';
 }
 
 /** rifty-TS marker count for a VFS path via the EditorHost e2e hook (ADR-0166 P1.9d). */
@@ -506,7 +509,7 @@ async function writeOwnerFile(
   const escaped = content.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/'/g, "'\\''");
   await insertTerminalLineSettled(
     page,
-    `mkdir -p ${parentDir(path)} && printf '${escaped}' > ${path}`,
+    `mkdir -p ${shellPath(parentDir(path))} && printf '${escaped}' > ${shellPath(path)}`,
     30_000,
     slot,
   );
@@ -644,7 +647,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // exit, so the palette then lists it.
     await runOwnerShell(
       page,
-      `mkdir -p ${parentDir(tsPath)} && printf '' > ${tsPath} && ls ${projectPath(root, 'src')}`,
+      `mkdir -p ${shellPath(parentDir(tsPath))} && printf '' > ${shellPath(tsPath)} && ls ${shellPath(projectPath(root, 'src'))}`,
       15_000,
       shellSlot,
     );
@@ -719,7 +722,12 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     const typescriptDir = projectPath(root, 'node_modules/typescript');
     const hiddenTypeScriptDir = `${typescriptDir}.rifty-e2e-hidden`;
     const shellSlot = await openShellTerminal(page);
-    await runOwnerShell(page, `mv ${typescriptDir} ${hiddenTypeScriptDir}`, 30_000, shellSlot);
+    await runOwnerShell(
+      page,
+      `mv ${shellPath(typescriptDir)} ${shellPath(hiddenTypeScriptDir)}`,
+      30_000,
+      shellSlot,
+    );
 
     expect(await tsReinit(page)).toBe(false);
     await page.locator('[data-testid="problems-tab"]').click();
@@ -728,7 +736,12 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     });
     await expect(initFailure).toContainText('tsconfig.json:1:1', { timeout: 30_000 });
 
-    await runOwnerShell(page, `mv ${hiddenTypeScriptDir} ${typescriptDir}`, 30_000, shellSlot);
+    await runOwnerShell(
+      page,
+      `mv ${shellPath(hiddenTypeScriptDir)} ${shellPath(typescriptDir)}`,
+      30_000,
+      shellSlot,
+    );
     expect(await tsReinit(page)).toBe(true);
     await expect(initFailure).toHaveCount(0, { timeout: 30_000 });
   });
@@ -1018,7 +1031,12 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     //  L5 `const c = localGreet("y");`     localGreet starts col 11
     //  L6 `const d = cool.value;`          completion switches this to `cool.`
     await writeOwnerFile(page, usesDep, usesDepResolvedSource, shellSlot);
-    await runOwnerShell(page, `cat ${depDts} && ls ${projectPath(root, 'src')}`, 15_000, shellSlot);
+    await runOwnerShell(
+      page,
+      `cat ${shellPath(depDts)} && ls ${shellPath(projectPath(root, 'src'))}`,
+      15_000,
+      shellSlot,
+    );
     await expect
       .poll(() => terminalBuffer(page, shellSlot), { timeout: 15_000 })
       .toContain('coolValue');
@@ -1223,7 +1241,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
       ].join('\n'),
       shellSlot,
     );
-    await runOwnerShell(page, `ls ${projectPath(root, 'src')}`, 15_000, shellSlot);
+    await runOwnerShell(page, `ls ${shellPath(projectPath(root, 'src'))}`, 15_000, shellSlot);
     await expect
       .poll(() => terminalBuffer(page, shellSlot), { timeout: 15_000 })
       .toContain('app.ts');
@@ -1427,7 +1445,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
       ['export const sum=(a:number,b:number)=>a+b;', 'export const v=sum(1,2);', ''].join('\n'),
       shellSlot,
     );
-    await runOwnerShell(page, `ls ${projectPath(root, 'src')}`, 15_000, shellSlot);
+    await runOwnerShell(page, `ls ${shellPath(projectPath(root, 'src'))}`, 15_000, shellSlot);
     await expect
       .poll(() => terminalBuffer(page, shellSlot), { timeout: 15_000 })
       .toContain('app.ts');

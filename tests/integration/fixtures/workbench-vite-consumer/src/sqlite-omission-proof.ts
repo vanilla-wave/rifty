@@ -26,7 +26,7 @@ module.exports = async function prove() {
   const child = execSync('node sqlite-leaf.cjs', {
     env: { RIFTY_SQLITE_WASM_URL: '/guest-sqlite-must-not-load.wasm' },
   }).toString().trim();
-  const worker = new Worker('/sqlite-thread.cjs', {
+  const worker = new Worker('./sqlite-thread.cjs', {
     env: { RIFTY_SQLITE_WASM_URL: '/guest-sqlite-must-not-load.wasm' },
   });
   const threaded = await new Promise((resolve, reject) => {

@@ -114,33 +114,35 @@ export function recordRejection(
 ): void {
   if (beginNodeEvalUnhandled(reason, origin)) return;
   const state = keepaliveState();
-  if (state.rejection === null) state.rejection = { reason, origin };
+  if (currentRejection(state) === null) state.rejection = { reason, origin };
 }
 
 /** A serialized invocation reports this failure once; live handles and eval lifecycle remain. */
 export function takeUnhandledRejection(): { readonly reason: unknown } | null {
   const state = keepaliveState();
-  const rejection = state.rejection;
+  const rejection = currentRejection(state);
   state.rejection = null;
   return rejection;
 }
 
 /**
- * Track a detached async task as an event-loop handle. Some real CLIs start an
- * async action without awaiting it at top level (Vite's bundled CAC does this);
- * Node stays alive because the action uses libuv-backed work. Browser/WASI
- * promises may not create such handles, so we pin the child until the promise
- * settles and surface rejection through awaitDrain.
+ * The recorded rejection, unless it is an exit signal reported as a rejection
+ * that is not this invocation's terminal: a reused process (no-COI) may record
+ * an earlier invocation's late exit-signal rejection before it is reset; it is
+ * dropped. An eval-owned explicit exit is never stale.
  */
-export function trackKeepalivePromise(promise: PromiseLike<unknown>): void {
-  ref();
-  promise.then(
-    () => unref(),
-    (err) => {
-      unref();
-      handleRealmUnhandledRejection(err, promise);
-    },
-  );
+function currentRejection(state: KeepaliveState): KeepaliveState['rejection'] {
+  const rejection = state.rejection;
+  if (
+    rejection !== null &&
+    rejection.origin !== 'explicit-exit' &&
+    isRiftyProcessExit(rejection.reason) &&
+    readNodeProcessTerminal() !== rejection.reason
+  ) {
+    state.rejection = null;
+    return null;
+  }
+  return rejection;
 }
 
 /** Install the one eval invocation's deferred print/error work into the existing drain. */
@@ -420,12 +422,9 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
         resolve();
         return;
       }
-      if (state.rejection !== null) {
-        finish({
-          kind: 'rejected',
-          reason: state.rejection.reason,
-          origin: state.rejection.origin,
-        });
+      const rejection = currentRejection(state);
+      if (rejection !== null) {
+        finish({ kind: 'rejected', reason: rejection.reason, origin: rejection.origin });
         return;
       }
       // ADR-0445: the process's first terminal ends its loop in-realm, as the
@@ -503,6 +502,10 @@ export function handleRealmUncaughtError(reason: unknown): boolean {
  * browser report. An exit signal is never dispatched: the drain carries its code.
  */
 export function handleRealmUnhandledRejection(reason: unknown, promise: unknown): boolean {
+  // An exit signal requested its exit when thrown; one that is not this run's
+  // terminal belongs to an earlier invocation of a reused process (no-COI) and
+  // must not end the current one. Node's exit() never rejects anything.
+  if (isRiftyProcessExit(reason) && readNodeProcessTerminal() !== reason) return true;
   const outcome = isRiftyProcessExit(reason) ? null : dispatchUnhandledRejection(reason, promise);
   if (outcome?.kind === 'handled' || outcome?.kind === 'exited') return true;
   if (beginNodeEvalUnhandled(reason, 'rejection')) return true;

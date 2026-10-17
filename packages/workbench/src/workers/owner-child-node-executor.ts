@@ -23,7 +23,7 @@ import {
   type ForegroundWritable,
   runForegroundChild,
 } from '../glue/run-foreground-child.ts';
-import { toOwnerProjectPath } from '../workbench/project-file-boundary.ts';
+import { type GuestRoots, guestRootsLayout, resolveGuestPath } from './guest-layout.ts';
 import {
   type ReserveOwnerChildAdmission,
   observeOwnerChildExit,
@@ -81,18 +81,20 @@ function concatChunks(chunks: readonly Uint8Array[]): Uint8Array {
 export function createOwnerExecSyncRunner(
   nodeEntryUrl: string,
   nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
-  getActiveProjectRoot: () => string,
+  getActiveGuestRoots: () => GuestRoots,
   reserveAdmission: ReserveOwnerChildAdmission,
   spawn: OwnerExecSyncSpawn = spawnOwnerExecSyncChild,
 ): OwnerExecSyncRunner {
   return async (spec, context) => {
-    const remoteFsRoot = getActiveProjectRoot();
-    const reservation = await reserveAdmission(toOwnerProjectPath(remoteFsRoot, spec.entryPath));
+    const guestRoots = getActiveGuestRoots();
+    const entry = resolveGuestPath(guestRootsLayout(guestRoots), spec.entryPath);
+    if (entry.kind !== 'mount') throw new TypeError('execSync entry is outside the guest mounts');
+    const reservation = await reserveAdmission(entry.owner);
     let child: OwnerExecSyncChild;
     try {
       const projectedBindings = projectOwnerChildRuntimeBindings(
         reservation.snapshot.runtimeBindings,
-        remoteFsRoot,
+        guestRoots,
       );
       child = spawn(
         {
@@ -100,7 +102,7 @@ export function createOwnerExecSyncRunner(
             kind: 'program',
             bin: false,
             remoteFs: true,
-            remoteFsRoot,
+            ...guestRoots,
             nodeServe: false,
             runtimeBindings: projectedBindings,
           }),
@@ -199,13 +201,13 @@ export function buildNodeChildSpawnSpec(
   cols = 80,
   rows = 24,
   previewScope?: string,
-  remoteFsRoot?: string,
+  guestRoots?: GuestRoots,
   runtimeBindings: readonly NodeEntryRuntimeBinding[] = [],
 ): SpawnWorkerSpec {
-  const projectedBindings = projectOwnerChildRuntimeBindings(runtimeBindings, remoteFsRoot);
+  const projectedBindings = projectOwnerChildRuntimeBindings(runtimeBindings, guestRoots);
   const common = {
     remoteFs: true,
-    ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
+    ...(guestRoots ?? {}),
     ...(previewScope === undefined ? {} : { previewScope }),
     terminal: childTerminalBootstrap({ isTTY: tty, cols, rows }),
     runtimeBindings: projectedBindings,
@@ -258,8 +260,8 @@ export interface NodeRunHooks {
   readonly sid: string;
   /** Owner-minted provenance bound to this launch, never guest env. */
   readonly previewScope?: string;
-  /** Host-only physical root behind the child process's public `/` namespace. */
-  readonly remoteFsRoot?: string;
+  /** Host-only project roots behind the child process's guest namespace. */
+  readonly guestRoots?: GuestRoots;
   readonly onListening: (sid: string, pid: number, ports: number[], previewScope?: string) => void;
   readonly onExit: (sid: string) => void;
 }
@@ -305,7 +307,7 @@ export function createOwnerChildNodeExecutor(
           ctx.cols ?? 80,
           ctx.rows ?? 24,
           hooks.previewScope,
-          hooks.remoteFsRoot,
+          hooks.guestRoots,
           reservation.snapshot.runtimeBindings,
         ),
       );

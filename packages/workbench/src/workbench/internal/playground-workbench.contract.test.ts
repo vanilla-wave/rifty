@@ -648,6 +648,7 @@ describe('Playground companion sealed contract', () => {
     expect(Object.keys(companionModule).sort()).toEqual(['openPlaygroundWorkbench']);
     expect(Object.keys(rootModule).sort()).toEqual([
       'ClosedHandleError',
+      'DEFAULT_PUBLIC_PROJECT_ROOT',
       'DirtyProjectDocumentError',
       'FileConflictError',
       'ProjectBusyError',

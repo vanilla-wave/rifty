@@ -312,7 +312,7 @@ test.describe('workspace state persists across reload', () => {
     const modeHint = page.locator(
       `.rf-terminal-slot[data-session-id="${reopenedShell.sessionId}"] [data-testid="terminal-mode-hint"]`,
     );
-    await expect(modeHint).toContainText('Commands run in /;', { timeout: 30_000 });
+    await expect(modeHint).toContainText('running programs own stdin', { timeout: 30_000 });
     await runTerminalLine(page, 'cat ./src/main.js', reopenedShell);
     await expectSessionContains(page, reopenedShell, marker, 20_000);
   });

@@ -1,6 +1,8 @@
 /// <reference lib="webworker" />
+import { openHostBroadcastChannel } from '../../../packages/io/src/index.ts';
 import { nativeSegmentRecords, nativeWriteBytes } from './native-replica-observer.ts';
-const channel = new BroadcastChannel('legacy-layout-cut');
+// Owner-realm infrastructure: rifty's own channels never hold the realm (ADR-0529).
+const channel = openHostBroadcastChannel('legacy-layout-cut');
 const mode = await new Promise<string>((resolve) => {
   channel.onmessage = ({ data }) => {
     if (typeof data.mode === 'string') {
