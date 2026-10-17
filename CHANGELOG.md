@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Process: one canon file `docs/process/README.md` replaces `rules/{decisions,pr,readiness,review,stops}.md`, `stages/*`, `artifacts/*` and `.claude/workflows/goal-run.js`. Overturned: per-unit `reference/*-contract-red.json` / `*-evidence.md` records (REV-8: one landing verdict per PR, unit verdicts live on the PR); DEC-1 p.4 "new mechanism → ADR" and DEC-2 "new ADR per correction" (now a dated line in the owning ADR); STOP-1 halting a run (the question rides the map and the PR, the run continues); map-ordered RECHART (now the acceptance carrier run picks the next wall); a full local `pr:check` per unit (now diff-scoped, CI runs the full set); REV-10's "sibling sweep" blocker wording (a sweep beyond the cited row is a concern, enforced by `blockers.mjs`); REV-7 Repeat is a blocking authority and a `STOP-3` stall; nothing now asks a mechanism's killed rival candidates to be named.
+
 - Add the public `checkSandboxSupport()` browser prerequisite report to `@riftydev/workbench`, and settle its probe teardown against the terminated Worker's OPFS lock (ADR-0437, ADR-0438, ADR-0439). SDK README samples keep gating on `checkCapabilities().sufficient`; the published support assets build from one publishing step the browser suite reuses in a scratch directory.
 
 - Make replica browser fixture setup join native settlement before judging short

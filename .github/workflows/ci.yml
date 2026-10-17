@@ -68,6 +68,10 @@ jobs:
       - run: pnpm check:runtime-adapter-boundary # ADR-0308: generic admission/launch never branches on esbuild/Vite
       - run: pnpm check:esbuild-legacy-retirement # cutover: vendored ADR-0047 path cannot return
       - run: pnpm check:dir-owner # blocking: source dir > 30 direct prod modules carries an owner README
+      - run: pnpm check:file-size # blocking: prod source file ≤ 800 lines, oversized files only shrink
+      - run: pnpm check:esbuild-runtime-drift # generated esbuild runtime artifacts match their inventory
+      - run: pnpm check:publish-config-drift # publish configs match the inventory
+      - run: pnpm check:install-stamp-writers # one install-stamp writer
       - run: pnpm check:contract-drift # blocking: no in-place ready-contract edits in the same diff as source changes
       - run: pnpm check:pass-binding # blocking on a ready PR: product/test changes carry a landing verdict bound to an ancestor sha (REV-8); draft PRs skipped
       - run: pnpm backlog:check # blocking: frontmatter + TODO(backlog:) integrity
