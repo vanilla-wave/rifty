@@ -2,25 +2,28 @@
 
 ## [Unreleased]
 
-- Shared reference host uses explicit preparation/open, with no snapshot deployment policy (ADR-0490).
-
-- Keep existing benchmark preview by registering its SW only on preview; default packed CI runs the shared-host smoke with real Vite.
-
-- Boot the exact packed reference-host module in no-COI, connect agent registry installs, adopt100-call defaults and expose per-capability/text-only toggles. Record optional no-COI policy settings in report/comparison identity (ADR-0489).
-
-- Commit summary JSON artifacts as gzip; report-written JSON gets a normalized header (mtime 0, OS byte 0x03), deflate stream identical per zlib build (not proven across OS); frozen `source-artifacts.json.gz` bundles keep their measured bytes, manifest sizes/SHA256 test-checked; `report`/`--compare` read plain or gzip and write back in the directory's format.
-
-- Count successful core compactions only; failed summary attempts no longer inflate the benchmark counter.
-
-- Compare fixed-config recorded runs with exact identities, per-task/lane metric deltas, preserved provenance and visible regressions.
-
-- Preserve JSON numbers and native protocol tags during credential redaction; derive every lane's metrics from live events before masking payload strings.
-- Keep generated report addresses/revisions valid while masking credential-bearing payload keys, including filenames.
-
-- Accept native catalog endpoint/defaults in every lane; report full input/output tokens, continuation/tool-failure counters and separate context-exceeded outcomes.
-
-- Migrate browser lane session creation to native pi model catalogs.
-
-- Reuse the packed-consumer installed-tarball registry helper; drop unused process helpers.
-- Run three cold Pi lanes with common React/Hono judges, optional auth, real admission/deadline limits, retained diagnostic artifacts and manual failure classification.
-- Verify smoke through an external HTTP observer and real browser trace actions; validate judges against native positive controls.
+- Retire the record-observation judge engine (ADR-0535 supersedes 0511/0512/0516/0518–0525): `src/judge/{record-*,reservation-*,room-records,expense-records,native-input,public-record-display,booking-native-*}.ts`, the discovery half of `judge/context.ts` (workflow actions/candidates, action-context binding, choice projection), the booking/expense cases v1–v11, manifests `pilot-v1…4`/`eval-v1…18`, their version/correction tests and origin-control scripts. Five independent Final reviews on PR #375 each found a new caption-heuristic defect class; the user chose removal over a sixth cycle. App tasks now state their contract in the prompt and are judged by an ordinary test calibrated on ≥3 correct / ≥3 wrong implementations before freeze (`docs/backlog/distribution/agent-bench-contract-first-corpus.md`).
+- `core-v1` suite: the six eval-v18 cases whose judges stand (`ms-negative`, `ms-weeks`, `stringify-boxed`, `queue-clear`, `csv-workflow-v5`, `markdown-notes-v4`) with unchanged bytes; corpus cards lose `judgeSupport`. `corpus-plan`/`corpus-validation`/`plan-source-volume` tests, `corpus-controls.spec.ts`, `corpus-smoke.ts`, `app-structure-controls.ts` and the CSV-toggle/notes-entry/notes-delete-icon controls run on it; the app-structure CSV alternative renders its `<output>` with `white-space: pre-wrap` — the v1-era inline output collapsed CSV records into one visible line, which the v5 judge (visible text, ADR-0515) rejects. eval-v18 README marks booking/expense rows oracle-qualified.
+- Judge fingerprint covers the judge's whole relative-import closure (ADR-0506/0507); `corpus-judge-closure.test.ts` guards every suite. Plans after this change are not fingerprint-comparable with eval-v18 by construction.
+- `series-interruption.spec.ts` asserts the retained interrupted row (ADR-0505) instead of its absence.
+- Committed summaries carry the text core only (ADR-0532): report/statistics/summary/README; `summaries-policy` rejects zip/part/browser attachments and files above 8 MiB. eval-v18 README is the current reference; v1–v17 archives, binary attachments and the frozen input bundle left git. Playwright trace stays local; opt-in capture tracked in `docs/backlog/distribution/agent-bench-browser-trace-opt-in.md`.
+- Freeze fresh v18 complete 96/classifications as the current reference; retain original scores and explicit protocol/oracle/HMR limits.
+- Retain interrupted attempts separately from completed quality outcomes; preserve observed PASS on cleanup signals; reap native preview after browser cleanup rejects, including failed setup.
+- Verify committed gzip/manifest evidence per artifact with unchanged seals; legacy CLI test admits its existing subprocess deadline plus readback.
+- Deliver observed tool/environment catalog and finite four-family boundary profile (`boundary-v1`) with fresh own-origin confirmations and offline regeneration; observe pending inactivity, published selection membership, CSV diagnostic values/coordinates/undo and indexed Region filtering independently of carriers; preserve starter build/boot.
+- Stream Git source fingerprints beyond 1 MiB; retain exit/deadline failures and reuse plan identity in report headers.
+- Observe current-filter CSV exports before/after toggle actions (`csv-workflow-v5`, ADR-0515); observe CSV saved records through public export, preserving multiplicity (ADR-0513); decode CSV export values, optional header/quoting (ADR-0509).
+- Observe composed saved-note identities through accessible titles and visible components; exclude delete actions through computed accessible role names including descendant ARIA/image labels (`markdown-notes-v4`, ADR-0514); judge visible Markdown rendering/navigation with hidden descendants rejected (ADR-0510); semantic field-purpose discovery separates editable source from read-only output (ADR-0508).
+- Select editable controls by accessible names, excluding textarea/option data; preserve named native input ARIA role overrides (ADR-0517; `editable-control-names.spec.ts`, `native-input-roles.spec.ts`).
+- Keep SIGINT partial-series persistence under the runner owner; suppress Playwright default process exit and prove real SIGINT/TERM interruption.
+- Derive fixed-matrix statistics/uncertainty, task/family/workload counts and failure stages from unchanged JSON; separate Codex and non-model evidence, reject identity drift, preserve legacy gzip outputs; record attempt phases/installed-input hashes and artifact links (ADR-0507).
+- Load frozen real-project/app corpora; validate hashes/v3 locks/family split; run private command judges in each origin and retain non-model controls separately (ADR-0506).
+- Add real isolated native Codex reference, explicit settings/version, terminal protocol validation, SIGINT budgets, retained raw errors and unknown telemetry; preserve native UTF-8 across chunks and raw log bytes.
+- Resolve full selected series before setup; reject occupied outputs, retain partial/missing trials on interruption and atomically persist completed records before cleanup. Report regeneration is read-only over JSON; unsupported selected trials remain failures (ADR-0505).
+- Shared reference host uses explicit preparation/open, with no snapshot deployment policy (ADR-0490); keep existing benchmark preview by registering its SW only on preview; default packed CI runs the shared-host smoke with real Vite.
+- Boot the exact packed reference-host module in no-COI, connect agent registry installs, adopt 100-call defaults and expose per-capability/text-only toggles; record optional no-COI policy settings in report/comparison identity (ADR-0489).
+- Commit summary JSON artifacts as gzip with a normalized header; `report`/`--compare` read plain or gzip and write back in the directory's format.
+- Count successful core compactions only; compare fixed-config recorded runs with exact identities, per-task/lane metric deltas, preserved provenance and visible regressions.
+- Preserve JSON numbers and native protocol tags during credential redaction; derive every lane's metrics from live events before masking; keep generated report addresses/revisions valid while masking credential-bearing payload keys.
+- Accept native catalog endpoint/defaults in every lane; report full input/output tokens, continuation/tool-failure counters and separate context-exceeded outcomes; migrate browser lane session creation to native pi model catalogs.
+- Run three cold Pi lanes with common React/Hono judges, optional auth, real admission/deadline limits, retained diagnostic artifacts and manual failure classification; verify smoke through an external HTTP observer and real browser trace actions; validate judges against native positive controls.

@@ -326,6 +326,8 @@ export interface Lockfile {
 }
 
 export interface LockfileEntry {
+  /** Registry package name when the dependency key is an npm alias. */
+  name?: string;
   version: string;
   resolved?: string;
   integrity?: string;
@@ -349,6 +351,7 @@ export interface LockfileEntry {
 }
 
 type LockfilePackage = ResolvedPackage & {
+  registryName?: string;
   resolved?: string;
   integrity?: string;
   peerDependencies?: Record<string, string>;
@@ -423,6 +426,7 @@ function buildPreparedLockfile(
       version: p.version,
       dependencies: p.dependencies,
     };
+    if (p.registryName) entry.name = p.registryName;
     if (p.resolved) entry.resolved = p.resolved;
     if (p.integrity) entry.integrity = p.integrity;
     const bin = normalizePackageBin(p.name, p.bin);

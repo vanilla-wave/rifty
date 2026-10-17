@@ -15,8 +15,22 @@ export interface Task {
   files: FileTree;
   preset: string;
   port: number;
-  judge: TaskJudge;
+  judge?: TaskJudge;
+  commandJudge?: {
+    path: string;
+    text: string;
+    marker: string;
+    starterRegression?: { buildCommand: string; heading: string };
+  };
+  corpus?: string;
+  corpusManifestSha256?: string;
+  caseCardSha256?: string;
+  split?: string;
+  controls?: Record<string, FileTree>;
   node: boolean;
+  group?: string;
+  family?: string;
+  judgeFiles?: string[];
 }
 export const taskIds = [
   'fix-date-sort',
@@ -45,6 +59,12 @@ export async function loadTasks(): Promise<Task[]> {
         port: spec.defaultPort,
         judge: judges[i]!,
         node,
+        group: 'smoke',
+        family: node ? 'hono-api' : 'trackline',
+        judgeFiles: [
+          `tools/agent-bench/tasks/${id}/judge.ts`,
+          'tools/agent-bench/src/judge/context.ts',
+        ],
       };
     }),
   );

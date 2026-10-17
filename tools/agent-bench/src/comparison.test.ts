@@ -315,3 +315,15 @@ it('[fault: corrupt-input] refuses absent or truncated summary JSON, naming both
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+it('rejects controls versus agent evidence and different control variants', () => {
+  const quality = clone();
+  quality.header.purpose = 'quality';
+  const controls = clone();
+  controls.header.purpose = 'controls';
+  controls.header.control = 'reference';
+  expect(() => compare(quality, controls)).toThrow(/purpose/);
+  const partial = structuredClone(controls);
+  partial.header.control = 'partial';
+  expect(() => compare(controls, partial)).toThrow(/control/);
+});

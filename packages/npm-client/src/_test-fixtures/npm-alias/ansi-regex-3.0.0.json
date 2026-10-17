@@ -1,0 +1,98 @@
+{
+  "bugs": {
+    "url": "https://github.com/chalk/ansi-regex/issues"
+  },
+  "dist": {
+    "shasum": "ed0317c322064f79466c02966bddb605ab37d998",
+    "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-3.0.0.tgz",
+    "integrity": "sha512-wFUFA5bg5dviipbQQ32yOQhl6gcJaJXiHE7dvR8VYPG97+J/GNC5FKGepKdEDUFeXRzDxPF1X/Btc8L+v7oqIQ==",
+    "signatures": [
+      {
+        "sig": "MEUCIGZIxnZvDlDd2wlGhadhaYGHYJUyNwYOgCW3R98PdgWbAiEA2wN0X8oDjEhS1vHmuDx3Rmof6hJLkC4TfVvx6jBu6eE=",
+        "keyid": "SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA"
+      }
+    ]
+  },
+  "name": "ansi-regex",
+  "_from": ".",
+  "files": ["index.js"],
+  "author": {
+    "url": "sindresorhus.com",
+    "name": "Sindre Sorhus",
+    "email": "sindresorhus@gmail.com"
+  },
+  "_shasum": "ed0317c322064f79466c02966bddb605ab37d998",
+  "engines": {
+    "node": ">=4"
+  },
+  "gitHead": "0a8cc19946c03c38520fe8c086b8adb66f9cce0b",
+  "license": "MIT",
+  "scripts": {
+    "test": "xo && ava",
+    "view-supported": "node fixtures/view-codes.js"
+  },
+  "_npmUser": {
+    "name": "sindresorhus",
+    "email": "sindresorhus@gmail.com"
+  },
+  "homepage": "https://github.com/chalk/ansi-regex#readme",
+  "keywords": [
+    "ansi",
+    "styles",
+    "color",
+    "colour",
+    "colors",
+    "terminal",
+    "console",
+    "cli",
+    "string",
+    "tty",
+    "escape",
+    "formatting",
+    "rgb",
+    "256",
+    "shell",
+    "xterm",
+    "command-line",
+    "text",
+    "regex",
+    "regexp",
+    "re",
+    "match",
+    "test",
+    "find",
+    "pattern"
+  ],
+  "repository": {
+    "url": "git+https://github.com/chalk/ansi-regex.git",
+    "type": "git"
+  },
+  "_npmVersion": "2.15.11",
+  "description": "Regular expression for matching ANSI escape codes",
+  "directories": {},
+  "maintainers": [
+    {
+      "name": "dthree",
+      "email": "threedeecee@gmail.com"
+    },
+    {
+      "name": "qix",
+      "email": "i.am.qix@gmail.com"
+    },
+    {
+      "name": "sindresorhus",
+      "email": "sindresorhus@gmail.com"
+    }
+  ],
+  "_nodeVersion": "4.8.3",
+  "devDependencies": {
+    "xo": "*",
+    "ava": "*"
+  },
+  "_npmOperationalInternal": {
+    "tmp": "tmp/ansi-regex-3.0.0.tgz_1497985412590_0.5700640194118023",
+    "host": "s3://npm-registry-packages"
+  },
+  "_id": "ansi-regex@3.0.0",
+  "version": "3.0.0"
+}

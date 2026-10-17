@@ -9,6 +9,7 @@ import { NotImplementedError } from '@riftydev/io';
 import { type Vfs, joinPath } from '@riftydev/vfs';
 import type { InstallOptions } from './installer.ts';
 import type { RootLockfileDependencyMaps } from './linker.ts';
+import { parseNpmAlias } from './npm-alias.ts';
 import type { OverrideMap } from './overrides.ts';
 
 export interface NormalizedInstallRequest {
@@ -208,7 +209,8 @@ function unsupportedDependencySpec(range: string): string | null {
     return 'git';
   }
   if (/^https?:/.test(spec)) return 'http-tarball';
-  if (spec.startsWith('npm:')) return 'npm-alias';
+  const alias = parseNpmAlias(spec);
+  if (alias) return unsupportedDependencySpec(alias.range);
   if (isGithubShorthand(spec)) return 'git';
   return null;
 }
@@ -225,7 +227,7 @@ function unsupportedOverrideTargetSpec(target: string): string | null {
   // npm resolves `$name` against the root manifest's dependencies (ADR-0451).
   if (target.startsWith('$')) return 'override-reference';
   const raw = target.trim();
-  const withoutAlias = raw.startsWith('npm:') ? raw.slice(4) : raw;
+  const withoutAlias = /^npm:/i.test(raw) ? raw.slice(4) : raw;
   const direct = unsupportedDependencySpec(withoutAlias);
   if (direct) return direct;
   const at = withoutAlias.lastIndexOf('@');

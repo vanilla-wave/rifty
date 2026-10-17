@@ -121,6 +121,11 @@ lazy playground "+chat", three-lane42-run diagnostic. Consumer guide:
 Delivered no-COI host kit: copyable SDK + agent composition shared by packed CI
 and the benchmark; typed lifecycle/progress, policies, transcript, text transport
 and registry install. Proof: `docs/backlog/distribution/reference/no-coi-agent-host-kit-close.md`.
+Delivered coding comparison: four real origins, retained own-environment results/
+uncertainty; eval-v18 result and classification. Runbook:
+`tools/agent-bench/README.md`; result:
+`tools/agent-bench/reports/summaries/2026-10-15-eval-v18-corrected/README.md`
+(text core only, ADR-0532).
 open:
 - `docs/backlog/distribution/ai-agent-subagent-orchestration` — `task`/subagent orchestration over the embeddable loop.
 - `docs/backlog/distribution/ai-ide-product-ui` — chat + streamed tool-call/diff/approve UI over the IDE-kit.

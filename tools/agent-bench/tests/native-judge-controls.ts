@@ -83,7 +83,7 @@ const controls = selected.flatMap((task) => {
       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
       await ctx.view.goto(new URL('issues?status=open&assignee=Deniz', ctx.previewUrl).href);
       await page.getByRole('heading', { name: 'Issues', exact: true }).waitFor();
-      return task.judge(ctx);
+      return task.judge!(ctx);
     };
   }
   if (task.id !== 'new-issue-form') return [fixed];
@@ -125,7 +125,7 @@ const controls = selected.flatMap((task) => {
     },
   ];
 });
-const out = await mkdtemp(join(tmpdir(), 'rifty-bench-native-judges-'));
+const out = join(await mkdtemp(join(tmpdir(), 'rifty-bench-native-judges-')), 'series');
 try {
   const report = await run(config, controls, ['local-reference'], out);
   console.log(

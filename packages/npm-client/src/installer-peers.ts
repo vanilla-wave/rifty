@@ -35,9 +35,14 @@ export function hasEffectiveTopLevelNameCollision(
   const seen = new Set<string>();
   for (const request of [dependencies, optionalDependencies]) {
     for (const [name, range] of Object.entries(request)) {
-      const { effectiveName } = resolveEffectivePackageRequest(name, range, rootName, overrides);
-      if (seen.has(effectiveName)) return true;
-      seen.add(effectiveName);
+      const { effectiveName, installName = effectiveName } = resolveEffectivePackageRequest(
+        name,
+        range,
+        rootName,
+        overrides,
+      );
+      if (seen.has(installName)) return true;
+      seen.add(installName);
     }
   }
   return false;

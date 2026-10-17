@@ -1,0 +1,101 @@
+{
+  "bugs": {
+    "url": "https://github.com/chalk/ansi-regex/issues"
+  },
+  "dist": {
+    "shasum": "69093d6436d30dbb9b04fe7bdcbcfe16c697d8a1",
+    "tarball": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-6.4.0.tgz",
+    "fileCount": 5,
+    "integrity": "sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==",
+    "signatures": [
+      {
+        "sig": "MEYCIQCsT/CePkqh1W53SAG1BsN81dO/9pIclGXq3mAC2m4u1wIhAOBMqExjLOtubJHdfVa3adIU4jlYG7xXn4/dZN/6Qeni",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "sig": "MEYCIQCMC91xSdyCQEY16iDc+hjR5HHmBZ7q4TwZzIutkbAKDQIhAOuS3oTIP314MzjllsuWtXkKsqk/Ekk+SkD9Ehb0ow+G",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "unpackedSize": 6208
+  },
+  "name": "ansi-regex",
+  "type": "module",
+  "types": "./index.d.ts",
+  "author": {
+    "url": "https://sindresorhus.com",
+    "name": "Sindre Sorhus",
+    "email": "sindresorhus@gmail.com"
+  },
+  "engines": {
+    "node": ">=12"
+  },
+  "exports": "./index.js",
+  "funding": "https://github.com/chalk/ansi-regex?sponsor=1",
+  "gitHead": "f923667b5ea05b8b0447f6ead4c56661b7bf7fa1",
+  "license": "MIT",
+  "scripts": {
+    "test": "xo && ava && tsd",
+    "view-supported": "node fixtures/view-codes.js"
+  },
+  "_npmUser": {
+    "name": "sindresorhus",
+    "email": "sindresorhus@gmail.com"
+  },
+  "homepage": "https://github.com/chalk/ansi-regex#readme",
+  "keywords": [
+    "ansi",
+    "styles",
+    "color",
+    "colour",
+    "colors",
+    "terminal",
+    "console",
+    "cli",
+    "string",
+    "tty",
+    "escape",
+    "formatting",
+    "rgb",
+    "256",
+    "shell",
+    "xterm",
+    "command-line",
+    "text",
+    "regex",
+    "regexp",
+    "re",
+    "match",
+    "test",
+    "find",
+    "pattern"
+  ],
+  "repository": {
+    "url": "git+https://github.com/chalk/ansi-regex.git",
+    "type": "git"
+  },
+  "_npmVersion": "12.0.1",
+  "description": "Regular expression for matching ANSI escape codes",
+  "directories": {},
+  "maintainers": [
+    {
+      "name": "sindresorhus",
+      "email": "sindresorhus@gmail.com"
+    }
+  ],
+  "sideEffects": false,
+  "_nodeVersion": "26.9.0",
+  "_hasShrinkwrap": false,
+  "devDependencies": {
+    "xo": "^0.54.2",
+    "ava": "^3.15.0",
+    "tsd": "^0.21.0",
+    "ansi-escapes": "^5.0.0"
+  },
+  "_npmOperationalInternal": {
+    "tmp": "tmp/ansi-regex_6.4.0_1790480084480_0.5640897407142593",
+    "host": "s3://npm-registry-packages-npm-production"
+  },
+  "_id": "ansi-regex@6.4.0",
+  "version": "6.4.0"
+}
