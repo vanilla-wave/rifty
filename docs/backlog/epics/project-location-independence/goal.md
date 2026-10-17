@@ -45,7 +45,9 @@ ENOENT class disappear together.
    run 5; oracle configs: watcher off + explicit optimizer entry, and runs
    2-3 for the phantom config restart) — documented, not repaired. Vite 8 at
    `/`: byte identity only, no real-Node artifact yet.
-4. The Vite 7/8 starter build/dev+HMR/preview lanes run at the default and,
+4. The Vite 7 starter build/dev+HMR/preview and the Vite 8 starter
+   build/dev (an edit served after reload; its template keeps
+   `server.hmr: false`, ADR-0161)/preview lanes run at the default and,
    through the same host/SDK/template parameter, at a second non-root
    location (e.g. `/srv/app`) with identical observable results; at `/` the
    build/preview lanes pass and the dev lane asserts the documented
@@ -87,7 +89,9 @@ real-Node artifacts of evidence §Root as the `/` oracle.
    §Root runs 2-3/5 with their configs as the oracle), documented as behavior,
    not repaired; Vite 8 at `/` is covered by byte identity only.
 4. I4. The public root is one host/SDK/template parameter with default
-   `/home/project`; the Vite 7/8 starter build/dev+HMR/preview lanes pass at
+   `/home/project`; the Vite 7 starter build/dev+HMR/preview and the Vite 8
+   starter build/dev (edit served after reload; template `server.hmr: false`,
+   ADR-0161)/preview lanes pass at
    the default and, through the same parameter, at a second non-root location
    with identical observable results; at `/` build/preview pass and dev
    asserts I3's documented behavior.
@@ -169,6 +173,10 @@ and "reserve `/tmp`,`/home` under `/`" recorded as rejected routes; title says
   ADR removed + pointer in `docs/adr/README.md`. ADR-0165 layout/switch and
   ADR-0280 isolation stay. Child 1's parameter ADR cites ADR-0280 without
   overturning it (default still `/`).
+- amend: 2026-10-17 — user: «ок» on «Поправить I4: для Vite 8 dev — «правка
+  видна после reload» по текущей политике стартера. Включение HMR у Vite 8 —
+  отдельная цель.» — I4/scenario 4: the Vite 8 dev leg is an edit served after
+  reload (template `server.hmr: false`, ADR-0161); Vite 8 HMR is outside this goal.
 - rejected route: keep `/` and patch each upstream edge — violates I3 and
   Outcome ("code paths they take on real machines").
 - rejected route: per-project path `/home/projects/<name>` — user chose the
