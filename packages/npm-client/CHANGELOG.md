@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- A present-but-empty (`""`/`null`) `dist.integrity` no longer disarms the declared SHA-1 `dist.shasum`: corrupted archive bytes fail with `EINTEGRITY` before package/lock publication, as pacote selects the checksum by truthiness (ADR-0527); an empty shasum declares nothing. Parity: `tests/integration/npm-alias.parity.test.ts` corrupt-input rows over absent/empty/null SRI. Found by the independent Final review of PR #375.
+
 - Preserve native same-version alias source names/cache keys on no-args replay, including alias→plain manifests; named installs use selected metadata SHA-1 shasum or exact-target pinned proofs (ADR-0527).
 
 - Install root/transitive/scoped npm aliases under alias paths; preserve target manifests, lock identities, override placement and Eddy cache acquisition (ADR-0526).

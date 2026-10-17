@@ -524,11 +524,15 @@ function createRegistrySource(
   };
 }
 
-/** npm metadata's SHA-1 shasum is an acquisition proof when SRI is absent. */
+/**
+ * npm metadata's SHA-1 shasum is an acquisition proof when SRI is absent. pacote
+ * (`registry.js`) selects `dist.integrity ? … : dist.shasum ? … : null` by truthiness:
+ * an empty/null SRI never disarms a declared shasum, an empty shasum declares nothing.
+ */
 function manifestIntegrity(manifest: VersionManifest, name: string): string | undefined {
-  if (manifest.dist.integrity !== undefined) return manifest.dist.integrity;
+  if (manifest.dist.integrity) return manifest.dist.integrity;
   const shasum = manifest.dist.shasum;
-  if (shasum === undefined) return undefined;
+  if (!shasum) return undefined;
   if (typeof shasum !== 'string' || !/^[a-f\d]{40}$/i.test(shasum)) {
     throw new TypeError(`Invalid SHA-1 shasum for ${name}@${manifest.version}`);
   }

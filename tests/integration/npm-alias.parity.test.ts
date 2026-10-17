@@ -41,11 +41,14 @@ const packages = await Promise.all(
   }),
 );
 
+/** Declared checksum shapes npm treats as absent (pacote registry.js: truthiness, not presence). */
+type AbsentSri = undefined | '' | null;
 async function withRegistry(
   run: (url: string, requests: string[]) => Promise<void>,
   omitIntegrityFor?: string,
-  omitShasum = false,
+  omitShasum: boolean | 'empty' = false,
   fault?: 'corrupt-tarball' | 'malformed-shasum',
+  declaredIntegrity: AbsentSri = undefined,
 ) {
   const requests: string[] = [];
   let baseUrl = '';
@@ -86,9 +89,9 @@ async function withRegistry(
                 ...manifest.dist,
                 ...(omitIntegrityFor === `${manifest.name}@${manifest.version}`
                   ? {
-                      integrity: undefined,
+                      integrity: declaredIntegrity,
                       ...(omitShasum
-                        ? { shasum: undefined }
+                        ? { shasum: omitShasum === 'empty' ? '' : undefined }
                         : fault === 'malformed-shasum'
                           ? { shasum: 'not-a-sha1' }
                           : {}),
@@ -447,7 +450,7 @@ describe('retained npm alias source authority', () => {
     60000,
   );
 
-  it.each([false, true])(
+  it.each([false, true, 'empty'] as const)(
     '[fault: poisoned-cache] explicit install selects a new same-version target without dist.integrity (omit shasum: %s)',
     async (omitShasum) =>
       withRegistry(
@@ -523,9 +526,10 @@ describe('retained npm alias source authority', () => {
 });
 
 describe('legacy metadata SHA-1 authority', () => {
-  it(
-    '[fault: corrupt-input] rejects altered real archive bytes against declared shasum before publication',
-    async () =>
+  // pacote falls back to `dist.shasum` for any falsy `dist.integrity`; a present-but-empty SRI must not disarm it.
+  it.each([undefined, '', null] as const)(
+    '[fault: corrupt-input] rejects altered real archive bytes against declared shasum before publication (declared SRI: %j)',
+    async (declaredIntegrity) =>
       withRegistry(
         async (url, requests) => {
           const dir = await mkdtemp(join(tmpdir(), 'rifty-alias-corrupt-'));
@@ -557,6 +561,7 @@ describe('legacy metadata SHA-1 authority', () => {
         'ansi-regex@3.0.0',
         false,
         'corrupt-tarball',
+        declaredIntegrity,
       ),
     60000,
   );
