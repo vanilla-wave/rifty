@@ -24,8 +24,8 @@ in the report describe the run directory, not this repository.
 | queue-clear | 0 | 0 | 3 | 3 | 4 rifty-runtime: AsyncLocalStorage after `await`; 1 unisolated (Node fails too); 1 import-toast setup timeout |
 | csv-workflow-v5 | 2 | 3 | 3 | 2 | 1 unisolated; Codex: CLI 503 reconnect, app judge PASS |
 | markdown-notes-v4 | 3 | 2 | 3 | 3 | 1 agent TypeError |
-| booking-workflow-v11 | 0 | 0 | 0 | 3 | agent (Luna): public Validation/date-time regex defects in all Pi lanes |
-| expense-settlement-v11 | 0 | 2 | 1 | 1 | COI: Svelte HMR blank preview ×3 (unisolated); task-bad ×4 across native lanes |
+| booking-workflow-v11 | 0 | 0 | 0 | 3 | oracle-qualified: judged by the retired record-observation engine (ADR-0535), not reproducible from this tree; recorded class agent (Luna): public Validation/date-time regex defects in all Pi lanes |
+| expense-settlement-v11 | 0 | 2 | 1 | 1 | oracle-qualified (ADR-0535); COI: Svelte HMR blank preview ×3 (unisolated); task-bad ×4 across native lanes |
 
 Failure classes: none 64, agent 15, rifty-runtime 4, ai-mode-ux 2, native-tooling 1,
 task-bad 4, unisolated 6.
@@ -42,17 +42,20 @@ task-bad 4, unisolated 6.
   failures) — `docs/backlog/playground/workspace-import-success-observation-timeout.md`.
 - npm-client rejected SHA-1 lock integrity and `npm:` aliases (24/96 setup failures in
   the confounded eval-v16); repaired with real-npm parity in this delivery (ADR-0526/0527).
-- Expense/booking judges still reject some working UIs (decorative glyphs, styled
-  checkbox, native CLI 503 status) — captured as `docs/backlog/distribution/*-observation.md`.
+- Expense/booking judges rejected working UIs (decorative glyphs, styled checkbox);
+  the record-observation engine behind them was retired instead of repaired
+  (ADR-0535). The notes judge's native `confirm()` dismissal stays
+  `docs/backlog/distribution/native-confirmation-observation.md`; the native Codex
+  CLI 503 status `docs/backlog/distribution/native-codex-recovered-error-status.md`.
 
 ## Limits
 
-Judge code changed after this recording: `judge/context.ts` (caption-only Cancel
-exclusion removed from candidates; destructive captions never loaded as edits) and
-the judge fingerprint now covers the import closure, so a new plan is not
+The record-observation judge engine behind booking/expense was removed after this
+recording (ADR-0535); those rows are oracle-qualified and cannot be re-run from this
+tree. `judge/context.ts` was trimmed to the helpers the surviving cases use and the
+judge fingerprint covers the import closure, so a new plan is not
 fingerprint-comparable with this report (`report --compare` flags judge drift by
-design). Compare new runs against each other, not against v18. Known judge limit:
-`docs/backlog/distribution/agent-bench-identity-remainder-interior-tokens.md`.
+design). Compare new runs against each other, not against v18.
 
 Models, contexts, tools and installed graphs differ between lanes; no causal
 model-quality or runtime-only delta is claimed. Proxy prices are 0, not spend.
@@ -64,5 +67,6 @@ tuning or pruning after the series started.
 Pilot v1–v4 and eval v1–v17 (2026-10-05 → 2026-10-14) were each stopped or
 superseded on judge false-negatives, npm-client setup failures, a codex-proxy
 parallel tool-call argument loss, or host faults; eval-v16 original 43/96 was
-confounded, corrected v16 51/96, v17 57/96. Their archives are not retained in
-git (ADR-0532); the corpus versions that drove them stay under `corpus/`.
+confounded, corrected v16 51/96, v17 57/96. Their archives, manifests and case
+versions are not retained in git (ADR-0532/0535); `corpus/core-v1.json` carries the six
+cases of this run whose judges stand, with unchanged bytes.

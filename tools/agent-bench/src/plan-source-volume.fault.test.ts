@@ -27,7 +27,7 @@ import {loadCorpus} from ${JSON.stringify(resolve('tools/agent-bench/src/corpus.
 import {resolvePlan} from ${JSON.stringify(resolve('tools/agent-bench/src/plan.ts'))};
 const config=await loadConfig(${JSON.stringify(resolve('tools/agent-bench/configs/pilot-comparison.json'))});
 ${configuration}
-const task=(await loadCorpus('eval-v16'))[0];
+const task=(await loadCorpus('core-v1'))[0];
 task.judgeFiles=task.judgeFiles.map(path=>resolve(path));
 process.chdir(${JSON.stringify(directory)});
 const plan=await resolvePlan(config,[task],['local-reference']);

@@ -406,22 +406,12 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0508 | Discover semantic captions in corrected pilot judges |
 | 0509 | Judge decoded CSV export values in a corrected pilot |
 | 0510 | Judge visible Markdown and note navigation behavior |
-| 0511 | Freeze connected workflow evaluation corpus |
-| 0512 | Accept contextual choice captions in workflow judges |
 | 0513 | Observe persisted CSV records through public export |
 | 0514 | Observe composed saved-note captions |
 | 0515 | Observe visible CSV exports before state-changing actions |
-| 0516 | Accept native calendar controls in booking judges |
 | 0517 | Use accessible names for editable judge controls |
-| 0518 | Bind editable judge controls to action context |
-| 0519 | Resolve workflow operations through observable context |
-| 0520 | Verify workflow record identity outside action captions |
-| 0521 | Corroborate record identity across caption presentation |
-| 0522 | Observe record identity through persisted effects |
-| 0523 | Observe reservations through independent public display |
-| 0524 | Project reservation fields without aggregate identity |
-| 0525 | Verify complete record observation settlement |
 | 0532 | Commit evaluation summaries as text core only |
+| 0535 | Judge app tasks against a prompt-stated contract |
 
 ## Superseded (removed)
 
@@ -464,6 +454,17 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0321 | 0371 | strict lifecycle motive retained; the ninth correlation engine is deleted with its only consumer |
 | 0373 | 0374 | narrow install/run-bin control retained; Workbench entry ownership, nested-only URL, toolchain-only report, shared-WASM boundary and ADR-0371 registry-twin authority grafted |
 | 0374 | 0375 | explicit Worker/API/registry authority retained; Vite identity, lifecycle and build-only finalizer removed from generic no-COI control |
+| 0511 | 0535 | connected workflow corpus freeze (booking/expense) retired; contract-first app cases calibrate before freeze |
+| 0512 | 0535 | contextual choice-caption projection retired with the booking/expense judges |
+| 0516 | 0535 | native date/time/number input owner retired with the booking/expense judges |
+| 0518 | 0535 | action-context control binding retired; the contract names its controls |
+| 0519 | 0535 | workflow-operation discovery through context retired; no discovery layer |
+| 0520 | 0535 | record identity outside captions retired; records are declared by the module API |
+| 0521 | 0535 | caption-presentation corroboration retired with 0520 |
+| 0522 | 0535 | persisted-effect record observation retired; judges are ordinary tests against a stated API |
+| 0523 | 0535 | independent reservation display observation retired with the booking case |
+| 0524 | 0535 | reservation field projection retired with the booking case |
+| 0525 | 0535 | record observation settlement retired with the engine |
 
 
 ## Corrections (active)

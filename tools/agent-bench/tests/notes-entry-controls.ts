@@ -15,7 +15,7 @@ import {
   waitHttpReady,
 } from '../src/proc.ts';
 
-const task = (await loadCorpus(process.argv[2] ?? 'eval-v3')).find(
+const task = (await loadCorpus(process.argv[2] ?? 'core-v1')).find(
   (task) => task.family === 'linked-knowledge',
 )!;
 const files = JSON.parse(
@@ -157,7 +157,7 @@ try {
   await writeFile(
     join(root, 'evidence.json'),
     JSON.stringify(
-      { suite: process.argv[2] ?? 'eval-v3', task: task.id, files, ...evidence },
+      { suite: process.argv[2] ?? 'core-v1', task: task.id, files, ...evidence },
       null,
       2,
     ),

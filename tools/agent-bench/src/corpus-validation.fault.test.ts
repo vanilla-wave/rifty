@@ -9,7 +9,7 @@ it.each(['project', 'prompt', 'judge', 'card', 'provenance', 'lock', 'path', 'fa
   async (field) => {
     const root = await mkdtemp(join(tmpdir(), 'rifty-corpus-corrupt-'));
     await cp('tools/agent-bench/corpus', root, { recursive: true });
-    const manifestPath = join(root, 'pilot-v1.json');
+    const manifestPath = join(root, 'core-v1.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
     manifest.cases = manifest.cases.slice(0, 2);
     const card = manifest.cases[0];
@@ -39,7 +39,7 @@ it.each(['project', 'prompt', 'judge', 'card', 'provenance', 'lock', 'path', 'fa
       await writeFile(path, text);
     }
     await writeFile(manifestPath, JSON.stringify(manifest));
-    const result = await loadCorpus('pilot-v1', root).then(
+    const result = await loadCorpus('core-v1', root).then(
       () => 'admitted',
       (error) => String(error),
     );

@@ -22,7 +22,7 @@ try {
     compat: {},
   };
   config.codex = undefined;
-  const tasks = await loadCorpus('pilot-v1');
+  const tasks = await loadCorpus('core-v1');
   const report = await run(
     config,
     tasks,

@@ -1,12 +1,5 @@
 import type { Frame, Locator, Page } from '@playwright/test';
-import {
-  cancellationAction,
-  caption,
-  escapeCaption,
-  recordScopeByIdentity,
-} from './record-context.ts';
 
-export { caption } from './record-context.ts';
 export interface JudgeContext {
   view: Frame | Page;
   previewUrl: string;
@@ -24,6 +17,16 @@ export type TaskJudge = (context: JudgeContext) => Promise<JudgeVerdict>;
 export function verdict(probes: JudgeProbe[]): JudgeVerdict {
   return { pass: probes.length > 0 && probes.every((probe) => probe.pass), probes };
 }
+
+const escapeCaption = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Literal caption as a word-bounded, case-insensitive pattern. */
+export function caption(name: string): RegExp {
+  return new RegExp(
+    `${/^\w/.test(name) ? '\\b' : ''}${escapeCaption(name)}${/\w$/.test(name) ? '\\b' : ''}`,
+    'i',
+  );
+}
+
 export async function issues({ view }: JudgeContext) {
   await view.getByRole('link', { name: 'Issues', exact: true }).click();
   await view.getByRole('heading', { name: 'Issues', exact: true }).waitFor();
@@ -46,7 +49,7 @@ export async function fieldValue(field: Locator): Promise<string> {
       : (node.textContent ?? ''),
   );
 }
-export function namedActions({ view }: JudgeContext, name: string | RegExp) {
+function namedActions({ view }: JudgeContext, name: string | RegExp) {
   return view
     .getByRole('button', { name, exact: typeof name === 'string' })
     .or(view.getByRole('link', { name, exact: typeof name === 'string' }));
@@ -71,14 +74,14 @@ export async function renderedValue(output: Locator): Promise<string> {
   });
 }
 
-export function field({ view }: JudgeContext, name: string | RegExp) {
+function field({ view }: JudgeContext, name: string | RegExp) {
   return view
     .getByRole('textbox', { name })
     .or(view.getByRole('searchbox', { name }))
     .or(view.getByRole('combobox', { name }));
 }
 
-/** Editing selects controls, even when read-only outputs share their purpose. */
+/** Editing selects controls, even when read-only outputs share their purpose (ADR-0517). */
 const editableControls =
   'input:not([readonly]):not([disabled]),textarea:not([readonly]):not([disabled]),select:not([disabled]),[contenteditable="true"],[role="combobox"]:not([aria-disabled="true"]):not([aria-readonly="true"])';
 export function editableControl(ctx: JudgeContext, name: string | RegExp) {
@@ -106,217 +109,13 @@ export function editableControl(ctx: JudgeContext, name: string | RegExp) {
     .and(view.locator(editableControls));
 }
 
-/** Native form association or closest action context owns the candidate set. */
-async function controlsInAction(
-  candidates: Locator,
-  action: Locator,
-  scalar: boolean,
-  groups: readonly Locator[] = [],
-): Promise<Locator> {
-  if ((await action.count()) !== 1) throw new Error('Action context is missing or ambiguous');
-  // A shared editor has one control for each observed participant purpose.
-  if (
-    !scalar &&
-    groups.length &&
-    (await Promise.all(groups.map((group) => group.count()))).every((count) => count === 1)
-  )
-    return candidates;
-  const form = await action.evaluateHandle((node) =>
-    node instanceof HTMLButtonElement || node instanceof HTMLInputElement
-      ? node.form
-      : node.closest('form'),
-  );
-  try {
-    const indices = await candidates.evaluateAll(
-      (nodes, owner) =>
-        nodes.flatMap((node, index) => {
-          const nativeOwner =
-            node instanceof HTMLInputElement ||
-            node instanceof HTMLTextAreaElement ||
-            node instanceof HTMLSelectElement ||
-            node instanceof HTMLButtonElement
-              ? node.form
-              : node.closest('form');
-          return owner && nativeOwner === owner ? [index] : [];
-        }),
-      form,
-    );
-    if (scalar ? indices.length === 1 : indices.length > 0) {
-      let owned = candidates.nth(indices[0]!);
-      for (const index of indices.slice(1)) owned = owned.or(candidates.nth(index));
-      return owned;
-    }
-  } finally {
-    await form.dispose();
-  }
-  const scopes = await action.locator('xpath=ancestor::*').all();
-  for (const scope of scopes.reverse()) {
-    const contained = candidates.and(scope.locator('*'));
-    const count = await contained.count();
-    if (scalar ? count === 1 : count > 0) {
-      if (
-        scalar ||
-        (await Promise.all(groups.map((group) => group.and(contained).count()))).every(
-          (count) => count === 1,
-        )
-      )
-        return contained;
-    }
-  }
-  throw new Error('Control purpose is missing or ambiguous in the intended action context');
-}
-
-/** Scalar observation preserves shared singleton editors and rejects ambiguous sets. */
-export async function controlForAction(candidates: Locator, action: Locator): Promise<Locator> {
-  if ((await candidates.count()) === 1) return candidates;
-  return controlsInAction(candidates, action, true);
-}
-
-/** Scope a heterogeneous participant set before selecting its representation or state. */
-export async function controlsForAction(
-  candidates: Locator,
-  action: Locator,
-  groups: readonly Locator[],
-): Promise<Locator> {
-  const observed: Locator[] = [];
-  for (const group of groups) if (await group.count()) observed.push(group);
-  return controlsInAction(candidates, action, false, observed);
-}
-
-export async function editableControlForAction(
-  ctx: JudgeContext,
-  name: string | RegExp,
-  action: Locator,
-): Promise<Locator> {
-  return controlForAction(editableControl(ctx, name), action);
-}
-
-export async function workflowAction(
-  ctx: JudgeContext,
-  subjects: string,
-  creation = false,
-  purpose?: Locator,
-): Promise<Locator> {
-  const update = await workflowActions(ctx, 'save|update', subjects);
-  const add = await workflowActions(ctx, 'add|create', subjects);
-  const visible = async (choices: Locator, verbs: string) => {
-    const verb = `(?:${verbs.split('|').map(escapeCaption).join('|')})`;
-    const subject = `(?:${subjects.split('|').map(escapeCaption).join('|')})`;
-    const actionVerb = new RegExp(`\\b${verb}\\b\\s*`, 'i');
-    const actionSubject = new RegExp(`\\b${subject}\\b\\s*`, 'i');
-    const result: Locator[] = [];
-    const captions: (string | undefined)[] = [];
-    for (const node of await choices.all()) {
-      if (!(await node.isVisible())) continue;
-      const name = accessibleRoot(await node.ariaSnapshot());
-      const caption =
-        name === undefined
-          ? undefined
-          : JSON.stringify(name.replace(actionVerb, '').replace(actionSubject, '').trim());
-      let duplicate = -1;
-      if (purpose && (await purpose.count()) && caption) {
-        for (let index = 0; index < result.length; index++) {
-          if (captions[index] !== caption) continue;
-          const first = await controlForAction(purpose, result[index]!);
-          const second = await controlForAction(purpose, node);
-          if (await first.and(second).count()) {
-            duplicate = index;
-            break;
-          }
-        }
-      }
-      if (duplicate >= 0) {
-        if (!(await result[duplicate]!.isEnabled()) && (await node.isEnabled()))
-          result[duplicate] = node;
-      } else {
-        result.push(node);
-        captions.push(caption);
-      }
-    }
-    return result;
-  };
-  const updates = await visible(update, 'save|update');
-  const additions = await visible(add, 'add|create');
-  if (creation && additions.length === 1 && purpose && (await purpose.count())) {
-    const creationControl = await controlForAction(purpose, additions[0]!);
-    const commits: Locator[] = [];
-    for (const candidate of updates) {
-      const updateControl = await controlForAction(purpose, candidate);
-      if (await creationControl.and(updateControl).count()) commits.push(candidate);
-    }
-    // Add can open/reset the same editor whose Save commits the filled draft.
-    if (commits.length === 1) return commits[0]!;
-    if (commits.length > 1) throw new Error(`Ambiguous intended ${subjects} commit`);
-  }
-  for (const choices of creation ? [additions, updates] : [updates, additions]) {
-    if (choices.length === 1) return choices[0]!;
-    if (choices.length > 1) throw new Error(`Ambiguous intended ${subjects} action`);
-  }
-  throw new Error(`Missing intended ${subjects} action`);
-}
-
-export async function optionLabel(option: Locator): Promise<string> {
-  const nativeLabel = await option.evaluate((node) =>
-    node instanceof HTMLOptionElement &&
-    node.hasAttribute('label') &&
-    !node.hasAttribute('aria-label') &&
-    !node.hasAttribute('aria-labelledby')
-      ? node.label
-      : undefined,
-  );
-  return nativeLabel ?? accessibleRoot(await option.ariaSnapshot()) ?? '';
-}
-
-/** Display context is open; exact literal identities precede caption fragments. */
-export async function choiceOption(scope: JudgeContext['view'] | Locator, name: string) {
-  const exact: Locator[] = [];
-  const contextual: Locator[] = [];
-  for (const option of await scope.getByRole('option').all()) {
-    const label = await optionLabel(option);
-    if (label === name) exact.push(option);
-    if (caption(name).test(label)) contextual.push(option);
-  }
-  const options = exact.length ? exact : contextual;
-  if (options.length !== 1) throw new Error(`Missing/ambiguous choice: ${name}`);
-  return options[0]!;
-}
-
-export async function selectChoices(field: Locator, names: readonly string[]) {
-  const indices = [];
-  for (const name of names) {
-    const options = await choiceOption(field, name);
-    indices.push(await options.evaluate((node) => (node as HTMLOptionElement).index));
-  }
-  await field.selectOption(indices.map((index) => ({ index })));
-}
-
-export async function selectedChoice(field: Locator, identities: readonly string[]) {
-  const selected = field.locator('option:checked');
-  if ((await selected.count()) !== 1) throw new Error('Missing/ambiguous selected option');
-  const label = await optionLabel(selected);
-  const exact = identities.filter((name) => name === label);
-  const matches = exact.length ? exact : identities.filter((name) => caption(name).test(label));
-  if (matches.length !== 1) throw new Error(`Missing/ambiguous selected identity: ${label}`);
-  return matches[0]!;
-}
-
-/** Named action meaning is independent of caption word order. */
-export function actionCaption(verbs: string, subjects: string, identity?: string): RegExp {
-  const words = [verbs.split('|'), subjects.split('|')];
-  return new RegExp(
-    words.map((group) => `(?=.*\\b(?:${group.map(escapeCaption).join('|')})\\b)`).join('') +
-      (identity ? `(?=.*${caption(identity).source})` : ''),
-    'i',
-  );
-}
-
 function primaryPurpose(words: readonly string[], others: readonly string[]): string {
   const exclude = others.map(escapeCaption).join('|');
   const prefix = exclude ? `^(?:(?!\\b(?:${exclude})\\b).)*` : '^.*';
   return `${prefix}\\b(?:${words.map(escapeCaption).join('|')})\\b`;
 }
 
-/** Primary domain purpose distinguishes source/search descriptions from row/editor fields. */
+/** Primary domain purpose distinguishes source/search descriptions from row/editor fields (ADR-0508). */
 function purposePattern(name: string, namespace: Readonly<Record<string, readonly string[]>>) {
   const own = namespace[name];
   if (!own?.length) throw new Error(`Unknown field purpose: ${name}`);
@@ -334,23 +133,7 @@ export function describedField(
   return field(ctx, purposePattern(name, namespace)).and(ctx.view.locator(':read-write'));
 }
 
-export function describedEditableControl(
-  ctx: JudgeContext,
-  name: string,
-  namespace: Readonly<Record<string, readonly string[]>>,
-) {
-  const purpose = purposePattern(name, namespace);
-  return field(ctx, purpose)
-    .or(ctx.view.getByRole('listbox', { name: purpose }))
-    .or(ctx.view.getByRole('spinbutton', { name: purpose }))
-    .and(ctx.view.locator(editableControls));
-}
-
-export function savedEntry(
-  { view }: JudgeContext,
-  title: string,
-  otherTitles: readonly string[] = [],
-) {
+function savedEntry({ view }: JudgeContext, title: string, otherTitles: readonly string[] = []) {
   const name = new RegExp(
     `^(?!.*\\b(?:delete|remove)\\b)${primaryPurpose([title], otherTitles).slice(1)}`,
     'i',
@@ -384,7 +167,7 @@ async function renderedCandidates(ctx: JudgeContext, text: string, exact: boolea
   return candidates;
 }
 
-/** Literal preview content may share a paragraph; editor source is not rendering proof. */
+/** Literal preview content may share a paragraph; editor source is not rendering proof (ADR-0510). */
 export async function renderedText(ctx: JudgeContext, text: string): Promise<boolean> {
   return (await renderedCandidates(ctx, text, false)).length > 0;
 }
@@ -398,12 +181,7 @@ export async function renderedBold(ctx: JudgeContext, text: string): Promise<boo
   return false;
 }
 
-/** Target caption before current title distinguishes Wiki actions from saved-entry excerpts. */
-export function noteTarget(ctx: JudgeContext, target: string, current: string) {
-  return savedEntry(ctx, target, current && current !== target ? [current] : []);
-}
-
-/** Current note identity uses visible caption components; legacy versions retain savedEntry. */
+/** Saved-note identity from visible caption components; a composed delete caption is never an entry (ADR-0514). */
 export async function savedNoteEntry(
   ctx: JudgeContext,
   title: string,
@@ -411,7 +189,7 @@ export async function savedNoteEntry(
 ) {
   const actions = namedActions(ctx, new RegExp(escapeCaption(title), 'i'));
   const exact = namedActions(ctx, new RegExp(`^${escapeCaption(title)}$`, 'i'));
-  const legacy = savedEntry(ctx, title, otherTitles);
+  const plain = savedEntry(ctx, title, otherTitles);
   const identities = [title, ...otherTitles];
   const boundary = `(?:\\b|(?:${identities.map(escapeCaption).join('|')}))`;
   const destructive = namedActions(ctx, new RegExp(`${boundary}(?:delete|remove)${boundary}`, 'i'));
@@ -462,7 +240,7 @@ export async function savedNoteEntry(
       }
       return primary;
     }, identities);
-    if (identity === 0 || (identity < 0 && (await candidate.and(legacy).count()) > 0))
+    if (identity === 0 || (identity < 0 && (await candidate.and(plain).count()) > 0))
       result = result.or(candidate);
   }
   return result;
@@ -472,7 +250,7 @@ export function wikiNoteTarget(ctx: JudgeContext, target: string, current: strin
   return savedNoteEntry(ctx, target, current && current !== target ? [current] : []);
 }
 
-/** RFC4180 field decoding; exported LF/CRLF records, optional header/quoting. */
+/** RFC4180 field decoding; exported LF/CRLF records, optional header/quoting (ADR-0509). */
 export function csvExportMatches(
   text: string,
   expected: readonly (readonly string[])[],
@@ -537,7 +315,7 @@ export function csvExportMatches(
   return JSON.stringify(rows) === JSON.stringify(expected);
 }
 
-/** Visible text and live field values cover accessible output without choosing a caption/DOM. */
+/** Visible text and live field values cover accessible output without choosing a caption/DOM (ADR-0515). */
 export async function outputTexts(ctx: JudgeContext): Promise<string[]> {
   const { view } = ctx;
   const values: string[] = [];
@@ -556,185 +334,4 @@ export async function outputTexts(ctx: JudgeContext): Promise<string[]> {
       .map((node) => (node instanceof HTMLElement ? node.innerText : (node.textContent ?? ''))),
   );
   return [...new Set([...values, ...texts])].filter(Boolean);
-}
-
-function accessibleRoot(snapshot: string): string | undefined {
-  const heading = snapshot.split('\n')[0]?.slice(2) ?? '';
-  const root = heading.startsWith("'")
-    ? heading.slice(1, heading.lastIndexOf("'")).replace(/''/g, "'")
-    : heading;
-  const quoted = root.match(/^\S+ ("(?:\\.|[^"\\])*")/)?.[1];
-  return quoted ? (JSON.parse(quoted) as string) : undefined;
-}
-
-export async function actionName(action: Locator): Promise<string> {
-  const name = accessibleRoot(await action.ariaSnapshot());
-  if (name === undefined) throw new Error('Missing computed action name');
-  return name;
-}
-
-/** Pure eligibility only. Record identity is established by explicit saved effects. */
-export async function workflowCandidates(
-  ctx: JudgeContext,
-  verbs: string,
-  subjects: string,
-): Promise<Locator> {
-  const requested = new RegExp(`\\b(?:${verbs.split('|').map(escapeCaption).join('|')})\\b`, 'i');
-  const domain = new RegExp(
-    `\\b(?:${subjects
-      .split('|')
-      .flatMap((word) => [word, word === 'person' ? 'people' : `${word}s`])
-      .map(escapeCaption)
-      .join('|')})\\b`,
-    'i',
-  );
-  const collections = ctx.view
-    .getByRole('region', { name: domain })
-    .or(ctx.view.getByRole('group', { name: domain }))
-    .or(ctx.view.getByRole('form', { name: domain }))
-    .or(ctx.view.getByRole('list', { name: domain }))
-    .or(ctx.view.getByRole('table', { name: domain }));
-  let result = ctx.view.locator('xpath=//*[false()]');
-  for (const candidate of await namedActions(ctx, requested).all()) {
-    if (!(await candidate.isVisible()) || !(await candidate.isEnabled())) continue;
-    const name = accessibleRoot(await candidate.ariaSnapshot());
-    if (name === undefined) throw new Error('Missing computed operation caption');
-    // Pure eligibility keeps every affordance, cancellations included (ADR-0522); only
-    // workflowActions resolves record context. A caption that starts with a destructive verb
-    // matches a non-destructive request only through the record's literal identity and must
-    // never be executed as an observation load.
-    if (!/\b(?:delete|remove)\b/i.test(verbs) && /^\W*(?:delete|remove)\b/i.test(name)) continue;
-    let eligible = actionCaption(verbs, subjects).test(name);
-    if (!eligible) {
-      for (const scope of (await candidate.locator('xpath=ancestor::*').all()).reverse()) {
-        if (await scope.and(collections).count()) {
-          eligible = true;
-          break;
-        }
-        const headings = scope.getByRole('heading');
-        if ((await headings.count()) === 1 && domain.test(await renderedValue(headings.first()))) {
-          eligible = true;
-          break;
-        }
-      }
-    }
-    if (eligible) {
-      // A new editor control can mention the same verb; it cannot rebind a saved caption.
-      const sameName = namedActions(ctx, name);
-      const element = await candidate.elementHandle();
-      if (!element) throw new Error('Operation disappeared during caption binding');
-      try {
-        const index = await sameName.evaluateAll(
-          (nodes, element) => nodes.indexOf(element),
-          element,
-        );
-        if (index < 0) throw new Error('Operation changed during caption binding');
-        result = result.or(sameName.nth(index));
-      } finally {
-        await element.dispose();
-      }
-    }
-  }
-  return result;
-}
-
-/** Declared operation uses its accessible record/collection context. */
-export async function workflowActions(
-  ctx: JudgeContext,
-  verbs: string,
-  subjects: string,
-  identity?: string,
-): Promise<Locator> {
-  const requested = new RegExp(
-    `(?=.*\\b(?:${verbs.split('|').map(escapeCaption).join('|')})\\b)${identity ? `(?=.*${caption(identity).source})` : ''}`,
-    'i',
-  );
-  const candidates = namedActions(ctx, requested);
-  const subjectWords = subjects
-    .split('|')
-    .flatMap((word) => [word, word === 'person' ? 'people' : `${word}s`]);
-  const domain = new RegExp(`\\b(?:${subjectWords.map(escapeCaption).join('|')})\\b`, 'i');
-  const collections = ctx.view
-    .getByRole('region', { name: domain })
-    .or(ctx.view.getByRole('group', { name: domain }))
-    .or(ctx.view.getByRole('form', { name: domain }))
-    .or(ctx.view.getByRole('list', { name: domain }))
-    .or(ctx.view.getByRole('table', { name: domain }));
-  let result = ctx.view.locator('xpath=//*[false()]');
-  for (const node of await candidates.all()) {
-    if (!(await node.isVisible())) continue;
-    const name = accessibleRoot(await node.ariaSnapshot());
-    if (name === undefined) throw new Error('Missing computed operation caption');
-    const cancellation = await cancellationAction(node, name, verbs);
-    const identityText = name
-      .replace(
-        new RegExp(`\\b(?:${verbs.split('|').map(escapeCaption).join('|')})\\b\\s*`, 'i'),
-        '',
-      )
-      .replace(
-        new RegExp(`\\b(?:${subjects.split('|').map(escapeCaption).join('|')})\\b\\s*`, 'i'),
-        '',
-      )
-      .trim();
-    // Presentation may differ; original action and selected identity stay literal.
-    const plainIdentity = identityText.replace(/^[^\p{L}\p{N}_]+|[^\p{L}\p{N}_]+$/gu, '');
-    const identityEvidence = new RegExp(
-      [...new Set([identityText, plainIdentity])]
-        .filter(Boolean)
-        .map((value) => caption(value).source)
-        .join('|'),
-      'i',
-    );
-    const scopes = (await node.locator('xpath=ancestor::*').all()).reverse();
-    let record: Locator | undefined;
-    if (identityText) {
-      const opposite = new RegExp(
-        `(?=.*\\b(?:${verbs.includes('delete') ? 'edit' : 'delete'})\\b)(?=.*(?:${identityEvidence.source}))`,
-        'i',
-      );
-      for (const scope of scopes) {
-        const local = scope
-          .getByRole('button', { name: requested })
-          .or(scope.getByRole('link', { name: requested }));
-        const complement = scope
-          .getByRole('button', { name: opposite })
-          .or(scope.getByRole('link', { name: opposite }));
-        if ((await complement.count()) && (await local.count()) === 1) {
-          record = scope;
-          break;
-        }
-      }
-    }
-    // Record operations need identity evidence outside their own action caption.
-    if (/\b(?:edit|delete)\b/.test(verbs) && !record) {
-      if (!identityText) continue;
-      record = await recordScopeByIdentity(node, requested, identityEvidence);
-      if (!record) continue;
-    }
-    // A cancellation caption without record context is not a workflow action (ADR-0519).
-    if (cancellation && !record) continue;
-    let accepted = actionCaption(verbs, subjects, identity).test(name);
-    if (!accepted) {
-      for (const scope of scopes) {
-        if (await scope.and(collections).count()) {
-          accepted = true;
-          break;
-        }
-        const headings = scope.getByRole('heading');
-        if ((await headings.count()) === 1 && domain.test(await renderedValue(headings.first()))) {
-          accepted = true;
-          break;
-        }
-      }
-    }
-    if (!accepted) continue;
-    const owner = record ?? scopes[0];
-    if (!owner) throw new Error('Operation has no observable context');
-    result = result.or(
-      owner
-        .getByRole('button', { name, exact: true })
-        .or(owner.getByRole('link', { name, exact: true })),
-    );
-  }
-  return result;
 }

@@ -15,7 +15,7 @@ import {
   waitHttpReady,
 } from '../src/proc.ts';
 
-const task = (await loadCorpus(process.argv[2] ?? 'eval-v5')).find(
+const task = (await loadCorpus(process.argv[2] ?? 'core-v1')).find(
   (t) => t.family === 'contact-import',
 )!;
 const root = await mkdtemp(join(tmpdir(), 'rifty-csv-export-toggle-controls-'));

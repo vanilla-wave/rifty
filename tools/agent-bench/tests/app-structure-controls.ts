@@ -16,7 +16,7 @@ const root = await mkdtemp(join(tmpdir(), 'rifty-app-structure-controls-'));
 const browser = await chromium.launch();
 const evidence = [];
 try {
-  const tasks = (await loadCorpus('pilot-v1')).filter((task) => task.group === 'app');
+  const tasks = (await loadCorpus('core-v1')).filter((task) => task.group === 'app');
   for (const task of tasks) {
     const dir = join(root, task.id);
     await mkdir(dir);
@@ -27,13 +27,14 @@ try {
       timeoutMs: 300000,
     });
     const reference = task.controls!.reference!;
-    const sourcePath = task.id === 'csv-workflow' ? 'src/main.tsx' : 'src/main.js';
+    const sourcePath = task.family === 'contact-import' ? 'src/main.tsx' : 'src/main.js';
     let source = reference[sourcePath]!;
-    if (task.id === 'csv-workflow')
+    if (task.family === 'contact-import')
       source = source
         .replace(
           '<label>Exported CSV<textarea readOnly value={output}/></label>',
-          '<output aria-label="Exported CSV">{output}</output>',
+          // An inline output collapses the CSV line breaks a reader/copier needs; keep them visible.
+          '<output aria-label="Exported CSV" style={{ whiteSpace: \'pre-wrap\' }}>{output}</output>',
         )
         .replace(
           '<label>Filter<input value={query}',
@@ -65,10 +66,10 @@ try {
         variant === 'structure'
           ? structural
           : variant === 'search-only'
-            ? task.id === 'csv-workflow'
+            ? task.family === 'contact-import'
               ? reference[sourcePath]!.replace('`${row.name} ${row.email}`', '`${row.email}`')
               : reference[sourcePath]!.replace("(note.title+' '+note.body)", 'note.body')
-            : task.id === 'csv-workflow'
+            : task.family === 'contact-import'
               ? reference[sourcePath]!.replace('row.name.length>0&&', '').replace(
                   "value+='\"';i++;",
                   'i++;',

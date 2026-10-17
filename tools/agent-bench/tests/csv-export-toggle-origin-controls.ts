@@ -12,7 +12,7 @@ import { run } from '../src/runner.ts';
 const root = await mkdtemp(join(tmpdir(), 'rifty-csv-export-toggle-origins-'));
 const config = await loadConfig('tools/agent-bench/configs/pilot-comparison.json');
 config.runsPerTask = 1;
-const original = (await loadCorpus('eval-v5')).find((task) => task.family === 'contact-import')!;
+const original = (await loadCorpus('core-v1')).find((task) => task.family === 'contact-import')!;
 const native = JSON.parse(await readFile(process.argv[2]!, 'utf8')) as {
   variant: string;
   source: FileTree;

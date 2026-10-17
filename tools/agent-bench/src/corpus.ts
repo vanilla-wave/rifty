@@ -15,7 +15,6 @@ interface Card {
   prompt: string;
   judge: string;
   starterRegression?: { buildCommand: string; heading: string };
-  judgeSupport?: 'native-input-v1' | 'record-observation-v1';
   inputsSha256: string;
   lockSha256: string;
   promptSha256: string;
@@ -83,9 +82,7 @@ export async function loadCorpus(
       !['calibration', 'evaluation'].includes(card.split) ||
       card.project !== 'project.json' ||
       card.prompt !== 'prompt.md' ||
-      !/^judge\.(cjs|mjs|ts)$/.test(card.judge) ||
-      (card.judgeSupport !== undefined &&
-        !['native-input-v1', 'record-observation-v1'].includes(card.judgeSupport))
+      !/^judge\.(cjs|mjs|ts)$/.test(card.judge)
     )
       throw new Error('Invalid corpus card');
     if (
@@ -155,19 +152,6 @@ export async function loadCorpus(
           ...(card.starterRegression
             ? ['tools/agent-bench/src/runner.ts', 'tools/agent-bench/src/corpus.ts']
             : []),
-          ...(card.judgeSupport === 'record-observation-v1'
-            ? [
-                'tools/agent-bench/src/judge/record-observation.ts',
-                'tools/agent-bench/src/judge/record-candidates.ts',
-                'tools/agent-bench/src/judge/record-action-binding.ts',
-                'tools/agent-bench/src/judge/public-record-display.ts',
-                'tools/agent-bench/src/judge/reservation-records.ts',
-                'tools/agent-bench/src/judge/reservation-display.ts',
-                'tools/agent-bench/src/judge/expense-records.ts',
-                'tools/agent-bench/src/judge/room-records.ts',
-              ]
-            : []),
-          ...(card.judgeSupport ? ['tools/agent-bench/src/judge/native-input.ts'] : []),
         ];
         // Every file the judge reaches by import carries criteria (ADR-0506/0507); listed order is kept.
         const reached = await judgeImportClosure(join(dir, card.judge));

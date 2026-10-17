@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, it } from 'vitest';
-it('resolves the frozen pilot with real projects/apps, family separation and identical lock identity', async () => {
+it('resolves the frozen core suite with real projects/apps, family separation and identical lock identity', async () => {
   const result = spawnSync(
     process.execPath,
     [
@@ -13,7 +13,7 @@ it('resolves the frozen pilot with real projects/apps, family separation and ide
       '--config',
       'tools/agent-bench/configs/gpt-6-luna.json',
       '--suite',
-      'pilot-v1',
+      'core-v1',
       '--runs',
       '2',
     ],
@@ -36,8 +36,8 @@ it('resolves the frozen pilot with real projects/apps, family separation and ide
     'ms-weeks',
     'stringify-boxed',
     'queue-clear',
-    'csv-workflow',
-    'markdown-notes',
+    'csv-workflow-v5',
+    'markdown-notes-v4',
   ]);
   expect(plan.trials).toHaveLength(48);
   expect(new Set(plan.tasks.map((task) => task.group))).toEqual(new Set(['bug', 'feature', 'app']));

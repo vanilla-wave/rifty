@@ -13,7 +13,7 @@ import { run } from '../src/runner.ts';
 const root = await mkdtemp(join(tmpdir(), 'rifty-notes-entry-origins-'));
 const config = await loadConfig('tools/agent-bench/configs/pilot-comparison.json');
 config.runsPerTask = 1;
-const original = (await loadCorpus('eval-v4')).find((task) => task.family === 'linked-knowledge')!;
+const original = (await loadCorpus('core-v1')).find((task) => task.family === 'linked-knowledge')!;
 const native = JSON.parse(await readFile(process.argv[2]!, 'utf8')) as {
   variant: string;
   files: FileTree;

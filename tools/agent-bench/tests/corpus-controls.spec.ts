@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 // Deterministic real origin controls; no agent/model emulation or paid CI participant.
-test('every selected pilot reference is judged in its real origin, with retained failures', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'rifty-pilot-controls-'));
+test('every selected core reference is judged in its real origin, with retained failures', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'rifty-core-controls-'));
   const output = join(root, 'series');
   const config = JSON.parse(
     await readFile('tools/agent-bench/configs/gpt-6-luna.json', 'utf8'),
@@ -21,7 +21,7 @@ test('every selected pilot reference is judged in its real origin, with retained
       resolve('tools/agent-bench/src/cli.ts'),
       'controls',
       '--suite',
-      'pilot-v1',
+      'core-v1',
       '--config',
       input,
       '--control',
@@ -68,8 +68,8 @@ test('every selected pilot reference is judged in its real origin, with retained
     'ms-weeks',
     'stringify-boxed',
     'queue-clear',
-    'csv-workflow',
-    'markdown-notes',
+    'csv-workflow-v5',
+    'markdown-notes-v4',
   ]) {
     const rows = report.runs.filter((row) => row.task === task);
     expect(rows.map((row) => row.lane).sort()).toEqual(
@@ -85,5 +85,5 @@ test('every selected pilot reference is judged in its real origin, with retained
     (row) => row.lane === 'local-reference' || row.lane === 'native-codex',
   ))
     expect(row.judge.pass, JSON.stringify(row)).toBe(true);
-  console.log(`PILOT_CONTROL_ARTIFACTS ${output}`);
+  console.log(`CORE_CONTROL_ARTIFACTS ${output}`);
 });
