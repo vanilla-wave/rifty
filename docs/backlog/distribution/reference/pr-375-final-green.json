@@ -1,0 +1,492 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "B1 закрыт; поведенческих блокеров нет. Перед merge сохранить verdict и получить зелёный pr:check: сейчас refs:check красный.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #375 observed-defect/repack; /tmp/pr375-body.md; tools/agent-bench/CHANGELOG.md:5–6; docs/adr/distribution/0535-judge-app-tasks-against-a-prompt-stated-contract.md; ADR-0526/0527. HEAD 97d6680c11f2beb9a0ee161aef8a9b147ac4c598; BASE 22f02a3b354ef1dd4861f0e17a798aed2512baed (origin/main). Frozen reference eval-v18 @ cf7a842a46de48ae8dcf3ebcccdb7ba6338dd109. Удалённый booking/expense engine исключён решением пользователя; исполнение только в detached scratch. Вердикт проверен tools/review/blockers.mjs, exit 0; /tmp/pr375-review-round2/verdict.json.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "ADR-0535 Consequences: next contract-first corpus",
+      "location": "docs/backlog/distribution/agent-bench-contract-first-corpus.md:20",
+      "summary": "Следующий core-v2 остаётся draft: prompt API/UI, обычные test judges, ≥3 correct/≥3 wrong calibration; вне текущего unit."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "install(): root/transitive/scoped aliases, native-lock paths, offline semver/latest replay",
+      "source": "public-api",
+      "trace": "ADR-0526",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:189; /tmp/pr375-npm-v9-proof.md:5",
+      "note": ""
+    },
+    {
+      "row": "resolveOverride(): alias placement, omitted range=*",
+      "source": "public-api",
+      "trace": "ADR-0526",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:177; tests/integration/npm-alias.parity.test.ts:182",
+      "note": ""
+    },
+    {
+      "row": "buildLockfile()/Lockfile: alias path, canonical target name",
+      "source": "public-api",
+      "trace": "ADR-0526+ADR-0527",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:228",
+      "note": ""
+    },
+    {
+      "row": "bundleCompletenessGap(): canonical target/cache identity",
+      "source": "public-api",
+      "trace": "ADR-0526",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:289; tests/integration/npm-alias.parity.test.ts:307",
+      "note": ""
+    },
+    {
+      "row": "computeIntegrity(): SHA-1 совпадает с native digest",
+      "source": "public-api",
+      "trace": "ADR-0527",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-sha1.parity.test.ts:78",
+      "note": ""
+    },
+    {
+      "row": "parseIntegrityAlgorithm()/IntegrityAlgorithm: SHA-1 SRI принимается",
+      "source": "public-api",
+      "trace": "ADR-0527",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-sha1.parity.test.ts:74",
+      "note": ""
+    },
+    {
+      "row": "VfsTarballCache: SHA-1 verification/refetch/corruption rejection",
+      "source": "public-api",
+      "trace": "ADR-0527",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-sha1.parity.test.ts:79",
+      "note": ""
+    },
+    {
+      "row": "Без named intent сохраняются admitted source name/archive/checksum",
+      "source": "acceptance",
+      "trace": "ADR-0527",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:328; tests/integration/npm-alias.parity.test.ts:404",
+      "note": ""
+    },
+    {
+      "row": "Named install выбирает target metadata/checksum; unsigned source получает независимый SHA-512",
+      "source": "acceptance",
+      "trace": "ADR-0527",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:453; /tmp/pr375-npm-v9-proof.md:18",
+      "note": ""
+    },
+    {
+      "row": "Объявленный shasum при absent/empty/null SRI отклоняет повреждение до публикации package/lock",
+      "source": "acceptance",
+      "trace": "ADR-0527",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:530; /tmp/pr375-npm-v9-proof.md:18",
+      "note": ""
+    },
+    {
+      "row": "Non-registry alias targets отклоняются до HTTP",
+      "source": "acceptance",
+      "trace": "ADR-0526",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:314",
+      "note": ""
+    },
+    {
+      "row": "Original npm fixture archive set защищён записанными SHA-512",
+      "source": "frozen-artifact",
+      "trace": "ADR-0526+ADR-0527",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:33",
+      "note": ""
+    },
+    {
+      "row": "CLI plan: полная deterministic matrix до setup",
+      "source": "public-api",
+      "trace": "ADR-0505",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/series.fault.test.ts:20",
+      "note": ""
+    },
+    {
+      "row": "CLI controls: без model; own-origin evidence отдельно от quality",
+      "source": "public-api",
+      "trace": "ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/corpus-controls.spec.ts:7; tools/agent-bench/src/statistics-report.test.ts:198",
+      "note": ""
+    },
+    {
+      "row": "CLI run: occupied output отклоняется; unsupported selected trials сохраняются",
+      "source": "public-api",
+      "trace": "ADR-0505",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/series.fault.test.ts:73; tools/agent-bench/tests/series-interruption.spec.ts:154",
+      "note": ""
+    },
+    {
+      "row": "CLI report: offline regeneration сохраняет producer JSON",
+      "source": "public-api",
+      "trace": "ADR-0505+ADR-0532",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:114; /tmp/pr375-round2-summary-proof.md:7",
+      "note": ""
+    },
+    {
+      "row": "Completed attempts сохраняются до cleanup; signals сохраняют PASS и завершают native children",
+      "source": "acceptance",
+      "trace": "ADR-0505",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/lifecycle.fault.test.ts:15; tools/agent-bench/src/lifecycle.fault.test.ts:81; tools/agent-bench/src/lifecycle.fault.test.ts:135",
+      "note": ""
+    },
+    {
+      "row": "Interrupted attempts/missing trials сохраняются; persistence failure громкий",
+      "source": "acceptance",
+      "trace": "ADR-0505",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/series-interruption.spec.ts:114; tools/agent-bench/src/series.fault.test.ts:95; tools/agent-bench/src/series.fault.test.ts:134",
+      "note": ""
+    },
+    {
+      "row": "Native Codex требует completion+judge; failure/corrupt JSONL/budget не превращаются в success",
+      "source": "acceptance",
+      "trace": "ADR-0505",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/codex-observation.fault.test.ts:17; tools/agent-bench/src/codex-observation.fault.test.ts:27; tools/agent-bench/src/codex-observation.fault.test.ts:49",
+      "note": ""
+    },
+    {
+      "row": "Native pipe output сохраняет UTF-8 между chunks",
+      "source": "acceptance",
+      "trace": "ADR-0505",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/proc-output.fault.test.ts:4",
+      "note": ""
+    },
+    {
+      "row": "Полные source diff/status fingerprints; producer failure/deadline громкие",
+      "source": "acceptance",
+      "trace": "ADR-0507",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/plan-source-volume.fault.test.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Corpus project/prompt/judge/card/lock pins, v3 lock, family split, private seed exclusion",
+      "source": "acceptance",
+      "trace": "ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-validation.fault.test.ts:9; tools/agent-bench/src/corpus-plan.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Фактическое retained judge import closure входит в fingerprint; criteria drift incomparable",
+      "source": "acceptance",
+      "trace": "ADR-0506+ADR-0507",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/corpus-judge-closure.test.ts:8; tools/agent-bench/src/statistics-report.test.ts:281",
+      "note": ""
+    },
+    {
+      "row": "CP95 finite-cell/macro uncertainty; incomplete cells unknown",
+      "source": "acceptance",
+      "trace": "ADR-0507",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:131; tools/agent-bench/src/statistics-report.test.ts:233",
+      "note": ""
+    },
+    {
+      "row": "Controls/Codex разделены; unknown telemetry и failure/missing denominators сохранены",
+      "source": "acceptance",
+      "trace": "ADR-0507",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:198; tools/agent-bench/src/statistics-report.test.ts:207; tools/agent-bench/src/statistics-report.test.ts:250; tools/agent-bench/src/statistics-report.test.ts:309",
+      "note": ""
+    },
+    {
+      "row": "ms-negative: frozen judge/input/prompt/lock bytes сохранены из eval-v18",
+      "source": "frozen-artifact",
+      "trace": "ADR-0535+ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/ms-negative/judge.cjs:1; tools/agent-bench/src/corpus-validation.fault.test.ts:9; /tmp/pr375-retained-frozen-hashes.json:1",
+      "note": ""
+    },
+    {
+      "row": "ms-weeks: frozen judge/input/prompt/lock bytes сохранены из eval-v18",
+      "source": "frozen-artifact",
+      "trace": "ADR-0535+ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/ms-weeks/judge.cjs:1; tools/agent-bench/src/corpus-validation.fault.test.ts:9; /tmp/pr375-retained-frozen-hashes.json:1",
+      "note": ""
+    },
+    {
+      "row": "stringify-boxed: frozen judge/input/prompt/lock bytes сохранены из eval-v18",
+      "source": "frozen-artifact",
+      "trace": "ADR-0535+ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/stringify-boxed/judge.cjs:1; tools/agent-bench/src/corpus-validation.fault.test.ts:9; /tmp/pr375-retained-frozen-hashes.json:1",
+      "note": ""
+    },
+    {
+      "row": "queue-clear: frozen judge/input/prompt/lock bytes сохранены из eval-v18",
+      "source": "frozen-artifact",
+      "trace": "ADR-0535+ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/queue-clear/judge.mjs:1; tools/agent-bench/src/corpus-validation.fault.test.ts:9; /tmp/pr375-retained-frozen-hashes.json:1",
+      "note": ""
+    },
+    {
+      "row": "csv-workflow-v5: frozen judge/input/prompt/lock bytes сохранены из eval-v18",
+      "source": "frozen-artifact",
+      "trace": "ADR-0535+ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/csv-workflow-v5/judge.ts:1; tools/agent-bench/src/corpus-validation.fault.test.ts:9; /tmp/pr375-retained-frozen-hashes.json:1",
+      "note": ""
+    },
+    {
+      "row": "markdown-notes-v4: frozen judge/input/prompt/lock bytes сохранены из eval-v18",
+      "source": "frozen-artifact",
+      "trace": "ADR-0535+ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/markdown-notes-v4/judge.ts:1; tools/agent-bench/src/corpus-validation.fault.test.ts:9; /tmp/pr375-retained-frozen-hashes.json:1",
+      "note": ""
+    },
+    {
+      "row": "linked-import-1: pinned boundary judge и positive/negative controls",
+      "source": "frozen-artifact",
+      "trace": "ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/linked-import-1/judge.mjs:1; tools/agent-bench/tests/boundary-corpus-controls.ts:31",
+      "note": ""
+    },
+    {
+      "row": "linked-import-2: pinned boundary judge и positive/negative controls",
+      "source": "frozen-artifact",
+      "trace": "ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/linked-import-2/judge.mjs:1; tools/agent-bench/tests/boundary-corpus-controls.ts:31",
+      "note": ""
+    },
+    {
+      "row": "async-search-1: pinned boundary judge и positive/negative controls",
+      "source": "frozen-artifact",
+      "trace": "ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/async-search-1/judge.mjs:1; tools/agent-bench/tests/boundary-corpus-controls.ts:31",
+      "note": ""
+    },
+    {
+      "row": "async-search-2: pinned boundary judge и positive/negative controls",
+      "source": "frozen-artifact",
+      "trace": "ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/async-search-2/judge.mjs:1; tools/agent-bench/tests/boundary-corpus-controls.ts:31",
+      "note": ""
+    },
+    {
+      "row": "compiler-dependency-1: pinned boundary judge и positive/negative controls",
+      "source": "frozen-artifact",
+      "trace": "ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/compiler-dependency-1/judge.ts:1; tools/agent-bench/tests/boundary-corpus-controls.ts:31",
+      "note": ""
+    },
+    {
+      "row": "compiler-dependency-2: pinned boundary judge и positive/negative controls",
+      "source": "frozen-artifact",
+      "trace": "ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/compiler-dependency-2/judge.ts:1; tools/agent-bench/tests/boundary-corpus-controls.ts:31",
+      "note": ""
+    },
+    {
+      "row": "indexed-data-1: pinned boundary judge и positive/negative controls",
+      "source": "frozen-artifact",
+      "trace": "ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/indexed-data-1/judge.ts:1; tools/agent-bench/tests/boundary-corpus-controls.ts:31",
+      "note": ""
+    },
+    {
+      "row": "indexed-data-2: pinned boundary judge и positive/negative controls",
+      "source": "frozen-artifact",
+      "trace": "ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/corpus/cases/indexed-data-2/judge.ts:1; tools/agent-bench/tests/boundary-corpus-controls.ts:31",
+      "note": ""
+    },
+    {
+      "row": "Compiler goldens: TypeScript5.9.2/esbuild0.28.0, es2015/es2020",
+      "source": "frozen-artifact",
+      "trace": "ADR-0506",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/boundary-compiler-goldens.json:1; tools/agent-bench/tests/boundary-compiler-selection-guards.ts:33",
+      "note": ""
+    },
+    {
+      "row": "CSV: exact decoded values, optional header/quoting, saved record multiplicity",
+      "source": "acceptance",
+      "trace": "ADR-0509+ADR-0513",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/csv-export.fault.test.ts:4; tools/agent-bench/src/csv-export.fault.test.ts:20; tools/agent-bench/src/csv-export.fault.test.ts:56",
+      "note": ""
+    },
+    {
+      "row": "CSV current-filter export проверяется до/после toggle action",
+      "source": "acceptance",
+      "trace": "ADR-0515",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/csv-export-toggle-controls.ts:69; tools/agent-bench/tests/csv-export-toggle-controls.ts:106",
+      "note": ""
+    },
+    {
+      "row": "Semantic editable purposes отделены от output; visible Markdown/navigation сохранены",
+      "source": "acceptance",
+      "trace": "ADR-0508+ADR-0510",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/app-structure-controls.spec.ts:4; tools/agent-bench/tests/app-structure-controls.ts:84",
+      "note": ""
+    },
+    {
+      "row": "Composed saved-note/Wiki identity исключает destructive actions/hidden identity",
+      "source": "acceptance",
+      "trace": "ADR-0514",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/notes-entry-controls.fault.spec.ts:4; tools/agent-bench/tests/notes-entry-controls.fault.spec.ts:16; tools/agent-bench/tests/notes-entry-controls.fault.spec.ts:46",
+      "note": ""
+    },
+    {
+      "row": "Editable accessible names/native role overrides/readonly/disabled сохранены",
+      "source": "acceptance",
+      "trace": "ADR-0517",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/editable-control-names.spec.ts:24; tools/agent-bench/tests/native-input-roles.spec.ts:36; /tmp/pr375-retained-browser-escalated.log:1",
+      "note": ""
+    },
+    {
+      "row": "Committed summaries: text-core formats/8MiB ceiling; без browser/zip/parts",
+      "source": "acceptance",
+      "trace": "ADR-0532",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/summaries-policy.test.ts:99; /tmp/pr375-round2-summary-proof.md:11",
+      "note": ""
+    },
+    {
+      "row": "BASE gzip validity/header/manifest seals сохранены",
+      "source": "acceptance",
+      "trace": "ADR-0532",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/summaries-policy.test.ts:28; tools/agent-bench/src/summaries-policy.test.ts:51; /tmp/pr375-round2-summary-proof.md:9",
+      "note": ""
+    },
+    {
+      "row": "Frozen eval-v18 producer report: 96 rows/64PASS/32FAIL",
+      "source": "frozen-artifact",
+      "trace": "ADR-0532+ADR-0535",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/summaries-policy.test.ts:117; /tmp/pr375-round2-summary-proof.md:17",
+      "note": ""
+    },
+    {
+      "row": "Offline regeneration сохраняет producer bytes; отсутствующие artifact links отмечены not local",
+      "source": "acceptance",
+      "trace": "ADR-0532",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:114; tools/agent-bench/src/report.ts:278; /tmp/pr375-round2-summary-probes.log:1",
+      "note": ""
+    },
+    {
+      "row": "Malformed declared shasum отклоняется до tarball HTTP",
+      "source": "acceptance",
+      "trace": "ADR-0527",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:569; /tmp/pr375-npm-v9-green.log:1",
+      "note": ""
+    },
+    {
+      "row": "CLI --compare: drift config/task/input/prompt/judge/purpose отклоняется",
+      "source": "public-api",
+      "trace": "ADR-0507",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/comparison.test.ts:170; tools/agent-bench/src/statistics-report.test.ts:281",
+      "note": ""
+    },
+    {
+      "row": "eval-v18 statistics.json.gz: производная от неизменного report, 96 selected/retained",
+      "source": "frozen-artifact",
+      "trace": "ADR-0507+ADR-0532",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/statistics-report.test.ts:131; /tmp/pr375-round2-summary-proof.md:17",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/npm-client/alias-dist-tag-warm-replay.md:7",
+          "evidence": "Detached /tmp/pr375-review-round2-root @97d6680c: node tools/refs/check.mjs > /tmp/pr375-round2-refs.log 2>&1; exit1: 1 dangling reference — docs/backlog/distribution/reference/pr-375-final-green.json. /tmp/pr375-prcheck2.log также показывает refs:check ✗; test:run/test:parity на последнем прочитанном хвосте ещё не завершены.",
+          "summary": "C2: C1-draft ссылается на будущий verdict; refs:check красный. После сохранения review нужен повтор pr:check; полного GREEN на этом head пока нет. Advisory по REV-2/3.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/npm-client/src/installer-lockfile-reader.ts:152",
+          "evidence": "Node24.16.0/npm11.17.0, detached /tmp/pr375-review-npm-v9 @97d6680c. node node_modules/vitest/vitest.mjs run --workspace review-workspace.ts --project integration tests/integration/review-alias-tag.parity.test.ts -t \"native stable tag replay is offline\"; exit1, 1 failed/14 skipped. /tmp/pr375-npm-v9-c1-tag-probe.log: native NATIVE_TAG_REPLAY requests:[]; Rifty warm replay без registry — NotImplementedError npm-client.registry.packument. Fixture/команды: /tmp/pr375-npm-v9-proof.md. BASE отвергал alias при первом admission.",
+          "summary": "C1 сохраняется: non-latest alias tag stable требует metadata при warm replay. Уже записан в alias-dist-tag-warm-replay.md; прежний NOTE вне доказанных semver/latest сценариев, исправление здесь не требуется.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "97d6680c11f2beb9a0ee161aef8a9b147ac4c598"
+}
