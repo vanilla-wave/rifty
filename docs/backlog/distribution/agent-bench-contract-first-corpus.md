@@ -29,6 +29,13 @@ Vue, Svelte) with
 The rifty-vs-native delta on these cases measures Node fidelity in the browser
 (fs/persistence, module resolution, timers, URL/encoding), not UI guessing.
 
+Why the two retained browser judges go too (independent review of PR #375, round 3,
+executed mutants against `markdown-notes-v4/judge.ts`): a status reading "Ready"
+instead of the missing-target message passes 7/7 (`judge.ts:48`); a Save that returns
+early when the current note exists passes 7/7 while the public edit→Save→reload probe
+shows the original body (`judge.ts:85`). Snapshot-change probes do not discriminate the
+declared behaviour; a test against a stated API does.
+
 ## Challenge
 
 challenge: 2026-10-17 — clear (decision taken with the user in session; the

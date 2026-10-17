@@ -55,7 +55,12 @@ recording (ADR-0535); those rows are oracle-qualified and cannot be re-run from 
 tree. `judge/context.ts` was trimmed to the helpers the surviving cases use and the
 judge fingerprint covers the import closure, so a new plan is not
 fingerprint-comparable with this report (`report --compare` flags judge drift by
-design). Compare new runs against each other, not against v18.
+design). Compare new runs against each other, not against v18. The retained
+`markdown-notes-v4` judge is weak on two declared requirements (independent review
+mutants, PR #375 round 3): a status reading "Ready" in place of the missing-target
+message passes, and a Save that ignores an edit to an existing note passes — its PASS
+rows are upper bounds. Contract-first replacement:
+`docs/backlog/distribution/agent-bench-contract-first-corpus.md`.
 
 Models, contexts, tools and installed graphs differ between lanes; no causal
 model-quality or runtime-only delta is claimed. Proxy prices are 0, not spend.
