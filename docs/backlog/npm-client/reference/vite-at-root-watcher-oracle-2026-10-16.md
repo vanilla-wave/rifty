@@ -1,7 +1,7 @@
 # Vite 7.3.6 watched dev server at project root `/` — real Node oracle (run 6)
 
 Executed 2026-10-16 by the independent Contract+RED reviewer of
-`npm-client/vite-root-policies-removal-node-exact-at-root` @ `5aa5b7dc3`
+the Vite root unit (closed; ADR-0533) @ `5aa5b7dc3`
 (`/tmp/rifty-review-u5/verdict.json`): `docker --context colima create --name
 rifty-review-oracle-5aa5b7dc3 node:24 node /probe/probe.mjs`, project of
 evidence §Root at `/`, `npm install` (vite 7.3.6, @vitejs/plugin-react 5.2.0,

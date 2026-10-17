@@ -5,14 +5,14 @@ title: A from-scratch React + Vite 7 install now resolves `vite@7.3.7` and the e
 created: 2026-10-16
 why: the heavy e2e `react-vite-build.spec.ts` fails with no rifty change because `^7` ranges resolve the newly published 7.3.7, which the exact-7.3.6 esbuild runtime policy refuses loudly
 user_story: As a developer creating the "Real npm project" React starter, I want `npm run dev`/`build` to work, but today the fresh install takes vite 7.3.7 and Vite refuses to start with `vite esbuild runtime supports exact Vite 7.3.6; executed 7.3.7`
-sources: [tests/e2e/react-vite-build.spec.ts, docs/backlog/epics/honest-guest-package-adaptations/map.md]
+sources: [tests/e2e/react-vite-build.spec.ts, docs/backlog/runtime-js/reference/guest-package-patches-refine-evidence-2026-10-15.md]
 code: [tools/shadow-registry/src/runtime/vite-esbuild-runtime.ts]
 ---
 
 ## Context
 
 Finding (2026-10-16, branch `t3/honest-adaptations-location` while running the
-Vite lanes of `npm-client/vite-cli-action-keepalive-hook-removal`; the failure is
+Vite lanes of the closed Vite CLI hook unit (ADR-0530; verdict `docs/backlog/npm-client/reference/vite-cli-action-keepalive-hook-removal-final-green.json`); the failure is
 in the version gate, not the removed hook): `RIFTY_PLAYGROUND_PORT=5314 npx playwright test
 --project=chromium-heavy tests/e2e/react-vite-build.spec.ts` → terminal
 `Error: vite esbuild runtime supports exact Vite 7.3.6; executed 7.3.7`, preview

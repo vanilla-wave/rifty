@@ -12,7 +12,7 @@ code: [tests/no-coi/no-coi-sandbox-build-loop.spec.ts, tests/browser-unit/child-
 ## Context
 
 Finding (2026-10-16, while running the Vite lanes of
-`npm-client/vite-cli-action-keepalive-hook-removal`). On a clean worktree at
+the closed Vite CLI hook unit, ADR-0530). On a clean worktree at
 `aebdd7ddd` (before any change of that unit), Chromium via Playwright:
 
 - `tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2343` "build parity: headerless
