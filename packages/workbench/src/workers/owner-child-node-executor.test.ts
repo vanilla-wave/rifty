@@ -20,6 +20,7 @@ const NODE_WORKER_RUNTIME_ENV = {
   RIFTY_SQLITE_WASM_URL: 'blob:sqlite-wasm',
 };
 const REMOTE_FS_ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
+const GUEST_ROOTS = { remoteFsRoot: REMOTE_FS_ROOT, publicRoot: '/' } as const;
 const RUNTIME_BINDINGS = [
   {
     adapterId: 'rifty.runtime-adapter.esbuild.v1',
@@ -207,11 +208,11 @@ describe('owner-child-node-executor', () => {
       80,
       24,
       undefined,
-      REMOTE_FS_ROOT,
+      GUEST_ROOTS,
     );
 
     expect(spec.entry).toMatchObject({
-      bootstrap: { payload: { launch: { remoteFsRoot: REMOTE_FS_ROOT } } },
+      bootstrap: { payload: { launch: { remoteFsRoot: REMOTE_FS_ROOT, publicRoot: '/' } } },
     });
     expect(spec.argv).toEqual(['rifty', '/src/server.js', '--port', '3000']);
     expect(spec.cwd).toBe('/');
@@ -233,7 +234,7 @@ describe('owner-child-node-executor', () => {
     const run = createOwnerExecSyncRunner(
       'URL',
       NODE_WORKER_RUNTIME_ENV,
-      () => REMOTE_FS_ROOT,
+      () => GUEST_ROOTS,
       reserve,
       spawn,
     );
@@ -270,6 +271,7 @@ describe('owner-child-node-executor', () => {
                 bin: false,
                 remoteFs: true,
                 remoteFsRoot: REMOTE_FS_ROOT,
+                publicRoot: '/',
                 nodeServe: false,
                 runtimeBindings: PUBLIC_RUNTIME_BINDINGS,
               },
@@ -301,7 +303,7 @@ describe('owner-child-node-executor', () => {
     const run = createOwnerExecSyncRunner(
       'URL',
       NODE_WORKER_RUNTIME_ENV,
-      () => REMOTE_FS_ROOT,
+      () => GUEST_ROOTS,
       reserveEmptyAdmission,
       spawn,
     );
@@ -346,7 +348,7 @@ describe('owner-child-node-executor', () => {
     const run = createOwnerExecSyncRunner(
       'URL',
       NODE_WORKER_RUNTIME_ENV,
-      () => REMOTE_FS_ROOT,
+      () => GUEST_ROOTS,
       reserve,
       () => {
         throw spawnFailure;
@@ -406,7 +408,7 @@ describe('owner-child-node-executor', () => {
     const p = exec('/w/server.js', [], makeCtx({ env: { USER_FLAG: 'kept' } }), {
       sid: 's1',
       previewScope: 'owner-preview',
-      remoteFsRoot: REMOTE_FS_ROOT,
+      guestRoots: GUEST_ROOTS,
       onListening: () => {},
       onExit: () => {},
     });
@@ -449,7 +451,7 @@ describe('owner-child-node-executor', () => {
     const exec = createOwnerChildNodeExecutor('URL', NODE_WORKER_RUNTIME_ENV, reserve, spawn);
     const running = exec('/w/server.js', [], makeCtx(), {
       sid: 'empty-plan',
-      remoteFsRoot: REMOTE_FS_ROOT,
+      guestRoots: GUEST_ROOTS,
       onListening: () => {},
       onExit: () => {},
     });
@@ -482,7 +484,7 @@ describe('owner-child-node-executor', () => {
     const exec = createOwnerChildNodeExecutor('URL', NODE_WORKER_RUNTIME_ENV, reserve, spawn);
     const running = exec('/w/server.js', [], makeCtx(), {
       sid: 'capability',
-      remoteFsRoot: REMOTE_FS_ROOT,
+      guestRoots: GUEST_ROOTS,
       onListening: () => {},
       onExit: () => {},
     });

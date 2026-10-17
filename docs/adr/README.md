@@ -111,6 +111,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0464 | Named-loud members for charted unclaimed-mode ceilings |
 | 0480 | Refuse advanced IPC view constructor accessors |
 | 0470 | Preserve native WebAssembly in no-COI guests |
+| 0529 | Count host-task-async Node-surface requests in child-realm keepalive |
 
 ### runtime-wasi
 
@@ -189,13 +190,15 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0371 | Registry twins carry substituted runtime bytes in the installed tree |
 | 0384 | Registry ownership of bundled guest-package adaptations |
 | 0399 | Preserve declared companion policy through retained-lock acquisition |
-| 0433 | Preserve Vite module URLs at the filesystem root |
 | 0435 | Follow npm tar root stripping for materialized installs |
 | 0451 | User override values follow npm's version/range reading |
 | 0504 | Preserve named install intent and optional resolution outcomes |
 | 0526 | Separate npm alias placement from registry identity |
 | 0527 | Retain npm alias source identity until named install |
 | 0528 | Netlify proxy rewrite serves the production npm-registry route |
+| 0530 | Installed Vite CLI runs upstream bytes; trackKeepalivePromise removed |
+| 0533 | Vite runs upstream bytes at every project root; root policies removed |
+| 0534 | napi-rs packages launch with NAPI_RS_FORCE_WASI=1 |
 
 ### playground
 
@@ -410,6 +413,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0514 | Observe composed saved-note captions |
 | 0515 | Observe visible CSV exports before state-changing actions |
 | 0517 | Use accessible names for editable judge controls |
+| 0531 | Guest namespace mounts the project at a public root with project-owned tmp and home |
 | 0532 | Commit evaluation summaries as text core only |
 | 0535 | Judge app tasks against a prompt-stated contract |
 
@@ -454,6 +458,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0321 | 0371 | strict lifecycle motive retained; the ninth correlation engine is deleted with its only consumer |
 | 0373 | 0374 | narrow install/run-bin control retained; Workbench entry ownership, nested-only URL, toolchain-only report, shared-WASM boundary and ADR-0371 registry-twin authority grafted |
 | 0374 | 0375 | explicit Worker/API/registry authority retained; Vite identity, lifecycle and build-only finalizer removed from generic no-COI control |
+| 0433 | 0533 | Vite root-URL repair removed with the root-watch policy; installed Vite is upstream bytes, a `/`-rooted project takes upstream's code paths |
 | 0511 | 0535 | connected workflow corpus freeze (booking/expense) retired; contract-first app cases calibrate before freeze |
 | 0512 | 0535 | contextual choice-caption projection retired with the booking/expense judges |
 | 0516 | 0535 | native date/time/number input owner retired with the booking/expense judges |
@@ -527,6 +532,8 @@ superseded.
 | 0278 exact session-tools / legacy-prefix conversion clauses | 0282 / note 2026-07-16 | TS recovery, durability wait, and root-free terminal restoration are public companion semantics |
 | 0278 depth-insensitive archive `.git`/`.rifty` exclusion clause | 0286 / note 2026-07-17 | Git and nested ordinary `.rifty` round-trip; root `.rifty` remains private |
 | 0278 snapshot v2 serialized identity / templateId / stale-version proof clauses | 0346 / note 2026-08-10 | snapshotId covers canonical v3 bytes; templateId names v3; stale v2 rejects before effects |
+| 0280 Decision: public `/` = exact project tree; `/`-rooted traversal and destructive-mutation clauses | 0531 / note 2026-10-16 | the project mounts at `publicProjectRoot` (default `/home/project`) beside project-owned `/tmp`, `/home/rifty`; refusal applies to every mount point |
+| 0278 terminal-state public cwd and archive root `/` | 0531 / note 2026-10-16 | both mean the project root; a persisted cwd outside the project falls back to it |
 | 0281 package-private durability operation clause | 0282 / note 2026-07-16 | `awaitDurability()` is public but exposes no backend, report, path, owner, or transport |
 | 0276 exact-preplan-or-loud-throw Git clause | 0276 note 2026-07-15 | opaque lower-level worktree plans may use a repo replacement candidate; applied owner endpoints remain the only reset evidence |
 | 0010 every-method-throws / terminal-state clause | 0181 | client `request`/`get` route over host `fetch()`; `createServer`/`Agent`/TLS options still loud-throw |
@@ -571,6 +578,7 @@ superseded.
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
 | 0152 §1 named handle set | 0447 / note 2026-09-25 | a manually referenced `MessagePort` is counted (one ref per port; `unref()` or `close()` of either pair end releases; transfers that would hide a release are named throws); listener referencing stays an explicit gap; §1 shape unchanged, named set grew |
+| 0152 §1 named handle set | 0529 / note 2026-10-16 | pending host-task-async Node-surface requests are counted (Blob/File reads, WebAssembly compile/instantiate, SubtleCrypto, host-backed Response/Request bodies; global `WebSocket` until `close`); microtask-settled fs.promises/zlib stay uncounted; §1 shape unchanged, named set grew |
 | 0152 §1 first zero-ref sample settles the drain; §3 every recorded rejection is fatal | 0445 / note 2026-09-25 | a zero-ref drain settles after one more host task confirms it (late Chromium `unhandledrejection`); a rejection a process listener handles is canceled and not recorded; the no-listener default stays stderr + exit `uint8(exitCode ?? 1)` read after the `'exit'` listeners (1 unless one reassigns it), a rejection's printed and requested at the trap and the drain records that exit |
 | 0152 §1 named handle set; 0445 rule 6 natural exit (worker thread; `node <file>`, `node -e`, execSync child) | 0446 / note 2026-09-25 | a live `worker_threads.Worker` is counted through Node's own `Symbol(kHandle)`/`Symbol(kPublicPort)` references (napi-rs can neuter them), a worker realm's `parentPort` is counted while referenced by its `'message'` listeners, worker-thread realms drain uncapped then exit naturally, and no natural exit calls the reassignable `process.exit`; ADR-0445's "worker-thread natural exit stays with map item 8" gap is closed; §1 shape unchanged, named set grew |
 | 0157 §1 `exit()` clause | 0445 / note 2026-09-25 | `exitCode` starts `undefined`; `exit()` without an argument uses it, emits `'exit'` once before the kernel exit request, and natural exit calls it |

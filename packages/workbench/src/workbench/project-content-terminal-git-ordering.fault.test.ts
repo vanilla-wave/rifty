@@ -154,6 +154,7 @@ describe('terminal Git owner-applied ordering', () => {
 
     const runtime = createWorkbenchProjectRuntime({
       projectRoot: ROOT,
+      publicRoot: '/',
       packageConfig,
       authority,
       packageState,

@@ -1,0 +1,258 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Unit можно принимать: B5/B6 закрыты; C2/C3 advisory. Goal не завершён.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "7b27d4f5b666037923a2fde5c0d32e3eb7b47db6",
+  "unit_goal_source": "ready docs/backlog/distribution/home-project-default-and-project-owned-tmp-home.md; goal docs/backlog/epics/project-location-independence/goal.md, I1/I2/I4; BASE aebdd7ddda550759b5697d7b4a227ad29bade5df, merge main 89cadbcba; Contract+RED @ c167c3d36; Final+GREEN round 4, prior round @ 8adc397cd. Заявленные carriers: Playwright 13/13 PASS; runtime/os/mv 229/229 PASS; process-exit-lifecycle 15/15 PASS. B5: Node v24.16.0 HOME пустой → homedir=\"\", TMPDIR/TMP/TEMP пустые → tmpdir=\"/tmp\"; новый committed test на os.ts из 8adc397cd RED, HEAD GREEN; прежний browser repro PASS (/tmp/rifty-review-loc-fg4/{os-red.log,empty-home-browser.log}). B6: оба прежних duplicate-open repro и awaited close/reopen PASS; sibling sweep — C3. Полный pr:check/CI повторно не проверялся. Другие units вне границы REV-1. Fault matrix/frozen artifacts внутри unit отсутствуют; tracked tree чистый.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1; scenario 1",
+      "location": "docs/backlog/epics/project-location-independence/goal.md:74",
+      "summary": "Сквозное принятие goal, включая React Refresh scenario 1, этим review не завершено."
+    },
+    {
+      "clause": "I3 + I4 root leg",
+      "location": "docs/backlog/epics/project-location-independence/goal.md:84",
+      "summary": "Upstream-byte/root-oracle obligations и независимый Final+GREEN Vite-root unit остаются вне этого review."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: default pwd/process.cwd(); точные listings / и /home",
+      "source": "acceptance",
+      "trace": "I1+scenario 1",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:236",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: mkdtemp, HOME, bare cd, ~/.npmrc",
+      "source": "acceptance",
+      "trace": "I2+scenario 2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:245",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: Files/archive/snapshot без tmp/home/.npmrc",
+      "source": "acceptance",
+      "trace": "I2+scenario 2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:257",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: reopen, Save-CONVERT, fresh scratch, switch-back",
+      "source": "acceptance",
+      "trace": "I2+scenario 2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:413",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: Vite 7 build, HMR без reload, preview на двух non-root roots",
+      "source": "acceptance",
+      "trace": "I4+scenario 4",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:267",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: Vite 8 build, dev-reload, preview на двух non-root roots",
+      "source": "acceptance",
+      "trace": "I4+scenario 4",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:287",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: root '/' cwd/listing и Vite 7 build/preview",
+      "source": "acceptance",
+      "trace": "I4+scenario 4",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:373",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: project tmp collision → EEXIST с /tmp",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:395",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 9: diagnostic /home/project/missing.cjs",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:329",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 10: EACCES/EPERM/EXDEV; cross-mount mv copies then removes",
+      "source": "acceptance",
+      "trace": "ADR-0531",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:333; packages/shell/tests/mv.test.ts:213",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 11: os.homedir/tmpdir follow HOME/TMPDIR",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:353; packages/runtime-js/src/builtins/os.test.ts:94",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: HOME=/tmp; TMPDIR trailing slash removed",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:353",
+      "note": ""
+    },
+    {
+      "row": "WorkbenchOptions.publicProjectRoot через openWorkbench",
+      "source": "public-api",
+      "trace": "ADR-0531",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:226",
+      "note": ""
+    },
+    {
+      "row": "openPlaygroundWorkbench: publicProjectRoot прокидывается через companion",
+      "source": "public-api",
+      "trace": "ADR-0531",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/sealed-playground-workbench.ts:270",
+      "note": ""
+    },
+    {
+      "row": "DEFAULT_PUBLIC_PROJECT_ROOT export",
+      "source": "public-api",
+      "trace": "ADR-0531",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/playground-workbench.contract.test.ts:651",
+      "note": ""
+    },
+    {
+      "row": "buildNodeEntryWorkerEntry: publicRoot в program/eval/worker-thread launch",
+      "source": "public-api",
+      "trace": "ADR-0531",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts:204",
+      "note": ""
+    },
+    {
+      "row": "readNodeEntryBootstrap: publicRoot сохраняется и наследуется child launches",
+      "source": "public-api",
+      "trace": "ADR-0531",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts:238",
+      "note": ""
+    },
+    {
+      "row": "os.homedir(): HOME, default /home/rifty",
+      "source": "public-api",
+      "trace": "I2+ADR-0531",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:245; packages/runtime-js/src/builtins/os.test.ts:87; packages/runtime-js/src/builtins/os.test.ts:94",
+      "note": ""
+    },
+    {
+      "row": "os.tmpdir(): TMPDIR, default /tmp, trailing slash",
+      "source": "public-api",
+      "trace": "I2+ADR-0531",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:358",
+      "note": ""
+    },
+    {
+      "row": "VfsErrorCode.EXDEV: cross-mount rename",
+      "source": "public-api",
+      "trace": "ADR-0531",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:344",
+      "note": ""
+    },
+    {
+      "row": "ProjectTerminal.snapshot(): точный round-trip env и project-relative cwd",
+      "source": "public-api",
+      "trace": "ADR-0278+ADR-0531",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-playground-companion.spec.ts:491; packages/workbench/src/workers/workbench-project-runtime.test.ts:986",
+      "note": ""
+    },
+    {
+      "row": "os.userInfo().homedir: account home не зависит от HOME",
+      "source": "public-api",
+      "trace": "ADR-0531",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/os.test.ts:87",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/workbench-project-runtime.ts:512",
+          "evidence": "pnpm vitest run --workspace /tmp/rifty-review-loc-fg4-provenance/vitest.workspace.ts /tmp/rifty-review-loc-fg4-provenance/runtime-provenance.test.ts -t 'duplicate-open provenance regression|close-open provenance lifecycle' → 3 PASS, 1 FAIL: close неизвестного sid → open того же sid до cleanup → await close → exec возвращает {HOME:'/home/rifty',KEEP:'1'} вместо {KEEP:'1'}. Тот же probe с vitest-before.workspace.ts/runtime-before.test.ts (runtime da3c23a8b, только imports перепривязаны) → 4 PASS. Артефакты: /tmp/rifty-review-loc-fg4-provenance/{run.log,before.log,runtime-provenance.test.ts:2877}.",
+          "summary": "C3. Cleanup no-op close удаляет provenance нового open по совпавшему sid. Advisory: прямой loopback в одном тике; PtyClient запрещает reopening закрытого sid, worker message events дренируют microtasks. Нарушение принятого публичного сценария не установлено; обычный awaited close/reopen проходит.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/os.ts:15",
+          "evidence": "",
+          "summary": "C2 сохраняется: os paths читают заменяемый globalThis.process. Подмена global может сменить источник HOME/TMPDIR; Node сохраняет привязку к process environment. За пределами явных сценариев — advisory.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "adjudication": []
+}

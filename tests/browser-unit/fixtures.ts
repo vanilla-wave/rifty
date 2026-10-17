@@ -17,6 +17,8 @@ export interface BootOwnerOptions {
   /** #255: host budget of owner durability-progress SILENCE; unset = shipped 60 s. */
   readonly ownerOperationSilenceTimeoutMs?: number;
   readonly plan?: Readonly<Record<string, unknown>>;
+  /** ADR-0531 Workbench option; unset = the shipped default. */
+  readonly publicProjectRoot?: string;
 }
 
 export interface BootAttempt {

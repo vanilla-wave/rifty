@@ -94,7 +94,7 @@ process.stdout.write(
       '/scratch/sqlite-parent.mjs',
       `import { execSync } from 'node:child_process';
 const stdout = execSync('node sqlite-child.mjs', {
-  cwd: '/',
+  cwd: '/home/project',
   env: { CONTEXT_SENTINEL: 'exact-child' },
 });
 process.stdout.write(stdout);
@@ -105,7 +105,7 @@ process.stdout.write(stdout);
 
     const result = await execLine(page, 'node sqlite-parent.mjs');
     expect(result.exit, result.out).toBe(0);
-    expect(result.out).toContain('NESTED_SQLITE|sqlite-ready|cwd=/|env=exact-child');
+    expect(result.out).toContain('NESTED_SQLITE|sqlite-ready|cwd=/home/project|env=exact-child');
   } finally {
     await closeOwner(page);
   }
@@ -217,7 +217,7 @@ await worker.terminate();
     const result = await execLine(page, 'node worker-parent.mjs');
     expect(result.exit, result.out).toBe(0);
     expect(result.out).toContain(
-      `WORKER_RELAY|env=${oracle.env}|envKeys=${oracle.envKeys.join(',')}|parentAbsent=${oracle.parentAbsent}|cwdInherited=${oracle.cwdInherited}|cwd=/|data=${oracle.data}|file=owner-file|sqlite=worker-sqlite|nested=grandchild-sqlite:grand-exact|processRows=1`,
+      `WORKER_RELAY|env=${oracle.env}|envKeys=${oracle.envKeys.join(',')}|parentAbsent=${oracle.parentAbsent}|cwdInherited=${oracle.cwdInherited}|cwd=/home/project|data=${oracle.data}|file=owner-file|sqlite=worker-sqlite|nested=grandchild-sqlite:grand-exact|processRows=1`,
     );
   } finally {
     await closeOwner(page);
@@ -240,7 +240,7 @@ test('real fork Worker crosses owner FS, launch context, recursive IPC, and disc
       '/scratch/plain-spawn.mjs',
       `import { readFileSync, writeFileSync } from 'node:fs';
 
-writeFileSync('/plain-spawn.bin', new Uint8Array([3, 2, 1, 0]));
+writeFileSync('/home/project/plain-spawn.bin', new Uint8Array([3, 2, 1, 0]));
 process.stdout.write(JSON.stringify({
   argv: process.argv.slice(2),
   cwd: process.cwd(),
@@ -248,7 +248,7 @@ process.stdout.write(JSON.stringify({
     plain: process.env.PLAIN_ONLY,
     inherited: process.env.INHERITED_ONLY ?? null,
   },
-  ownerBytes: [...readFileSync('/fork-parent.bin')],
+  ownerBytes: [...readFileSync('/home/project/fork-parent.bin')],
   publicIpc: {
     send: typeof process.send,
     disconnect: typeof process.disconnect,
@@ -277,8 +277,8 @@ setTimeout(() => process.exit(0), 0);
       `import { readFileSync, writeFileSync } from 'node:fs';
 
 process.once('message', (message) => {
-  const ownerBytes = [...readFileSync('/fork-parent.bin')];
-  writeFileSync('/fork-grandchild.bin', new Uint8Array([0, 127, 128, 255]));
+  const ownerBytes = [...readFileSync('/home/project/fork-parent.bin')];
+  writeFileSync('/home/project/fork-grandchild.bin', new Uint8Array([0, 127, 128, 255]));
   process.send({
     echo: message,
     argv: process.argv.slice(2),
@@ -314,7 +314,7 @@ process.once('message', (message) => {
   });
   grandchild.once('message', async (grandchildMessage) => {
     const exit = await grandchildExit;
-    writeFileSync('/fork-child.bin', new Uint8Array([255, 128, 127, 0]));
+    writeFileSync('/home/project/fork-child.bin', new Uint8Array([255, 128, 127, 0]));
     process.send({
       echo: message,
       argv: process.argv.slice(2),
@@ -323,13 +323,13 @@ process.once('message', (message) => {
         child: process.env.CHILD_ONLY,
         inherited: process.env.INHERITED_ONLY ?? null,
       },
-      ownerBytes: [...readFileSync('/fork-parent.bin')],
+      ownerBytes: [...readFileSync('/home/project/fork-parent.bin')],
       parentRealmLeaked: globalThis.__forkParentRealm === true,
       grandchild: { message: grandchildMessage, exit },
     });
     process.disconnect();
     setTimeout(() => {
-      writeFileSync('/fork-after-disconnect.bin', new Uint8Array([9, 8, 7, 6]));
+      writeFileSync('/home/project/fork-after-disconnect.bin', new Uint8Array([9, 8, 7, 6]));
       process.exit(0);
     }, 20);
   });
@@ -345,7 +345,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 globalThis.__forkParentRealm = true;
 process.env.INHERITED_ONLY = 'must-not-survive-replacement';
-writeFileSync('/fork-parent.bin', new Uint8Array([0, 1, 127, 128, 254, 255]));
+writeFileSync('/home/project/fork-parent.bin', new Uint8Array([0, 1, 127, 128, 254, 255]));
 
 const plain = spawn('node', ['./plain-spawn.mjs', 'plain-argv'], {
   cwd: process.cwd(),
@@ -422,14 +422,14 @@ console.log('REAL_FORK_BOUNDARY|' + JSON.stringify({
     events: plainEvents,
     stdout: plainOut,
     stderr: plainErr,
-    bytes: [...readFileSync('/plain-spawn.bin')],
+    bytes: [...readFileSync('/home/project/plain-spawn.bin')],
   },
   inheritedOutcome,
   outcome,
   events,
-  childBytes: [...readFileSync('/fork-child.bin')],
-  grandchildBytes: [...readFileSync('/fork-grandchild.bin')],
-  afterDisconnectBytes: [...readFileSync('/fork-after-disconnect.bin')],
+  childBytes: [...readFileSync('/home/project/fork-child.bin')],
+  grandchildBytes: [...readFileSync('/home/project/fork-grandchild.bin')],
+  afterDisconnectBytes: [...readFileSync('/home/project/fork-after-disconnect.bin')],
 }));
 `,
     );
@@ -506,7 +506,7 @@ console.log('REAL_FORK_BOUNDARY|' + JSON.stringify({
         events: ['stdout', 'exit:0/null', 'close:0/null'],
         stdout: `${JSON.stringify({
           argv: ['plain-argv'],
-          cwd: '/',
+          cwd: '/home/project',
           env: {
             plain: 'plain-replacement',
             inherited: null,
@@ -525,7 +525,7 @@ console.log('REAL_FORK_BOUNDARY|' + JSON.stringify({
       inheritedOutcome: {
         message: {
           argv: ['inherited-argv'],
-          cwd: '/',
+          cwd: '/home/project',
           inherited: 'must-not-survive-replacement',
           parentRealmLeaked: false,
         },
@@ -536,7 +536,7 @@ console.log('REAL_FORK_BOUNDARY|' + JSON.stringify({
         message: {
           echo: { direction: 'parent-to-child', text: 'π\u0000終' },
           argv: ['child-argv', 'β'],
-          cwd: '/',
+          cwd: '/home/project',
           env: {
             child: 'child-replacement',
             inherited: null,
@@ -547,7 +547,7 @@ console.log('REAL_FORK_BOUNDARY|' + JSON.stringify({
             message: {
               echo: { direction: 'child-to-grandchild', text: 'π\u0000終' },
               argv: ['grand-argv', 'λ'],
-              cwd: '/',
+              cwd: '/home/project',
               env: {
                 grand: 'grand-replacement',
                 child: null,
@@ -585,12 +585,12 @@ test('node-server execSync relays the public project root to its nested child', 
     plan: nodeServerPlan('bu-dev-server-recursive-exec', 3417, {
       '/exec-project-only.txt': 'exec-project-only\n',
       '/nested-exec.mjs': `import { readFileSync } from 'node:fs';
-process.stdout.write(readFileSync('/exec-project-only.txt', 'utf8').trim());
+process.stdout.write(readFileSync('/home/project/exec-project-only.txt', 'utf8').trim());
 `,
       '/server.mjs': `import { execSync } from 'node:child_process';
 import { createServer } from 'node:http';
 
-const nested = execSync('node nested-exec.mjs', { cwd: '/' }).toString();
+const nested = execSync('node nested-exec.mjs', { cwd: '/home/project' }).toString();
 createServer((_request, response) => response.end('ok')).listen(3417, () => {
   console.log('DEV_EXEC_RELAY|' + nested);
 });
@@ -619,7 +619,7 @@ test('node-server worker_threads relays the public project root to its worker', 
       '/worker-project-only.txt': 'worker-project-only\n',
       '/thread-child.mjs': `import { readFileSync } from 'node:fs';
 import { parentPort } from 'node:worker_threads';
-parentPort.postMessage(readFileSync('/worker-project-only.txt', 'utf8').trim());
+parentPort.postMessage(readFileSync('/home/project/worker-project-only.txt', 'utf8').trim());
 `,
       '/server.mjs': `import { createServer } from 'node:http';
 import { Worker } from 'node:worker_threads';

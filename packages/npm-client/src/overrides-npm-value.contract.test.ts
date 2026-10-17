@@ -160,7 +160,7 @@ describe('user override value — npm 11.17.0 reading (ADR-0451)', () => {
   it('baked substitutions keep the rifty name grammar → I1', () => {
     expect(resolveOverride('bcrypt', undefined, {})).toEqual({
       name: 'bcryptjs',
-      range: null,
+      range: '3.0.3',
       source: 'baked',
     });
   });

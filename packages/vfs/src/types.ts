@@ -8,6 +8,8 @@ export type VfsErrorCode =
   | 'EPERM'
   | 'EINVAL'
   | 'EACCES'
+  /** Rename across mounts (Node: cross-device link not permitted). */
+  | 'EXDEV'
   | 'EROFS'
   | 'EDQUOT'
   | 'EIO';

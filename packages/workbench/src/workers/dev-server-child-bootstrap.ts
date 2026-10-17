@@ -25,6 +25,7 @@ import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { bootDevServer } from './dev-server-boot.ts';
 import { readDevServerChildConfig } from './dev-server-child-config.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
+import { createGuestLayout } from './guest-layout.ts';
 import { prepareNodeEntryRuntime } from './node-entry-runtime-preparation.ts';
 import { installNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import { ProjectTerminalFsSync } from './project-terminal-namespace.ts';
@@ -68,9 +69,9 @@ async function bootstrapDevServerChild(): Promise<void> {
   }
   const ownerRemoteFs = installRemoteSyncFs(syncApi.call, syncApi.callBinary);
   const remoteFs =
-    c.remoteFsRoot === undefined
+    c.remoteFsRoot === undefined || c.publicRoot === undefined
       ? ownerRemoteFs
-      : new ProjectTerminalFsSync(ownerRemoteFs, c.remoteFsRoot);
+      : new ProjectTerminalFsSync(ownerRemoteFs, createGuestLayout(c.publicRoot, c.remoteFsRoot));
   setSyncMirror(remoteFs);
   await prepareNodeEntryRuntime({
     bin: false,

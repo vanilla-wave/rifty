@@ -28,8 +28,10 @@ export interface NodeEntryProgramLaunch {
   /** Public Node fork lane and its `serialization` (ADR-0448). Omitted and
    * `none` are equivalent for non-fork launches. */
   readonly ipc?: 'none' | 'json' | 'advanced';
-  /** Host-only physical root behind the child's public `/` namespace. */
+  /** Host-only physical root of the project mounted in the child's guest namespace. */
   readonly remoteFsRoot?: string;
+  /** Guest mount point of that project (ADR-0531); present exactly with `remoteFsRoot`. */
+  readonly publicRoot?: string;
   readonly nodeServe: boolean;
   readonly previewScope?: string;
   readonly terminal?: NodeEntryTerminalBootstrap;
@@ -44,8 +46,10 @@ export interface NodeEntryEvalLaunch {
   readonly print: boolean;
   readonly execArgv: readonly string[];
   readonly remoteFs: boolean;
-  /** Host-only physical root behind the child's public `/` namespace. */
+  /** Host-only physical root of the project mounted in the child's guest namespace. */
   readonly remoteFsRoot?: string;
+  /** Guest mount point of that project (ADR-0531); present exactly with `remoteFsRoot`. */
+  readonly publicRoot?: string;
   readonly previewScope?: string;
   readonly terminal?: NodeEntryTerminalBootstrap;
   readonly runtimeBindings?: readonly NodeEntryRuntimeBinding[];
@@ -54,8 +58,10 @@ export interface NodeEntryEvalLaunch {
 export interface NodeEntryWorkerThreadLaunch {
   readonly kind: 'worker-thread';
   readonly remoteFs: boolean;
-  /** Inherited host-only physical root behind the worker's public `/` namespace. */
+  /** Inherited host-only physical root of the project in the worker's guest namespace. */
   readonly remoteFsRoot?: string;
+  /** Inherited guest mount point of that project (ADR-0531). */
+  readonly publicRoot?: string;
   readonly threadId: number;
   readonly workerDataJson?: string;
   readonly runtimeBindings?: readonly NodeEntryRuntimeBinding[];
@@ -255,6 +261,24 @@ function remoteFsRootValue(value: unknown, remoteFs: boolean): string | undefine
   return value;
 }
 
+function publicRootValue(value: unknown, remoteFsRoot: string | undefined): string | undefined {
+  if (value === undefined && remoteFsRoot === undefined) return undefined;
+  if (
+    typeof value !== 'string' ||
+    value.includes('\0') ||
+    !isAbsolute(value) ||
+    normalizePath(value) !== value
+  ) {
+    throw new TypeError(
+      'node-entry bootstrap launch.publicRoot must be an absolute normalized path given with launch.remoteFsRoot',
+    );
+  }
+  if (remoteFsRoot === undefined) {
+    throw new TypeError('node-entry bootstrap launch.publicRoot requires launch.remoteFsRoot');
+  }
+  return value;
+}
+
 function previewScopeValue(value: unknown): string | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== 'string' || value === '') {
@@ -297,6 +321,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
         'bin',
         'remoteFs',
         'remoteFsRoot',
+        'publicRoot',
         'ipc',
         'nodeServe',
         'previewScope',
@@ -309,6 +334,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
     const bin = booleanOwnField(record, 'bin', 'node-entry bootstrap launch');
     const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
     const remoteFsRoot = remoteFsRootValue(optionalOwnField(record, 'remoteFsRoot'), remoteFs);
+    const publicRoot = publicRootValue(optionalOwnField(record, 'publicRoot'), remoteFsRoot);
     const ipc = optionalOwnField(record, 'ipc');
     if (ipc !== undefined && ipc !== 'none' && ipc !== 'json' && ipc !== 'advanced') {
       throw new TypeError('node-entry bootstrap launch.ipc must be none, json or advanced');
@@ -323,6 +349,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       bin,
       remoteFs,
       ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
+      ...(publicRoot === undefined ? {} : { publicRoot }),
       ...(ipc === undefined ? {} : { ipc }),
       nodeServe,
       ...(previewScope === undefined ? {} : { previewScope }),
@@ -343,6 +370,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
         'execArgv',
         'remoteFs',
         'remoteFsRoot',
+        'publicRoot',
         'previewScope',
         'terminal',
         'runtimeBindings',
@@ -354,6 +382,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
     const execArgv = stringArrayOwnField(record, 'execArgv', 'node-entry bootstrap launch');
     const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
     const remoteFsRoot = remoteFsRootValue(optionalOwnField(record, 'remoteFsRoot'), remoteFs);
+    const publicRoot = publicRootValue(optionalOwnField(record, 'publicRoot'), remoteFsRoot);
     const previewScope = previewScopeValue(optionalOwnField(record, 'previewScope'));
     const terminal = optionalOwnField(record, 'terminal');
     const runtimeBindings = optionalOwnField(record, 'runtimeBindings');
@@ -364,6 +393,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       execArgv,
       remoteFs,
       ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
+      ...(publicRoot === undefined ? {} : { publicRoot }),
       ...(previewScope === undefined ? {} : { previewScope }),
       ...(terminal === undefined ? {} : { terminal: snapshotNodeEntryTerminalBootstrap(terminal) }),
       ...(runtimeBindings === undefined
@@ -378,6 +408,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
         'kind',
         'remoteFs',
         'remoteFsRoot',
+        'publicRoot',
         'threadId',
         'workerDataJson',
         'runtimeBindings',
@@ -387,6 +418,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
     );
     const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
     const remoteFsRoot = remoteFsRootValue(optionalOwnField(record, 'remoteFsRoot'), remoteFs);
+    const publicRoot = publicRootValue(optionalOwnField(record, 'publicRoot'), remoteFsRoot);
     const threadId = positiveInteger(
       requiredOwnField(record, 'threadId', 'node-entry bootstrap launch'),
       'node-entry bootstrap launch.threadId',
@@ -408,6 +440,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       kind: 'worker-thread',
       remoteFs,
       ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
+      ...(publicRoot === undefined ? {} : { publicRoot }),
       threadId,
       ...(workerDataJson === undefined ? {} : { workerDataJson }),
       ...(runtimeBindings === undefined
@@ -455,6 +488,7 @@ export function buildConfiguredNodeEntryWorkerEntry(launch: NodeEntryLaunch): No
   }
   const current = readNodeEntryBootstrapIfPresent();
   const inheritedRoot = current?.launch.remoteFsRoot;
+  const inheritedPublicRoot = current?.launch.publicRoot;
   const inheritedRuntimeBindings = current?.launch.runtimeBindings;
   const inheritedPreviewScope =
     current !== null && current.launch.kind !== 'worker-thread'
@@ -471,6 +505,13 @@ export function buildConfiguredNodeEntryWorkerEntry(launch: NodeEntryLaunch): No
     throw new TypeError('nested node-entry launch cannot replace the inherited remoteFsRoot');
   }
   if (
+    inheritedPublicRoot !== undefined &&
+    launch.publicRoot !== undefined &&
+    launch.publicRoot !== inheritedPublicRoot
+  ) {
+    throw new TypeError('nested node-entry launch cannot replace the inherited publicRoot');
+  }
+  if (
     inheritedPreviewScope !== undefined &&
     launch.kind !== 'worker-thread' &&
     launch.previewScope !== undefined &&
@@ -480,7 +521,12 @@ export function buildConfiguredNodeEntryWorkerEntry(launch: NodeEntryLaunch): No
   }
   const nestedLaunch: NodeEntryLaunch = {
     ...launch,
-    ...(inheritedRoot !== undefined && launch.remoteFs ? { remoteFsRoot: inheritedRoot } : {}),
+    ...(inheritedRoot !== undefined && launch.remoteFs
+      ? {
+          remoteFsRoot: inheritedRoot,
+          ...(inheritedPublicRoot === undefined ? {} : { publicRoot: inheritedPublicRoot }),
+        }
+      : {}),
     ...(inheritedPreviewScope !== undefined &&
     launch.kind !== 'worker-thread' &&
     launch.previewScope === undefined

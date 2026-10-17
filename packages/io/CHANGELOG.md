@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `openHostBroadcastChannel(name)` / `HOST_BROADCAST_CHANNEL`: rifty's own channels open the realm's native `BroadcastChannel`, never the guest global that holds the event loop (ADR-0529).
+
 - `Readable.pipe` follows Node's end rule: `dest.end()` is skipped only for a literal `{end: false}` or the realm's
   `process.stdout|stderr` (`require('node:process')`), and such a pipe unpipes at source end; `pipeline` pipes
   `{end: false}` and ends each stage itself. Fixes vitest's `child.stdout.pipe(process.stdout)` crash. The process

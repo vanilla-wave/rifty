@@ -34,6 +34,7 @@ import {
   type ProjectMaterializer,
   createProjectMaterializer,
 } from '../workbench/project-materialization.ts';
+import { DEFAULT_PUBLIC_PROJECT_ROOT, createGuestLayout } from './guest-layout.ts';
 import { installNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import { createOwnerExecSyncRunner } from './owner-child-node-executor.ts';
 import { resolveOwnerGitCommitIdentity } from './owner-git-commit-identity.ts';
@@ -409,6 +410,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
   let rejectOwnerLifetime = (error: Error): void => {
     throw error;
   };
+  const publicRoot = config.publicProjectRoot ?? DEFAULT_PUBLIC_PROJECT_ROOT;
   const requireActiveProjectRoot = (): string => {
     if (activeProjectRoot === null) {
       throw new Error('Workbench owner execSync requires an active project');
@@ -425,11 +427,15 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
           : { root: activeProjectRoot, vfs: activeProjectVfs },
     }),
     {
-      getVfs: () => new ProjectTerminalFsSync(authority, requireActiveProjectRoot()),
+      getVfs: () =>
+        new ProjectTerminalFsSync(
+          authority,
+          createGuestLayout(publicRoot, requireActiveProjectRoot()),
+        ),
       runWorker: createOwnerExecSyncRunner(
         config.deployment.workers.node,
         nodeWorkerRuntimeEnv,
-        requireActiveProjectRoot,
+        () => ({ remoteFsRoot: requireActiveProjectRoot(), publicRoot }),
         (root) => packageState.reserveChildAdmission(root),
       ),
     },
@@ -481,6 +487,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
           createRuntime: (vfs) =>
             createWorkbenchProjectRuntime({
               projectRoot,
+              publicRoot,
               packageConfig: workbenchPackageConfig(input.definition, projectRoot, {
                 packageJsonBytes:
                   (input.materialized.acquisition as { kind?: string } | undefined)?.kind ===

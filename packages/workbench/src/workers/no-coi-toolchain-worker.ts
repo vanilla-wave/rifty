@@ -12,7 +12,7 @@ import {
   awaitDrain,
   installEventLoopKeepalive,
   installFetchKeepalive,
-  trackKeepalivePromise,
+  installHostAsyncKeepalive,
 } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import {
@@ -62,7 +62,6 @@ registerNetBuiltins();
 // can reassign `process.exit`.
 const nodeExit = riftyProcess.exit;
 const closeToolchainWorker = installToolchainCloseSignal();
-Reflect.set(globalThis, '__riftyTrackCliPromise', trackKeepalivePromise);
 
 let runtimeBackend: 'opfs' | 'memory' | null = null;
 let installContext: ReturnType<typeof createNoCoiInstallContext>;
@@ -458,6 +457,7 @@ void import('@riftydev/runtime-js/worker')
   .then(({ backend: vfsBackend, reason }) => {
     runtimeBackend = vfsBackend;
     installFetchKeepalive();
+    installHostAsyncKeepalive();
     self.postMessage({
       type: 'toolchain-ready',
       protocol: SANDBOX_TOOLCHAIN_PROTOCOL,

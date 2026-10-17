@@ -1,0 +1,311 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "CLOSE обоих goals подтверждён; merge после GREEN CI 38985351600 и docs-only cleanup.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "7726256ee903285a1a484478d05af1ffbb20a38b",
+  "unit_goal_source": "PR #374 CLOSE round 2: docs/backlog/epics/honest-guest-package-adaptations/goal.md (ready; amend 2026-10-16) + docs/backlog/epics/project-location-independence/goal.md (ready; amend 2026-10-17); BASE round-1 c1e916e78e038bf479b54df3a61b001add7818bc. Неизменённые доказательства раунда 1 переиспользованы; изменённые carriers проверены на reviewed_sha.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Host-async Blob/File, fs.openAsBlob, Wasm, WebCrypto, Body и zlib: вывод/exit совпадают с Node.",
+      "source": "acceptance",
+      "trace": "honest-guest-package-adaptations I1 + scenario 1",
+      "status": "pass",
+      "citation": "tests/browser-unit/host-async-keepalive.spec.ts:24",
+      "note": ""
+    },
+    {
+      "row": "Guest-stream waits не удерживают процесс; clone/copy сохраняют исключение; unhandled rejection даёт exit 1.",
+      "source": "acceptance",
+      "trace": "honest-guest-package-adaptations I1 + ADR-0529",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:151; tests/browser-unit/host-async-keepalive.spec.ts:47",
+      "note": ""
+    },
+    {
+      "row": "Response/Request/WebSocket: constructor identity, instanceof, native names/toString; init.body читается один раз; locked body отказывает.",
+      "source": "acceptance",
+      "trace": "ADR-0529",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:34; tests/browser-unit/fixtures/host-async-keepalive-cases.ts:231",
+      "note": ""
+    },
+    {
+      "row": "WebSocket держит до настоящего close; synthetic close не освобождает ref.",
+      "source": "acceptance",
+      "trace": "honest-guest-package-adaptations I1 + ADR-0529",
+      "status": "pass",
+      "citation": "tests/browser-unit/host-async-keepalive.spec.ts:85",
+      "note": ""
+    },
+    {
+      "row": "BroadcastChannel держит до close; ref/unref имеют Node lifetime.",
+      "source": "acceptance",
+      "trace": "honest-guest-package-adaptations I1 + ADR-0529",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:405",
+      "note": ""
+    },
+    {
+      "row": "Неучтённые fs/zlib/body-stream операции завершаются без host task.",
+      "source": "acceptance",
+      "trace": "honest-guest-package-adaptations I1 + ADR-0529",
+      "status": "pass",
+      "citation": "tests/browser-unit/host-async-keepalive.spec.ts:56",
+      "note": ""
+    },
+    {
+      "row": "Native-internal body reads и navigator.locks явно объявлены gaps с kill condition.",
+      "source": "acceptance",
+      "trace": "honest-guest-package-adaptations I1 + ADR-0529",
+      "status": "pass",
+      "citation": "docs/public/compat/process.md:28; docs/adr/runtime-js/0529-count-host-task-async-node-surface-requests-in-child-realm-keepalive.md:80",
+      "note": ""
+    },
+    {
+      "row": "Vite 7/8 cli.js идентичен upstream; realm hook отсутствует.",
+      "source": "acceptance",
+      "trace": "honest-guest-package-adaptations I2 + scenario 2",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-cli-upstream-bytes.spec.ts:43",
+      "note": ""
+    },
+    {
+      "row": "Vite 7 build/dev/HMR/preview/optimize и Vite 8 build/preview работают без hook.",
+      "source": "acceptance",
+      "trace": "honest-guest-package-adaptations I2 + scenario 2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:267; tests/browser-unit/project-location.spec.ts:303; tests/browser-unit/esbuild-vite-contract.spec.ts:1146",
+      "note": ""
+    },
+    {
+      "row": "Ошибочный config даёт Node stderr/exit 1; repaired build в reused no-COI процессе завершается.",
+      "source": "acceptance",
+      "trace": "honest-guest-package-adaptations I2 + ADR-0530",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-cli-upstream-bytes.spec.ts:78; tests/no-coi/no-coi-pi-agent.spec.ts:249",
+      "note": ""
+    },
+    {
+      "row": "Поздний exit до/после reset не завершает новый invocation; direct drain фильтрует stale rejection.",
+      "source": "acceptance",
+      "trace": "honest-guest-package-adaptations I2 + ADR-0530",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:285; packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:337",
+      "note": ""
+    },
+    {
+      "row": "Каждая executable/catalog/launch adaptation имеет class, authority, drift anchor и kill condition.",
+      "source": "acceptance",
+      "trace": "honest-guest-package-adaptations I3 + scenario 3",
+      "status": "pass",
+      "citation": "docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md:25",
+      "note": ""
+    },
+    {
+      "row": "Upstream-edge имеет Node artifact; broken bcrypt раскрыт; NAPI_RS_FORCE_WASI объявлен ADR.",
+      "source": "acceptance",
+      "trace": "honest-guest-package-adaptations I3 + ADR-0534",
+      "status": "pass",
+      "citation": "docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md:33; docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md:40; docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md:47",
+      "note": ""
+    },
+    {
+      "row": "Default cwd /home/project, synthetic /, диагностические пути и project-relative terminal state согласованы.",
+      "source": "acceptance",
+      "trace": "project-location-independence I1 + scenario 1 + ADR-0531",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:236; tests/browser-unit/project-location.spec.ts:329; tests/browser-unit/workbench-playground-companion.spec.ts:491",
+      "note": ""
+    },
+    {
+      "row": "/tmp и /home/rifty writable; mkdtemp, HOME, bare cd и ~/.npmrc работают.",
+      "source": "acceptance",
+      "trace": "project-location-independence I2 + scenario 2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:245",
+      "note": ""
+    },
+    {
+      "row": "Private areas отсутствуют в Files, snapshot и archive.",
+      "source": "acceptance",
+      "trace": "project-location-independence I2 + scenario 2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:257",
+      "note": ""
+    },
+    {
+      "row": "Private areas сохраняются при reopen/Save, изолированы между проектами.",
+      "source": "acceptance",
+      "trace": "project-location-independence I2 + scenario 2",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:413",
+      "note": ""
+    },
+    {
+      "row": "Один Vite 7 проект: private areas → upstream bytes/keepalive → build → preview → HMR → повтор bytes/keepalive.",
+      "source": "acceptance",
+      "trace": "honest-guest-package-adaptations I1 + I2 + project-location-independence I1 + I2 + I4 + scenario 1",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:221; /tmp/rifty-close-composition/composition.spec.ts:1",
+      "note": ""
+    },
+    {
+      "row": "Vite 7/8 installed chunks идентичны upstream; recipe не содержит Vite policies.",
+      "source": "acceptance",
+      "trace": "project-location-independence I3 + scenario 3 + ADR-0533",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-at-root.spec.ts:42; tools/checks/install-artifact-identity.test.ts:12",
+      "note": ""
+    },
+    {
+      "row": "При / React Refresh URLs разделяются как у Node; default использует один URL.",
+      "source": "acceptance",
+      "trace": "project-location-independence I3 + scenario 3",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-at-root.spec.ts:123",
+      "note": ""
+    },
+    {
+      "row": "При / watcher без edit создаёт config restart/root-file events; default — нет.",
+      "source": "acceptance",
+      "trace": "project-location-independence I3 + scenario 3",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-at-root.spec.ts:192",
+      "note": ""
+    },
+    {
+      "row": "Поведение Vite при / опубликовано как upstream; Vite 8 при / ограничен byte identity.",
+      "source": "acceptance",
+      "trace": "project-location-independence I3 + scenario 3 + ADR-0533",
+      "status": "pass",
+      "citation": "docs/public/compat/vite-command.md:20",
+      "note": ""
+    },
+    {
+      "row": "Vite 7 build/HMR/preview проходят на default и /srv/app через общий параметр.",
+      "source": "acceptance",
+      "trace": "project-location-independence I4 + scenario 4",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:221",
+      "note": ""
+    },
+    {
+      "row": "Vite 8 build/dev (правка видна после reload)/preview на default и /srv/app; amendment 2026-10-17.",
+      "source": "acceptance",
+      "trace": "project-location-independence I4 + scenario 4",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:287; docs/backlog/epics/project-location-independence/goal.md:176",
+      "note": ""
+    },
+    {
+      "row": "При / Vite 7 build/preview проходят; коллизия project tmp даёт loud EEXIST.",
+      "source": "acceptance",
+      "trace": "project-location-independence I2 + I3 + I4 + ADR-0531",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:373",
+      "note": ""
+    },
+    {
+      "row": "WorkbenchOptions.publicProjectRoot через openWorkbench/openPlaygroundWorkbench; default export.",
+      "source": "public-api",
+      "trace": "project-location-independence I4 + ADR-0531",
+      "status": "pass",
+      "citation": "tests/browser-unit/project-location.spec.ts:226; packages/workbench/src/workbench/internal/playground-workbench.contract.test.ts:651",
+      "note": ""
+    },
+    {
+      "row": "os.homedir/tmpdir/userInfo и cross-mount EXDEV/mv сохраняют объявленную Node семантику.",
+      "source": "public-api",
+      "trace": "project-location-independence I2 + ADR-0531",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/os.test.ts:87; tests/browser-unit/project-location.spec.ts:344",
+      "note": ""
+    },
+    {
+      "row": "trackKeepalivePromise удалён из публичной runtime-js поверхности.",
+      "source": "public-api",
+      "trace": "honest-guest-package-adaptations I2 + ADR-0530",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/index-surface.test.ts:8",
+      "note": ""
+    },
+    {
+      "row": "BroadcastChannel close/ref/unref доступны с объявленным lifetime.",
+      "source": "public-api",
+      "trace": "honest-guest-package-adaptations I1 + ADR-0529",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/host-async-keepalive-cases.ts:405; tests/browser-unit/fixtures/host-async-keepalive-cases.ts:431",
+      "note": ""
+    },
+    {
+      "row": "Vite 7/8 upstream CLI/chunk hashes и baked snapshots совпадают.",
+      "source": "frozen-artifact",
+      "trace": "honest-guest-package-adaptations I2 + project-location-independence I3 + ADR-0530 + ADR-0533",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite-cli-upstream-bytes.spec.ts:19; tests/browser-unit/vite-at-root.spec.ts:20; apps/playground/src/templates/baked-snapshot-identity.contract.test.ts:71",
+      "note": ""
+    },
+    {
+      "row": "Node-at-/ run-5 URL и run-6 watcher oracle сохранены и различаются browser carriers.",
+      "source": "frozen-artifact",
+      "trace": "project-location-independence I3 + scenario 3",
+      "status": "pass",
+      "citation": "docs/backlog/npm-client/reference/vite-at-root-watcher-oracle-2026-10-16.md:20; tests/browser-unit/vite-at-root.spec.ts:150; tests/browser-unit/vite-at-root.spec.ts:225",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/fixtures/legacy-layout-fault-owner.ts:5",
+          "evidence": "RIFTY_PLAYGROUND_PORT=5401 npx playwright test --config playwright.browser-unit.config.ts tests/browser-unit/legacy-layout-notice.spec.ts tests/browser-unit/saved-project-interrupted-install.spec.ts tests/browser-unit/project-location.spec.ts → 27 passed (53.8s). RIFTY_PLAYGROUND_PORT=5431 npx playwright test --project=chromium-light tests/e2e/cli-report.spec.ts → 9 passed (44.9s). pnpm lint и pnpm docs:check → exit 0. gh run view 38985351600 --json headSha,status,conclusion,jobs → HEAD 7726256ee903285a1a484478d05af1ffbb20a38b, in_progress. CI 38955249240 @5d39f1834: все product jobs GREEN кроме исправленного browser-unit. Артефакты: /tmp/rifty-review-close-r2/ci-head.json, browser-unit-summary.txt; /tmp/rifty-close-r2-cli/*.log.",
+          "summary": "Общий CI точного HEAD ещё выполняется; полный DoD пока не подтверждён. Изменённые lanes GREEN, продуктового дефекта не найдено; перед merge дождаться итогового CI.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

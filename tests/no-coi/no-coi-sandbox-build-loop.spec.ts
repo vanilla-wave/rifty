@@ -2475,34 +2475,6 @@ test('threaded-WASM: Vite 8 Rolldown fails at the unavailable Worker boundary', 
       );
       const launcher = await sandbox.fs.readFile(`${root}/node_modules/.bin/vite`, 'utf8');
       const provenance = { manifest, launcher };
-      const replaceOnce = (source: string, needle: string, replacement: string): string => {
-        if (source.split(needle).length !== 2) {
-          throw new Error(`Vite 8 boundary fixture anchor drifted: ${needle}`);
-        }
-        return source.replace(needle, replacement);
-      };
-      const cliPath = `${root}/node_modules/vite/dist/node/cli.js`;
-      let cliSource = await sandbox.fs.readFile(cliPath, 'utf8');
-      // Explicit acquisition now emits the same prepared CLI as snapshots.
-      cliSource = replaceOnce(
-        cliSource,
-        'var __riftyAction = this.runMatchedCommand();',
-        'var __riftyAction = globalThis.__riftyVite8FixtureAction = this.runMatchedCommand();',
-      );
-      cliSource = replaceOnce(
-        cliSource,
-        'cli.parse();',
-        'cli.parse();\nexport const __promise = globalThis.__riftyVite8FixtureAction;',
-      );
-      await sandbox.fs.writeFile(cliPath, cliSource);
-      const entryPath = `${root}/node_modules/vite/bin/vite.js`;
-      let entrySource = await sandbox.fs.readFile(entryPath, 'utf8');
-      entrySource = replaceOnce(
-        entrySource,
-        '} else {\n  start()\n}',
-        '} else {\n  globalThis.__riftyVite8FixtureImport = start()\n}\nexport const __promise = globalThis.__riftyVite8FixtureImport.then((namespace) => namespace.__promise)',
-      );
-      await sandbox.fs.writeFile(entryPath, entrySource);
       const output: string[] = [];
       const off = sandbox.runtime.on((event) => {
         if ((event.type === 'stdout' || event.type === 'stderr') && event.chunk) {

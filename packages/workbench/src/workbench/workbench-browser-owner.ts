@@ -199,7 +199,7 @@ export function startBrowserWorkspaceOwner(
   });
   const silenceBudgetMs =
     deployment.ownerOperationSilenceTimeoutMs ?? OWNER_OPERATION_SILENCE_TIMEOUT_MS;
-  const playgroundUrlContext = input.playgroundUrlContext;
+  const { legacyWorkspacePrefix, publicProjectRoot, playgroundUrlContext } = input;
   const companionMode = playgroundUrlContext !== undefined;
   const readyState = deferred<void>();
   const closedState = deferred<void>();
@@ -558,12 +558,9 @@ export function startBrowserWorkspaceOwner(
     }),
     packageAcquisition: input.packageAcquisition,
     storage: input.storage,
-    ...(input.legacyWorkspacePrefix === undefined
-      ? {}
-      : { legacyWorkspacePrefix: input.legacyWorkspacePrefix }),
-    ...(input.playgroundUrlContext === undefined
-      ? {}
-      : { playgroundUrlContext: input.playgroundUrlContext }),
+    ...(legacyWorkspacePrefix === undefined ? {} : { legacyWorkspacePrefix }),
+    ...(publicProjectRoot === undefined ? {} : { publicProjectRoot }),
+    ...(playgroundUrlContext === undefined ? {} : { playgroundUrlContext }),
   });
   try {
     send({ type: 'workbench:initialize', config: bootConfig });

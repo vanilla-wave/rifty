@@ -6,6 +6,7 @@ import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
 import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
 import { resolveDevServerChildConfig } from './dev-server-child-config.ts';
 import { createDevServerController } from './dev-server-controller.ts';
+import { createGuestLayout } from './guest-layout.ts';
 import type { ReserveOwnerChildAdmission } from './owner-child-admission.ts';
 import {
   type DevServerChildHandle,
@@ -133,7 +134,7 @@ describe('buildDevServerChildSpawnSpec', () => {
       seedFiles: { '/server.mjs': 'export {}' },
     };
     const spec = buildDevServerChildSpawnSpec(
-      { ...params, cfg, remoteFsRoot },
+      { ...params, cfg, guestRoots: { remoteFsRoot, publicRoot: '/' } },
       'blob:dev-server-url',
       NODE_WORKER_RUNTIME_ENV,
     );
@@ -304,7 +305,7 @@ describe('createOwnerChildDevServer', () => {
         root: '/',
         entryPath: '/packages/nested/server.mjs',
       },
-      remoteFsRoot: '/.rifty/workbench/v2/projects/project-a/tree',
+      guestRoots: { remoteFsRoot: '/.rifty/workbench/v2/projects/project-a/tree', publicRoot: '/' },
     };
     const boot = driver.boot({
       signal: new AbortController().signal,
@@ -360,7 +361,7 @@ describe('createOwnerChildDevServer', () => {
         entryPath: '/packages/nested/server.mjs',
         seedFiles: { '/packages/nested/server.mjs': 'export {}' },
       },
-      remoteFsRoot,
+      guestRoots: { remoteFsRoot, publicRoot: '/' },
     };
     const boot = driver.boot({
       signal: new AbortController().signal,
@@ -385,7 +386,7 @@ describe('createOwnerChildDevServer', () => {
     const marker = new Uint8Array([0, 97, 115, 109]);
     ownerFs.mkdirSync(physicalPackagePath, { recursive: true });
     ownerFs.writeFileSync(`${physicalPackagePath}/esbuild.wasm`, marker);
-    const guestFs = new ProjectTerminalFsSync(ownerFs, remoteFsRoot);
+    const guestFs = new ProjectTerminalFsSync(ownerFs, createGuestLayout('/', remoteFsRoot));
     expect(guestFs.readFileBytesSync(`${runtimeBindings[0]!.packagePath}/esbuild.wasm`)).toEqual(
       marker,
     );

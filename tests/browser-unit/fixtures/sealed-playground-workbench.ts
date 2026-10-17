@@ -27,6 +27,8 @@ export interface SealedWorkbenchBootOptions {
   /** #255: host budget of owner durability-progress SILENCE; unset = shipped 60 s. */
   readonly ownerOperationSilenceTimeoutMs?: number;
   readonly plan?: PlaygroundProjectPlan;
+  /** ADR-0531 Workbench option; unset = the shipped default. */
+  readonly publicProjectRoot?: string;
 }
 
 interface HostAssets {
@@ -265,6 +267,9 @@ export async function openSealedWorkbenchFixture(
         persistence: options.persistence ?? 'ephemeral',
         ...(options.namespace === undefined ? {} : { namespace: options.namespace }),
       },
+      ...(options.publicProjectRoot === undefined
+        ? {}
+        : { publicProjectRoot: options.publicProjectRoot }),
     });
     const definition = workbench.playground.define(plan);
     await workbench.playground.catalog.createScratch({

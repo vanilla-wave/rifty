@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Unquoted word-initial `~` and `~/…` expand to `$HOME` as bash; `mv` across mounts copies then removes the source, as GNU `mv` (ADR-0531).
+
 - Honor git status --short through the existing -s formatter; do not silently print the long summary.
 
 

@@ -1,11 +1,13 @@
 import { expect, it } from 'vitest';
 import { pathFromTerminalFileLink } from './terminal-links.ts';
 
-it('accepts normalized file links inside the workspace', () => {
-  expect(pathFromTerminalFileLink('file:///workspace/src/main.js')).toBe('/workspace/src/main.js');
-  expect(pathFromTerminalFileLink('file:///workspace/src/../README.md')).toBe(
-    '/workspace/README.md',
+it('maps normalized file links inside the workspace to project paths', () => {
+  expect(pathFromTerminalFileLink('file:///workspace/src/main.js')).toBe('/src/main.js');
+  expect(pathFromTerminalFileLink('file:///workspace/src/../README.md')).toBe('/README.md');
+  expect(pathFromTerminalFileLink('file:///home/project/src/main.js', '/home/project')).toBe(
+    '/src/main.js',
   );
+  expect(pathFromTerminalFileLink('file:///home/rifty/.npmrc', '/home/project')).toBeNull();
 });
 
 it('accepts descendants when the workspace is the filesystem root', () => {

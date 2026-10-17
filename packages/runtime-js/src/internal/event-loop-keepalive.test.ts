@@ -12,7 +12,6 @@ import {
   registerNodeEvalDrainLifecycle,
   releaseNodeEvalDrainOwnership,
   resetKeepalive,
-  trackKeepalivePromise,
   unref,
 } from './event-loop-keepalive.ts';
 
@@ -524,28 +523,6 @@ describe('event-loop keepalive', () => {
     expect(events).toEqual(['print', 'exit:7']);
     expect(queue).toEqual([]);
     expect(drainSettled).toBe(false);
-  });
-
-  it('trackKeepalivePromise pins until a detached promise settles', async () => {
-    let resolveTask!: () => void;
-    trackKeepalivePromise(
-      new Promise<void>((resolve) => {
-        resolveTask = resolve;
-      }),
-    );
-    expect(activeRefs()).toBe(1);
-    resolveTask();
-    await Promise.resolve();
-    expect(activeRefs()).toBe(0);
-  });
-
-  it('trackKeepalivePromise records detached promise rejection for awaitDrain', async () => {
-    trackKeepalivePromise(Promise.reject(new Error('detached boom')));
-    await Promise.resolve();
-    const queue: Array<() => void> = [];
-    const p = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
-    queue.shift()!();
-    await expect(p).rejects.toThrow('detached boom');
   });
 });
 

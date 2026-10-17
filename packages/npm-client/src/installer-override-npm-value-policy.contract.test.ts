@@ -37,7 +37,7 @@ const RELEASES: readonly Release[] = [
   { name: 'esbuild', version: '0.28.0' },
   { name: 'esbuild-wasm', version: '0.28.0' },
   { name: 'bcrypt', version: '5.1.1' },
-  { name: 'bcryptjs', version: '2.4.3' },
+  { name: 'bcryptjs', version: '3.0.3' },
 ];
 
 class PolicyRegistry extends RegistryClient {

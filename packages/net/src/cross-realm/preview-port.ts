@@ -19,7 +19,7 @@
 
 import { DEFAULT_PREVIEW_PREFIX, NotImplementedError, normalizePreviewPrefix } from '@riftydev/io';
 import type { PortHandler } from '../registry.ts';
-import { channelNameFor } from '../ws/bridge.ts';
+import { channelNameFor, openHostBroadcastChannel } from '../ws/bridge.ts';
 import { injectPreviewWebSocketBridge } from './preview-html-inject.ts';
 
 /**
@@ -275,7 +275,7 @@ export function serveCrossRealmPreview(
   opts: PreviewPortScopeOptions & { readonly streamDrainTimeoutMs?: number } = {},
 ): () => void {
   const channelName = channelNameFor(previewPortChannelUrl(port));
-  const channel = new BroadcastChannel(channelName);
+  const channel = openHostBroadcastChannel(channelName);
   const streamDrainTimeoutMs = opts.streamDrainTimeoutMs ?? DEFAULT_STREAM_DRAIN_TIMEOUT_MS;
 
   const onMessage = async (event: MessageEvent): Promise<void> => {
@@ -679,7 +679,7 @@ export function bridgeCrossRealmPreview(
     opts.previewPrefix === undefined ? DEFAULT_PREVIEW_PREFIX : opts.previewPrefix,
   );
   const channelName = channelNameFor(previewPortChannelUrl(port));
-  const channel = new BroadcastChannel(channelName);
+  const channel = openHostBroadcastChannel(channelName);
   const pending = new Map<string, Waiter>();
 
   const plain = (text: string, status: number): Response =>
@@ -897,7 +897,7 @@ export function dispatchCrossRealmLoopback(
 ): Promise<Response | null> {
   const probeTimeoutMs = opts.probeTimeoutMs ?? 1000;
   const idleTimeoutMs = opts.idleTimeoutMs ?? 30_000;
-  const channel = new BroadcastChannel(channelNameFor(previewPortChannelUrl(port)));
+  const channel = openHostBroadcastChannel(channelNameFor(previewPortChannelUrl(port)));
   const requestId = nextRequestId();
   const bodyBytes = req.method === 'GET' || req.method === 'HEAD' ? null : req.body;
 

@@ -297,10 +297,10 @@ async function runtimeBearingSourcesOutsideBuild(): Promise<readonly string[]> {
 }
 
 describe('@riftydev/workbench extraction boundary', () => {
-  it('pins the retained 224-file move, including all 107 tests and three fixtures', () => {
-    expect(EXTRACTION_MAP).toHaveLength(224);
-    expect(new Set(EXTRACTION_MAP.map(([source]) => source)).size).toBe(224);
-    expect(new Set(EXTRACTION_MAP.map(([, target]) => target)).size).toBe(224);
+  it('pins the retained 223-file move, including all 107 tests and three fixtures', () => {
+    expect(EXTRACTION_MAP).toHaveLength(223);
+    expect(new Set(EXTRACTION_MAP.map(([source]) => source)).size).toBe(223);
+    expect(new Set(EXTRACTION_MAP.map(([, target]) => target)).size).toBe(223);
     expect(
       EXTRACTION_MAP.filter(([, target]) =>
         /(?:[\\/]test-fixtures[\\/]|(?:\.(?:contract\.)?(?:fault\.)?test|\.test-fixture)\.[cm]?[jt]sx?$)/u.test(
@@ -373,7 +373,9 @@ describe('@riftydev/workbench extraction boundary', () => {
     // ADR-0437: three diagnostic modules and four separately emitted probe assets.
     // ADR-0445: one no-COI invocation scope shared by project command and runBin.
     // ADR-0487: package JSON/spec helpers split from the ratcheted npm command.
-    expect(packageProductionFiles).toHaveLength(173);
+    // ADR-0531: guest layout module; legacy index parsing split from the
+    // ratcheted playground project authority.
+    expect(packageProductionFiles).toHaveLength(175);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 
