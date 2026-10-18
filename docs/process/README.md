@@ -46,8 +46,12 @@ A new parity/stateful promise needs Contract+RED first. Documentation has no
 product RED. A whole-goal hand-off loops the route over the map, then CLOSE; a
 standalone request finishes its unit. The starting session drives the entire
 route, including routine records and its report; never return control between
-stages. A re-entry reads the PR body and the ledger tail. Fresh contexts are for
-independent decisions only (`DEC-5`).
+stages. On Claude Code a whole-goal hand-off runs through
+`.claude/workflows/goal-run.js`: the script sequences the same stages, one fresh
+leaf per stage reading state from disk, a fresh reviewer per checkpoint, the
+invoking session the exception layer (`DEC-5`; `traps.md` §Harness). A re-entry
+reads the PR body and the ledger tail. Fresh contexts are for independent
+decisions only (`DEC-5`).
 
 ### FIT — chart a goal
 
@@ -392,8 +396,11 @@ violation, and blocking on a demand no declared authority makes.
   (`REV-11`); one critic — a disputed blocker, an overturned decision or the
   premise (`docs/backlog/README.md` §Challenge); the written-result check at
   the end of refine/FIT (`RDY-6`). Orchestrator, worker and runner are one
-  driver across all stages. No fresh agent for state reads, a journal line or
-  a user-facing report. A decision leaves a session only through the journal
+  driver across all stages: the session, or on Claude Code the `goal-run`
+  script, whose stage leaves are fresh by construction and hand over through
+  the journal (one read-only state leaf, because the script has no file
+  access). No fresh agent for a journal line or a user-facing report. A
+  decision leaves a session only through the journal
   (ledger line, verdict, `## Decisions` line), written before it can fall out
   of context.
 

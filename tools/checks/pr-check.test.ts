@@ -51,6 +51,7 @@ describe('pr:check lanes follow the diff class', () => {
       'CHANGELOG.md',
       '.agents/skills/rifty-goal/SKILL.md',
       '.agents/skills/rifty-fix/SKILL.md',
+      '.claude/workflows/goal-run.js',
     ];
     expect(classifyDiff(paths)).toBe('docs-only');
     const names = selectTasks(TASKS, 'docs-only').map((t: { name: string }) => t.name);

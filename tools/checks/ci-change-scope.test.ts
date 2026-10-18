@@ -48,6 +48,7 @@ describe('CI change scope', () => {
       'CLAUDE.md',
       '.agents/skills/rifty-goal/SKILL.md',
       '.agents/skills/rifty-fix/SKILL.md',
+      '.claude/workflows/goal-run.js',
     ]) {
       expect(isDocumentationOnlyPath(path), path).toBe(true);
     }

@@ -45,7 +45,7 @@ Checklist: `docs/process/README.md` §Decisions. Core:
 
 ## Goal runs
 
-A unit runs PICKUP → Contract+RED → IMPLEMENT → Final+GREEN on its own (`docs/process/README.md` §Route); an explicit whole-ready-goal hand-off loops it over the map (`rifty-goal`); a re-entry reads the PR body and the ledger tail.
+A unit runs PICKUP → Contract+RED → IMPLEMENT → Final+GREEN on its own (`docs/process/README.md` §Route); an explicit whole-ready-goal hand-off loops it over the map (`rifty-goal`; Claude Code: `.claude/workflows/goal-run.js`); a re-entry reads the PR body and the ledger tail.
 
 ## PR — unit of delivery
 One PR = one reviewable delivered behavior; rules `docs/process/README.md` §PR (`PR-1..6`): discoveries ride the unit's branch, a draft PR opens at the first commit (one per goal by default), packaging is agent-owned, independent criteria never require a separate PR, the user's packaging wins.

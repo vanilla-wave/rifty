@@ -24,7 +24,7 @@ tree of the process re-cut (rounds/park/size-gate/tail/`proof-only` removed,
 | door | user-brought idea/finding → `rifty-refine` | AGENTS.md:31; README.md:52 |
 | door | mid-task/agent discovery → `rifty-to-backlog` | AGENTS.md:31; README.md:52 |
 | door | observed defect → `rifty-fix` (no doc, `review: ordinary` by construction) | AGENTS.md:31; rifty-fix/SKILL.md:3,8 |
-| door | whole-ready-goal hand-off → `rifty-goal` / `goal-run.js` | AGENTS.md:47; README.md:48-51 |
+| door | whole-ready-goal hand-off → `rifty-goal` / `goal-run.js` | AGENTS.md:48; README.md:46-52 |
 | door | standalone item → the pickup ask, the session drives the stages | README.md:53-54; pickup.md:3-4; `RDY-1` |
 | door | no-doc unit (docs, CHANGELOG, fix, CI rule) → own ordinary PR, nothing minted or journaled | `PR-2`; `RDY-8`; README.md:44-47 |
 | door | "still load-bearing?" → question draft → PICKUP declines (§Declined row) or compiles retirement | backlog README §Shape; `RDY-2` 5; pickup.md |
@@ -40,7 +40,7 @@ tree of the process re-cut (rounds/park/size-gate/tail/`proof-only` removed,
 | handoff | driver → fresh reviewer per checkpoint / per ordinary review | `REV-11`; checkpoint-run.md |
 | handoff | driver → fresh critic (reception), checkpoints only | checkpoint-run.md 2 |
 | handoff | capture → fresh challenge critic; fresh report subagent for user-facing write-ups only | rifty-to-backlog §5-6 |
-| handoff | stop → user → re-invoke; harness report → re-invoke | goal-run.js:6; `STOP-6` |
+| handoff | stop → user → re-invoke; harness report → re-invoke | goal-run.js:4-5; `STOP-6` |
 
 ## Suite
 

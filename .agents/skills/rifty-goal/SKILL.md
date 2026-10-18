@@ -11,7 +11,12 @@ interview (`rifty-refine`), unplanned defects (`rifty-fix`), and intake
 Detect the mode from state. A whole-goal hand-off runs the README §Route loop
 — PICKUP → Contract+RED → IMPLEMENT → Final+GREEN → RECHART until the map is
 empty, then CLOSE, ending on `gh pr checks` green at HEAD (`PR-6`) — in this session (`DEC-5`), parking a `STOP-1` question on the map and continuing; the end of a stage is never the end of a turn; a re-entry reads the PR
-body and the ledger tail. A single-mode ask ("fit X",
+body and the ledger tail. On Claude Code the hand-off runs the `goal-run`
+workflow instead: call the Workflow tool with name `goal-run` and args
+`{ goal: '<slug>' }` (never a JSON string), relay its return (`{closed}` or a
+`STOP-6` report) and re-invoke after the user's answer; its leaves follow this
+skill's modes. Drive the loop here when the user asks for in-session or the
+Workflow tool is absent. A single-mode ask ("fit X",
 "re-chart", "close") runs that mode only:
 
 | State | Mode → procedure |
