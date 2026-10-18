@@ -6,7 +6,7 @@ description: Repair an observed rifty runtime/package/toolchain correctness fail
 # rifty-fix
 
 An observed defect uses its real Node/existing baseline as authority: reproduce,
-RED, fix, then independent Final+GREEN (`docs/process/rules/readiness.md`
+RED, fix, then independent Final+GREEN (`docs/process/README.md`
 `RDY-8`). No invented contract doc or review mode. Required repairs stay in
 the authorized work; useful outside work is captured only if deferred
 (`REV-12`). A new promise disguised as a fix still needs Contract+RED.
@@ -14,7 +14,7 @@ Expected RED is not a defect.
 
 ## Steps
 
-1. **Root cause.** Reproduce. Cannot reproduce → no speculative fix: record the attempt as a finding draft with the repro command (`rifty-to-backlog`; `traps.md` when it is a lesson), and this unit ends — a status, not a stop; the caller runs its gate once more and, still red, does not land — the draft is its named residual (`rules/pr.md` `PR-6`), never a retry loop. A red that reproduces but resists diagnosis is the same. Trace the bad value to where it is born; instrument each boundary when the path spans layers.
+1. **Root cause.** Reproduce. Cannot reproduce → no speculative fix: record the attempt as a finding draft with the repro command (`rifty-to-backlog`; `traps.md` when it is a lesson), and this unit ends — a status, not a stop; the caller runs its gate once more and, still red, does not land — the draft is its named residual (`PR-6`), never a retry loop. A red that reproduces but resists diagnosis is the same. Trace the bad value to where it is born; instrument each boundary when the path spans layers.
 2. **Class.** In `docs/process/rules/fault-classes.md`, name the axis and boundary; add a missing model first. Strike physically excluded faults — only on the boundary where step 1 traced the birth (a friendlier row = boundary-shopping), after the full sweep, each strike listed in the PR with its row and the step-1 trace evidence; surviving axes keep fault tests. Sweep the pattern repo-wide and enumerate sibling operations. A second reachable instance → §Class-kill.
 3. **RED.** Add a failing parity/regression/fault test before code. Assert the honest outcome. A conflicting old test means the contract changed; do not quietly retarget it.
 4. **Fix once.** Change the root owner; for a class, apply §Class-kill. Avoid wrappers and drive-by work.
