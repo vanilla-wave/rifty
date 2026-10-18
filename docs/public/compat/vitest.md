@@ -12,21 +12,24 @@ edge (`^6.0.0 || ^7.0.0 || ^8.0.0`) resolve the latest Vite, whose `lightningcss
 recipe refuses: `npm install` fails with `Not implemented: lightningcss.version`. Start from a tree
 without `node_modules/vite`; re-pinning over an installed Vite is not claimed.
 
-Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not implemented (throws
+**Exact-version ceiling.** Every vitest row holds only at this pin (`AGENTS.md` §Fidelity), so it
+reads ⚠️; the Node process contracts row is parity-proven independent of the vitest version.
+
+Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-version ceiling · ❌ not implemented (throws
 `NotImplementedError` or a named module-load ceiling).
 
 | Feature | Status | Notes |
 |---|---|---|
-| `npm install` with the Vite pin | ✅ | One `node_modules/vite` at 8.0.16 (none nested) satisfying vitest's `vite` edge, matching lock entry, `@rolldown/binding-wasm32-wasi`, `lightningcss@^1.32.0` → `lightningcss-wasm@1.32.0` shadow substitution; exit 0 |
-| `vitest.config.ts` | ✅ | The TypeScript config is loaded and honoured: only its `include` glob is collected; a test file outside it is not run |
-| TypeScript source and test files | ✅ | `.ts` modules are transformed and run; a failure points at the original `file:line:column` with Node's code frame |
-| `vitest run` default reporter | ✅ | Per-file and per-test lines, the failing test's assertion message and `- Expected`/`+ Received` diff, `Test Files`/`Tests` counts as on Node; exit 1 with a failing test, 0 when all pass |
-| `npm test` (`"test": "vitest run"`) | ✅ | Same results and exit codes as `vitest run`; npm's `> test` banner line is not printed (rifty's npm prints `> vitest run` only) |
-| `--reporter=verbose` | ✅ | One line per test with the failure reason, same counts and exit codes |
-| `--pool=forks` (default) | ✅ | Test files run in a forked Node child (`serialization: 'advanced'`, piped stdio) |
-| `--pool=threads` | ✅ | Test files run in a `worker_threads.Worker` (stdout/stderr streams); same results and exit codes as `forks` |
+| `npm install` with the Vite pin | ⚠️ | One `node_modules/vite` at 8.0.16 (none nested) satisfying vitest's `vite` edge, matching lock entry, `@rolldown/binding-wasm32-wasi`, `lightningcss@^1.32.0` → `lightningcss-wasm@1.32.0` shadow substitution; exit 0 |
+| `vitest.config.ts` | ⚠️ | The TypeScript config is loaded and honoured: only its `include` glob is collected; a test file outside it is not run |
+| TypeScript source and test files | ⚠️ | `.ts` modules are transformed and run; a failure points at the original `file:line:column` with Node's code frame |
+| `vitest run` default reporter | ⚠️ | Per-file and per-test lines, the failing test's assertion message and `- Expected`/`+ Received` diff, `Test Files`/`Tests` counts as on Node; exit 1 with a failing test, 0 when all pass |
+| `npm test` (`"test": "vitest run"`) | ⚠️ | Same results and exit codes as `vitest run`; npm's `> test` banner line is not printed (rifty's npm prints `> vitest run` only) |
+| `--reporter=verbose` | ⚠️ | One line per test with the failure reason, same counts and exit codes |
+| `--pool=forks` (default) | ⚠️ | Test files run in a forked Node child (`serialization: 'advanced'`, piped stdio) |
+| `--pool=threads` | ⚠️ | Test files run in a `worker_threads.Worker` (stdout/stderr streams); same results and exit codes as `forks` |
 | Node process contracts vitest depends on | ✅ | A live `Worker`/ref'd `MessagePort` keeps the process running; `uncaughtException`/`unhandledRejection` handlers, the `exit` event and `process.exit()` honouring `process.exitCode` behave as on Node |
-| Loading the vitest 4.1.11 tree | ✅ | CLI, config bundle and pool workers load every module on the claimed path — no link-time `SyntaxError`, `ModuleLoadError` or loader ceiling; members the browser cannot provide throw a named `NotImplementedError` only on unclaimed calls |
+| Loading the vitest 4.1.11 tree | ⚠️ | CLI, config bundle and pool workers load every module on the claimed path — no link-time `SyntaxError`, `ModuleLoadError` or loader ceiling; members the browser cannot provide throw a named `NotImplementedError` only on unclaimed calls |
 | `environment: 'jsdom'` | ❌ | `Not implemented: vm.createContext.DONT_CONTEXTIFY` at jsdom's `vm.createContext(vm.constants.DONT_CONTEXTIFY)` (vitest runs jsdom with `runScripts: 'dangerously'`; ADR-0464); tracked by epic `jsdom-environment-in-browser` |
 | `environment: 'happy-dom'` | ❌ | `Not implemented: module-loader.esm-global-function-assignment` — happy-dom's window writes a `Function` binding |
 | Coverage (`--coverage`, `@vitest/coverage-v8`) | ❌ | `Built-in 'node:inspector/promises' is not implemented` |

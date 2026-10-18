@@ -28,4 +28,4 @@ from test RESULTS is tracked in `docs/backlog/toolchain-build/compat-matrix-test
 - (sqlite.md — coming with the `node:sqlite` `DatabaseSync` shim, ADR-0065)
 - [Browser versions, modes, persistence and executed evidence](browsers.md)
 
-Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not implemented (throws `NotImplementedError` or `UNSUPPORTED_PROTOCOL`).
+Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-version ceiling · ❌ not implemented (throws `NotImplementedError` or `UNSUPPORTED_PROTOCOL`).

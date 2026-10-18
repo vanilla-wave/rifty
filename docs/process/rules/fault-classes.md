@@ -53,7 +53,8 @@ fault-labelled suite; use small boundary decorators, not one framework.
 ## Guest-package adaptations
 
 An adaptation is any transform of installed package bytes or generated twin
-source (owner ADR-0384; inventory
+source, or an admission narrower than the range the package itself accepts
+(exact pin, version gate, manifest override) (owner ADR-0384; inventory
 `docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md`).
 Each one records its class, its authority and a drift-loud anchor:
 
@@ -70,6 +71,10 @@ item/ADR that owns the divergence and states the kill condition; the patch
 dies when that lands. An undeclared one is debt by construction (`AGENTS.md`
 §Fidelity). A class claim without its artifact is a `frozen-assumption`; a
 second instance of one class at one boundary follows §Class-kill.
+
+Every adaptation is a ceiling (`AGENTS.md` §Fidelity): the compat claim it
+carries reads ⚠️ and names the exact version until its kill condition lands;
+kill condition `none` = a permanent ceiling.
 
 ## Seam contract
 
