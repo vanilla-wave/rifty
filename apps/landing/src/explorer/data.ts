@@ -104,7 +104,7 @@ export const NODES: Record<NodeId, NodeDef> = {
   vite: {
     label: 'vite dev server',
     realm: 'worker',
-    compat: 'ok',
+    compat: 'warn',
     role: 'Exact Vite 7.3.6 dev + HMR; opt-in Vite 8.0.16 dev/build/preview uses Rolldown with HMR disabled.',
   },
   kernel: {

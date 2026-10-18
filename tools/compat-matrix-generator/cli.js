@@ -262,8 +262,9 @@ const viteCommandMatrix = {
   file: 'vite-command.md',
   title: 'Compatibility matrix — installed Vite command',
   intro:
-    'Public claim surface for Vite 7 and exact Vite 8.0.16 through the installed `node_modules/.bin/vite` CLI (ADR-0174/0226/0243/0308/0317). ' +
-    'Vite actions run at two versions only: exact 7.3.6 (the exact esbuild 0.28.0 twin; any other non-8 version stops with `vite esbuild runtime supports exact Vite 7.3.6; executed <version>`) and exact 8.0.16 (the manifest override pins `@napi-rs/wasm-runtime@1.1.6`; other 8.x unclaimed). Rows that run Vite are exact-version ceilings (⚠️).',
+    'Public claim surface for exact Vite 7.3.6 and exact Vite 8.0.16 through the installed `node_modules/.bin/vite` CLI (ADR-0174/0226/0243/0308/0317); rows that run Vite are exact-version ceilings (⚠️). ' +
+    'Vite 7 needs the exact esbuild 0.28.0 twin: `npm install` refuses an esbuild range that does not admit it (`esbuild.version`, Vite ≤ 7.3.5), and 7.3.7 installs but its actions stop with `vite esbuild runtime supports exact Vite 7.3.6; executed 7.3.7` (`--help`/`--version` still run). ' +
+    'Vite 8.0.16 needs the `@napi-rs/wasm-runtime@1.1.6` override that the Vite project definition adds (a hand-written manifest must declare it); other 8.x run unclaimed, and ≥ 8.2 fails `npm install` on `lightningcss ^1.33.0`.',
   rows: [
     [
       'Installed `.bin/vite` dispatch',
@@ -273,7 +274,7 @@ const viteCommandMatrix = {
     [
       '`vite`, `vite dev`, `vite serve`, flags, help/version, unknown commands',
       '⚠️',
-      "Args reach Vite's own CLI parser byte-for-byte; rifty classifies only lifecycle mode before execution. Actions run at the two admitted versions only.",
+      "Args reach Vite's own CLI parser byte-for-byte; rifty classifies only lifecycle mode before execution. Actions are claimed at the two exact versions only.",
     ],
     [
       'Visible `vite.config.{js,mjs,ts,cjs,mts,cts}` ownership',

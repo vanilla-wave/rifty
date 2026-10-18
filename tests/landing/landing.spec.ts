@@ -111,7 +111,7 @@ test('serves configured search, sharing, crawl, and pre-JavaScript contracts', a
   await noScriptPage.goto('/');
   await expect(noScriptPage.getByRole('heading', { name: /Node, npm &/ })).toBeVisible();
   await expect(
-    noScriptPage.getByText(/Run tested Express 4, Vite 7, npm tooling and \.wasm workflows/),
+    noScriptPage.getByText(/Run tested Express 4, Vite 7\.3\.6, npm tooling and \.wasm workflows/),
   ).toBeVisible();
   await expect(noScriptPage.getByRole('link', { name: /view rifty on github/i })).toHaveAttribute(
     'href',
@@ -149,7 +149,7 @@ test('positions the open runtime honestly and shows only public Sandbox API', as
   await page.goto('/');
 
   await expect(page.locator('.hero-lead')).toHaveText(
-    'rifty is an open, self-hostable Node-compatible runtime and WASI runner for Chromium. Run tested Express 4, Vite 7, npm tooling and .wasm workflows — execution and files stay in the tab.',
+    'rifty is an open, self-hostable Node-compatible runtime and WASI runner for Chromium. Run tested Express 4, Vite 7.3.6, npm tooling and .wasm workflows — execution and files stay in the tab.',
   );
   await expect(page.locator('.hero-h1')).toHaveText(/Node, npm &a dev server —in a tab\./);
 

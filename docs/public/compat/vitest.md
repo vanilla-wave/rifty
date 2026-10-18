@@ -12,7 +12,7 @@ edge (`^6.0.0 || ^7.0.0 || ^8.0.0`) resolve the latest Vite, whose `lightningcss
 recipe refuses: `npm install` fails with `Not implemented: lightningcss.version`. Start from a tree
 without `node_modules/vite`; re-pinning over an installed Vite is not claimed.
 
-**Exact-version ceiling.** Every vitest row holds only at this pin (`AGENTS.md` §Fidelity), so it
+**Exact-version ceiling.** Every supported row is proven only at this pin (`AGENTS.md` §Fidelity), so it
 reads ⚠️; the Node process contracts row is parity-proven independent of the vitest version.
 
 Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-version ceiling · ❌ not implemented (throws
