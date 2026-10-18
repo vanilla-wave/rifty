@@ -49,8 +49,8 @@ is the one `npm-client/shadow-admission-refusal-names-substituted-version`
 delivers. Twin bump to 1.105.0 is not this item.
 
 Dedup: no title/`code:`/map match; `docs/adr/README.md` §Declined concepts has
-no admission row; `npm-client/sass-closure-upstream-dependency-drift` is the
-closure fixture drift, unrelated to admission.
+no admission row; closure fixture drift (unrelated to admission) is closed by the
+lock-frozen registry fixture `tests/browser-unit/sass-registry-fixture.ts`.
 
 ## Challenge
 

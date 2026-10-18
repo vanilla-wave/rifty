@@ -69,18 +69,18 @@ async function freezeOracleLockClosure(
   );
   expect(createHash('sha256').update(lockBytes).digest('hex')).toBe(buildOracle.lockFixture.sha256);
   const lock = JSON.parse(lockBytes.toString('utf8')) as {
-    readonly packages: Record<string, { readonly version?: string }>;
+    readonly packages: Record<string, { readonly version?: string; readonly integrity?: string }>;
   };
-  const locked = new Map<string, string>();
+  const locked = new Map<string, { readonly version: string; readonly integrity?: string }>();
   for (const [key, entry] of Object.entries(lock.packages)) {
     if (key === '' || entry.version === undefined) continue;
     const name = key.slice(key.lastIndexOf('node_modules/') + 'node_modules/'.length);
     if (served.has(name)) continue;
-    const previous = locked.get(name);
+    const previous = locked.get(name)?.version;
     if (previous !== undefined && previous !== entry.version) {
       throw new Error(`oracle lock records ${name} at ${previous} and ${entry.version}`);
     }
-    locked.set(name, entry.version);
+    locked.set(name, { version: entry.version, integrity: entry.integrity });
   }
   const packumentName = (url: URL): string | undefined => {
     const path = decodeURIComponent(url.pathname);
@@ -90,22 +90,26 @@ async function freezeOracleLockClosure(
     (url) => locked.has(packumentName(url) ?? ''),
     async (route) => {
       const name = packumentName(new URL(route.request().url())) ?? '';
-      const version = locked.get(name) ?? '';
+      const pin = locked.get(name);
+      if (pin === undefined) throw new Error(`no oracle lock entry for ${name}`);
       const response = await route.fetch();
       const packument = (await response.json()) as {
-        readonly versions?: Record<string, unknown>;
+        readonly versions?: Record<string, { readonly dist?: { readonly integrity?: string } }>;
         readonly time?: Record<string, string>;
       };
-      const manifest = packument.versions?.[version];
-      if (manifest === undefined) throw new Error(`registry no longer serves ${name}@${version}`);
-      const time = packument.time?.[version];
+      const manifest = packument.versions?.[pin.version];
+      if (manifest === undefined)
+        throw new Error(`registry no longer serves ${name}@${pin.version}`);
+      if (pin.integrity !== undefined) expect(manifest.dist?.integrity).toBe(pin.integrity);
+      const time = packument.time?.[pin.version];
+      // Fresh headers: the upstream content-encoding/length describe the untrimmed body.
       await route.fulfill({
-        response,
+        status: response.status(),
         json: {
           ...packument,
-          'dist-tags': { latest: version },
-          versions: { [version]: manifest },
-          ...(time === undefined ? {} : { time: { [version]: time } }),
+          'dist-tags': { latest: pin.version },
+          versions: { [pin.version]: manifest },
+          ...(time === undefined ? {} : { time: { [pin.version]: time } }),
         },
       });
     },
