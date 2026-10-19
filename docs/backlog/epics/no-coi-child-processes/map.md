@@ -1,15 +1,15 @@
 # Map — no-coi-child-processes
 
-Live plan: index, not store. Draft — FIT pending (goal §Question).
-
 ## Items
+
+1. `runtime-js/no-coi-child-processes` — native Worker + live owner FS through SW, Node acceptance.
+2. Retire generated esbuild client/adapters — hypothesis after upstream carrier passes; packed artifact proof (I3).
 
 ## Open questions
 
-- Feasibility of a SAB-free separate-realm child with sync `require` over
-  another Worker's VFS — owner: agent — design spike at FIT; infeasible →
-  user (goal §Question).
+- Acceptance and runtime gaps exposed by upstream bytes — owner: agent — run the shared Node/browser carrier after each repair.
 
 ## Out of scope
 
-- COI child processes (the kernel Worker route exists).
+- COI child-process transport; worker_threads; synchronous child_process APIs.
+- Independent FS progress while the owner runs uninterrupted synchronous guest JS.

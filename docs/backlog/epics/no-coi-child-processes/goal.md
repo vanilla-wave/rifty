@@ -3,43 +3,52 @@ kind: epic
 status: draft
 title: No-COI child processes run scripts that load node_modules
 created: 2026-10-16
+tier: works
 value: A developer on a no-COI host (ADR-0375) runs npm CLIs that spawn a Node helper — first upstream esbuild-wasm's `spawn('node', bin/esbuild)` — as on Node, so the generated 0.28.0 esbuild client retained there (`esbuild-upstream-twin` I4) can be deleted.
 user_story: As a developer on a no-COI SDK host, I want `require('esbuild-wasm').transform(...)` (and any CLI spawning `node <node_modules script>`) to work as on Node, but today the child falls back to same-realm execution and fails with `child_process.same-realm.require`
 ---
 
 ## Outcome
 
-Draft seed — the user chose «Временно старый рантайм (Recommended)» (option:
-«В no-COI остаётся нынешний esbuild 0.28.0 с патчами как объявленный долг;
-kill = child-процессы в no-COI (отдельная цель)…», 2026-10-16,
-`epics/esbuild-upstream-twin` §Decisions). FIT has not run: feasibility is
-open (below). A no-COI `spawn('node', script)` child gets its own realm,
-module loader and globals and can `require` the project's `node_modules`,
-with async stdio pipes, so upstream esbuild-wasm's Node entry runs there and
-the retained generated client dies.
+A no-COI `spawn('node', script)` child gets its own realm, module loader
+and globals and can `require` the project's `node_modules`, with async stdio
+pipes. Upstream esbuild-wasm's Node entry runs there; the retained generated
+0.28.0 client and its no-COI-only runtime adapter are removed.
 
 ## User scenario
 
-On a no-COI SDK host (`createSandbox({requireCrossOriginIsolation:false})`):
+On a no-COI SDK host (`createSandbox({requireCrossOriginIsolation:false})`)
+with an active rifty Service Worker:
 `node -e "require('esbuild-wasm').transform('let x: number = 1',{loader:'ts'}).then(r=>console.log(r.code))"`
-prints `let x = 1;` as Node 24 does (today: `[rifty:child_process] Falling
-back to same-realm execution…` then `SyntaxError: Invalid or unexpected token`
-(shebang through `new Function`, `child_process-exec.ts:454`); shebang-free →
-`NotImplementedError: Not implemented: child_process.same-realm.require
-(same-realm child cannot require non-builtin node_modules/esbuild-wasm/bin/esbuild)`
-(`:506`); evidence `docs/backlog/npm-client/reference/esbuild-upstream-twin-refine-evidence-2026-10-16.md`
-§No-COI arm).
+prints `let x = 1;` as real Node. A CLI spawning a Node helper from
+`node_modules` uses its own globals/builtins, live project files and async
+stdin/stdout/stderr. No COOP/COEP or SharedArrayBuffer is introduced.
 
-## Question
+## Invariants
 
-Is a separate-realm child (own module loader, own globals, async stdio)
-with the project's files reachable without SharedArrayBuffer — sync
-`require`/`readFileSync` against a VFS owned by another Worker — and at what
-cost? The worker route requires SAB (`child_process.ts:353-358`); no-COI
-`worker_threads.Worker` is refused (`worker_threads.ts:129`). A design spike
-decides feasibility at FIT. Infeasible → back to the user: keeping the
-generated esbuild client in no-COI permanently versus refusing esbuild there
-is their call, not an agent ADR.
+Baseline: 2026-10-20, 3207b33ac; raw upstream esbuild acceptance reaches
+same-realm shebang SyntaxError and missing child.unref; Node v24.16.0 prints
+`let x = 1;`. Carriers: `tests/no-coi/no-coi-child-processes.spec.ts`.
 
-Related: `runtime-js/same-realm-child-process-object-shape`,
-`runtime-js/no-coi-toolchain-run-builtin-state-leak`.
+- I1. Upstream esbuild-wasm's Node entry completes transform in a no-COI SDK sandbox with the same output as Node, without runtime package-byte adaptation.
+- I2. A spawned Node helper has separate globals, builtin state and module loader; loads project node_modules; reads/writes the one live project VFS and exchanges async stdio as Node does.
+- I3. The temporary generated esbuild 0.28.0 client and its no-COI adapter are retired, including emitted artifacts and their declared adaptation debt.
+- I4. No-COI child processes require an active rifty SW, with a loud named failure when unavailable; other SDK functions remain usable without SW.
+
+## Challenge
+
+challenge: 2026-10-20 — clear after user resolves the SW prerequisite.
+
+Independent critic: sync XHR → SW → VFS owner is the simplest honest candidate;
+SW is currently optional, so making it a child-process prerequisite needs a
+user decision. Snapshot/mirror loses live filesystem semantics; OPFS mailbox
+adds storage dependency and polling; QuickJS changes the guest engine and
+WebAssembly boundary. Owner CPU work can delay child FS requests.
+
+## Decisions
+
+- 2026-10-20 — user: «Да: child_processes требуют SW; остальные функции без SW сохраняются». SW is required only for no-COI child processes; unavailable transport never silently runs the child in the parent realm.
+- 2026-10-20 — tier works: real happy-path parity; transport/Worker failures remain loud. No new fault-tolerance/retry promise.
+- 2026-10-20 — one PR for the entire goal, per user request.
+- rejected route: snapshot VFS or same-realm eval — violates I2.
+- rejected route: retain generated esbuild client — violates I3.
