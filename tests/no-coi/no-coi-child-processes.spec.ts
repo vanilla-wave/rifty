@@ -45,7 +45,7 @@ for (const entry of ['parent.cjs', 'esbuild.cjs', 'errors.cjs', 'kill.cjs']) {
       const oracle = await exec(process.execPath, [entry], {
         cwd: directory,
         timeout: 20_000,
-        env: { NO_COLOR: '1' },
+        env: { NO_COLOR: '1', PATH: dirname(process.execPath) },
       });
       expect(oracle.stderr).toBe('');
       await test.info().attach('node-oracle', {
