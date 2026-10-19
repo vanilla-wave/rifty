@@ -4,6 +4,9 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
+0. `npm-client/esbuild-upstream-twin-carrier` — **carrier** — I1/I2/I5;
+   executable install + stock build + complete tarball-byte comparison, RED.
+
 1. `runtime-js/process-stdio-write-callback` — **stdio-cb** — I3; the stock
    entry's first deadlock; independent (the end surface stays in
    `runtime-js/process-stdio-writable-end-surface`, not this goal).
