@@ -429,9 +429,17 @@ function createRegistrySource(
       const versions = Object.keys(packument.versions);
       const latestTag = rangeIsUnconstrained(effectiveRange)
         ? packument['dist-tags']?.latest
-        : packument['dist-tags']?.[effectiveRange!];
+        : undefined;
       const pick = latestTag ?? pickBestVersion(versions, effectiveRange);
       if (!pick) {
+        // npm resolves a dist-tag and its lock replays that pin offline (Arborist dep-valid `tag`);
+        // rifty's replay rechecks the spec as a range, so the tag stays a loud ceiling.
+        // TODO(backlog: npm-client/dist-tag-dependency-spec-replay)
+        if (effectiveRange && packument['dist-tags']?.[effectiveRange])
+          throw new NotImplementedError(
+            'npm-client.dependency-spec.dist-tag',
+            `${effectiveName}@${effectiveRange}`,
+          );
         throw new Error(`No matching version for ${effectiveName}@${effectiveRange ?? '*'}`);
       }
 

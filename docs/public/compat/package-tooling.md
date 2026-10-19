@@ -9,6 +9,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Feature | Status | Notes |
 |---|---|---|
 | `npm install` from `package.json` | ✅ | Installs registry `dependencies`/`devDependencies`/root `optionalDependencies` tarballs and honors `dist-tags.latest` for unconstrained specs |
+| Dependency specs naming a dist-tag other than `latest` | ❌ | npm resolves `"pkg": "next"` from `dist-tags` and its lock replays that pin offline even after the tag moves (Arborist dep-valid: a tag spec is satisfied by any registry-resolved node); rifty throws `NotImplementedError('npm-client.dependency-spec.dist-tag')` after the packument read, before any tarball or lock write — plain and `npm:` alias specs alike. Real npm reference: `packages/npm-client/src/installer-dist-tag.parity.test.ts`; tracked in `backlog/npm-client/dist-tag-dependency-spec-replay` |
 | SDK no-COI agent shell `npm install [<pkg>…]` | ✅ | `toolchain.registryUrl` connects the existing installer; native saved dependency ranges/sections, readonly policy, busy rejection and Stop. No connection is valid and fails with SDK `registry-missing`; a host per-call install does not establish it (ADR-0487). |
 | Required network acquisition without a configured registry | ❌ | Workbench snapshot-only and optional `InstallOptions.registry` keep local replay; required uncached metadata/tarballs throw `NotImplementedError('npm-client.registry.packument')` / `NotImplementedError('npm-client.registry.tarball')`. Eddy without registry rejects before callbacks. This host policy is separate from npm `--offline` |
 | Exact npm project metadata/empty-project initialization | ❌ | Without registry metadata hashes, npm omits lock integrity while rifty records its established independently computed SHA-512 cache proof (ADR-0527). Existing glue differs on default manifest fields, empty-project lock creation, root name and package license metadata; tracked in `backlog/npm-client/npm-project-metadata`. Dependency-change parity is a separate claim. |
@@ -41,6 +42,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 
 - `tests/integration/npm-alias.parity.test.ts` — real npm localhost alias graph, identities, retained lock and Eddy cache.
 - `packages/npm-client/src/installer-sha1.parity.test.ts` — legacy SHA-1 SRI parity.
+- `packages/npm-client/src/installer-dist-tag.parity.test.ts` — non-`latest` dist-tag spec: npm's resolve/replay reference, rifty's loud ceiling.
 
 - `tests/e2e/owner-shell-prettier-eslint.spec.ts`
 - `tests/e2e/command-resolver-discovery.spec.ts`
