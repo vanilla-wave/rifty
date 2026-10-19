@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: Run no-COI Node children against the live owner filesystem
 created: 2026-10-20
 why: Upstream esbuild and installed helpers cannot execute in the same-realm fallback
@@ -51,5 +51,7 @@ existing capabilities/declared gaps. No autonomous FS progress while the owner
 executes uninterrupted synchronous guest JS.
 
 ## Decisions
+
+- ready-verdict: 2026-10-20 — Contract+RED @ 537dfbafd8914face8e7ac2f98634125de01d857
 
 - 2026-10-20 — scope and SW prerequisite inherited from the goal; one PR.

@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: No-COI child processes run scripts that load node_modules
 created: 2026-10-16
 tier: works
