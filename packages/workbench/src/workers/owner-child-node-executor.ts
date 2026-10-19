@@ -107,6 +107,7 @@ export function createOwnerExecSyncRunner(
             runtimeBindings: projectedBindings,
           }),
           argv: spec.argv,
+          stdinMode: 'pull',
           env: { ...spec.env },
           cwd: spec.cwd,
         },
@@ -229,6 +230,7 @@ export function buildNodeChildSpawnSpec(
         };
   const workerEntry = buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, launch);
   return {
+    stdinMode: 'pull',
     entry: workerEntry,
     argv:
       typeof execution === 'string'

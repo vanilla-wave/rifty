@@ -1,3 +1,4 @@
+import { bindPortAsWritable } from './worker-stdin-writer.ts';
 /**
  * Minimal process manager: per-PID table, parent/child links, dispatch.
  *
@@ -11,7 +12,7 @@
  * manager; tests exercise the manager directly.
  */
 
-import { Readable, Writable } from '@riftydev/io';
+import { Readable, type Writable } from '@riftydev/io';
 import { EventEmitter } from './internal/event-emitter.ts';
 import { getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
 import type { SyncRpcCallerContext } from './ipc/sync-dispatch.ts';
@@ -841,7 +842,8 @@ export class ProcessManager {
         return this.#stderrReadable;
       }
       stdin(): Writable {
-        if (!this.#stdinWritable) this.#stdinWritable = bindPortAsWritable(ports.stdin);
+        if (!this.#stdinWritable)
+          this.#stdinWritable = bindPortAsWritable(ports.stdin, spawnResult.stdinWriter);
         return this.#stdinWritable;
       }
       /**
@@ -2358,34 +2360,5 @@ export function installProcessFederation(manager: ProcessManager): void {
       ? undefined
       : relayOptional(PROCESS_SNAPSHOT_RPC, payload);
     return relayed === undefined ? manager.snapshot() : relayed;
-  });
-}
-
-function bindPortAsWritable(port: MessagePort): Writable {
-  return new Writable({
-    write(chunk, _encoding, cb) {
-      try {
-        if (chunk instanceof Uint8Array) {
-          port.postMessage(chunk);
-        } else if (typeof chunk === 'string') {
-          port.postMessage(new TextEncoder().encode(chunk));
-        } else {
-          // Object-mode payloads pass through verbatim.
-          port.postMessage(chunk);
-        }
-        cb();
-      } catch (err) {
-        cb(err instanceof Error ? err : new Error(String(err)));
-      }
-    },
-    final(cb) {
-      try {
-        port.postMessage({ kind: 'stdin:eof' });
-        port.close();
-        cb();
-      } catch (err) {
-        cb(err instanceof Error ? err : new Error(String(err)));
-      }
-    },
   });
 }

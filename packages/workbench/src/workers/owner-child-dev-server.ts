@@ -59,6 +59,7 @@ export function buildDevServerChildSpawnSpec(
     ...(projectedBindings.length === 0 ? {} : { runtimeBindings: projectedBindings }),
   });
   return {
+    stdinMode: 'pull',
     entry,
     argv: ['rifty', params.cfg.entryPath],
     env: {

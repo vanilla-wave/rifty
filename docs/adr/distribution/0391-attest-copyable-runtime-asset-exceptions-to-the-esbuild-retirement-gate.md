@@ -38,3 +38,5 @@ Negative probes substitute real esbuild bytes under admitted names, mutate
 allowed WASM, add unknown inline WASM and exceed compiler limits. Hash-named
 imports can change the TypeScript worker fingerprint after ordinary runtime
 edits; that pin update stays explicit. No ADR is superseded.
+
+- 2026-10-20 — upstream-twin runtime changes regenerate TypeScript-worker chunk imports; exact size stays 10,022,664 bytes. Pin refreshed; packed toolchain surface (15 first-party/73 external tarballs, Chromium agent/build) and retirement gate pass. No directory/size exemption added.

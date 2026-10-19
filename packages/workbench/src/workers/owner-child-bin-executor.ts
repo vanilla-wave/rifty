@@ -46,6 +46,7 @@ export function buildChildSpawnSpec(
     ...(projectedBindings.length === 0 ? {} : { runtimeBindings: projectedBindings }),
   });
   return {
+    stdinMode: 'pull',
     entry,
     argv: ['rifty', req.shimPath, ...req.args],
     env: { ...req.env },

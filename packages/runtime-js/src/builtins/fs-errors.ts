@@ -17,6 +17,7 @@ import { type PathLike, pathToString } from './fs-path.ts';
 export const FS_ERRNO: Record<string, { errno: number; description: string }> = {
   EACCES: { errno: -13, description: 'permission denied' },
   EROFS: { errno: -30, description: 'read-only file system' },
+  ESPIPE: { errno: -29, description: 'invalid seek' },
   EBADF: { errno: -9, description: 'bad file descriptor' },
   EDQUOT: { errno: -122, description: 'disk quota exceeded' },
   EEXIST: { errno: -17, description: 'file already exists' },

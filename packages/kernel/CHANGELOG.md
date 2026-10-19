@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Optional pull stdin (ADR-0542): bounded physical input, existing SAB reads, readiness-only ports; EOF/teardown settle pending operations.
+
 - Check native `Atomics.waitAsync` at the ring wrapper; preserve TypeError when unavailable and bind the ES2022 guard to the actual call.
 
 ### Added

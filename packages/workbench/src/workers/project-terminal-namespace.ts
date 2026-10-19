@@ -7,6 +7,7 @@ import {
   type VfsMutationIntent,
   normalizePath,
 } from '@riftydev/vfs';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 import {
   type GuestLayout,
   type GuestMount,
@@ -89,10 +90,13 @@ function assertNotReserved(resolved: GuestResolution, guestPath: string): void {
 
 /** Guest view over the owner authority: mounts, virtual ancestors, and their edges (ADR-0531). */
 export class ProjectTerminalFsSync implements FsSync {
+  readonly #virtual = new MemoryFsSync();
   constructor(
     private readonly inner: FsSync,
     private readonly layout: GuestLayout,
-  ) {}
+  ) {
+    for (const mount of layout.mounts) this.#virtual.mkdirSync(mount.guest, { recursive: true });
+  }
 
   private resolve(path: string): GuestResolution {
     const guest = normalizePath(path);
@@ -235,7 +239,11 @@ export class ProjectTerminalFsSync implements FsSync {
     return this.run(() => {
       const resolved = this.resolve(path);
       if (resolved.kind === 'absent') throw new VfsError('ENOENT', normalizePath(path));
-      if (resolved.kind === 'virtual') return { isFile: false, isDirectory: true };
+      if (resolved.kind === 'virtual')
+        return {
+          ...this.#virtual.statSync(normalizePath(path)),
+          nlink: 2 + this.readdirSync(path).filter((entry) => entry.isDirectory).length,
+        };
       return this.inner.statSync(resolved.owner);
     });
   }
@@ -244,7 +252,11 @@ export class ProjectTerminalFsSync implements FsSync {
     return this.run(() => {
       const resolved = this.resolve(path);
       if (resolved.kind === 'absent') return null;
-      if (resolved.kind === 'virtual') return { isFile: false, isDirectory: true };
+      if (resolved.kind === 'virtual')
+        return {
+          ...this.#virtual.statSync(normalizePath(path)),
+          nlink: 2 + this.readdirSync(path).filter((entry) => entry.isDirectory).length,
+        };
       return this.inner.statSyncOrNull(resolved.owner);
     });
   }

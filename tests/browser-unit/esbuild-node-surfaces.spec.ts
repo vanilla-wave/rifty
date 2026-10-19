@@ -3,6 +3,14 @@ import { expect, test } from '@playwright/test';
 import { bootOwner, closeOwner, execLine, gotoHarness, readOwnerFile } from './fixtures.ts';
 
 const probes = {
+  'crypto survives guest crypto replacement': `const c=require('crypto');
+Object.defineProperty(globalThis,'crypto',{configurable:true,writable:true,value:{getRandomValues:v=>c.randomFillSync(v)}});
+const b=Buffer.alloc(16);
+require('fs').writeFileSync('result.json',JSON.stringify({fill:c.randomFillSync(b)===b,web:c.getRandomValues(b)===b,uuid:typeof c.randomUUID()}));`,
+  'hrtime survives guest performance replacement': `const p=require('process');
+globalThis.performance={now:()=>{const [s,n]=p.hrtime();return s*1000+n/1e6}};
+const pair=p.hrtime();
+require('fs').writeFileSync('result.json',JSON.stringify({pair:pair.map(Number.isFinite),bigint:typeof p.hrtime.bigint(),uptime:Number.isFinite(p.uptime())}));`,
   'child and pipe ref unref': `const fs=require('fs');fs.writeFileSync('child.cjs',"setTimeout(()=>console.log('child-finished'),1000)");
 const c=require('child_process').spawn('node',['child.cjs']);
 const result={child:[c.ref(),c.ref(),c.unref(),c.unref()],pipes:{}};
@@ -30,7 +38,7 @@ setTimeout(()=>require('fs').writeFileSync('result.json',JSON.stringify(events))
 fs.writeFileSync('file','hello');fs.mkdirSync('dir');
 const fields=['dev','ino','mode','nlink','uid','gid','rdev','size','blksize','blocks','atimeMs','mtimeMs','ctimeMs','birthtimeMs'];
 const fd=fs.openSync('file','r');
-const values=[fs.statSync('file'),fs.lstatSync('file'),fs.fstatSync(fd),fs.statSync('dir')];
+const values=[fs.statSync('file'),fs.lstatSync('file'),fs.fstatSync(fd),fs.statSync('dir'),fs.statSync('/')];
 const shape=values.map(s=>({
  fields:fields.map(k=>[k,typeof s[k],Number.isFinite(s[k])]),
  dates:['atime','mtime','ctime','birthtime'].map(k=>[k,s[k] instanceof Date,Number.isFinite(+s[k])]),

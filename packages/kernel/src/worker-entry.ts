@@ -47,7 +47,9 @@ import {
   publishKernelEntryBootstrap,
   publishKernelProcessSpec,
   publishKernelSyncApi,
+  readKernelSyncApi,
 } from './shared-globals.ts';
+import { workerInputReader } from './worker-stdin-rpc.ts';
 import {
   type WorkerOutputState,
   bindWorkerStdioOutput,
@@ -101,6 +103,7 @@ export type WorkerEntryDescriptor =
  * the parent's `postMessage` transfer list.
  */
 export interface WorkerSpawnSpec {
+  readonly stdinMode?: 'pull';
   readonly entry: WorkerEntryDescriptor;
   readonly argv: readonly string[];
   readonly env: Readonly<Record<string, string>>;
@@ -247,6 +250,7 @@ function publishProcessSpec(spec: WorkerSpawnSpec): void {
       stdout: bindWorkerStdioOutput(spec.stdio.stdout, spec.outputState, 'stdout', spec.stdio.ipc),
       stderr: bindWorkerStdioOutput(spec.stdio.stderr, spec.outputState, 'stderr', spec.stdio.ipc),
       stdin: spec.stdio.stdin,
+      ...(spec.stdinMode === 'pull' ? { input: workerInputReader(readKernelSyncApi()!) } : {}),
       ipc: spec.stdio.ipc,
     },
   };

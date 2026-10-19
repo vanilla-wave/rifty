@@ -5,6 +5,7 @@
 import type { KernelStdioOutputWriter } from '@riftydev/kernel';
 import { Buffer, type Encoding } from './buffer.ts';
 import { EventEmitter } from './events.ts';
+import { OUTPUT_FD, type OutputFdSource } from './stdio-fd-source.ts';
 
 // --- stdio plumbing (shared by spec + no-spec processes) ---
 
@@ -97,6 +98,21 @@ export function makeStdioWriter(
   size: { readonly cols: number; readonly rows: number },
   defer: (callback: () => void) => void = queueMicrotask,
 ): NodeStdioWriter {
+  let closed = false;
+  const badFd = () => Object.assign(new Error('bad file descriptor'), { code: 'EBADF' });
+  const descriptor: OutputFdSource = {
+    get closed() {
+      return closed;
+    },
+    write(bytes) {
+      if (closed) throw badFd();
+      port.write(new Uint8Array(bytes));
+    },
+    close() {
+      if (closed) throw badFd();
+      closed = true;
+    },
+  };
   const stream = Object.assign(new EventEmitter(), {
     isTTY,
     fd,
@@ -113,7 +129,7 @@ export function makeStdioWriter(
       // A passed-in view may share storage with its caller; the semantic writer
       // owns transport, while this adapter preserves Node's non-detaching write.
       try {
-        port.write(typeof chunk === 'string' ? bytes : new Uint8Array(bytes));
+        descriptor.write(bytes);
       } catch (error) {
         const failure = error instanceof Error ? error : new Error(String(error));
         defer(() => {
@@ -126,5 +142,6 @@ export function makeStdioWriter(
       return true;
     },
   }) as NodeStdioWriter;
+  Object.defineProperty(stream, OUTPUT_FD, { value: descriptor });
   return isTTY ? attachTtyControls(stream, size) : stream;
 }

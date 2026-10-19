@@ -51,7 +51,7 @@ const NON_PROD_RE = /\.(?:test|spec|fault|contract)\.[cm]?[jt]sx?$|\.d\.ts$/;
 export const BASELINE = [
   { file: 'packages/shell/src/commands/git.ts', max: 3064 },
   { file: 'packages/runtime-js/src/module-loader/function-import-routing.ts', max: 2806 },
-  { file: 'packages/kernel/src/process-manager.ts', max: 2392 },
+  { file: 'packages/kernel/src/process-manager.ts', max: 2365 },
   { file: 'packages/workbench/src/workers/playground-project-authority.ts', max: 2356 },
   { file: 'tools/node-parity-runner/src/run-in-rifty.ts', max: 2069 },
   { file: 'packages/runtime-js/src/builtins/vm/membrane.ts', max: 2058 },
@@ -66,7 +66,7 @@ export const BASELINE = [
   { file: 'packages/ts-language-service/src/service.ts', max: 1377 },
   { file: 'packages/workbench/src/workers/package-acquisition-authority.ts', max: 1374 },
   { file: 'apps/playground/src/components/editor-host-core.ts', max: 1270 },
-  { file: 'packages/runtime-js/src/builtins/process.ts', max: 1226 },
+  { file: 'packages/runtime-js/src/builtins/process.ts', max: 1003 },
   {
     file: 'packages/workbench/src/workbench/internal/playground-session-tools-transport.ts',
     max: 1191,

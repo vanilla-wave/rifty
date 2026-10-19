@@ -24,6 +24,7 @@ import {
 } from '../builtins/process-bootstrap-identity.ts';
 import { makeStdioWriter } from '../builtins/process-stdio-writer.ts';
 import { resetNodeProcessExit, riftyProcess } from '../builtins/process.ts';
+import { captureProcessStdio } from '../builtins/stdio-fd-source.ts';
 import { type NodeEntryRunner, concatChunks } from './recursive-runner.ts';
 
 /**
@@ -63,6 +64,7 @@ export function makeInProcessNodeEntryRunner(): NodeEntryRunner {
     const prevStdout = riftyProcess.stdout;
     const prevExitCode = riftyProcess.exitCode;
     (riftyProcess as { stdout: unknown }).stdout = capture;
+    const restoreDescriptors = captureProcessStdio(riftyProcess);
     resetNodeProcessExit(riftyProcess);
     // Make the loader-run child read `riftyProcess` as the ambient `process`
     // (its stdout/exitCode now route to our capture), the same realm shape the
@@ -81,6 +83,7 @@ export function makeInProcessNodeEntryRunner(): NodeEntryRunner {
     } catch (err) {
       exitCode = exitCodeFromThrow(err);
     } finally {
+      restoreDescriptors();
       g.process = prevGlobalProcess;
       setActiveNodeProcessBootstrap(
         prevActiveProcess?.process ?? null,

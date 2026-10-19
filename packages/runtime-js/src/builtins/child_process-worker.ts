@@ -379,6 +379,7 @@ export function spawnWorkerChild(
       : { execArgv: options.execArgv }),
   });
   const spec: SpawnWorkerSpec = {
+    stdinMode: 'pull',
     entry,
     argv: ['rifty', entryPath, ...args.slice(1)],
     env: options.env === undefined ? parent.env : { ...options.env },

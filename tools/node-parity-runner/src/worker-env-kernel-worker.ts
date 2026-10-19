@@ -14,12 +14,14 @@ import {
   type KernelSyncApi,
   publishKernelProcessSpec,
   publishKernelSyncApi,
+  readKernelSyncApi,
 } from '../../../packages/kernel/src/shared-globals.ts';
 import {
   type WorkerInitMessage,
   type WorkerSpawnSpec,
   runEntryLifecycle,
 } from '../../../packages/kernel/src/worker-entry.ts';
+import { workerInputReader } from '../../../packages/kernel/src/worker-stdin-rpc.ts';
 import {
   bindWorkerStdioOutput,
   sealWorkerOutput,
@@ -436,6 +438,7 @@ async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
       stdout,
       stderr,
       stdin: spec.stdio.stdin,
+      ...(spec.stdinMode === 'pull' ? { input: workerInputReader(readKernelSyncApi()!) } : {}),
       ipc: spec.stdio.ipc,
     },
   });

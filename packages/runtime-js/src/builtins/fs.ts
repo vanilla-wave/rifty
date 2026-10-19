@@ -1,3 +1,5 @@
+import { assertNonNegativeInteger, checkedSliceBounds } from './fs-fd-bounds.ts';
+import { closeStdin, readStdin, readStdinSync, statStdin, writeStdio } from './fs-stdio.ts';
 /**
  * Node-compatible `node:fs` (subset).
  *
@@ -14,7 +16,7 @@ import { VfsError } from '@riftydev/vfs';
 import { Buffer, type Encoding } from './buffer.ts';
 import { fsError, withSyscall } from './fs-errors.ts';
 import { type PathLike, pathToString, resolvePath } from './fs-path.ts';
-import { type StatOptions, Stats } from './fs-stats.ts';
+import { Dirent, type StatOptions, Stats } from './fs-stats.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { statfsSync } from './loud-members.ts';
 import { runNodeCallback } from './process-lifecycle-events.ts';
@@ -173,60 +175,6 @@ function statStrictOrNull(np: string): { isFile: boolean; isDirectory: boolean }
   } catch (err) {
     if (err instanceof VfsError && err.code === 'ENOENT') return null;
     throw err;
-  }
-}
-
-function assertNonNegativeInteger(value: number, name: string): void {
-  if (!Number.isInteger(value) || value < 0) {
-    throw new RangeError(`${name} must be a non-negative integer`);
-  }
-}
-
-function checkedSliceBounds(buffer: Uint8Array, offset: number, length: number): void {
-  assertNonNegativeInteger(offset, 'offset');
-  assertNonNegativeInteger(length, 'length');
-  if (offset + length > buffer.byteLength) {
-    throw new RangeError('offset + length exceeds buffer length');
-  }
-}
-
-class Dirent {
-  readonly name: string;
-  /**
-   * Directory this entry lives in, echoing the path ARG passed to `readdir`
-   * (relative stays relative); for `{ recursive: true }` it's the arg joined with
-   * the subdirectory. Node v24 REMOVED the deprecated `path` alias, so it's
-   * absent here too.
-   */
-  readonly parentPath: string;
-  private readonly _isFile: boolean;
-  private readonly _isDirectory: boolean;
-  constructor(d: { name: string; isFile: boolean; isDirectory: boolean; parentPath: string }) {
-    this.name = d.name;
-    this.parentPath = d.parentPath;
-    this._isFile = d.isFile;
-    this._isDirectory = d.isDirectory;
-  }
-  isFile(): boolean {
-    return this._isFile;
-  }
-  isDirectory(): boolean {
-    return this._isDirectory;
-  }
-  isSymbolicLink(): boolean {
-    return false;
-  }
-  isBlockDevice(): boolean {
-    return false;
-  }
-  isCharacterDevice(): boolean {
-    return false;
-  }
-  isFIFO(): boolean {
-    return false;
-  }
-  isSocket(): boolean {
-    return false;
   }
 }
 
@@ -510,10 +458,20 @@ function flagOf(opts: ReadFileOptions | Encoding | null | undefined): string | u
 }
 
 export function readFileSync(
-  p: string,
+  p: string | number,
   opts?: ReadFileOptions | Encoding | null,
 ): Uint8Array | string {
   const enc = toEncodingOrNull(opts);
+  if (typeof p === 'number') {
+    const chunks: Uint8Array[] = [];
+    for (;;) {
+      const buffer = Buffer.alloc(16 * 1024);
+      const count = readSync(p, buffer, 0, buffer.length, null);
+      if (count === 0) break;
+      chunks.push(buffer.subarray(0, count));
+    }
+    return decodeResult(Buffer.concat(chunks), enc);
+  }
   const np = resolvePath(p);
   const ps = pathToString(p);
   const flag = flagOf(opts);
@@ -936,6 +894,10 @@ export function openSync(p: PathLike, flags: OpenFlags = 'r', _mode?: number): n
 }
 
 export function closeSync(fd: number): void {
+  if (fd === 0) {
+    closeStdin();
+    return;
+  }
   if (!fdTable.delete(fd)) throw fsError('EBADF', undefined, 'close');
 }
 
@@ -954,8 +916,8 @@ export function readSync(
   length?: number,
   position?: number | null,
 ): number {
-  const record = getFd(fd, 'read');
-  if (!record.readable) throw fsError('EBADF', undefined, 'read');
+  const record = fd === 0 ? null : getFd(fd, 'read');
+  if (record && !record.readable) throw fsError('EBADF', undefined, 'read');
   if (!(buffer instanceof Uint8Array)) throw new TypeError('buffer must be a Uint8Array');
 
   const offset =
@@ -971,6 +933,7 @@ export function readSync(
   checkedSliceBounds(buffer, offset, count);
   if (pos !== null) assertNonNegativeInteger(pos, 'position');
 
+  if (record === null) return readStdinSync(buffer, offset, count, pos);
   const stat = withSyscall('read', record.path, () => syncMirror().statSync(record.path));
   if (stat.isDirectory) throw fsError('EISDIR', undefined, 'read');
   const bytes = withSyscall('read', record.path, () => syncMirror().readFileBytesSync(record.path));
@@ -1002,12 +965,15 @@ export function writeSync(
   lengthOrEncoding?: number | Encoding,
   position?: number | null,
 ): number {
-  const record = getFd(fd, 'write');
+  const record = fd === 1 || fd === 2 ? null : getFd(fd, 'write');
   if (typeof data === 'string') {
     const rawPos =
       typeof offsetOrPosition === 'number' || offsetOrPosition === null ? offsetOrPosition : null;
     const enc = typeof lengthOrEncoding === 'string' ? lengthOrEncoding : 'utf8';
-    return writeBytesAt(record, Buffer.from(data, enc), rawPos === -1 ? null : rawPos);
+    const bytes = Buffer.from(data, enc);
+    return record === null
+      ? writeStdio(fd, bytes, rawPos === -1 ? null : rawPos)
+      : writeBytesAt(record, bytes, rawPos === -1 ? null : rawPos);
   }
   if (!(data instanceof Uint8Array)) throw new TypeError('data must be a string or Uint8Array');
   const offset = offsetOrPosition ?? 0;
@@ -1016,10 +982,12 @@ export function writeSync(
   const rawPos = position ?? null;
   const pos = rawPos === -1 ? null : rawPos;
   checkedSliceBounds(data, offset, length);
-  return writeBytesAt(record, data.subarray(offset, offset + length), pos);
+  const bytes = data.subarray(offset, offset + length);
+  return record === null ? writeStdio(fd, bytes, pos) : writeBytesAt(record, bytes, pos);
 }
 
 export function fstatSync(fd: number, options?: StatOptions): Stats {
+  if (fd === 0) return statStdin(options);
   // EBADF first — Node reports the bad fd before any bigint shaping.
   const record = getFd(fd, 'fstat');
   const vs = withSyscall('fstat', record.path, () => syncMirror().statSync(record.path));
@@ -1317,6 +1285,14 @@ export function read(
           ? positionOrCb
           : cb
   ) as ReadCallback;
+  if (fd === 0) {
+    try {
+      readStdin(buffer, options, cbFinal);
+    } catch (error) {
+      queueMicrotask(() => runNodeCallback(cbFinal, error as NodeJS.ErrnoException));
+    }
+    return;
+  }
   Promise.resolve()
     .then(() => readSync(fd, buffer, options))
     .then(

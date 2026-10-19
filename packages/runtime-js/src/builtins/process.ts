@@ -61,8 +61,9 @@ import {
   dispatchUncaughtException,
   rethrowUndispatched,
 } from './process-lifecycle-events.ts';
-import { INHERIT_STDIN, type InheritStdin, type StdinInheritor } from './process-stdin-inherit.ts';
+import { type NodeStdin, makeStdinReader } from './process-stdin-reader.ts';
 import { type NodeStdioWriter, applyTtyShape, makeStdioWriter } from './process-stdio-writer.ts';
+import { captureProcessStdio } from './stdio-fd-source.ts';
 
 const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
   'rifty.runtime-js.process-terminal-bootstrap.v1',
@@ -193,18 +194,20 @@ function chdir(dir: string): void {
   currentCwd = target;
 }
 
+const monotonicNow = performance.now.bind(performance);
+
 function hrtime(time?: [number, number]): [number, number] {
-  const ms = performance.now();
+  const ms = monotonicNow();
   const secs = Math.floor(ms / 1000);
   const ns = Math.floor((ms - secs * 1000) * 1e6);
   if (!time) return [secs, ns];
   const [s0, n0] = time;
   return [secs - s0, ns - n0];
 }
-hrtime.bigint = (): bigint => BigInt(Math.floor(performance.now() * 1e6));
+hrtime.bigint = (): bigint => BigInt(Math.floor(monotonicNow() * 1e6));
 
 function uptime(): number {
-  return performance.now() / 1000;
+  return monotonicNow() / 1000;
 }
 
 /** Patch `Promise.prototype.then` so nextTick beats `.then` (Node ordering). */
@@ -231,199 +234,8 @@ export function patchPromiseForNextTick(): void {
   } as typeof Promise.prototype.then;
 }
 
-export interface NodeStdin extends EventEmitter {
-  isTTY: boolean;
-  fd: number;
-  setEncoding(encoding?: string | null): NodeStdin;
-  resume(): NodeStdin;
-  pause(): NodeStdin;
-  read(size?: number): never;
-  pipe(destination: unknown): never;
-  setRawMode(enabled: boolean): never;
-  [Symbol.asyncIterator](): never;
-}
-
 type StdinListener = (...args: unknown[]) => void;
-
-function throwStdinGap(feature: string): never {
-  throw new NotImplementedError(feature);
-}
-
-/** Runtime-owned loud boundary shared by every spec-seeded and host process. */
-class NodeStdinEmitter extends EventEmitter implements NodeStdin {
-  readonly #onDataListener: () => void;
-
-  declare isTTY: boolean;
-  declare fd: number;
-  declare setEncoding: NodeStdin['setEncoding'];
-  declare resume: NodeStdin['resume'];
-  declare pause: NodeStdin['pause'];
-
-  constructor(onDataListener: () => void) {
-    super();
-    this.#onDataListener = onDataListener;
-  }
-
-  override addListener(event: string | symbol, listener: StdinListener): this {
-    if (event === 'readable') throwStdinGap('process.stdin.readable');
-    const result = super.addListener(event, listener);
-    if (event === 'data') this.#onDataListener();
-    return result;
-  }
-
-  override prependListener(event: string | symbol, listener: StdinListener): this {
-    if (event === 'readable') throwStdinGap('process.stdin.readable');
-    const result = super.prependListener(event, listener);
-    if (event === 'data') this.#onDataListener();
-    return result;
-  }
-
-  read(): never {
-    return throwStdinGap('process.stdin.read');
-  }
-
-  pipe(): never {
-    return throwStdinGap('process.stdin.pipe');
-  }
-
-  setRawMode(): never {
-    return throwStdinGap('process.stdin.setRawMode');
-  }
-
-  [Symbol.asyncIterator](): never {
-    return throwStdinGap('process.stdin[Symbol.asyncIterator]');
-  }
-}
-
-/**
- * Build a `process.stdin` Readable-ish EventEmitter fed by either a kernel
- * stdin MessagePort (spec child) or the host bridge (`writeProcessStdin`, REPL).
- * Returns the stdin + a `push(data)` the host source calls. Pre-listener
- * buffering + utf8 stream-decoding match Node's encoding semantics.
- */
-function makeStdinReader(
-  port?: MessagePort,
-  isTTY = false,
-): {
-  stdin: NodeStdin;
-  push(data: string | Uint8Array): void;
-} {
-  let encoding: string | null = null;
-  const pending: Array<string | Uint8Array> = [];
-  let decoder = new TextDecoder();
-  let flowing = false;
-  let explicitlyPaused = false;
-  let eofReceived = false;
-  let endEmitted = false;
-  let keepaliveHeld = false;
-  // Worker children reading this stdin as an inherited fd (never holds the realm).
-  const inheritors = new Set<StdinInheritor>();
-  const syncKeepalive = (): void => {
-    const shouldHold = port !== undefined && flowing && !eofReceived;
-    if (shouldHold === keepaliveHeld) return;
-    keepaliveHeld = shouldHold;
-    if (shouldHold) refEventLoop();
-    else unrefEventLoop();
-  };
-  const stdin = new NodeStdinEmitter(() => {
-    if (explicitlyPaused) return;
-    flowing = true;
-    syncKeepalive();
-    queueMicrotask(flush);
-  });
-
-  const normalize = (data: string | Uint8Array): string | Uint8Array | null => {
-    if (typeof data === 'string') return data;
-    if (encoding && /^utf-?8$/iu.test(encoding)) {
-      const text = decoder.decode(data, { stream: true });
-      return text.length === 0 ? null : text;
-    }
-    return data;
-  };
-  function flush(): void {
-    while ((flowing || inheritors.size > 0) && pending.length > 0) {
-      const data = pending.shift();
-      if (data === undefined) continue;
-      for (const inheritor of inheritors) inheritor.data(data);
-      if (!flowing) continue;
-      const chunk = normalize(data);
-      if (chunk !== null) stdin.emit('data', chunk);
-    }
-    if (eofReceived && pending.length === 0) {
-      for (const inheritor of inheritors) inheritor.end();
-      inheritors.clear();
-    }
-    if (!flowing || pending.length > 0 || !eofReceived || endEmitted) return;
-    if (encoding && /^utf-?8$/iu.test(encoding)) {
-      const tail = decoder.decode();
-      if (tail.length > 0) stdin.emit('data', tail);
-    }
-    endEmitted = true;
-    stdin.emit('end');
-  }
-  const push = (data: string | Uint8Array): void => {
-    if (eofReceived) return;
-    pending.push(data);
-    flush();
-  };
-  const end = (): void => {
-    if (eofReceived) return;
-    eofReceived = true;
-    syncKeepalive();
-    flush();
-  };
-
-  Object.assign(stdin, {
-    isTTY,
-    fd: 0,
-    setEncoding(next: string | null) {
-      const requested = next ?? 'utf8';
-      if (!/^utf-?8$/iu.test(requested)) {
-        throw new NotImplementedError(`process.stdin.setEncoding('${requested}')`);
-      }
-      if (encoding === 'utf8') return stdin;
-      encoding = 'utf8';
-      decoder = new TextDecoder();
-      return stdin;
-    },
-    resume() {
-      explicitlyPaused = false;
-      flowing = true;
-      syncKeepalive();
-      flush();
-      return stdin;
-    },
-    pause() {
-      explicitlyPaused = true;
-      flowing = false;
-      syncKeepalive();
-      return stdin;
-    },
-  });
-  const inherit: InheritStdin = (inheritor) => {
-    inheritors.add(inheritor);
-    queueMicrotask(flush);
-    return () => inheritors.delete(inheritor);
-  };
-  Object.defineProperty(stdin, INHERIT_STDIN, { value: inherit });
-  if (port) {
-    port.onmessage = (ev: MessageEvent): void => {
-      const data = ev.data;
-      if (typeof data === 'string' || data instanceof Uint8Array) push(data);
-      else if (isStdinEofFrame(data)) end();
-    };
-    port.start();
-  }
-  return { stdin, push };
-}
-
-function isStdinEofFrame(value: unknown): value is { readonly kind: 'stdin:eof' } {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as { readonly kind?: unknown }).kind === 'stdin:eof'
-  );
-}
+export type { NodeStdin } from './process-stdin-reader.ts';
 
 interface ProcessTerminalBootstrap {
   readonly stdinIsTTY: boolean;
@@ -643,7 +455,7 @@ export class NodeProcess extends EventEmitter {
       const size = { cols: terminal.cols, rows: terminal.rows };
       this.stdout = makeStdioWriter(spec.stdio.stdout, 1, terminal.stdoutIsTTY, size, nextTick);
       this.stderr = makeStdioWriter(spec.stdio.stderr, 2, terminal.stderrIsTTY, size, nextTick);
-      const reader = makeStdinReader(spec.stdio.stdin, terminal.stdinIsTTY);
+      const reader = makeStdinReader(spec.stdio.stdin, terminal.stdinIsTTY, spec.stdio.input);
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
       if (
@@ -686,6 +498,7 @@ export class NodeProcess extends EventEmitter {
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
     }
+    captureProcessStdio(this);
   }
 
   override addListener(event: string | symbol, listener: StdinListener): this {

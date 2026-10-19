@@ -24,6 +24,7 @@ import {
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
 import { makeStdioWriter } from './process-stdio-writer.ts';
+import { captureProcessStdio } from './stdio-fd-source.ts';
 import {
   clearImmediate as runtimeClearImmediate,
   setImmediate as runtimeSetImmediate,
@@ -365,6 +366,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
         lifecycleWake();
       };
     }
+    captureProcessStdio(childProcess);
     attachNodeProcessBootstrapIdentity(childProcess, {
       pid: a.ownHandle.pid,
       ppid: a.ownHandle.ppid,

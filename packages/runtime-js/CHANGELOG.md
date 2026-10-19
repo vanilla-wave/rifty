@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- fs consumes real stdio descriptors; kernel stdin supports synchronous reads, async reads share process.stdin consumption. hrtime and crypto retain platform sources when guests replace the globals (stock esbuild-wasm 0.21).
+
 - Stock Node guest prerequisites: stdio write callbacks/encoding; ChildProcess and pipe references; synchronous named workerData/execFileSync refusals; complete VFS-backed numeric Stats (ADR-0540).
 
 - `os.homedir()` keeps an explicitly empty `HOME` (`''`), as Node; `os.tmpdir()` still falls through empty `TMPDIR`/`TMP`/`TEMP`.
