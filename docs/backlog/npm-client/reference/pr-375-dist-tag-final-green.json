@@ -1,0 +1,103 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Блокеров нет; RED→GREEN, 19/19, backlog/refs/biome GREEN. PR-4: старые критерии прочитаны, merge меняет только header. Merge после зелёного CI на reviewed HEAD; C1 advisory.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "4194c43aa7f8cc2fba3d4ca43901987fc70d3992",
+  "unit_goal_source": "PR #375; HEAD 4194c43aa7f8cc2fba3d4ca43901987fc70d3992; BASE aa1ded21213bb9766cb365da11a126f93a69759d; observed pre-PR baseline bf92f1d40ebb4ee0677124bdd11cab19920ca438.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "npm 11.17.0: fresh next → 2.0.0; moved tag сохраняет lock pin online/offline без HTTP.",
+      "source": "acceptance",
+      "trace": "PR #375 observed baseline: real npm 11.17.0",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-dist-tag.parity.test.ts:89; /tmp/rifty-pr375-red.BkFgNV/probe-aa1ded212.log; /private/tmp/rifty-375-review.sikDaB/head-extra-probes-after-restore.log — plain/alias native replay requests:[], pin:2.0.0.",
+      "note": ""
+    },
+    {
+      "row": "Plain non-latest tag: named ceiling после packument, до tarball/VFS/lock write; fresh и npm-lock replay.",
+      "source": "public-api",
+      "trace": "PR #375 observed baseline bf92f1d40 → loud unsupported gap; aa1ded212 → silent replay divergence",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-dist-tag.parity.test.ts:101; packages/npm-client/src/installer-sources.ts:428; /tmp/rifty-pr375-red.BkFgNV/red-aa1ded212.log — exact new regression exit1, promise resolved tagged@3.0.0; /private/tmp/rifty-375-review.sikDaB/head-extra-probes-after-restore.log — requests:[/tagged], mutations:[]; /tmp/rifty-375-green-ev8iwL/green-vitest.log — HEAD exit0. Baseline bf92f1d40: /tmp/rifty-pr375-red.BkFgNV/probe-bf92f1d40.log — No matching version for tagged@next, без tarball/lock.",
+      "note": ""
+    },
+    {
+      "row": "npm: alias non-latest tag имеет тот же ceiling и границу записи.",
+      "source": "public-api",
+      "trace": "PR #375 plain/npm: ceiling scenario; docs/public/compat/package-tooling.md:12",
+      "status": "weak",
+      "citation": "packages/npm-client/src/installer-dist-tag.parity.test.ts:69; packages/npm-client/src/installer-sources.ts:438; /private/tmp/rifty-375-review.sikDaB/head-extra-probes-after-restore.log",
+      "note": "C1: HEAD alias подтверждён scratch-probe; committed carrier пропускает выполненный alias-only bypass mutant."
+    },
+    {
+      "row": "Сохранены 17 alias parity rows: identity, retained replay, named install, checksum faults, Eddy.",
+      "source": "public-api",
+      "trace": "ADR-0526 + ADR-0527",
+      "status": "pass",
+      "citation": "tests/integration/npm-alias.parity.test.ts:190; tests/integration/npm-alias.parity.test.ts:404; tests/integration/npm-alias.parity.test.ts:530; /tmp/rifty-375-green-ev8iwL/green-vitest.log — 17/17 alias PASS на HEAD.",
+      "note": ""
+    },
+    {
+      "row": "Сохранены npm SHA-1 lock replay, warm-cache verification, corrupt network rejection.",
+      "source": "public-api",
+      "trace": "ADR-0527",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-sha1.parity.test.ts:18; /tmp/rifty-375-green-ev8iwL/green-vitest.log — SHA-1 PASS; общий запуск 3 files/19 tests PASS, Node v24.16.0/npm 11.17.0.",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/npm-client/src/installer-dist-tag.parity.test.ts:69",
+          "evidence": "Detached /private/tmp/rifty-375-review.sikDaB/tree, Node v24.16.0/npm 11.17.0. HEAD: ./node_modules/.bin/vitest run packages/npm-client/src/_review-dist-tag-plain.test.ts packages/npm-client/src/_review-dist-tag-alias.test.ts --reporter=verbose → exit0, 2/2; fresh/native-lock plain и alias: requests:[/tagged], mutations:[]; log head-extra-probes-after-restore.log. Mutant alias-bypass-mutant.patch меняет только false branch latestTag на installName !== effectiveName ? packument[dist-tags][effectiveRange] : undefined. ./node_modules/.bin/vitest run packages/npm-client/src/installer-dist-tag.parity.test.ts packages/npm-client/src/_review-dist-tag-alias.test.ts --reporter=verbose → exit1: committed regression PASS, alias probe FAIL (install resolved alias-tagged@3.0.0 вместо ceiling); полный log /private/tmp/rifty-375-review.sikDaB/alias-bypass-mutant.log. Исходный source восстановлен; probes повторно GREEN, git diff пуст.",
+          "summary": "C1: committed regression проверяет только plain next. Добавить npm:tagged@next в fresh/replay matrix: alias-only возврат dist-tag resolution остаётся незамеченным. Текущий HEAD корректен; advisory REV-4.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

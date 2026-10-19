@@ -35,3 +35,8 @@ tag (ADR-0504/0527 intent); aliases `npm:<name>@<tag>` ride the same rule.
 Replay must recognise a tag spec without a second resolver or cache layer
 (ADR-0527 candidates); rifty's semver subset must not misread a valid range as
 a tag. The ceiling test flips to the parity rows when this lands.
+
+Carrier gap (independent Final 2026-10-19, `reference/pr-375-dist-tag-final-green.json`
+C1, weak row): the committed regression exercises the plain spec; `npm:tagged@next`
+fresh/replay rows join it at pickup so an alias-only re-introduction of dist-tag
+resolution is caught by the carrier, not by a probe.
