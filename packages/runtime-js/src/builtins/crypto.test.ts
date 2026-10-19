@@ -21,7 +21,7 @@ const errorOf = (fn: () => unknown): { name?: string; code?: string } | null => 
 };
 
 describe('crypto.randomInt — unbiased rejection sampling', () => {
-  it('rejects the biased 48-bit tail and resamples (deterministic)', () => {
+  it('rejects the biased 48-bit tail and resamples (deterministic)', async () => {
     // range = 3, min = 0. The 48-bit space N = 2^48; N % 3 === 1, so the
     // acceptance limit is N - 1. A draw of exactly N-1 (all-0xFF bytes) lands in
     // the rejected tail and must be discarded; the next draw (value 7) is
@@ -39,7 +39,10 @@ describe('crypto.randomInt — unbiased rejection sampling', () => {
       subtle: real.subtle,
     });
     try {
-      expect(cryptoModule.randomInt(0, 3)).toBe(1);
+      // The platform boundary is captured at module initialization.
+      vi.resetModules();
+      const { default: injected } = await import('./crypto.ts');
+      expect(injected.randomInt(0, 3)).toBe(1);
       expect(grv).toHaveBeenCalledTimes(2);
     } finally {
       vi.unstubAllGlobals();
@@ -175,25 +178,29 @@ describe('crypto.randomFill — async fill', () => {
   });
 
   it('honours the offset/size window', async () => {
-    const target = Buffer.alloc(8); // zero-filled
-    await new Promise<void>((resolve) => {
-      // Force the window bytes non-zero deterministically via a stubbed RNG.
-      const real = globalThis.crypto;
-      vi.stubGlobal('crypto', {
-        getRandomValues: (view: Uint8Array) => {
-          view.fill(0xab);
-          return view;
-        },
-        randomUUID: real.randomUUID,
-        subtle: real.subtle,
-      });
-      cryptoModule.randomFill(target, 2, 3, (_e: unknown, b: Buffer) => {
-        vi.unstubAllGlobals();
-        // Only [2,5) is filled; the rest stays zero.
-        expect(Array.from(b)).toEqual([0, 0, 0xab, 0xab, 0xab, 0, 0, 0]);
-        resolve();
-      });
+    const target = Buffer.alloc(8);
+    const real = globalThis.crypto;
+    vi.stubGlobal('crypto', {
+      getRandomValues: (view: Uint8Array) => {
+        view.fill(0xab);
+        return view;
+      },
+      randomUUID: real.randomUUID,
+      subtle: real.subtle,
     });
+    try {
+      vi.resetModules();
+      const { default: injected } = await import('./crypto.ts');
+      const result = await new Promise<Buffer>((resolve, reject) => {
+        injected.randomFill(target, 2, 3, (error: Error | null, bytes: Buffer) => {
+          if (error) reject(error);
+          else resolve(bytes);
+        });
+      });
+      expect(Array.from(result)).toEqual([0, 0, 0xab, 0xab, 0xab, 0, 0, 0]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('floors a non-integer offset/size like Node', () => {

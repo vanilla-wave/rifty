@@ -96,7 +96,7 @@ export function makeStdioWriter(
   fd: number,
   isTTY: boolean,
   size: { readonly cols: number; readonly rows: number },
-  defer: (callback: () => void) => void = queueMicrotask,
+  defer: (callback: () => void) => void,
 ): NodeStdioWriter {
   let closed = false;
   const badFd = () => Object.assign(new Error('bad file descriptor'), { code: 'EBADF' });

@@ -66,7 +66,6 @@ export const BASELINE = [
   { file: 'packages/ts-language-service/src/service.ts', max: 1377 },
   { file: 'packages/workbench/src/workers/package-acquisition-authority.ts', max: 1374 },
   { file: 'apps/playground/src/components/editor-host-core.ts', max: 1270 },
-  { file: 'packages/runtime-js/src/builtins/process.ts', max: 1003 },
   {
     file: 'packages/workbench/src/workbench/internal/playground-session-tools-transport.ts',
     max: 1191,
@@ -85,6 +84,7 @@ export const BASELINE = [
   { file: 'packages/runtime-js/src/builtins/fs-streams.ts', max: 1016 },
   { file: 'packages/workbench/src/glue/pty-client.ts', max: 1012 },
   { file: 'packages/net/src/http/server.ts', max: 1010 },
+  { file: 'packages/runtime-js/src/builtins/process.ts', max: 1003 },
   { file: 'packages/net/src/http/upgrade-socket.ts', max: 976 },
   { file: 'apps/playground/src/templates/socket-lab.ts', max: 968 },
   { file: 'packages/runtime-js/src/module-loader/resolver.ts', max: 953 },

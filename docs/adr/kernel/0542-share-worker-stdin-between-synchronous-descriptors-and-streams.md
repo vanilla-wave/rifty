@@ -40,3 +40,5 @@ No-COI execution selection and its esbuild runtime are unchanged.
 Proof: `fs-stdio-fds.spec.ts`, `worker-stdin.test.ts`, stock upstream esbuild
 matrix. A partial read followed by stream consumption proves shared ownership;
 EOF/close and pending-operation teardown discriminate loss and retained holds.
+
+- 2026-10-20 — same-realm `ProcessIO.write` accepts string or Uint8Array; output events retain bytes, avoiding decode/re-encode loss. Pending input writes each reuse a WorkerReference until their callback, including Writable-queued requests; no hook into a bypassable `_write` method.

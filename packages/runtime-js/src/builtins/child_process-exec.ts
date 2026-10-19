@@ -24,6 +24,7 @@ import {
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
 import { makeStdioWriter } from './process-stdio-writer.ts';
+import { patchPromiseForNextTick, riftyProcess } from './process.ts';
 import { captureProcessStdio } from './stdio-fd-source.ts';
 import {
   clearImmediate as runtimeClearImmediate,
@@ -115,10 +116,10 @@ const hostClearInterval = globalThis.clearInterval.bind(globalThis);
  */
 export async function execScript(a: ExecScriptArgs): Promise<void> {
   let streamsClosed = false;
-  const writeStdout = (chunk: string): void => {
+  const writeStdout = (chunk: string | Uint8Array): void => {
     a.io.write('stdout', chunk);
   };
-  const writeStderr = (chunk: string): void => {
+  const writeStderr = (chunk: string | Uint8Array): void => {
     a.io.write('stderr', chunk);
   };
   const closeStreams = (): void => {
@@ -154,6 +155,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
   try {
     const source = syncMirror().readFileBytesSync(scriptPath);
     const code = Buffer.from(source).toString();
+    patchPromiseForNextTick();
     let wakeLifecycle = (): void => {};
     const lifecycleWake = (): void => wakeLifecycle();
     const stdin = a.stdinPipe.attach(lifecycleWake);
@@ -298,16 +300,24 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       ppid: a.ownHandle.ppid,
       stdin,
       stdout: makeStdioWriter(
-        { write: (bytes) => writeStdout(Buffer.from(bytes).toString()) },
+        { write: (bytes) => writeStdout(bytes) },
         1,
         false,
         { cols: 80, rows: 24 },
+        (callback) =>
+          riftyProcess.nextTick(() => {
+            if (!finished && !aborted) invokeGuest(callback);
+          }),
       ),
       stderr: makeStdioWriter(
-        { write: (bytes) => writeStderr(Buffer.from(bytes).toString()) },
+        { write: (bytes) => writeStderr(bytes) },
         2,
         false,
         { cols: 80, rows: 24 },
+        (callback) =>
+          riftyProcess.nextTick(() => {
+            if (!finished && !aborted) invokeGuest(callback);
+          }),
       ),
       cwd: () => childCwd,
       on(event, cb) {

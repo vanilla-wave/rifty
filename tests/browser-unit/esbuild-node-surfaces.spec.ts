@@ -65,8 +65,19 @@ ${reref ? 'c.ref();c.ref();' : ''}
 c.on('close',()=>{c.ref();for(const stream of c.stdio)stream.ref();});
 process.on('exit',()=>fs.writeFileSync('result.json',JSON.stringify({output})));
 `;
+const pendingWrites = (unref: boolean): string => `const fs=require('fs');
+fs.writeFileSync('child.cjs',"setTimeout(()=>{process.stdin.on('data',()=>{});},100)");
+const c=require('child_process').spawn('node',['child.cjs'],{stdio:['pipe','ignore','ignore']});
+c.unref();${unref ? 'c.stdin.unref();' : ''}
+const result={callbacks:[],errors:[]};c.stdin.on('error',e=>result.errors.push(e.code));
+for(let i=0;i<2;i++)c.stdin.write(Buffer.alloc(8*1024*1024,65),e=>{
+result.callbacks.push([i,e && e.code]);if(i===1)c.stdin.end();
+});
+process.on('exit',()=>fs.writeFileSync('result.json',JSON.stringify(result)));`;
 const allProbes = {
   ...probes,
+  'pending writes retain an unreferenced child': pendingWrites(false),
+  'pending writes retain an unreferenced input pipe': pendingWrites(true),
   'referenced pipes retain an unreferenced child': childLifetime(false, false),
   'child reref retains parent and close releases references': childLifetime(true, true),
   'idle stdin does not retain parent': `const fs=require('fs');

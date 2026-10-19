@@ -29,7 +29,7 @@ import {
 } from './worker-stdio-drain.ts';
 
 export interface ProcessIO {
-  write(stream: 'stdout' | 'stderr', chunk: string): void;
+  write(stream: 'stdout' | 'stderr', chunk: string | Uint8Array): void;
   /** Send a structured IPC message (used by fork). */
   send(message: unknown): void;
   /** Listen for incoming IPC messages. */

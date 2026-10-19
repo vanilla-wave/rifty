@@ -18,16 +18,28 @@ export function referenceChildPipe(stream: Readable | Writable, input: boolean):
   });
   if (input) {
     const writable = stream as Writable;
-    const write = writable._write;
-    writable._write = function (chunk, encoding, callback): void {
-      reference.ref();
+    const write = writable.write;
+    writable.write = function (chunk, encodingOrCallback, callback): boolean {
+      // One request retains until its callback, including queued writes. The
+      // constructor's options.write can bypass the public _write hook.
+      const request = new WorkerReference();
+      request.ref();
+      const cb = typeof encodingOrCallback === 'function' ? encodingOrCallback : callback;
       try {
-        write.call(this, chunk, encoding, (error) => {
-          reference.unref();
-          callback(error);
-        });
+        return write.call(
+          this,
+          chunk,
+          typeof encodingOrCallback === 'string' ? encodingOrCallback : undefined,
+          (error) => {
+            try {
+              cb?.(error ?? null);
+            } finally {
+              WorkerReference.dispose(request);
+            }
+          },
+        );
       } catch (error) {
-        reference.unref();
+        WorkerReference.dispose(request);
         throw error;
       }
     };
