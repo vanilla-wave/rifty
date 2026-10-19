@@ -23,6 +23,10 @@ restores `^7` and retires that pin. The proven-version admission policy for Vite
 separate refine in the guest-package-patches handoff (§Фон); this records the
 user-visible failure it now causes.
 
+In COI the refusal goes with `epics/esbuild-upstream-twin` I6 (the
+exact-7.3.6 gate is removed at its cutover, user 2026-10-16); retiring the
+starter pin and proving `^7` lanes stays this item's.
+
 ## Challenge
 
 <!-- finding capture — no premise critic at draft (README §Challenge) -->
