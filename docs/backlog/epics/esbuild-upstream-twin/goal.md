@@ -209,14 +209,17 @@ direction (f1-f5 show the four gaps are the minimal set).
   the Worker before validating (`lib/main.js:1995-1998, 2194-2253`), so an
   invalid-option `transformSync` gets the named gap, not Node's validation
   error; the compat `*Sync` row reads partial.
-- 2026-10-16 — agent: PR #373 (merged `aebdd7ddd`) filed
-  `npm-client/guest-package-adaptation-inventory-classes` with the esbuild
-  patch ids as `substitution-environment`/`handle-mapping`, kill none; this
-  evidence makes the 7 Node-entry stand-in ids `platform-gap` under its own
-  `fault-classes.md` §Guest-package adaptations text (COI: kill = this goal's
-  cutover; no-COI client: kill = `epics/no-coi-child-processes`); the 5
-  `gate-*` ids and `native-target-errno` stay `substitution-environment` with
-  kill = the cutover in COI — corrected in that item in this PR; ledger note in `honest-guest-package-adaptations`.
+- 2026-10-16 — agent: the ADR-0384 inventory
+  (`docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md`
+  §Finite inventory, classified 2026-10-16 by the closed
+  `honest-guest-package-adaptations` I3) lists the esbuild patch ids as
+  `substitution-environment`/`handle-mapping`, kill none; this evidence makes
+  the 7 Node-entry stand-in ids `platform-gap` under `fault-classes.md`
+  §Guest-package adaptations (COI: kill = this goal's cutover; no-COI client:
+  kill = `epics/no-coi-child-processes`); the 5 `gate-*` ids and
+  `native-target-errno` stay `substitution-environment` with kill = the
+  cutover in COI; the Vite version-gate row's COI kill = I6 — rows corrected
+  in this PR.
 - amend (other goal): 2026-10-16 — `honest-substitution-signals` scenario 4
   (`esbuild@^0.21.0` refused) holds in no-COI only after this goal's cutover;
   recorded there as `amend:` citing the user's «Любая…»; its I2 (types

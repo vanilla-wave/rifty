@@ -39,23 +39,18 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 - Stock-path cost on the Vite 7.3.6 lanes (extra Worker + pipe + 13.9 MB
   compile per service start) — owner: agent — measured at cutover; lane
   time-outs are not silently raised.
-- Vite-side preparation that is still version-specific in COI after the
-  gate goes (I6): the three install patches throw a plain `Error` when a
-  needle is missing (`vite-cli-install-policy.ts`; needles verified in 5.4.21,
-  6.4.4, 7.3.6 only) and the CLI mode grammar is copied from 7.3.6
-  (`vite-cli-prep.ts:194-218`) — owner: agent — cutover pickup proves I6
-  holds for Vite 5/6/7 (deletion of the hook/root patches is owned by
-  `honest-guest-package-adaptations` I2 and `project-location-independence`);
-  narrowing I6's "any" goes back to the user. The root policies' inventory
-  row says "re-prove on each admitted Vite version": a Vite admitted
-  unverified under I6 runs them without a real-Node artifact until
-  `project-location-independence` deletes them — the cutover records that in
-  the inventory row.
-- Starter pin: `apps/playground/src/vite-project-policy.ts:11-12` pins the
-  starters to Vite 7.3.6 "because the esbuild runtime admits only its proven
-  Vite consumer version", and `vite-version.contract.test.ts` reads
-  `esbuild-runtime-policy.json` `consumer.version` — owner: agent — the pin
-  stays (scenario 4); its reason and test re-anchor at the cutover.
+- Vite-side preparation still version-specific in COI after the gate goes
+  (I6): the CAC hook (ADR-0530) and root policies (ADR-0533) are gone on
+  main; the CLI mode grammar is still copied from 7.3.6 (`vite-cli-prep.ts`,
+  "copied from vite 7.3.6") — owner: agent — cutover pickup proves I6 holds
+  for Vite 5/6/7 (grammar probes); narrowing I6's "any" goes back to the
+  user.
+- Starter pin: playground seeds pin `vite@7.3.6` (`vite-project-policy.ts`,
+  `vite-version.contract.test.ts`), inventory row `platform-gap`, owned by
+  `npm-client/vite-7-3-7-from-scratch-esbuild-refusal` (kill: starters
+  declare `^7` and lanes pass) — owner: agent — in COI the refusal that item
+  reports goes with I6 at the cutover; the pin's retirement stays that item's
+  proof.
 - Oracle host: the file-stdout quirk and every CLI row were observed on
   macOS Node 24.16.0 only; CI captures the oracle on Linux — owner: agent —
   cutover pickup re-captures on the CI host before freezing rows.

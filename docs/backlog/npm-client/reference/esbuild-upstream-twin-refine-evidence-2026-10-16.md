@@ -148,6 +148,8 @@ child; `globalThis.require/fs` writes stay in the child realm under COI.
   once in `dist/node/cli.js`, the Chokidar `DirEntry.add` needle in one
   chunk, and `resolved.id.slice(root.length)` in one file.
 - Vite 5/6 were never run on rifty; runtime gaps beyond the gate are unknown.
+- Later main (`9fb6123d3`): the CAC hook (ADR-0530) and both root policies
+  (ADR-0533) are deleted; the gate and the 7.3.6-copied CLI grammar remain.
 
 ## Older esbuild-wasm Node entries
 
