@@ -80,7 +80,7 @@ const state = (label, phase = 'Units') =>
 
 const run = (stage, unit, extra = '', phase = 'Units', tag = short(unit)) =>
   agent(
-    `Run ${stage} per ${CANON} §${stage} for goal ${DIR}${unit ? `, unit ${unit}` : ''}.${extra ? ` ${extra}` : ''} ${LEAF} Return per schema: 'done' (stage complete), 'declined' (nothing to implement: the draft was deleted or a retirement compiled with no product change), 'left-path' (STOP-4: the approach changed or the obligation is parked with owner and trigger, unsafe partial changes reverted — report what resisted), 'harness' (something outside the process broke — report what).${
+    `Run ${stage} per ${CANON} §${stage} for goal ${DIR}${unit ? `, unit ${unit}` : ''}.${extra ? ` ${extra}` : ''} ${LEAF} Return per schema: 'done' (stage complete), 'declined' (PICKUP only: the draft was deleted or a retirement compiled with no product change — nothing to implement), 'left-path' (STOP-4: the approach changed or the obligation is parked with owner and trigger, unsafe partial changes reverted — report what resisted), 'harness' (something outside the process broke — report what).${
       stage === 'PICKUP'
         ? ' PICKUP prepares the contract and its RED tests on the branch (committed, no implementation) and sets needsContractRed per RDY-8; unit = the contract path after compile/split.'
         : ''
@@ -179,17 +179,20 @@ for (let i = 0; !st.mapEmpty || !st.hasCarrier; i++) {
     x = await run('RECHART', null, 'The goal has no acceptance carrier and no open unit: the carrier is the next unit (RECHART 2); seed it on the map.')
   } else {
     x = st.unitCertified ? { outcome: 'done', report: 'certified', unit } : await run('PICKUP', unit)
-    if (x?.outcome === 'done') {
-      unit = x.unit ?? unit
-      if (x.needsContractRed) x = await checkpoint('Contract+RED', unit, st.base)
-    }
-    if (x?.outcome === 'done') x = await run('IMPLEMENT', unit)
-    if (x?.outcome === 'done') x = await checkpoint('Final+GREEN', unit, st.base)
-    if (x?.outcome === 'done') {
-      landed++
-      x = await run('RECHART', unit, 'The slice landed (Final+GREEN PASS, verdict recorded per REV-8): RECHART 1–4.')
-    } else if (x?.outcome === 'left-path') {
-      x = await run('RECHART', unit, `The unit left the path (STOP-4): ${x.report}. RECHART 1 and 3: keep the obligation linked with owner, dependency and trigger; revert unsafe partial changes; continue independent work.`)
+    if (x?.outcome !== 'declined') {
+      // Only PICKUP may decline (PICKUP 2); a later 'declined' is a unit leaving the path.
+      if (x?.outcome === 'done') {
+        unit = x.unit ?? unit
+        if (x.needsContractRed) x = await checkpoint('Contract+RED', unit, st.base)
+      }
+      if (x?.outcome === 'done') x = await run('IMPLEMENT', unit)
+      if (x?.outcome === 'done') x = await checkpoint('Final+GREEN', unit, st.base)
+      if (x?.outcome === 'done') {
+        landed++
+        x = await run('RECHART', unit, 'The slice landed (Final+GREEN PASS, verdict recorded per REV-8): RECHART 1–4.')
+      } else if (x && x.outcome !== 'harness') {
+        x = await run('RECHART', unit, `The unit left the path (STOP-4): ${x.report}. RECHART 1 and 3: keep the obligation linked with owner, dependency and trigger; revert unsafe partial changes; continue independent work.`)
+      }
     }
   }
   if (!x) return stop('harness', 'a stage leaf returned nothing')

@@ -175,6 +175,16 @@ describe('goal-run workflow sequencing', () => {
       'review:Final+GREEN:goal',
     ]);
     expect(declined.result.closed).toBe(true);
+    // Only PICKUP may decline: a declined IMPLEMENT is a unit leaving the path, never a skipped Final+GREEN.
+    const late = await trace(GOAL, {
+      state: [st({ unitCertified: true }), st({ mapEmpty: true })],
+      IMPLEMENT: [{ outcome: 'declined', report: 'nothing to do' }],
+      RECHART: [done()],
+      ...closing,
+    });
+    expect(late.labels.slice(1, 4)).toEqual(['IMPLEMENT:u1', 'RECHART:u1', 'state:1']);
+    expect(late.labels).not.toContain('review:Final+GREEN:u1');
+    expect(late.calls[2].prompt).toContain('left the path (STOP-4): nothing to do');
   });
 
   it('routes a unit that leaves the path at Contract+RED to RECHART, never to IMPLEMENT', async () => {
