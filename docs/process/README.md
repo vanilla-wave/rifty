@@ -49,8 +49,9 @@ route, including routine records and its report; never return control between
 stages. On Claude Code a whole-goal hand-off runs through
 `.claude/workflows/goal-run.js`: the script sequences the same stages, one fresh
 leaf per stage reading state from disk, a fresh reviewer per checkpoint, the
-invoking session the exception layer (`DEC-5`; `traps.md` §Harness). A re-entry
-reads the PR body and the ledger tail. Fresh contexts are for independent
+invoking session the exception layer (`DEC-5`; `traps.md` §Harness); in-session
+on the user's request or without the Workflow tool. A re-entry reads the PR
+body and the ledger tail. Fresh contexts are for independent
 decisions only (`DEC-5`).
 
 ### FIT — chart a goal
@@ -422,7 +423,9 @@ violation, and blocking on a demand no declared authority makes.
   Passes are not counted; a new real defect at a verify pass is the review
   doing its job, also of a recurring fault class (`REV-7` Repeat blocks the
   mechanism, not the bug). A blocker on a row the previous pass graded `pass` goes
-  through reception like any finding.
+  through reception like any finding. A harness entry may bound the verify
+  passes per checkpoint (a valve, `traps.md` §Harness): reaching it is `STOP-4`
+  for the unit, and raising it is the user's decision.
 - **STOP-4 Change the approach, keep the obligation.** Check the authority and
   diagnosis, trim unsupported demands, choose a materially different design or
   a discriminating probe; record what new fact can settle it. If that fact is
