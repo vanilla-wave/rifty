@@ -1,3 +1,4 @@
+import { fetchHost } from '@riftydev/io';
 /// <reference lib="webworker" />
 
 /**
@@ -126,7 +127,7 @@ export async function runWasiInWorker(proc: WasiProcess): Promise<void> {
   const guestEnv = stripChannelKeys(proc.env);
   const guestArgs = proc.argv.slice();
 
-  const response = await fetch(wasmUrl);
+  const response = await fetchHost(wasmUrl);
   if (!response.ok) {
     throw new Error(
       `runtime-wasi/worker-entry: fetch(${wasmUrl}) → ${response.status} ${response.statusText}`,

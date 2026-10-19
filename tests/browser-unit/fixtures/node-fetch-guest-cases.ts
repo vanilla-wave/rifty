@@ -26,12 +26,48 @@ app.request('/x', {method:'POST', headers:{cookie:'a=1'}, body:form})
 
 export const fetchGuestCases: readonly FetchGuestCase[] = [
   {
+    name: 'custom-tee-state',
+    source: `${preamble}
+(async () => {
+ for (const read of [false,true]) {
+  const a = new ReadableStream({start(c) {c.enqueue(new Uint8Array([65]));c.close();}});
+  const reader = new ReadableStreamDefaultReader(a);
+  if (read) {await reader.read();reader.releaseLock();}
+  const response = new Response('source');
+  response.body.tee = () => [a,a];
+  const copy = response.clone();
+  row('custom-tee-'+read, [response.body === a,copy.body === a,copy.bodyUsed,copy.body.locked]);
+  if(!read) reader.releaseLock();
+ }
+ const revocable = Object.getOwnPropertyDescriptor(Proxy,'revocable').value;
+ const record=Object.defineProperty({visible:'yes'},'hidden',{value:'no'});
+ const pair=revocable(record,{});
+ row('revocable',[...new Headers(pair.proxy)]);
+ pair.revoke();
+ try {new Headers(pair.proxy);row('revoked','accepted');}catch(e){row('revoked',e.name);}
+})().catch(fail);
+`,
+  },
+  {
+    name: 'vm-header-record',
+    source: `${preamble}
+const vm=require('node:vm');
+const object=vm.runInNewContext('Object.defineProperty({visible:"yes"}, "hidden", {value:"also"})');
+row('vm-record',[...new Headers(object)]);
+const proxy=vm.runInNewContext('new Proxy(Object.defineProperty({visible:"yes"}, "hidden", {value:"also"}), {})');
+row('vm-proxy',[...new Headers(proxy)]);
+`,
+  },
+  {
     name: 'headers-and-identity',
     source: `${preamble}
 const request = new Request('http://example.test/', {headers:{cookie:'a=1',host:'h'}});
 const headers = new Headers([['set-cookie','a=1'], ['set-cookie','b=2']]);
 row('headers', [request.headers.get('cookie'), request.headers.get('host'), headers.getSetCookie()]);
-row('identity', [Headers, Request, Response, FormData].map(C => C.prototype.constructor === C));
+row('identity', [Headers, Request, Response, FormData].map(C => [C.name,C.length,C.prototype.constructor === C]));
+row('fetch-shape',[fetch.name,fetch.length]);
+row('stream-alias',ReadableStream.prototype.values === ReadableStream.prototype[Symbol.asyncIterator]);
+row('wrapped-function-record',[...new Headers(Blob.prototype.stream)]);
 const record = Object.defineProperty({visible:'yes'}, 'hidden', {value:'also'});
 row('record', [...new Headers(record)]);
 const calls = [];
@@ -85,6 +121,8 @@ const request = new Request('http://example.test/', {method:'POST', body:form});
  row('request-copy', [r.bodyUsed, await copied.text(), copied.bodyUsed]);
  const errorBody = new Response(new ReadableStream({start(c) {c.error(new Error('source failed'));}}));
  try {await errorBody.text();} catch(e) {row('source-error',e.message);}
+ row('source-error-used',errorBody.bodyUsed);
+ try {await errorBody.text(); row('source-reread','accepted');} catch(e) {row('source-reread',e.name);}
  row('guest-text', await new Response(new ReadableStream({start(c) {c.enqueue(new TextEncoder().encode('done'));c.close();}})).text());
 })().catch(fail);
 `,
@@ -113,8 +151,31 @@ export function networkFetchCase(url: string): string {
  for (;;) {const part=await reader.read(); if(part.done) break; text+=decoder.decode(part.value,{stream:true});}
  reader.releaseLock(); text+=decoder.decode();
  row('network-body',[text,await copy.text(),response.bodyUsed,copy.bodyUsed]);
+ const cancelled=await fetch(${JSON.stringify(url)});
+ const surviving=Response.prototype.clone.call(cancelled);
+ const cancellation=cancelled.body.cancel();
+ row('cancelled-branch',await Response.prototype.text.call(surviving));
+ await cancellation;
+ row('cancelled-state',[cancelled.bodyUsed,surviving.bodyUsed]);
  const controller=new AbortController(); controller.abort();
  try {await fetch(${JSON.stringify(url)}, {signal:controller.signal});} catch(e) {row('abort',e.name);}
+ const active = new AbortController();
+ const slow = await fetch(${JSON.stringify(`${url}/slow`)}, {signal:active.signal});
+ const read = slow.text();
+ active.abort();
+ try {await read; row('active-abort','accepted');} catch(e) {row('active-abort',e.name);}
+ const uploading = new AbortController();
+ const blob=new Blob(['x']); let finishUpload;
+ blob.stream=()=>new ReadableStream({start(c){finishUpload=()=>c.close();}});
+ const upload=fetch(${JSON.stringify(url)},{method:'POST',body:blob,signal:uploading.signal});
+ uploading.abort();
+ const guard=setTimeout(()=>{row('upload-abort-late',true);finishUpload();},1000);guard.unref();
+ try {await upload;} catch(e) {row('upload-abort',e.name);}
+ clearTimeout(guard);
+ const urlDescriptor=Object.getOwnPropertyDescriptor(Request.prototype,'url');
+ Object.defineProperty(Request.prototype,'url',{configurable:true,get(){throw new Error('public url getter');}});
+ try {row('private-request',await (await fetch(${JSON.stringify(url)})).text());}
+ finally {Object.defineProperty(Request.prototype,'url',urlDescriptor);}
  try {await fetch(${JSON.stringify(`${url}/disconnect`)});} catch(e) {row('connection-error',e.name);}
 })().catch(fail);
 `;

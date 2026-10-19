@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: Prove guest Fetch classes with a real Hono and body-lifetime carrier
 created: 2026-10-20
 why: Native browser classes lose Node headers and body lifetime; executable acceptance must expose each wall before replacement.
@@ -51,4 +51,5 @@ existing NotImplementedError ceiling.
 
 ## Decisions
 
+- ready-verdict: 2026-10-20 — Contract+RED @ 2a6a30728d5af714ef2598bf84158b89dc65e48e (PR #381 review JSON; 0 blockers, 2 advisory coverage concerns).
 - 2026-10-20 — carrier first, expected failures until the owner is replaced; same PR throughout.

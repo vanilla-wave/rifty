@@ -30,6 +30,7 @@
       "tests/browser-unit/fixtures/real-tree-manifest.json",
       "tools/shadow-registry/src/runtime/generated/**",
       "packages/runtime-js/src/module-loader/generated/typescript-browser.js",
+      "packages/runtime-js/src/builtins/fetch/generated/classes.js",
       "tools/shadow-registry/generated/**",
       "packages/ts-language-service/vendor/**",
       "docs/landing/handoff/**"

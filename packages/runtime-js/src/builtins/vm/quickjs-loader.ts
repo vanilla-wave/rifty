@@ -1,3 +1,4 @@
+import { fetchHost } from '@riftydev/io';
 /**
  * QuickJS-WASM engine loader for the `vm.*` sandbox membrane.
  *
@@ -110,7 +111,7 @@ function quickjsVariantWithLocation(): typeof variant {
 }
 
 async function fetchQuickjsWasm(wasmLocation: string): Promise<ArrayBuffer> {
-  const response = await globalThis.fetch(wasmLocation);
+  const response = await fetchHost(wasmLocation);
   if (!response.ok) {
     await response.body?.cancel().catch(() => {});
     throw new Error(

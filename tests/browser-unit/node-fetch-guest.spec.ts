@@ -48,7 +48,6 @@ function honoProgram(): string {
 
 test('Node Fetch goal: real Hono and body lifecycle match live Node', async ({ page }) => {
   test.setTimeout(300_000);
-  test.fail(true, 'node-fetch-classes-in-guest acceptance carrier: current native classes are RED');
   const cases = [{ name: 'hono', source: honoProgram() }, ...fetchGuestCases];
   const oracles = new Map<string, Awaited<ReturnType<typeof runNodeOracle>>>();
   for (const fixture of cases) {
@@ -82,10 +81,7 @@ test('Node Fetch goal: real Hono and body lifecycle match live Node', async ({ p
 
 test('Node Fetch goal: multipart network response has one body state', async ({ page }) => {
   test.setTimeout(120_000);
-  test.fail(
-    true,
-    'node-fetch-classes-in-guest acceptance carrier: native fetch body wrapper splits locks',
-  );
+  let unreadEnded = false;
   const server = createServer((request, response) => {
     if (request.url?.endsWith('/disconnect')) {
       request.destroy();
@@ -93,6 +89,20 @@ test('Node Fetch goal: multipart network response has one body state', async ({ 
     }
     response.setHeader('access-control-allow-origin', '*');
     response.setHeader('access-control-allow-headers', '*');
+    if (request.url?.endsWith('/unread')) {
+      response.writeHead(200);
+      response.flushHeaders();
+      setTimeout(() => {
+        unreadEnded = true;
+        response.end('unread');
+      }, 500);
+      return;
+    }
+    if (request.url?.endsWith('/slow')) {
+      response.writeHead(200);
+      response.write('pending');
+      return;
+    }
     if (request.method === 'OPTIONS') {
       response.end();
       return;
@@ -143,6 +153,33 @@ test('Node Fetch goal: multipart network response has one body state', async ({ 
       expect
         .soft(rows(cookie.out), cookie.out)
         .toEqual(['FETCH|cookie=NotImplementedError:fetch.requestHeaders']);
+      await writeOwnerFile(
+        page,
+        '/scratch/stream-upload.cjs',
+        `fetch(${JSON.stringify(url)}, {
+        method:'POST',duplex:'half',body:new ReadableStream({start(c){c.enqueue(new Uint8Array([65]));c.close();}})
+      }).then(()=>console.log('FETCH|stream=accepted'),e=>console.log('FETCH|stream='+e.name+':'+e.feature));`,
+      );
+      const streaming = await runOwnerCommand(page, 'node stream-upload.cjs', 20_000);
+      expect(streaming.timedOut, streaming.out).toBe(false);
+      expect(streaming.exit, streaming.out).toBe(0);
+      expect(rows(streaming.out), streaming.out).toEqual([
+        'FETCH|stream=NotImplementedError:fetch.streamingUpload',
+      ]);
+      const unread = `fetch(${JSON.stringify(`${url}/unread`)}).then(() => console.log('FETCH|unread=headers'));`;
+      unreadEnded = false;
+      const unreadOracle = await runNodeOracle(unread);
+      expect(unreadOracle.code, unreadOracle.stderr).toBe(0);
+      expect(unreadEnded, 'Node exits after the unread network response reaches EOF').toBe(true);
+      unreadEnded = false;
+      await writeOwnerFile(page, '/scratch/unread.cjs', unread);
+      const unreadRun = await runOwnerCommand(page, 'node unread.cjs', 20_000);
+      expect(unreadRun.timedOut, unreadRun.out).toBe(false);
+      expect(unreadRun.exit, unreadRun.out).toBe(0);
+      expect(rows(unreadRun.out)).toEqual(rows(unreadOracle.stdout));
+      expect(unreadEnded, 'guest must not exit at headers while network body remains pending').toBe(
+        true,
+      );
     } finally {
       await closeOwner(page);
     }

@@ -1,3 +1,4 @@
+import { fetchHost } from '@riftydev/io';
 /** One static-asset boundary for header/body stalls and runaway bytes. */
 
 export const DEFAULT_ASSET_STALL_MS = 10_000;
@@ -31,7 +32,7 @@ async function waitForHeaders(
     options.headerTimeoutMs ?? DEFAULT_ASSET_STALL_MS,
     'asset header timeout',
   );
-  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const fetchImpl = options.fetchImpl ?? fetchHost;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const attempt = fetchImpl(url, { signal: controller.signal });
   attempt.catch(() => {});

@@ -105,6 +105,10 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
 
 ## Corrections
 
+- 2026-10-20 — ADR-0541 replaces native Request/Response constructor/consumer
+  holds and the native-body gap (§2/§4) with Node's JS classes; real Blob I/O
+  remains held. Other host API classes and navigator.locks are unchanged.
+
 - 2026-10-16 — §3 had claimed string, bytes, URLSearchParams, JSON and
   string-only FormData bodies settle on microtasks (64 MiB probes passed
   unheld): false — every Body consumer takes a host task and `clone()` tees

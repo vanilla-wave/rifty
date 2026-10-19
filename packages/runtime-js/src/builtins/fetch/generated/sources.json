@@ -1,0 +1,28 @@
+{
+  "version": "7.25.0",
+  "esbuild": "0.28.0",
+  "sha256": "347a5eedba5ea72cb324546ea7134479f22ecde18dc26009733f31432f45cd15",
+  "sources": {
+    "lib/core/constants.js": "feeb46180cfa4623da75627c9c3a5d5f38945644c30b7afe37415437ed71bca2",
+    "lib/core/errors.js": "c69b7a060b711e4cd97f3ff05eb18cf4ec7a08ce5d618c54a567baf6f1a47481",
+    "lib/core/symbols.js": "4b839c2a59097740289c27d80548eaba8e6b557ed3204402c050b9a42cd5a0cc",
+    "lib/core/tree.js": "c9fc9938718f33d77a6ed1abac5e564531ac9f9436cde2867243d50cd6c0b4e8",
+    "lib/core/util.js": "a53177756a60479215b577b895867e92e3ce0d61ab479fb642cd4420e84cc165",
+    "lib/encoding/index.js": "7ea8fe81ff3c9d054f3ef8bb67bfe260b2e930c51d5d5563ca2ef19a218a5909",
+    "lib/util/promise.js": "123edb8cf7eb03156beb04a3482c5cb86bddf3f8348b857edb263cae38bc482b",
+    "lib/util/runtime-features.js": "eda04942c74b6c80341e3df2112968bcd1810271aab9215261306811c3ee60a4",
+    "lib/util/timers.js": "4e5ef13ce9e1ca6de8a656b95e2425602bacbd6010af1da3ce573f8d8f573119",
+    "lib/web/fetch/body.js": "fd7e1fe68e263f3296ecf0f4f799b3099717ecd8c9626db9bab73b7a4db7eb7d",
+    "lib/web/fetch/constants.js": "030e21057cdd1758db16eb0e86806be93b7616e5f46d9a93b90a9a8e99672423",
+    "lib/web/fetch/data-url.js": "acd2ae8c00e035a8b3c816c8a5f75eebfe12ab7db61158488cc350f92785fcd4",
+    "lib/web/fetch/formdata-parser.js": "f7fb794151853c66c5e982f8786fe59697609dfd05661a65741d6ced68c5dbbe",
+    "lib/web/fetch/formdata.js": "957184704f2ef215849411f702bdb9bcff1f42d81dfc0f69b16ff62670bf936a",
+    "lib/web/fetch/global.js": "6b38813b82ec8d5002009640515d35f83ab96d4f8e0066d71fae89324079a289",
+    "lib/web/fetch/headers.js": "0ca9bcb1cb174a19311b27f55b954d53e5adc06d6aa935c42df96c9a4453d0a7",
+    "lib/web/fetch/request.js": "b4b36815f3c0d082ab8f413a27085f0b197f8cdf04880db15bf7d1f0084d780a",
+    "lib/web/fetch/response.js": "0c376c359711217831d095d8139fb62b290c77dca1fe93e708d1b081074812fc",
+    "lib/web/fetch/util.js": "765b5cfb803401dbb591b1e28d22fd6a9fd6db4c0bf2ec5f86dc89e39429e016",
+    "lib/web/infra/index.js": "06cf4d0fe3220e2309f389d40d6e403e2c765ccb7552f68fce60cc2d25ee13bc",
+    "lib/web/webidl/index.js": "b77b27e5de8632a1e8d9fd4be8f06981fc162327ab7b3c3c424bb067dcdeb992"
+  }
+}

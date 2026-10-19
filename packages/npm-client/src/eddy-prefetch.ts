@@ -1,3 +1,4 @@
+import { fetchHost } from '@riftydev/io';
 /**
  * Out-of-band eddy bundle prefetch: start the (GET-by-hash or POST) bundle
  * fetch BEFORE `install()` runs — e.g. at playground owner boot — so the
@@ -58,7 +59,7 @@ export const DEFAULT_PREFETCH_STALL_MS = DEFAULT_BUNDLE_STALL_MS;
 
 export function startEddyPrefetch(opts: StartEddyPrefetchOptions): EddyPrefetchHandle {
   const key = canonicalEddyRequestKey(opts.request, opts.prefer ?? 'cached');
-  const fetchImpl = opts.fetchImpl ?? fetch;
+  const fetchImpl = opts.fetchImpl ?? fetchHost;
   const body: Record<string, unknown> = { ...opts.request };
   if (opts.prefer) body.prefer = opts.prefer;
   // prefer:'online' promises a FRESH server-side recompute — a pinned

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Asset/registry/owner resource fetches keep host semantics when Node guest Fetch classes are installed (ADR-0541).
+
 - A repeated `pty:open` of a live session keeps that session's login-`HOME` provenance; it is dropped when the session's close settles.
 
 - The terminal state's login-`HOME` provenance is fixed at the session's open, so an `npm run` lifecycle shell no longer adds `HOME` to the snapshot (ADR-0531 §6).

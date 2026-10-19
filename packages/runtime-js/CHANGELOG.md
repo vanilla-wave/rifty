@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Node guest `Request`/`Response`/`Headers`/`FormData` now use undici 7.25.0 (Node 24.16.0): Hono header retention, multipart/File bodies, clone/tee, locking/bodyUsed and detached reads match live Node. One network stream/ref replaces native Body wrappers; unsupported browser wire headers/dispatchers/opaque responses reject explicitly. VM headers preserve semantic Proxy identity. ADR-0541.
+
 - `os.homedir()` keeps an explicitly empty `HOME` (`''`), as Node; `os.tmpdir()` still falls through empty `TMPDIR`/`TMP`/`TEMP`.
 
 - `os.userInfo().homedir` is the account home `/home/rifty` regardless of `$HOME`, as Node (ADR-0531); stale exit-signal rejections recorded before a reused process's reset are dropped too.
