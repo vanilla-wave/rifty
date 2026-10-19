@@ -20,6 +20,8 @@ import {
 import { assertNotCrswapReserved } from './opfs-errors.ts';
 import { type IndexEntry, OpfsPreloadError, walkOpfsTree } from './opfs-preload.ts';
 import type { ReplicaImage, ReplicaPersistence, ReplicaRecord } from './opfs-replica-types.ts';
+import { opfsStat } from './opfs-stat.ts';
+import { type FsStat, createStatMetadata } from './stat-metadata.ts';
 export { walkOpfsTree } from './opfs-preload.ts';
 import {
   basename,
@@ -190,13 +192,18 @@ export class OpfsFsSync implements FsSync {
       this.replica ? (operations) => this.persistReplicaBatch(operations) : undefined,
     );
     // Seed root so `readdirSync('/')` works before `refreshIndex` runs.
-    this.index.set('/', { kind: 'dir', size: 0, children: new Set() });
+    this.index.set('/', {
+      kind: 'dir',
+      size: 0,
+      children: new Set(),
+      metadata: createStatMetadata(),
+    });
     for (const entry of options.initialImage ?? []) {
       this.index.set(
         entry.path,
         entry.kind === 'dir'
-          ? { kind: 'dir', size: 0, children: new Set() }
-          : { kind: 'file', size: entry.bytes.length },
+          ? { kind: 'dir', size: 0, children: new Set(), metadata: createStatMetadata() }
+          : { kind: 'file', size: entry.bytes.length, metadata: createStatMetadata(0) },
       );
       this.times.set(entry.path, { atime: entry.atime, mtime: entry.mtime });
       if (entry.kind === 'file') this.content.set(entry.path, entry.bytes);
@@ -305,7 +312,11 @@ export class OpfsFsSync implements FsSync {
     this.handles.set(normalized, handle);
     // Pre-warm also indexes a brand-new path (e.g. `openSync(p, create=true)`).
     if (!this.index.has(normalized)) {
-      this.index.set(normalized, { kind: 'file', size: handle.getSize() });
+      this.index.set(normalized, {
+        kind: 'file',
+        size: handle.getSize(),
+        metadata: createStatMetadata(0),
+      });
       this.attachChild(normalized);
     }
     return handle;
@@ -547,7 +558,9 @@ export class OpfsFsSync implements FsSync {
     const previousMtime = previousTimes?.mtime ?? 0;
     const mtime = now <= previousMtime ? previousMtime + 1 : now;
     this.times.set(normalized, { atime: previousTimes?.atime ?? now, mtime });
-    this.index.set(normalized, { kind: 'file', size: data.byteLength });
+    const metadata = this.index.get(normalized)?.metadata ?? createStatMetadata(now);
+    metadata.ctime = now;
+    this.index.set(normalized, { kind: 'file', size: data.byteLength, metadata });
     if (!wasKnown) {
       this.attachChild(normalized); // attachChild invalidates the parent cache
     } else {
@@ -803,7 +816,7 @@ export class OpfsFsSync implements FsSync {
     }
   }
 
-  statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } {
+  statSync(path: string): FsStat {
     const normalized = normalizeAbsolute(path);
     const entry = this.index.get(normalized);
     if (!entry) {
@@ -813,17 +826,13 @@ export class OpfsFsSync implements FsSync {
     // mtime: prefer `utimes` side-table; fall back to 0 — OPFS exposes no
     // native mtime to the sync surface (ADR-0029).
     const mtime = this.times.get(normalized)?.mtime ?? 0;
-    if (entry.kind === 'dir') {
-      return { isFile: false, isDirectory: true, size: 0, mtime };
-    }
-    // Content/index cache is the authoritative sync mirror (ADR-0072). An
-    // open sync access handle can lag a write-through queued from writeFileSync.
-    return { isFile: true, isDirectory: false, size: entry.size, mtime };
+    return opfsStat(entry, normalized, this.index, {
+      atime: this.times.get(normalized)?.atime ?? 0,
+      mtime,
+    });
   }
 
-  statSyncOrNull(
-    path: string,
-  ): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } | null {
+  statSyncOrNull(path: string): FsStat | null {
     // Non-throwing stat (ADR-0083): null on an absent warm-index entry, else
     // the same statSync path (live-handle size + utimes-side-table mtime).
     // One normalize; statSync re-normalizes the already-normalized arg cheaply
@@ -841,6 +850,8 @@ export class OpfsFsSync implements FsSync {
       throw new VfsError('ENOENT', path);
     }
     this.times.set(normalized, { atime: atimeMs, mtime: mtimeMs });
+    const entry = this.index.get(normalized);
+    if (entry) entry.metadata.ctime = Date.now();
     if (this.replica)
       this.scheduler.enqueue(this.index.get(normalized)?.kind === 'dir' ? 'mkdir' : 'write', [
         normalized,
@@ -905,7 +916,12 @@ export class OpfsFsSync implements FsSync {
         // Missing parent still names the TARGET (same rule as ENOTDIR above).
         throw new VfsError('ENOENT', path);
       }
-      this.index.set(cumulative, { kind: 'dir', size: 0, children: new Set() });
+      this.index.set(cumulative, {
+        kind: 'dir',
+        size: 0,
+        children: new Set(),
+        metadata: createStatMetadata(),
+      });
       this.attachChild(cumulative);
     }
     // Mirror is source of truth for sync callers; OPFS catches up best-effort.

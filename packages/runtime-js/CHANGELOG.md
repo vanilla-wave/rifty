@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Stock Node guest prerequisites: stdio write callbacks/encoding; ChildProcess and pipe references; synchronous named workerData/execFileSync refusals; complete VFS-backed numeric Stats (ADR-0540).
+
 - `os.homedir()` keeps an explicitly empty `HOME` (`''`), as Node; `os.tmpdir()` still falls through empty `TMPDIR`/`TMP`/`TEMP`.
 
 - `os.userInfo().homedir` is the account home `/home/rifty` regardless of `$HOME`, as Node (ADR-0531); stale exit-signal rejections recorded before a reused process's reset are dropped too.

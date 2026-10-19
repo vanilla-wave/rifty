@@ -14,6 +14,7 @@ const PROJECT_FILES = {
   'src/m.ts': 'export const answer: number = 42;\n',
   'build.mjs': `import esbuild from 'esbuild';
 await esbuild.build({entryPoints:['src/index.ts'],bundle:true,outfile:'dist/out.js'});
+if(globalThis.__riftyShadowRegistry?.esbuild) throw new Error('generated esbuild runtime loaded');
 `,
 };
 
@@ -122,9 +123,7 @@ if(globalThis.__riftyShadowRegistry?.esbuild) throw new Error('generated esbuild
       ownerOpen = true;
       const range = version.startsWith('0.21.')
         ? '~0.21.5'
-        : version.startsWith('0.25.')
-          ? '^0.25.0'
-          : '^0.28.0';
+        : `^${version.split('.').slice(0, 2).join('.')}.0`;
       const install = await execLine(page, `npm install esbuild@${range}`);
       expect(install.exit, install.out).toBe(0);
       const build = await execLine(page, 'node build.mjs');

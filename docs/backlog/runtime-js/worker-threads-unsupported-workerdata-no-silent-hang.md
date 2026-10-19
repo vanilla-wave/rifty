@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: esbuild-wasm's `*Sync` routes end in a named NotImplementedError — a parent blocking in `Atomics.wait` after `new Worker(...)` with MessagePort-bearing workerData, and the `execFileSync` route — never a hang or TypeError
 created: 2026-10-16
 why: rifty reports the unsupported workerData only as an async `'error'` event; esbuild-wasm's `*Sync` path builds that Worker and immediately blocks in `Atomics.wait`, so `transformSync` hangs forever under COI; with `ESBUILD_WORKER_THREADS=0` it calls `child_process.execFileSync`, which rifty does not export (TypeError)
@@ -38,15 +38,25 @@ Second route: esbuild-wasm `lib/main.js:1889` skips worker_threads when
 `runtime-js/node-builtins-loud-stub-capability-gaps`; ADR-0443's
 named-loud-member rule governs the loud form.
 
-## Question
+## Challenge
 
-Node validates `transferList` and workerData cloneability synchronously in
-the constructor (`DataCloneError` for uncloneables) — does throwing the
-existing `NotImplementedError('worker_threads.workerData.structuredClone')`
-synchronously from the constructor match the error timing Node gives for
-cloneable-but-unsupported data, and what does esbuild surface to the
-`transformSync` caller then (its `startWorkerThreadService` is called inside
-`transformSync`)? `execFileSync` becomes a named loud member like `spawnSync`
-(goal I2: every `*Sync` route ends in a named `NotImplementedError`; running
-it over the `execSync` SAB path would be real sync — outside the goal).
-Settled at PICKUP by Node + rifty probes.
+challenge: 2026-10-20 — clear; observed defects, goal premise unchanged.
+
+## Acceptance
+
+1. Kernel Worker rejects unsupported workerData synchronously before caller can block; execFileSync throws its named NotImplementedError. → I2
+
+## Reference contract
+
+Node v24.16.0; `tests/browser-unit/esbuild-node-surfaces.spec.ts` runs the
+same supported scenario against Node and Chromium. Named unsupported Sync
+results follow goal I2, not Node's success output.
+
+## Out of scope
+
+Other goal units remain linked on the map; no goal closure from this repair.
+
+## Decisions
+
+- 2026-10-20 — RDY-8 observed-defect route: real baseline + executed RED
+  before implementation; independent Final+GREEN pending. Carrier: unsupported sync routes.

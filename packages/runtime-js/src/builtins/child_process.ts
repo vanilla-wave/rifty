@@ -26,7 +26,7 @@ import {
   isSabIpcSupported,
   readRootProcessSnapshot,
 } from '@riftydev/kernel';
-import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
+import { referenceChildPipe } from '../internal/child-pipe-reference.ts';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
 import {
@@ -35,6 +35,7 @@ import {
   encodeNodeIpcMessage,
 } from '../internal/node-ipc-serialization.ts';
 import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts';
+import { WorkerReference } from '../internal/worker-reference.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { inspect } from '../repl/inspect.ts';
 import { SameRealmStdinPipe, execScript } from './child_process-exec.ts';
@@ -55,7 +56,7 @@ import {
   spawnWorkerChild,
 } from './child_process-worker.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
-import { spawnSync } from './loud-members.ts';
+import { execFileSync, spawnSync } from './loud-members.ts';
 import { nodeChildSpawnOptions } from './node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
 import {
@@ -134,7 +135,8 @@ class ChildProcess extends EventEmitter {
   private readonly handle: ProcessHandle;
   private readonly ownerProcess: unknown;
   private readonly ownerBootstrap: ReturnType<typeof readActiveNodeProcessBootstrap>;
-  #keepaliveHeld = true;
+  readonly #reference = new WorkerReference();
+  readonly #pipeReferences: WorkerReference[] = [];
   /** Bus the child's script subscribes to for parent-sent `'childMessage'`
    * events. Exposed to the spawner via `internalIpc()`. */
   readonly inboundIpc: EventEmitter = new EventEmitter();
@@ -162,7 +164,11 @@ class ChildProcess extends EventEmitter {
     const stdio: (Readable | Writable | null)[] = [this.stdin, this.stdout, this.stderr];
     while (stdio.length < streams.slots) stdio.push(null);
     this.stdio = stdio;
-    refEventLoop();
+    this.#reference.ref();
+    for (const stream of this.stdio) {
+      if (stream === null) continue;
+      this.#pipeReferences.push(referenceChildPipe(stream, stream === this.stdin));
+    }
     handle.on('exit', (code, signal) => {
       this.finishIpc();
       this.emitToOwner('exit', code, signal);
@@ -246,9 +252,16 @@ class ChildProcess extends EventEmitter {
   }
 
   #releaseKeepalive(): void {
-    if (!this.#keepaliveHeld) return;
-    this.#keepaliveHeld = false;
-    unrefEventLoop();
+    WorkerReference.dispose(this.#reference);
+    for (const reference of this.#pipeReferences) WorkerReference.dispose(reference);
+  }
+
+  ref(): void {
+    this.#reference.ref();
+  }
+
+  unref(): void {
+    this.#reference.unref();
   }
 
   get exitCode(): number | null {
@@ -701,13 +714,14 @@ export function fork(
 // `execSync` lives in `./child_process-sync.ts` to keep the SAB-vs-fallback
 // branch with its helpers. Re-exported here for the public `child_process`
 // surface.
-export { execSync };
+export { execSync, execFileSync };
 
 export const ChildProcess_ = ChildProcess;
 
 const child_process = {
   spawn,
   spawnSync,
+  execFileSync,
   exec,
   execFile,
   fork,

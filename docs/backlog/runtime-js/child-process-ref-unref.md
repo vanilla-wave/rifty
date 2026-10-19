@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `ChildProcess#ref/unref` and child stdio `unref` exist with Node's loop semantics
 created: 2026-10-16
 why: rifty's `ChildProcess` has no `ref()`/`unref()` and its stdio streams no `unref()`; the child holds the parent's keepalive from construction to `'close'`, so upstream esbuild-wasm's `child.unref()` throws `TypeError` and a long-lived unref'd service child can never let its parent exit
@@ -27,10 +27,25 @@ Finding (2026-10-16, evidence §Node-surface gaps, §Discriminating layers):
 constructor and `unrefEventLoop()` at `'close'` only. ADR-0152 §1 owns the
 keepalive count; this is a Node handle class on that chokepoint.
 
-## Question
+## Challenge
 
-Which Node semantics does the parity seed pin — `ref`/`unref` idempotence, an
-unref'd child with a pending stdout listener (Node: the pipe handle still
-refs unless the stream is unref'd), exit of a parent whose only live handle is
-an unref'd child — and on which routes (kernel Worker child; same-realm
-fallback)? Settled at PICKUP by Node probes.
+challenge: 2026-10-20 — clear; observed defects, goal premise unchanged.
+
+## Acceptance
+
+1. ChildProcess ref/unref and child pipe ref/unref match Node return and lifetime behavior; output pipes and pending writes retain independently, idle stdin does not. → I3
+
+## Reference contract
+
+Node v24.16.0; `tests/browser-unit/esbuild-node-surfaces.spec.ts` runs the
+same supported scenario against Node and Chromium. Named unsupported Sync
+results follow goal I2, not Node's success output.
+
+## Out of scope
+
+Other goal units remain linked on the map; no goal closure from this repair.
+
+## Decisions
+
+- 2026-10-20 — RDY-8 observed-defect route: real baseline + executed RED
+  before implementation; independent Final+GREEN pending. Carrier: child and pipe ref unref; referenced pipes; child reref; idle stdin.

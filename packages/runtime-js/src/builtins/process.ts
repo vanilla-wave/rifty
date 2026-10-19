@@ -641,8 +641,8 @@ export class NodeProcess extends EventEmitter {
       currentCwd = spec.cwd;
       const terminal = processTerminalBootstrap(launch);
       const size = { cols: terminal.cols, rows: terminal.rows };
-      this.stdout = makeStdioWriter(spec.stdio.stdout, 1, terminal.stdoutIsTTY, size);
-      this.stderr = makeStdioWriter(spec.stdio.stderr, 2, terminal.stderrIsTTY, size);
+      this.stdout = makeStdioWriter(spec.stdio.stdout, 1, terminal.stdoutIsTTY, size, nextTick);
+      this.stderr = makeStdioWriter(spec.stdio.stderr, 2, terminal.stderrIsTTY, size, nextTick);
       const reader = makeStdinReader(spec.stdio.stdin, terminal.stdinIsTTY);
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
@@ -666,22 +666,22 @@ export class NodeProcess extends EventEmitter {
       this.ppid = 0;
       this.argv = ['rifty', 'repl'];
       this.env = Object.create(null);
-      this.stdout = Object.assign(new EventEmitter(), {
-        write: (chunk: string | Uint8Array) => {
-          console.log(chunk);
-          return true;
-        },
-        isTTY: false,
-        fd: 1,
-      }) as NodeStdioWriter;
-      this.stderr = Object.assign(new EventEmitter(), {
-        write: (chunk: string | Uint8Array) => {
-          console.error(chunk);
-          return true;
-        },
-        isTTY: false,
-        fd: 2,
-      }) as NodeStdioWriter;
+      const size = { cols: 80, rows: 24 };
+      const decoder = new TextDecoder();
+      this.stdout = makeStdioWriter(
+        { write: (bytes) => console.log(decoder.decode(bytes)) },
+        1,
+        false,
+        size,
+        nextTick,
+      );
+      this.stderr = makeStdioWriter(
+        { write: (bytes) => console.error(decoder.decode(bytes)) },
+        2,
+        false,
+        size,
+        nextTick,
+      );
       const reader = makeStdinReader();
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;

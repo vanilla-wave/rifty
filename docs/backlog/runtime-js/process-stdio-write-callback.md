@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `process.stdout|stderr.write(chunk[, encoding], cb)` calls `cb` as in Node
 created: 2026-10-16
 why: rifty's stdio writer takes `write(chunk)` only and drops the callback; Go's wasm_exec waits on that callback for every stdout/stderr write, so upstream esbuild-wasm deadlocks (`fatal error: all goroutines are asleep - deadlock!`), and any program sequencing on the write callback stalls
@@ -26,10 +26,25 @@ Finding (2026-10-16, evidence §Node-surface gaps, step a, layer f2):
 Related, not this item: `runtime-js/process-stdio-writable-end-surface`
 (`end`/`writableEnded`/`destroy`, `pipeline`, `instanceof Writable`).
 
-## Question
+## Challenge
 
-What callback timing and arguments does parity pin (after the bytes reach the
-stdio port; `(err)` arity; order relative to later writes and to
-`'drain'`; `encoding` handling for strings; callback when the port is closed),
-on the kernel Worker route and the same-realm route? Settled at PICKUP by
-Node probes.
+challenge: 2026-10-20 — clear; observed defects, goal premise unchanged.
+
+## Acceptance
+
+1. stdout/stderr write callback overloads, encoded bytes and callback timing match Node in kernel and same-realm execution. → I3
+
+## Reference contract
+
+Node v24.16.0; `tests/browser-unit/esbuild-node-surfaces.spec.ts` runs the
+same supported scenario against Node and Chromium. Named unsupported Sync
+results follow goal I2, not Node's success output.
+
+## Out of scope
+
+Other goal units remain linked on the map; no goal closure from this repair.
+
+## Decisions
+
+- 2026-10-20 — RDY-8 observed-defect route: real baseline + executed RED
+  before implementation; independent Final+GREEN pending. Carrier: stdio write callbacks; process-stdio-callback.test.ts.

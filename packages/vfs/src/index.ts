@@ -35,3 +35,5 @@ export {
   type VfsMutationGuard,
   type VfsMutationIntent,
 } from './mutation-intent.ts';
+
+export type { FsStat, StatMetadata } from './stat-metadata.ts';

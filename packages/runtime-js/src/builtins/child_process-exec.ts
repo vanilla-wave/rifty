@@ -23,6 +23,7 @@ import {
   readActiveNodeProcessBootstrap,
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
+import { makeStdioWriter } from './process-stdio-writer.ts';
 import {
   clearImmediate as runtimeClearImmediate,
   setImmediate as runtimeSetImmediate,
@@ -295,8 +296,18 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       pid: a.ownHandle.pid,
       ppid: a.ownHandle.ppid,
       stdin,
-      stdout: { write: writeStdout },
-      stderr: { write: writeStderr },
+      stdout: makeStdioWriter(
+        { write: (bytes) => writeStdout(Buffer.from(bytes).toString()) },
+        1,
+        false,
+        { cols: 80, rows: 24 },
+      ),
+      stderr: makeStdioWriter(
+        { write: (bytes) => writeStderr(Buffer.from(bytes).toString()) },
+        2,
+        false,
+        { cols: 80, rows: 24 },
+      ),
       cwd: () => childCwd,
       on(event, cb) {
         processEvents.on(event, cb);

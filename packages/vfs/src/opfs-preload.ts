@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { isCrswapArtifactName } from './opfs-errors.ts';
+import { type StatMetadata, createStatMetadata } from './stat-metadata.ts';
 import type { VfsDirent } from './types.ts';
 
 /** Acquired persisted tree could not be read; never authorize memory fallback. */
@@ -14,6 +15,7 @@ export class OpfsPreloadError extends Error {
 }
 
 export interface IndexEntry {
+  readonly metadata: StatMetadata;
   readonly kind: 'file' | 'dir';
   /** Last-known size in bytes (files only; `0` for dirs). */
   size: number;
@@ -39,7 +41,7 @@ export async function walkOpfsTree(
   content?: Map<string, Uint8Array>,
 ): Promise<Map<string, IndexEntry>> {
   const out = new Map<string, IndexEntry>();
-  out.set('/', { kind: 'dir', size: 0, children: new Set() });
+  out.set('/', { kind: 'dir', size: 0, children: new Set(), metadata: createStatMetadata(0) });
   async function recurse(dir: FileSystemDirectoryHandle, prefix: string): Promise<void> {
     const children = out.get(prefix)?.children;
     for await (const [name, handle] of dir as unknown as AsyncIterable<
@@ -50,10 +52,15 @@ export async function walkOpfsTree(
       children?.add(name);
       if (handle.kind === 'file') {
         const file = await (handle as FileSystemFileHandle).getFile();
-        out.set(path, { kind: 'file', size: file.size });
+        out.set(path, { kind: 'file', size: file.size, metadata: createStatMetadata(0) });
         if (content) content.set(path, new Uint8Array(await file.arrayBuffer()));
       } else if (handle.kind === 'directory') {
-        out.set(path, { kind: 'dir', size: 0, children: new Set() });
+        out.set(path, {
+          kind: 'dir',
+          size: 0,
+          children: new Set(),
+          metadata: createStatMetadata(0),
+        });
         await recurse(handle as FileSystemDirectoryHandle, path);
       }
     }

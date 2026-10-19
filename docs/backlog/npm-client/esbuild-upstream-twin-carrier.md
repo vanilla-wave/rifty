@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Execute the upstream twin install and stock build scenario against Node
 created: 2026-10-20
 why: the fitted goal has no executable acceptance carrier
@@ -41,6 +41,8 @@ Product implementation; goal's remaining API/CLI/Vite/no-COI and runtime
 parity rows compile at their pickup. This carrier does not close the goal.
 
 ## Decisions
+
+ready-verdict: 2026-10-20 — Contract+RED @ f5699dfb34553469d69d1b31f23255f7ac287273
 
 - 2026-10-20 — acceptance-carrier first per RECHART; archive integrity and
   expected file hashes derived from real upstream bytes, never typed goldens.

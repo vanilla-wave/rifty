@@ -3,20 +3,24 @@
  * `NodeProcess` (`process.ts`); split out of it by concern.
  */
 import type { KernelStdioOutputWriter } from '@riftydev/kernel';
+import { Buffer, type Encoding } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 
 // --- stdio plumbing (shared by spec + no-spec processes) ---
 
-const STDIO_ENCODER = new TextEncoder();
-
-function encodeChunk(chunk: string | Uint8Array): Uint8Array {
-  return typeof chunk === 'string' ? STDIO_ENCODER.encode(chunk) : chunk;
+function encodeChunk(chunk: string | Uint8Array, encoding: Encoding = 'utf8'): Uint8Array {
+  return typeof chunk === 'string' ? Buffer.from(chunk, encoding) : chunk;
 }
 
 type StdioCallback = () => void;
+type WriteCallback = (error?: Error | null) => void;
 
 export interface NodeStdioWriter extends EventEmitter {
-  write(chunk: string | Uint8Array): boolean;
+  write(
+    chunk: string | Uint8Array,
+    encodingOrCallback?: Encoding | WriteCallback,
+    callback?: WriteCallback,
+  ): boolean;
   isTTY: boolean;
   fd: number;
   columns?: number;
@@ -91,15 +95,34 @@ export function makeStdioWriter(
   fd: number,
   isTTY: boolean,
   size: { readonly cols: number; readonly rows: number },
+  defer: (callback: () => void) => void = queueMicrotask,
 ): NodeStdioWriter {
   const stream = Object.assign(new EventEmitter(), {
     isTTY,
     fd,
-    write(chunk: string | Uint8Array) {
-      const bytes = encodeChunk(chunk);
+    write(
+      chunk: string | Uint8Array,
+      encodingOrCallback?: Encoding | WriteCallback,
+      callback?: WriteCallback,
+    ) {
+      const cb = typeof encodingOrCallback === 'function' ? encodingOrCallback : callback;
+      const bytes = encodeChunk(
+        chunk,
+        typeof encodingOrCallback === 'string' ? encodingOrCallback : undefined,
+      );
       // A passed-in view may share storage with its caller; the semantic writer
       // owns transport, while this adapter preserves Node's non-detaching write.
-      port.write(typeof chunk === 'string' ? bytes : new Uint8Array(bytes));
+      try {
+        port.write(typeof chunk === 'string' ? bytes : new Uint8Array(bytes));
+      } catch (error) {
+        const failure = error instanceof Error ? error : new Error(String(error));
+        defer(() => {
+          cb?.(failure);
+          stream.emit('error', failure);
+        });
+        return false;
+      }
+      if (cb) defer(() => cb(null));
       return true;
     },
   }) as NodeStdioWriter;
