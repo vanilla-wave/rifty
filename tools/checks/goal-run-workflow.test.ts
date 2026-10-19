@@ -27,7 +27,6 @@ async function trace(args: unknown, leaves: Record<string, Leaf | unknown[]>) {
     const leaf = leaves[key];
     return Array.isArray(leaf) ? leaf[Math.min(n, leaf.length - 1)] : (leaf as Leaf)(call, n);
   };
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const body = new Function(
     'args',
     'agent',
