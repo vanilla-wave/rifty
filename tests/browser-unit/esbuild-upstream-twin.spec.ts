@@ -20,6 +20,10 @@ import { bootOwner, closeOwner, execLine, gotoHarness, readOwnerFile } from './f
 // I5: version strings + upstream archives are the only version-specific inputs.
 const VERIFIED_VERSIONS = ['0.21.5', '0.25.12', '0.28.2'];
 const PROJECT_FILES = {
+  'sync.cjs': readFileSync(
+    new URL('./fixtures/esbuild-upstream-sync.cjs', import.meta.url),
+    'utf8',
+  ),
   'api.cjs': readFileSync(new URL('./fixtures/esbuild-upstream-api.cjs', import.meta.url), 'utf8'),
   'src/index.ts': "import { answer } from './m.ts'; console.log(answer);\n",
   'src/m.ts': 'export const answer: number = 42;\n',
@@ -220,6 +224,28 @@ if(globalThis.__riftyShadowRegistry?.esbuild) throw new Error('generated esbuild
         const apiResult = await readOwnerFile(page, '/scratch/api-result.json');
         expect(apiResult.ok, apiResult.error).toBe(true);
         expect(JSON.parse(apiResult.text)).toEqual(expectedApi);
+        for (const route of ['workers', 'exec']) {
+          const sync = await execLine(page, `node sync.cjs ${requestedName} ${route}`);
+          expect(sync.exit, sync.out).toBe(0);
+          const result = await readOwnerFile(page, '/scratch/sync-result.json');
+          expect(result.ok, result.error).toBe(true);
+          const methods = JSON.parse(result.text);
+          expect(Object.keys(methods).sort()).toEqual([
+            'analyzeMetafileSync',
+            'buildSync',
+            'formatMessagesSync',
+            'transformSync',
+          ]);
+          for (const outcome of Object.values(methods)) {
+            expect(outcome).toEqual({
+              name: 'NotImplementedError',
+              feature:
+                route === 'workers'
+                  ? 'worker_threads.workerData.structuredClone'
+                  : 'child_process.execFileSync',
+            });
+          }
+        }
         for (const mode of ['pipe', 'tty', 'file'] as const) {
           const executable =
             requestedName === 'esbuild'

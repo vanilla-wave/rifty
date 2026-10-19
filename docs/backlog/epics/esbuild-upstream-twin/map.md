@@ -15,7 +15,9 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 4. `runtime-js/fs-stats-node-fields` — **stats** — I3; independent.
 5. `runtime-js/worker-threads-unsupported-workerdata-no-silent-hang` —
    **sync-loud** — I2 `*Sync` clause; independent.
-6. `npm-client/esbuild-upstream-twin-cutover` — **cutover** — I1, I2, I4,
+6. `npm-client/esbuild-upstream-range-install` — **range-install** — I1/I4/I5;
+   explicit installer tier + range template + byte/offline/no-COI proof.
+7. `npm-client/esbuild-upstream-twin-cutover` — **cutover** — I1, I2, I4,
    I5, I6; blocked by 1-5; carries the version-agnostic differential suite,
    the no-COI split, the COI Vite gate removal, the DEC-2 ADR and the compat
    pages.

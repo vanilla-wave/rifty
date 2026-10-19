@@ -201,6 +201,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0530 | Installed Vite CLI runs upstream bytes; trackKeepalivePromise removed |
 | 0533 | Vite runs upstream bytes at every project root; root policies removed |
 | 0534 | napi-rs packages launch with NAPI_RS_FORCE_WASI=1 |
+| 0543 | Resolve COI esbuild ranges to unmodified upstream Node twins |
 
 ### playground
 
