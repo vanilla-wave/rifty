@@ -193,6 +193,8 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0435 | Follow npm tar root stripping for materialized installs |
 | 0451 | User override values follow npm's version/range reading |
 | 0504 | Preserve named install intent and optional resolution outcomes |
+| 0526 | Separate npm alias placement from registry identity |
+| 0527 | Retain npm alias source identity until named install |
 | 0528 | Netlify proxy rewrite serves the production npm-registry route |
 | 0530 | Installed Vite CLI runs upstream bytes; trackKeepalivePromise removed |
 | 0533 | Vite runs upstream bytes at every project root; root policies removed |
@@ -401,7 +403,19 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0488 | Use npm semver subset rules for installed dependency saves |
 | 0489 | Keep reference host deployment policy outside the SDK |
 | 0490 | Keep reference host snapshot preparation explicit |
+| 0505 | Local evaluation series evidence and native Codex reference |
+| 0506 | Judge frozen project corpus in each originating environment |
+| 0507 | Report fixed corpus uncertainty without equality claims |
+| 0508 | Discover semantic captions in corrected pilot judges |
+| 0509 | Judge decoded CSV export values in a corrected pilot |
+| 0510 | Judge visible Markdown and note navigation behavior |
+| 0513 | Observe persisted CSV records through public export |
+| 0514 | Observe composed saved-note captions |
+| 0515 | Observe visible CSV exports before state-changing actions |
+| 0517 | Use accessible names for editable judge controls |
 | 0531 | Guest namespace mounts the project at a public root with project-owned tmp and home |
+| 0532 | Commit evaluation summaries as text core only |
+| 0535 | Judge app tasks against a prompt-stated contract |
 
 ## Superseded (removed)
 
@@ -445,6 +459,17 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0373 | 0374 | narrow install/run-bin control retained; Workbench entry ownership, nested-only URL, toolchain-only report, shared-WASM boundary and ADR-0371 registry-twin authority grafted |
 | 0374 | 0375 | explicit Worker/API/registry authority retained; Vite identity, lifecycle and build-only finalizer removed from generic no-COI control |
 | 0433 | 0533 | Vite root-URL repair removed with the root-watch policy; installed Vite is upstream bytes, a `/`-rooted project takes upstream's code paths |
+| 0511 | 0535 | connected workflow corpus freeze (booking/expense) retired; contract-first app cases calibrate before freeze |
+| 0512 | 0535 | contextual choice-caption projection retired with the booking/expense judges |
+| 0516 | 0535 | native date/time/number input owner retired with the booking/expense judges |
+| 0518 | 0535 | action-context control binding retired; the contract names its controls |
+| 0519 | 0535 | workflow-operation discovery through context retired; no discovery layer |
+| 0520 | 0535 | record identity outside captions retired; records are declared by the module API |
+| 0521 | 0535 | caption-presentation corroboration retired with 0520 |
+| 0522 | 0535 | persisted-effect record observation retired; judges are ordinary tests against a stated API |
+| 0523 | 0535 | independent reservation display observation retired with the booking case |
+| 0524 | 0535 | reservation field projection retired with the booking case |
+| 0525 | 0535 | record observation settlement retired with the engine |
 
 
 ## Corrections (active)

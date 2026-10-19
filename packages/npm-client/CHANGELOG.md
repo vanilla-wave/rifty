@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+- Dependency specs naming a dist-tag other than `latest` are a loud ceiling again: `NotImplementedError('npm-client.dependency-spec.dist-tag')` after the packument read, before any tarball or lock write. The alias repair had let `createRegistrySource` consult `dist-tags[spec]`, so a fresh install matched npm but the warm replay re-resolved the moved tag online and rewrote the lock where npm keeps its pin (independent Final C1, widened to all specs by the inline review of PR #375). Real-npm reference: `installer-dist-tag.parity.test.ts`; tracked in `backlog/npm-client/dist-tag-dependency-spec-replay`.
+
+- A present-but-empty (`""`/`null`) `dist.integrity` no longer disarms the declared SHA-1 `dist.shasum`: corrupted archive bytes fail with `EINTEGRITY` before package/lock publication, as pacote selects the checksum by truthiness (ADR-0527); an empty shasum declares nothing. Parity: `tests/integration/npm-alias.parity.test.ts` corrupt-input rows over absent/empty/null SRI. Found by the independent Final review of PR #375.
+
+- Preserve native same-version alias source names/cache keys on no-args replay, including alias→plain manifests; named installs use selected metadata SHA-1 shasum or exact-target pinned proofs (ADR-0527).
+
+- Install root/transitive/scoped npm aliases under alias paths; preserve target manifests, lock identities, override placement and Eddy cache acquisition (ADR-0526).
+- Verify legacy SHA-1 lockfile SRI with WebCrypto; reject corrupted archives/cache bytes before install.
+
 - Preserve named root update intent across lock reuse; expose actual skipped optional resolution facts for native saves (ADR-0504).
 
 - Match native npm root dev/optional/prod precedence in direct and Eddy installs; normalize optional duplicates in root lock dependency maps.

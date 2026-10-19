@@ -1,0 +1,93 @@
+{
+  "bugs": {
+    "url": "https://github.com/sindresorhus/string-width/issues"
+  },
+  "dist": {
+    "shasum": "269c7117d27b05ad2e536830a8ec895ef9c6d010",
+    "tarball": "https://registry.npmjs.org/string-width/-/string-width-4.2.3.tgz",
+    "fileCount": 5,
+    "integrity": "sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==",
+    "signatures": [
+      {
+        "sig": "MEUCIQCdE8iSHW3j8YsH6u/KbZmvj9DtpGTXHmhmmp6oeUG6/AIge8jaI1Qk/Z/GED/SrwJ+yNQAEzkZ28FrbwLFqeAqdSg=",
+        "keyid": "SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA"
+      }
+    ],
+    "unpackedSize": 5161
+  },
+  "name": "string-width",
+  "author": {
+    "url": "sindresorhus.com",
+    "name": "Sindre Sorhus",
+    "email": "sindresorhus@gmail.com"
+  },
+  "engines": {
+    "node": ">=8"
+  },
+  "gitHead": "e7a2755c834246c59a4cc5de9471bef2d531a6b1",
+  "license": "MIT",
+  "scripts": {
+    "test": "xo && ava && tsd"
+  },
+  "_npmUser": {
+    "name": "sindresorhus",
+    "email": "sindresorhus@gmail.com"
+  },
+  "homepage": "https://github.com/sindresorhus/string-width#readme",
+  "keywords": [
+    "string",
+    "character",
+    "unicode",
+    "width",
+    "visual",
+    "column",
+    "columns",
+    "fullwidth",
+    "full-width",
+    "full",
+    "ansi",
+    "escape",
+    "codes",
+    "cli",
+    "command-line",
+    "terminal",
+    "console",
+    "cjk",
+    "chinese",
+    "japanese",
+    "korean",
+    "fixed-width"
+  ],
+  "repository": {
+    "url": "git+https://github.com/sindresorhus/string-width.git",
+    "type": "git"
+  },
+  "_npmVersion": "7.5.4",
+  "description": "Get the visual width of a string - the number of columns required to display it",
+  "directories": {},
+  "maintainers": [
+    {
+      "name": "sindresorhus",
+      "email": "sindresorhus@gmail.com"
+    }
+  ],
+  "_nodeVersion": "16.9.1",
+  "dependencies": {
+    "strip-ansi": "^6.0.1",
+    "emoji-regex": "^8.0.0",
+    "is-fullwidth-code-point": "^3.0.0"
+  },
+  "_hasShrinkwrap": false,
+  "readmeFilename": "readme.md",
+  "devDependencies": {
+    "xo": "^0.24.0",
+    "ava": "^1.4.1",
+    "tsd": "^0.7.1"
+  },
+  "_npmOperationalInternal": {
+    "tmp": "tmp/string-width_4.2.3_1632417441184_0.9029691587206747",
+    "host": "s3://npm-registry-packages"
+  },
+  "_id": "string-width@4.2.3",
+  "version": "4.2.3"
+}

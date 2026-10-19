@@ -39,7 +39,7 @@ import {
   syntheticResolvedIdentity,
 } from './internal/shadow/substitution.ts';
 import type { Lockfile } from './linker.ts';
-import type { Packument } from './registry.ts';
+import type { Packument, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
 import { resolveEffectivePackageRequest } from './shadow-shims.ts';
 import { Semaphore } from './utils/semaphore.ts';
@@ -152,15 +152,15 @@ function createLockfileSource(
       // Apply the same retained redirect/user override as live resolution
       // before lookup. Synthetic catalog recipes keep their source identity
       // and are validated separately against the lockfile recipe trace.
-      const { override, effectiveName } = resolveEffectivePackageRequest(
-        name,
-        range,
-        ctx.parentName,
-        opts.overrides,
-      );
-      const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+      const {
+        override,
+        effectiveName,
+        installName = effectiveName,
+      } = resolveEffectivePackageRequest(name, range, ctx.parentName, opts.overrides);
+      const hit = pinnedEntryForParent(lockfile, installName, ctx.parentLockfilePath);
+      const registryName = hit?.entry.name ?? installName;
       if (hit && typeof hit.entry.version === 'string')
-        onSelection?.({ name: effectiveName, version: hit.entry.version });
+        onSelection?.({ name: registryName, version: hit.entry.version });
       // Recorded-pin admission fact (ADR-0361); absent entry keeps the
       // request-shape throw ahead of the missing-entry EBROKENLOCK below.
       const recipe = builtinRecipeForRequest(
@@ -214,7 +214,7 @@ function createLockfileSource(
       );
       const cpu = lockfileStringArray(entry.cpu, 'cpu', effectiveName, installPath);
       const os = lockfileStringArray(entry.os, 'os', effectiveName, installPath);
-      if (!override) assertNativeSupported(effectiveName, entry.version, { cpu, os }, installPath);
+      if (!override) assertNativeSupported(registryName, entry.version, { cpu, os }, installPath);
       // Override redirected to a target NAME the lockfile pins, but a moved
       // override RANGE (e.g. the baked table bumps, or a user edits `overrides`)
       // can leave the locked version stale. The live-resolve source would pick a
@@ -273,7 +273,8 @@ function createLockfileSource(
       }
       return {
         origin: 'lockfile',
-        name: effectiveName,
+        name: installName,
+        ...(installName === registryName ? {} : { registryName }),
         version: entry.version,
         resolved: entry.resolved ?? syntheticResolvedIdentity(synthetic!),
         integrity: entry.integrity,
@@ -417,12 +418,12 @@ function createRegistrySource(
           },
         };
       }
-      const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
-        name,
-        range,
-        ctx.parentName,
-        opts.overrides,
-      );
+      const {
+        override,
+        effectiveName,
+        effectiveRange,
+        installName = effectiveName,
+      } = resolveEffectivePackageRequest(name, range, ctx.parentName, opts.overrides);
 
       const packument = await loadPackument(effectiveName);
       const versions = Object.keys(packument.versions);
@@ -431,6 +432,14 @@ function createRegistrySource(
         : undefined;
       const pick = latestTag ?? pickBestVersion(versions, effectiveRange);
       if (!pick) {
+        // npm resolves a dist-tag and its lock replays that pin offline (Arborist dep-valid `tag`);
+        // rifty's replay rechecks the spec as a range, so the tag stays a loud ceiling.
+        // TODO(backlog: npm-client/dist-tag-dependency-spec-replay)
+        if (effectiveRange && packument['dist-tags']?.[effectiveRange])
+          throw new NotImplementedError(
+            'npm-client.dependency-spec.dist-tag',
+            `${effectiveName}@${effectiveRange}`,
+          );
         throw new Error(`No matching version for ${effectiveName}@${effectiveRange ?? '*'}`);
       }
 
@@ -463,18 +472,24 @@ function createRegistrySource(
       // Prefer the manifest's integrity; fall back to the lockfile entry's so a
       // partial re-resolve still serves unchanged transitive deps from cache.
       // Neither present → `fetchAndUnpackToCache` computes it from the bytes.
-      let expectedIntegrity = manifest.dist.integrity;
+      let expectedIntegrity = manifestIntegrity(manifest, effectiveName);
       if (!expectedIntegrity) {
         const lf = await ensureLockfileLoaded();
-        const pinned = lf?.packages[`node_modules/${effectiveName}`];
-        if (pinned && pinned.version === pick && pinned.integrity) {
+        const pinned = lf?.packages[`node_modules/${installName}`];
+        if (
+          pinned &&
+          (pinned.name ?? installName) === effectiveName &&
+          pinned.version === pick &&
+          pinned.integrity
+        ) {
           expectedIntegrity = pinned.integrity;
         }
       }
 
       return {
         origin: 'metadata',
-        name: effectiveName,
+        name: installName,
+        ...(installName === effectiveName ? {} : { registryName: effectiveName }),
         version: pick,
         resolved: manifest.dist.tarball,
         integrity: expectedIntegrity,
@@ -515,4 +530,20 @@ function createRegistrySource(
       };
     },
   };
+}
+
+/**
+ * npm metadata's SHA-1 shasum is an acquisition proof when SRI is absent. pacote
+ * (`registry.js`) selects `dist.integrity ? … : dist.shasum ? … : null` by truthiness:
+ * an empty/null SRI never disarms a declared shasum, an empty shasum declares nothing.
+ */
+function manifestIntegrity(manifest: VersionManifest, name: string): string | undefined {
+  if (manifest.dist.integrity) return manifest.dist.integrity;
+  const shasum = manifest.dist.shasum;
+  if (!shasum) return undefined;
+  if (typeof shasum !== 'string' || !/^[a-f\d]{40}$/i.test(shasum)) {
+    throw new TypeError(`Invalid SHA-1 shasum for ${name}@${manifest.version}`);
+  }
+  const bytes = Uint8Array.from(shasum.match(/../g)!, (pair) => Number.parseInt(pair, 16));
+  return `sha1-${btoa(String.fromCharCode(...bytes))}`;
 }

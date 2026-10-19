@@ -4,7 +4,7 @@ status: draft
 title: Measure whether the 16 KiB tool-text cap costs the sandbox agent solved tasks before changing it
 created: 2026-09-27
 why: the no-COI + agent fidelity audit found rifty's tool-text cap three times tighter than Pi's 50 KB reads and real `vite build` error output untested against it; ADR-0424 D7 records the cap, so a change needs measurement, not a hunch
-sources: [ADR-0424, docs/backlog/distribution/reference/no-coi-agent-host-kit-evidence.md]
+sources: [tools/agent-bench/reports/summaries/2026-10-15-eval-v18-corrected/README.md, docs/backlog/distribution/reference/no-coi-agent-host-kit-evidence.md]
 code: [packages/agent/src/text.ts, tools/agent-bench/src/config.ts]
 ---
 
@@ -16,7 +16,7 @@ Long Vite/TypeScript error traces are exactly what a head/tail cut removes.
 Does the cap change task outcomes on a benchmark corpus? A measured loss is
 the evidence a superseding ADR on 0424 D7 needs. Owner: none yet — any
 `tools/agent-bench` campaign may add the cap as an experiment variable
-(`epics/agent-code-quality-evaluation`, PR #341, carries no obligation).
+(delivered PR #341 carries no obligation; `tools/agent-bench/README.md`).
 Neither the kit goal (`docs/backlog/distribution/reference/no-coi-agent-host-kit-close.md`) nor this item changes it.
 
 Run budgets (audit row 18) are settled elsewhere: `epics/agent-weak-models`

@@ -76,6 +76,8 @@ const bench = {
     }
   },
   snapshot,
+  apply: (files: FileTree) => host.prepare({ files }),
+  command: (line: string) => host.call(() => host.project.run(line).completion),
   async preview() {
     await registerServiceWorker('/rifty/sw.js');
     const resident = await host.sandbox.toolchain.startBin({

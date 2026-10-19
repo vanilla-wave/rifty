@@ -1,120 +1,152 @@
 # Agent benchmark
 
-Private diagnostic harness; never a paid CI lane. Same five tasks/model/common Pi
-policy, three cold runs per supported lane by default. Tool/context differences
-remain explicit; a delta is not automatically a runtime defect.
+Private local benchmark; four real lanes, frozen corpora, three fresh trials by
+default. The original five tasks are the smoke set. Tool/context differences
+remain explicit; a delta is not a runtime-only cause.
+
+[Current qualified eval-v18 reference](reports/summaries/2026-10-15-eval-v18-corrected/README.md):
+fresh 96 trials, 64 PASS / 32 FAIL; COI 10, no-COI 14, native Pi 19, native Codex 21
+of 24; every FAIL classified; two setup failures; no clean model-quality or
+runtime-only causal claim. Its booking/expense rows are oracle-qualified: the
+record-observation judge engine that graded them was retired (ADR-0535) and those
+cases are not in the tree. Earlier campaigns (pilot v1–v4, eval v1–v17, boundary
+studies) were restarted on judge/setup/proxy defects and are not retained in git;
+the v18 README records their history. Committed summaries carry the text core only
+(ADR-0532): report, statistics, summary, README; traces, screenshot streams and
+workspace archives stay in the local run directory.
 
 ```sh
-pnpm agent-bench run --mock-model --runs 1 --output /tmp/agent-smoke
-pnpm agent-bench run --config /tmp/agent-endpoint.json --output /tmp/agent-live
-pnpm agent-bench report /tmp/agent-live
-pnpm agent-bench report /tmp/agent-live --compare /tmp/agent-baseline
+pnpm agent-bench plan --suite core-v1 --config tools/agent-bench/configs/pilot-comparison.json
+pnpm agent-bench run --suite core-v1 --config tools/agent-bench/configs/pilot-comparison.json --output /tmp/agent-core
+pnpm agent-bench report /tmp/agent-core
+pnpm agent-bench report /tmp/agent-core --compare /tmp/agent-core-baseline
+pnpm agent-bench run --mock-model --runs 1 --output /tmp/agent-smoke   # legacy five-task smoke
 ```
 
-Comparison requires identical endpoint/limits/task set and complete matching run identities.
-`comparison.json`/`comparison.md` retain both headers and per-task/lane metric deltas.
-Any lost pass exits1 after writing artifacts; ±1/3 is labelled within noise, still a regression.
+`--lane all|rifty|rifty-no-coi|local-reference|native-codex`, `--task <slug>`,
+`--runs N`, `--suite core-v1|boundary-v1`. Without `--suite` the legacy smoke tasks
+run: fix-date-sort, add-search, url-filters, new-issue-form, node-endpoint.
 
-Committed summaries (`reports/summaries/`) store every JSON artifact as gzip
-`<name>.json.gz` (test-enforced); Markdown/screenshots stay plain. Report-written JSON gets
-a normalized gzip header (mtime 0, OS byte 0x03); its deflate stream is identical for the
-same zlib build, not proven across OS. Frozen `source-artifacts.json.gz` bundles keep
-their measured bytes; manifest sizes/SHA256 are test-checked against committed files.
-`report` reads either `<name>.json` or `<name>.json.gz`; a directory holding only
-`report.json.gz` gets gzip report/comparison JSON back, fresh run directories stay plain.
+## Corpora
 
-Config (no-auth example):
+`core-v1` — six frozen cases with unchanged eval-v18 bytes: `ms-negative`, `ms-weeks`
+(calibration), `stringify-boxed`, `queue-clear` (library bug/feature; private
+command judges executed in each origin, ADR-0506) and the two app cases
+`csv-workflow-v5` (React/TS, ADR-0509/0513/0515) and `markdown-notes-v4` (vanilla,
+ADR-0510/0514) whose browser judges were calibrated on real programmes.
+`boundary-v1` — eight engineering/boundary cases on the installed starters with
+command judges and starter build/boot regression.
+
+Loader validates source/prompt/judge hashes, v3 lock, seed paths and card identity
+before execution; the judge fingerprint covers the judge's whole relative-import
+closure (`corpus-judge-closure.test.ts`). Seeds exclude controls/private checks.
+`controls --suite <s> --control baseline|reference|partial|alternative` exercises the
+four origins without model calls (`agentStatus: not-run`); controls validate
+task/judge behaviour, never agent quality.
+
+New app cases follow ADR-0535: the prompt states the module API and the accessible
+names the smoke touches, the judge is a test run in the origin, and ≥3 correct / ≥3
+wrong implementations are committed before freeze —
+`docs/backlog/distribution/agent-bench-contract-first-corpus.md`.
+
+Freeze selection/config/source/working references before models. Choose an unused
+playgroundPort; record its transport change. Do not resume interrupted series,
+regrade history, tune prompts to rescue failures or infer runtime cause from a
+native pass. An all-pass resource bound is not an absolute ceiling.
+
+## Config
 
 ```json
 {
   "endpoint": {
     "id": "gpt-6-luna", "name": "GPT-6 Luna", "provider": "codex-proxy",
-    "api": "openai-completions", "baseUrl": "http://127.0.0.1:10539/v1",
+    "api": "openai-completions", "baseUrl": "http://127.0.0.1:10530/v1",
     "contextWindow": 1000000, "maxTokens": 8192, "reasoning": true,
     "input": ["text"], "thinking": "medium", "compat": { "supportsReasoningEffort": true },
     "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
   },
-  "limits": { "maxToolCalls": 40, "runTimeoutMs": 600000 }
+  "limits": { "maxToolCalls": 100, "runTimeoutMs": 600000 },
+  "codex": { "model": "gpt-6.1-sol", "reasoning": "low" }
 }
 ```
 
 The endpoint uses native pi Model fields; contextWindow/maxTokens are required.
-Optional reasoning/input/thinking/compat default to false/text/off/empty. Temperature
-and samplingParams (including top_p) are optional provider defaults; absent values
-are not sent. All lanes receive the same declared entry. The checked-in
-[local Luna config](configs/gpt-6-luna.json) is used for the goal baseline/re-run.
+Optional reasoning/input/thinking/compat default to false/text/off/empty.
+Temperature/samplingParams are optional provider defaults; absent values are not
+sent. All lanes receive the same declared entry. `endpoint.envKey` names an existing
+key environment variable; the value never goes in config. Runs with keys or model
+headers omit raw Playwright traces/screenshots; textual artifacts are redacted,
+JSON numbers/protocol tags/provenance intact. Default playground port 5289;
+override `playgroundPort`. Optional `noCoiPolicies` passes `{files,shell}` to the
+no-COI host; reports record it and comparison rejects differing values.
+`codex` enables the native Codex lane (no paid default); absent config retains each
+native-codex setup failure as a record.
 
-Optional `endpoint.envKey` names an existing key environment variable; the value
-never goes in config. Runs with keys or model headers omit raw Playwright traces/screenshots (these
-can contain provider errors verbatim); textual artifacts are redacted. JSON
-numbers, protocol tags and generated artifact/provenance fields stay intact;
-known credentials are masked in payload strings and dictionary keys. Metrics
-use live events before masking in every lane. Default
-playground port5289; override `playgroundPort` in config.
-
-`--lane all|rifty|rifty-no-coi|local-reference`, `--task <slug>`, `--runs N`.
-Tasks: fix-date-sort, add-search, url-filters, new-issue-form, node-endpoint.
-Node control is explicitly excluded from rifty-no-coi; full default matrix42 runs.
+## Lanes
 
 - rifty: real launcher/+chat/settings/prompt entry, visible Agent terminal,
-  editor/SCM/preview. Benchmark hooks only seed/task metadata/export. Ordinary
-  workspace archives capture baseline/final bytes, including changes an agent commits.
+  editor/SCM/preview. Benchmark hooks only seed/task metadata/export.
 - rifty-no-coi: SDK/agent installed from first-party tarballs in an external
-  consumer; real installed dependency tarballs supply pinned packages unavailable
-  from a registry. Shipped runtime assets, no source aliases or COI headers.
-  Public project files/commands; host starts resident Vite only after agent work.
-- local-reference: fresh native npm/Node project, pinned Pi CLI0.85.1. Public
-  extension hooks remove auth when omitted, admit tool budgets and abort deadlines.
-  Native tools remain read/bash/edit/write; full actual provider prompts recorded.
-  Project lives outside the checkout even when reports live inside it; native
-  children omit inherited `NODE_PATH`. The retained workspace path is in the report.
+  consumer; real installed dependency tarballs supply pinned packages. Shipped
+  runtime assets, no source aliases or COI headers; host starts resident Vite only
+  after agent work.
+- local-reference: fresh native npm/Node project, pinned Pi CLI 0.85.1, native
+  read/bash/edit/write tools; project lives outside the checkout; native children
+  omit inherited `NODE_PATH`.
+- native-codex: `codex exec --json`, fresh ephemeral session, ignored user
+  config/rules, project-doc byte limit 0, workspace-write/automatic approval.
+  Completion needs exit 0 and exactly one successful `turn.completed`; budgets cancel
+  with SIGINT after an observed excess item; counters the CLI does not emit are
+  unknown, never 0. Codex pass rates are separate references, never Pi deltas.
 
-Smoke model reads the actual package.json and stops. Planted defects remain:
-`agentStatus: done` + `outcome: fail` is the expected baseline, with identical
-common judge evidence across lanes. Smoke success proves execution, not repair.
+Native Pi/Codex share fresh native project/npm/git/server preparation and common
+judges; command judges are injected after the turn and execute in the origin.
+
+## Runs, reports, comparison
+
+`plan` validates without starting services: ordered identities, config, source
+revision/dirty-diff digest, file/prompt/judge hashes and lockfile hash. Output must
+be absent; each run creates a new series and cold workspaces. SIGINT/SIGTERM keeps
+completed records; the unfinished trial stays missing. No resume. `report`
+regenerates Markdown from unchanged JSON and never calls agents; `statistics.json`
+carries per-task CP95 % intervals (iid conditional on fixed settings; provider/cache
+correlation may violate it) and Bonferroni bands. `--compare` requires identical
+endpoint/limits/task set, input/lock/prompt/judge identity and complete series; any
+lost pass exits 1 after writing artifacts.
 
 Each run retains transcript/events/provider requests, usage, elapsed time, tool
-count, terminal tail, actual before/after file trees (including dependency locks), file diff, judge probes, browser trace/screenshot
-when keyless. Header records source revision/dirty state and native/browser/Pi versions. JSON/Markdown distinguish budget-exceeded and context-exceeded from ordinary
-failure, retaining the actual agent status. Input tokens include pi input plus
-cacheRead/cacheWrite; output tokens use pi output. Counts derive from emitted
-retry starts, successful compactions (including summary usage), repeated-call
-notices and errored edit/validation tool results. Counters may overlap; manual
-failure classification stays separate. Legacy reports show absent metrics as —.
-Native compaction and agent-level retries are on; provider retries remain off.
-Assign `failureClass` and `note` manually in report.json (committed summaries:
-report.json.gz), then regenerate Markdown;
-existing assignments survive. Classes: agent, rifty-runtime, rifty-tooling,
-ai-mode-ux, provider, task-bad. Unclassified remains null. Failed setup/judging
-retains its stage/error and previously completed records.
+count, terminal tail, before/after file trees (including locks), diff, judge probes
+and — keyless — browser trace/screenshot in the local run directory. Outcomes:
+pass, fail, budget-exceeded, context-exceeded. Assign `failureClass`/`note` manually
+in a fresh `report.json` before freezing (classes: agent, rifty-runtime,
+rifty-tooling, native-tooling, ai-mode-ux, provider, task-bad; `none` for PASS,
+`unisolated` for an unexplained failure), then regenerate Markdown. Frozen reports
+stay immutable; later classifications use a linked sidecar.
 
-Validation (serialized; heavy browser runs must not overlap):
+Committed summaries store JSON as gzip `<name>.json.gz` (test-enforced, normalized
+header, ≤8 MiB, no `browser.*`/zip/parts); `report` reads plain or gzip.
+
+## Validation (no model)
 
 ```sh
+pnpm exec vitest run tools/agent-bench/src
 pnpm exec playwright test --config tools/agent-bench/playwright.config.ts
 pnpm exec tsx tools/agent-bench/tests/native-judge-controls.ts
+pnpm exec tsx tools/agent-bench/tests/app-structure-controls.ts
+node --import tsx tools/agent-bench/tests/csv-export-toggle-controls.ts
+node --import tsx tools/agent-bench/tests/notes-entry-controls.ts
 ```
 
-The external smoke observer checks28 actual provider requests/14 tool replies,
-shared policy text and common-judge actions inside real Playwright ZIPs. Positive
-controls execute seven ordinary repaired React/Hono programs through the same
-judges, including link entry and native required textarea variants.
+Playwright specs are on-demand (serialized; heavy browser runs must not overlap):
+`contract.spec.ts` external smoke observer, `reference-host.spec.ts` packed-host
+smoke (also in the default packed-consumer CI lane), `corpus-controls.spec.ts`
+four-origin reference matrix on `core-v1`, `trusted-origin.fault.spec.ts`
+judge-substitution proof, `series-interruption.spec.ts`, `editable-control-names`/
+`native-input-roles`/`notes-entry-controls.fault` judge-helper specs. The
+`*-origin-controls.ts` scripts replay captured programmes through all four origins.
+Real Codex acceptance: `pnpm exec tsx tools/agent-bench/tests/codex-reference.ts`
+(paid, on-demand).
 
-[Live42-run diagnostic](reports/summaries/2026-09-13-gpt-5.6-sol/README.md):
-original measurements, classified judge repairs, retained-source rechecks and traces.
-
-
-The no-COI lane imports the packed Vite consumer's `src/host.ts`; packing preserves
-that relative import and resolves SDK/agent/Workbench from installed tarballs.
-Defaults100 calls/600s match the reference host; explicit `limits` remain measured
-inputs. Set `endpoint.textOnlyContent` for string-only message content. Optional
-`noCoiPolicies` passes `{files,shell}` policy values to this same host (only the
-no-COI lane); omitted means unrestricted. Reports record these values and comparison
-rejects differing policy settings. Historical reports keep their original limits.
-
-Scripted packed-host smoke (no model account):
-`pnpm exec playwright test -c tools/agent-bench/playwright.config.ts reference-host.spec.ts`.
-
-The default full packed-consumer CI lane runs this smoke too, including genuine
-Vite iframe preview. SW registration occurs only when the benchmark requests
-preview after the agent turn; the shared commands host remains SW-free.
+Smoke model reads the actual package.json and stops; planted defects remain:
+`agentStatus: done` + `outcome: fail` is the expected baseline. Smoke success
+proves execution, not repair.

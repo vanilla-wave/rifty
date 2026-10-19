@@ -4,6 +4,7 @@
  * the vendored fixture registry (`makeLocalFetcher`), so every assertion is on
  * REAL upstream traffic, not mocks.
  */
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   LOCAL_REGISTRY_BASE_URL,
@@ -463,6 +464,15 @@ describe('TtlPackumentCache', () => {
 });
 
 describe('MemoryTarballCache', () => {
+  it('retains verified legacy SHA-1 bytes and refuses a corrupted write', async () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const integrity = `sha1-${createHash('sha1').update(bytes).digest('base64')}`;
+    const cache = new MemoryTarballCache();
+    await cache.put('legacy', '1.0.0', integrity, bytes);
+    expect(await cache.get('legacy', '1.0.0', integrity)).toEqual(bytes);
+    await cache.put('corrupt', '1.0.0', integrity, new Uint8Array([4]));
+    expect(await cache.get('corrupt', '1.0.0', integrity)).toBeNull();
+  });
   // Real sha512 SRI for the 3-byte payloads below, computed with node:crypto.
   const bytesA = new Uint8Array([1, 2, 3]);
   const bytesB = new Uint8Array([4, 5, 6]);
