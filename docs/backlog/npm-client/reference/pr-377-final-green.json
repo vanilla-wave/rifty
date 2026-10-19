@@ -1,0 +1,70 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Mergeable once PR CI is green at HEAD 2267c5b49 and this verdict is committed as the landing verdict; delta b9c77f5ec..2267c5b49 verified (fixture fresh headers + lock-integrity check, inventory wording, draft delete-on-done); one concern NOTE remains (AGENTS.md:15 user-owned wording).",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #377 @ BASE 97a9d056b, HEAD 2267c5b49 (verify of delta b9c77f5ec..2267c5b49 after Final+GREEN PASS at b9c77f5ec), observed baseline: CI browser-unit red sass-vite-contract.spec.ts:471",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "fresh browser build equals the real-Node oracle for the oracle's input (sass-vite-7.3.6-node-build.json build.files, incl. index-CN9dmDIi.js bytes/sha256)",
+      "source": "frozen-artifact",
+      "trace": "baseline",
+      "status": "pass",
+      "citation": "tests/browser-unit/sass-vite-contract.spec.ts:471; tests/browser-unit/sass-vite-contract.spec.ts:748; tests/browser-unit/sass-registry-fixture.ts:63; tests/browser-unit/sass-registry-fixture.ts:103",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "AGENTS.md:15",
+          "evidence": "apps/playground/src/templates/express-sqlite.ts:404 nodemon: '3.1.14' (also hono-api.ts:267, koa-api.ts:322); npm view nodemon dist-tags.latest -> 3.1.14; no gate/patch behind it (ADR-0327 reproducibility pin).",
+          "summary": "'never a starter pin' reads absolute, but the tree keeps nodemon 3.1.14 starter pins (not a ceiling: = latest, no gate) and the Vite pins as declared platform-gap debt. A later reviewer can block on the literal text. Fix: user-owned wording, e.g. 'never a starter pin that hides it'; else leave as is.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "2267c5b49151b9771fed6bb4b5f1dd6d4f617da7"
+}
