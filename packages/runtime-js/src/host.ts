@@ -115,6 +115,7 @@ export interface RuntimeCommandCall {
 }
 
 export interface ToolchainRuntimeController extends RuntimeController {
+  connectChildProcesses(endpoint: string, port: MessagePort): void;
   projectFs(options: ToolchainProjectOptions): RuntimeFs;
   command(input: ToolchainCommandInput, observer: RuntimeCommandObserver): RuntimeCommandCall;
   readonly toolchain: RuntimeToolchain;
@@ -582,6 +583,12 @@ function createRuntimeController(
   };
   return {
     ...controller,
+    connectChildProcesses(endpoint, port) {
+      if (worker === null) throw new Error('toolchain Worker is unavailable');
+      worker.postMessage({ type: 'no-coi-child-fs-connect', endpoint, workerUrl: opts.workerUrl }, [
+        port,
+      ]);
+    },
     async reset() {
       throw new NotImplementedError(
         'sandbox.toolchain.restart',

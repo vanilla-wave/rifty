@@ -1,4 +1,4 @@
-import { Writable } from '@riftydev/io';
+import { Buffer, Writable } from '@riftydev/io';
 import type { KernelProcessSpec } from '@riftydev/kernel';
 import { NotImplementedError } from '@riftydev/vfs';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -94,7 +94,10 @@ describe('installNodeProcessShim stdin', () => {
     const chunk = onceData(process);
     stdin.port2.postMessage(new Uint8Array([0x68, 0x69]));
 
-    await expect(chunk).resolves.toEqual(new Uint8Array([0x68, 0x69]));
+    const received = await chunk;
+    // Real Node v24.16.0 stdin probe: {buffer:true,bytes:[104,105]} (ADR-0539).
+    expect(Buffer.isBuffer(received)).toBe(true);
+    expect(received).toEqual(Buffer.from([0x68, 0x69]));
   });
 
   it('makes every unsupported readable, pull, and raw surface a precise loud gap', () => {
@@ -147,7 +150,7 @@ describe('installNodeProcessShim stdin', () => {
 
     stdin.port2.postMessage(new Uint8Array([0x78]));
 
-    await expect(onceData(process)).resolves.toEqual(new Uint8Array([0x78]));
+    await expect(onceData(process)).resolves.toEqual(Buffer.from([0x78]));
   });
 
   it('decodes stdin bytes when utf8 encoding is set', async () => {
@@ -263,6 +266,6 @@ describe('installNodeProcessShim stdin', () => {
     stdin.port2.postMessage({ kind: 'stdin:eof' });
 
     await tick();
-    expect(events).toEqual([new Uint8Array([0x78]), 'end']);
+    expect(events).toEqual([Buffer.from([0x78]), 'end']);
   });
 });

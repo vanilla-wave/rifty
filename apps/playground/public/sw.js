@@ -915,6 +915,67 @@ function previewPrefixFromServiceWorkerUrl(url) {
   return normalizePreviewPrefix(decoded);
 }
 
+// ../../packages/service-worker/src/sync-fs-bridge.ts
+var OPEN = "rifty-sync-fs-open/v1";
+var REQUEST = "rifty-sync-fs-request/v1";
+var PATH = "__rifty_sync_fs/";
+var TIMEOUT_MS = 3e4;
+function installSyncFsInterceptor(scope) {
+  const prefix = new URL(PATH, scope.registration.scope).pathname;
+  scope.addEventListener("message", (event) => {
+    if (event.data?.type !== OPEN || typeof event.data.token !== "string") return;
+    const source = event.source;
+    const reply = event.ports[0];
+    if (reply === void 0 || source === null || !("id" in source)) return;
+    reply.postMessage({
+      endpoint: new URL(`${PATH}${source.id}/${event.data.token}`, scope.registration.scope).href
+    });
+    reply.close();
+  });
+  scope.addEventListener("fetch", (event) => {
+    const url = new URL(event.request.url);
+    if (!url.pathname.startsWith(prefix)) return;
+    event.respondWith(
+      (async () => {
+        const [clientId, token, extra] = url.pathname.slice(prefix.length).split("/");
+        if (!clientId || !token || extra !== void 0 || event.request.method !== "POST")
+          return new Response("invalid child filesystem route", { status: 400 });
+        const client = await scope.clients.get(clientId);
+        if (!client || client.type !== "window")
+          return new Response("child filesystem owner is unavailable", { status: 503 });
+        const bytes = new Uint8Array(await event.request.arrayBuffer());
+        const channel = new MessageChannel();
+        return await new Promise((resolve) => {
+          const settle = (response) => {
+            clearTimeout(timer);
+            channel.port1.close();
+            resolve(response);
+          };
+          const timer = setTimeout(
+            () => settle(
+              new Response("child filesystem owner did not reply; mutation outcome unknown", {
+                status: 504
+              })
+            ),
+            TIMEOUT_MS
+          );
+          channel.port1.onmessage = (reply) => {
+            settle(
+              reply.data instanceof Uint8Array ? new Response(reply.data, {
+                headers: { "Content-Type": "application/octet-stream" }
+              }) : new Response(String(reply.data?.error ?? "invalid owner reply"), { status: 502 })
+            );
+          };
+          client.postMessage(
+            { type: REQUEST, token, bytes, caller: url.searchParams.get("caller") ?? "" },
+            [channel.port2]
+          );
+        });
+      })()
+    );
+  });
+}
+
 // ../../packages/service-worker/src/sw.ts
 var previewPrefix = previewPrefixFromServiceWorkerUrl(self.location.href);
 self.addEventListener("install", (event) => {
@@ -925,3 +986,4 @@ self.addEventListener("activate", (event) => {
 });
 self.addEventListener("message", createControlPingHandler(void 0, previewPrefix));
 installPreviewInterceptor(self, previewPrefix);
+installSyncFsInterceptor(self);

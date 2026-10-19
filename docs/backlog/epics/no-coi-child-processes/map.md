@@ -7,6 +7,8 @@
 
 ## Open questions
 
+- I3: shared generated client still owns COI; user chooses no-COI-only retirement versus including the entire upstream-twin goal — owner: user — current main catalog-source.ts uses the global generated runtime in both tiers; raw no-COI carrier now GREEN.
+
 - Acceptance and runtime gaps exposed by upstream bytes — owner: agent — run the shared Node/browser carrier after each repair.
 
 ## Out of scope

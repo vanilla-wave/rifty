@@ -26,6 +26,7 @@ const fs = require('node:fs');
 const dependency = require('helper-dependency');
 globalThis.childOnly = true;
 fs.childOnly = true;
+process.stderr.write('child-stderr\\n');
 process.stdout.write('ready\\n');
 let input = '';
 process.stdin.on('data', chunk => { input += chunk; });
@@ -39,7 +40,6 @@ process.stdin.on('end', () => {
   'esbuild.cjs': `
 require('esbuild-wasm').transform('let x: number = 1', {loader:'ts'}).then(result => {
   process.stdout.write(result.code);
-  require('esbuild-wasm').stop();
 });
 `,
   'errors.cjs': `
@@ -64,5 +64,53 @@ child.on('close', (code, signal) => console.log('closed', code, signal));
   'node_modules/helper/forever.cjs': `#!/usr/bin/env node
 setInterval(() => {}, 1000);
 console.log('ready-to-kill');
+`,
+  'nested.cjs': `
+const { spawn } = require('node:child_process');
+const child = spawn(process.execPath, ['node_modules/helper/nested.cjs']);
+child.stdout.on('data', chunk => process.stdout.write(chunk));
+child.stderr.on('data', chunk => process.stderr.write(chunk));
+child.on('close', code => console.log('parent-close', code));
+`,
+  'node_modules/helper/nested.cjs': `#!/usr/bin/env node
+const { spawn } = require('node:child_process');
+const child = spawn(process.execPath, ['node_modules/helper/leaf.cjs']);
+let output = '';
+child.stdout.on('data', chunk => { output += chunk; });
+child.stderr.on('data', chunk => process.stderr.write(chunk));
+child.on('close', code => console.log(JSON.stringify({code, distinct:process.pid !== child.pid, parent:Number(output) === process.pid})));
+`,
+  'node_modules/helper/leaf.cjs': 'console.log(process.ppid);',
+  'unref-pipes.cjs': `
+const {spawn} = require('node:child_process');
+const child = spawn(process.execPath, ['node_modules/helper/delayed.cjs']);
+child.stdout.on('data',chunk=>process.stdout.write(chunk));
+child.stderr.on('data',chunk=>process.stderr.write(chunk));
+child.unref();
+`,
+  'node_modules/helper/delayed.cjs': "setTimeout(()=>console.log('pipe-keeps-parent'),60);",
+  'fork.cjs': `
+const { fork } = require('node:child_process');
+const child = fork('node_modules/helper/fork.cjs', [], {silent:true});
+child.stdout.on('data', chunk => process.stdout.write(chunk));
+child.stderr.on('data', chunk => process.stderr.write(chunk));
+child.on('message', message => console.log(JSON.stringify(message)));
+child.on('close', code => console.log('fork-close', code, child.connected));
+child.send({ value:42 });
+`,
+  'node_modules/helper/fork.cjs': `
+process.on('message', message => { process.send({value:message.value}); process.disconnect(); });
+`,
+  'signal.cjs': `
+const { spawn } = require('node:child_process');
+const child = spawn(process.execPath, ['node_modules/helper/signal.cjs']);
+child.stdout.on('data', chunk => { process.stdout.write(chunk); if(String(chunk).includes('ready')) child.kill('SIGUSR2'); });
+child.stderr.on('data', chunk => process.stderr.write(chunk));
+child.on('close', code => console.log('signal-close', code));
+`,
+  'node_modules/helper/signal.cjs': `
+const timer = setInterval(() => {}, 1000);
+process.on('SIGUSR2', () => { clearInterval(timer); console.log('handled'); });
+console.log('ready');
 `,
 };

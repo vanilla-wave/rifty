@@ -75,6 +75,15 @@ Both compositions require cryptographic UUID generation. COI also requires
 isolation, SAB/Atomics, a private Window Web Lock, nested module
 Workers, JS eval, QuickJS WASM and SW registration. Non-COI has no COI/SAB gate,
 uses rewrite by default, and reports SW/preview loss as optional limitations.
+No-COI Node children (`child_process.spawn('node', [script])` / `fork`) require
+a controlling rifty SW (`serviceWorkerUrl`, default `/sw.js`). They use separate
+Workers, their own module loaders/globals, and the owner's live VFS; ephemeral
+memory storage works too. `skipServiceWorker: true` preserves files, eval and
+ordinary commands, but child creation throws
+`NotImplementedError('child_process.spawn.service-worker')`. The SDK capability
+report names that prerequisite. Child FS calls wait while the owner runs
+synchronous guest code. Synchronous child-process APIs and `worker_threads`
+retain their existing limits (ADR-0539).
 Set `wasm: true` when non-COI programs need `node:sqlite`, WASI binaries or
 `vmEngine: 'quickjs'`. For QuickJS, also match the selected engine with
 `nonCoiVmEngine: 'quickjs'`; that option already makes WASM required even without

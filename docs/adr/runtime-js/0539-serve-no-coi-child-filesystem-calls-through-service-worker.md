@@ -27,9 +27,14 @@ without COI: `docs/backlog/runtime-js/reference/no-coi-child-processes-spike.mjs
 4. Child async stdio and terminal frames share one private ordered output/control
    port; stdin has its own port. ProcessManager retains PID/exit/kill ownership.
    No SAB output counter is carried into this transport.
+   Physical child routes reuse kernel federation for nested PID/control identity;
+   the live owner binds each route token to its existing caller context. Process
+   and readable-pipe references are independent, as Node's `unref` requires.
 5. The Workbench no-COI Worker entry selects owner/child bootstrap. SDK retains
    bridge ownership through restart/disposal. File operations use the owner's
    current project policy and ordinary persistence/flush path.
+   Invocation teardown applies the kernel's existing descendant-retirement policy,
+   so an idle unref'd service cannot mutate the next reused invocation.
 
 ## Consequences
 

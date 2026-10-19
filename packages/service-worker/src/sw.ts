@@ -9,6 +9,7 @@
 import { createControlPingHandler } from './control-ping.ts';
 import { installPreviewInterceptor } from './preview-bridge.ts';
 import { previewPrefixFromServiceWorkerUrl } from './preview-configuration.ts';
+import { installSyncFsInterceptor } from './sync-fs-bridge.ts';
 
 declare const self: ServiceWorkerGlobalScope;
 const previewPrefix = previewPrefixFromServiceWorkerUrl(self.location.href);
@@ -24,3 +25,4 @@ self.addEventListener('activate', (event: ExtendableEvent) => {
 self.addEventListener('message', createControlPingHandler(undefined, previewPrefix));
 
 installPreviewInterceptor(self, previewPrefix);
+installSyncFsInterceptor(self);

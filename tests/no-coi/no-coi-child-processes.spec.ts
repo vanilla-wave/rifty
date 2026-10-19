@@ -21,8 +21,21 @@ const upstreamFiles = [
   'esbuild.wasm',
 ];
 
-for (const entry of ['parent.cjs', 'esbuild.cjs', 'errors.cjs', 'kill.cjs']) {
-  test(`no-COI child processes match Node: ${entry}`, async ({ page }) => {
+const cases = [
+  ...[
+    'parent.cjs',
+    'esbuild.cjs',
+    'errors.cjs',
+    'kill.cjs',
+    'nested.cjs',
+    'fork.cjs',
+    'signal.cjs',
+    'unref-pipes.cjs',
+  ].map((entry) => ({ entry, persistence: 'preferred' as const })),
+  ...['parent.cjs', 'esbuild.cjs'].map((entry) => ({ entry, persistence: 'ephemeral' as const })),
+];
+for (const { entry, persistence } of cases) {
+  test(`no-COI child processes match Node: ${entry} (${persistence})`, async ({ page }) => {
     test.setTimeout(120_000);
     const directory = await mkdtemp(join(tmpdir(), 'rifty-no-coi-child-'));
     try {
@@ -47,22 +60,23 @@ for (const entry of ['parent.cjs', 'esbuild.cjs', 'errors.cjs', 'kill.cjs']) {
         timeout: 20_000,
         env: { NO_COLOR: '1', PATH: dirname(process.execPath) },
       });
-      expect(oracle.stderr).toBe('');
       await test.info().attach('node-oracle', {
         body: JSON.stringify({ version: process.version, entry, ...oracle }),
         contentType: 'application/json',
       });
       await page.goto('/no-coi-harness.html');
       const observed = await page.evaluate(
-        async ({ root, files, entry }) => {
+        async ({ root, files, entry, persistence }) => {
           const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
           const sandbox = await createSandbox({
             requireCrossOriginIsolation: false,
             serviceWorkerUrl: '/sw.js',
+            storage: { persistence },
             toolchain: {
               workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
             },
           });
+          Reflect.set(globalThis, 'noCoiChildSandbox', sandbox);
           try {
             for (const [path, base64] of Object.entries(files)) {
               await sandbox.fs.writeFile(
@@ -76,22 +90,35 @@ for (const entry of ['parent.cjs', 'esbuild.cjs', 'errors.cjs', 'kill.cjs']) {
                 setTimeout(() => reject(new Error('child acceptance timed out')), 30_000),
               ),
             ]);
-            return { coi: crossOriginIsolated, sab: typeof SharedArrayBuffer, result };
-          } finally {
+            return {
+              coi: crossOriginIsolated,
+              sab: typeof SharedArrayBuffer,
+              backend: sandbox.vfs.backend,
+              result,
+            };
+          } catch (error) {
             sandbox.dispose();
+            throw error;
           }
         },
-        { root, files, entry },
+        { root, files, entry, persistence },
       );
       expect(observed.coi).toBe(false);
       expect(observed.sab).toBe('undefined');
-      test.fail(true, 'no-coi-child-processes acceptance carrier: baseline RED');
+      if (persistence === 'ephemeral') expect(observed.backend).toBe('memory');
       expect(observed.result, JSON.stringify(observed.result)).toMatchObject({
         status: 'exited',
         exitCode: 0,
         stdout: oracle.stdout,
+        stderr: oracle.stderr,
       });
+      await expect
+        .poll(() => page.workers().length, {
+          message: 'only the SDK owner remains after process completion',
+        })
+        .toBe(1);
     } finally {
+      await page.evaluate(() => Reflect.get(globalThis, 'noCoiChildSandbox')?.dispose());
       await rm(directory, { recursive: true, force: true });
     }
   });
@@ -129,10 +156,56 @@ catch(error) { console.log(error.name, error.feature); }
   }, root);
   expect(observed.ordinary).toMatchObject({ status: 'exited', exitCode: 0, stdout: 'usable\n' });
   expect(observed.file).toBe("console.log('child must not run');");
-  test.fail(true, 'no-coi-child-processes acceptance carrier: baseline RED');
   expect(observed.child).toMatchObject({
     status: 'exited',
     exitCode: 0,
     stdout: 'NotImplementedError child_process.spawn.service-worker\n',
   });
+});
+
+test('native child startup error settles and leaves the SDK owner usable', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('/no-coi-harness.html');
+  const observed = await page.evaluate(async (root) => {
+    const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
+    const sandbox = await createSandbox({
+      requireCrossOriginIsolation: false,
+      serviceWorkerUrl: '/sw.js',
+      toolchain: {
+        workerUrl: `/@fs${root}/tests/no-coi/fixtures/no-coi-child-startup-fault-worker.ts`,
+      },
+    });
+    Reflect.set(globalThis, 'noCoiChildSandbox', sandbox);
+    await sandbox.fs.writeFile(
+      '/startup/parent.cjs',
+      `
+const child = require('node:child_process').spawn('node', ['child.cjs']);
+child.stderr.on('data', chunk=>process.stderr.write(chunk));
+child.on('close', code=>console.log('child-close',code));
+`,
+    );
+    const project = sandbox.project({ root: '/startup' });
+    return {
+      failed: await project.run('node parent.cjs').completion,
+      next: await project.run('echo still-usable').completion,
+    };
+  }, root);
+  try {
+    expect(observed.failed).toMatchObject({
+      status: 'exited',
+      exitCode: 0,
+      stdout: 'child-close 1\n',
+    });
+    expect(observed.failed.stderr).toContain('child-startup-failure');
+    expect(observed.next).toMatchObject({
+      status: 'exited',
+      exitCode: 0,
+      stdout: 'still-usable\n',
+    });
+    await expect.poll(() => page.workers().length).toBe(1);
+    expect(errors).toEqual([]);
+  } finally {
+    await page.evaluate(() => Reflect.get(globalThis, 'noCoiChildSandbox')?.dispose());
+  }
 });

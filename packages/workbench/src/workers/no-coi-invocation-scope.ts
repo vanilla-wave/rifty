@@ -1,4 +1,5 @@
 import { captureEventEmitterListenerScope } from '@riftydev/io';
+import { globalProcessManager } from '@riftydev/kernel';
 import { riftyProcess } from '@riftydev/runtime-js/builtins/process';
 import { captureTimerBoundary, clearTimersSince } from '@riftydev/runtime-js/internal';
 
@@ -15,6 +16,7 @@ export interface NoCoiInvocationScope {
 
 export function openNoCoiInvocationScope(): NoCoiInvocationScope {
   const timerBoundary = captureTimerBoundary();
+  const priorChildren = new Set(globalProcessManager.snapshot().map((process) => process.pid));
   const listenerScopes = [
     riftyProcess,
     riftyProcess.stdin,
@@ -25,6 +27,10 @@ export function openNoCoiInvocationScope(): NoCoiInvocationScope {
     clearTimers: () => clearTimersSince(timerBoundary),
     end() {
       for (const retire of listenerScopes) retire();
+      for (const child of globalProcessManager.snapshot()) {
+        if (child.ppid === riftyProcess.pid && !priorChildren.has(child.pid))
+          globalProcessManager.kill(child.pid);
+      }
       clearTimersSince(timerBoundary);
     },
   };
