@@ -28,10 +28,19 @@ async function trace(args: unknown, leaves: Record<string, Leaf | unknown[]>) {
     return Array.isArray(leaf) ? leaf[Math.min(n, leaf.length - 1)] : (leaf as Leaf)(call, n);
   };
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
-  const body = new Function('args', 'agent', 'phase', 'log', `return (async () => {${SCRIPT}\n})()`) as (
-    ...a: unknown[]
-  ) => Promise<Record<string, unknown>>;
-  const result = await body(args, agent, () => undefined, () => undefined);
+  const body = new Function(
+    'args',
+    'agent',
+    'phase',
+    'log',
+    `return (async () => {${SCRIPT}\n})()`,
+  ) as (...a: unknown[]) => Promise<Record<string, unknown>>;
+  const result = await body(
+    args,
+    agent,
+    () => undefined,
+    () => undefined,
+  );
   return { result, calls, labels: calls.map((c) => c.label) };
 }
 
@@ -50,7 +59,12 @@ const st = (o: Record<string, unknown> = {}) => ({
 const done = (o: Record<string, unknown> = {}) => ({ outcome: 'done', report: 'ok', ...o });
 const left = { outcome: 'left-path', report: 'resisted' };
 const pass = (verdictPath = 'v-pass') => ({ pass: true, verdictPath, exitCode: 0, blockers: [] });
-const fail = (verdictPath: string, ...blockers: Blocker[]) => ({ pass: false, verdictPath, exitCode: 1, blockers });
+const fail = (verdictPath: string, ...blockers: Blocker[]) => ({
+  pass: false,
+  verdictPath,
+  exitCode: 1,
+  blockers,
+});
 const B1 = { authority: 'I1', summary: 'carrier missing' };
 const B2 = { authority: 'ADR-0001', summary: 'wrong owner' };
 const GOAL = { goal: 'g' };
@@ -77,7 +91,10 @@ describe('goal-run workflow sequencing', () => {
     expect(notReady.labels).toEqual(['state:initial']);
     expect(notReady.calls[0].phase).toBe('Preflight');
     const dirty = await trace(GOAL, { state: [st({ treeClean: false })] });
-    expect(dirty.result).toMatchObject({ stop: 'precondition', report: expect.stringContaining('dirty tree') });
+    expect(dirty.result).toMatchObject({
+      stop: 'precondition',
+      report: expect.stringContaining('dirty tree'),
+    });
   });
 
   it('seeds the carrier (RECHART 2), runs one unit through every stage, then CLOSE', async () => {
@@ -128,7 +145,12 @@ describe('goal-run workflow sequencing', () => {
       RECHART: [done()],
       ...closing,
     });
-    expect(labels.slice(0, 4)).toEqual(['state:initial', 'PICKUP:u1', 'IMPLEMENT:u1', 'review:Final+GREEN:u1']);
+    expect(labels.slice(0, 4)).toEqual([
+      'state:initial',
+      'PICKUP:u1',
+      'IMPLEMENT:u1',
+      'review:Final+GREEN:u1',
+    ]);
     expect(labels).not.toContain('RECHART');
   });
 
@@ -146,7 +168,12 @@ describe('goal-run workflow sequencing', () => {
       PICKUP: [{ outcome: 'declined', report: 'draft deleted' }],
       ...closing,
     });
-    expect(declined.labels.slice(0, 4)).toEqual(['state:initial', 'PICKUP:u1', 'state:1', 'review:Final+GREEN:goal']);
+    expect(declined.labels.slice(0, 4)).toEqual([
+      'state:initial',
+      'PICKUP:u1',
+      'state:1',
+      'review:Final+GREEN:goal',
+    ]);
     expect(declined.result.closed).toBe(true);
   });
 
@@ -159,7 +186,13 @@ describe('goal-run workflow sequencing', () => {
       RECHART: [done()],
       ...closing,
     });
-    expect(labels.slice(0, 5)).toEqual(['state:initial', 'PICKUP:u1', 'review:Contract+RED:u1', 'Contract+RED:u1', 'RECHART:u1']);
+    expect(labels.slice(0, 5)).toEqual([
+      'state:initial',
+      'PICKUP:u1',
+      'review:Contract+RED:u1',
+      'Contract+RED:u1',
+      'RECHART:u1',
+    ]);
     expect(labels).not.toContain('IMPLEMENT:u1');
     expect(calls[4].prompt).toContain('left the path (STOP-4): resisted');
   });
@@ -180,7 +213,10 @@ describe('goal-run workflow sequencing', () => {
     expect(reception[1].prompt).toContain('[I1] carrier missing');
     expect(reception[1].prompt).toContain('other blockers of this pass');
     expect(reception[1].prompt).toContain('[ADR-0001] wrong owner');
-    expect(calls.find((c) => c.label === 'review:Final+GREEN:u1' && c.prompt.includes('Verify pass'))?.prompt).toContain('prior verdict is v1');
+    expect(
+      calls.find((c) => c.label === 'review:Final+GREEN:u1' && c.prompt.includes('Verify pass'))
+        ?.prompt,
+    ).toContain('prior verdict is v1');
     expect(labels).toContain('RECHART:u1');
   });
 
@@ -191,7 +227,10 @@ describe('goal-run workflow sequencing', () => {
       {
         state: [st({ unitCertified: true }), st({ mapEmpty: true })],
         IMPLEMENT: [done()],
-        'review:Final+GREEN': (c) => (c.label.endsWith(':goal') ? pass() : fail(`v${++n}`, { authority: 'I1', summary: `defect ${n}` })),
+        'review:Final+GREEN': (c) =>
+          c.label.endsWith(':goal')
+            ? pass()
+            : fail(`v${++n}`, { authority: 'I1', summary: `defect ${n}` }),
         'Final+GREEN': [done(), done(), done()],
         RECHART: [done()],
         CLOSE: [done()],
@@ -215,11 +254,18 @@ describe('goal-run workflow sequencing', () => {
       RECHART: [done()],
       CLOSE: [done()],
     });
-    expect(labels.slice(2, 6)).toEqual(['review:Final+GREEN:u1', 'Final+GREEN:u1', 'critic:Final+GREEN:u1', 'Final+GREEN:u1']);
+    expect(labels.slice(2, 6)).toEqual([
+      'review:Final+GREEN:u1',
+      'Final+GREEN:u1',
+      'critic:Final+GREEN:u1',
+      'Final+GREEN:u1',
+    ]);
     const receptions = calls.filter((c) => c.label === 'Final+GREEN:u1');
     expect(receptions[1].prompt).toContain('FALSE — carrier missing');
     expect(receptions[2].prompt).not.toContain('STOP-3');
-    expect(calls.find((c) => c.label === 'critic:Final+GREEN:u1')?.prompt).toContain('v1: carrier missing');
+    expect(calls.find((c) => c.label === 'critic:Final+GREEN:u1')?.prompt).toContain(
+      'v1: carrier missing',
+    );
   });
 
   it('retries a malformed verdict once, then reports a harness failure', async () => {
@@ -239,7 +285,10 @@ describe('goal-run workflow sequencing', () => {
       IMPLEMENT: [done()],
       'review:Final+GREEN': [malformed, malformed],
     });
-    expect(twice.result).toMatchObject({ stop: 'harness', report: expect.stringContaining('malformed verdict twice') });
+    expect(twice.result).toMatchObject({
+      stop: 'harness',
+      report: expect.stringContaining('malformed verdict twice'),
+    });
     expect(twice.labels).not.toContain('Final+GREEN:u1');
   });
 
@@ -252,18 +301,40 @@ describe('goal-run workflow sequencing', () => {
       'review:Final+GREEN': [pass()],
       'Final+GREEN': [null],
     });
-    expect(record.result).toMatchObject({ stop: 'harness', report: expect.stringContaining('record leaf') });
-    const close = await trace(GOAL, { state: [st({ mapEmpty: true })], 'review:Final+GREEN': [pass()], 'Final+GREEN': [done()], CLOSE: [null] });
-    expect(close.result).toMatchObject({ stop: 'harness', report: expect.stringContaining('CLOSE') });
+    expect(record.result).toMatchObject({
+      stop: 'harness',
+      report: expect.stringContaining('record leaf'),
+    });
+    const close = await trace(GOAL, {
+      state: [st({ mapEmpty: true })],
+      'review:Final+GREEN': [pass()],
+      'Final+GREEN': [done()],
+      CLOSE: [null],
+    });
+    expect(close.result).toMatchObject({
+      stop: 'harness',
+      report: expect.stringContaining('CLOSE'),
+    });
     const stateNull = await trace(GOAL, { state: [null] });
     expect(stateNull.result).toMatchObject({ stop: 'harness' });
   });
 
   it('reports a fully blocked map and guards a loop that never closes', async () => {
-    const blocked = await trace(GOAL, { state: [st({ unit: null, notes: 'row 2 blocked by owner: user' })] });
-    expect(blocked.result).toMatchObject({ stop: 'report', report: expect.stringContaining('owner: user') });
-    const forever = await trace(GOAL, { state: [st()], PICKUP: [{ outcome: 'declined', report: 'again' }] });
-    expect(forever.result).toMatchObject({ stop: 'harness', report: expect.stringContaining('runaway guard') });
+    const blocked = await trace(GOAL, {
+      state: [st({ unit: null, notes: 'row 2 blocked by owner: user' })],
+    });
+    expect(blocked.result).toMatchObject({
+      stop: 'report',
+      report: expect.stringContaining('owner: user'),
+    });
+    const forever = await trace(GOAL, {
+      state: [st()],
+      PICKUP: [{ outcome: 'declined', report: 'again' }],
+    });
+    expect(forever.result).toMatchObject({
+      stop: 'harness',
+      report: expect.stringContaining('runaway guard'),
+    });
     expect(forever.labels.filter((l) => l === 'PICKUP:u1')).toHaveLength(24);
   });
 });
