@@ -44,7 +44,7 @@ const ITEM_REQUIRED_KEYS = ['area', 'status', 'title', 'created', 'why'];
 const EPIC_REQUIRED_KEYS = ['kind', 'status', 'title', 'created', 'value'];
 // Parity cases only where an oracle exists (docs/backlog/README.md); the reviewer grades absence (REV-4).
 const READY_ITEM_SECTIONS = ['Acceptance', 'Out of scope', 'Decisions'];
-// Trace gate on ready items (docs/process/rules/readiness.md RDY-3); ratchet by
+// Trace gate on ready items (docs/process/README.md RDY-3); ratchet by
 // creation date — older ready items get traces at their next re-cut. No size
 // gate: one intent is a reviewer concern (RDY-4), not a count.
 const TRACE_SINCE = '2026-09-03';

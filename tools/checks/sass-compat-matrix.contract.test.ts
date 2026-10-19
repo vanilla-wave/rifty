@@ -98,7 +98,7 @@ describe('sass-embedded public compatibility contract', () => {
     expect(value.state).toBe('final-green');
     const matrix = await readFile(matrixUrl, 'utf8').catch(() => '');
     for (const { surface } of value.surfaces) {
-      expect(matrix).toContain(`| ${surface} | ✅ |`);
+      expect(matrix).toContain(`| ${surface} | ⚠️ |`);
     }
     expect(matrix).toContain(`| ${value.divergence.surface} | ⚠️ |`);
     for (const entry of value.unsupported) {

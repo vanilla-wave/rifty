@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Read a rifty-review verdict, validate coverage + authority, print slice + goal state.
-// Rules: docs/process/rules/review.md (REV-2 authority, REV-3 severity, REV-4 coverage);
-// exit codes: docs/process/artifacts/verdict.md.
+// Rules: docs/process/README.md (REV-2 authority, REV-3 severity, REV-4 coverage);
+// exit codes: docs/process/README.md §Artifacts.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

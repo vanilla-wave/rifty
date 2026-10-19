@@ -3,7 +3,7 @@
 Hand-maintained public claim surface for real npm-installed tooling executed inside the rifty
 browser shell. Rows cite the end-to-end package fixture, not host-side shortcuts.
 
-Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not implemented (throws
+Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-version ceiling · ❌ not implemented (throws
 `NotImplementedError` or a documented unsupported command error).
 
 | Feature | Status | Notes |

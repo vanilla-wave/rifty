@@ -1,8 +1,8 @@
 # Epic template — directory format (goal/map/ledger)
 
 An epic is a directory `docs/backlog/epics/<slug>/` with three files split by
-owner × mutability (`docs/process/artifacts/`). Procedure:
-`docs/process/stages/fit.md`. No new single-file epics.
+owner × mutability (`docs/process/README.md §Artifacts`). Procedure:
+`docs/process/README.md`. No new single-file epics.
 
 ## `goal.md` — user-owned destination
 
@@ -61,9 +61,9 @@ Index, not store: one line + link per entry; content lives on items/ledger.
 
 <!-- Fog: in-scope questions not yet phrasable as a contract. A child whose
      contract depends on an open question is not seeded. Don't pre-slice fog.
-     A user-owned question is ASKED at FIT (stages/fit.md 3); unanswered →
+     A user-owned question is ASKED at FIT (README §FIT 3); unanswered →
      the goal stays draft, the question recorded here as owner: user. A ready
-     map is agent-owned; owner: user otherwise only mid-run (STOP-4). Split a
+     map is agent-owned; owner: user otherwise only mid-run (STOP-1). Split a
      mixed question by owner. -->
 
 - <question> — owner: agent — <what settles it: probe/spike/design>
@@ -77,8 +77,8 @@ Index, not store: one line + link per entry; content lives on items/ledger.
 
 One-line decisions (what + where the full answer lives), reception verdicts,
 observations/diagnoses (or links to `reference/`), the landed slice's PASS
-(`docs/process/artifacts/ledger.md`). Lines are never edited or removed; the
-closure (`docs/process/stages/close.md`) resolves obligations and exports useful
+(`docs/process/README.md`). Lines are never edited or removed; the
+closure (`docs/process/README.md`) resolves obligations and exports useful
 knowledge; routine observations remain git history.
 
 ```md

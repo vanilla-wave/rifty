@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Hero names exact Vite 7.3.6 and the explorer's Vite node reads ⚠ (partial): Vite runs only at its exact pinned versions, an exact-version ceiling (`AGENTS.md` §Fidelity).
 - Redesigned the page as the "Poster / Dark" handoff (`docs/landing/handoff/`): 2px rule grid,
   Archivo Black display type (self-hosted latin subset, OFL), one lime accent, zero radii, and
   three decorative Rifters nods (hero sonar, right-edge depth gauge, accent glow) — all

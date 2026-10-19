@@ -38,3 +38,12 @@ diff touches no sandbox-support or SW code), same `sw-denied` probe, same
 `page.evaluate: Target page, context or browser has been closed` at :79, as the
 last agent-unrelated spec after 274 passes in a 23.4 min single-browser run.
 Still not reproduced locally. Two of the last ~70 CI runs.
+
+Rate jump 2026-10-19 (PR #377; no diff touches sandbox-support, SW or Workbench
+support code): same `page.evaluate: Target page, context or browser has been
+closed` at :79, now on both `sw-denied` users — :248 and :372 (`[fault:
+poisoned-cache]`, its second probe is `sw-denied`). CI runs: 39172935764
+(`97a9d056b`, main, :248), 39176716879 (`b9c77f5ec`, :372), 39179001991
+(`d785f4faf`, :248 + :372); 39179010506 on the same `d785f4faf` passed both.
+3 of the last 6 browser-unit runs. Local Chromium 148.0.7778.96, whole file
+`--repeat-each=8`: 280/280. Still no browser-side cause captured.

@@ -224,3 +224,74 @@ without refine) — fit.md:7-9; R4 (agent-only never interviews) — refine
 Preconditions:12 + `rifty-to-backlog`:62-63; R5 (items never FIT) — §4:56
 "An epic"; R7 (just-file) — §4:58-60. All re-rehearsed clean. Residual silence:
 R8 branch choice (agent path, `PR-3`).
+
+## Canon delta Δ1–Δ8 — regression suite, 2026-10-13
+
+Paper rehearsal of the proposed delta (`/tmp/shakedown/proposal.md`, kept out of
+the repo) on the working tree (docs/process = origin/main, unchanged since
+09-24). Seeds S1–S10 are the October runs: #353 Opus (13 children, 108 review
+sessions, 15 598 record lines), glm-dir Sol 6.1 (11 units in one evening, 13 fix
+waves / 38 h, u5 34 reviews, vitest never run), #368 Sol 6.1 (acceptance-first,
+I1–I6 in 3 h, then a fake I7 gate + 12 ADRs), #351 Astra (54 h on four
+questions, re-asked after compaction), #357/#359/#362/#364 Astra, #366/#367.
+Measured: 160/219 reviewer blockers were real behavior defects; 118/219 demanded
+a sweep / more RED beyond the cited row; `pass-binding.mjs:91` returns `ok` on
+the first bound artifact (no per-unit cascade exists in code). Each cell was
+walked BEFORE (today's text) and AFTER (delta applied); opus rehearsers, fable
+scorer, both fresh contexts. Axes kept: size · spread · certainty · origin ·
+distance; added: presence (user in the room ↔ absent for hours/days).
+
+| # | Cell / seed | Persona / want | Before | After | What the delta did |
+|---|---|---|---|---|---|
+| A | tiny fix / #366 | maintainer, main red, green in 20 min | fail (3) | fail (3) | docs read 12→6; Δ8 "CI green before review" + Δ7 second run ≈ +35 min; binding still skips drafts (pass-binding.mjs:41) |
+| B | docs-only / #367 | maintainer, 4 lines | fail (2) | fail (4) | Δ2 b3 makes a 1-line doc commit a JSON + CI; reviewer per line stays (Δ1 b1) |
+| E | ready item adding a public SDK option / #359 child | agent | fail (3) | fail (3) | records 336 lines → PR; Δ3 DEC-2 line vs AGENTS.md:42 unedited; `adr:new` throws without the Index |
+| I | post-CLOSE repair on an ADR seam / c9fbd0668 + ADR-0504 | agent, merged today | fail (1) | fail (5) | Δ1 STOP-3 turns the owner's real I9 defect into a stall; Δ2 one record vs the CLOSE verdict unstated |
+| G | whole epic, 13 children / #353 | owner away two days | fail (5) | fail (6) | 15 598 record lines → 1 file; ceremony passes; u7 rounds 2–7 become NOTEs (Δ1 b2) |
+| N1 | light-units-first, wall never reached / glm-dir | Sol 6.1 driver, overnight | fail (6) | fail (5) | Δ4 orders the carrier first (serialise passes); Δ5 deletes "no approach left → report the limit" |
+| L2 | distinct real bugs of recurring classes over 7 reviews / Opus u7 | driver at round 3 | **pass** (0) | fail (9) | Δ1 diff-only verify + class stall lose 4 of 5 real parity bugs; Δ5 "commits reverted" |
+| N3 | unbounded analyzer under review / glm u5 | driver at wave 4 | fail (4) | fail (3) | stall at wave 2 instead of 11; fault class of a static-guard bypass is a judgment (fault-classes.md:29-37) |
+| N2 | wall needs the user's call, user absent / #368 I7, #351, #362 | driver at hour 4 | fail (4) | **pass** (0) | Δ5 one map line + PR post, run continues; Δ4 carrier first; fake throw named before review |
+| M2 | sweep demand, one sibling really broken / glm wave 2, u7 | driver | fail (4) | fail (2) | REV-2 enforced; but the Worker sibling outside the FIX diff ships as a NOTE |
+| N6 | internal mechanism, realm-wide substitution / #368 Buffer | driver | fail (3) | fail (6) | 3 ADRs in 4 h → 0, but nobody is mandated to challenge the mechanism; F5/F7 outside the 28-file diff |
+| N7 | owner reviews the PR after 19/19 PASS / #357 | owner | fail (4) | fail (4) | Δ7 gives the finding a door (REV-12 observation); "why did review miss it" has no home either way |
+| N10 | the process text itself / R9 + canon frozen since 09-24 | maintainer landing a lesson | fail (7) | fail (7) | docs read 13→5; "≤250" is a cap with no overflow; fold leaves 15 dangling refs, skills/recipe cite deleted files |
+
+Score: property×cell fails 46 → 57 (34 newly failing, 23 newly passing); whole-cell pass 1/13 → 1/13 (L2 → N2). Gains: ceremony 9→3, lesson-paid-once 7→3, Simplicity 3→1, delete-on-done 1→0. Losses: findings-land-in-the-unit 0→6, STOP-3 "passes are not counted" 0→6, README:5 "one home" 1→5, re-cut-in-place 0→3.
+
+Constraint (before): the process bills and binds by the record a stage emits —
+a verdict file, an evidence file, an ADR, a blocker with an `authority` string,
+a lesson line — never by who reads it next; so records pile up unread, a blocker
+binds on form, a review ends only when the reviewer runs out of things to write,
+and a lesson is paid again. Explains 39/46. Does not explain: N2 halt vs
+continue (stops.md:27-29 vs README.md:59), N1 loop order (rifty-goal:11-13),
+REV-8 binding skipped on drafts/docs (pass-binding.mjs:41,:46).
+Constraint (after): Δ1 re-keys the verify pass and the stall to the shape of
+the last FIX (its diff, its fault class) instead of to the obligation, and
+Δ3/Δ5/Δ6 delete rule homes without editing the texts and tools that cite them.
+Explains 40/57.
+
+Delta verdicts (backfire-checked; cells each Δ was re-rehearsed against are in
+the scorer's §6): Δ1 amend — keep both checkpoints and machine-checked blocker
+admissibility; make `REV-7` Repeat (same class at one boundary → redesign) a
+blocking authority; drop the diff-only verify, the fault-class STOP-3 and the
+deletion of stops.md:42-50; edit review.md:145-146 so reviewers stop writing
+"sweep siblings" into blockers. Δ2 amend — no `contract-red.json`, no
+`evidence.md`; one landing verdict per PR *at merge* with LANDING_ARTIFACT_RE
+and :91 unchanged; no pr-N rename. Δ3 amend — DEC-2 correction = dated line in
+the owning ADR (edit AGENTS.md:42, adr README:3, refs/check, adr/new together);
+keep "new mechanism" in DEC-1 p.4 (N6: the ≥2-candidate ADR was the only written
+challenge to a mechanism born in a FIX). Δ4 keep minus "stays unpicked" (CLOSE
+owes every invariant). Δ5 amend — keep the STOP-1 paragraph; keep "materially
+different design", "no approach left → report the limit", "surviving letters
+keep their places"; "commits reverted" → rechart.md 3 wording. Δ6 amend — one
+file, no "≤250"; critic slot = disputed blocker or overturned decision; list the
+out-of-docs/process edits. Δ7 amend — keep "done = merged on green PR CI at
+HEAD; bot/review comments are REV-12 observations"; drop retries→0 and the
+exact-bytes pin. Δ8 amend — diff-scoped local gate + `--all`; drop "review
+needs CI green on the reviewed sha"; add the four local-only lanes to ci.yml
+(pr-check.mjs:150,155,158,160) or drop "full set on CI".
+
+Carried silences: binding skipped on drafts/docs (A, B); "why did review miss
+it" (N7); nothing drains a process lesson (N10, 14 process-meta drafts);
+rifty-fix:21 "touched gates" vs implement.md:13 "pnpm pr:check" (A).

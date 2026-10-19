@@ -10,7 +10,7 @@ it to the user as an alternative entry.
 ## Preconditions
 
 - User in session. Mid-task or agent-only context → `rifty-to-backlog` + request manual refine; never self-run the interview.
-- Target: a raw idea (no doc yet) or one `draft` item/epic. A `ready` item with a live fork is demoted first (`docs/process/rules/readiness.md` `RDY-5`); a ready `goal.md` changes with the user's recorded amendment (`RDY-6`).
+- Target: a raw idea (no doc yet) or one `draft` item/epic. A `ready` item with a live fork is demoted first (`docs/process/README.md` `RDY-5`); a ready `goal.md` changes with the user's recorded amendment (`RDY-6`).
 - Research informs the user's next choice; it does not require a full implementation design.
 
 ## 1. Scan — no mint
@@ -33,8 +33,8 @@ next choice is informed; a new fact can open or close dependent forks.
 Explicit just-file and settled factual captures need honest sources, not an
 extra study or premise critic; proceed to Formalize and the final written-result check.
 
-Before treating a no-fork result as settled, apply `docs/process/rules/readiness.md`
-`RDY-6` §Establishing scope. Research discovers material choices from the raw
+Before treating a no-fork result as settled, apply `docs/process/README.md`
+`RDY-6`. Research discovers material choices from the raw
 request and reachable interactions, not just from the current question list.
 
 ## 3. Grill
@@ -45,7 +45,7 @@ completion, not a refusal.
 
 1. Restate the real package/program, exact action, and observed result. No real software unblocked → stop as off-mission or `process-meta`.
 2. Ask in frontier rounds: one numbered round holds ALL currently-independent open forks, each with a recommendation, decisive evidence and tradeoff. A fork whose scope depends on a still-open fork (or a running spike) waits for a later round. After answers, return to Research for affected dependent choices. Close by `RDY-6`, not merely an empty frontier. The user chooses observable scope; the agent chooses carriers and other internal mechanisms.
-3. Do not ask what code/ADR/Node already answers. Apply reachability and refine-altitude rules (`docs/process/rules/readiness.md` `RDY-6`, `RDY-7`).
+3. Do not ask what code/ADR/Node already answers. Apply reachability and refine-altitude rules (`docs/process/README.md` `RDY-6`, `RDY-7`).
 4. For infra, ask only physically reachable fault branches within the epic tier; use `docs/process/rules/fault-classes.md` and `docs/backlog/README.md` §Tier.
 5. Treat dropping or weakening a traced (`I#` / `scenario`) row as user-owned (`RDY-5`); never soften it through ADR, backlog, Out of scope, or rewritten acceptance.
 6. For an epic, grill until the outcome is statable as numbered `## Invariants`, each false on main (shape: `docs/backlog/README.md` §Epic fit); FIT step 4 lands them in this session (§4).
@@ -54,14 +54,14 @@ completion, not a refusal.
 
 Hand the settled result to `rifty-to-backlog` in this invocation: mint/update
 with evidence, decisions and any early Challenge record. An epic not yet
-`ready` continues into `docs/process/stages/fit.md` here, in this session on
+`ready` continues into `docs/process/README.md` §FIT here, in this session on
 its branch — Invariants, tier, final check, `status: ready`. A goal stays
 `draft` only when the user asked to just file it or a user question is still
-unanswered (`STOP-1a`): a ready goal carries no `owner: user` fog, its run is
+unanswered (`STOP-1`): a ready goal carries no `owner: user` fog, its run is
 autonomous. FIT resumes when the answer arrives — here (§3) or at the next
 hand-off (`rifty-goal`); no merge is required in between (`PR-3`). A
-ready `goal.md` is amended in place (`RDY-6`). One `RDY-6` §Final check in a
-fresh context on the actual final drafts (fit.md 8 for an epic); FIT/PICKUP
+ready `goal.md` is amended in place (`RDY-6`). One `RDY-6` final written-result check in a
+fresh context on the actual final drafts (`docs/process/README.md` §FIT 8 for an epic); FIT/PICKUP
 reuse it only for an unchanged result. Item `draft → ready` stays with PICKUP
 (`RDY-1`). The driver delivers `docs/backlog/README.md` §Report before
 implementation; a build authorized in this session continues to PICKUP on
