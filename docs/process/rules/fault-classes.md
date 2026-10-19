@@ -53,9 +53,10 @@ fault-labelled suite; use small boundary decorators, not one framework.
 ## Guest-package adaptations
 
 An adaptation is any transform of installed package bytes or generated twin
-source (owner ADR-0384; inventory
+source, or an admission narrower than the range the package itself accepts
+(exact pin, version gate, manifest override) (owner ADR-0384; inventory
 `docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md`).
-Each one records its class, its authority and a drift-loud anchor:
+Each one records its class, authority, drift-loud anchor and kill condition:
 
 | Class | Meaning | Authority |
 |---|---|---|
@@ -64,12 +65,16 @@ Each one records its class, its authority and a drift-loud anchor:
 | `upstream-edge` | an upstream defect reproduced on real Node at the same version and location | the real-Node artifact (command + output + version) |
 | `backport` | an upstream fix at a named version | the upstream commit/version |
 
-`platform-gap` — a patch that makes a package work around a rifty divergence —
+`platform-gap` — a patch or narrowed admission that makes a package work around a rifty divergence —
 is admissible only as declared interim debt: its row links the platform
-item/ADR that owns the divergence and states the kill condition; the patch
+item/ADR that owns the divergence and states the kill condition; it
 dies when that lands. An undeclared one is debt by construction (`AGENTS.md`
 §Fidelity). A class claim without its artifact is a `frozen-assumption`; a
 second instance of one class at one boundary follows §Class-kill.
+
+Every adaptation is a ceiling (`AGENTS.md` §Fidelity): the compat claim it
+carries reads ⚠️ and names the admitted version or range until its kill condition lands;
+kill condition `none` = a permanent ceiling.
 
 ## Seam contract
 

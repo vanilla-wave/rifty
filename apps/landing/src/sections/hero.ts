@@ -53,7 +53,7 @@ function buildBody(): HTMLElement {
   const lead = document.createElement('p');
   lead.className = 'hero-lead';
   lead.textContent =
-    'rifty is an open, self-hostable Node-compatible runtime and WASI runner for Chromium. Run tested Express 4, Vite 7, npm tooling and .wasm workflows — execution and files stay in the tab.';
+    'rifty is an open, self-hostable Node-compatible runtime and WASI runner for Chromium. Run tested Express 4, Vite 7.3.6, npm tooling and .wasm workflows — execution and files stay in the tab.';
 
   const cta = document.createElement('div');
   cta.className = 'hero-cta';

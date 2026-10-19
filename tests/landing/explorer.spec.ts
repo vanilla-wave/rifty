@@ -111,7 +111,11 @@ test('keeps raw WASI free of SAB claims and flags the esbuild CLI gap', async ({
   await expect(esbuild).toHaveAttribute('aria-label', 'esbuild JS API (partial)');
   await expect(esbuild.locator('.exp-node-warn')).toHaveText('⚠');
   await expect(esbuild.locator('.exp-node-warn')).toHaveAttribute('aria-hidden', 'true');
-  await expect(page.locator('.exp-node-warn')).toHaveCount(1);
+  await expect(page.locator('[data-node="vite"]')).toHaveAttribute(
+    'aria-label',
+    'vite dev server (partial)',
+  );
+  await expect(page.locator('.exp-node-warn')).toHaveCount(2);
 
   await esbuild.click();
   await expect(esbuild).toHaveAttribute('aria-pressed', 'true');

@@ -12,8 +12,8 @@ Classified 2026-10-16 under `docs/process/rules/fault-classes.md` §Guest-packag
 adaptations (goal `honest-guest-package-adaptations` I3). Owner history: PR #314
 moved every row from Workbench/runtime-js to the registry; since then the `.vite`
 exclusion (PR #314), the Vite CAC hook (ADR-0530) and the Vite root-watch and
-root-URL policies (ADR-0533) are gone. `platform-gap` rows: none (the only one,
-the CAC hook, is deleted). Sweep source: `esbuild-runtime-policy.json` `patches`,
+root-URL policies (ADR-0533) are gone. `platform-gap` rows: the starter and default exact Vite pins (the CAC
+hook is deleted). Sweep source: `esbuild-runtime-policy.json` `patches`,
 `sass-embedded-policy.json`, the substitution catalog, `internalsShims`,
 `bakedOverrides`, installed-file and launch preparations in
 `tools/shadow-registry/src/runtime/`.
@@ -44,6 +44,7 @@ the CAC hook, is deleted). Sweep source: `esbuild-runtime-policy.json` `patches`
 | Preparation | Class | Authority | Loud drift anchor | Kill condition |
 |---|---|---|---|---|
 | Vite CLI mode grammar (`viteCliMode`), info-mode startup suppression, version gate (`decideViteEsbuildRuntime`: 7.3.6 starts the esbuild twin, 8.x skips, other versions throw), `.bin/vite` preview scope and label | `substitution-environment` (decides when the esbuild twin starts and routes the CLI's listened port into the preview iframe; no guest-visible bytes) | ADR-0174, ADR-0226 D2, ADR-0317, ADR-0384 D2, ADR-0173 §4, ADR-0326; compat `vite-command.md` | version gate throws for an unadmitted Vite version; grammar pinned by Vite 7.3.6 CAC probes (`tests/integration/vite-cli-prep.test.ts`) | grammar, info suppression and version gate: the Vite 7 esbuild twin claim ends; preview scope: none |
+| Starter and default exact Vite pins: playground `vite`/`react-vite` seeds `vite@7.3.6` (`DEFAULT_VITE7_VERSION`, PR #341), the `vite8` seed and the Workbench Vite default `8.0.16` (`project-defaults.ts`) | `platform-gap` (keeps the default path inside the 7.3.6 esbuild gate and the 8.0.16 manifest override) | `docs/backlog/distribution/reference/pr-341-starter-version-repair.md`, ADR-0317, ADR-0336; platform item `npm-client/vite-7-3-7-from-scratch-esbuild-refusal` | `apps/playground/src/templates/vite-version.contract.test.ts` pins the Vite 7 seeds (the 8.0.16 pins: the manifest-override row); the version gate throws for any other Vite 7 | the starters declare Vite's own range (`^7` / `^8`) and their lanes pass |
 | `NAPI_RS_FORCE_WASI=1` in dev-server children and `.bin/vite` spawns (`launch.ts`, `vite-cli-prep.ts`) | `substitution-environment` (napi-rs's public selector for the published WASI binding; guest-visible env key) | ADR-0534 | a napi-rs loader that cannot load its WASI binding throws with the WASI error in its cause chain (Rolldown 1.0.3 loader); the loader's native-then-WASI fallback runs in the Vite 8 lanes | the Vite 8 lanes and a napi-rs-loaded package pass without the key (`npm-client/napi-rs-force-wasi-launch-env`) |
 
 Runtime worker realm compatibility supplies generic Node/WebIDL globals, not package recognition. npm schema-one recipe ids preserve old persistence rejection. Public Vite project intent, templates, oracles and host build tools may name packages.

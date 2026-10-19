@@ -16,8 +16,10 @@ Vite lanes of the closed Vite CLI hook unit (ADR-0530; verdict `docs/backlog/npm
 in the version gate, not the removed hook): `RIFTY_PLAYGROUND_PORT=5314 npx playwright test
 --project=chromium-heavy tests/e2e/react-vite-build.spec.ts` → terminal
 `Error: vite esbuild runtime supports exact Vite 7.3.6; executed 7.3.7`, preview
-never ready (180 s). Baked starters pin 7.3.6 through their committed lockfiles
-and stay green. The proven-version admission policy for Vite 7.3.7 was named a
+never ready (180 s). Starters pin exact `vite: 7.3.6` (`fdea02023`, PR #341;
+`apps/playground/src/templates/vite-version.contract.test.ts`): a starter pin `AGENTS.md`
+§Fidelity forbids, recorded as `platform-gap` in the adaptation inventory; this item's fix
+restores `^7` and retires that pin. The proven-version admission policy for Vite 7.3.7 was named a
 separate refine in the guest-package-patches handoff (§Фон); this records the
 user-visible failure it now causes.
 

@@ -5,7 +5,7 @@ Hand-maintained until `pnpm compat:generate` learns to source `@riftydev/io` tes
 Status of the Node-compatible `Buffer` polyfill that lives in `@riftydev/io` and
 is re-exported by `@riftydev/runtime-js/builtins/buffer`.
 
-Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not
+Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-version ceiling · ❌ not
 implemented (throws `NotImplementedError` or `TypeError`).
 
 | Feature | Status | Notes |

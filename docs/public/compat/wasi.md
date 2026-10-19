@@ -8,7 +8,7 @@ with a `LinkError` for a real toolchain (`esbuild.wasm`, `tsc.wasm`,
 `swc.wasm`). Unsupported calls return `E_NOSYS` (52). The link-surface
 guarantee is enforced by `packages/runtime-wasi/src/syscalls/wasi-link.test.ts`.
 
-Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not
+Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-version ceiling · ❌ not
 implemented — call returns `E_NOSYS` and behaviour is documented.
 
 | Syscall | Status | Notes |
