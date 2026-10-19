@@ -2,21 +2,16 @@
 
 ## Items
 
-<!-- none seeded: the destination is unratified (goal.md draft) -->
+1. `runtime-js/node-fetch-guest-carrier` — acceptance carrier — real Hono + Node/Chromium body, lifecycle and network differential cases.
 
 ## Open questions
 
-- Source of the classes: Node's bundled undici (`internal/deps/undici`) vendored
-  vs the `undici` npm package; a new runtime dependency → ADR — owner: agent at FIT.
-- Bundle-size budget for the runtime worker chunk — owner: user at FIT.
-- Which globals move (`Request`, `Response`, `Headers`, `FormData`, `fetch`;
-  `WebSocket`/`EventSource` too?) and how native-only consumers
-  (`WebAssembly.compileStreaming`, service-worker preview) convert at the
-  boundary — owner: agent at FIT.
-- Fate of ADR-0158's fetch wrapper and ADR-0529 §2 Response/Request holds once
-  bodies are JS — owner: agent at FIT (superseding ADR).
+- Source/build: Node 24.16.0 embeds undici 7.25.0; choose reproducible minimal class graph, prove Node-internal dependencies (Proxy detection, stream state) — owner: agent — isolated source spike + differential cases.
+- Native consumers / response metadata / upload bridge — owner: agent — network carrier and existing Hono preview acceptance; preserve WebAssembly streaming ceiling.
+- Retire ADR-0158 body wrappers and ADR-0529 Request/Response holds — owner: agent — superseding ADR + lifecycle carrier.
 
 ## Out of scope
 
 - ADR-0529 classes that are real host I/O (Blob reads, WebAssembly, SubtleCrypto,
   WebSocket, BroadcastChannel) — unchanged.
+- Server transport, WebSocket/EventSource implementation, new bundle limit.
