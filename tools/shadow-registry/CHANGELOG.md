@@ -1,5 +1,7 @@
 # Changelog — @riftydev/shadow-registry
 
+- No-COI esbuild alias selects upstream Node entry; ordinary preparation has a client-free export. COI generated client retained.
+
 ## [Unreleased]
 
 - The baked `bcrypt` substitution pins `bcryptjs@3.0.3` (the requested `bcrypt` range no longer reaches `bcryptjs`, whose newest is 3.0.3); the install still fails at the lock save (`npm-client/bcrypt-substitution-install`, compat ❌). `NAPI_RS_FORCE_WASI=1` launch preparation declared (ADR-0534).

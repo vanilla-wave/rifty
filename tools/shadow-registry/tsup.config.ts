@@ -8,6 +8,7 @@ export default defineConfig({
     index: 'src/index.ts',
     internal: 'src/internal/index.ts',
     runtime: 'src/runtime/index.ts',
+    'runtime/common': 'src/runtime/common.ts',
   },
   format: ['esm'],
   dts: true,

@@ -4,7 +4,6 @@ import {
   shadowSubstitutionPlanForInstallResult,
 } from '@riftydev/npm-client/internal';
 import type { ToolchainInstallRequest } from '@riftydev/runtime-js/internal';
-import { preparePackageEntryRuntime } from '@riftydev/shadow-registry/runtime';
 import type { CommandContext } from '@riftydev/shell';
 import { type Vfs, normalizePath, syncMirror } from '@riftydev/vfs';
 import {
@@ -12,13 +11,7 @@ import {
   executeNpmInstallOperation,
 } from '../glue/npm-shell-command.ts';
 import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
-import {
-  type WorkbenchRuntimeBinding,
-  activateWorkbenchRuntimeAdapters,
-  workbenchRuntimeAdapterOwnership,
-} from './workbench-runtime-adapters.ts';
-
-export { activateWorkbenchRuntimeAdapters };
+import type { WorkbenchRuntimeBinding } from './workbench-runtime-adapters.ts';
 
 /** Saved files remain accessible; invalid lock grants no adapter capability. */
 export async function prepareSavedToolchain(cwd: string) {
@@ -40,13 +33,6 @@ export async function prepareSavedToolchain(cwd: string) {
   } catch {
     // A missing/invalid lock is not installation admission (ADR-0417).
   }
-  await preparePackageEntryRuntime({
-    kind: 'eval',
-    root: cwd,
-    runtimeBindings: bindings,
-    fs: syncMirror(),
-    ...workbenchRuntimeAdapterOwnership(),
-  });
   return bindings;
 }
 
@@ -80,7 +66,6 @@ export async function installToolchainPackages(
       }),
     ),
   );
-  await activateWorkbenchRuntimeAdapters({ bindings, fs: syncMirror(), cwd: input.cwd });
   return {
     bindings,
     packages: result.packages.length,

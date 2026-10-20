@@ -30,12 +30,7 @@ export const FS_METHODS = {
   cp: 'fs.cp',
 } as const;
 
-export interface FsStatShape {
-  isFile: boolean;
-  isDirectory: boolean;
-  size?: number;
-  mtime?: number;
-}
+export type FsStatShape = import('@riftydev/vfs').FsStat;
 
 export interface FsReadHead {
   readonly size: number;

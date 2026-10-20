@@ -1,5 +1,7 @@
 # Changelog
 
+- Transport complete numeric Stats fields from VFS; upstream no-COI esbuild can resolve build files.
+
 ## [Unreleased]
 
 - No-COI Node children use isolated Workers and live owner FS via SW; support child ref/unref, transported stdin Buffers, spec stdio write callbacks and async fs.read(0) (ADR-0539).

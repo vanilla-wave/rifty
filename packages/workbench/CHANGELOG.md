@@ -1,5 +1,7 @@
 # Changelog
 
+- No-COI install/open/snapshot no longer activate the generated esbuild client; builds use SW children.
+
 ## [Unreleased]
 
 - Compose separate no-COI child realms from the toolchain entry; retire invocation children at process completion (ADR-0539).

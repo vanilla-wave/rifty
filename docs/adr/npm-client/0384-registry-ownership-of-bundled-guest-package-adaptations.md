@@ -34,3 +34,5 @@ PR #314 accepts SDK rebuilds, all existing adaptations and optional public Vite 
 
 - 2026-10-16 — every adaptation this ADR owns is classified (class, authority, loud drift anchor, kill condition) under `docs/process/rules/fault-classes.md` §Guest-package adaptations; inventory `docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md`. Pointer only; Decision unchanged.
 - 2026-10-19 — §Alternatives "preserve proven implementation": a preserved adaptation is a declared ceiling, not support (`AGENTS.md` §Fidelity, "Similar but different must work"); its compat claim reads ⚠️ until its inventory kill condition lands (`none` = permanent). Decision unchanged.
+
+- 2026-10-20 — ADR-0539: no-COI uses upstream Node esbuild through SW children; no adapter activation at install/open. Shared COI client remains.

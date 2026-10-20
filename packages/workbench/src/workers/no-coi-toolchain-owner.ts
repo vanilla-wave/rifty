@@ -189,8 +189,6 @@ async function applySnapshot(
     onProgress: (progress) =>
       self.postMessage({ type: 'progress', operation: 'snapshot', id, ...progress }),
   });
-  const { activateWorkbenchRuntimeAdapters } = await import('./no-coi-toolchain-install.ts');
-  await activateWorkbenchRuntimeAdapters({ bindings, fs: syncMirror(), cwd: input.cwd });
   return activationSnapshot(input.cwd, bindings);
 }
 

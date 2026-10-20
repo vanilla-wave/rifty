@@ -113,6 +113,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0470 | Preserve native WebAssembly in no-COI guests |
 | 0529 | Count host-task-async Node-surface requests in child-realm keepalive |
 | 0539 | Serve no-COI child filesystem calls through Service Worker |
+| 0540 | [Expose virtual filesystem Stats metadata for stock Node guests](runtime-js/0540-expose-virtual-filesystem-stats-metadata-for-stock-node-guests.md) |
 
 ### runtime-wasi
 

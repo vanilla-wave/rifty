@@ -32,3 +32,7 @@ and permission bits, `ino` stability per path, `nlink`, `uid/gid`, `dev`,
 `bigint: true` — and which are Node-observable versus platform-varying (Node
 values differ by host)? Settled at PICKUP; atime value semantics stay with the
 related item.
+
+## Pickup evidence
+
+- 2026-10-20 — PR #380 imports the shared ADR-0540 metadata fix from upstream-twin 9e639e9c after no-COI Vite baseline RED. `fs/stats-node-fields` parity GREEN; atime-value semantics remain separate. Coordinate final closure with upstream-twin.

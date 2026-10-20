@@ -187,6 +187,7 @@ const SPEC = {
     sideEffects: false,
     addExports: {
       './runtime': './src/runtime/index.ts',
+      './runtime/common': './src/runtime/common.ts',
       './internal': './src/internal/index.ts',
     },
     keywords: ['npm-overrides'],

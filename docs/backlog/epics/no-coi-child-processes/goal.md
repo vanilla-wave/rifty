@@ -54,4 +54,4 @@ WebAssembly boundary. Owner CPU work can delay child FS requests.
 - 2026-10-20 — tier works: real happy-path parity; transport/Worker failures remain loud. No new fault-tolerance/retry promise.
 - 2026-10-20 — one PR for the entire goal, per user request.
 - rejected route: snapshot VFS or same-realm eval — violates I2.
-- rejected route: retain generated esbuild client — violates I3.
+- rejected route: retain generated esbuild client in no-COI — violates I3.

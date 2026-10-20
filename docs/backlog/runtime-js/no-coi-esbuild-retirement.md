@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: Retire the generated esbuild client from no-COI execution
 created: 2026-10-20
 why: Isolated children can run the upstream client but installed esbuild still selects legacy
@@ -42,5 +42,7 @@ COI upstream cutover; expanding the exact-version installation recipe;
 synchronous child processes; worker_threads.
 
 ## Decisions
+
+- ready-verdict: 2026-10-20 — Contract+RED @ 09be0e47178a079b4cac4d1c40656af957570583
 
 - 2026-10-20 — explicit user amendment keeps the shared COI client; I3 retires no-COI debt only.

@@ -6,6 +6,11 @@ PR #314 `df3cd222f`; source baseline `c64cb2ebb`. Node v24.16.0, Vitest 2.1.9.
 
 `pnpm exec vitest run packages/workbench/src/workers/workbench-runtime-adapters.contract.test.ts packages/workbench/src/workers/vite-node-entry-edge.test.ts packages/workbench/src/workers/package-install-finalizer.test.ts packages/runtime-js/src/internal/worker-globals.test.ts`: 4 files, 42 passed (2026-09-07).
 
+2026-10-20 correction: ADR-0539 retires the generated esbuild client and runtime
+adapter from no-COI execution/emitted graphs. The generated-client rows below
+remain COI-only, owned by `epics/esbuild-upstream-twin`; exact install admission
+remains shared.
+
 ## Finite inventory
 
 Classified 2026-10-16 under `docs/process/rules/fault-classes.md` §Guest-package

@@ -1,4 +1,4 @@
-import { binNameOf, installedBinPreviewSource } from '@riftydev/shadow-registry/runtime';
+import { binNameOf, installedBinPreviewSource } from '@riftydev/shadow-registry/runtime/common';
 import type { CommandContext, ProcessExit } from '@riftydev/shell';
 import type { BinExecutorDeps, BinSpawnRequest } from '../glue/bin-executor.ts';
 import type { OwnerPtyRunAdmission } from '../glue/pty-protocol.ts';

@@ -2,8 +2,7 @@
 
 ## Items
 
-1. `runtime-js/no-coi-child-processes` — native Worker + live owner FS through SW, Node acceptance.
-2. Retire generated esbuild client/adapters — hypothesis after upstream carrier passes; packed artifact proof (I3).
+1. `runtime-js/no-coi-esbuild-retirement` — remove no-COI activation and generated client graph; installed alias and packed proof (I3).
 
 ## Open questions
 

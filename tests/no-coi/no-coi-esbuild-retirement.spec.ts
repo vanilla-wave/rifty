@@ -15,7 +15,6 @@ esbuild.transform('let x: number = 1', {loader:'ts'}).then(result => console.log
 test('installed no-COI esbuild uses upstream children without loading the legacy client', async ({
   page,
 }) => {
-  test.fail(true, 'I3: no-COI still activates the shared legacy client');
   test.setTimeout(120_000);
   const oracleRoot = await mkdtemp(join(tmpdir(), 'rifty-esbuild-cutover-'));
   const loaded: string[] = [];
