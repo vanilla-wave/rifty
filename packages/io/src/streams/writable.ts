@@ -183,18 +183,6 @@ function admitWrite(
 
 class WritableImplementation extends EventEmitter {
   readonly _writableState!: WritableState;
-  private writeImpl?: (
-    this: Writable,
-    chunk: unknown,
-    encoding: string,
-    cb: (err?: Error | null) => void,
-  ) => void;
-  private writevImpl?: (
-    this: Writable,
-    chunks: WriteChunk[],
-    cb: (err?: Error | null) => void,
-  ) => void;
-  private finalImpl?: (this: Writable, cb: (err?: Error | null) => void) => void;
   private readonly endCallbacks!: EndCallback[];
 
   constructor(opts: WritableOptions = {}) {
@@ -434,7 +422,7 @@ class WritableImplementation extends EventEmitter {
           this.publishWriteCompletion([next], undefined, false, false);
         }
       };
-      const writeImpl = this.writeImpl ?? this._write;
+      const writeImpl = this._write;
       writeImpl.call(this, next.chunk, next.encoding, done);
       inSyncWrite = false;
       // Continue only on a clean synchronous completion; stop on async-pending
@@ -452,7 +440,6 @@ class WritableImplementation extends EventEmitter {
   private resolveWritev():
     | ((this: Writable, chunks: WriteChunk[], cb: (err?: Error | null) => void) => void)
     | undefined {
-    if (this.writevImpl) return this.writevImpl;
     return typeof this._writev === 'function' ? this._writev : undefined;
   }
 
@@ -463,7 +450,7 @@ class WritableImplementation extends EventEmitter {
    * (matches Node, which uses `_writev` whenever `_write` is not provided).
    */
   private hasRealWrite(): boolean {
-    return this.writeImpl !== undefined || this._write !== Writable.prototype._write;
+    return this._write !== Writable.prototype._write;
   }
 
   private flushViaWritev(
@@ -582,7 +569,7 @@ class WritableImplementation extends EventEmitter {
         });
       }
     };
-    const finalImpl = this.finalImpl ?? this._final;
+    const finalImpl = this._final;
     finalImpl.call(this, finalize);
     inSyncFinal = false;
   }

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Child stdin retains only dispatched transport writes; corked buffers no longer keep an unreferenced parent alive, including a corked successor after an active write.
+
 - Async explicit process exits retain their drain status without leaking an internal exit signal as a browser error (ADR-0445).
 
 - CJS with a standalone first-line strict directive preserves source positions without a stack hook, including frozen guest hooks; stock esbuild validation points at original source. Other CJS shapes retain the recorded +2-line gap.

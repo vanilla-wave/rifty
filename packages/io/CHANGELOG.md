@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Writable constructor write/writev/final options install the native replaceable _write/_writev/_final hooks; transport wrappers observe active writes instead of buffered admissions.
+
 - Writable uses Node tick callbacks (success = null) and a cursor over the existing reentrant buffer; completed slots release payloads.
 
 - `openHostBroadcastChannel(name)` / `HOST_BROADCAST_CHANNEL`: rifty's own channels open the realm's native `BroadcastChannel`, never the guest global that holds the event loop (ADR-0529).

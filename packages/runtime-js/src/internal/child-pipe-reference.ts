@@ -18,26 +18,19 @@ export function referenceChildPipe(stream: Readable | Writable, input: boolean):
   });
   if (input) {
     const writable = stream as Writable;
-    const write = writable.write;
-    writable.write = function (chunk, encodingOrCallback, callback): boolean {
-      // One request retains until its callback, including queued writes. The
-      // constructor's options.write can bypass the public _write hook.
+    const write = writable._write;
+    writable._write = function (chunk, encoding, callback): void {
+      // Only a dispatched transport request retains; corked buffers are idle.
       const request = new WorkerReference();
       request.ref();
-      const cb = typeof encodingOrCallback === 'function' ? encodingOrCallback : callback;
       try {
-        return write.call(
-          this,
-          chunk,
-          typeof encodingOrCallback === 'string' ? encodingOrCallback : undefined,
-          (error) => {
-            try {
-              cb?.(error ?? null);
-            } finally {
-              WorkerReference.dispose(request);
-            }
-          },
-        );
+        write.call(this, chunk, encoding, (error) => {
+          try {
+            callback(error ?? null);
+          } finally {
+            WorkerReference.dispose(request);
+          }
+        });
       } catch (error) {
         WorkerReference.dispose(request);
         throw error;

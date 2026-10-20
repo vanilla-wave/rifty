@@ -76,6 +76,18 @@ result.callbacks.push([i,e && e.code]);if(i===1)c.stdin.end();
 process.on('exit',()=>fs.writeFileSync('result.json',JSON.stringify(result)));`;
 const allProbes = {
   ...probes,
+  'corked stdin does not retain an unreferenced child': `const fs=require('fs');
+fs.writeFileSync('child.cjs',"setTimeout(()=>{},1000)");
+const c=require('child_process').spawn('node',['child.cjs'],{stdio:['pipe','ignore','ignore']});
+let callbacks=0;c.stdin.on('error',()=>{});c.stdin.cork();c.stdin.write('buffered',()=>callbacks++);c.unref();
+process.on('exit',()=>fs.writeFileSync('result.json',JSON.stringify({callbacks,buffered:c.stdin.writableLength})));`,
+  'corked successor does not retain after the active write': `const fs=require('fs');
+fs.writeFileSync('child.cjs',"setTimeout(()=>process.stdin.on('data',()=>{}),100)");
+const c=require('child_process').spawn('node',['child.cjs'],{stdio:['pipe','ignore','ignore']});
+const callbacks=[];c.stdin.on('error',()=>{});c.unref();c.stdin.unref();
+c.stdin.write(Buffer.alloc(8*1024*1024,65),()=>callbacks.push('active'));
+c.stdin.cork();c.stdin.write('buffered',()=>callbacks.push('corked'));
+process.on('exit',()=>fs.writeFileSync('result.json',JSON.stringify({callbacks,buffered:c.stdin.writableLength})));`,
   'pending writes retain an unreferenced child': pendingWrites(false),
   'pending writes retain an unreferenced input pipe': pendingWrites(true),
   'referenced pipes retain an unreferenced child': childLifetime(false, false),
