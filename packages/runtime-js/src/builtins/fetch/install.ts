@@ -1,6 +1,7 @@
 import { HOST_FETCH, NODE_NETWORK_FETCH } from '@riftydev/io';
 import { Buffer } from '../buffer.ts';
 import { ensureRuntimeJsBuiltinsRegistered, loadBuiltin } from '../index.ts';
+import { publicNodeProcess } from '../process-public.ts';
 import createFetchClasses from './generated/classes.js';
 import { createGuestFetch, createNodeNetworkFetch } from './network.ts';
 import { installFetchPlatformBindings } from './platform.ts';
@@ -27,7 +28,8 @@ export function installNodeFetch(target: FetchTarget = globalThis): void {
       if (builtin == null) throw new Error(`Fetch requires builtin ${id}`);
       return builtin;
     },
-    loadBuiltin('node:process'),
+    // Bootstrap may precede the seeded child process; never pin the fallback in the registry.
+    publicNodeProcess(),
     Buffer,
     installFetchPlatformBindings(),
   );

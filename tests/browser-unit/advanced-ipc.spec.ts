@@ -70,7 +70,7 @@ for (const program of parityPrograms) {
   });
 }
 
-test('Chromium ceiling values in an advanced message fail by name, posting nothing', async ({
+test('Chromium IPC ceilings refuse dispatch while JS Headers serialize as in Node', async ({
   page,
 }) => {
   test.setTimeout(180_000);

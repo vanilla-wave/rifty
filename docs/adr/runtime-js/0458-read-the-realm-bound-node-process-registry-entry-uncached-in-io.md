@@ -49,3 +49,11 @@ Candidates:
 - Unchanged: a loader `require('node:process')` issued under a swapped bootstrap
   still caches. The Node-hosted `in-process-node-entry-runner` does this, but it
   is a test seam.
+
+## Correction
+
+2026-10-20 — ADR-0541 Fetch preload hit the same process-cache fault before the
+child bootstrap. Runtime-js reads its existing `publicNodeProcess()` owner
+instead of caching `loadBuiltin('node:process')`; io's uncached helper remains
+internal. Real child IPC/Worker/stdout carriers and a bootstrap identity
+revert-test prove the repair. Registry cache semantics stay unchanged.

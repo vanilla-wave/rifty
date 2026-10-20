@@ -157,6 +157,17 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
   fetch calls run in browser pages or standalone VFS workers; production
   browser resource I/O already uses `fetchHost`. No runtime exception added.
 
+- Full CI audit also exposed early Fetch preload caching the fallback
+  `node:process` before child bootstrap. Request classes need version/platform
+  facts, not a cached builtin namespace: use existing `publicNodeProcess()`.
+  Real IPC/Worker RED→GREEN plus a bootstrap identity regression guard; no new
+  registry mechanism. Headers' old native-object IPC ceiling is superseded:
+  all four JS Fetch classes round-trip own enumerable fields as live Node.
+- WebAssembly ceiling carrier now uses real loopback HTTP headers plus an open
+  body until reader cancellation. The old synthetic transport Response had no
+  URL. All ten Response/PromiseLike ceiling and four priority/reflection
+  assertions remain; production response metadata never gets a fake fallback.
+
 ## Consequences
 
 - Hono headers/File bodies, clone/direct readers and detached body lifetime use
@@ -177,7 +188,7 @@ bootstrap; generated undici class output is 107 KB.
 | Asset prefix | Before bytes | After bytes | Delta bytes | Before gzip | After gzip | Delta gzip |
 |---|---:|---:|---:|---:|---:|---:|
 | node-entry-bootstrap | 874375 | 878897 | +4522 | 263274 | 264818 | +1544 |
-| quickjs-kernel-worker-host | 198549 | 665004 | +466455 | 56745 | 197669 | +140924 |
+| quickjs-kernel-worker-host | 198549 | 664990 | +466441 | 56745 | 197660 | +140915 |
 | workbench-owner-bootstrap | 1206219 | 1212112 | +5893 | 354672 | 356729 | +2057 |
 | dev-server-child-bootstrap | 759804 | 764193 | +4389 | 230274 | 231704 | +1430 |
 | ts-lsp-worker-entry | 3842025 | 3848134 | +6109 | 1095809 | 1097923 | +2114 |

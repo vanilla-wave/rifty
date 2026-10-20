@@ -46,3 +46,5 @@ edits; that pin update stays explicit. No ADR is superseded.
   2 MB ceiling and negative payload tests unchanged; packed consumer proof.
 - 2026-10-20 — Fetch abort/finalization correction changes hashed imports again;
   TypeScript worker byte size unchanged, exact SHA re-pinned. Same ceilings.
+- 2026-10-20 — Fetch bootstrap process-cache repair changes the import hash;
+  same TypeScript worker byte size and ceilings, exact SHA re-pinned.

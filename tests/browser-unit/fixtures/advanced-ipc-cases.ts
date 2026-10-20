@@ -45,7 +45,7 @@ export const parityPrograms: readonly AdvancedIpcProgram[] = [
  * plain objects (a browser clone would deliver a different value or refuse
  * with a DOM error), a detached buffer or view (Chromium prefixes its refusal
  * text) and an own accessor beside a Buffer. An echo child reports every
- * label that arrived: in rifty only `after`, since a refused send posts nothing.
+ * label that arrived: JS Fetch classes serialize as Node; refused sends post nothing.
  */
 const hostObject = 'NotImplementedError:child_process.serialization.advanced.host-object';
 const ceilingCases: readonly {
@@ -59,7 +59,7 @@ const ceilingCases: readonly {
   { label: 'url', node: 'sent', rifty: hostObject },
   { label: 'abort-controller', node: 'sent', rifty: hostObject },
   { label: 'text-encoder', node: 'sent', rifty: hostObject },
-  { label: 'headers', node: 'sent', rifty: hostObject },
+  { label: 'headers', node: 'sent', rifty: 'sent' },
   { label: 'message-port', node: 'sent', rifty: hostObject },
   {
     label: 'detached-array-buffer',
@@ -135,11 +135,14 @@ export const ceilingNodeRows: readonly string[] = [
   ])}`,
 ];
 
-/** rifty's rows in Chromium: each refused by name, nothing posted. */
+/** rifty's rows in Chromium: only admitted values and the final marker arrive. */
 export const ceilingRows: readonly string[] = [
   ...ceilingCases.map(({ label, rifty }) => `CEIL|${label}|${rifty}`),
   'CEIL|after|true',
-  'CEIL|received|["after"]',
+  `CEIL|received|${JSON.stringify([
+    ...ceilingCases.filter(({ rifty }) => rifty === 'sent').map(({ label }) => label),
+    'after',
+  ])}`,
 ];
 
 /** Stdout rows: the lines a program printed, CR-free, blank lines dropped. */
