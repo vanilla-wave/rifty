@@ -7,6 +7,9 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const runner = resolve(repoRoot, 'tests/integration/workbench-packed-consumer.mjs');
 const enabled = process.env.RIFTY_RUN_PACKED_CONSUMER === '1';
 const maxOutputBytes = 1024 * 1024;
+// Original packed journey (820s) plus its later, serial benchmark subprocess (600s).
+// Inner operation deadlines stay in the runner; reserve 80s for termination/cleanup.
+const runnerTimeoutMs = 820_000 + 600_000;
 
 function appendBounded(output: string, chunk: unknown): string {
   const next = output + String(chunk);
@@ -25,10 +28,13 @@ describe.skipIf(!enabled)('packed Workbench external consumer', () => {
         let output = '';
         let forceKill: ReturnType<typeof setTimeout> | undefined;
         const timeout = setTimeout(() => {
-          output = appendBounded(output, '\nPacked consumer exceeded 820000ms; terminating\n');
+          output = appendBounded(
+            output,
+            `\nPacked consumer exceeded ${runnerTimeoutMs}ms; terminating\n`,
+          );
           child.kill('SIGTERM');
           forceKill = setTimeout(() => child.kill('SIGKILL'), 60_000);
-        }, 820_000);
+        }, runnerTimeoutMs);
         child.stdout.on('data', (chunk) => {
           output = appendBounded(output, chunk);
         });
@@ -50,5 +56,5 @@ describe.skipIf(!enabled)('packed Workbench external consumer', () => {
 
     expect(result.code, result.output).toBe(0);
     expect(result.output).toContain('Packed Workbench consumer passed');
-  }, 900_000);
+  }, runnerTimeoutMs + 80_000);
 });
