@@ -62,6 +62,8 @@
     "shadow-catalog:generate": "tsx tools/shadow-registry/tools/generate-shadow-substitution-catalog.ts --write",
     "esbuild-runtime:generate": "tsx tools/shadow-registry/tools/generate-esbuild-runtime.ts --write",
     "eval-compiler:generate": "node tools/publishing/generate-eval-compiler.mjs --write",
+    "fetch-classes:generate": "node tools/publishing/generate-fetch-classes.mjs --write",
+    "check:fetch-classes-drift": "node tools/publishing/generate-fetch-classes.mjs --check",
     "check:eval-compiler-drift": "node tools/publishing/generate-eval-compiler.mjs --check",
     "check:esbuild-runtime-drift": "tsx tools/shadow-registry/tools/generate-esbuild-runtime.ts --check",
     "check:shadow-catalog-drift": "tsx tools/shadow-registry/tools/generate-shadow-substitution-catalog.ts --check",
@@ -88,6 +90,7 @@
     "tsup": "^8.3.5",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
+    "undici": "7.25.0",
     "vitest": "^2.1.0",
     "ws": "8.18.3"
   }

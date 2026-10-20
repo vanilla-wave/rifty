@@ -32,11 +32,39 @@ function fromParityCase(name: string, parityCase: ParityCase): AdvancedIpcProgra
 
 export const constructorProgram = fromParityCase('constructor', constructorCase);
 
+// The Node-hosted runner's globals are Node's own Fetch classes, not rifty's.
+// Only the real browser guest exercises the generated classes through the codec.
+const fetchClassesProgram: AdvancedIpcProgram = {
+  name: 'fetch-classes',
+  files: {
+    'echo.cjs': `const process = require('node:process');
+process.on('message', message => process.send(message));`,
+  },
+  main: `const { fork } = require('node:child_process');
+const child = fork('echo.cjs', [], { serialization: 'advanced', stdio: 'ignore' });
+let received = 0;
+child.on('message', ({ label, value }) => {
+  console.log(label + ' ' + JSON.stringify({
+    plain: Object.getPrototypeOf(value) === Object.prototype,
+    entries: Object.entries(value),
+  }));
+  if (++received === 4) child.disconnect();
+});
+for (const [label, value] of [
+  ['headers', new Headers({ a: '1' })],
+  ['request', new Request('https://example.test/')],
+  ['response', new Response('body')],
+  ['form-data', new FormData()],
+]) child.send({ label, value: Object.assign(value, { own: label }) });
+`,
+};
+
 export const parityPrograms: readonly AdvancedIpcProgram[] = [
   fromParityCase('values', advancedValues),
   fromParityCase('fault', advancedFault),
   fromParityCase('options', advancedOptions),
   fromParityCase('same-realm-program', advancedSameRealm),
+  fetchClassesProgram,
 ];
 
 /**
@@ -45,7 +73,7 @@ export const parityPrograms: readonly AdvancedIpcProgram[] = [
  * plain objects (a browser clone would deliver a different value or refuse
  * with a DOM error), a detached buffer or view (Chromium prefixes its refusal
  * text) and an own accessor beside a Buffer. An echo child reports every
- * label that arrived: in rifty only `after`, since a refused send posts nothing.
+ * label that arrived: JS Fetch classes serialize as Node; refused sends post nothing.
  */
 const hostObject = 'NotImplementedError:child_process.serialization.advanced.host-object';
 const ceilingCases: readonly {
@@ -59,7 +87,7 @@ const ceilingCases: readonly {
   { label: 'url', node: 'sent', rifty: hostObject },
   { label: 'abort-controller', node: 'sent', rifty: hostObject },
   { label: 'text-encoder', node: 'sent', rifty: hostObject },
-  { label: 'headers', node: 'sent', rifty: hostObject },
+  { label: 'headers', node: 'sent', rifty: 'sent' },
   { label: 'message-port', node: 'sent', rifty: hostObject },
   {
     label: 'detached-array-buffer',
@@ -135,11 +163,14 @@ export const ceilingNodeRows: readonly string[] = [
   ])}`,
 ];
 
-/** rifty's rows in Chromium: each refused by name, nothing posted. */
+/** rifty's rows in Chromium: only admitted values and the final marker arrive. */
 export const ceilingRows: readonly string[] = [
   ...ceilingCases.map(({ label, rifty }) => `CEIL|${label}|${rifty}`),
   'CEIL|after|true',
-  'CEIL|received|["after"]',
+  `CEIL|received|${JSON.stringify([
+    ...ceilingCases.filter(({ rifty }) => rifty === 'sent').map(({ label }) => label),
+    'after',
+  ])}`,
 ];
 
 /** Stdout rows: the lines a program printed, CR-free, blank lines dropped. */

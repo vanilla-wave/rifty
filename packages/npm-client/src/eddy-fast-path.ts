@@ -1,3 +1,4 @@
+import { fetchHost } from '@riftydev/io';
 import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
 /**
  * ADR-0182 opt-in eddy fast path (extracted from installer.ts, move-only):
@@ -194,7 +195,7 @@ export async function tryEddyFastPath(
       label: 'get',
       via: 'get',
       expectedHash: pin,
-      run: (signal) => fetch(bundleUrlFor(bundleBase, pin), { signal }),
+      run: (signal) => fetchHost(bundleUrlFor(bundleBase, pin), { signal }),
     });
   }
   attempts.push({
@@ -208,7 +209,7 @@ export async function tryEddyFastPath(
       // CORS-simple request, so a cross-origin browser skips the OPTIONS
       // preflight (one RTT off the cold path). The server parses the body
       // unconditionally.
-      return fetch(url, { method: 'POST', body: JSON.stringify(requestBody), signal });
+      return fetchHost(url, { method: 'POST', body: JSON.stringify(requestBody), signal });
     },
   });
 

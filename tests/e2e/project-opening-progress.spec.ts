@@ -20,18 +20,21 @@ test('first Vite starter displays real saving operations in the preparing UI', a
     const { workbenchViteHostAssets } = await import(/* @vite-ignore */ url);
     return new URL(workbenchViteHostAssets.workers.owner, location.href).href;
   });
-  const observer = `/@fs${process.cwd().replaceAll('\\', '/')}/tests/browser-unit/fixtures/native-replica-observer.ts`;
+  const sourceRoot = `/@fs${process.cwd().replaceAll('\\', '/')}`;
+  const observer = `${sourceRoot}/tests/browser-unit/fixtures/native-replica-observer.ts`;
   await page.route(ownerUrl, async (route) => {
     const response = await route.fetch();
     await route.fulfill({
       response,
       body: `
+      import { fetchHost } from ${JSON.stringify(`${sourceRoot}/packages/io/src/index.ts`)};
       import { observeNativeReplicaWrites } from ${JSON.stringify(observer)};
       let held = false;
       observeNativeReplicaWrites(async records => {
         if (!held && records.some(record => record.kind === 'file' && record.path.includes('/node_modules/vite/'))) {
           held = true;
-          await fetch('/project-save-barrier');
+          // Harness resource I/O stays native after the worker installs Node globals.
+          await fetchHost('/project-save-barrier');
         }
       });
       ${await response.text()}

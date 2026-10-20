@@ -1,0 +1,374 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN/CLOSE accepted: 0 blockers, 1 advisory childSaw NOTE, 39 coverage PASS, no residuals. Merged-tree browser 50/50, no-COI 26/26 plus interactive network carrier 1/1, production 1/1, packed consumer 1/1 (267.82s), pr:check 28/28 (unit 223.6s, parity 150.3s, no isolated rerun). Sandbox-support factual capture written-result check PASS; cause remains unknown. Merge only after re-bound pass-binding and green PR CI at the newly published HEAD; old 42a3 CI is not green and does not authorize merge.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "3301e4c465a7da0deb5da2c7bf678b3b086bbc9c",
+  "unit_goal_source": "PR #381 https://github.com/vanilla-wave/rifty/pull/381; goal node-fetch-classes-in-guest / unit node-fetch-guest-carrier; accepted I1–I3, real Hono/body/network scenario, Node 24.16.0 and existing browser transport with explicit ceilings; measured bundle growth without new limit; WebSocket/EventSource/server transport excluded. Raw accepted goal/unit at 207e9db6b4bf84b525d396d5378080ae1244c5b1; Contract+RED 2a6a30728d5af714ef2598bf84158b89dc65e48e (PR comment 6278683544), original BASE 3207b33acb3cb74d54be2cff6d33200cb32bf556. Current review BASE 7f8d0e8d7dea72f271e1060e074f5be9a8285223; clean committed product/test tree 3301e4c465a7da0deb5da2c7bf678b3b086bbc9c; verify full PR diff plus integration delta against 42a3d462692a7748d44a4745a9ab110fe30442cd. Read raw sources, preparation carrier, PR comments, current carriers and receipts; retained 3fe0e53 review is history, not immunity. Latest sandbox-support draft wording separately checked against raw CI run39366901741/job118446158154, trace artifact12240234469 and unchanged-head local rerun; only documentation wording differs from reviewed commit. Current receipts: /tmp/rifty-fetch-main-browser.log, /tmp/rifty-fetch-main-no-coi.log, /tmp/rifty-fetch-main-no-coi-interactive.log, /tmp/rifty-fetch-main-prod.log, /tmp/rifty-fetch-main-packed.log, /tmp/rifty-fetch-main-pr-check.log.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Acceptance 1: real Hono preserves Cookie/File multipart and Node header conversion",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:49",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: body locking/disturbance, clone/copy, detached reads and pending guest-source exit match live Node",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:111",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: real multipart HTTP, one fetched body, explicit ceilings, abort/network errors and released lifetime holds",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:86",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: Hono File/Cookie, getSetCookie, retained headers and Fetch class identities",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:10",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: both clone branches, direct multipart stream, guest bodies, consumed/locked bodies and Request copies",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:111",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: multipart POST, fetched lock/clone, metadata, active abort and connection failure",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:171",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: abort during fetch/body rejects and releases the hold; original Contract+RED advisory closed by active-body/upload cases",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:193",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: source error rejects and cannot be reread; original Contract+RED advisory closed by bodyUsed and second-consumer assertions",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:153",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: unavailable transport rejects and process exits",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:244",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: unsupported explicit wire headers reject with the named ceiling",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:248",
+      "note": ""
+    },
+    {
+      "row": "Request public construction/conversion, copy and body state",
+      "source": "public-api",
+      "trace": "I1+I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:90",
+      "note": ""
+    },
+    {
+      "row": "Response public methods, direct stream, clone/tee and shared disturbance",
+      "source": "public-api",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:136",
+      "note": ""
+    },
+    {
+      "row": "Headers public conversion, getSetCookie, plain-object/Proxy distinction and traps",
+      "source": "public-api",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:90",
+      "note": ""
+    },
+    {
+      "row": "FormData public File/body encoding and USV conversion, including BOM preserved as exact codepoints",
+      "source": "public-api",
+      "trace": "I1+I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:10",
+      "note": ""
+    },
+    {
+      "row": "fetch accepts JS Request/FormData and returns JS Response; cache and Host behavior match Node",
+      "source": "public-api",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:157",
+      "note": ""
+    },
+    {
+      "row": "Explicit referrer blocker fixed: empty/same-browser-origin referrers preserved, unsupported external referrers reject; independently rerun real HTTP frontend/Node probe matched",
+      "source": "public-api",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:189",
+      "note": ""
+    },
+    {
+      "row": "Response metadata advisory weak→pass: actual 302→207 redirect proves status, statusText, final URL, redirected, exposed header and body against live Node",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:191",
+      "note": ""
+    },
+    {
+      "row": "Unread network response holds process through real EOF; pure guest pending body does not",
+      "source": "acceptance",
+      "trace": "I2+I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:271",
+      "note": ""
+    },
+    {
+      "row": "HOST_FETCH/fetchHost preserve infrastructure relative asset/resource I/O through production bootstrap and packed external consumers",
+      "source": "public-api",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "tests/e2e-prod/node-fetch-guest.spec.ts:13",
+      "note": ""
+    },
+    {
+      "row": "NODE_NETWORK_FETCH/fetchNodeNetwork preserve native-compatible HTTP inputs with the same response/ref owner",
+      "source": "public-api",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:285",
+      "note": ""
+    },
+    {
+      "row": "process.emitWarning supports required Node overloads, validation, nextTick identity and constructor warning delivery",
+      "source": "public-api",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:29",
+      "note": ""
+    },
+    {
+      "row": "Warning-file redirection remains an explicit named ceiling; application-owned listeners work",
+      "source": "fault-matrix",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process-warnings.fault.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Native immediate scheduler bootstrap regression: idle/pending/completed/cancelled port references match real lifetime; four guard revert probes killed",
+      "source": "acceptance",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/timers-host-lifetime.fault.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Private stream/Proxy bindings preserve locked/disturbed custom tee and semantic VM Proxy identity across production bundles",
+      "source": "acceptance",
+      "trace": "ADR-0541+I1+I2",
+      "status": "pass",
+      "citation": "tests/e2e-prod/node-fetch-guest.spec.ts:13",
+      "note": ""
+    },
+    {
+      "row": "Pinned undici 7.25.0 class source/output provenance, exact portability anchors and generated bootstrap drift gate",
+      "source": "frozen-artifact",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "tools/publishing/generate-fetch-classes.mjs:16",
+      "note": ""
+    },
+    {
+      "row": "PR-4 compiler pin merge: old main exact-size/SHA criterion retained; merged asset independently measured 10022694 bytes, SHA256 dfdb491807cbb35df7d30759775c5ee2e6cefe04a75d5c19818306658285fe2d; other ceilings and negative payload tests unchanged, current packed consumer GREEN",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.test.ts:17",
+      "note": ""
+    },
+    {
+      "row": "Requested bundle growth measured against the same merged main 7f8d0e8d7 without a new limit; reviewer independently recomputed five actual emitted assets with Python gzip level9/mtime0 and matched ADR0541 table",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/adr/runtime-js/0541-run-node-fetch-classes-over-the-browser-i-o-boundary.md:181",
+      "note": ""
+    },
+    {
+      "row": "Pre-aborted body blocker fixed: native readable/closed/errored/locked states, retained bodyUsed, original abort reason, transport-admission priority and public/underlying cancel failures match Node; preabort and terminal-state mutants killed",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0541",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:193",
+      "note": ""
+    },
+    {
+      "row": "Caller-locked body with overridden cancel rejects fetch.abortBodyState explicitly without invoking it or stealing the reader; real Node comparison records the intentional boundary; ceiling mutant killed",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0541",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:226",
+      "note": ""
+    },
+    {
+      "row": "Errored-body finalization blocker fixed: real fetched Responses are collected; readable/closed retained streams become disturbed, errored retained stream remains undisturbed as Node; finalizer-error mutant killed",
+      "source": "fault-matrix",
+      "trace": "I2+ADR-0541",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-finalization.spec.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Active-upload cancellation advice disposition NOTE: real Node and guest both reject the abort reason then read 30 chunks with zero cancel callbacks; permanent differential guards against applying reader.cancel",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0541",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:227",
+      "note": ""
+    },
+    {
+      "row": "Existing saving-UI baseline preserved after Node globals install: real owner-worker native-write barrier uses fetchHost for its relative resource URL; CI/local RED and committed GREEN, unchanged route, record filter, UI progress/geometry and release assertions; PR-4 old criterion retained",
+      "source": "acceptance",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "tests/e2e/project-opening-progress.spec.ts:3",
+      "note": ""
+    },
+    {
+      "row": "No-COI Stop/native-flush baseline preserved: guest eval keeps Node fetch and receives an absolute host-resolved barrier URL; real native-write selector, Stop retention, flushed effects and follow-up command assertions unchanged; actual RED and committed GREEN",
+      "source": "acceptance",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:8",
+      "note": ""
+    },
+    {
+      "row": "No-COI admitted install/run baseline preserved after main merge: guest CLI gets absolute endpoint URL; unchanged real network gates, busy rejection, host interactivity, output/release assertions pass on the new child transport",
+      "source": "acceptance",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2689",
+      "note": ""
+    },
+    {
+      "row": "Fetch preload does not cache the fallback node:process before child bootstrap: existing publicNodeProcess owner preserves later seeded process identity; old cached-read revert fails the real registry regression and existing IPC programs return to Node parity",
+      "source": "fault-matrix",
+      "trace": "ADR-0458+ADR-0541",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process-globals.test.ts:35",
+      "note": ""
+    },
+    {
+      "row": "Headers/Request/Response/FormData own enumerable properties round-trip as plain objects through actual browser advanced fork IPC against live Node; old native Headers ceiling retired, other ceilings retained. Browser-only carrier replaces the invalid Node-hosted ambient-global probe; shared baseline case restored unchanged",
+      "source": "public-api",
+      "trace": "ADR-0448+ADR-0541",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/advanced-ipc-cases.ts:37",
+      "note": ""
+    },
+    {
+      "row": "Worker/fork startup and stdio baseline restored after preload repair: worker data, output, execArgv and vitest-pool-shaped programs match live Node in the real Chromium child realm",
+      "source": "acceptance",
+      "trace": "ADR-0449+ADR-0458",
+      "status": "pass",
+      "citation": "tests/browser-unit/worker-stdio-exec-argv.spec.ts:37",
+      "note": ""
+    },
+    {
+      "row": "Existing WebAssembly streaming boundary retained: ten carrier ceilings and four priority/reflection assertions unchanged; a real loopback response with pending body replaces the URL-less transport stub, preserving hold/drain/cancellation discrimination",
+      "source": "acceptance",
+      "trace": "ADR-0158+ADR-0541",
+      "status": "pass",
+      "citation": "tests/e2e/fetch-keepalive-webassembly-streaming.spec.ts:327",
+      "note": ""
+    },
+    {
+      "row": "Integration with main no-COI child transport preserves seeded process, Buffer stdin, kernel-owned completion and SDK lifecycle; auto-merges keep both changes, real Node/Chromium child hierarchy/stdio/IPC/startup and agent mutation carriers pass (26/26)",
+      "source": "acceptance",
+      "trace": "ADR-0539+ADR-0541",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:53",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/fixtures/advanced-ipc-cases.ts:41",
+          "summary": "NOTE: optional childSaw snapshot would retain explicit first-hop observation in the new Fetch-class IPC carrier, which currently inspects the returned value. No current contract violation established: the shared codec uses native structuredClone and only rebrands Buffer on receive, has no Fetch-specific reconstruction, and the existing generic values carrier observes childSaw for ordinary classes/records. Producer retained this as advisory without expanding the carrier; coverage remains pass, no residual.",
+          "authority": "",
+          "evidence": "Read current browser-only Fetch-class round-trip and packages/runtime-js/src/internal/node-ipc-advanced.ts:329/:371: native clone plus Buffer-only rebranding, no Fetch reconstruction. Existing generic carrier records childSaw. Same-source live Node/Chromium carrier passes at3301 in /tmp/rifty-fetch-main-browser.log. No demonstrated wrong-first-hop product mutant; optional hardening only."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

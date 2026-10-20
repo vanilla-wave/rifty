@@ -305,7 +305,7 @@ ADRs and the verdicts below are the record.
   channels open the native constructor). Proof:
   `tests/browser-unit/host-async-keepalive.spec.ts` (live Node 24.16.0 parity +
   host-task-count row). Declared gaps (user amend 2026-10-16): native-internal
-  body reads → goal `epics/node-fetch-classes-in-guest`; `navigator.locks` →
+  body reads → ADR-0541 (closed 2026-10-20); `navigator.locks` →
   `runtime-js/navigator-locks-node-lifetime`. Verdict:
   `docs/backlog/runtime-js/reference/keepalive-host-async-node-carriers-final-green.json`
   (round 8; round 9 re-checked the host-constructor seam, concern-only).
@@ -341,17 +341,16 @@ ADRs and the verdicts below are the record.
   Proof: `tests/browser-unit/vite-at-root.spec.ts`. Verdict:
   `docs/backlog/npm-client/reference/vite-root-policies-removal-node-exact-at-root-final-green.json`.
 
+2026-10-20 — Fetch classes/body-read and clone follow-ups closed by ADR-0541 (PR #381).
+
 Deferred, outside both goals (owner: agent via `rifty-refine` at the user's
 next pick; trigger as listed):
 
-- `epics/node-fetch-classes-in-guest` — FIT with the user (draft goal); kills the
-  ADR-0529 §4 body-read gap.
 - `runtime-js/navigator-locks-node-lifetime` — a program whose last work is a
-  lock request; or the fetch-classes goal's sweep.
+  lock request.
 - `runtime-js/broadcast-channel-guest-scope` — first parity row (two processes,
   one channel name).
 - `npm-client/bcrypt-substitution-install` — `rifty-fix` (observed, compat ❌).
 - `npm-client/napi-rs-force-wasi-launch-env` — the ADR-0534 kill probe.
-- `runtime-js/fetch-keepalive-response-clone-lifecycle` (ADR-0158 lock split),
-  `distribution/build-module-count-pins-over-live-transitives`,
+- `distribution/build-module-count-pins-over-live-transitives`,
   `npm-client/vite-7-3-7-from-scratch-esbuild-refusal` — existing drafts.

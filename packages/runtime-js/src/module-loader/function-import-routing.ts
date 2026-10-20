@@ -1,9 +1,9 @@
 import { NotImplementedError } from '@riftydev/io';
 import type { ImportExpression, Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
+import { runtimeProxy } from '../internal/proxy-identity.ts';
 import { rewriteDirectEvalImportArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
-
 type DynamicImport = (specifier: unknown) => Promise<Record<string, unknown>>;
 type RuntimeCompiledFunction = (...args: unknown[]) => unknown;
 
@@ -67,7 +67,7 @@ function makeRoutedConstructor(
   dynamicImport: DynamicImport,
   baseId: string,
 ): RuntimeFunctionConstructor {
-  return new Proxy(realConstructor, {
+  return runtimeProxy(realConstructor, {
     apply(target, thisArg, rawArgs) {
       return routeOrCompile(rawArgs, dynamicImport, baseId, (args) =>
         Reflect.apply(target, thisArg, args),

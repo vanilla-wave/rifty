@@ -1,3 +1,4 @@
+import { fetchHost } from '@riftydev/io';
 /**
  * Fetcher for `@riftydev/npm-client.RegistryClient` that routes every request
  * through the configured npm-registry proxy.
@@ -27,7 +28,7 @@ function registryProxyPrefix(value: string | undefined): string {
 
 export function proxiedRegistryFetch(options: ProxiedRegistryFetchOptions = {}): Fetcher {
   const proxyPrefix = registryProxyPrefix(options.proxyPrefix);
-  const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
+  const fetcher = options.fetcher ?? fetchHost;
 
   return async (url: string, init?: RequestInit) => {
     const rewritten = url.startsWith(UPSTREAM_PREFIX)

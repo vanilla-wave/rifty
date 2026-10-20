@@ -41,3 +41,17 @@ edits; that pin update stays explicit. No ADR is superseded.
 
 - 2026-10-20 — upstream-twin runtime changes regenerate TypeScript-worker chunk imports; exact size stays 10,022,664 bytes. Pin refreshed; packed toolchain surface (15 first-party/73 external tarballs, Chromium agent/build) and retirement gate pass. No directory/size exemption added.
 - 2026-10-20 — file-stdout imports refresh that same 10,022,664-byte worker to SHA-256 `03b5b25a62685f215f32e2173a028bb04ec1d1e0a7ae4ee16e17dfd23f085725`; packed toolchain surface and exact retirement gate pass.
+## Corrections
+
+- 2026-10-20 — ADR-0541 native resource-fetch imports change the TypeScript
+  worker fingerprint (+30 bytes); re-pin exact bytes/SHA only. Compiler chunk,
+  2 MB ceiling and negative payload tests unchanged; packed consumer proof.
+- 2026-10-20 — Fetch abort/finalization correction changes hashed imports again;
+  TypeScript worker byte size unchanged, exact SHA re-pinned. Same ceilings.
+- 2026-10-20 — Fetch bootstrap process-cache repair changes the import hash;
+  same TypeScript worker byte size and ceilings, exact SHA re-pinned.
+- 2026-10-20 — Merge main7f8d0e8d7 (no-COI child transport): resolve competing
+  TypeScript worker pins from the merged build, not either parent. Byte size
+  unchanged; ceilings and negative probes retained.
+
+- 2026-10-20 — integrate Fetch main40837803b with upstream esbuild: derive the TypeScript worker pin from the combined build; exact bytes/hash only, all other ceilings unchanged.

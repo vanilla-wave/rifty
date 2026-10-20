@@ -13,6 +13,7 @@
  */
 import { NotImplementedError, isBuiltinSpecifier, listBuiltins } from '@riftydev/io';
 import { createRequirePath } from '../internal/create-require-path.ts';
+import { runtimeProxy } from '../internal/proxy-identity.ts';
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
 
 interface RequireFn {
@@ -112,7 +113,7 @@ const moduleModule = {
   flushCompileCache,
   getCompileCacheDir,
   isBuiltin,
-  builtinModules: new Proxy([] as string[], {
+  builtinModules: runtimeProxy([] as string[], {
     get(_target, prop) {
       const arr = listBuiltins();
       const value = (arr as unknown as Record<string | symbol, unknown>)[prop];

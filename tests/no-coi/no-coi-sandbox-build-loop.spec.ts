@@ -2801,6 +2801,7 @@ test('host stays interactive while admitted install and run wait at network boun
         __riftyPendingToolchain?: Promise<unknown>;
       };
       const root = '/interactive-run';
+      const runUrl = new URL('/favicon.svg?toolchain-run-boundary=admitted', location.href).href;
       await holder.__riftyNoCoiSandbox.fs.writeFile(
         `${root}/node_modules/.bin/network-boundary`,
         "#!/usr/bin/env node\nimport('../network-boundary/cli.js');\n",
@@ -2811,7 +2812,7 @@ test('host stays interactive while admitted install and run wait at network boun
       );
       await holder.__riftyNoCoiSandbox.fs.writeFile(
         `${root}/node_modules/network-boundary/cli.js`,
-        "fetch('/favicon.svg?toolchain-run-boundary=admitted').then((response) => response.arrayBuffer()).then(() => console.log('__RIFTY_RUN_RELEASED__')); module.exports = {};\n",
+        `fetch(${JSON.stringify(runUrl)}).then((response) => response.arrayBuffer()).then(() => console.log('__RIFTY_RUN_RELEASED__')); module.exports = {};\n`,
       );
       const output: string[] = [];
       const off = holder.__riftyNoCoiSandbox.runtime.on((event) => {

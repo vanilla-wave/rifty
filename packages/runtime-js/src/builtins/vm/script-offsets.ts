@@ -1,3 +1,4 @@
+import { runtimeProxy } from '../../internal/proxy-identity.ts';
 /**
  * Host-realm `vm` script offsets (ADR-0450). A script with a non-zero
  * `lineOffset` / `columnOffset` is evaluated under a `sourceURL` identity that
@@ -162,7 +163,7 @@ function projectCallSite(site: unknown): unknown {
   if (typeof callSite.getScriptNameOrSourceURL !== 'function') return site;
   const identity = parseIdentity(callSite.getScriptNameOrSourceURL());
   if (!identity) return site;
-  const proxy = new Proxy(callSite, projectionHandler(identity));
+  const proxy = runtimeProxy(callSite, projectionHandler(identity));
   projectedSites.add(proxy);
   return proxy;
 }

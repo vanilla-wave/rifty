@@ -1,11 +1,8 @@
 /**
  * Node-compatible `process` global — the ONE `NodeProcess` class (ADR-0157).
  *
- * Spec-seeded (pid/ppid/argv/env/cwd + stdio MessagePorts + ADR-0045 fork-IPC)
- * AND mutable (chdir/nextTick/hrtime/uptime/exitCode). Built once: the kernel
- * pre-entry seam constructs `new NodeProcess(spec)` for kernel-spawned children
- * (see `ipc/install-process.ts`); the REPL worker uses the no-spec singleton
- * `riftyProcess`. No post-spawn `globalThis.process` swap.
+ * Kernel pre-entry constructs one spec-seeded NodeProcess (argv/env/stdio/IPC);
+ * the REPL uses `riftyProcess`. No later global process swap.
  *
  * `nextTick` is queued via `queueMicrotask`. To match Node's ordering (nextTick
  * always wins over `Promise.then`), `patchPromiseForNextTick` patches
@@ -64,6 +61,7 @@ import {
 } from './process-lifecycle-events.ts';
 import { type NodeStdin, makeStdinReader } from './process-stdin-reader.ts';
 import { type NodeStdioWriter, applyTtyShape, makeStdioWriter } from './process-stdio-writer.ts';
+import { type EmitWarning, installProcessWarnings } from './process-warnings.ts';
 import { captureProcessStdio } from './stdio-fd-source.ts';
 
 const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
@@ -299,6 +297,7 @@ export function coerceExitCode(v: unknown): number {
  * `process instanceof require('events')` keeps working.
  */
 export class NodeProcess extends EventEmitter {
+  declare emitWarning: EmitWarning;
   pid: number;
   ppid: number;
   argv: string[];
@@ -496,6 +495,7 @@ export class NodeProcess extends EventEmitter {
     }
     captureProcessStdio(this);
     if (this.#stdoutIsFile) installLazyFileStdout(this);
+    installProcessWarnings(this);
   }
 
   override addListener(event: string | symbol, listener: StdinListener): this {

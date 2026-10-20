@@ -2,8 +2,6 @@ export const URLConstructor = globalThis.URL;
 
 const encodeURIPrimordial = globalThis.encodeURI;
 const decodeURIComponentPrimordial = globalThis.decodeURIComponent;
-const fromCharCodePrimordial = String.fromCharCode;
-const charCodeAtPrimordial = String.prototype.charCodeAt;
 const reflectApplyPrimordial = Reflect.apply;
 
 type CodedTypeError = TypeError & { code: string };
@@ -33,25 +31,18 @@ function codedTypeError(code: string, message: string): CodedTypeError {
   return error;
 }
 
-function toWellFormed(value: string): string {
-  let result = '';
-  for (let index = 0; index < value.length; index += 1) {
-    const unit = reflectApplyPrimordial(charCodeAtPrimordial, value, [index]) as number;
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const next = reflectApplyPrimordial(charCodeAtPrimordial, value, [index + 1]) as number;
-      if (next >= 0xdc00 && next <= 0xdfff) {
-        result += fromCharCodePrimordial(unit, next);
-        index += 1;
-      } else {
-        result += '\ufffd';
-      }
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
-      result += '\ufffd';
-    } else {
-      result += fromCharCodePrimordial(unit);
-    }
-  }
-  return result;
+// ES2022 implementation of ToWellFormed; keep the regexp's protocol independent
+// of guest edits to RegExp.prototype. Shared by file URLs and Fetch WebIDL.
+const loneSurrogates = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+Object.defineProperties(loneSurrogates, {
+  exec: { value: RegExp.prototype.exec },
+  global: { value: true },
+  unicode: { value: false },
+  unicodeSets: { value: false },
+});
+const replaceRegExp = RegExp.prototype[Symbol.replace];
+export function toWellFormed(value: string): string {
+  return reflectApplyPrimordial(replaceRegExp, loneSurrogates, [value, '\ufffd']) as string;
 }
 
 function encodePath(path: string): string {
