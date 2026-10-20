@@ -81,6 +81,8 @@ const state = (label, phase = 'Units') =>
 const run = (stage, unit, extra = '', phase = 'Units', tag = short(unit)) =>
   agent(
     `Run ${stage} per ${CANON} §${stage} for goal ${DIR}${unit ? `, unit ${unit}` : ''}.${extra ? ` ${extra}` : ''} ${LEAF} Return per schema: 'done' (stage complete), 'declined' (PICKUP only: the draft was deleted or a retirement compiled with no product change — nothing to implement), 'left-path' (STOP-4: the approach changed or the obligation is parked with owner and trigger, unsafe partial changes reverted — report what resisted), 'harness' (something outside the process broke — report what).${
+      stage === 'IMPLEMENT' ? ' Run pnpm pr:check once on the committed tree and name its log path and sha in the report (the reviewer reads it, never re-runs it).' : ''
+    }${
       stage === 'PICKUP'
         ? ' PICKUP prepares the contract and its RED tests on the branch (committed, no implementation) and sets needsContractRed per RDY-8; unit = the contract path after compile/split.'
         : ''
@@ -88,9 +90,11 @@ const run = (stage, unit, extra = '', phase = 'Units', tag = short(unit)) =>
     { label: unit ? `${stage}:${tag}` : stage, phase, schema: EXIT },
   )
 
-const review = (checkpoint, unit, base, prev, phase, tag) =>
+const review = (checkpoint, unit, base, prev, phase, tag, evidence) =>
   agent(
-    `You are the fresh independent reviewer (REV-11), read-only: never edit tracked files, never commit. Invoke rifty-review for ${checkpoint} of ${unit} against BASE ${base}. Read ${CANON} §Review rules and apply its evidence bar; use raw evidence (diff, contract, carriers, probes in a detached scratch copy); inspect changed checking criteria against BASE (PR-4).${
+    `You are the fresh independent reviewer (REV-11), read-only: never edit tracked files, never commit. Invoke rifty-review for ${checkpoint} of ${unit} against BASE ${base}. Read ${CANON} §Review rules and apply its evidence bar; use raw evidence (diff, contract, carriers, probes in a detached scratch copy); inspect changed checking criteria against BASE (PR-4). Execute only discriminating probes: the gate already run at this sha (pnpm pr:check, lanes) is evidence you read from the stage report, never re-run.${
+      evidence ? ` Stage report: ${evidence}` : ''
+    }${
       prev ? ` Verify pass: the prior verdict is ${prev}; review the actual changed tree, including whether the fixes work; prior rulings are evidence, not immunity.` : ''
     } Write the review-schema JSON (tools/review/review-schema.json) to <mktemp -d -t rifty-review.XXXX>/verdict.json, run node tools/review/blockers.mjs on it, and return per schema: pass = exit 0, verdictPath, exitCode (2 = malformed), blockers = every finding of severity blocker (authority + summary verbatim).`,
     { label: `review:${checkpoint}:${tag}`, phase, schema: REVIEW },
@@ -107,7 +111,7 @@ const fmt = (blockers) => blockers.map((b) => `[${b.authority}] ${b.summary}`).j
 const stalled = (prev, cur) => cur.filter((b) => prev.some((p) => p.authority === b.authority && p.summary === b.summary))
 
 // One checkpoint: review → reception (FIX / NOTE / dispute → critic) → verify, until PASS, STOP-3 stall, or the valve.
-async function checkpoint(name, unit, base, phase = 'Units', tag = short(unit)) {
+async function checkpoint(name, unit, base, phase = 'Units', tag = short(unit), evidence = '') {
   const record =
     name === 'Contract+RED'
       ? "the contract's 'ready-verdict:' line; the JSON on the PR"
@@ -118,7 +122,7 @@ async function checkpoint(name, unit, base, phase = 'Units', tag = short(unit)) 
   let prevBlockers = []
   let retried = false
   for (let verify = 0; ; ) {
-    const r = await review(name, unit, base, prev, phase, tag)
+    const r = await review(name, unit, base, prev, phase, tag, evidence)
     if (!r) return harness(`${name} reviewer returned nothing`)
     if (r.exitCode === 2) {
       // §Review run: an invalid report is a harness failure — retry once, then report.
@@ -140,7 +144,7 @@ async function checkpoint(name, unit, base, phase = 'Units', tag = short(unit)) 
       unit,
       same.length
         ? `STOP-3 stall at verdict ${r.verdictPath}: ${same.length} blocker(s) survived the fix + verify pass unchanged — ${fmt(same)}. For those do STOP-4, never another fix of the same kind: check the authority and diagnosis, choose a materially different design or a discriminating probe, or park the obligation and revert unsafe partial changes; report 'left-path' when the unit leaves the path.${rest.length ? ` The other blockers of this pass go through §Review run 1–2 as usual: ${fmt(rest)}.` : ''}`
-        : `The reviewer returned blockers (verdict ${r.verdictPath}): ${fmt(r.blockers)}. Do §Review run 1–2: verify each against its authority and evidence (REV-12) — a valid blocker is FIX, advice is NOTE; list the blockers you dispute in 'disputed' and stop there (a fresh critic rules; the implementer cannot dismiss its own defect); otherwise fix the surviving blockers together and commit.`,
+        : `The reviewer returned blockers (verdict ${r.verdictPath}): ${fmt(r.blockers)}. Do §Review run 1–2: verify each against its authority and evidence (REV-12) — a valid blocker is FIX, advice is NOTE; list the blockers you dispute in 'disputed' and stop there (a fresh critic rules; the implementer cannot dismiss its own defect); otherwise fix the surviving blockers together, commit, run pnpm pr:check once on that tree and name its log path and sha in the report.`,
       phase,
       tag,
     )
@@ -156,6 +160,7 @@ async function checkpoint(name, unit, base, phase = 'Units', tag = short(unit)) 
     if (x.outcome !== 'done') return x
     prev = r.verdictPath
     prevBlockers = r.blockers.filter((b) => !demoted.includes(b.summary))
+    evidence = x.report
     verify++
   }
 }
@@ -183,10 +188,10 @@ for (let i = 0; !st.mapEmpty || !st.hasCarrier; i++) {
       // Only PICKUP may decline (PICKUP 2); a later 'declined' is a unit leaving the path.
       if (x?.outcome === 'done') {
         unit = x.unit ?? unit
-        if (x.needsContractRed) x = await checkpoint('Contract+RED', unit, st.base)
+        if (x.needsContractRed) x = await checkpoint('Contract+RED', unit, st.base, 'Units', short(unit), x.report)
       }
       if (x?.outcome === 'done') x = await run('IMPLEMENT', unit)
-      if (x?.outcome === 'done') x = await checkpoint('Final+GREEN', unit, st.base)
+      if (x?.outcome === 'done') x = await checkpoint('Final+GREEN', unit, st.base, 'Units', short(unit), x.report)
       if (x?.outcome === 'done') {
         landed++
         x = await run('RECHART', unit, 'The slice landed (Final+GREEN PASS, verdict recorded per REV-8): RECHART 1–4.')
@@ -204,7 +209,7 @@ for (let i = 0; !st.mapEmpty || !st.hasCarrier; i++) {
 phase('Close')
 const cl = await checkpoint('Final+GREEN', `the whole goal ${DIR} end to end — every invariant executed on the real scenario (CLOSE 1)`, st.branchBase, 'Close', 'goal')
 if (cl.outcome !== 'done') return stop(cl.outcome, cl.report)
-const done = await run('CLOSE', null, 'CLOSE 1 passed (landing verdict recorded per REV-8). Do CLOSE 2–4, then merge per PR-6 and DEC-3; wait for gh pr checks at HEAD.', 'Close')
+const done = await run('CLOSE', null, 'CLOSE 1 passed (landing verdict recorded per REV-8). Do CLOSE 2–4, then merge per PR-6 and DEC-3; wait for gh pr checks at HEAD; with no PR CI run pnpm pr:check --all once at HEAD instead.', 'Close')
 if (!done) return stop('harness', 'CLOSE returned nothing')
 if (done.outcome !== 'done') return stop(done.outcome, done.report)
 return { closed: true, goal, landed, report: done.report }

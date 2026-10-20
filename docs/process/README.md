@@ -131,7 +131,8 @@ batch fix, one verify pass (§Review run); a stall → `STOP-3`.
    §Class-kill); a sibling the sweep finds is routed by `REV-12`.
 3. Update obligations, decisions and useful observations where they belong. A
    technical uncertainty is a next probe/design, not a user scope question.
-4. Run `pnpm pr:check` (`PR-6`). A reproducing failure is diagnosed; expected
+4. Run `pnpm pr:check` once on the committed tree (`PR-6`); its log at that sha
+   is the reviewer's gate evidence. A reproducing failure is diagnosed; expected
    RED is not a separate bug; an unresolvable red never lands.
 5. Commit, push, update the draft PR, continue Final+GREEN.
 
@@ -188,8 +189,9 @@ An empty map is not proof of completion; CLOSE verifies the destination.
 Name CHECKPOINT (`Contract+RED` | `Final+GREEN`), UNIT (contract path, or PR
 number plus the observed baseline) and BASE. The tree is clean. A fresh
 independent reviewer (`rifty-review`) reads raw authorities, diff and
-artifacts — never the implementer's diagnosis; it may execute probes/mutants in
-a detached scratch copy; it never edits the work. Harness mechanics: `traps.md`
+artifacts — never the implementer's diagnosis; it may execute discriminating
+probes/mutants in a detached scratch copy, never the gate already run at the
+reviewed sha (its `pnpm pr:check` log is evidence); it never edits the work. Harness mechanics: `traps.md`
 §Harness. An invalid report is a harness failure, not a review: retry once, then
 report the error.
 
@@ -350,10 +352,12 @@ violation, and blocking on a demand no declared authority makes.
   settles it; ask the informed frontier together; revisit dependent choices
   after an answer. A probe establishes behavior, not consent. An unanswered
   user question keeps the goal `draft`. Final written-result check: before a
-  write-up (capture, refine, FIT) is complete, one fresh read-only reviewer
+  refine, a FIT or a user-facing capture is complete, one fresh read-only reviewer
   reads the final draft set with the original request, the user's answers and
   the evidence; verify its findings by `REV-12`; material edits get a new pass;
-  no approval of the report. Amendments: a user decision amends a ready goal in
+  no approval of the report. A capture or contract written inside an
+  authorized run gets no separate pass: its checkpoint reviewer reads it
+  (`REV-12`). Amendments: a user decision amends a ready goal in
   place — `amend: <date> — user: <their words> — <changed obligations and why>`
   — rechart dependencies, recheck changed promises (`RDY-8`), keep valid
   evidence. Silence, a technical failure, an ADR or a reviewer demand is not
@@ -457,7 +461,8 @@ violation, and blocking on a demand no declared authority makes.
 - **PR-5** The user's requested packaging wins.
 - **PR-6 DoD.** `AGENTS.md` §DoD: `pnpm pr:check` (locally the test lanes
   follow the diff since the origin/main merge-base; `--all`, or CI on every
-  PR push that is not docs-only, runs the full set), real acceptance proof,
+  PR push that is not docs-only, runs the full set; a run with no PR CI runs
+  `--all` once before CLOSE, never per unit), real acceptance proof,
   root-cause repairs, package CHANGELOGs. `check:pass-binding` runs after
   final review, before merge and in ready-PR CI; it consumes the review, never
   turns a BLOCK into PASS. A product/test commit after `reviewed_sha` (a

@@ -83,8 +83,10 @@ Record the verdict verbatim in `## Challenge`, including an early draft check.
 FIT/PICKUP and goal children reuse a checked premise for unchanged promises;
 new evidence or materially changed promises need reconsideration, a new stage
 name does not. Existing-baseline repairs and just-file captures gain no premise critic.
-Every completed backlog write-up still gets the `RDY-6` final check of the written
-result after drafting; reuse of an early premise check cannot skip it.
+Every completed backlog write-up outside a run still gets the `RDY-6` final check
+of the written result after drafting; reuse of an early premise check cannot skip
+it. A capture written inside an authorized run is read by that unit's checkpoint
+reviewer (`REV-12`), never by a separate pass.
 
 A ready document records `challenge: <date> — clear | N problems` in
 `## Challenge`. Resolve a value/cheaper-route objection with evidence or the

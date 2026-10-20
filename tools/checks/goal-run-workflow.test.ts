@@ -100,10 +100,10 @@ describe('goal-run workflow sequencing', () => {
     const { result, labels, calls } = await trace(GOAL, {
       state: [st({ hasCarrier: false, unit: null }), st(), st({ mapEmpty: true })],
       RECHART: [done(), done()],
-      PICKUP: [done({ needsContractRed: true })],
+      PICKUP: [done({ needsContractRed: true, report: 'contract + RED at sha-p' })],
       'review:Contract+RED': [pass('v-cr')],
       'Contract+RED': [done()],
-      IMPLEMENT: [done()],
+      IMPLEMENT: [done({ report: 'green; pr:check log /tmp/g.log @ sha-i' })],
       'review:Final+GREEN': [pass('v-fg'), pass('v-goal')],
       'Final+GREEN': [done(), done()],
       CLOSE: [done({ report: 'merged' })],
@@ -134,6 +134,13 @@ describe('goal-run workflow sequencing', () => {
     expect(prompt('review:Final+GREEN:u1')).toContain('BASE b1');
     expect(calls.find((c) => c.label === 'review:Final+GREEN:goal')?.phase).toBe('Close');
     expect(prompt('PICKUP:u1')).toContain('never spawn agents');
+    expect(prompt('review:Contract+RED:u1')).toContain('Stage report: contract + RED at sha-p');
+    expect(prompt('review:Final+GREEN:u1')).toContain(
+      'Stage report: green; pr:check log /tmp/g.log @ sha-i',
+    );
+    expect(prompt('review:Final+GREEN:u1')).toContain('never re-run');
+    expect(prompt('IMPLEMENT:u1')).toContain('pr:check once');
+    expect(prompt('CLOSE')).toContain('--all once');
   });
 
   it('picks up a seeded carrier unit instead of re-charting while the carrier is uncommitted', async () => {
@@ -211,11 +218,14 @@ describe('goal-run workflow sequencing', () => {
       state: [st({ unitCertified: true }), st({ mapEmpty: true })],
       IMPLEMENT: [done()],
       'review:Final+GREEN': [fail('v1', B1), fail('v2', B1, B2), pass()],
-      'Final+GREEN': [done(), left, done()],
+      'Final+GREEN': [done({ report: 'fixed B1; pr:check log /tmp/f.log @ sha-f' }), left, done()],
       RECHART: [done()],
       CLOSE: [done()],
     });
     const reception = calls.filter((c) => c.label === 'Final+GREEN:u1');
+    expect(calls.filter((c) => c.label === 'review:Final+GREEN:u1')[1].prompt).toContain(
+      'Stage report: fixed B1; pr:check log /tmp/f.log @ sha-f',
+    );
     expect(reception[0].prompt).toContain('returned blockers (verdict v1)');
     expect(reception[0].prompt).not.toContain('STOP-3');
     expect(reception[1].prompt).toContain('STOP-3 stall at verdict v2');

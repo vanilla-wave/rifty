@@ -55,9 +55,10 @@ A factual capture needs no premise critic. A proposed direction follows
 otherwise at FIT/PICKUP. Preserve any early record for reuse; formalizing the
 same premise does not require another premise critique.
 
-Every completed write-up, including a factual/agent-only capture, gets `RDY-6`
-final written-result check after the draft is written (an epic
-continuing into FIT in this session: that check is README §FIT 8). Use a fresh
+Every completed write-up outside a run, including a factual/agent-only capture,
+gets `RDY-6` final written-result check after the draft is written (an epic
+continuing into FIT in this session: that check is README §FIT 8; a capture
+written inside an authorized run is read by its checkpoint reviewer, `REV-12`). Use a fresh
 reviewer on the final draft set and original sources; an early Challenge cannot
 substitute. Keep explicit unanswered questions in drafts; do not self-run a
 user interview in an agent-only context or claim their scope settled.
