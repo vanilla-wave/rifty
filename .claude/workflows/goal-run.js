@@ -81,7 +81,7 @@ const state = (label, phase = 'Units') =>
 const run = (stage, unit, extra = '', phase = 'Units', tag = short(unit)) =>
   agent(
     `Run ${stage} per ${CANON} §${stage} for goal ${DIR}${unit ? `, unit ${unit}` : ''}.${extra ? ` ${extra}` : ''} ${LEAF} Return per schema: 'done' (stage complete), 'declined' (PICKUP only: the draft was deleted or a retirement compiled with no product change — nothing to implement), 'left-path' (STOP-4: the approach changed or the obligation is parked with owner and trigger, unsafe partial changes reverted — report what resisted), 'harness' (something outside the process broke — report what).${
-      stage === 'IMPLEMENT' ? ' Run pnpm pr:check once on the committed tree and name its log path and sha in the report (the reviewer reads it, never re-runs it).' : ''
+      stage === 'IMPLEMENT' ? ' Run pnpm pr:check once on the committed tree, tee its log to /tmp or a gitignored *.log name (the tree must stay clean for the stamp), and name the log path and sha in the report (the reviewer reads it, never re-runs it).' : ''
     }${
       stage === 'PICKUP'
         ? ' PICKUP prepares the contract and its RED tests on the branch (committed, no implementation) and sets needsContractRed per RDY-8; unit = the contract path after compile/split.'
@@ -144,7 +144,7 @@ async function checkpoint(name, unit, base, phase = 'Units', tag = short(unit), 
       unit,
       same.length
         ? `STOP-3 stall at verdict ${r.verdictPath}: ${same.length} blocker(s) survived the fix + verify pass unchanged — ${fmt(same)}. For those do STOP-4, never another fix of the same kind: check the authority and diagnosis, choose a materially different design or a discriminating probe, or park the obligation and revert unsafe partial changes; report 'left-path' when the unit leaves the path.${rest.length ? ` The other blockers of this pass go through §Review run 1–2 as usual: ${fmt(rest)}.` : ''}`
-        : `The reviewer returned blockers (verdict ${r.verdictPath}): ${fmt(r.blockers)}. Do §Review run 1–2: verify each against its authority and evidence (REV-12) — a valid blocker is FIX, advice is NOTE; list the blockers you dispute in 'disputed' and stop there (a fresh critic rules; the implementer cannot dismiss its own defect); otherwise fix the surviving blockers together, commit, run pnpm pr:check once on that tree and name its log path and sha in the report.`,
+        : `The reviewer returned blockers (verdict ${r.verdictPath}): ${fmt(r.blockers)}. Do §Review run 1–2: verify each against its authority and evidence (REV-12) — a valid blocker is FIX, advice is NOTE; list the blockers you dispute in 'disputed' and stop there (a fresh critic rules; the implementer cannot dismiss its own defect); otherwise fix the surviving blockers together, commit, run pnpm pr:check once on that tree (tee to /tmp or a gitignored *.log name) and name its log path and sha in the report.`,
       phase,
       tag,
     )
@@ -209,7 +209,7 @@ for (let i = 0; !st.mapEmpty || !st.hasCarrier; i++) {
 phase('Close')
 // PR-6: the full gate once, before CLOSE 1; its report is the CLOSE reviewer's evidence.
 const gate = await agent(
-  `Gate before CLOSE 1 for goal ${DIR} (${CANON} PR-6): with a PR, wait for gh pr checks at HEAD and report the result and sha; with no PR CI run pnpm pr:check --all once at HEAD, tee its log, report the log path, its 'tree:' stamp and the sha. A red lane is repaired per rifty-fix here and the gate re-run; an unrepairable red → 'left-path' with what is red. ${LEAF} Return per schema.`,
+  `Gate before CLOSE 1 for goal ${DIR} (${CANON} PR-6): with a PR, wait for gh pr checks at HEAD and report the result and sha; with no PR CI run pnpm pr:check --all once at HEAD, tee its log to /tmp or a gitignored *.log name, report the log path, its 'tree:' stamp and the sha. A red lane is repaired per rifty-fix here and the gate re-run; an unrepairable red → 'left-path' with what is red. ${LEAF} Return per schema.`,
   { label: 'gate', phase: 'Close', schema: EXIT },
 )
 if (!gate) return stop('harness', 'gate returned nothing')
