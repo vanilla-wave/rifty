@@ -163,6 +163,8 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
   Real IPC/Worker RED→GREEN plus a bootstrap identity regression guard; no new
   registry mechanism. Headers' old native-object IPC ceiling is superseded:
   all four JS Fetch classes round-trip own enumerable fields as live Node.
+  Carrier runs in the Chromium guest: the Node-hosted parity runner leaves
+  ambient Fetch constructors owned by Node, so it cannot grade this port.
 - WebAssembly ceiling carrier now uses real loopback HTTP headers plus an open
   body until reader cancellation. The old synthetic transport Response had no
   URL. All ten Response/PromiseLike ceiling and four priority/reflection

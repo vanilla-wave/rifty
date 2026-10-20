@@ -84,10 +84,6 @@ const c: ParityCase = {
         annotations: [],
       });
       return [
-        ['fetch-headers', Object.assign(new Headers({ a: '1' }), { own: 'headers' })],
-        ['fetch-request', Object.assign(new Request('https://example.test/'), { own: 'request' })],
-        ['fetch-response', Object.assign(new Response('body'), { own: 'response' })],
-        ['fetch-form-data', Object.assign(new FormData(), { own: 'form-data' })],
         ['string', 'hello'],
         ['number', 42],
         ['boolean', true],
