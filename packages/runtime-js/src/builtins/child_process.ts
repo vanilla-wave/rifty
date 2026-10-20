@@ -37,6 +37,7 @@ import {
 import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts';
 import { WorkerReference } from '../internal/worker-reference.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
+import { spawnNoCoiChild } from '../ipc/no-coi-child-process.ts';
 import { inspect } from '../repl/inspect.ts';
 import { SameRealmStdinPipe, execScript } from './child_process-exec.ts';
 import {
@@ -53,6 +54,7 @@ import {
   forkExecArgv,
   forwardWorkerStdio,
   resolveWorkerStdio,
+  snapshotChildEnvironment,
   spawnWorkerChild,
 } from './child_process-worker.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -63,6 +65,8 @@ import {
   readActiveNodeProcessBootstrap,
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
+import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
+import { readNodeProcessTerminal } from './process-lifecycle-events.ts';
 
 // ADR-0011 phase 3 / ADR-0039: the runtime-js `'execSync'` handler. Kernel ships
 // no default handlers after ADR-0039 — execSync is Node-API knowledge and lives
@@ -137,6 +141,7 @@ class ChildProcess extends EventEmitter {
   private readonly ownerBootstrap: ReturnType<typeof readActiveNodeProcessBootstrap>;
   readonly #reference = new WorkerReference();
   readonly #pipeReferences: WorkerReference[] = [];
+  #ipcClosedByParent = false;
   /** Bus the child's script subscribes to for parent-sent `'childMessage'`
    * events. Exposed to the spawner via `internalIpc()`. */
   readonly inboundIpc: EventEmitter = new EventEmitter();
@@ -175,8 +180,15 @@ class ChildProcess extends EventEmitter {
     });
     handle.on('close', (code, signal) => {
       this.#releaseKeepalive();
+      const parentEnded = readNodeProcessTerminal(this.ownerProcess) !== null;
+      if (parentEnded) {
+        streams.stdout.removeAllListeners();
+        streams.stderr.removeAllListeners();
+      }
       if (!streams.stdout._readableState.ended) streams.stdout.push(null);
       if (!streams.stderr._readableState.ended) streams.stderr.push(null);
+      // Node 24 leaves its IPC close count pending after parent disconnect (parity-pinned).
+      if (parentEnded || this.#ipcClosedByParent) return;
       if (handle.kind === 'same-realm') {
         queueMicrotask(() => this.emitToOwner('close', code, signal));
       } else {
@@ -203,15 +215,14 @@ class ChildProcess extends EventEmitter {
       };
       this.disconnect = (): void => {
         if (!this.connected) return;
+        this.#ipcClosedByParent = true;
         if (handle.kind === 'worker') handle.disconnect();
         this.finishIpc();
       };
-      if (handle.kind === 'worker') {
-        handle.on('message', (message) => {
-          this.emitToOwner('message', decodeNodeIpcMessage(message, ipc));
-        });
-        handle.on('disconnect', () => this.finishIpc());
-      }
+      handle.on('message', (message) => {
+        this.emitToOwner('message', decodeNodeIpcMessage(message, ipc));
+      });
+      handle.on('disconnect', () => this.finishIpc());
     }
   }
 
@@ -223,6 +234,7 @@ class ChildProcess extends EventEmitter {
   }
 
   private emitToOwner(event: string, ...args: unknown[]): boolean {
+    if (readNodeProcessTerminal(this.ownerProcess) !== null) return false;
     const realm = globalThis as { process?: unknown };
     const previous = realm.process;
     const previousBootstrap = readActiveNodeProcessBootstrap();
@@ -346,7 +358,12 @@ function rejectedChildCwd(cwd: string): ChildProcess | null {
   return null;
 }
 
-export function spawn(command: string, args: string[] = [], opts: SpawnOptions = {}): ChildProcess {
+export function spawn(
+  executable: string,
+  args: string[] = [],
+  opts: SpawnOptions = {},
+): ChildProcess {
+  const command = executable === NODE_PROCESS_IDENTITY.execPath ? 'node' : executable;
   const stdio = resolveWorkerStdio(
     opts.stdio,
     activeProcessStdio(),
@@ -370,6 +387,39 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
     getKernelWorkerUrl() !== null &&
     getNodeEntryWorkerUrl() !== null;
   const execArgv = opts.__execArgv ?? [];
+  if (command === 'node' && args[0] !== undefined && isSandboxToolchainRealm()) {
+    const remote = spawnNoCoiChild(args, {
+      cwd: opts.cwd,
+      env: opts.env,
+      ipc: ipc ?? 'none',
+      execArgv,
+    });
+    const child = new ChildProcess(remote.handle, ipc, {
+      ...remote,
+      expose: stdio.expose,
+      slots: stdio.slots,
+    });
+    child.inboundIpc.on('childMessage', (payload) =>
+      remote.inbound.emit('send', encodeNodeIpcMessage(payload, ipc ?? 'json')),
+    );
+    child.inboundIpc.on('signal', (signal) => remote.inbound.emit('signal', signal));
+    if (ipc !== null) {
+      // Match the send() microtask boundary so accepted messages precede disconnect.
+      child.once('disconnect', () =>
+        queueMicrotask(() => remote.inbound.emit('disconnect-request')),
+      );
+    }
+    forwardWorkerStdio(
+      {
+        stdin: () => remote.stdin,
+        stdout: () => remote.stdout,
+        stderr: () => remote.stderr,
+        once: remote.handle.once.bind(remote.handle),
+      },
+      stdio,
+    );
+    return child;
+  }
   if (workerRoute) {
     const handle = spawnWorkerChild(command, args, {
       cwd: opts.cwd,
@@ -417,7 +467,6 @@ function spawnViaSameRealm(
   stdio: ReturnType<typeof resolveWorkerStdio>,
   ipc: NodeIpcSerialization | null,
 ): ChildProcess {
-  warnSameRealmFallbackOnce();
   // The handler needs the `ProcessHandle` and `ChildProcess`, both built AFTER
   // it's registered. A mutable container lets the handler read them on the next
   // microtask without an extra `await` boundary, which would delay the script
@@ -428,13 +477,14 @@ function spawnViaSameRealm(
   const stdinPipe = new SameRealmStdinPipe();
   const stdin = stdinPipe.writable;
   const parent = activeChildProcessContext();
+  const env = snapshotChildEnvironment(opts.env, parent.env);
   const execution = buildChildExecutionPlan(
     parent.cwd,
     opts.cwd,
     command === 'node' ? args[0] : undefined,
   );
   const resolvedArgs =
-    execution.entryPath === undefined ? args : [execution.entryPath, ...args.slice(1)];
+    execution.entryPath === undefined ? args.slice() : [execution.entryPath, ...args.slice(1)];
 
   const handle = globalProcessManager.spawn(
     command,
@@ -445,17 +495,17 @@ function spawnViaSameRealm(
         throw new Error('child_process.spawn: wiring not populated before handler ran');
       }
       if (command === 'ps') {
-        stdout.push(renderPs(args));
+        stdout.push(renderPs(resolvedArgs));
         return;
       }
       if (command === 'kill') {
-        runKill(args);
+        runKill(resolvedArgs);
         return;
       }
       await execScript({
         command,
         args: resolvedArgs,
-        opts: { ...opts, cwd: execution.cwd, env: opts.env ?? parent.env },
+        opts: { ...opts, cwd: execution.cwd, env },
         io,
         ownHandle,
         inboundIpc: child.inboundIpc,
@@ -488,16 +538,6 @@ function spawnViaSameRealm(
     stderr.on('data', (chunk) => stdio.stderr?.write(chunk));
   }
   return child;
-}
-
-let sameRealmWarningFired = false;
-
-function warnSameRealmFallbackOnce(): void {
-  if (!isSandboxToolchainRealm() || sameRealmWarningFired) return;
-  sameRealmWarningFired = true;
-  console.warn(
-    '[rifty:child_process] Falling back to same-realm execution: child shares the parent event loop.',
-  );
 }
 
 function renderPs(args: readonly string[]): string {

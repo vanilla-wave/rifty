@@ -1,5 +1,5 @@
 import { serializePackageJson } from '@riftydev/npm-client';
-import { preparePackageManifest } from '@riftydev/shadow-registry/runtime';
+import { preparePackageManifest } from '@riftydev/shadow-registry/runtime/common';
 import { nodeProjectRootShellCommand } from './internal/node-command.ts';
 import { defineOwnEnumerableProperty } from './internal/own-property.ts';
 import {

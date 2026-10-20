@@ -35,4 +35,6 @@ PR #314 accepts SDK rebuilds, all existing adaptations and optional public Vite 
 - 2026-10-16 — every adaptation this ADR owns is classified (class, authority, loud drift anchor, kill condition) under `docs/process/rules/fault-classes.md` §Guest-package adaptations; inventory `docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md`. Pointer only; Decision unchanged.
 - 2026-10-19 — §Alternatives "preserve proven implementation": a preserved adaptation is a declared ceiling, not support (`AGENTS.md` §Fidelity, "Similar but different must work"); its compat claim reads ⚠️ until its inventory kill condition lands (`none` = permanent). Decision unchanged.
 
-- 2026-10-20 — ADR-0543 limits D2 generated esbuild client/carrier ownership to no-COI. The Alternatives rejection of general Node capability fixes is superseded for COI by stock-entry differential proof; registry ownership of all retained adaptations remains.
+## Corrections (active)
+
+- 2026-10-20 — ADR-0539 removes generated-client startup from no-COI; ADR-0543 removes it from COI. Both run stock Node entries. The Alternatives rejection of general Node capability fixes is superseded by differential proof; registry ownership of retained adaptations remains.

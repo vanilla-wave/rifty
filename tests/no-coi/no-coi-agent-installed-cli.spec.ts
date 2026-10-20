@@ -11,7 +11,7 @@ test('agent project runs and rebuilds installed Vite with its file policy', asyn
       );
       const sandbox = await createSandbox({
         requireCrossOriginIsolation: false,
-        skipServiceWorker: true,
+        serviceWorkerUrl: '/sw.js',
         toolchain: {
           workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
         },

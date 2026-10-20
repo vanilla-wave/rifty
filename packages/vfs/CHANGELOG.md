@@ -1,5 +1,7 @@
 # Changelog
 
+- Supply session-local inode/clock/link metadata through memory and OPFS stats for stock Node guests.
+
 ## [Unreleased]
 
 - Entry-owned session inode and creation/change clocks in FsStat; Memory/OPFS sync preserve identity on overwrite/rename and expose link count/atime (ADR-0540).

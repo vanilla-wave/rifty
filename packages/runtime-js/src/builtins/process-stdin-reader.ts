@@ -1,6 +1,7 @@
 import type { KernelStdioInputReader } from '@riftydev/kernel';
 import { NotImplementedError } from '@riftydev/vfs';
 import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
+import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { INHERIT_STDIN, type InheritStdin, type StdinInheritor } from './process-stdin-inherit.ts';
 import { STDIN_FD, type StdinFdSource } from './stdio-fd-source.ts';
@@ -120,7 +121,7 @@ export function makeStdinReader(
       const text = decoder.decode(data, { stream: true });
       return text.length === 0 ? null : text;
     }
-    return data;
+    return Buffer.from(data);
   };
   function take(length: number): Uint8Array {
     const chunk = pending.shift();

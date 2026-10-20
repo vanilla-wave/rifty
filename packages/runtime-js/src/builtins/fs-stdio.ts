@@ -1,6 +1,6 @@
 import { NotImplementedError } from '@riftydev/io';
 import { fsError } from './fs-errors.ts';
-import { checkedSliceBounds } from './fs-fd-bounds.ts';
+import { checkedSliceBounds } from './fs-read-arguments.ts';
 import { type StatOptions, Stats } from './fs-stats.ts';
 import { runNodeCallback } from './process-lifecycle-events.ts';
 import { publicNodeProcess } from './process-public.ts';

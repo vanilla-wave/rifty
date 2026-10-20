@@ -7,11 +7,11 @@ import {
   type VfsMutationIntent,
   normalizePath,
 } from '@riftydev/vfs';
-import { MemoryFsSync } from '@riftydev/vfs/internal';
 import {
   type GuestLayout,
   type GuestMount,
   type GuestResolution,
+  guestPrivateRoot,
   guestText,
   ownerToGuestPath,
   resolveGuestPath,
@@ -90,13 +90,10 @@ function assertNotReserved(resolved: GuestResolution, guestPath: string): void {
 
 /** Guest view over the owner authority: mounts, virtual ancestors, and their edges (ADR-0531). */
 export class ProjectTerminalFsSync implements FsSync {
-  readonly #virtual = new MemoryFsSync();
   constructor(
     private readonly inner: FsSync,
     private readonly layout: GuestLayout,
-  ) {
-    for (const mount of layout.mounts) this.#virtual.mkdirSync(mount.guest, { recursive: true });
-  }
+  ) {}
 
   private resolve(path: string): GuestResolution {
     const guest = normalizePath(path);
@@ -241,15 +238,42 @@ export class ProjectTerminalFsSync implements FsSync {
     });
   }
 
+  private virtualStat(
+    path: string,
+    resolved: Extract<GuestResolution, { kind: 'virtual' }>,
+  ): ReturnType<FsSync['statSync']> {
+    // A colliding child mount must not make its existing ancestor inaccessible.
+    const nlink = 2 + this.virtualEntries(resolved).filter((entry) => entry.isDirectory).length;
+    const covered = resolved.owner === null ? null : this.inner.statSyncOrNull(resolved.owner);
+    if (covered?.isDirectory) return { ...covered, nlink };
+    // Share identity across transient namespace views and remote callers through the owner VFS.
+    const backing = normalizePath(
+      `${guestPrivateRoot(this.layout.projectRoot)}/ancestors${normalizePath(path)}`,
+    );
+    try {
+      let stat = this.inner.statSyncOrNull(backing);
+      if (stat === null) {
+        this.inner.mkdirSync(backing, { recursive: true });
+        stat = this.inner.statSync(backing);
+      }
+      if (!stat.isDirectory) throw new VfsError('ENOTDIR', backing);
+      return { ...stat, nlink };
+    } catch (error) {
+      if (error instanceof VfsError) {
+        const guest = normalizePath(path);
+        throw new VfsError(error.code, guest, error.message.replaceAll(backing, guest), {
+          cause: error,
+        });
+      }
+      throw error;
+    }
+  }
+
   statSync(path: string): ReturnType<FsSync['statSync']> {
     return this.run(() => {
       const resolved = this.resolve(path);
       if (resolved.kind === 'absent') throw new VfsError('ENOENT', normalizePath(path));
-      if (resolved.kind === 'virtual')
-        return {
-          ...this.#virtual.statSync(normalizePath(path)),
-          nlink: 2 + this.virtualEntries(resolved).filter((entry) => entry.isDirectory).length,
-        };
+      if (resolved.kind === 'virtual') return this.virtualStat(path, resolved);
       return this.inner.statSync(resolved.owner);
     });
   }
@@ -258,11 +282,7 @@ export class ProjectTerminalFsSync implements FsSync {
     return this.run(() => {
       const resolved = this.resolve(path);
       if (resolved.kind === 'absent') return null;
-      if (resolved.kind === 'virtual')
-        return {
-          ...this.#virtual.statSync(normalizePath(path)),
-          nlink: 2 + this.virtualEntries(resolved).filter((entry) => entry.isDirectory).length,
-        };
+      if (resolved.kind === 'virtual') return this.virtualStat(path, resolved);
       return this.inner.statSyncOrNull(resolved.owner);
     });
   }

@@ -15,7 +15,7 @@ export async function bootToolchain(
 ): Promise<ToolchainSandbox> {
   return await createSandbox({
     requireCrossOriginIsolation: false,
-    skipServiceWorker: true,
+    serviceWorkerUrl: '/sw.js',
     toolchain: { workerUrl },
     vmEngine,
   });

@@ -1,0 +1,334 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN/CLOSE verified at ac1e383a61ac36f66636bfc9a6025a7d8baae3b7; no remaining blocker; bind this verdict and merge only after green CI at final HEAD. Independently ran Stats plus boundary negative tests: 14/14 (/tmp/no-coi-boundary-review-focused.log), direct runtime-adapter-boundary gate: 28 generic modules and 7 Sass-forbidden categories (/tmp/no-coi-boundary-review-gate-green.log), and compiler byte comparison: both 10022694 bytes, SHA256 3e4e79930957f3e36119cbc3f5be07e157798e400991c7d9ce5352dd28248951, byte-identical to immutable accepted packed consumer (/tmp/no-coi-boundary-review-compiler.log). Inspected actual GREEN artifacts: 49 namespace/Stats/extraction/retained-COI unit tests (/tmp/no-coi-boundary-stats-green.log); 8 project-location/Vite7/Vite8/guest-Stats browser cases (/tmp/no-coi-location-green.log); 24 gate/extraction/retained-registry tests (/tmp/no-coi-retired-adapter-gates-green.log); 2 real in-realm Worker/fault browser cases (/tmp/no-coi-legacy-fixture-browser-green.log). Full pnpm pr:check --all passed all 27 checks, including full unit and Node parity (/tmp/no-coi-boundary-prcheck-all-final.log). Earlier interrupted run is not acceptance evidence. PR-4: exact 175-file closure/equality and no unreachable runtime assertions unchanged; wrapper was unexecuted. Direct registry consumers retain production cwd/ref ownership and all acceptance assertions. Boundary scanner/fail-on-missing unchanged, only removed source path retired; Sass negative injection still executes on retained registry adapter. Ancestor stat projects existing metadata without admitting colliding descendants; readdir/access still EEXIST; real owner accepts next command and closes. Prior full packed consumer (16 first-party + 178 external tarballs) and 233/233 no-COI suite accepted at BASE remain valid for unchanged dependencies under REV-1. All I1-I4 closed; pre-existing ctime advisory remains outside goal.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "ac1e383a61ac36f66636bfc9a6025a7d8baae3b7",
+  "unit_goal_source": "PR #380 observed extraction-boundary and root mount-collision repairs against BASE 7a262c5406ec8498f96a09e6a87cf477e43965e6; frozen candidate ac1e383a61ac36f66636bfc9a6025a7d8baae3b7. Raw PR body, BASE diff, original CI artifacts /tmp/no-coi-ci-unit-old.log and /tmp/no-coi-ci-browser-old.log, local REDs /tmp/no-coi-extraction-red.log and /tmp/no-coi-root-collision-red.log, focused RED /tmp/no-coi-ancestor-stat-red.log and discriminating revert /tmp/no-coi-ancestor-stat-revert.log reviewed. Also verified missing removed-module gate failure /tmp/no-coi-boundary-review-gate-red.log and final fix. CLOSE rebind of no-coi-child-processes: original goal and child unit slugs no-coi-child-processes/no-coi-esbuild-retirement read with git show 59da8edb51d440449b599aa5b3c9887549494256 (goal under docs/backlog/epics/no-coi-child-processes; units under docs/backlog/runtime-js). Accepted user amendments require SW only for children, keep ordinary no-SW SDK, retire no-COI legacy and retain shared COI client. ADR-0531 original/correction, ADR-0361 and ADR-0344 checked. Prior 31-row landing verdict and accepted packed/no-COI evidence at BASE reused for unchanged obligations under REV-1.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Acceptance 1: installed esbuild transforms twice with Node output; legacy realm slot and generated client absent",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-esbuild-retirement.spec.ts:86",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: packed no-COI graph excludes generated client and public packed SDK still executes helper/upstream transforms",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-esbuild-graph-proof.mjs:7; tests/integration/no-coi-child-browser-proof.mjs:109",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: preserve installed Vite build/rebuild baseline and shared COI client",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-installed-cli.spec.ts:35; tests/browser-unit/esbuild-vite-contract.spec.ts:1124",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: installed alias repeated fresh invocations equal native Node stdout/stderr/status",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-esbuild-retirement.spec.ts:37",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 1: raw upstream esbuild transform equals Node without package-byte patches",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:53",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: shebang helper loads dependencies, isolates globals/builtins, uses async pipes and live bidirectional FS",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/child-process-programs.ts:2",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: absent SW gives named child gap while ordinary SDK file/command operations work",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:148",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: parent.cjs close, environment, dependency, globals/builtins, bytes and live FS match actual Node execution",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:53",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: untouched esbuild.cjs transforms and terminates naturally",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/child-process-programs.ts:39",
+      "note": ""
+    },
+    {
+      "row": "Peer death: terminal outcome and released Worker resources, no successful missing output",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:187",
+      "note": ""
+    },
+    {
+      "row": "Unavailable SW during spawn: named transport error without same-realm fallback",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:148",
+      "note": ""
+    },
+    {
+      "row": "Owner FS error: preserved Node/VFS error without stale copy",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/child-process-programs.ts:44",
+      "note": ""
+    },
+    {
+      "row": "Scenario: nonempty asynchronous stdin/stdout/stderr equals native Node",
+      "source": "acceptance",
+      "trace": "scenario + I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:53",
+      "note": ""
+    },
+    {
+      "row": "SyncRpcDispatcher.dispatch reuses registered FS/process semantics across transports",
+      "source": "public-api",
+      "trace": "ADR-0539",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:53",
+      "note": ""
+    },
+    {
+      "row": "ProcessIO.complete and SpawnOptions.remoteControl retain kernel terminal and nested identity authority",
+      "source": "public-api",
+      "trace": "ADR-0539",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/child-process-programs.ts:67",
+      "note": ""
+    },
+    {
+      "row": "connectSyncFsBridge and installSyncFsInterceptor route real child requests through SW/Window to live owner",
+      "source": "public-api",
+      "trace": "ADR-0539",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:53",
+      "note": ""
+    },
+    {
+      "row": "ToolchainRuntimeController.connectChildProcesses supplies the matched Worker URL and live bridge",
+      "source": "public-api",
+      "trace": "ADR-0539",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:53",
+      "note": ""
+    },
+    {
+      "row": "ChildProcess.ref/unref and independently referenced readable pipes preserve natural completion and delayed output",
+      "source": "public-api",
+      "trace": "I1 + I2 + ADR-0539",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/child-process-programs.ts:109",
+      "note": ""
+    },
+    {
+      "row": "FsStat transports numeric metadata, file type, stable inode/birth identity and link counts through stat/lstat/fstat",
+      "source": "public-api",
+      "trace": "ADR-0540",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/fs/stats-node-fields.case.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Client-free registry runtime/common public subpath preserves packed SDK execution while excluding generated esbuild client",
+      "source": "public-api",
+      "trace": "ADR-0539",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:1203; tests/integration/no-coi-child-browser-proof.mjs:109",
+      "note": ""
+    },
+    {
+      "row": "Current exact catalog/recipe identities match regenerated snapshots and retained COI contract; unchanged package versions",
+      "source": "frozen-artifact",
+      "trace": "I3 + ADR-0539",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-vite-contract.spec.ts:1052; tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2365",
+      "note": ""
+    },
+    {
+      "row": "Updated replay-authority exact alias fixture retains rejection-before-effects negative criteria",
+      "source": "frozen-artifact",
+      "trace": "I3 + ADR-0539",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-shadow-recipe-v2-replay-authority.contract.test.ts:80",
+      "note": ""
+    },
+    {
+      "row": "Immediate parent fork disconnect settles without losing the startup request; real Worker resources retire",
+      "source": "fault-matrix",
+      "trace": "I2 + ADR-0539",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/child-process-programs.ts:126; tests/no-coi/no-coi-child-processes.spec.ts:53",
+      "note": ""
+    },
+    {
+      "row": "An accepted send reaches the child before a following parent disconnect",
+      "source": "fault-matrix",
+      "trace": "I2 + ADR-0539",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/child-process-programs.ts:133; tests/no-coi/no-coi-child-processes.spec.ts:53",
+      "note": ""
+    },
+    {
+      "row": "Parent disconnect retains Node 24.16.0 exit/close behavior while child-originated disconnect remains distinct",
+      "source": "public-api",
+      "trace": "ADR-0539",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/parent-disconnect-close.case.ts:3; tests/no-coi/fixtures/child-process-programs.ts:115",
+      "note": ""
+    },
+    {
+      "row": "Guest statSync/statSyncOrNull and Node stat/lstat expose complete numeric metadata, stable distinct directory identity across views, covered-root identity and visible-directory nlink",
+      "source": "public-api",
+      "trace": "ADR-0531 + ADR-0540",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/project-terminal-stats.test.ts:30; packages/workbench/src/workers/project-terminal-stats.test.ts:57; tests/browser-unit/guest-directory-stats.spec.ts:23",
+      "note": ""
+    },
+    {
+      "row": "Malformed private metadata ancestor/backing types fail ENOTDIR with guest-only path and diagnostic",
+      "source": "fault-matrix",
+      "trace": "ADR-0531 D7",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/project-terminal-stats.test.ts:86",
+      "note": ""
+    },
+    {
+      "row": "Exact compiler artifact admission preserves size and full SHA checks; repaired emitted artifact changes only generated import hashes, negative payload rejection unchanged",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391 + I3",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:96; tools/checks/esbuild-legacy-retirement.test.ts:1",
+      "note": ""
+    },
+    {
+      "row": "Dedicated Worker bootstrap publishes the init listener before init/port transfer; dynamic host wrappers preserve Node helper and immediate send/disconnect behavior, memory/OPFS recovery still works",
+      "source": "fault-matrix",
+      "trace": "I1 + I2 + ADR-0539",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:49; tests/no-coi/no-coi-dev-hmr.spec.ts:965; tests/no-coi/no-coi-dev-hmr.spec.ts:1297",
+      "note": ""
+    },
+    {
+      "row": "Packed snapshot/reference and warm-open Vite hosts use the controlling rifty SW while ordinary no-SW SDK behavior and named child refusal remain",
+      "source": "fault-matrix",
+      "trace": "I3 + I4 + ADR-0539",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:62; tests/integration/reference-host-browser-proof.mjs:325; tests/no-coi/no-coi-warm-open.spec.ts:90; tests/no-coi/no-coi-child-processes.spec.ts:148",
+      "note": ""
+    },
+    {
+      "row": "Saved installed tree runs upstream esbuild/Vite with malformed lock unchanged; no legacy lock-derived adapter activation",
+      "source": "fault-matrix",
+      "trace": "I3 + ADR-0539 + ADR-0420",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-esbuild-retirement.spec.ts:41; tests/no-coi/no-coi-esbuild-retirement.spec.ts:95; tests/integration/no-coi-snapshot-browser-proof.mjs:105",
+      "note": ""
+    },
+    {
+      "row": "Existing ancestor statSync/statSyncOrNull remains usable with file or directory mount collision; listing/descendant stat still EEXIST and real terminal executes next command and closes",
+      "source": "fault-matrix",
+      "trace": "ADR-0531",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/project-terminal-stats.test.ts:65; tests/browser-unit/project-location.spec.ts:373",
+      "note": ""
+    },
+    {
+      "row": "No-COI retirement removes unused wrapper while exact production closure and runtime build reachability remain strict; retained COI registry admission, live cwd/ref ownership and real Worker execution survive",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/tests/extraction-boundary.contract.test.ts:338; packages/workbench/tests/extraction-boundary.contract.test.ts:382; packages/workbench/src/workers/no-coi-project-esbuild-cwd.test.ts:22; tests/integration/workbench-runtime-adapters.contract.test.ts:19; tests/browser-unit/child-fs-in-realm-lane.spec.ts:9",
+      "note": ""
+    },
+    {
+      "row": "Generic adapter boundary and every Sass-forbidden category retain negative detection after deleted-wrapper path retirement, including the retained registry adapter",
+      "source": "frozen-artifact",
+      "trace": "ADR-0361 + ADR-0344",
+      "status": "pass",
+      "citation": "tools/checks/runtime-adapter-boundary.test.ts:95; tools/checks/runtime-adapter-boundary.test.ts:118",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/vfs/src/memory-backend.ts:314; packages/vfs/src/opfs-sync.ts:1027",
+          "summary": "New numeric Stats coverage does not establish all timestamp transitions: rename preserves stale entry/parent ctime. Outside I1–I4; recorded in the existing upstream-twin Stats item with owner and next probe, and generator-backed public fs matrix marks partial support. No full timestamp-value parity claimed.",
+          "authority": "",
+          "evidence": "Read rename implementations and tools/node-parity-runner/cases/fs/stats-node-fields.case.ts: the carrier asserts shape, stable inode/birth and link count, not ctime transition. Disposition recorded at docs/backlog/runtime-js/fs-stats-node-fields.md:39 and tools/compat-matrix-generator/fs-matrix.js:19."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

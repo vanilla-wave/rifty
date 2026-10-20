@@ -199,7 +199,7 @@ export type ToolchainResult =
     }
   | { readonly id: number; readonly ok: false; readonly error: SerializedRuntimeError };
 
-export const SANDBOX_TOOLCHAIN_PROTOCOL = 'rifty.sandbox-toolchain/v6' as const;
+export const SANDBOX_TOOLCHAIN_PROTOCOL = 'rifty.sandbox-toolchain/v7' as const;
 
 /** `node:vm` sandbox engine (ADR-0142): the real-realm QuickJS engine (default
  * after the T17 cutover) or the opt-in hardened-rewrite engine. */

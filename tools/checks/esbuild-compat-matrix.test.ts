@@ -2,22 +2,14 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 const matrixUrl = new URL('../../docs/public/compat/esbuild-js-api.md', import.meta.url);
-const policyUrl = new URL('../shadow-registry/esbuild-runtime-policy.json', import.meta.url);
 
-describe('esbuild compatibility gap statuses', () => {
-  it('marks every unsupported no-COI D4 API as not implemented', async () => {
+describe('esbuild compatibility tiers', () => {
+  it('reports upstream clients, the SW requirement and the remaining exact-version ceiling', async () => {
     const matrix = await readFile(matrixUrl, 'utf8');
-    const policy = JSON.parse(await readFile(policyUrl, 'utf8')) as {
-      readonly gaps: readonly { readonly surface: string }[];
-    };
-    const gapStatuses = new Map(
-      [...matrix.matchAll(/^\| No-COI D4 gap: `([^`]+)` \| ([^|]+) \|/gmu)].map(
-        ([, surface, status]) => [surface, status?.trim()],
-      ),
-    );
-
-    expect(gapStatuses).toEqual(
-      new Map(policy.gaps.map(({ surface }) => [surface, '❌'] as const)),
-    );
+    expect(matrix).toContain('No-COI uses the upstream 0.28.0 Node client');
+    expect(matrix).toContain('an active rifty SW is required');
+    expect(matrix).toContain('| No-COI upstream Node client | ⚠️ |');
+    expect(matrix).toContain('| COI Sync family | ⚠️ |');
+    expect(matrix).not.toContain('No-COI D4 gap:');
   });
 });

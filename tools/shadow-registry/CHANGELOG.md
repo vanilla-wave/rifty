@@ -1,5 +1,7 @@
 # Changelog — @riftydev/shadow-registry
 
+- No-COI esbuild alias selects upstream Node entry; ordinary preparation has a client-free export. COI generated client retained.
+
 ## [Unreleased]
 
 - Load generated esbuild only on no-COI activation; reject legacy bindings in COI before import. COI Vite CLI has no version gate; stock Node differential and verified-version inventory own its claim.

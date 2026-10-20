@@ -55,12 +55,12 @@ export async function openReferenceHost(connections: HostConnections) {
     wasm: true,
   });
   connections.renderSupport?.(support);
-  // Runtime has no SW; its disposable support-probe rows are informational here.
+  // The support probe is informational; createSandbox admits the controlling SW.
   if (support.modes.nonCoi.conclusion !== 'supported')
     throw new Error(`Sandbox prerequisites: ${support.modes.nonCoi.unmet.join(', ')}`);
   const opening = createSandbox({
     requireCrossOriginIsolation: false,
-    skipServiceWorker: true,
+    serviceWorkerUrl: new URL('sw.js', new URL(connections.workerUrl, location.href)).href,
     storage: connections.storage,
     startupTimeoutMs: connections.startupTimeoutMs,
     toolchain: { workerUrl: connections.workerUrl, registryUrl: connections.registryUrl },

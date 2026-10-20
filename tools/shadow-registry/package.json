@@ -22,7 +22,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./internal": "./src/internal/index.ts",
-    "./runtime": "./src/runtime/index.ts"
+    "./runtime": "./src/runtime/index.ts",
+    "./runtime/common": "./src/runtime/common.ts"
   },
   "files": ["dist", "CHANGELOG.md"],
   "publishConfig": {
@@ -42,6 +43,10 @@
       "./runtime": {
         "types": "./dist/runtime.d.ts",
         "import": "./dist/runtime.js"
+      },
+      "./runtime/common": {
+        "types": "./dist/runtime/common.d.ts",
+        "import": "./dist/runtime/common.js"
       }
     }
   },

@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { activatePackageRuntimeAdapters } from '@riftydev/shadow-registry/runtime';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
-import { activateWorkbenchRuntimeAdapters } from '../../packages/workbench/src/workers/workbench-runtime-adapters.ts';
 import { readRuntimeEsbuild } from '../../tools/shadow-registry/src/runtime/realm.ts';
 
 const ESBUILD_BINDING = Object.freeze({
@@ -16,14 +16,14 @@ const exactEsbuildWasm = new Uint8Array(
   readFileSync(requireFromRegistry.resolve('esbuild-wasm/esbuild.wasm')),
 );
 
-describe('Workbench in-tree runtime adapter dispatch', () => {
+describe('retained COI runtime adapter dispatch', () => {
   it('does no VFS or compile work when the admitted tree has no binding', async () => {
     const fs = new MemoryFsSync();
     const read = vi.spyOn(fs, 'readFileBytesSync');
     const compile = vi.spyOn(WebAssembly, 'compile');
     const before = readRuntimeEsbuild();
 
-    await activateWorkbenchRuntimeAdapters({ bindings: [], fs, cwd: '/workspace' });
+    await activatePackageRuntimeAdapters({ bindings: [], fs, cwd: '/workspace' });
 
     expect(read).not.toHaveBeenCalled();
     expect(compile).not.toHaveBeenCalled();
@@ -40,7 +40,7 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
       const read = vi.spyOn(fs, 'readFileBytesSync');
       const before = readRuntimeEsbuild();
       await expect(
-        activateWorkbenchRuntimeAdapters({ bindings, fs, cwd: '/workspace' }),
+        activatePackageRuntimeAdapters({ bindings, fs, cwd: '/workspace' }),
       ).rejects.toThrow(/runtime-adapter|duplicate/u);
       expect(read).not.toHaveBeenCalled();
       expect(readRuntimeEsbuild()).toBe(before);
@@ -53,7 +53,7 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
     const before = readRuntimeEsbuild();
 
     await expect(
-      activateWorkbenchRuntimeAdapters({
+      activatePackageRuntimeAdapters({
         bindings: [ESBUILD_BINDING],
         fs,
         cwd: '/workspace',
@@ -75,7 +75,7 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
     const before = readRuntimeEsbuild();
 
     await expect(
-      activateWorkbenchRuntimeAdapters({ bindings: [ESBUILD_BINDING], fs, cwd: '/workspace' }),
+      activatePackageRuntimeAdapters({ bindings: [ESBUILD_BINDING], fs, cwd: '/workspace' }),
     ).rejects.toThrow(/size|13.?918.?738/u);
     expect(compile).not.toHaveBeenCalled();
     expect(readRuntimeEsbuild()).toBe(before);
@@ -93,7 +93,7 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
     const before = readRuntimeEsbuild();
 
     await expect(
-      activateWorkbenchRuntimeAdapters({ bindings: [forged], fs, cwd: '/workspace' }),
+      activatePackageRuntimeAdapters({ bindings: [forged], fs, cwd: '/workspace' }),
     ).rejects.toThrow(/packagePath|ancestor|runtime-adapter/u);
     expect(compile).not.toHaveBeenCalled();
     expect(readRuntimeEsbuild()).toBe(before);
@@ -112,7 +112,7 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
     const before = readRuntimeEsbuild();
 
     await expect(
-      activateWorkbenchRuntimeAdapters({ bindings: [forged], fs, cwd: '/workspace' }),
+      activatePackageRuntimeAdapters({ bindings: [forged], fs, cwd: '/workspace' }),
     ).rejects.toThrow(/packagePath|esbuild-wasm|runtime-adapter/u);
     expect(read).not.toHaveBeenCalled();
     expect(compile).not.toHaveBeenCalled();
@@ -132,7 +132,7 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
     const before = readRuntimeEsbuild();
 
     await expect(
-      activateWorkbenchRuntimeAdapters({ bindings: [forged], fs, cwd: '/workspace' }),
+      activatePackageRuntimeAdapters({ bindings: [forged], fs, cwd: '/workspace' }),
     ).rejects.toThrow(/packagePath|ancestor|runtime-adapter/u);
     expect(read).not.toHaveBeenCalled();
     expect(compile).not.toHaveBeenCalled();
@@ -152,9 +152,9 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
       const compile = vi.spyOn(WebAssembly, 'compile');
       const before = readRuntimeEsbuild();
 
-      await expect(
-        activateWorkbenchRuntimeAdapters({ bindings: [nested], fs, cwd }),
-      ).rejects.toThrow(/esbuild\.wasm|runtime-adapter/u);
+      await expect(activatePackageRuntimeAdapters({ bindings: [nested], fs, cwd })).rejects.toThrow(
+        /esbuild\.wasm|runtime-adapter/u,
+      );
 
       expect(read).toHaveBeenCalledWith(`${nested.packagePath}/esbuild.wasm`);
       expect(compile).not.toHaveBeenCalled();
@@ -170,7 +170,7 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
     const before = readRuntimeEsbuild();
 
     await expect(
-      activateWorkbenchRuntimeAdapters({
+      activatePackageRuntimeAdapters({
         bindings: [ESBUILD_BINDING],
         fs,
         cwd: '/workspace',

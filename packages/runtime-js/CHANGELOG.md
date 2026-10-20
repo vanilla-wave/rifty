@@ -1,5 +1,11 @@
 # Changelog
 
+- Preserve Buffer chunks on process.stdin after merging shared descriptor reads with no-COI children.
+
+- Preserve immediate fork disconnect and send ordering; match Node24 parent-disconnect terminal events.
+
+- Transport complete numeric Stats fields from VFS; upstream no-COI esbuild can resolve build files.
+
 ## [Unreleased]
 
 - Child stdin retains only dispatched transport writes; corked buffers no longer keep an unreferenced parent alive, including a corked successor after an active write.
@@ -13,6 +19,9 @@
 - fs consumes real stdio descriptors; kernel stdin supports synchronous reads, async reads share process.stdin consumption. hrtime and crypto retain platform sources when guests replace the globals (stock esbuild-wasm 0.21).
 
 - Stock Node guest prerequisites: stdio write callbacks/encoding; ChildProcess and pipe references; synchronous named workerData/execFileSync refusals; complete VFS-backed numeric Stats (ADR-0540).
+- Wait for child bootstrap readiness before transferring init ports; dynamic host wrappers retain startup messages.
+
+- No-COI Node children use isolated Workers and live owner FS via SW; support child ref/unref, transported stdin Buffers, spec stdio write callbacks and async fs.read(0) (ADR-0539).
 
 - `os.homedir()` keeps an explicitly empty `HOME` (`''`), as Node; `os.tmpdir()` still falls through empty `TMPDIR`/`TMP`/`TEMP`.
 

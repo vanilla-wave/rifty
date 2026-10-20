@@ -1,7 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { readRootProcessSnapshot } from '@riftydev/kernel';
 import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
-import { binNameOf, createPreviewScope } from '@riftydev/shadow-registry/runtime';
+import { binNameOf, createPreviewScope } from '@riftydev/shadow-registry/runtime/common';
 import {
   type BinExecutor,
   type CommandContext,

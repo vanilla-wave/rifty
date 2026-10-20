@@ -6,7 +6,7 @@ Date: 2026-10-20
 ## Context
 
 esbuild-upstream-twin I1/I4/I5 replaces COI's exact generated client while
-preserving no-COI's 0.28.0 client. Upstream 0.21.5/0.25.12/0.28.2 build and
+preserving no-COI's exact 0.28.0 admission and upstream SW-backed client (ADR-0539). Upstream 0.21.5/0.25.12/0.28.2 build and
 async lifecycle run through their stock Node entry after generic Node fixes.
 The installer still rejects older ranges and binds the generated client.
 
@@ -33,8 +33,9 @@ The installer still rejects older ranges and binds the generated client.
 - Catalog identity changes deliberately invalidate old traced locks, including
   other recipes. No migration (goal decision). Existing integrity, replay,
   rollback and publication checks stay authoritative.
-- Generated esbuild runtime loads only for an active no-COI binding. COI never
-  imports it. Remove the COI Vite version gate; preserve no-COI preparation.
+- Neither active tier imports the generated esbuild runtime: COI uses its range
+  recipe, no-COI uses the stock Node entry through SW children (ADR-0539).
+  Remove the COI Vite version gate; preserve no-COI admission.
 - COI oracle is unmodified esbuild-wasm on Node 24, captured per version/run.
   Stock Sync calls remain named loud gaps on Worker and execFileSync routes;
   COI does not retain generated-client validation-before-gap ordering.
@@ -43,8 +44,7 @@ The installer still rejects older ranges and binds the generated client.
 
 In COI, no version allowlist, per-version facade patches, copied declarations or
 native esbuild oracle. Verified versions remain a finite evidence set, not admission.
-Existing no-COI generated-client patches remain a declared platform gap with
-no-coi-child-processes as the kill condition. Fixture pins preserving the
+ADR-0539 retires the no-COI generated-client path. Fixture pins preserving the
 existing no-COI byte oracle and the Vite starter pin remain independent.
 
 ## Corrections
@@ -78,3 +78,7 @@ existing no-COI byte oracle and the Vite starter pin remain independent.
   D2/Alternatives. Stock Node differentials: 0.21.5/0.25.12/0.28.2. No-COI
   generated semantics/native oracle, common CJS interop, integrity/replay/bin
   authorities, ADR-0375 D6 pinned byte proof and starter pins remain.
+
+- 2026-10-20 — integrate landed ADR-0539 and amended I4: no-COI runs upstream
+  0.28.0 through SW children. Its old generated-client semantics/native oracle
+  are superseded; exact admission and pinned build-byte proof remain.

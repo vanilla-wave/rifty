@@ -1,4 +1,3 @@
-import { assertNonNegativeInteger, checkedSliceBounds } from './fs-fd-bounds.ts';
 import { closeStdin, readStdin, readStdinSync, statStdin, writeStdio } from './fs-stdio.ts';
 /**
  * Node-compatible `node:fs` (subset).
@@ -16,6 +15,11 @@ import { VfsError } from '@riftydev/vfs';
 import { Buffer, type Encoding } from './buffer.ts';
 import { fsError, withSyscall } from './fs-errors.ts';
 import { type PathLike, pathToString, resolvePath } from './fs-path.ts';
+import {
+  type FdReadOptions,
+  assertNonNegativeInteger,
+  checkedSliceBounds,
+} from './fs-read-arguments.ts';
 import { Dirent, type StatOptions, Stats } from './fs-stats.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { statfsSync } from './loud-members.ts';
@@ -85,12 +89,6 @@ interface ParsedOpenFlags {
   truncate: boolean;
   append: boolean;
   directory: boolean;
-}
-
-interface FdReadOptions {
-  offset?: number;
-  length?: number;
-  position?: number | null;
 }
 
 // ADR-0153: faithful Node Linux-ABI fs constants (real numeric values; gap lives at the

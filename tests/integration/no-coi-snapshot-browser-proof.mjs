@@ -101,14 +101,10 @@ export async function provePackedNoCoiSnapshots(root) {
       const local = await invoke(page, 'evaluate', "require('/project/local.cjs');void 0");
       assert.equal(local.result.ok, true);
       assert.match(local.output, /packed-sdk-independent-source/u);
-      const invalidLockBuild = await invoke(page, 'build').then(
-        (result) => ({ result }),
-        (error) => ({ error: String(error) }),
-      );
-      if ('result' in invalidLockBuild) {
-        assert.notEqual(invalidLockBuild.result.exitCode, 0, JSON.stringify(invalidLockBuild));
-        assert.match(invalidLockBuild.result.output, /adapter|esbuild|runtime/iu);
-      } else assert.match(invalidLockBuild.error, /adapter|esbuild|runtime/iu);
+      // Upstream Node packages read the saved tree; no legacy adapter needs the lock.
+      const invalidLockBuild = await invoke(page, 'build');
+      assert.equal(invalidLockBuild.exitCode, 0);
+      assert.match(invalidLockBuild.js, /packed-sdk-saved-edit/u);
       assert.equal(await invoke(page, 'read', '/package-lock.json'), '{broken');
       await invoke(page, 'apply', changed, true);
       assert.equal((await invoke(page, 'build')).exitCode, 0);

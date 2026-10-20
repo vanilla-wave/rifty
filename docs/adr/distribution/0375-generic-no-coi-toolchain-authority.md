@@ -77,6 +77,8 @@ policy and the build-only finalizer are removed.
 
 ## Corrections (active)
 
+- 2026-10-20 — ADR-0539 adds separate no-COI child realms behind the existing single VFS owner; only child creation requires SW. Other SW-free SDK operations and generic control-plane ownership remain.
+
 - 2026-09-07 — ADR-0384 supersedes package-adaptation owner/carrier clauses and `.vite` archive classification where applicable; all other decisions remain active.
 - 2026-09-27 — ADR-0470 supersedes D4 and D6's shared-allocation rejection: native WebAssembly, explicit failure at unsupported toolchain Worker construction. Other decisions remain active.
 

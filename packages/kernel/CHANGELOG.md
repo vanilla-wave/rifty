@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Optional pull stdin (ADR-0542): bounded physical input, existing SAB reads, readiness-only ports; EOF/teardown settle pending operations.
+- Expose common RPC dispatch and reuse process federation for host-managed no-COI Workers (ADR-0539).
 
 - Check native `Atomics.waitAsync` at the ring wrapper; preserve TypeError when unavailable and bind the ES2022 guard to the actual call.
 

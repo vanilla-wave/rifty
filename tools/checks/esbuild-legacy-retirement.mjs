@@ -71,7 +71,7 @@ export const ALLOWED_COORDINATION_SOURCES = Object.freeze([
   'packages/workbench/src/glue/vfs-snapshot-port.ts',
   'packages/workbench/src/workbench/service-worker-control.ts',
   'tools/shadow-registry/src/runtime/generated/esbuild-runtime.js',
-  'packages/workbench/src/workers/no-coi-toolchain-worker.ts',
+  'packages/workbench/src/workers/no-coi-toolchain-owner.ts',
 ]);
 
 const SELF = new Set([
@@ -101,8 +101,8 @@ const WORKBENCH_COMPILER_OUTPUTS = Object.freeze({
     sha256: '39be666ac003c7361e9fbcd88abdda1ed51052350ade9b57b4d2716f1e296498',
   },
   'typescript-worker.js': {
-    bytes: 10_022_664,
-    sha256: '6bc87acc9318036d26cc4367838842b6d48bf6b65baf516372f2c2ed771e189c',
+    bytes: 10_022_694,
+    sha256: '49f6df2671394432494d6cb72e6e803a64cfa3c86d84e28f45daaecbd4ff286d',
   },
 });
 const WORKBENCH_WASM_OUTPUTS = Object.freeze({

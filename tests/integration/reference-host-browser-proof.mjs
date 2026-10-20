@@ -322,9 +322,10 @@ export async function provePackedReferenceHost(root, registryUrl) {
         assert.equal(await invoke(other, 'read', 'package.json'), savedManifest);
         assert.equal(await invoke(other, 'read', 'package-lock.json'), savedLock);
         await invoke(other, 'close');
-        assert(
-          !requests.some((url) => /\/sw\.js(?:\?|$)/u.test(url)),
-          'reference runtime registered a service worker',
+        assert.equal(
+          await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL),
+          `${base}/dist/rifty/sw.js`,
+          'upstream build host requires its controlling rifty service worker',
         );
         if (!connected)
           assert(

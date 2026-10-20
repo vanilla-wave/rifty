@@ -15,7 +15,7 @@ import {
   type NodeEntryRuntimeBinding,
   buildNodeEntryWorkerEntry,
 } from '@riftydev/runtime-js/builtins/node-entry-url';
-import { preparePackageBinSpawnRequest } from '@riftydev/shadow-registry/runtime';
+import { preparePackageBinSpawnRequest } from '@riftydev/shadow-registry/runtime/common';
 import type { BinExecutor } from '@riftydev/shell';
 import type { BinExecutorDeps, BinSpawnRequest, BinWorkerHandle } from '../glue/bin-executor.ts';
 import { childTerminalBootstrap } from '../glue/child-terminal.ts';

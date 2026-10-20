@@ -109,11 +109,7 @@ const hostClearTimeout = globalThis.clearTimeout.bind(globalThis);
 const hostSetInterval = globalThis.setInterval.bind(globalThis);
 const hostClearInterval = globalThis.clearInterval.bind(globalThis);
 
-/**
- * Run a child script through `new Function`. Mutates `ownHandle.exitCode`
- * directly for non-zero exits (so the kernel preserves them) and emits
- * `'exit'` / `'close'` on the handle itself.
- */
+/** Run a same-realm script; the kernel owns terminal publication and retirement. */
 export async function execScript(a: ExecScriptArgs): Promise<void> {
   let streamsClosed = false;
   const writeStdout = (chunk: string | Uint8Array): void => {
@@ -132,10 +128,8 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
   const finish = (exitCode: number): void => {
     if (finished || a.ownHandle.exitCode !== null || a.ownHandle.signalCode !== null) return;
     finished = true;
-    a.ownHandle.exitCode = exitCode;
     closeStreams();
-    a.ownHandle.emit('exit', exitCode, null);
-    a.ownHandle.emit('close', exitCode, null);
+    a.io.complete(exitCode);
   };
 
   if (a.command !== 'node') {

@@ -1,5 +1,9 @@
 # Changelog
 
+- Supply owner-stable Stats metadata for virtual namespace directories, retaining guest-only error paths.
+
+- No-COI install/open/snapshot no longer activate the generated esbuild client; builds use SW children.
+
 ## [Unreleased]
 
 - Reuse predicates accept the selected runtime tier; virtual-ancestor Stats keep metadata readable while directory listings reject mount collisions.
@@ -13,6 +17,10 @@
 - Refresh install identity and baked snapshots for the tier-aware catalog; retain every committed dependency version.
 
 - Node children select pull stdin; virtual guest ancestors carry VFS entry metadata for complete Node Stats (ADR-0540/0542).
+- Keep ancestor Stats available across nested mount collisions; listing/child access still refuses loudly.
+- Remove the unused no-COI adapter wrapper after upstream cutover; shared COI client retained.
+
+- Compose separate no-COI child realms from the toolchain entry; retire invocation children at process completion (ADR-0539).
 
 - A repeated `pty:open` of a live session keeps that session's login-`HOME` provenance; it is dropped when the session's close settles.
 

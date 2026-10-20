@@ -405,6 +405,9 @@ test('project root `/`: project files plus mounts; a project `tmp` collides loud
       expect(collided.exit, line).not.toBe(0);
       expect(collided.out, line).toMatch(/EEXIST.*\/tmp/u);
     }
+    const next = await execLine(page, 'echo still-usable');
+    expect(next.exit, next.out).toBe(0);
+    expect(lines(next.out)).toContain('still-usable');
   } finally {
     await closeOwner(page);
   }
