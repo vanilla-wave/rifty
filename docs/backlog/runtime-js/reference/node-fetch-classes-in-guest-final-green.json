@@ -1,9 +1,9 @@
 {
-  "overall_verdict": "pass",
-  "merge_call": "Final+GREEN/CLOSE PASS: CI saving-UI harness regression fixed without weakening its native-write barrier or assertions; product proof from d7 retained. Committed target e2e GREEN; pr:check 28/28 GREEN, two broad-run unit timeouts passed the mandatory isolated rerun. Merge after re-bound pass-binding and green CI at HEAD.",
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN/CLOSE accepted: 0 blockers, 1 advisory childSaw NOTE. Committed pr:check 28/28 GREEN (3 broad-run Vitest timeouts passed mandatory isolated reruns), no-COI 2, browser 15 and Wasm/progress 15 GREEN; production and packed-consumer proof retained for unchanged product source. Merge after re-bound pass-binding and green CI at HEAD.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "8c39b7c8c7fd753c3badb0858a37cd2970365091",
-  "unit_goal_source": "PR #381 https://github.com/vanilla-wave/rifty/pull/381; goal node-fetch-classes-in-guest / unit node-fetch-guest-carrier, accepted I1–I3 and user-approved browser transport with explicit ceilings; raw goal/unit authority preserved at 207e9db6b4bf84b525d396d5378080ae1244c5b1; BASE 3207b33acb3cb74d54be2cff6d33200cb32bf556; Contract+RED preparation 2a6a30728d5af714ef2598bf84158b89dc65e48e, PR comment 6278683544; prior product Final+GREEN/CLOSE d7eb2ad79bd57ce2f36aeb31a40e4a410ab26762; current verify including CI harness baseline project-opening-progress at 8c39b7c8c7fd753c3badb0858a37cd2970365091.",
+  "reviewed_sha": "3fe0e53bb18f01200a7f9cd23f3328ac828d9858",
+  "unit_goal_source": "PR #381 https://github.com/vanilla-wave/rifty/pull/381; goal node-fetch-classes-in-guest / unit node-fetch-guest-carrier, accepted I1–I3 and user-approved browser transport with explicit ceilings; raw goal/unit authority preserved at 207e9db6b4bf84b525d396d5378080ae1244c5b1; BASE 3207b33acb3cb74d54be2cff6d33200cb32bf556; Contract+RED preparation 2a6a30728d5af714ef2598bf84158b89dc65e48e, PR comment 6278683544; full Final+GREEN/CLOSE verify including every established failed-job observation from CI run 39352801104 at clean 3fe0e53bb18f01200a7f9cd23f3328ac828d9858. Product source unchanged from cfe3ba10f1a1a4baaea59ba8c9dd58642705174d; carrier placement corrected and full gate rerun at reviewed tree.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -221,7 +221,7 @@
       "source": "acceptance",
       "trace": "scenario",
       "status": "pass",
-      "citation": "docs/adr/runtime-js/0541-run-node-fetch-classes-over-the-browser-i-o-boundary.md:160",
+      "citation": "docs/adr/runtime-js/0541-run-node-fetch-classes-over-the-browser-i-o-boundary.md:181",
       "note": ""
     },
     {
@@ -263,13 +263,69 @@
       "status": "pass",
       "citation": "tests/e2e/project-opening-progress.spec.ts:3",
       "note": ""
+    },
+    {
+      "row": "No-COI Stop/native-flush baseline preserved: guest eval keeps Node fetch and receives an absolute host-resolved barrier URL; real native-write selector, Stop retention, flushed effects and follow-up command assertions unchanged; actual RED and committed GREEN",
+      "source": "acceptance",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:8",
+      "note": ""
+    },
+    {
+      "row": "No-COI admitted install/run baseline preserved: guest CLI receives the absolute endpoint URL; real route gates, busy-admission rejection, host interactivity and output/release assertions unchanged; actual RED and committed GREEN",
+      "source": "acceptance",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2690",
+      "note": ""
+    },
+    {
+      "row": "Fetch preload does not cache the fallback node:process before child bootstrap: existing publicNodeProcess owner preserves later seeded process identity; old cached-read revert fails the real registry regression and existing IPC programs return to Node parity",
+      "source": "fault-matrix",
+      "trace": "ADR-0458+ADR-0541",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process-globals.test.ts:35",
+      "note": ""
+    },
+    {
+      "row": "Headers/Request/Response/FormData own enumerable properties round-trip as plain objects through actual browser advanced fork IPC against live Node; old native Headers ceiling retired, other ceilings retained. Browser-only carrier replaces the invalid Node-hosted ambient-global probe; shared baseline case restored unchanged",
+      "source": "public-api",
+      "trace": "ADR-0448+ADR-0541",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/advanced-ipc-cases.ts:37",
+      "note": ""
+    },
+    {
+      "row": "Worker/fork startup and stdio baseline restored after preload repair: worker data, output, execArgv and vitest-pool-shaped programs match live Node in the real Chromium child realm",
+      "source": "acceptance",
+      "trace": "ADR-0449+ADR-0458",
+      "status": "pass",
+      "citation": "tests/browser-unit/worker-stdio-exec-argv.spec.ts:37",
+      "note": ""
+    },
+    {
+      "row": "Existing WebAssembly streaming boundary retained: ten carrier ceilings and four priority/reflection assertions unchanged; a real loopback response with pending body replaces the URL-less transport stub, preserving hold/drain/cancellation discrimination",
+      "source": "acceptance",
+      "trace": "ADR-0158+ADR-0541",
+      "status": "pass",
+      "citation": "tests/e2e/fetch-keepalive-webassembly-streaming.spec.ts:327",
+      "note": ""
     }
   ],
   "axes": [
     {
       "axis": "Completeness",
-      "verdict": "pass",
-      "findings": []
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/fixtures/advanced-ipc-cases.ts:41",
+          "summary": "NOTE: optional childSaw snapshot would retain explicit first-hop observation in the new Fetch-class IPC carrier, which currently inspects the returned value. No current contract violation established: the shared codec uses native structuredClone and only rebrands Buffer on receive, has no Fetch-specific reconstruction, and the existing generic values carrier observes childSaw for ordinary classes/records. Producer retained this as advisory without expanding the carrier; coverage remains pass, no residual.",
+          "authority": "",
+          "evidence": "Read current browser-only program and packages/runtime-js/src/internal/node-ipc-advanced.ts:329/:371; inspect existing DESCRIBE_SOURCE/ECHO_CHILD_SOURCE generic carrier. Same-source live Node/Chromium fetch-classes program GREEN in committed browser run. No wrong-first-hop product mutant demonstrated; optional hardening only."
+        }
+      ]
     },
     {
       "axis": "Mission and architecture",
