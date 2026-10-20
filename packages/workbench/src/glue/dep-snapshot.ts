@@ -16,8 +16,10 @@ import {
   tarballCachePath,
 } from '@riftydev/npm-client';
 import { planShadowSubstitutionsFromLockfile } from '@riftydev/npm-client/internal';
+import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
 import { joinPath } from '@riftydev/vfs';
 import { drainByteStreamBounded, fetchAssetBytesBounded } from './bounded-asset-fetch.ts';
+import { projectDependencySnapshotTier } from './dep-snapshot-runtime-tier.ts';
 import { decodeDepSnapshotTar, encodeDepSnapshotTar } from './dep-snapshot-tar.ts';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
 import { depsEqual, effectiveDepsFromPackageJsonText } from './install-stamp.ts';
@@ -181,17 +183,19 @@ export async function restoreDepSnapshot(
   fs: WorkspaceArchiveFs,
   root: string,
   snapshot: DepSnapshotV3,
+  options?: { readonly runtimeTier?: ShadowRuntimeTier },
 ): Promise<void> {
-  (await prepareDepSnapshotRestore(fs, root, snapshot)).apply();
+  (await prepareDepSnapshotRestore(fs, root, snapshot, options)).apply();
 }
 
 /** Decode and validate the complete restore mapping before destination mutation. */
 export async function prepareDepSnapshotRestore(
   fs: WorkspaceArchiveFs,
   root: string,
-  snapshot: DepSnapshotV3,
+  source: DepSnapshotV3,
+  options: { readonly runtimeTier?: ShadowRuntimeTier } = {},
 ): Promise<PreparedDepSnapshotRestore> {
-  await verifyDepSnapshotReplayCache(snapshot);
+  const snapshot = await prepareDepSnapshotForRuntimeTier(source, options.runtimeTier);
   const nodeModules = prepareWorkspaceArchiveImport(fs, snapshot.nodeModules, {
     root: joinPath(root, 'node_modules'),
     replace: true,
@@ -218,6 +222,15 @@ export async function prepareDepSnapshotRestore(
       applyPayload();
     },
   };
+}
+
+/** Shared preflight for restore, explicit application and host admission. */
+export async function prepareDepSnapshotForRuntimeTier(
+  snapshot: DepSnapshotV3,
+  runtimeTier?: ShadowRuntimeTier,
+): Promise<DepSnapshotV3> {
+  await verifyDepSnapshotReplayCache(snapshot);
+  return projectDependencySnapshotTier(snapshot, runtimeTier);
 }
 
 interface ReplayCacheRequirement {

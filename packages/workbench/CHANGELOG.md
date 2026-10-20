@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Explicit snapshot runtime tier shares restore/application preflight; only generated facade/receipt changes, while COI install claims carry a distinct policy identity (ADR-0543).
+
 - Propagate file stdout through Node/bin child bootstrap; preserve pipe/TTY selection (ADR-0544).
 
 - Refresh install identity and baked snapshots for the tier-aware catalog; retain every committed dependency version.

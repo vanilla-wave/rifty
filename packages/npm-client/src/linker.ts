@@ -479,6 +479,18 @@ export function buildPreparedInstallLockfile(
     throw new TypeError('trusted installer shadow plan invariant failed');
   }
   const lockfile = buildPreparedLockfile(rootName, rootVersion, packages, rootDependencyMaps);
+  appendRegistryShadowEmbeddedSources(lockfile, plan, embeddedSources);
+  return recordShadowSubstitutionPlan(lockfile, plan);
+}
+
+/** One receipt writer for installs and current-catalog tier projection. */
+export function recordShadowSubstitutionPlan(
+  lockfile: Lockfile,
+  plan: ShadowSubstitutionPlan,
+): Lockfile {
+  if (!Object.isFrozen(plan) || !Object.isFrozen(plan.substitutions)) {
+    throw new TypeError('trusted installer shadow plan invariant failed');
+  }
   for (const substitution of plan.substitutions) {
     const recipe = builtinRecipeById(substitution.substitutionId, substitution.trigger.version);
     if (!recipe) {
@@ -497,7 +509,6 @@ export function buildPreparedInstallLockfile(
     else entry.bin = { ...recipe.materialization.bin };
     entry.riftyShadowRecipe = substitution.substitutionId;
   }
-  appendRegistryShadowEmbeddedSources(lockfile, plan, embeddedSources);
   if (plan.substitutions.length === 0) return lockfile;
   return {
     ...lockfile,

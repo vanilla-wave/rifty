@@ -74,6 +74,7 @@ refresh, new cache, second lock/claim writer or per-version admission list.
 
 ## Decisions
 
+- ready-verdict: 2026-10-20 — Contract+RED @ 3a2a449c7973a21de811fd570a3e1c5b9f068664
 - 2026-10-20 — ADR-0543 tier selection applies to current-catalog replay and
   snapshot materialization too. Its sources and transitive pins stay fixed.
 - 2026-10-20 — derive the COI claim identity from the existing build identity

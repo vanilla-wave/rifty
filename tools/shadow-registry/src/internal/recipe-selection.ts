@@ -1,8 +1,29 @@
-import { shadowDigest, shadowSha256 } from './canonical.ts';
+import { canonicalShadowJson, shadowDigest, shadowSha256 } from './canonical.ts';
 import { builtinShadowSubstitutionCatalog } from './codec.ts';
 import type { BuiltinShadowSubstitutionRecipe } from './model.ts';
 
 export type ShadowRuntimeTier = 'coi' | 'no-coi';
+
+/** A host-tier change may select another facade over the same attested source. */
+export function canReprojectShadowRecipe(
+  from: BuiltinShadowSubstitutionRecipe | undefined,
+  to: BuiltinShadowSubstitutionRecipe,
+): boolean {
+  return (
+    from?.runtimeTier !== undefined &&
+    to.runtimeTier !== undefined &&
+    from.runtimeTier !== to.runtimeTier &&
+    from.acquisition.kind === 'registry' &&
+    to.acquisition.kind === 'registry' &&
+    from.acquisition.name === to.acquisition.name &&
+    from.acquisition.version === to.acquisition.version &&
+    from.trigger.name === to.trigger.name &&
+    from.trigger.version === to.trigger.version &&
+    from.materialization.name === to.materialization.name &&
+    from.materialization.version === to.materialization.version &&
+    canonicalShadowJson(from.materialization.bin) === canonicalShadowJson(to.materialization.bin)
+  );
+}
 
 /** Explicit host policy; unspecified callers retain the legacy tier. */
 export function builtinRecipeForTier(

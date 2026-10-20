@@ -158,6 +158,7 @@ function readLockfileBytesSync(
 export async function classifyCheck(
   io: StampReadIo,
   input: InstallStampCheckInput,
+  runtimeTier?: ShadowRuntimeTier,
 ): Promise<{
   readonly result: InstallStampCheck;
   readonly diskPhase: InstallStampCheck['status'];
@@ -165,7 +166,7 @@ export async function classifyCheck(
 }> {
   const stamp = await readStamp(io, input.root);
   if (!stamp) return { result: { status: 'absent' }, diskPhase: 'absent', stamp: null };
-  if (!stampTrusted(stamp)) {
+  if (!stampTrusted(stamp, runtimeTier)) {
     const result: InstallStampCheck =
       input.slug === undefined || input.slug === stamp.slug
         ? { status: 'pending', stamp }
@@ -198,6 +199,7 @@ export async function classifyCheck(
 export function classifyCheckSync(
   fsSync: StampReadFs,
   input: InstallStampCheckInput,
+  runtimeTier?: ShadowRuntimeTier,
 ): {
   readonly result: InstallStampCheck;
   readonly diskPhase: InstallStampCheck['status'];
@@ -205,7 +207,7 @@ export function classifyCheckSync(
 } {
   const stamp = readStampSync(fsSync, input.root);
   if (!stamp) return { result: { status: 'absent' }, diskPhase: 'absent', stamp: null };
-  if (!stampTrusted(stamp)) {
+  if (!stampTrusted(stamp, runtimeTier)) {
     const result: InstallStampCheck =
       input.slug === undefined || input.slug === stamp.slug
         ? { status: 'pending', stamp }
@@ -267,3 +269,4 @@ export function claimFailed(report: PersistFailureReport | undefined, root: stri
   const path = installStampPath(root);
   return failureAt(report, (candidate) => candidate === path);
 }
+import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';

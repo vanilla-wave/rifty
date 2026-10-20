@@ -46,3 +46,27 @@ esbuild oracle. Verified versions remain a finite evidence set, not admission.
 Existing no-COI generated-client patches remain a declared platform gap with
 no-coi-child-processes as the kill condition. Fixture pins preserving the
 existing no-COI byte oracle and the Vite starter pin remain independent.
+
+## Corrections
+
+- 2026-10-20 — current-catalog tier changes may retain the exact attested
+  acquisition/version/bin placement. The selected recipe validates retained
+  metadata before publication; cache SRI and the strict trace reader remain
+  authoritative. No obsolete catalog trace is upgraded.
+- 2026-10-20 — snapshot preflight verifies cache, then uses the same recipe
+  selection and receipt writer to replace only generated facade files. All
+  ordinary/upstream bytes and pins stay fixed: those ordinary tarballs are not
+  in snapshot replay cache. Restore/application share this preflight. Omitted
+  tier preserves the existing low-level helper behavior.
+- 2026-10-20 — no-COI keeps the build-generated install identity; COI uses
+  SHA-256 of that identity + NUL + `coi`. Snapshot source identities must be
+  current before target-policy preparation; the existing stamp authority mints
+  and checks the selected identity, retaining epochs/lock hashes/rollback.
+- 2026-10-20 — PR-4: the new snapshot refusal assertion incorrectly required
+  lowercase `no-coi`; existing admission says `no-COI`. Independent Contract
+  reviewer accepted name/feature + case-insensitive tier instead; target
+  preservation unchanged.
+- 2026-10-20 — both policy identities are generated at build time. A runtime
+  SHA import from the registry package violated the existing no-COI lazy-install
+  graph proof; reading generated strings preserves that boundary. No extra
+  lazy projection wrapper or relaxed loading criterion is needed.

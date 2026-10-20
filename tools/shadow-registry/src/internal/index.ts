@@ -14,6 +14,7 @@ export type {
 
 export {
   builtinRecipeForTier,
+  canReprojectShadowRecipe,
   builtinRecipeById,
   specializeShadowRecipe,
   type ShadowRuntimeTier,

@@ -57,6 +57,7 @@ export const ALLOWED_SHADOW_PRODUCTION_SOURCES = Object.freeze([
   'packages/npm-client/src/internal/shadow/install-result.ts',
   'packages/npm-client/src/internal/shadow/planner.ts',
   'packages/npm-client/src/internal/shadow/registry-projection.ts',
+  'packages/npm-client/src/internal/shadow/runtime-tier.ts',
   'packages/npm-client/src/internal/shadow/schema-one-identity.ts',
   'packages/npm-client/src/internal/shadow/substitution.ts',
 ]);

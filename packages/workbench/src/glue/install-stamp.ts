@@ -1,3 +1,4 @@
+import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
 /**
  * Install stamp (ADR-0135): `<root>/node_modules/.rifty-install-stamp.json`
  * marks "this node_modules was installed for project SLUG". It certifies seed
@@ -21,7 +22,7 @@ import {
   joinPath,
   normalizePath,
 } from '@riftydev/vfs';
-import { installArtifactIdentity } from './install-artifact-identity.ts';
+import { installArtifactIdentityForTier } from './install-artifact-identity.ts';
 
 export interface InstallStamp {
   readonly version: 4;
@@ -265,11 +266,45 @@ export function depsEqual(
 }
 
 export interface InstallStampPayload {
+  readonly runtimeTier?: ShadowRuntimeTier;
   readonly slug: string;
   readonly packages: number;
   readonly lockfileSha256?: string;
   readonly durability?: 'pending';
   readonly epoch?: string;
+}
+
+export function pendingInstallStamp(
+  identity: Pick<InstallStamp, 'root' | 'slug' | 'packageJsonText'>,
+  epoch: string,
+  packages = 0,
+  runtimeTier?: ShadowRuntimeTier,
+): InstallStamp {
+  const stamp = createInstallStamp(identity.root, identity.packageJsonText, {
+    slug: identity.slug,
+    packages,
+    durability: 'pending',
+    epoch,
+    runtimeTier,
+  });
+  if (!stamp) throw new Error('install stamp identity is not valid package.json');
+  return stamp;
+}
+
+export function trustedInstallStamp(
+  identity: Pick<InstallStamp, 'root' | 'slug' | 'packageJsonText'>,
+  packages: number,
+  lockfileSha256?: string,
+  runtimeTier?: ShadowRuntimeTier,
+): InstallStamp {
+  const stamp = createInstallStamp(identity.root, identity.packageJsonText, {
+    slug: identity.slug,
+    packages,
+    runtimeTier,
+    ...(lockfileSha256 === undefined ? {} : { lockfileSha256 }),
+  });
+  if (!stamp) throw new Error('install stamp identity is not valid package.json');
+  return stamp;
 }
 
 /** One constructor for every async/sync stamp writer. */
@@ -291,7 +326,7 @@ export function createInstallStamp(
     root: canonicalRoot,
     slug: payload.slug,
     packageJsonText,
-    installArtifactIdentity,
+    installArtifactIdentity: installArtifactIdentityForTier(payload.runtimeTier),
     ...(payload.lockfileSha256 === undefined ? {} : { lockfileSha256: payload.lockfileSha256 }),
     deps,
     packages: payload.packages,
@@ -388,9 +423,10 @@ export async function readInstallStamp(vfs: Vfs, root: string): Promise<InstallS
   return parseInstallStamp(parsed, root);
 }
 
-export function stampTrusted(stamp: InstallStamp): boolean {
+export function stampTrusted(stamp: InstallStamp, runtimeTier?: ShadowRuntimeTier): boolean {
   return (
-    stamp.durability !== 'pending' && stamp.installArtifactIdentity === installArtifactIdentity
+    stamp.durability !== 'pending' &&
+    stamp.installArtifactIdentity === installArtifactIdentityForTier(runtimeTier)
   );
 }
 

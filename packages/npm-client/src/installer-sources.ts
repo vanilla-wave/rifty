@@ -281,6 +281,10 @@ function createLockfileSource(
         shadowRecipe?.acquisition.kind === 'registry'
           ? embeddedSources.find((source) => source.acquisitionInstallPath === installPath)
           : undefined;
+      const projection =
+        shadowRecipe && shadowFact?.substitutionId !== shadowRecipe.id
+          ? assertRegistryShadowProjection(shadowRecipe, entry)
+          : embeddedSource?.projection;
       if (synthetic) {
         substitutions.line(
           `npm: ${name}@${range ?? '*'} materialized from shadow registry (${synthetic.id})`,
@@ -304,7 +308,7 @@ function createLockfileSource(
           ? {
               shadow: {
                 recipe: shadowRecipe,
-                ...(embeddedSource?.projection ? { projection: embeddedSource.projection } : {}),
+                ...(projection ? { projection } : {}),
                 trigger: {
                   name,
                   requestedRange: range,

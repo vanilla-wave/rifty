@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Define same-source tier compatibility centrally; bin placement and acquisition/version stay identical. Generate both host policy identities without an eager runtime hash import (ADR-0543).
+
 - Add requested-range, tier-selected esbuild Node recipe (ADR-0543); retain the no-COI generated-client recipe. Catalog identity changes invalidate earlier traces; generated runtime bytes unchanged.
 
 - The baked `bcrypt` substitution pins `bcryptjs@3.0.3` (the requested `bcrypt` range no longer reaches `bcryptjs`, whose newest is 3.0.3); the install still fails at the lock save (`npm-client/bcrypt-substitution-install`, compat ❌). `NAPI_RS_FORCE_WASI=1` launch preparation declared (ADR-0534).
