@@ -217,7 +217,7 @@ test.describe('ADR-0165 §4 — switch coherence: surfaces follow the active pro
   test('a starter pick opens a fresh scratch and reboots its dev server at logical root', async ({
     page,
   }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     page.on('pageerror', (err) => console.log('[pageerror]', err.message));
 
     // Boot through the same launcher path a user follows.
@@ -230,7 +230,7 @@ test.describe('ADR-0165 §4 — switch coherence: surfaces follow the active pro
     const hint = page.locator('[data-testid="terminal-mode-hint"]').first();
     await expect(hint).toContainText('running programs own stdin', { timeout: 15_000 });
     await expectProjectChipName(page, 'Project files scratch');
-    await expectViteDevServerReady(page, 5174, 30_000);
+    await expectViteDevServerReady(page);
 
     // Pick a different starter. The chip and the bound shell must follow the
     // newly active scratch, never the prior starter.

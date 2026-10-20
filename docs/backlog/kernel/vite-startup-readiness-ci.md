@@ -60,3 +60,48 @@ Dedup: kernel worker-retirement CI finding is post-close, not startup;
 server-shaped-worker-process-lifecycle concerns premature exit. No matching
 startup-deadline draft or declined concept found in kernel/toolchain/playground
 items, goal maps, traps or ADR index. This record changes no support claim.
+
+## Follow-up — 2026-10-20
+
+The one next gate at `f6ce57129` repeated light-4's second-CLI timeout in all
+three attempts: [job](https://github.com/vanilla-wave/rifty/actions/runs/39451668584/job/118728578937).
+No blind retry followed. Same-HEAD local full file: 11/11 PASS. Linux probes
+ran on a diagnostic branch; their instrumentation is not shipped in the PR.
+
+- [Baseline/current isolated](https://github.com/vanilla-wave/rifty/actions/runs/39454287281):
+  HEAD `5bd1e4b06` second CLI ready after 28.759 s (Vite reports 27.056 s);
+  `f6ce57129` after 15.756 s (14.530 s). Baseline primary readiness was
+  36.883 s after `bootProjectFiles` returned. Different runners; not a
+  causal performance comparison of the import edit.
+- [Exact light-4 workload](https://github.com/vanilla-wave/rifty/actions/runs/39455330408):
+  18 passed/three skipped; second CLI 26.147 s (Vite 25.071 s). This diagnostic
+  workflow built libraries first, unlike ordinary e2e CI.
+- [CI setup without that build](https://github.com/vanilla-wave/rifty/actions/runs/39457215611):
+  same failed scenario repeated three times, original 30-second assertion
+  preserved: 16.190/16.154/16.132 s; 3/3 PASS. No late-readiness branch ran.
+- Both failed runs' retry-1 traces have a last poll with zero `:5173` options,
+  followed by an error-context snapshot listing the real `vite :5173` option.
+  Context teardown spans 3.8/4.0 s after the failed poll. This establishes
+  later readiness in those attempts, not an exact startup duration for all
+  failures or their CPU/transport cause.
+
+Artifacts: `/tmp/pr379-linux-{before,current,shard,clean}.log`,
+`/tmp/pr379-analyze-startup.py`; diagnostic revisions `5d0f53a95`, `482292778`,
+`2969c3e48` on `t3/pr379-linux-probe`. The diagnostic catch retained and rethrew
+an original failure after observing later readiness; it did not redefine PASS.
+
+PR-4 decision: the two June/July 30-second Vite-specific overrides predate
+upstream-WASM startup. Use the existing helper's 60-second budget; preserve
+its exact live-pill/port/output predicate and every functional assertion.
+Both journeys start two programs, so their outer test budget is 180 seconds
+(the terminal case retains its existing 90-second first-start allowance).
+No runtime deadline, support claim, worker count or retry policy changes.
+This is a test-budget correction, not a runtime performance repair. Mission
+has no production-performance promise; measured runner variation remains honest.
+
+Class: `frozen-assumption` at the UI readiness judge. Sweep: these are the
+30-second cold-Vite callers; the TypeScript helper at
+`tests/e2e/ts-language-service.spec.ts:605` boots its node-server starter,
+not this Vite CLI. Shared helper/default unchanged; no new mechanism.
+Owner/next probe above remain if the corrected gate fails. Do not increase
+another deadline without new evidence; final-HEAD CI still gates delivery.
