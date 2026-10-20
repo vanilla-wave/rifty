@@ -1,9 +1,9 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "Final+GREEN/CLOSE accepted with one captured outside-goal concern: amended I1–I6 proven, unit/goal residuals empty, docs cleanup independently verified. Final HEAD CI remains PR-6 delivery condition; merge not requested.",
+  "merge_call": "Final+GREEN/CLOSE retained with one captured outside-goal concern. Test-only exact-inventory correction independently verified and rebound to53c601bb0; full pr:check27/27 PASS without reruns. Final HEAD CI remains delivery condition; merge not requested.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "1f292220518c9dc0b4b147270cab0a1302c47aa1",
-  "unit_goal_source": "PR #379 integration of cork-reviewed c28909a8c24711ab9e79564fa23625163836a250 and landed main 7f8d0e8d7dea72f271e1060e074f5be9a8285223; merge411ca786ccfcfceda7ecba8e3bf35c22efd544bb, current reviewed1f292220518c9dc0b4b147270cab0a1302c47aa1. Accepted current goal docs/backlog/epics/esbuild-upstream-twin/goal.md at reviewed SHA, including explicit2026-10-20 user I4 amendment to upstream no-COI0.28.0+SW. Both parent diffs and combined merge hunks inspected; former landing verdict had superseded I4 and is not this result. CLOSE docs-only verification: clean7d5eddfe758ad46dac80f05f6da67f2db2e87cca differs from reviewed1f only by deleting completed goal/map/ledger; RECHART history retained at1fec623adef2ca8e5cb7a231e21ade243c1bb03d. No linked epic children remain. Independent backlog/refs PASS (/tmp/esbuild-merge-close-independent-docs.log). Product/test reviewed_sha preserved; frozen amended goal remains readable there.",
+  "reviewed_sha": "53c601bb0210a6d7c2ac1ae475ec59d0a893ab1a",
+  "unit_goal_source": "PR #379 post-CLOSE observed extraction-boundary CI failure; BASE ab6998d000deaa7c93a38a202b3be2edd1fdb674; test-only correction 53c601bb0210a6d7c2ac1ae475ec59d0a893ab1a. Current unit authority: packages/workbench/tests/extraction-boundary.contract.test.ts baseline closure/no-orphans invariants plus ADR-0543 authorized runtime-tier projection. Preceding CLOSE landing record at ab6998d00 retains inherited amended esbuild-upstream-twin goal proof, frozen at 1f292220518c9dc0b4b147270cab0a1302c47aa1. That goal was deleted by accepted cleanup; no live contract is invented. Runtime and all prior packed/Node/browser acceptance inputs are unchanged; new diff is only exact count175→176 plus cause comment.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -13,7 +13,7 @@
       "source": "acceptance",
       "trace": "I1",
       "status": "pass",
-      "citation": "tests/browser-unit/esbuild-upstream-twin.spec.ts:107; tests/browser-unit/esbuild-upstream-host.spec.ts:4; /tmp/esbuild-merge-upstream-vite.log",
+      "citation": "tests/browser-unit/esbuild-upstream-twin.spec.ts:107; tests/browser-unit/esbuild-upstream-host.spec.ts:4; /tmp/esbuild-merge-upstream-vite.log; historical amended goal docs/backlog/epics/esbuild-upstream-twin/goal.md @ 1f292220518c9dc0b4b147270cab0a1302c47aa1",
       "note": "Current merged14cases include all3 aliases+all3raw packages, actual build/API/CLI/fulltree, instant zero-generated snapshot, Vite offline reopen. Prior recipe/admission proofs retained; no new admission list."
     },
     {
@@ -135,6 +135,14 @@
       "status": "pass",
       "citation": "/tmp/esbuild-merge-clean-prcheck.log; tools/shadow-registry/src/runtime/README.md:3; tools/shadow-registry/src/runtime/runtime-adapters.ts:145",
       "note": "27/27PASS,unit184.1s/parity130.3s,no isolationreruns. Dormant low-level adapter export preserves prior API; active COI rejects legacy bindings and no-COI host uses common preparation. I1 forbids loaded client, not deletion of every exported compatibility entry. Removing dormant API is untraced code/API retirement, not a required REV-7 mechanism redesign."
+    },
+    {
+      "row": "Post-CLOSE PR-4 exact Workbench production inventory accommodates the one authorized helper without weakening closure or no-orphans rules",
+      "source": "frozen-artifact",
+      "trace": "ADR-0543 + named extraction-boundary baseline",
+      "status": "pass",
+      "citation": "packages/workbench/tests/extraction-boundary.contract.test.ts:379; packages/workbench/src/glue/dep-snapshot-runtime-tier.ts:12; /tmp/esbuild-extraction-independent-inventory.json; /tmp/esbuild-extraction-independent-green.log; /tmp/esbuild-extraction-prcheck.log",
+      "note": "Independent tracked-file inventory with the unchanged production classifier: main7f8=175, HEAD53=176; sole addition glue/dep-snapshot-runtime-tier.ts, no deletions. BASE raw isolated RED1FAIL/4PASS read. Exact source-closure set equality, unresolved/escaped edges, runtime-bearing no-orphans, eight sealed entries,223-file historical extraction and lower-package checks are unchanged. Independent isolated5/5PASS. Current full27/27PASS (unit196.6s,parity129.3s,no reruns). Diff-scoped prior local gate missed dynamically enumerated source inventory; new direct test change is selected now. No product/test acceptance field relaxed, no runtime changes or reopened goal obligation."
     }
   ],
   "axes": [
