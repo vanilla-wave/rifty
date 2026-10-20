@@ -1,18 +1,12 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "PASS unit: оба CJS findings и все12 старых CI observations проверены. Merge только после завершения clean pr:check, зелёного HEAD CI и CLOSE; goal пока не завершён.",
+  "merge_call": "PASS Final+GREEN/CLOSE: I1–I6 доказаны, unit/goal residuals пусты, clean pr:check27/27 и docs cleanup проверены. Доставка ещё требует зелёного final HEAD CI по PR-6; merge пользователем не запрошен.",
   "checkpoint": "Final+GREEN",
   "reviewed_sha": "c8eab80cb5efb6f9a64a78c23bbf200785ba5573",
-  "unit_goal_source": "docs/backlog/npm-client/esbuild-upstream-twin-cutover.md @ c8eab80cb5efb6f9a64a78c23bbf200785ba5573; BASE 10504415d848c89f2d032d7199bb9658cb0d3238; goal docs/backlog/epics/esbuild-upstream-twin/goal.md; PR #379; original CJS findings fixed @5a370da8; new CI reception verified @c8eab80c",
+  "unit_goal_source": "docs/backlog/npm-client/esbuild-upstream-twin-cutover.md @ c8eab80cb5efb6f9a64a78c23bbf200785ba5573; BASE 10504415d848c89f2d032d7199bb9658cb0d3238; goal docs/backlog/epics/esbuild-upstream-twin/goal.md at same frozen commit; PR #379. Product/test reviewed_sha remains c8eab80c; CLOSE docs-only tree a8f694459d0dbbf9ba578c18d97bb4b880723b3f inspected; original CJS findings fixed @5a370da8 and new CI reception verified @c8eab80c.",
   "unit_residuals": [],
-  "goal_residuals": [
-    {
-      "clause": "CLOSE step4 / REV-9: finish clean gate and remove completed linked children",
-      "location": "docs/backlog/epics/esbuild-upstream-twin/map.md:5",
-      "summary": "I1–I6 end-to-end acceptance is proven, with no remaining known functional obligation. I5 CI execution is proven by all6 esbuild/esbuild-wasm×3versions PASS in /tmp/esbuild-ci-browser-unit-plain.log:444–454; same-HEAD Linux oracle is not a separate invariant. Current clean pr:check still running and carrier/cutover documents remain linked. After clean gate and CLOSE cleanup, goal_complete may become true; green final HEAD CI remains PR-6 delivery condition before reporting done/merge, not an invented goal invariant."
-    }
-  ],
-  "goal_complete": false,
+  "goal_residuals": [],
+  "goal_complete": true,
   "coverage": [
     {
       "row": "Acceptance 1: physical COI fresh/terminal install, snapshot restore/application and claims select upstream policy; ranges, complete trees and pinned offline replay",
@@ -229,6 +223,62 @@
       "status": "pass",
       "citation": "tests/browser-unit/opfs-parallel-drain.spec.ts:136; /tmp/esbuild-opfs-performance-isolated.log",
       "note": "No code/criterion change: faithful40659ms/product11728ms, raw3.466857x; exact trees and pendingflush boundsPASS. Not a substitute for final Linux HEAD CI."
+    },
+    {
+      "row": "CLOSE I1: requested ranges select unmodified upstream trees and own Node entry; no generated module in COI; saved trees remain usable offline",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-upstream-twin.spec.ts:107; tests/browser-unit/esbuild-upstream-host.spec.ts:4; tests/browser-unit/esbuild-vite-contract.spec.ts:1246; tests/browser-unit/saved-project-adapter-use.spec.ts:18; /tmp/esbuild-cjs-aliases-final.log; /tmp/esbuild-ci-round2-browser.log; /tmp/esbuild-packed-final-green.log",
+      "note": "Same representative stock program covers install/build/async/CLI/tree; actual owner snapshots and persistent reopen retain policy and upstream pins."
+    },
+    {
+      "row": "CLOSE I2: all verified versions preserve stock async/lifecycle/CLI outputs, errors and exit; every Sync route named loud; Vite7 build/dev/HMR/optimize pass",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-upstream-twin.spec.ts:107; tests/browser-unit/esbuild-vite-contract.spec.ts:1010; tests/browser-unit/node-async-exit.spec.ts:5; /tmp/esbuild-cjs-aliases-final.log; /tmp/esbuild-cjs-browser-final.log; /tmp/esbuild-cutover-vite7-hmr-build.log; /tmp/esbuild-async-exit-browser-green.log; /tmp/esbuild-packed-final-green.log",
+      "note": "Stock10+7 probe retains exact error fields. Generic nonstrict CJS +2 is a preexisting outside-goal limitation, explicitly retained; all verified stock diagnostics pass."
+    },
+    {
+      "row": "CLOSE I3: generic write callbacks, child/pipe loop references, stdio descriptors and numeric Stats work for actual Node guests",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-node-surfaces.spec.ts:90; tests/browser-unit/fs-stdio-fds.spec.ts:33; tests/browser-unit/file-stdout.spec.ts:57; packages/workbench/src/workers/project-terminal-namespace.test.ts:388; /tmp/esbuild-ci-browser-unit-plain.log:422; /tmp/esbuild-ci-browser-unit-plain.log:486; /tmp/esbuild-round2-independent-verify.log",
+      "note": "Retains accepted prerequisite final reviews at a05c6876/543afcce. Raw Linux Node/Chromium carriers run callbacks/Stats/ref-lifetime/fd0–2; composed stock API/CLI consumes them. New root collision repaired without weakening public listing refusal."
+    },
+    {
+      "row": "CLOSE I4: legacy no-COI0.28.0 behavior/bytes and named incompatible range/pin failures remain; debt owner/kill explicit",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2376; packages/npm-client/src/installer-esbuild-upstream.test.ts:205; packages/workbench/src/glue/dep-snapshot-runtime-tier.test.ts:164; docs/backlog/epics/no-coi-child-processes/map.md:5; /tmp/esbuild-no-coi-byte-proof.log; /tmp/esbuild-legacy-adapter-preserved.log; /tmp/esbuild-packed-final-green.log",
+      "note": "No-COI child-processes remains its separate draft; no admission relaxation or production starter pin change."
+    },
+    {
+      "row": "CLOSE I5: shared version-string/archive-only differential executes in CI; compat lists verified set and marks remaining admitted versions unverified",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tools/shadow-registry/esbuild-upstream-verified.json:1; tests/browser-unit/esbuild-upstream-twin.spec.ts:21; .github/workflows/ci.yml:280; /tmp/esbuild-ci-browser-unit-plain.log:444; tools/compat-matrix-generator/esbuild-matrix.js:118",
+      "note": "Raw Linux CI has all6 esbuild/esbuild-wasm×0.21.5/0.25.12/0.28.2 PASS. Current strict compiler reruns all3aliases locally; later scoped fixes verified independently. I5 contains no separate same-HEAD Linux oracle requirement; finalHEADgreen remains PR-6 delivery condition."
+    },
+    {
+      "row": "CLOSE I6: physical COI bypasses Vite version/startup preparation; installed Vite6 reaches real CLI, Vite7/8 verified lanes remain, no-COI behavior unchanged",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/runtime/vite-node-entry-edge.ts:36; tests/browser-unit/vite6-upstream-cli.spec.ts:14; tools/compat-matrix-generator/cli.js:123; /tmp/esbuild-ci-round2-browser.log; /tmp/esbuild-cjs-browser-final.log; /tmp/esbuild-coi-vite-migrated-2.log",
+      "note": "Vite6 not promoted to verified; retained starter pin is a separate owned item, as accepted in frozen goal."
+    },
+    {
+      "row": "CLOSE cleanup and final local gate preserve accepted scope and durable review evidence",
+      "source": "acceptance",
+      "trace": "I1+I2+I3+I4+I5+I6",
+      "status": "pass",
+      "citation": "docs/backlog/npm-client/reference/esbuild-upstream-twin-final-green.json:1; /tmp/esbuild-round2-clean-prcheck.log; /tmp/esbuild-close-docs.log",
+      "note": "Independent git diff c8eab80c..a8f69445 shows docs-only. Clean pr:check27/27PASS, unit183.8s/parity125.6s without reruns. Independent backlog:check and refs:check PASS after deletion; no epic:esbuild-upstream-twin children remain. Historical rechart kept at051ad10ab. Catalog-name draft deletion follows frozen goal228–232 and delivered ADR0543 tier-disjoint decode/rejection. Adjacent goal.md files untouched; no-COI/TS-IDE and starter-pin work retains owners. This closes goal evidence, not finalHEADCI delivery."
     }
   ],
   "axes": [
