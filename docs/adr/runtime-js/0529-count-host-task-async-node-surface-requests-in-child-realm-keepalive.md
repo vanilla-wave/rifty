@@ -80,8 +80,8 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
 4. Declared gaps (compat ❌), Node-surface but no exact outside hold:
    - `body` stream reads Chromium performs internally — either branch after
      `clone()`, a Request whose FormData body holds a Blob/File — and Body
-     consumers over a guest-stream body. Kill condition: Node's own JS Fetch
-     classes in the guest (`backlog/epics/node-fetch-classes-in-guest`).
+     consumers over a guest-stream body. Closed 2026-10-20 by ADR-0541's
+     Node JS Fetch classes; no native-body hold remains.
    - `navigator.locks`: acquisition and release are host IPC, and Node exits
      with a request queued behind a never-released lock, so no outside hold
      matches (`backlog/runtime-js/navigator-locks-node-lifetime`).

@@ -135,8 +135,7 @@ The same seeded bytes run unchanged under local Node 24/npm.
   gap because a port-registry request has no per-request TCP transport;
   middleware's listener surface is covered, but a finalhandler headers-sent
   error path can surface that `NotImplementedError`.
-- Response clone keepalive remains
-  `runtime-js/fetch-keepalive-response-clone-lifecycle` (draft).
+- Response clone/body lifecycle closed by ADR-0541 (2026-10-20).
 
 ## Decisions
 

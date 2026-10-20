@@ -14,9 +14,9 @@ now reject a Promise with `NotImplementedError('WebAssembly.<api>')` for every
 carrier. Non-streaming Body consumers retain Decision §1. Listed in README
 "Corrections (active)".
 
-This correction does not claim tracked `Response.clone()` lifecycle parity.
-The public Body wrapper can retain the pre-clone stream; that separate observed
-gap is explicit in compat and `backlog/runtime-js/fetch-keepalive-response-clone-lifecycle`.
+This correction did not claim tracked `Response.clone()` lifecycle parity.
+The stale pre-clone stream gap was closed 2026-10-20 by ADR-0541: one JS body
+authority replaces the instance wrapper.
 
 Discarded RED lineage (2026-08-11): native parity reached success/error,
 direct/Promise, lock, correlation, and Body-mixin rows before the escape proof
