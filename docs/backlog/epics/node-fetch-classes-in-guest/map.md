@@ -2,8 +2,6 @@
 
 ## Items
 
-1. `runtime-js/node-fetch-guest-carrier` — acceptance carrier — real Hono + Node/Chromium body, lifecycle and network differential cases.
-
 ## Open questions
 
 None. Source/platform bindings and superseded lifecycle decisions: ADR-0541;

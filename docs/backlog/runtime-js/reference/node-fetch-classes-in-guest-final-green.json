@@ -1,0 +1,270 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN/CLOSE PASS: referrer blocker и metadata advisory закрыты; committed pr:check (28 checks), live Node/Chromium, production, packed consumer и Hono GREEN. Merge после docs-only CLOSE cleanup, pass-binding и green CI at HEAD.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "207e9db6b4bf84b525d396d5378080ae1244c5b1",
+  "unit_goal_source": "PR #381 https://github.com/vanilla-wave/rifty/pull/381; goal node-fetch-classes-in-guest / unit node-fetch-guest-carrier, accepted I1–I3 and user-approved browser transport with explicit ceilings; BASE 3207b33acb3cb74d54be2cff6d33200cb32bf556; Contract+RED preparation 2a6a30728d5af714ef2598bf84158b89dc65e48e, PR comment 6278683544; Final+GREEN and CLOSE tree 207e9db6b4bf84b525d396d5378080ae1244c5b1.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Acceptance 1: real Hono preserves Cookie/File multipart and Node header conversion",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:49",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: body locking/disturbance, clone/copy, detached reads and pending guest-source exit match live Node",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:111",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: real multipart HTTP, one fetched body, explicit ceilings, abort/network errors and released lifetime holds",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:86",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: Hono File/Cookie, getSetCookie, retained headers and Fetch class identities",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:10",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: both clone branches, direct multipart stream, guest bodies, consumed/locked bodies and Request copies",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:111",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: multipart POST, fetched lock/clone, metadata, active abort and connection failure",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:171",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: abort during fetch/body rejects and releases the hold; original Contract+RED advisory closed by active-body/upload cases",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:193",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: source error rejects and cannot be reread; original Contract+RED advisory closed by bodyUsed and second-consumer assertions",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:153",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: unavailable transport rejects and process exits",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:212",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: unsupported explicit wire headers reject with the named ceiling",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:226",
+      "note": ""
+    },
+    {
+      "row": "Request public construction/conversion, copy and body state",
+      "source": "public-api",
+      "trace": "I1+I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:90",
+      "note": ""
+    },
+    {
+      "row": "Response public methods, direct stream, clone/tee and shared disturbance",
+      "source": "public-api",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:136",
+      "note": ""
+    },
+    {
+      "row": "Headers public conversion, getSetCookie, plain-object/Proxy distinction and traps",
+      "source": "public-api",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:90",
+      "note": ""
+    },
+    {
+      "row": "FormData public File/body encoding and USV conversion, including BOM preserved as exact codepoints",
+      "source": "public-api",
+      "trace": "I1+I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:10",
+      "note": ""
+    },
+    {
+      "row": "fetch accepts JS Request/FormData and returns JS Response; cache and Host behavior match Node",
+      "source": "public-api",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:157",
+      "note": ""
+    },
+    {
+      "row": "Explicit referrer blocker fixed: empty/same-browser-origin referrers preserved, unsupported external referrers reject; independently rerun real HTTP frontend/Node probe matched",
+      "source": "public-api",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:189",
+      "note": ""
+    },
+    {
+      "row": "Response metadata advisory weak→pass: actual 302→207 redirect proves status, statusText, final URL, redirected, exposed header and body against live Node",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:191",
+      "note": ""
+    },
+    {
+      "row": "Unread network response holds process through real EOF; pure guest pending body does not",
+      "source": "acceptance",
+      "trace": "I2+I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:252",
+      "note": ""
+    },
+    {
+      "row": "HOST_FETCH/fetchHost preserve infrastructure relative asset/resource I/O through production bootstrap and packed external consumers",
+      "source": "public-api",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "tests/e2e-prod/node-fetch-guest.spec.ts:13",
+      "note": ""
+    },
+    {
+      "row": "NODE_NETWORK_FETCH/fetchNodeNetwork preserve native-compatible HTTP inputs with the same response/ref owner",
+      "source": "public-api",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:266",
+      "note": ""
+    },
+    {
+      "row": "process.emitWarning supports required Node overloads, validation, nextTick identity and constructor warning delivery",
+      "source": "public-api",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:29",
+      "note": ""
+    },
+    {
+      "row": "Warning-file redirection remains an explicit named ceiling; application-owned listeners work",
+      "source": "fault-matrix",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process-warnings.fault.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Native immediate scheduler bootstrap regression: idle/pending/completed/cancelled port references match real lifetime; four guard revert probes killed",
+      "source": "acceptance",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/timers-host-lifetime.fault.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Private stream/Proxy bindings preserve locked/disturbed custom tee and semantic VM Proxy identity across production bundles",
+      "source": "acceptance",
+      "trace": "ADR-0541+I1+I2",
+      "status": "pass",
+      "citation": "tests/e2e-prod/node-fetch-guest.spec.ts:13",
+      "note": ""
+    },
+    {
+      "row": "Pinned undici 7.25.0 class source/output provenance, exact portability anchors and generated bootstrap drift gate",
+      "source": "frozen-artifact",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "tools/publishing/generate-fetch-classes.mjs:16",
+      "note": ""
+    },
+    {
+      "row": "Exact compiler asset fingerprint updated after real build; old size ceiling and negative payload criteria retained, packed consumer executed",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.test.ts:17",
+      "note": ""
+    },
+    {
+      "row": "Requested worker bundle growth measured without new limit; independently recomputed five emitted assets with matching Python gzip settings",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/adr/runtime-js/0541-run-node-fetch-classes-over-the-browser-i-o-boundary.md:129",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
