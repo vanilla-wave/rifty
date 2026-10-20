@@ -240,19 +240,35 @@ test.describe('M1 - terminal shell', () => {
   test('npm run vite resolves the seeded script through the installed Vite CLI', async ({
     page,
   }) => {
+    test.setTimeout(240_000);
+    const diagnosticStart = Date.now();
+    const mark = (event: string, detail: unknown = {}) => console.log('SHARD_STARTUP_PROBE', JSON.stringify({ms: Date.now()-diagnosticStart, event, detail}));
+    page.on('worker', worker => mark('worker', worker.url()));
+
     await bootProjectFiles(page);
     // ADR-0148: the chosen project-files starter boots its dev server in the owner — wait up.
     // Readiness = the LIVE pill (derived from the listening-port set), never a
     // rifty-authored terminal marker.
     await expectViteDevServerReady(page, 5174, 90_000);
+    mark("primary-ready");
 
     await openShellTerminal(page);
     await runTerminalLine(page, 'npm run vite');
+    mark('command-submitted');
 
     // The owner npm resolves the seeded `vite` script through the shell/bin path,
     // so this proves package scripts do not fall back to the old co-resident
     // special-case or a missing-script stub.
-    await expectViteDevServerReady(page, 5173, 30_000);
+    try {
+      await expectViteDevServerReady(page, 5173, 30_000);
+      mark('original-criterion-pass');
+    } catch (originalError) {
+      mark('original-criterion-fail', String(originalError));
+      await expectViteDevServerReady(page, 5173, 90_000);
+      mark('late-ready', await terminalBuffer(page));
+      throw originalError;
+    }
+    mark('second-output', await terminalBuffer(page));
     const buf = await terminalBuffer(page);
     expect(buf).not.toContain("unknown subcommand 'run'");
     expect(buf).not.toContain('missing script');
