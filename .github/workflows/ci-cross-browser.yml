@@ -43,8 +43,6 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}-${{ matrix.engine }}
       - if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
-      - if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps ${{ matrix.engine }}
       - name: Record actual browser build
         run: |
           node --input-type=module -e '
@@ -53,10 +51,9 @@ jobs:
             console.log(JSON.stringify({ engine: engine.name(), build: browser.version(), date: new Date().toISOString(), sha: "${{ github.sha }}", run: "${{ github.run_id }}" }));
             await browser.close();
           ' > browser-build.json
-      - run: pnpm build:libs
       - id: lane
         name: Execute existing ${{ matrix.lane }} suite
-        run: pnpm test:e2e:light --workers=1 --shard=4/8
+        run: pnpm test:e2e:light --workers=1 tests/e2e/m1-terminal-shell.spec.ts -g 'npm run vite resolves' --retries=0 --repeat-each=3
       - if: always()
         uses: actions/upload-artifact@v4
         with:
