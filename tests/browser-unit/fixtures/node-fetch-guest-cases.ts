@@ -166,6 +166,56 @@ new Response(new ReadableStream({pull() {return new Promise(() => {});}}))
  .text().then(value => row('unexpected',value), fail);
 `,
   },
+  {
+    // Node: every structured-clone surface refuses Fetch instances + markAsUncloneable tags.
+    name: 'clone-uncloneable',
+    source: `${preamble}
+const fs = require('node:fs');
+const path = require('node:path');
+const { Worker, markAsUncloneable } = require('node:worker_threads');
+const attempt = (label, fn) => { try { row(label, ['accepted', fn()]); } catch (e) { row(label, [e.name, e.message, e.code]); } };
+class H extends Headers {}
+const marked = {x:1}; markAsUncloneable(marked);
+attempt('clone-headers', () => structuredClone(new Headers({a:'1'})));
+attempt('clone-nested-response', () => structuredClone({a:[new Response('x')]}));
+attempt('clone-request', () => structuredClone(new Request('http://example.test/')));
+attempt('clone-formdata', () => structuredClone(new FormData()));
+attempt('clone-map-headers', () => [...structuredClone(new Map([['k', new Headers()]]))]);
+attempt('clone-getter', () => structuredClone({ get a() { return new Headers(); } }));
+attempt('clone-subclass', () => structuredClone(new H()));
+attempt('clone-marked', () => structuredClone(marked));
+attempt('clone-control', () => structuredClone({x:1}));
+row('keys', Object.keys(new Headers({a:'1'})));
+attempt('port-postmessage', () => {
+ const { port1, port2 } = new MessageChannel();
+ try { port1.postMessage(new Headers()); return 'posted'; } finally { port1.close(); port2.close(); }
+});
+attempt('broadcast-postmessage', () => {
+ const channel = new BroadcastChannel('rifty-clone-probe');
+ try { channel.postMessage(new FormData()); return 'posted'; } finally { channel.close(); }
+});
+// Worker probes parentPort.postMessage, then reports through a cloneable message.
+// File entry only: { eval: true } is a separate declared ceiling
+// (NotImplementedError, backlog runtime-js/worker-eval-data-url-entry), not clone admission.
+const workerSource = [
+ "const { parentPort } = require('node:worker_threads');",
+ "let probe; try { parentPort.postMessage(new Headers()); probe = ['accepted', 'posted']; } catch (e) { probe = [e.name, e.message, e.code]; }",
+ 'parentPort.postMessage({ probe });',
+].join('\\n');
+const probeWorker = (label, create) => new Promise((resolve) => {
+ let worker;
+ try { worker = create(); } catch (e) { row(label + '-create', [e.name, e.message, e.code]); resolve(); return; }
+ const guard = setTimeout(() => { row(label + '-timeout', true); worker.terminate().then(resolve, resolve); }, 8000);
+ worker.on('message', (message) => row(label + '-message', message));
+ worker.on('error', (e) => row(label + '-error', [e.name, e.message, e.code]));
+ worker.on('exit', (code) => { clearTimeout(guard); row(label + '-exit', code); resolve(); });
+ attempt(label + '-postmessage', () => { worker.postMessage({ deep: { arr: [1, new Headers()] } }); return 'posted'; });
+});
+const workerFile = path.join(__dirname, 'clone-uncloneable-worker.cjs');
+fs.writeFileSync(workerFile, workerSource);
+probeWorker('worker-file', () => new Worker(workerFile)).catch(fail);
+`,
+  },
 ];
 
 export function networkFetchCase(url: string): string {

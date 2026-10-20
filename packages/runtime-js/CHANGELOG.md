@@ -6,11 +6,15 @@
 
 ## [Unreleased]
 
+- Guest Fetch instances and `markAsUncloneable` graphs throw Node's `DataCloneError` (code 25) on `structuredClone`, realm/`MessagePort`/`Worker`/`parentPort`/`BroadcastChannel` `postMessage`, nested values and getters included: one admission walk (`internal/clone-marks.ts`) ahead of every native clone (ADR-0541).
+
 - Early Fetch preload no longer caches the fallback `node:process`: child IPC, stdio and Worker construction observe the seeded child process. JS Fetch classes serialize own enumerable properties through advanced IPC as Node (ADR-0541).
 
 - Pre-aborted Fetch preserves abort priority and unstarted body cancellation; collected Responses leave retained errored bodies undisturbed. Locked bodies with custom cancel reject `fetch.abortBodyState`; active upload abort retains Node's continued-read behavior (ADR-0541).
 
 - `process.emitWarning` supports string/Error overloads, nextTick events, default stderr and deprecation controls; lowercase `Request` method `patch` now warns once instead of crashing. Warning-file redirection remains a named unsupported feature (ADR-0541).
+
+- Guest `fetch()`/`new Request()` reject relative URLs as Node (`TypeError` "Failed to parse URL …"), no browser-base-URL exception. Rifty infrastructure resource I/O (wasm, lib.d.ts, npm/eddy, owner assets) goes through `@riftydev/io` `fetchHost`; `node:http` egress through `fetchNodeNetwork` (ADR-0541).
 
 - Native Node embedding no longer stays alive after importing the immediate scheduler: its MessagePort references follow pending immediates; cold QuickJS preload exits normally.
 

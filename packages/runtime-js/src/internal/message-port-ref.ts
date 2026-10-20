@@ -40,7 +40,7 @@ function nativeGetter(target: object, key: PropertyKey): NativeMethod {
   return get as NativeMethod;
 }
 
-function ownerOf(object: object, key: PropertyKey): object | null {
+export function ownerOf(object: object, key: PropertyKey): object | null {
   for (let owner: object | null = object; owner !== null; owner = Object.getPrototypeOf(owner)) {
     if (Object.prototype.hasOwnProperty.call(owner, key)) return owner;
   }
@@ -51,7 +51,7 @@ function ownerOf(object: object, key: PropertyKey): object | null {
  * Replace a method in place, keeping its descriptor attributes, `name` and
  * `length`. The wrapper is a method (no `prototype`, not constructible).
  */
-function wrapMethod(
+export function wrapMethod(
   owner: object,
   key: string,
   wrap: (native: NativeMethod, receiver: unknown, args: unknown[]) => unknown,
