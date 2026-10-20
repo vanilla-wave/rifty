@@ -1,3 +1,4 @@
+import { runtimeProxy } from './proxy-identity.ts';
 /**
  * ADR-0447: Node's manual `MessagePort` reference API (`ref`/`unref`/`hasRef`)
  * in Node child realms. A referenced port holds one ADR-0152 keepalive ref until
@@ -159,7 +160,7 @@ export function installMessagePortReference(): void {
     keepaliveUnref();
   };
 
-  const channel = new Proxy(Channel, {
+  const channel = runtimeProxy(Channel, {
     construct(target, args, newTarget) {
       const created = Reflect.construct(target, args, newTarget) as MessageChannel;
       const first = { referenced: false, closed: false, moved: false } as PortRecord;

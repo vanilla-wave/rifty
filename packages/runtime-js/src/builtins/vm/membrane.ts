@@ -199,7 +199,9 @@
 
 import type { QuickJSContext, QuickJSHandle } from 'quickjs-emscripten-core';
 import { Scope } from 'quickjs-emscripten-core';
+import { proxyIdentity, runtimeProxy } from '../../internal/proxy-identity.ts';
 import { ContextLifetime } from './context-lifetime.ts';
+import { guestProxyIdentity } from './proxy-identity.ts';
 
 /**
  * Guest id registry as an UNREACHABLE closure. Evaluates to a function that maps
@@ -491,6 +493,7 @@ export class Membrane {
   #genericRebrandHandle: QuickJSHandle | undefined;
   /** Lazily-installed guest reflection closure (`REFLECT_BOOTSTRAP`, T12), infra-tracked. */
   #reflectHandle: QuickJSHandle | undefined;
+  readonly #isProxy: (value: QuickJSHandle) => boolean;
   /**
    * Sandbox own keys captured at `reseedContext` time, consumed by the next
    * `sweepContext` for DELETE-reflection: a seeded key the guest deleted (a
@@ -502,16 +505,11 @@ export class Membrane {
 
   constructor(ctx: QuickJSContext) {
     this.#ctx = ctx;
-    // Evict the identity-cache entry when a wrapper's handle is released. The
-    // wrapper arg is present only on the EXPLICIT path (`releaseWrapper`, wrapper
-    // still alive but its handle now dead) — delete if the stored ref points to
-    // THIS wrapper or is dead. On the GC path (no wrapper — held values must not
-    // pin the target) delete only if the stored ref is already dead, so a fresh
-    // wrapper that replaced a collected one (same id) is not clobbered.
     this.#lifetime = new ContextLifetime(ctx, (id, wrapper) => {
       const current = this.#wrappers.get(id)?.deref();
       if (current === undefined || current === wrapper) this.#wrappers.delete(id);
     });
+    this.#isProxy = guestProxyIdentity(ctx, this.#lifetime);
   }
 
   /** Handle-lifetime controller (engine wires the ContextObject finalizer to it). */
@@ -569,7 +567,7 @@ export class Membrane {
         const id = this.#idOf(handle);
         const origin = this.#hostOrigins.get(id);
         if (origin !== undefined) return origin;
-        return this.#wrapCached(id, () => this.#wrapFunction(handle, id));
+        return this.#wrapCached(id, handle, () => this.#wrapFunction(handle, id));
       }
       case 'object': {
         // null is typeof 'object' in QuickJS too — distinguish via dump (reliable
@@ -587,21 +585,23 @@ export class Membrane {
         // detect via the object's brand and build a REAL host exotic backing with a
         // severed-but-method-bearing prototype (`#exoticProtoFor`).
         const brand = this.#brandOf(handle);
-        if (brand === 'Date') return this.#wrapCached(id, () => this.#wrapDate(handle, id));
-        if (brand === 'RegExp') return this.#wrapCached(id, () => this.#wrapRegExp(handle, id));
+        if (brand === 'Date') return this.#wrapCached(id, handle, () => this.#wrapDate(handle, id));
+        if (brand === 'RegExp')
+          return this.#wrapCached(id, handle, () => this.#wrapRegExp(handle, id));
         // Error OUT (T11): a guest Error must mirror Node's cross-realm shape —
         // `instanceof Error` FALSE, but `.constructor.name`/`.name`/`.message`/
         // `.stack`/`toString()` faithful and the value REALLY catchable/rethrowable.
         // The brand of every Error subclass is `Error` (`Object.prototype.toString`).
-        if (brand === 'Error') return this.#wrapCached(id, () => this.#wrapError(handle, id));
+        if (brand === 'Error')
+          return this.#wrapCached(id, handle, () => this.#wrapError(handle, id));
         const taKind = TYPED_ARRAY_BRANDS.get(brand);
         if (taKind !== undefined) {
-          return this.#wrapCached(id, () => this.#wrapTypedArray(handle, id, taKind));
+          return this.#wrapCached(id, handle, () => this.#wrapTypedArray(handle, id, taKind));
         }
         if (this.#isArray(handle)) {
-          return this.#wrapCached(id, () => this.#wrapArray(handle, id));
+          return this.#wrapCached(id, handle, () => this.#wrapArray(handle, id));
         }
-        return this.#wrapCached(id, () => this.#wrapObject(handle, id));
+        return this.#wrapCached(id, handle, () => this.#wrapObject(handle, id));
       }
       default:
         // Unreachable: `kind` is `ctx.typeof`, every JS typeof is handled above.
@@ -976,17 +976,12 @@ export class Membrane {
     });
   }
 
-  /**
-   * Identity-cache wrapper: same guest object id → same host wrapper (within its
-   * lifetime). `id` is the precomputed `#idOf`. The cache holds a WEAK ref so a
-   * collected wrapper does not pin its guest handle; a dead/collected ref is a
-   * MISS and `make()` (which calls `#lifetime.trackWrapper`, re-storing the ref)
-   * rebuilds. `make()` MUST return an object (every wrapper is a Proxy).
-   */
-  #wrapCached(id: number, make: () => unknown): unknown {
+  /** Weak identity cache; record semantic Proxy kind before returning a wrapper. */
+  #wrapCached(id: number, handle: QuickJSHandle, make: () => unknown): unknown {
     const existing = this.#wrappers.get(id)?.deref();
     if (existing !== undefined) return existing;
     const wrapper = make() as object;
+    proxyIdentity().record(wrapper, this.#isProxy(handle));
     this.#wrappers.set(id, new WeakRef(wrapper));
     return wrapper;
   }
@@ -1039,7 +1034,7 @@ export class Membrane {
     // GC/`releaseWrapper`) instead of an untracked live handle that would later
     // abort `ctx.dispose()`. See `#retainForWrapper`.
     const target: unknown[] = [];
-    const wrapper = new Proxy(target, { getPrototypeOf: () => null });
+    const wrapper = runtimeProxy(target, { getPrototypeOf: () => null });
     this.#retainForWrapper(wrapper, handle, id);
     try {
       for (let i = 0; i < length; i++) {
@@ -1140,7 +1135,7 @@ export class Membrane {
       this.#syncTargetWith(target, guest, () => this.#wrappedGuestProto(guest), key);
     };
 
-    const wrapper = new Proxy(target, {
+    const wrapper = runtimeProxy(target, {
       getPrototypeOf: () => this.#wrappedGuestProto(guest),
       get(_t, key) {
         if (typeof key === 'symbol' && !hasSymbolKey(key)) return undefined;
@@ -1488,7 +1483,7 @@ export class Membrane {
     // and redefine the thunk's own `name`/`length` (both configurable on a fn) so
     // the Proxy surfaces them. Done BEFORE the Proxy so the wrapper is final.
     this.#copyFnNameLength(handle, thunk);
-    const wrapper = new Proxy(thunk, { getPrototypeOf: () => null });
+    const wrapper = runtimeProxy(thunk, { getPrototypeOf: () => null });
     // dup+track the guest handle (and record the OUT round-trip) via the shared
     // leak-safe path. While the host HOLDS the wrapper (e.g. `stored = cb`), the
     // dup stays alive, so calling it AFTER the run does `callFunction` on a

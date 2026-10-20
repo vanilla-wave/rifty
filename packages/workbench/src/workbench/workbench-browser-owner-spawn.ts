@@ -1,3 +1,4 @@
+import { fetchHost } from '@riftydev/io';
 // Physical owner spawn boundary: browser effect dependencies + the kernel
 // worker spawn. Split out of workbench-browser-owner.ts (file-size ratchet;
 // the spawn/effect boundary is the file's one non-transport responsibility).
@@ -34,7 +35,7 @@ export function browserDependencies(): BrowserOwnerDependencies {
       setTimeout: (callback, delayMs) => window.setTimeout(callback, delayMs),
       clearTimeout: (timerId) => window.clearTimeout(timerId),
     },
-    fetch: (url, init) => globalThis.fetch(url, init),
+    fetch: (url, init) => fetchHost(url, init),
     mountPreview: wirePreviewBridge,
     operationId: createOperationId,
   };

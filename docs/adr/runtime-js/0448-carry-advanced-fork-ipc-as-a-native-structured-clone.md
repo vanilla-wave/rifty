@@ -166,3 +166,8 @@ the message could tell.
 “error paths only” residual classification. A constructor accessor can change
 successful-send bytes; own/inherited accessors now throw before dispatch.
 Proxy-prototype effects remain a separate successful-send gap, not error precedence.
+
+2026-10-20 — ADR-0541 supersedes the Headers native-object ceiling: guest Fetch
+classes are JS objects. Headers/Request/Response/FormData own enumerable fields
+round-trip through real advanced fork IPC as Node; internal Fetch state omitted.
+Other native-object ceilings unchanged.

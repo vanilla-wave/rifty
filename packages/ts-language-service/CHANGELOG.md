@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Browser lib.d.ts resources use host fetch, preserving configured relative asset URLs after Node Fetch installs (ADR-0541).
+
 ### Changed
 
 - **Owner-FS relay consumes the complete SyncRpc v5 API (ADR-0366).** The

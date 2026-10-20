@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+- Early Fetch preload no longer caches the fallback `node:process`: child IPC, stdio and Worker construction observe the seeded child process. JS Fetch classes serialize own enumerable properties through advanced IPC as Node (ADR-0541).
+
+- Pre-aborted Fetch preserves abort priority and unstarted body cancellation; collected Responses leave retained errored bodies undisturbed. Locked bodies with custom cancel reject `fetch.abortBodyState`; active upload abort retains Node's continued-read behavior (ADR-0541).
+
+- `process.emitWarning` supports string/Error overloads, nextTick events, default stderr and deprecation controls; lowercase `Request` method `patch` now warns once instead of crashing. Warning-file redirection remains a named unsupported feature (ADR-0541).
+
+- Native Node embedding no longer stays alive after importing the immediate scheduler: its MessagePort references follow pending immediates; cold QuickJS preload exits normally.
+
+- Node guest `Request`/`Response`/`Headers`/`FormData` now use undici 7.25.0 (Node 24.16.0): Hono header retention, multipart/File bodies, clone/tee, locking/bodyUsed and detached reads match live Node. One network stream/ref replaces native Body wrappers; unsupported browser wire headers/dispatchers/opaque responses reject explicitly. VM headers preserve semantic Proxy identity. ADR-0541.
 - Wait for child bootstrap readiness before transferring init ports; dynamic host wrappers retain startup messages.
 
 - No-COI Node children use isolated Workers and live owner FS via SW; support child ref/unref, transported stdin Buffers, spec stdio write callbacks and async fs.read(0) (ADR-0539).

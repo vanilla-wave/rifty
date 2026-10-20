@@ -1,3 +1,4 @@
+import { fetchHost } from '@riftydev/io';
 /**
  * Ask eddy what closure a request resolves to WITHOUT downloading the bundle:
  * a plain POST resolve (no wire-protocol change) whose body is read only up
@@ -54,7 +55,7 @@ const dec = new TextDecoder('utf-8');
 export async function resolveEddyClosure(
   opts: ResolveEddyClosureOptions,
 ): Promise<EddyClosureSummary> {
-  const fetchImpl = opts.fetchImpl ?? fetch;
+  const fetchImpl = opts.fetchImpl ?? fetchHost;
   const stallMs = opts.stallTimeoutMs ?? DEFAULT_BUNDLE_STALL_MS;
   // The installer's CORS-simple POST shape: a string body with no content-type
   // header skips the cross-origin OPTIONS preflight; the server parses the

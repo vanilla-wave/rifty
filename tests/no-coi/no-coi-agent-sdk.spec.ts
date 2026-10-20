@@ -36,10 +36,12 @@ test('Stop retains an applied mutation through the pending native flush', async 
         if (typeof sandbox.project !== 'function')
           throw new Error('Missing public sandbox.project method');
         await sandbox.fs.writeFile('/mutation/seed', 'seed');
+        // Console eval uses Node fetch: resolve the host URL before serializing it.
+        const barrierUrl = new URL('/agent-flush-barrier', location.href).href;
         const patched = await sandbox.runtime.eval(`
         ${nativeReplicaProbeSource}
         observeNativeReplicaWrites(async records => {
-          if (records.some(record => record.path === '/mutation/held.txt' && record.kind === 'file')) await fetch('/agent-flush-barrier');
+          if (records.some(record => record.path === '/mutation/held.txt' && record.kind === 'file')) await fetch(${JSON.stringify(barrierUrl)});
         });
       `);
         if (!patched.ok) throw new Error('native boundary injection failed');

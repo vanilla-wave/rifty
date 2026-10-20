@@ -1,17 +1,6 @@
-/**
- * Event-loop keepalive for host-task-async Node-surface requests (ADR-0529,
- * extends ADR-0152 §1). libuv counts a pending threadpool/platform request as
- * active; in the child realm these settle on a host task, so the drain reaped
- * the realm before they settled (silent drop). Each pending request holds one
- * ref until it settles: Blob/File body reads, WebAssembly compile/instantiate,
- * SubtleCrypto, Body consumers of in-guest Responses/Requests, blob-backed body
- * streams, and an unclosed global WebSocket. Work settling with no host task
- * (`fs.promises` sync RPC, `node:zlib` over Chromium's synchronous
- * CompressionStream, uncloned string/bytes body streams) needs no ref.
- *
- * Wrappers are Proxies over the realm's own functions; `Function#toString`
- * reports the wrapped native text. A held call returns a settle-tracked copy
- * of the native promise, so an unhandled rejection stays the caller's.
+import { runtimeProxy } from '../internal/proxy-identity.ts';
+/** Host-I/O keepalive: Blob reads, WebAssembly, crypto, WebSocket and BroadcastChannel.
+ * Fetch classes/bodies are JS-owned (ADR-0541); only actual host requests hold refs.
  */
 
 import { HOST_BROADCAST_CHANNEL } from '@riftydev/io';
@@ -23,14 +12,7 @@ type Construct = new (...args: unknown[]) => object;
 const promiseThen = Promise.prototype.then;
 const reflectApply = Reflect.apply;
 const reflectConstruct = Reflect.construct;
-const BODY_CONSUMERS = ['arrayBuffer', 'blob', 'bytes', 'formData', 'json', 'text'] as const;
-const blobPrototype = typeof Blob === 'function' ? Blob.prototype : undefined;
-
-const blobSize = blobPrototype && Object.getOwnPropertyDescriptor(blobPrototype, 'size')?.get;
-const blobType = blobPrototype && Object.getOwnPropertyDescriptor(blobPrototype, 'type')?.get;
-const nativeBlobStream = blobPrototype?.stream as AnyFunction | undefined;
-const formDataHas = typeof FormData === 'function' ? FormData.prototype.has : undefined;
-// Realm primordials for the wrappers' own stream/header work (guest patches cannot reach it).
+// Realm primordials for host Blob reads (guest patches cannot reach them).
 const streamPrototype = typeof ReadableStream === 'function' ? ReadableStream.prototype : undefined;
 const readerPrototype =
   typeof ReadableStreamDefaultReader === 'function'
@@ -40,22 +22,6 @@ const nativeGetReader = streamPrototype?.getReader as AnyFunction | undefined;
 const nativeStreamCancel = streamPrototype?.cancel as AnyFunction | undefined;
 const nativeRead = readerPrototype?.read as AnyFunction | undefined;
 const nativeReaderCancel = readerPrototype?.cancel as AnyFunction | undefined;
-const responsePrototype = typeof Response === 'function' ? Response.prototype : undefined;
-const responseBody =
-  responsePrototype && Object.getOwnPropertyDescriptor(responsePrototype, 'body')?.get;
-const responseHeaders =
-  responsePrototype && Object.getOwnPropertyDescriptor(responsePrototype, 'headers')?.get;
-const requestPrototype = typeof Request === 'function' ? Request.prototype : undefined;
-const requestHeaders =
-  requestPrototype && Object.getOwnPropertyDescriptor(requestPrototype, 'headers')?.get;
-const FileReaderSyncCtor = (globalThis as { FileReaderSync?: typeof FileReaderSync })
-  .FileReaderSync;
-const streamLocked =
-  streamPrototype && Object.getOwnPropertyDescriptor(streamPrototype, 'locked')?.get;
-const headersPrototype = typeof Headers === 'function' ? Headers.prototype : undefined;
-const headersGet = headersPrototype?.get as AnyFunction | undefined;
-const headersHas = headersPrototype?.has as AnyFunction | undefined;
-const headersSet = headersPrototype?.set as AnyFunction | undefined;
 const BLOB_READS = ['arrayBuffer', 'bytes', 'text'] as const;
 const broadcastChannelName =
   typeof BroadcastChannel === 'function'
@@ -65,8 +31,6 @@ const broadcastChannelName =
 interface HostAsyncTarget {
   Function?: typeof Function;
   Blob?: typeof Blob;
-  Response?: typeof Response;
-  Request?: typeof Request;
   ReadableStream?: typeof ReadableStream;
   WebAssembly?: Pick<typeof WebAssembly, 'compile' | 'instantiate'>;
   SubtleCrypto?: typeof SubtleCrypto;
@@ -76,11 +40,6 @@ interface HostAsyncTarget {
 
 /** Wrapper → wrapped native function, for `Function#toString`. */
 const originals = new WeakMap<object, object>();
-/** Streams this module returned over host blob data (their pull holds). */
-const heldStreams = new WeakSet<object>();
-/** In-guest Responses/Requests bodied by a guest stream: consumers wait on guest work, never held. */
-const guestStreamBodies = new WeakSet<object>();
-
 const isObject = (value: unknown): value is object =>
   (typeof value === 'object' || typeof value === 'function') && value !== null;
 
@@ -106,7 +65,7 @@ function hold<T>(value: T): T {
 }
 
 function wrapFunction<F extends object>(original: F, handler: ProxyHandler<F>): F {
-  const proxy = new Proxy(original, handler);
+  const proxy = runtimeProxy(original, handler);
   originals.set(proxy, original);
   return proxy;
 }
@@ -134,7 +93,7 @@ function holdMethod(owner: object, name: PropertyKey, counts: (self: unknown) =>
 /** Proxy a global constructor; `X.prototype.constructor === X` stays true, as in Node. */
 function wrapConstructor(
   target: HostAsyncTarget,
-  name: 'Response' | 'Request' | 'WebSocket' | 'BroadcastChannel',
+  name: 'WebSocket' | 'BroadcastChannel',
   construct: (original: Construct, args: unknown[], newTarget: Construct) => object,
 ): object | undefined {
   const ctor = target[name] as unknown as Construct | undefined;
@@ -167,12 +126,6 @@ function branded(getter: AnyFunction | undefined, value: unknown): boolean {
     return false;
   }
 }
-const isBlob = (value: unknown): value is Blob => branded(blobSize, value);
-const isFormData = (value: unknown): value is FormData =>
-  branded(formDataHas as AnyFunction | undefined, value);
-const isGuestStream = (value: unknown): boolean =>
-  branded(streamLocked, value) && !heldStreams.has(value as object);
-
 /**
  * The one stream a guest sees over host blob data: every native consumer
  * (readers, async iteration, tee, pipes, bodies) works on it unchanged, and
@@ -180,12 +133,11 @@ const isGuestStream = (value: unknown): boolean =>
  */
 function holdReads(
   ReadableStreamCtor: typeof ReadableStream,
-  /** Resolved at the first pull or cancel (a Response body is encoded after its init). */
-  source: () => ReadableStream<Uint8Array<ArrayBuffer>>,
+  source: ReadableStream<Uint8Array<ArrayBuffer>>,
 ): ReadableStream<Uint8Array<ArrayBuffer>> {
   let reader: object | null = null;
   const pull = (controller: ReadableByteStreamController): Promise<void> => {
-    reader ??= reflectApply(nativeGetReader as AnyFunction, source(), []) as object;
+    reader ??= reflectApply(nativeGetReader as AnyFunction, source, []) as object;
     return reflectApply(promiseThen, hold(reflectApply(nativeRead as AnyFunction, reader, [])), [
       ({ done, value }: ReadableStreamReadResult<Uint8Array<ArrayBuffer>>) => {
         if (done) {
@@ -205,10 +157,9 @@ function holdReads(
     pull,
     cancel: (reason) =>
       reader === null
-        ? (reflectApply(nativeStreamCancel as AnyFunction, source(), [reason]) as Promise<void>)
+        ? (reflectApply(nativeStreamCancel as AnyFunction, source, [reason]) as Promise<void>)
         : (reflectApply(nativeReaderCancel as AnyFunction, reader, [reason]) as Promise<void>),
   });
-  heldStreams.add(stream);
   return stream;
 }
 
@@ -220,136 +171,8 @@ function installBlobKeepalive(target: HostAsyncTarget): void {
   if (ReadableStreamCtor === undefined) return;
   wrapMethod(blob, 'stream', (original, self, args) => {
     const native = reflectApply(original, self, args) as ReadableStream<Uint8Array<ArrayBuffer>>;
-    return holdReads(ReadableStreamCtor, () => native);
+    return holdReads(ReadableStreamCtor, native);
   });
-}
-
-/**
- * Every Body consumer is a host request in Chromium (one task even for an
- * in-memory string; a cloned body's tee takes many): held until it settles.
- * A guest-stream body waits on guest work, so its consumers hold nothing, as
- * in Node. `clone()` and `new Request(request)` carry the body's kind.
- */
-function holdBodyConsumers(prototype: object): void {
-  const counts = (self: unknown): boolean => !(isObject(self) && guestStreamBodies.has(self));
-  for (const consumer of BODY_CONSUMERS) holdMethod(prototype, consumer, counts);
-  wrapMethod(prototype, 'clone', (original, self, args) => {
-    const copy = reflectApply(original, self, args) as object;
-    if (!counts(self)) guestStreamBodies.add(copy);
-    return copy;
-  });
-}
-
-/**
- * A blob-backed Response is built natively over the held blob stream (its
- * `body`, locking, clone and consumers stay native); the content type the
- * native body extraction would set is kept. Other bodies stay native as given.
- */
-function installResponseKeepalive(target: HostAsyncTarget): void {
-  const ReadableStreamCtor = target.ReadableStream;
-  if (
-    ReadableStreamCtor === undefined ||
-    nativeBlobStream === undefined ||
-    responseBody === undefined ||
-    responseHeaders === undefined
-  ) {
-    return;
-  }
-  const headers = (response: object): object =>
-    reflectApply(responseHeaders, response, []) as object;
-  const keepType = (response: object, type: string | null): void => {
-    if (
-      type !== null &&
-      !reflectApply(headersHas as AnyFunction, headers(response), ['content-type'])
-    ) {
-      reflectApply(headersSet as AnyFunction, headers(response), ['content-type', type]);
-    }
-  };
-  const prototype = wrapConstructor(target, 'Response', (original, args, newTarget) => {
-    const body = args[0];
-    if (isBlob(body)) {
-      const native = reflectApply(nativeBlobStream, body, []) as ReadableStream<
-        Uint8Array<ArrayBuffer>
-      >;
-      const response = reflectConstruct(
-        original,
-        [holdReads(ReadableStreamCtor, () => native), ...args.slice(1)],
-        newTarget,
-      );
-      keepType(response, (reflectApply(blobType as AnyFunction, body, []) as string) || null);
-      return response;
-    }
-    if (!isFormData(body)) {
-      const response = reflectConstruct(original, args, newTarget);
-      if (isGuestStream(body)) guestStreamBodies.add(response);
-      return response;
-    }
-    let encoded: object | null = null;
-    const response = reflectConstruct(
-      original,
-      [
-        holdReads(
-          ReadableStreamCtor,
-          () => reflectApply(responseBody, encoded, []) as ReadableStream<Uint8Array<ArrayBuffer>>,
-        ),
-        ...args.slice(1),
-      ],
-      newTarget,
-    );
-    // Native extraction encodes after the init conversion, before the constructor
-    // returns: encode here, before any guest code can change the FormData.
-    encoded = reflectConstruct(original, [body]);
-    keepType(
-      response,
-      reflectApply(headersGet as AnyFunction, headers(encoded), ['content-type']) as string | null,
-    );
-    return response;
-  });
-  if (prototype !== undefined) holdBodyConsumers(prototype);
-}
-
-/**
- * An in-guest Request with a Blob/File body reads it synchronously
- * (`FileReaderSync`, dedicated workers) into the same bytes with its content
- * type, so its `body` stream needs no host task. Other bodies stay native;
- * `init.body` is observed during the native read.
- */
-function installRequestKeepalive(target: HostAsyncTarget): void {
-  const prototype = wrapConstructor(target, 'Request', (original, args, newTarget) => {
-    let body: unknown;
-    let type: string | null = null;
-    const init = args[1];
-    // A separate Proxy target: substituting `body` never meets a frozen init's invariants.
-    const observed = isObject(init)
-      ? new Proxy(Object.create(null) as object, {
-          get(_target, key) {
-            const value = Reflect.get(init, key, init);
-            if (key !== 'body') return value;
-            body = value;
-            if (isBlob(value) && FileReaderSyncCtor !== undefined) {
-              type = (reflectApply(blobType as AnyFunction, value, []) as string) || null;
-              return new FileReaderSyncCtor().readAsArrayBuffer(value);
-            }
-            return value;
-          },
-        })
-      : init;
-    const request = reflectConstruct(
-      original,
-      args.length > 1 ? [args[0], observed, ...args.slice(2)] : args,
-      newTarget,
-    );
-    if (type !== null && requestHeaders !== undefined) {
-      const headers = reflectApply(requestHeaders, request, []) as object;
-      if (!reflectApply(headersHas as AnyFunction, headers, ['content-type'])) {
-        reflectApply(headersSet as AnyFunction, headers, ['content-type', type]);
-      }
-    }
-    const inherited = body == null && isObject(args[0]) && guestStreamBodies.has(args[0]);
-    if (inherited || isGuestStream(body)) guestStreamBodies.add(request);
-    return request;
-  });
-  if (prototype !== undefined) holdBodyConsumers(prototype);
 }
 
 function installWebSocketKeepalive(target: HostAsyncTarget): void {
@@ -451,8 +274,6 @@ export function installHostAsyncKeepalive(
       if (name !== 'constructor') holdMethod(subtle, name, always);
     }
   }
-  installResponseKeepalive(target);
-  installRequestKeepalive(target);
   installWebSocketKeepalive(target);
   installBroadcastChannelKeepalive(target);
 }

@@ -1,3 +1,4 @@
+import { fetchHost } from '@riftydev/io';
 /**
  * Registry client. Pluggable fetcher so tests can mock.
  *
@@ -167,7 +168,7 @@ export class RegistryClient {
 
   constructor(opts: RegistryClientOptions = {}) {
     this.baseUrl = (opts.baseUrl ?? getRegistryBaseUrl()).replace(/\/$/, '');
-    this.fetch = opts.fetch ?? globalThis.fetch.bind(globalThis);
+    this.fetch = opts.fetch ?? fetchHost;
     this.maxRetries = opts.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.sleep = opts.sleep ?? defaultSleep;
     this.stallTimeoutMs = opts.stallTimeoutMs ?? DEFAULT_FETCH_STALL_MS;

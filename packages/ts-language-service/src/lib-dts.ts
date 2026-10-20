@@ -1,3 +1,4 @@
+import { fetchHost } from '@riftydev/io';
 /**
  * Loader for the TypeScript standard-library declaration files (`lib.*.d.ts`).
  *
@@ -136,7 +137,7 @@ async function loadFromNode(): Promise<ReadonlyMap<string, string>> {
  */
 async function loadFromBrowser(): Promise<ReadonlyMap<string, string>> {
   const url = getTsLibUrl();
-  const res = await fetch(url);
+  const res = await fetchHost(url);
   if (!res.ok) {
     throw new Error(`failed to fetch ts lib bundle from ${url}: HTTP ${res.status}`);
   }

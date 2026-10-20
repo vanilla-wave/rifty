@@ -1,3 +1,5 @@
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { type Page, expect, test } from '@playwright/test';
 
@@ -12,156 +14,166 @@ type PriorityCase = 'invalid-imports' | 'malformed-source';
 const EMPTY_WASM = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00] as const;
 
 async function runStreamingCeilingCase(page: Page, api: StreamingApi, carrier: Carrier) {
-  await page.goto('/unit-harness.html');
-  return await page.evaluate(
-    async ({ api, carrier, eventLoopUrl, fetchKeepaliveUrl, validWasm }) => {
-      const [{ installFetchKeepalive }, { activeRefs, awaitDrain, resetKeepalive }] =
-        (await Promise.all([
-          import(/* @vite-ignore */ fetchKeepaliveUrl),
-          import(/* @vite-ignore */ eventLoopUrl),
-        ])) as [
-          {
-            installFetchKeepalive(target: {
-              fetch: typeof fetch;
-              WebAssembly: typeof WebAssembly;
-            }): void;
-          },
-          {
-            activeRefs(): number;
-            awaitDrain(options: { capMs: number }): Promise<void>;
-            resetKeepalive(): void;
-          },
-        ];
-      const trackedResponse = new Response(new ReadableStream<Uint8Array>(), {
-        headers: { 'content-type': 'application/wasm' },
-      });
-      const target = {
-        fetch: (() => Promise.resolve(trackedResponse)) as typeof fetch,
-        WebAssembly: Object.create(globalThis.WebAssembly) as typeof WebAssembly,
-      };
-      installFetchKeepalive(target);
-
-      const errorShape = (error: unknown) => {
-        const feature =
-          error !== null && typeof error === 'object' && 'feature' in error
-            ? (error as { feature?: unknown }).feature
-            : undefined;
-        return {
-          feature: typeof feature === 'string' ? feature : null,
-          message: error instanceof Error ? error.message : String(error),
-          name: error instanceof Error ? error.name : typeof error,
+  const server = createServer((_request, response) => {
+    response.setHeader('access-control-allow-origin', '*');
+    response.setHeader('content-type', 'application/wasm');
+    response.flushHeaders(); // Real body stays pending until the tested reader cancels it.
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const networkUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/streaming-ceiling.wasm`;
+  try {
+    await page.goto('/unit-harness.html');
+    return await page.evaluate(
+      async ({ api, carrier, eventLoopUrl, fetchKeepaliveUrl, validWasm, networkUrl }) => {
+        const [{ installFetchKeepalive }, { activeRefs, awaitDrain, resetKeepalive }] =
+          (await Promise.all([
+            import(/* @vite-ignore */ fetchKeepaliveUrl),
+            import(/* @vite-ignore */ eventLoopUrl),
+          ])) as [
+            {
+              installFetchKeepalive(target: {
+                fetch: typeof fetch;
+                WebAssembly: typeof WebAssembly;
+              }): void;
+            },
+            {
+              activeRefs(): number;
+              awaitDrain(options: { capMs: number }): Promise<void>;
+              resetKeepalive(): void;
+            },
+          ];
+        const target = {
+          fetch: globalThis.fetch.bind(globalThis),
+          WebAssembly: Object.create(globalThis.WebAssembly) as typeof WebAssembly,
         };
-      };
-      const captureDrain = async (): Promise<string | null> => {
-        try {
-          await awaitDrain({ capMs: 30 });
-          return null;
-        } catch (error) {
-          return error instanceof Error ? error.message : String(error);
-        }
-      };
-      const invoke = (
-        source: Response | PromiseLike<Response>,
-      ): {
-        operation: Promise<unknown> | null;
-        syncError: ReturnType<typeof errorShape> | null;
-      } => {
-        try {
+        installFetchKeepalive(target);
+
+        const errorShape = (error: unknown) => {
+          const feature =
+            error !== null && typeof error === 'object' && 'feature' in error
+              ? (error as { feature?: unknown }).feature
+              : undefined;
           return {
-            operation:
-              api === 'instantiateStreaming'
-                ? target.WebAssembly.instantiateStreaming(source, {})
-                : target.WebAssembly.compileStreaming(source),
-            syncError: null,
+            feature: typeof feature === 'string' ? feature : null,
+            message: error instanceof Error ? error.message : String(error),
+            name: error instanceof Error ? error.name : typeof error,
           };
-        } catch (error) {
-          return { operation: null, syncError: errorShape(error) };
-        }
-      };
-      const settle = async (operation: Promise<unknown> | null) => {
-        if (operation === null) return { kind: 'no-promise' as const };
-        return await operation.then(
-          () => ({ kind: 'success' as const }),
-          (error) => ({ error: errorShape(error), kind: 'error' as const }),
-        );
-      };
-
-      const secondaryUnhandledRejections: ReturnType<typeof errorShape>[] = [];
-      const onUnhandledRejection = (event: PromiseRejectionEvent) => {
-        event.preventDefault();
-        secondaryUnhandledRejections.push(errorShape(event.reason));
-      };
-      globalThis.addEventListener('unhandledrejection', onUnhandledRejection);
-
-      try {
-        const fetchResult = target.fetch('https://controlled.invalid/streaming-ceiling.wasm');
-        const exactResponse = await fetchResult;
-        const exactReader = exactResponse.body!.getReader();
-        const untrackedResponse = new Response(new Uint8Array(validWasm), {
-          headers: { 'content-type': 'application/wasm' },
-        });
-        const clonedResponse = untrackedResponse.clone();
-        const untrackedPromise = Promise.resolve(untrackedResponse);
-        const untrackedPromiseLike: PromiseLike<Response> = {
-          then(onfulfilled, onrejected) {
-            return untrackedPromise.then(onfulfilled, onrejected);
-          },
         };
-        const source =
-          carrier === 'direct'
-            ? exactResponse
-            : carrier === 'promise'
-              ? fetchResult
-              : carrier === 'untracked-clone'
-                ? clonedResponse
-                : carrier === 'untracked'
-                  ? untrackedResponse
-                  : untrackedPromiseLike;
-        const refsBeforeInvoke = activeRefs();
-        const call = invoke(source);
-        const outcome = await settle(call.operation);
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-        const beforeCancel = {
-          cloneBodyUsed: clonedResponse.bodyUsed,
-          drainError: await captureDrain(),
-          refs: activeRefs(),
-          untrackedBodyUsed: untrackedResponse.bodyUsed,
+        const captureDrain = async (): Promise<string | null> => {
+          try {
+            await awaitDrain({ capMs: 30 });
+            return null;
+          } catch (error) {
+            return error instanceof Error ? error.message : String(error);
+          }
+        };
+        const invoke = (
+          source: Response | PromiseLike<Response>,
+        ): {
+          operation: Promise<unknown> | null;
+          syncError: ReturnType<typeof errorShape> | null;
+        } => {
+          try {
+            return {
+              operation:
+                api === 'instantiateStreaming'
+                  ? target.WebAssembly.instantiateStreaming(source, {})
+                  : target.WebAssembly.compileStreaming(source),
+              syncError: null,
+            };
+          } catch (error) {
+            return { operation: null, syncError: errorShape(error) };
+          }
+        };
+        const settle = async (operation: Promise<unknown> | null) => {
+          if (operation === null) return { kind: 'no-promise' as const };
+          return await operation.then(
+            () => ({ kind: 'success' as const }),
+            (error) => ({ error: errorShape(error), kind: 'error' as const }),
+          );
         };
 
-        let cancelError: ReturnType<typeof errorShape> | null = null;
+        const secondaryUnhandledRejections: ReturnType<typeof errorShape>[] = [];
+        const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+          event.preventDefault();
+          secondaryUnhandledRejections.push(errorShape(event.reason));
+        };
+        globalThis.addEventListener('unhandledrejection', onUnhandledRejection);
+
         try {
-          await exactReader.cancel('exact tracked reader canceled');
-        } catch (error) {
-          cancelError = errorShape(error);
+          const fetchResult = target.fetch(networkUrl);
+          const exactResponse = await fetchResult;
+          const exactReader = exactResponse.body!.getReader();
+          const untrackedResponse = new Response(new Uint8Array(validWasm), {
+            headers: { 'content-type': 'application/wasm' },
+          });
+          const clonedResponse = untrackedResponse.clone();
+          const untrackedPromise = Promise.resolve(untrackedResponse);
+          const untrackedPromiseLike: PromiseLike<Response> = {
+            then(onfulfilled, onrejected) {
+              return untrackedPromise.then(onfulfilled, onrejected);
+            },
+          };
+          const source =
+            carrier === 'direct'
+              ? exactResponse
+              : carrier === 'promise'
+                ? fetchResult
+                : carrier === 'untracked-clone'
+                  ? clonedResponse
+                  : carrier === 'untracked'
+                    ? untrackedResponse
+                    : untrackedPromiseLike;
+          const refsBeforeInvoke = activeRefs();
+          const call = invoke(source);
+          const outcome = await settle(call.operation);
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          const beforeCancel = {
+            cloneBodyUsed: clonedResponse.bodyUsed,
+            drainError: await captureDrain(),
+            refs: activeRefs(),
+            untrackedBodyUsed: untrackedResponse.bodyUsed,
+          };
+
+          let cancelError: ReturnType<typeof errorShape> | null = null;
+          try {
+            await exactReader.cancel('exact tracked reader canceled');
+          } catch (error) {
+            cancelError = errorShape(error);
+          }
+          await Promise.resolve();
+          const afterCancel = {
+            drainError: await captureDrain(),
+            refs: activeRefs(),
+          };
+          return {
+            afterCancel,
+            beforeCancel,
+            cancelError,
+            outcome,
+            refsBeforeInvoke,
+            returnedPromise: call.operation instanceof Promise,
+            secondaryUnhandledRejections,
+            syncError: call.syncError,
+          };
+        } finally {
+          globalThis.removeEventListener('unhandledrejection', onUnhandledRejection);
+          resetKeepalive();
         }
-        await Promise.resolve();
-        const afterCancel = {
-          drainError: await captureDrain(),
-          refs: activeRefs(),
-        };
-        return {
-          afterCancel,
-          beforeCancel,
-          cancelError,
-          outcome,
-          refsBeforeInvoke,
-          returnedPromise: call.operation instanceof Promise,
-          secondaryUnhandledRejections,
-          syncError: call.syncError,
-        };
-      } finally {
-        globalThis.removeEventListener('unhandledrejection', onUnhandledRejection);
-        resetKeepalive();
-      }
-    },
-    {
-      api,
-      carrier,
-      eventLoopUrl: eventLoopModuleUrl,
-      fetchKeepaliveUrl: fetchKeepaliveModuleUrl,
-      validWasm: EMPTY_WASM,
-    },
-  );
+      },
+      {
+        api,
+        carrier,
+        eventLoopUrl: eventLoopModuleUrl,
+        fetchKeepaliveUrl: fetchKeepaliveModuleUrl,
+        validWasm: EMPTY_WASM,
+        networkUrl,
+      },
+    );
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 }
 
 async function runErrorPriorityCase(page: Page, api: StreamingApi, fault: PriorityCase) {

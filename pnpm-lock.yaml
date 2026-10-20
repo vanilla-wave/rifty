@@ -32,6 +32,9 @@ importers:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
+      undici:
+        specifier: 7.25.0
+        version: 7.25.0
       vitest:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.19)
@@ -312,6 +315,9 @@ importers:
 
   packages/runtime-wasi:
     dependencies:
+      '@riftydev/io':
+        specifier: workspace:*
+        version: link:../io
       '@riftydev/kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -370,6 +376,9 @@ importers:
 
   packages/ts-language-service:
     dependencies:
+      '@riftydev/io':
+        specifier: workspace:*
+        version: link:../io
       '@riftydev/kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -2807,6 +2816,10 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
+  undici@7.25.0:
+    resolution: {integrity: sha512-xXnp4kTyor2Zq+J1FfPI6Eq3ew5h6Vl0F/8d9XU5zZQf1tX9s2Su1/3PiMmUANFULpmksxkClamIZcaUqryHsQ==}
+    engines: {node: '>=20.18.1'}
+
   undici@8.9.0:
     resolution: {integrity: sha512-aWZpUj7XoGonMClx4gdDRfgBjqeA+F473aDmROQQbM9n6PRfK/u1q/a0X4wMTgcHfT8H6fpbt98PFuDUwFg2YA==}
     engines: {node: '>=22.19.0'}
@@ -5044,6 +5057,8 @@ snapshots:
   ufo@1.6.4: {}
 
   undici-types@6.21.0: {}
+
+  undici@7.25.0: {}
 
   undici@8.9.0: {}
 

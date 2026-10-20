@@ -217,6 +217,14 @@ let nextImmediateId = 1;
 
 const channel: MessageChannel | null =
   typeof MessageChannel === 'function' ? new MessageChannel() : null;
+// Native Node test/embedding hosts auto-ref onmessage. Chromium lifetime is
+// already owned by keepaliveRef; never invoke the guest MessagePort ref shim.
+const nativeImmediatePort =
+  typeof WorkerGlobalScope === 'undefined'
+    ? (channel?.port1 as HostTimerRefHooks | undefined)
+    : undefined;
+const refImmediateHost = nativeImmediatePort?.ref?.bind(nativeImmediatePort);
+const unrefImmediateHost = nativeImmediatePort?.unref?.bind(nativeImmediatePort);
 
 if (channel) {
   channel.port1.onmessage = () => {
@@ -231,8 +239,10 @@ if (channel) {
     if (item === undefined) return; // cleared between message post and dispatch
     immediates.delete(id);
     keepaliveUnref();
+    if (immediates.size === 0) unrefImmediateHost?.();
     item.fn(...item.args);
   };
+  unrefImmediateHost?.();
 }
 
 export function setImmediate(
@@ -241,6 +251,7 @@ export function setImmediate(
 ): ImmediateHandle {
   const id = nextImmediateId++;
   immediates.set(id, { fn, args });
+  if (immediates.size === 1) refImmediateHost?.();
   keepaliveRef();
   if (channel) channel.port2.postMessage(null);
   else
@@ -257,6 +268,7 @@ export function setImmediate(
 export function clearImmediate(handle: ImmediateHandle | undefined): void {
   if (!handle) return;
   if (immediates.delete(handle.id)) keepaliveUnref();
+  if (immediates.size === 0) unrefImmediateHost?.();
 }
 
 export const timers = {

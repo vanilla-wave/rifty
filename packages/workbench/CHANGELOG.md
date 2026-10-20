@@ -6,6 +6,7 @@
 
 ## [Unreleased]
 
+- Asset/registry/owner resource fetches keep host semantics when Node guest Fetch classes are installed (ADR-0541).
 - Keep ancestor Stats available across nested mount collisions; listing/child access still refuses loudly.
 - Remove the unused no-COI adapter wrapper after upstream cutover; shared COI client retained.
 
