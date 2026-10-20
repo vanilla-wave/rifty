@@ -4,21 +4,11 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-0. `npm-client/esbuild-upstream-twin-carrier` — **carrier** — I1/I2/I5;
-   executable install + stock build + complete tarball-byte comparison, GREEN;
-   independent final verification pending.
-
-1. `npm-client/esbuild-upstream-twin-cutover` — **cutover** — I1, I2, I4,
-   I5, I6; carries the version-agnostic differential suite,
-   the no-COI split, the COI Vite gate removal, the DEC-2 ADR and the compat
-   pages.
-
 ## Open questions
 
-- Linux CI live stock oracle and final HEAD checks — owner: agent — await
-  browser-unit and whole-PR CI after the cutover repair commit.
-- Independent Final+GREEN/CLOSE — owner: agent — verify the repaired tree,
-  full gate and packed consumer. Accepted obligations remain on this map.
+- CLOSE cleanup and landing verdict — owner: agent — all accepted obligations
+  proven at c8eab80c; independent end-to-end review accepted.
+- Final HEAD CI — owner: agent — PR-6 delivery condition before handoff.
 
 ## Out of scope
 

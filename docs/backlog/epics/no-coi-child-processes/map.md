@@ -2,6 +2,9 @@
 
 Live plan: index, not store. Draft — FIT pending (goal §Question).
 
+Retained-client authority: ADR-0543. The original `esbuild-upstream-twin`
+decision quoted in goal.md is archived with PR #379; this goal remains draft.
+
 ## Items
 
 ## Open questions
