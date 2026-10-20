@@ -65,10 +65,10 @@ this proves CLI reachability, not an additional verified Vite lane.
 
 | Boundary / axis | Outcome / carrier | Trace |
 |---|---|---|
-| Host policy / sibling drift | instant snapshot and fresh install both select stock entry | I1 |
-| Runtime activation / provenance lie | legacy binding in COI fails before generated import | I1 |
-| Saved tree / offline source | current policy claim reopens without registry; wrong-tier claim is not trusted | I1/I4 |
-| No-COI install / unsupported pin | named tier refusal; prior files preserved | I4 |
+| Host policy / sibling drift | instant snapshot and fresh install both select stock entry | → I1 |
+| Runtime activation / provenance lie | legacy binding in COI fails before generated import | → I1 |
+| Saved tree / offline source | current policy claim reopens without registry; wrong-tier claim is not trusted | → I1/I4 |
+| No-COI install / unsupported pin | named tier refusal; prior files preserved | → I4 |
 
 Accepted snapshot preflight, package acquisition FIFO and stamp authority keep
 ownership. No new cache, lock, ledger or transport.
