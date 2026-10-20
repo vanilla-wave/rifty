@@ -139,6 +139,8 @@ The same seeded bytes run unchanged under local Node 24/npm.
 
 ## Decisions
 
+re-cut: 2026-10-20 — close the Response clone residual proven by ADR-0541; acceptance unchanged — trace: none
+
 ready-verdict: 2026-09-03 — Contract+RED @ 76e669240
 review: checkpoints
 contract-red: round 1 — blocker @ 75802657a
