@@ -326,6 +326,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0330 | Lifecycle failures remain exceptional through Shell |
 | 0357 | Git facade carries exact storage read failures; absence is proven, never inferred |
 | 0362 | One command resolution authority across execution and owner-backed discovery |
+| 0545 | Execute local npx binaries through the existing command resolver |
 
 ### terminal
 

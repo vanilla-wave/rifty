@@ -20,3 +20,6 @@ half. Outside the no-COI agent host kit; the install half is delivered under ADR
 ## Out of scope
 
 - `npx` fetching an uninstalled package; `yarn`/`pnpm`/`bun` execution (loud).
+
+Local installed-bin execution is now tracked by `shell/npx-local-bins` in
+`esbuild-upstream-twin`; this draft retains unsupported-manager/install wording.

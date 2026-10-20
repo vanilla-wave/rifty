@@ -7,10 +7,9 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 0. `npm-client/esbuild-upstream-twin-carrier` — **carrier** — I1/I2/I5;
    executable install + stock build + complete tarball-byte comparison, RED.
 
-1. `npm-client/esbuild-upstream-range-install` — **range-install** — I1/I4/I5;
-   explicit installer tier + range template + byte/offline/no-COI proof.
+1. `shell/npx-local-bins` — **local-npx** — I2/I6; Node npx differential RED.
 2. `npm-client/esbuild-upstream-twin-cutover` — **cutover** — I1, I2, I4,
-   I5, I6; depends on range-install; carries the version-agnostic differential suite,
+   I5, I6; depends on local-npx; carries the version-agnostic differential suite,
    the no-COI split, the COI Vite gate removal, the DEC-2 ADR and the compat
    pages.
 
