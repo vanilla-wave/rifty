@@ -5,7 +5,10 @@ import {
 } from '@riftydev/runtime-js/internal';
 import type { FsSync, PersistFailureReport } from '@riftydev/vfs';
 import { prepareDepSnapshotApplication } from '../glue/dep-snapshot-application.ts';
-import { fetchVerifiedDepSnapshot } from '../glue/dep-snapshot.ts';
+import {
+  fetchVerifiedDepSnapshot,
+  prepareDepSnapshotForRuntimeTier,
+} from '../glue/dep-snapshot.ts';
 import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
 
 /** Explicit operation only; no saved-install certificate or automatic acquisition. */
@@ -26,11 +29,12 @@ export async function applyNoCoiSnapshot(
       options.onProgress?.({ phase: 'fetch', bytes, ...(total === undefined ? {} : { total }) }),
   );
   if (verified.status !== 'matched') throw mismatch('identity');
-  const snapshot = verified.snapshot;
+  const snapshot = await prepareDepSnapshotForRuntimeTier(verified.snapshot, 'no-coi');
   if (snapshot.templateId !== input.snapshot.templateId) throw mismatch('template');
   if (snapshot.installArtifactIdentity !== installArtifactIdentity)
     throw mismatch('runtime compatibility');
   const plan = await prepareDepSnapshotApplication(options.fs, input.cwd, snapshot, {
+    runtimeTier: 'no-coi',
     conflict: input.force === true ? 'overwrite' : 'error',
     onProgress: (written, total) => options.onProgress?.({ phase: 'entries', written, total }),
     flush: async () => {

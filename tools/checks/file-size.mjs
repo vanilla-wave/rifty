@@ -77,7 +77,7 @@ export const BASELINE = [
   { file: 'packages/git/src/git.ts', max: 1118 },
   { file: 'packages/workbench/src/workbench/internal/typescript-relay-client.ts', max: 1083 },
   { file: 'packages/net/src/cross-realm/preview-port.ts', max: 1067 },
-  { file: 'tools/compat-matrix-generator/cli.js', max: 1050 },
+  { file: 'tools/compat-matrix-generator/cli.js', max: 894 },
   { file: 'apps/playground/src/components/FileExplorer.tsx', max: 1043 },
   { file: 'packages/workbench/src/glue/npm-shell-command.ts', max: 1042 },
   { file: 'packages/runtime-js/src/builtins/vm/rewrite-engine.ts', max: 1021 },

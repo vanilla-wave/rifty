@@ -137,3 +137,10 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
 - Unchanged, outside this ADR: eval-shaped host-realm frames, the absent
   default `displayErrors` decoration, and Chromium's `undefined` default hook
   before any offset script (evidence §Discovered).
+
+## CJS correction
+
+- 2026-10-20 — the CJS loader reuses this projection with lineOffset -2:
+  Function adds two physical lines while Node compileFunction does not. Native
+  Node differential covers stack text and guest hooks during/after require.
+  No second stack hook owner; vm/source-map windows retain their authority.

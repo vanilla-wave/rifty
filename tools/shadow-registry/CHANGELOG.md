@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Load generated esbuild only on no-COI activation; reject legacy bindings in COI before import. COI Vite CLI has no version gate; stock Node differential and verified-version inventory own its claim.
+
 - Define same-source tier compatibility centrally; bin placement and acquisition/version stay identical. Generate both host policy identities without an eager runtime hash import (ADR-0543).
 
 - Add requested-range, tier-selected esbuild Node recipe (ADR-0543); retain the no-COI generated-client recipe. Catalog identity changes invalidate earlier traces; generated runtime bytes unchanged.

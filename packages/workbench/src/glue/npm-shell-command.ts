@@ -43,7 +43,7 @@ import {
   PackageAcquisitionError,
   type PackageInstallExecution,
 } from '../workers/package-acquisition-authority.ts';
-import { installArtifactIdentity } from './install-artifact-identity.ts';
+import { installArtifactIdentityForTier } from './install-artifact-identity.ts';
 import {
   InstallStampAuthorityError,
   type InstallStampPromotionResult,
@@ -64,6 +64,7 @@ export type InstallFn = (
 export interface NpmShellCommandDeps {
   /** VFS used by the installer to write `node_modules/` and the lockfile. */
   readonly vfs: Vfs;
+  readonly runtimeTier?: InstallOptions['runtimeTier'];
   /** Playground wires one through `proxiedRegistryFetch()` so traffic stays on
    *  the proxy origin. */
   readonly registry?: RegistryClient;
@@ -529,7 +530,7 @@ async function runInstall(
           projectId: slug,
           root,
           slug,
-          identity: installArtifactIdentity,
+          identity: installArtifactIdentityForTier(deps.runtimeTier),
         };
       },
       argv: specs,
@@ -709,6 +710,7 @@ export async function executeNpmInstallOperation(
   try {
     const result = await installFn({
       vfs: deps.vfs,
+      runtimeTier: deps.runtimeTier,
       cwd: ctx.cwd,
       registry: deps.registry,
       ...(additions.length ? { updateNames: additions.map(({ name }) => name) } : {}),

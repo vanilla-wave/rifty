@@ -15,5 +15,9 @@ export function workbenchRuntimeAdapterOwnership(): {
 export function activateWorkbenchRuntimeAdapters(
   options: Pick<Parameters<typeof activatePackageRuntimeAdapters>[0], 'bindings' | 'fs' | 'cwd'>,
 ): Promise<void> {
-  return activatePackageRuntimeAdapters({ ...options, ...workbenchRuntimeAdapterOwnership() });
+  return activatePackageRuntimeAdapters({
+    ...options,
+    runtimeTier: 'no-coi',
+    ...workbenchRuntimeAdapterOwnership(),
+  });
 }

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { childFsScenario } from '../../tools/perf/child-fs/scenario.mjs';
 import {
   bootOwner,
@@ -20,6 +21,38 @@ const coiPort = Number(process.env.RIFTY_NO_COI_ORACLE_PORT ?? 5412);
 const resourcePort = Number(process.env.RIFTY_NO_COI_RESOURCE_PORT ?? 5413);
 const coiBaseUrl = `http://localhost:${coiPort}`;
 const marker = 'no-coi-build-parity-marker';
+const catalog = JSON.parse(
+  readFileSync(
+    new URL(
+      '../../tools/shadow-registry/generated/shadow-substitution-catalog.json',
+      import.meta.url,
+    ),
+    'utf8',
+  ),
+) as { digest: string; recipes: { id: string; digest: string }[] };
+const legacyRecipeDigest = catalog.recipes.find(
+  (recipe) => recipe.id === 'rifty.shadow-substitution.esbuild.v2',
+)?.digest;
+
+// ADR-0375 compares exact build bytes across execution tiers, not fresh range resolution.
+function buildParityScenario() {
+  const scenario = childFsScenario();
+  const text = scenario.files['/package.json'];
+  if (text === undefined) throw new Error('Canonical build fixture manifest missing');
+  const manifest = JSON.parse(text) as Record<string, unknown> & {
+    overrides?: Record<string, string>;
+  };
+  return {
+    ...scenario,
+    files: {
+      ...scenario.files,
+      '/package.json': JSON.stringify({
+        ...manifest,
+        overrides: { ...manifest.overrides, esbuild: '0.28.0' },
+      }),
+    },
+  };
+}
 
 function moduleTransformLines(output: string): readonly string[] {
   const escape = String.fromCharCode(27);
@@ -635,7 +668,7 @@ async function runCoiProduct(
   readonly dist: readonly DistFile[];
   readonly output: string;
 }> {
-  const scenario = childFsScenario();
+  const scenario = buildParityScenario();
   await page.goto(`${coiBaseUrl}/unit-harness.html`);
   await expect(page.locator('#browser-unit-harness')).toHaveAttribute('data-status', 'ready');
   await bootOwner(page, {
@@ -675,7 +708,7 @@ async function runNoCoiProduct(page: Page): Promise<{
   readonly exitCode: number;
   readonly esbuildAdmission: unknown;
 }> {
-  const scenario = childFsScenario();
+  const scenario = buildParityScenario();
   await page.evaluate(
     async ({ files, root }) => {
       const sandbox = (
@@ -2367,9 +2400,9 @@ test('build parity: headerless SDK dist equals live COI product bytes — design
         substitutionId: 'rifty.shadow-substitution.esbuild.v2',
         catalog: {
           id: 'rifty.shadow-substitutions.builtin.v2',
-          digest: '68b82251f296d987ba8ca8883b14adf2785b507b4ed3b69a84ebcad76b6f7002',
+          digest: catalog.digest,
         },
-        recipeDigest: '844104d3f7a0f7fb997a3678d63f8d34af0fe52c8f6788413b9bae8a92618c2d',
+        recipeDigest: legacyRecipeDigest,
         acquisition: {
           kind: 'registry',
           name: 'esbuild-wasm',

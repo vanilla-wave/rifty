@@ -41,8 +41,8 @@ The installer still rejects older ranges and binds the generated client.
 
 ## Consequences
 
-No version allowlist, per-version facade patches, copied declarations or native
-esbuild oracle. Verified versions remain a finite evidence set, not admission.
+In COI, no version allowlist, per-version facade patches, copied declarations or
+native esbuild oracle. Verified versions remain a finite evidence set, not admission.
 Existing no-COI generated-client patches remain a declared platform gap with
 no-coi-child-processes as the kill condition. Fixture pins preserving the
 existing no-COI byte oracle and the Vite starter pin remain independent.
@@ -70,3 +70,11 @@ existing no-COI byte oracle and the Vite starter pin remain independent.
   SHA import from the registry package violated the existing no-COI lazy-install
   graph proof; reading generated strings preserves that boundary. No extra
   lazy projection wrapper or relaxed loading criterion is needed.
+
+- 2026-10-20 — fresh DEC-2/DEC-5 critic accepted COI-only partial supersession
+  of ADR-0226 D1–D5 generated-runtime/oracle clauses (including D4 Sync
+  validation-before-gap), ADR-0316 exact-runtime/CLI-gap clauses, ADR-0361
+  fixed acquisition/replay, ADR-0371 generated binding/startup and ADR-0384
+  D2/Alternatives. Stock Node differentials: 0.21.5/0.25.12/0.28.2. No-COI
+  generated semantics/native oracle, common CJS interop, integrity/replay/bin
+  authorities, ADR-0375 D6 pinned byte proof and starter pins remain.

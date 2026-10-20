@@ -79,3 +79,5 @@ policy and the build-only finalizer are removed.
 
 - 2026-09-07 — ADR-0384 supersedes package-adaptation owner/carrier clauses and `.vite` archive classification where applicable; all other decisions remain active.
 - 2026-09-27 — ADR-0470 supersedes D4 and D6's shared-allocation rejection: native WebAssembly, explicit failure at unsupported toolchain Worker construction. Other decisions remain active.
+
+- 2026-10-20 — ADR-0543 changes COI execution to stock Node twins. D6 exact COI/no-COI Vite build bytes remain proven with the existing pinned 0.28.0 fixture; generic control plane, no-COI behavior and ungated installed Vite CLI remain.

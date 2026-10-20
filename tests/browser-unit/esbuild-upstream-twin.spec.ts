@@ -18,7 +18,12 @@ import { expect, test } from '@playwright/test';
 import { bootOwner, closeOwner, execLine, gotoHarness, readOwnerFile } from './fixtures.ts';
 
 // I5: version strings + upstream archives are the only version-specific inputs.
-const VERIFIED_VERSIONS = ['0.21.5', '0.25.12', '0.28.2'];
+const VERIFIED_VERSIONS: readonly string[] = JSON.parse(
+  readFileSync(
+    new URL('../../tools/shadow-registry/esbuild-upstream-verified.json', import.meta.url),
+    'utf8',
+  ),
+);
 const PROJECT_FILES = {
   'sync.cjs': readFileSync(
     new URL('./fixtures/esbuild-upstream-sync.cjs', import.meta.url),
@@ -44,10 +49,20 @@ function filesUnder(root: string, prefix = ''): string[] {
 const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
 function nativeCli(root: string, packageName: string, mode: 'pipe' | 'tty' | 'file') {
-  const executable = packageName === 'esbuild' ? 'npx' : process.execPath;
+  const executable = packageName === 'esbuild' ? 'env' : process.execPath;
   const args =
     packageName === 'esbuild'
-      ? ['--no-install', 'esbuild', 'src/index.ts', '--bundle']
+      ? [
+          '-u',
+          'NO_COLOR',
+          '-u',
+          'FORCE_COLOR',
+          'npx',
+          '--no-install',
+          'esbuild',
+          'src/index.ts',
+          '--bundle',
+        ]
       : [`node_modules/${packageName}/bin/esbuild`, 'src/index.ts', '--bundle'];
   if (mode === 'tty') {
     const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
@@ -92,7 +107,6 @@ for (const requestedName of ['esbuild', 'esbuild-wasm']) {
     test(`upstream twin ${requestedName}@${version}: install, stock entry, bundle and complete upstream bytes`, async ({
       page,
     }) => {
-      test.fail(requestedName === 'esbuild', 'Workbench COI range selection remains RED');
       test.setTimeout(240_000);
       const root = mkdtempSync(join(tmpdir(), 'rifty-upstream-twin-'));
       let ownerOpen = false;

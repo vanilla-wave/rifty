@@ -1,4 +1,5 @@
 import type { FsSync } from '@riftydev/vfs';
+import type { ShadowRuntimeTier } from '../internal/recipe-selection.ts';
 import { clearRuntimeEsbuild, publishRuntimeEsbuildFailure } from './realm.ts';
 import {
   ESBUILD_RUNTIME_ADAPTER_ID,
@@ -13,6 +14,7 @@ export async function preparePackageEntryRuntime(
   options:
     | {
         readonly kind?: 'program';
+        readonly runtimeTier?: ShadowRuntimeTier;
         readonly bin: boolean;
         readonly root: string;
         readonly args: readonly string[];
@@ -24,6 +26,7 @@ export async function preparePackageEntryRuntime(
       }
     | {
         readonly kind: 'eval';
+        readonly runtimeTier?: ShadowRuntimeTier;
         readonly root: string;
         readonly runtimeBindings: readonly PackageRuntimeBinding[];
         readonly fs: FsSync;
@@ -40,7 +43,11 @@ export async function preparePackageEntryRuntime(
       : planNodeEntryIntegration(options);
   if (integration.activateRuntimeAdapters) {
     // Bootstrap binding shape is an invariant; only activation failures defer to a consumer.
-    assertPackageRuntimeBindings({ bindings: options.runtimeBindings, cwd: options.root });
+    assertPackageRuntimeBindings({
+      bindings: options.runtimeBindings,
+      cwd: options.root,
+      runtimeTier: options.runtimeTier,
+    });
     if (
       !options.runtimeBindings.some((binding) => binding.adapterId === ESBUILD_RUNTIME_ADAPTER_ID)
     ) {
@@ -48,6 +55,7 @@ export async function preparePackageEntryRuntime(
     }
     try {
       await activatePackageRuntimeAdapters({
+        runtimeTier: options.runtimeTier,
         bindings: options.runtimeBindings,
         fs: options.fs,
         cwd: options.root,

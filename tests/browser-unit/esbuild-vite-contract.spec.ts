@@ -1,5 +1,5 @@
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { type Page, expect, test } from '@playwright/test';
@@ -9,10 +9,10 @@ import {
   ESBUILD_GUEST_POLICY_EXPECTATIONS,
   ESBUILD_GUEST_POLICY_ROW_IDS,
   type EsbuildContractTranscript,
-  type EsbuildGuestPolicyExpectation,
   type EsbuildGuestPolicyTranscript,
   type ModuleRow,
 } from '../../tools/shadow-registry/src/esbuild-contract-probe.ts';
+
 import {
   bootOwner,
   closeOwner,
@@ -23,6 +23,10 @@ import {
   sealedWorkbenchFixtureUrl,
   writeOwnerFile,
 } from './fixtures.ts';
+import {
+  type StockNodeOracle,
+  captureStockNodeOracle,
+} from './fixtures/esbuild-stock-node-oracle.ts';
 
 interface HostEsbuild {
   readonly version: string;
@@ -171,32 +175,27 @@ const DIRECT_ERROR_OPTIONS = Object.freeze({
   loader: 'ts',
   sourcefile: 'direct-error.ts',
 });
-const expectedContract = JSON.parse(
-  readFileSync(
-    fileURLToPath(
-      new URL(
-        '../../tools/shadow-registry/src/fixtures/esbuild-0.28.0-contract.json',
-        import.meta.url,
-      ),
-    ),
-    'utf8',
+const expectedRecipe = JSON.parse(
+  execFileSync(
+    process.execPath,
+    [
+      '--import',
+      'tsx',
+      '--input-type=module',
+      '-e',
+      `
+import { builtinShadowSubstitutionCatalog as catalog, builtinRecipeById } from './tools/shadow-registry/src/internal/index.ts';
+console.log(JSON.stringify({ catalog: { id: catalog.id, digest: catalog.digest }, recipe: builtinRecipeById('rifty.shadow-substitution.esbuild.wasm-node.v1', '0.28.0') }));
+`,
+    ],
+    { encoding: 'utf8' },
   ),
-) as EsbuildContractTranscript;
-const expectedPolicy = JSON.parse(
-  readFileSync(
-    fileURLToPath(
-      new URL(
-        '../../tools/shadow-registry/src/fixtures/esbuild-0.28.0-guest-policy-prerequisites.json',
-        import.meta.url,
-      ),
-    ),
-    'utf8',
-  ),
-) as EsbuildGuestPolicyTranscript;
+) as { catalog: { id: string; digest: string }; recipe: { digest: string } };
+
 const shadowRequire = createRequire(
   new URL('../../tools/shadow-registry/package.json', import.meta.url),
 );
-const hostEsbuild = shadowRequire('esbuild') as HostEsbuild;
+const hostEsbuild = shadowRequire('esbuild-wasm') as HostEsbuild;
 
 function pathsFor(
   token: string,
@@ -310,6 +309,7 @@ module.exports.__promise = (async () => {
     modules,
     makeContractWorkspace(${JSON.stringify(policyRoot)}),
   );
+  await cjs.stop();
   fs.writeFileSync(
     ${JSON.stringify(paths.devResult)},
     JSON.stringify({
@@ -368,6 +368,7 @@ const moduleRow = await RiftyEsbuildContractProbe.probeEsbuildModuleContract(
   },
   makeContractWorkspace(${JSON.stringify(root)}),
 );
+await cjs.stop();
 fs.writeFileSync(
   ${JSON.stringify(resultPath)},
   JSON.stringify({
@@ -661,6 +662,7 @@ function parseResult<T>(
 }
 
 async function runContractHarness(page: Page): Promise<{
+  readonly oracle: StockNodeOracle;
   readonly dev: FullEnvelope;
   readonly build: ModuleEnvelope;
   readonly preview: ModuleEnvelope;
@@ -671,6 +673,7 @@ async function runContractHarness(page: Page): Promise<{
   const fixturePaths = pathsFor(token, '/scratch');
   const paths = pathsFor(token, PUBLIC_PROJECT_ROOT);
   const bundle = await bundleProbe();
+  const oracle = captureStockNodeOracle(bundle, workspaceFactory());
   const original = await readOwnerFile(page, VITE_BIN);
   expect(original.ok, original.error).toBe(true);
 
@@ -787,7 +790,7 @@ async function runContractHarness(page: Page): Promise<{
       'slotEqualsCjsOuter',
       'legacyBridgeAbsent',
     ]);
-    expect(Object.keys(envelope.module)).toEqual(Object.keys(expectedContract.rows.module));
+    expect(Object.keys(envelope.module)).toEqual(Object.keys(oracle.contract.rows.module));
   }
   expect(infoEnvelope.health).toEqual({
     token,
@@ -801,6 +804,7 @@ async function runContractHarness(page: Page): Promise<{
   });
 
   return {
+    oracle,
     dev: devEnvelope,
     build: buildEnvelope,
     preview: previewEnvelope,
@@ -809,27 +813,22 @@ async function runContractHarness(page: Page): Promise<{
   };
 }
 
-function comparePolicySoft(actual: EsbuildGuestPolicyTranscript): void {
+function comparePolicySoft(
+  actual: EsbuildGuestPolicyTranscript,
+  expected: EsbuildGuestPolicyTranscript,
+): void {
   for (const rowId of ESBUILD_GUEST_POLICY_ROW_IDS) {
-    const expectations = ESBUILD_GUEST_POLICY_EXPECTATIONS[rowId] as Readonly<
-      Record<string, EsbuildGuestPolicyExpectation>
-    >;
-    for (const caseId of Object.keys(expectations)) {
-      const expectation = expectations[caseId];
+    for (const caseId of Object.keys(expected.rows[rowId])) {
       const actualCase = actual.rows[rowId][caseId];
-      expect.soft(actualCase, `${rowId}/${caseId} exists`).toBeDefined();
-      if (!expectation || !actualCase) continue;
-      if (expectation.mode === 'native-prerequisite') {
-        expect
-          .soft(actualCase, `${rowId}/${caseId} native`)
-          .toEqual(expectedPolicy.rows[rowId][caseId]);
+      if (rowId === 'gap-sync-family') {
+        expect.soft(actualCase?.outcome, `${rowId}/${caseId} named capability gap`).toMatchObject({
+          phase: 'sync-throw',
+          error: { name: 'NotImplementedError' },
+        });
       } else {
-        expect.soft(actualCase.outcome, `${rowId}/${caseId} gap`).toEqual(expectation.outcome);
-        if ('evidence' in expectation) {
-          expect
-            .soft(actualCase.evidence, `${rowId}/${caseId} evidence`)
-            .toEqual(expectation.evidence);
-        }
+        expect
+          .soft(actualCase, `${rowId}/${caseId} stock Node`)
+          .toEqual(expected.rows[rowId][caseId]);
       }
     }
   }
@@ -1015,6 +1014,13 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
   test.setTimeout(240_000);
   const requests: string[] = [];
   context.on('request', (request) => requests.push(request.url()));
+  const blockedRegistryRequests: string[] = [];
+  let blockRegistry = false;
+  await context.route(/\/npm-registry(?:\/|$)/u, async (route) => {
+    if (!blockRegistry) return route.continue();
+    blockedRegistryRequests.push(route.request().url());
+    await route.abort();
+  });
   await gotoHarness(page);
   requests.length = 0;
   const bootOptions = {
@@ -1049,14 +1055,14 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
       .toBe('rifty.shadow-substitutions/v2');
     expect
       .soft(esbuildRecipe?.substitutionId, 'real Chromium esbuild recipe identity')
-      .toBe('rifty.shadow-substitution.esbuild.v2');
+      .toBe('rifty.shadow-substitution.esbuild.wasm-node.v1');
     expect.soft(esbuildRecipe?.catalog, 'real Chromium esbuild catalog identity').toEqual({
-      id: 'rifty.shadow-substitutions.builtin.v2',
-      digest: '68b82251f296d987ba8ca8883b14adf2785b507b4ed3b69a84ebcad76b6f7002',
+      id: expectedRecipe.catalog.id,
+      digest: expectedRecipe.catalog.digest,
     });
     expect
       .soft(esbuildRecipe?.recipeDigest, 'real Chromium esbuild recipe digest')
-      .toBe('844104d3f7a0f7fb997a3678d63f8d34af0fe52c8f6788413b9bae8a92618c2d');
+      .toBe(expectedRecipe.recipe.digest);
     expect
       .soft(esbuildRecipe?.materialization, 'real Chromium esbuild materialization identity')
       .toMatchObject({
@@ -1072,7 +1078,7 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
       .toMatchObject({
         version: '0.28.0',
         bin: { esbuild: 'bin/esbuild' },
-        riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
+        riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.wasm-node.v1',
       });
 
     const contract = await runContractHarness(page);
@@ -1118,18 +1124,18 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
     for (const rowId of ESBUILD_CONTRACT_ROW_IDS) {
       expect
         .soft(contract.dev.parity.rows[rowId], `guest parity ${rowId}`)
-        .toEqual(expectedContract.rows[rowId]);
+        .toEqual(contract.oracle.contract.rows[rowId]);
     }
-    comparePolicySoft(contract.dev.policy);
+    comparePolicySoft(contract.dev.policy, contract.oracle.policy);
     for (const [mode, publication] of [
       ['dev', contract.dev.publication],
       ['build', contract.build.publication],
       ['preview', contract.preview.publication],
       ['optimize', contract.optimize.publication],
     ] as const) {
-      expect.soft(publication, `${mode} runtime published before first import`).toEqual({
-        slotPresentBeforeImport: true,
-        slotEqualsCjsOuter: true,
+      expect.soft(publication, `${mode} has no generated runtime publication`).toEqual({
+        slotPresentBeforeImport: false,
+        slotEqualsCjsOuter: false,
         legacyBridgeAbsent: true,
       });
     }
@@ -1140,7 +1146,7 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
     ] as const) {
       expect
         .soft(envelope.module, `${mode} import-first module`)
-        .toEqual(expectedContract.rows.module);
+        .toEqual(contract.oracle.contract.rows.module);
     }
 
     const optimize = await execLine(page, 'vite optimize --force');
@@ -1237,11 +1243,8 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
         if (!(error instanceof DOMException) || error.name !== 'NotFoundError') throw error;
       }
     });
-    const blockedRegistryRequests: string[] = [];
-    await context.route(/\/npm-registry(?:\/|$)/u, async (route) => {
-      blockedRegistryRequests.push(route.request().url());
-      await route.abort();
-    });
+    blockRegistry = true;
+    blockedRegistryRequests.length = 0;
     await bootOwner(page, bootOptions);
     ownerOpen = true;
     const offlineBuild = await execLine(page, 'vite build');
@@ -1269,6 +1272,13 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
   test.setTimeout(240_000);
   const requests: string[] = [];
   context.on('request', (request) => requests.push(request.url()));
+  const blockedRegistryRequests: string[] = [];
+  let blockRegistry = false;
+  await context.route(/\/npm-registry(?:\/|$)/u, async (route) => {
+    if (!blockRegistry) return route.continue();
+    blockedRegistryRequests.push(route.request().url());
+    await route.abort();
+  });
   await gotoHarness(page);
   requests.length = 0;
   const cjsResultPath = '/direct-cjs-result.json';
@@ -1306,7 +1316,7 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
     const esmFile = await readOwnerFile(page, `/scratch${esmResultPath}`);
     const native = await hostEsbuild.transform(DIRECT_SOURCE, DIRECT_TRANSFORM_OPTIONS);
     const nativeNamespace = (await import(
-      pathToFileURL(shadowRequire.resolve('esbuild')).href
+      pathToFileURL(shadowRequire.resolve('esbuild-wasm')).href
     )) as Readonly<Record<string, unknown>>;
     const nativeCjs = hostEsbuild as unknown as Readonly<Record<string, unknown>>;
 
@@ -1315,15 +1325,15 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
     expect(config.ok).toBe(false);
     expect(cjsRun.exit, cjsRun.out).toBe(0);
     expect(esmRun.exit, esmRun.out).toBe(0);
-    expect(cli.exit, cli.out).toBe(1);
-    expect(cli.out).toContain('esbuild.cli');
+    expect(cli.exit, cli.out).toBe(0);
+    expect(cli.out).toContain('0.28.0');
 
     const expected: DirectEnvelope = {
       version: '0.28.0',
       namespaceVersion: '0.28.0',
       defaultSame: true,
       moduleExportsSame: true,
-      runtimeSame: true,
+      runtimeSame: false,
       namespaceKeys: Object.keys(nativeNamespace).sort(),
       namespaceRelations: namespaceRelations(nativeNamespace, nativeCjs),
       code: native.code,
@@ -1346,11 +1356,8 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
 
     await closeOwner(page);
     ownerOpen = false;
-    const blockedRegistryRequests: string[] = [];
-    await context.route(/\/npm-registry(?:\/|$)/u, async (route) => {
-      blockedRegistryRequests.push(route.request().url());
-      await route.abort();
-    });
+    blockRegistry = true;
+    blockedRegistryRequests.length = 0;
     await bootOwner(page, bootOptions);
     ownerOpen = true;
     const offlineCjs = await execLine(page, 'node direct.cjs');
@@ -1365,7 +1372,7 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
   }
 });
 
-test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves the tree unchanged', async ({
+test('missing esbuild keeps Node MODULE_NOT_FOUND and unresolvable install leaves the tree unchanged', async ({
   context,
   page,
 }) => {
@@ -1404,7 +1411,7 @@ test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves
       nativeMissingEsbuildEvidence(),
     );
 
-    const unsupported = await execLine(page, 'npm install esbuild@^0.27');
+    const unsupported = await execLine(page, 'npm install esbuild@999.0.0');
     const packageJsonAfter = await readOwnerFile(page, '/scratch/package.json');
     const lockfileAfter = await readOwnerFile(page, '/scratch/package-lock.json');
     const modulesAfter = await execLine(page, 'ls node_modules');
@@ -1413,7 +1420,7 @@ test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves
     const secondEvidence = await readOwnerFile(page, `/scratch${resultPath}`);
 
     expect(unsupported.exit, unsupported.out).toBe(1);
-    expect(unsupported.out).toContain('esbuild.version');
+    expect(unsupported.out).toContain('999.0.0');
     expect(packageJsonAfter).toEqual(packageJsonBefore);
     expect(lockfileAfter).toEqual(lockfileBefore);
     expect(modulesAfter).toEqual(modulesBefore);
@@ -1423,8 +1430,10 @@ test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves
       parseResult<ModuleNotFoundEvidence>(secondEvidence, 'missing after rejected install'),
     ).toEqual(nativeMissingEsbuildEvidence());
     expect(
-      registryPackageRequests(requests, 'esbuild-wasm'),
-      'unsupported recipe must not acquire a twin',
+      registryPackageRequests(requests, 'esbuild-wasm').filter((url) =>
+        new URL(url).pathname.endsWith('.tgz'),
+      ),
+      'unresolvable request may read metadata but must not acquire a tarball',
     ).toEqual([]);
   } finally {
     await closeOwner(page);

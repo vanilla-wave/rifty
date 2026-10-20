@@ -5,7 +5,6 @@ test('COI instant Vite snapshot runs upstream esbuild without loading the genera
   page,
   context,
 }) => {
-  test.fail(true, 'COI snapshot still restores the legacy generated-runtime recipe');
   const generatedRequests: string[] = [];
   context.on('request', (request) => {
     if (request.url().includes('/generated/esbuild-runtime.js'))

@@ -7,7 +7,7 @@ import {
 import { type CommandContext, Shell } from '@riftydev/shell';
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, expect, it, vi } from 'vitest';
-import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
+import { installArtifactIdentityForTier } from '../glue/install-artifact-identity.ts';
 import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { createNoShadowInstallResultFixture } from './install-result.test-fixture.ts';
@@ -414,6 +414,7 @@ it('replaces a foreign stamped manifest on a cold owner first install', async ()
     new TextEncoder().encode('{"foreign":true}\n'),
   );
   const seedStamps = createInstallStampAuthority({
+    runtimeTier: 'coi',
     vfs: pair.vfs,
     fsSync: authority,
     claimIo: installStampClaims,
@@ -574,6 +575,7 @@ it('preserves a trusted user-extended tree when the first dev config replaces hi
   authority.writeFileSync(cowsayBin, new TextEncoder().encode('#!/usr/bin/env node\n'));
 
   const seedStamps = createInstallStampAuthority({
+    runtimeTier: 'coi',
     vfs: pair.vfs,
     fsSync: authority,
     claimIo: installStampClaims,
@@ -628,6 +630,7 @@ it('preserves a trusted user-extended tree when the first dev config replaces hi
     extendedPackageJson,
   );
   const reloadedStamps = createInstallStampAuthority({
+    runtimeTier: 'coi',
     vfs: pair.vfs,
     fsSync: authority,
     claimIo: installStampClaims,
@@ -685,6 +688,7 @@ it('reasserts template node_modules inside the package authority; extraneous see
   );
 
   const stamps = createInstallStampAuthority({
+    runtimeTier: 'coi',
     vfs: pair.vfs,
     fsSync: authority,
     claimIo: installStampClaims,
@@ -897,12 +901,13 @@ it('activates and ensures independent real project configs without an initial pl
   await state.quiesce();
   await expect(state.activateAndEnsure(projectConfig('a'))).resolves.toMatchObject({
     outcome: 'existing',
-    identity: installArtifactIdentity,
+    identity: installArtifactIdentityForTier('coi'),
   });
   await state.quiesce();
 
   expect(installs).toEqual(['/projects/a', '/projects/b']);
   const stamps = createInstallStampAuthority({
+    runtimeTier: 'coi',
     vfs: pair.vfs,
     fsSync: authority,
     claimIo: installStampClaims,

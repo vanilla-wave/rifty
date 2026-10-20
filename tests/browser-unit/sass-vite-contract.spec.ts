@@ -776,7 +776,10 @@ test('sass-embedded exact facade matches Node and powers Vite 7.3.6 SCSS dev/HMR
         .map(({ substitutionId }) => substitutionId)
         .sort(),
     ).toEqual(
-      ['rifty.shadow-substitution.esbuild.v2', 'rifty.shadow-substitution.sass-embedded.v2'].sort(),
+      [
+        'rifty.shadow-substitution.esbuild.wasm-node.v1',
+        'rifty.shadow-substitution.sass-embedded.v2',
+      ].sort(),
     );
     const applied = plainRecord(
       appliedFacts.find(

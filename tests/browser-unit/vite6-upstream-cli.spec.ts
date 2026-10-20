@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 import { expect, test } from '@playwright/test';
 import { browserRegistryPackages } from '../integration/browser-registry-fixture.mjs';
 import { startInstalledRegistry } from '../integration/installed-registry.mjs';
@@ -11,7 +12,6 @@ import { bootOwner, closeOwner, execLine, gotoHarness } from './fixtures.ts';
 
 // I6 only: reach the real Vite 6 build action. This is not a verified Vite 6 lane.
 test('Vite 6.4.4 npm install and npx build reach the upstream CLI', async ({ page, context }) => {
-  test.fail(true, 'COI owner still selects the legacy esbuild recipe');
   const packages = await browserRegistryPackages(process.cwd());
   for (const [name, version] of [
     ['vite', '6.4.4'],
@@ -91,7 +91,7 @@ test('Vite 6.4.4 npm install and npx build reach the upstream CLI', async ({ pag
     expect(install.exit, install.out).toBe(0);
     const cli = await execLine(page, 'npx vite build');
     expect(cli.exit, cli.out).toBe(oracle.status);
-    expect(cli.out).toContain('vite v6.4.4 building for production');
+    expect(stripVTControlCharacters(cli.out)).toContain('vite v6.4.4 building for production');
     expect(cli.out).toContain('Could not resolve entry module "index.html"');
   } finally {
     if (ownerOpen) await closeOwner(page);

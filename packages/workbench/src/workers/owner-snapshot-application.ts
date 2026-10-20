@@ -14,6 +14,7 @@ export async function planOwnerSnapshotApplication(
   const payload = input.snapshot.payload as DepSnapshotV3 | undefined;
   if (payload === undefined) throw new Error('Snapshot application payload missing');
   const plan = await prepareDepSnapshotApplication(options.fsSync, input.project.root, payload, {
+    runtimeTier: 'coi',
     conflict: input.conflict,
     ...(input.preflightRoot === undefined ? {} : { preflightRoot: input.preflightRoot }),
     flush: options.flush,

@@ -5,16 +5,15 @@ const matrixUrl = new URL('../../docs/public/compat/esbuild-js-api.md', import.m
 const policyUrl = new URL('../shadow-registry/esbuild-runtime-policy.json', import.meta.url);
 
 describe('esbuild compatibility gap statuses', () => {
-  it('marks every unsupported D4 API as not implemented', async () => {
+  it('marks every unsupported no-COI D4 API as not implemented', async () => {
     const matrix = await readFile(matrixUrl, 'utf8');
     const policy = JSON.parse(await readFile(policyUrl, 'utf8')) as {
       readonly gaps: readonly { readonly surface: string }[];
     };
     const gapStatuses = new Map(
-      [...matrix.matchAll(/^\| D4 gap: `([^`]+)` \| ([^|]+) \|/gmu)].map(([, surface, status]) => [
-        surface,
-        status?.trim(),
-      ]),
+      [...matrix.matchAll(/^\| No-COI D4 gap: `([^`]+)` \| ([^|]+) \|/gmu)].map(
+        ([, surface, status]) => [surface, status?.trim()],
+      ),
     );
 
     expect(gapStatuses).toEqual(

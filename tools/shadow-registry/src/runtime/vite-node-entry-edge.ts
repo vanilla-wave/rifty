@@ -1,3 +1,4 @@
+import type { ShadowRuntimeTier } from '../internal/recipe-selection.ts';
 import {
   type ViteCliPreparation,
   prepareViteCli,
@@ -26,12 +27,13 @@ function planned(preparation: ViteCliPreparation): NodeEntryIntegrationPlan {
 
 /** Concrete Vite recognition and its adapter-before-CLI ordering decision. */
 export function planViteNodeEntryEdge(options: {
+  readonly runtimeTier?: ShadowRuntimeTier;
   readonly bin: boolean;
   readonly root: string;
   readonly args: readonly string[];
   readonly entryPath: string;
 }): NodeEntryIntegrationPlan {
-  if (!options.bin) return NO_CONCRETE_INTEGRATION;
+  if (options.runtimeTier === 'coi' || !options.bin) return NO_CONCRETE_INTEGRATION;
   const preparation = viteCliPreparationFromArgs({
     root: options.root,
     args: options.args,

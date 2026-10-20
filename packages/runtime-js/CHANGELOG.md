@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- CJS error positions use the existing stack projection to remove Function wrapper lines, including guest stack hooks; stock package validation points at the original source.
+
 - File stdout initializes lazily through the current fs.writeSync; inherited child output uses captured descriptors (ADR-0544).
 
 - fs consumes real stdio descriptors; kernel stdin supports synchronous reads, async reads share process.stdin consumption. hrtime and crypto retain platform sources when guests replace the globals (stock esbuild-wasm 0.21).

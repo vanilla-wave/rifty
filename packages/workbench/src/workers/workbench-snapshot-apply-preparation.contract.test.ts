@@ -21,6 +21,7 @@ import {
   type DepSnapshotV3,
   buildDepSnapshot,
   parseDepSnapshot,
+  prepareDepSnapshotForRuntimeTier,
   serializeDepSnapshot,
   serializeDepSnapshotTar,
 } from '../glue/dep-snapshot.ts';
@@ -77,18 +78,10 @@ beforeAll(async () => {
     registryUrl,
     templateId: 'saved-ms',
   });
-  const payload = parseDepSnapshot(
+  const rawPayload = parseDepSnapshot(
     JSON.stringify(decodeDepSnapshotTar(new Uint8Array(gunzipSync(produced.archive)))),
   );
-  vite = {
-    ...produced,
-    payload,
-    descriptor: {
-      snapshotId: produced.snapshotId,
-      templateId: payload.templateId,
-      assetUrl: 'https://host.test/prepared-vite.tar.gz',
-    },
-  };
+  vite = fixture(await prepareDepSnapshotForRuntimeTier(rawPayload, 'coi'), 'tar', 'prepared-vite');
   ms = await bakeSavedSnapshotFixture();
 }, 90_000);
 
@@ -151,6 +144,7 @@ function definition(artifact: SavedSnapshotFixture, conflict?: 'error' | 'overwr
 
 function launch(root: string) {
   return preparePackageEntryRuntime({
+    runtimeTier: 'coi',
     bin: true,
     root,
     args: ['--version'],
@@ -421,7 +415,7 @@ describe('snapshot application preserves prepared source authority', () => {
           writes.mockRestore();
         }
         const claim = readInstallStampSync(h.authority, opened.projectRoot);
-        expect(claim !== null && stampTrusted(claim)).toBe(true);
+        expect(claim !== null && stampTrusted(claim, 'coi')).toBe(true);
         prepared = buildDepSnapshot(h.authority, opened.projectRoot, {
           templateId: raw.payload.templateId,
           deps: raw.payload.deps,

@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Select stock esbuild Node twins throughout the COI Workbench host
 created: 2026-10-16
 why: installer/runtime prerequisites pass but the physical host still restores and activates the legacy recipe
@@ -88,6 +88,8 @@ verified Vite lanes, retirement of the starter pin. Their existing goal
 boundaries remain. No change to ADR-0375 fixture pins or byte oracle.
 
 ## Decisions
+
+- ready-verdict: 2026-10-20 — Contract+RED @ 1e9b2654cb3b3469f32f1ac593fe2f35cf4f75c4
 
 - 2026-10-20 — ADR-0543 owns host policy and stock oracle; DEC-2 corrections
   name the COI supersession of ADR-0226/0316/0371/0361 and retained no-COI debt.

@@ -86,3 +86,5 @@ ADR-0047 remains the WASI-preview1 CLI forcing-consumer decision. Its gojs-moot 
 ## Corrections (active)
 
 - 2026-09-07 — ADR-0384 supersedes package-adaptation owner/carrier clauses and `.vite` archive classification where applicable; all other decisions remain active.
+
+- 2026-10-20 — ADR-0543 supersedes D1–D5 generated-runtime, startup/carrier, gate and native-oracle clauses in COI only. Stock esbuild-wasm Node entry owns those surfaces; Sync may hit a named Node capability gap before option validation. No-COI retains D1–D5, validation-first and native 0.28.0 oracle. D3 common CJS→ESM/cache semantics remain global.

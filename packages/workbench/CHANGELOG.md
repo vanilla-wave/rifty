@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Physical COI owner selects stock esbuild for install/snapshot/claims and Node bootstrap. No-COI retains its explicit legacy policy.
+
 - Explicit snapshot runtime tier shares restore/application preflight; only generated facade/receipt changes, while COI install claims carry a distinct policy identity (ADR-0543).
 
 - Propagate file stdout through Node/bin child bootstrap; preserve pipe/TTY selection (ADR-0544).

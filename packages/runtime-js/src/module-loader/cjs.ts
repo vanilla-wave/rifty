@@ -2,6 +2,7 @@ import { NotImplementedError } from '@riftydev/io';
 import { basename, dirname, joinPath } from '@riftydev/vfs';
 import type { ImportExpression, Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
+import { hostScriptSourceURL } from '../builtins/vm/script-offsets.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { type Edit, applyEdits, uniqueHelperName } from './cjs-source-rewrite.ts';
 import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
@@ -1764,6 +1765,8 @@ function compileCjsSource(
     dynamicImportHelperName,
     globalKeyHelperName,
   );
+  // Function adds two physical lines; Node's CJS compileFunction does not.
+  const sourceURL = hostScriptSourceURL('', filename, -2, 0);
   let fn: CjsFactory;
   try {
     fn = new Function(
@@ -1775,7 +1778,7 @@ function compileCjsSource(
       dynamicImportHelperName,
       functionHelperName,
       globalKeyHelperName,
-      `${source}\n//# sourceURL=${filename}`,
+      `${source}\n//# sourceURL=${sourceURL}`,
     ) as CjsFactory;
   } catch (error) {
     // `new Function` SyntaxError has no file context — surface a directed
