@@ -28,6 +28,8 @@ import {
 } from './worker-stdio-drain.ts';
 
 export interface ProcessIO {
+  /** Publish a handler process's terminal outcome through its manager. */
+  complete(code: number): boolean;
   write(stream: 'stdout' | 'stderr', chunk: string): void;
   /** Send a structured IPC message (used by fork). */
   send(message: unknown): void;
@@ -510,9 +512,7 @@ export class ProcessManager {
       kill(signal = 'SIGTERM'): boolean {
         return manager.killRecordTree(record, signal);
       }
-      controlKill(pid: number, signal: string): boolean {
-        return options.remoteControl?.kill(pid, signal) ?? false;
-      }
+      readonly controlKill = options.remoteControl?.kill.bind(options.remoteControl);
     }
 
     const handle = new Handle();
@@ -621,6 +621,7 @@ export class ProcessManager {
     }
 
     const io: ProcessIO = {
+      complete: (code) => settle(code, null),
       write(stream, chunk) {
         childToParent.emit(stream, chunk);
       },

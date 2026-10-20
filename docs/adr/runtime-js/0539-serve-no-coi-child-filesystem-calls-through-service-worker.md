@@ -26,7 +26,8 @@ without COI: `docs/backlog/runtime-js/reference/no-coi-child-processes-spike.mjs
    fails loudly; a timeout never claims a mutation was not applied.
 4. Child async stdio and terminal frames share one private ordered output/control
    port; stdin has its own port. ProcessManager retains PID/exit/kill ownership.
-   No SAB output counter is carried into this transport.
+   No SAB output counter is carried into this transport. Handler producers publish
+   completion through `ProcessIO.complete(code)`, the existing manager transition.
    Physical child routes reuse kernel federation for nested PID/control identity;
    the live owner binds each route token to its existing caller context. Process
    and readable-pipe references are independent, as Node's `unref` requires.

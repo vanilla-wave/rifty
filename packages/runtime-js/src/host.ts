@@ -174,6 +174,7 @@ function createRuntimeController(
   const startupTimeoutMs = startup.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS;
   const handlers = new Set<(event: RuntimeEvent) => void>();
   let worker: Worker | null = null;
+  let childWorkerUrl = opts.workerUrl;
   let nextId = 1;
   let ready = false;
   const pending = new Map<number, PendingEval>();
@@ -319,6 +320,15 @@ function createRuntimeController(
 
   function start(): void {
     const name = runtimeWorkerName(startup);
+    if (toolchainMode) {
+      const base =
+        typeof document !== 'undefined'
+          ? document.baseURI
+          : typeof location !== 'undefined'
+            ? location.href
+            : undefined;
+      childWorkerUrl = base === undefined ? opts.workerUrl : new URL(opts.workerUrl, base).href;
+    }
     worker = new Worker(opts.workerUrl, {
       type: 'module',
       ...(name === undefined ? {} : { name }),
@@ -585,7 +595,7 @@ function createRuntimeController(
     ...controller,
     connectChildProcesses(endpoint, port) {
       if (worker === null) throw new Error('toolchain Worker is unavailable');
-      worker.postMessage({ type: 'no-coi-child-fs-connect', endpoint, workerUrl: opts.workerUrl }, [
+      worker.postMessage({ type: 'no-coi-child-fs-connect', endpoint, workerUrl: childWorkerUrl }, [
         port,
       ]);
     },

@@ -12,8 +12,9 @@ user_story: As a developer on a no-COI SDK host, I want `require('esbuild-wasm')
 
 A no-COI `spawn('node', script)` child gets its own realm, module loader
 and globals and can `require` the project's `node_modules`, with async stdio
-pipes. Upstream esbuild-wasm's Node entry runs there; the retained generated
-0.28.0 client and its no-COI-only runtime adapter are removed.
+pipes. Upstream esbuild-wasm's Node entry runs there; the generated
+0.28.0 client and its adapter leave the no-COI execution and emitted boot graph.
+The shared COI client remains owned by `epics/esbuild-upstream-twin`.
 
 ## User scenario
 
@@ -32,7 +33,7 @@ same-realm shebang SyntaxError and missing child.unref; Node v24.16.0 prints
 
 - I1. Upstream esbuild-wasm's Node entry completes transform in a no-COI SDK sandbox with the same output as Node, without runtime package-byte adaptation.
 - I2. A spawned Node helper has separate globals, builtin state and module loader; loads project node_modules; reads/writes the one live project VFS and exchanges async stdio as Node does.
-- I3. The temporary generated esbuild 0.28.0 client and its no-COI adapter are retired, including emitted artifacts and their declared adaptation debt.
+- I3. No-COI execution and emitted boot graphs no longer load the generated esbuild 0.28.0 client or activate its adapter; no-COI adaptation debt is retired. The shared COI client remains for the separate upstream-twin goal.
 - I4. No-COI child processes require an active rifty SW, with a loud named failure when unavailable; other SDK functions remain usable without SW.
 
 ## Challenge
@@ -46,6 +47,8 @@ adds storage dependency and polling; QuickJS changes the guest engine and
 WebAssembly boundary. Owner CPU work can delay child FS requests.
 
 ## Decisions
+
+- amend: 2026-10-20 — user: «В этом ПР убрать legacy из no-COI; COI-клиент оставить до отдельной цели». I3 is explicitly no-COI retirement; shared COI source/artifacts remain. No dependency on PR #379.
 
 - 2026-10-20 — user: «Да: child_processes требуют SW; остальные функции без SW сохраняются». SW is required only for no-COI child processes; unavailable transport never silently runs the child in the parent realm.
 - 2026-10-20 — tier works: real happy-path parity; transport/Worker failures remain loud. No new fault-tolerance/retry promise.

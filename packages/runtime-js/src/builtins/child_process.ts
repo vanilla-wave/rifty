@@ -54,6 +54,7 @@ import {
   forkExecArgv,
   forwardWorkerStdio,
   resolveWorkerStdio,
+  snapshotChildEnvironment,
   spawnWorkerChild,
 } from './child_process-worker.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -390,12 +391,7 @@ export function spawn(
     getKernelWorkerUrl() !== null &&
     getNodeEntryWorkerUrl() !== null;
   const execArgv = opts.__execArgv ?? [];
-  if (
-    command === 'node' &&
-    args[0] !== undefined &&
-    isSandboxToolchainRealm() &&
-    !isSabIpcSupported()
-  ) {
+  if (command === 'node' && args[0] !== undefined && isSandboxToolchainRealm()) {
     const remote = spawnNoCoiChild(args, {
       cwd: opts.cwd,
       env: opts.env,
@@ -473,7 +469,6 @@ function spawnViaSameRealm(
   stdio: ReturnType<typeof resolveWorkerStdio>,
   ipc: NodeIpcSerialization | null,
 ): ChildProcess {
-  warnSameRealmFallbackOnce();
   // The handler needs the `ProcessHandle` and `ChildProcess`, both built AFTER
   // it's registered. A mutable container lets the handler read them on the next
   // microtask without an extra `await` boundary, which would delay the script
@@ -484,13 +479,14 @@ function spawnViaSameRealm(
   const stdinPipe = new SameRealmStdinPipe();
   const stdin = stdinPipe.writable;
   const parent = activeChildProcessContext();
+  const env = snapshotChildEnvironment(opts.env, parent.env);
   const execution = buildChildExecutionPlan(
     parent.cwd,
     opts.cwd,
     command === 'node' ? args[0] : undefined,
   );
   const resolvedArgs =
-    execution.entryPath === undefined ? args : [execution.entryPath, ...args.slice(1)];
+    execution.entryPath === undefined ? args.slice() : [execution.entryPath, ...args.slice(1)];
 
   const handle = globalProcessManager.spawn(
     command,
@@ -501,17 +497,17 @@ function spawnViaSameRealm(
         throw new Error('child_process.spawn: wiring not populated before handler ran');
       }
       if (command === 'ps') {
-        stdout.push(renderPs(args));
+        stdout.push(renderPs(resolvedArgs));
         return;
       }
       if (command === 'kill') {
-        runKill(args);
+        runKill(resolvedArgs);
         return;
       }
       await execScript({
         command,
         args: resolvedArgs,
-        opts: { ...opts, cwd: execution.cwd, env: opts.env ?? parent.env },
+        opts: { ...opts, cwd: execution.cwd, env },
         io,
         ownHandle,
         inboundIpc: child.inboundIpc,
@@ -544,16 +540,6 @@ function spawnViaSameRealm(
     stderr.on('data', (chunk) => stdio.stderr?.write(chunk));
   }
   return child;
-}
-
-let sameRealmWarningFired = false;
-
-function warnSameRealmFallbackOnce(): void {
-  if (!isSandboxToolchainRealm() || sameRealmWarningFired) return;
-  sameRealmWarningFired = true;
-  console.warn(
-    '[rifty:child_process] Falling back to same-realm execution: child shares the parent event loop.',
-  );
 }
 
 function renderPs(args: readonly string[]): string {

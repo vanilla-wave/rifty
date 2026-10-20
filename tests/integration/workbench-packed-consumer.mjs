@@ -36,6 +36,7 @@ import {
   startInstalledRegistry,
 } from './installed-registry.mjs';
 import { provePackedAgent } from './no-coi-agent-browser-proof.mjs';
+import { provePackedNoCoiChildren } from './no-coi-child-browser-proof.mjs';
 import { provePackedInstallLoading } from './no-coi-install-browser-proof.mjs';
 import { provePackedNoCoiPiAgent } from './no-coi-pi-agent-browser-proof.mjs';
 import { provePackedNoCoiSnapshots } from './no-coi-snapshot-browser-proof.mjs';
@@ -1197,6 +1198,11 @@ async function main() {
       await provePackedInstallLoading(
         consumerRoot,
         await readJson(resolve(consumerRoot, 'measure/report.json')),
+      );
+      await provePackedNoCoiChildren(
+        consumerRoot,
+        await readJson(resolve(consumerRoot, 'measure/report.json')),
+        repoRoot,
       );
       const agentRegistry = await startBrowserRegistry(await browserRegistryPackages(repoRoot));
       try {

@@ -81,6 +81,28 @@ child.stderr.on('data', chunk => process.stderr.write(chunk));
 child.on('close', code => console.log(JSON.stringify({code, distinct:process.pid !== child.pid, parent:Number(output) === process.pid})));
 `,
   'node_modules/helper/leaf.cjs': 'console.log(process.ppid);',
+  'close-authority.cjs': `
+const {spawn} = require('node:child_process');
+const child = spawn(process.execPath,['node_modules/helper/empty.cjs']);
+child.on('close',()=> {
+  const ps = spawn('ps',['-A','-o','ppid,pid'],{env:{PATH:'/usr/bin:/bin'}});
+  let output = '';
+  ps.stdout.on('data',chunk=>{output+=chunk;});
+  ps.on('close',()=>console.log('dead-visible',output.trim().split('\\n').some(line=>Number(line.trim().split(/\\s+/)[1])===child.pid)));
+});
+`,
+  'node_modules/helper/empty.cjs': 'void 0;',
+  'snapshot.cjs': `
+const {spawn} = require('node:child_process');
+const env = {CHILD_VALUE:'before'};
+const args = ['node_modules/helper/snapshot.cjs','before'];
+const child = spawn(process.execPath,args,{env});
+args[1] = 'after'; env.CHILD_VALUE = 'after';
+child.stdout.on('data',chunk=>process.stdout.write(chunk));
+child.stderr.on('data',chunk=>process.stderr.write(chunk));
+`,
+  'node_modules/helper/snapshot.cjs':
+    'console.log(JSON.stringify([process.env.CHILD_VALUE,process.argv[2]]));',
   'unref-pipes.cjs': `
 const {spawn} = require('node:child_process');
 const child = spawn(process.execPath, ['node_modules/helper/delayed.cjs']);

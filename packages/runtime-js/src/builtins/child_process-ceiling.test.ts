@@ -58,7 +58,7 @@ async function collect(
 }
 
 describe('spawn ceiling (F09 / Q-2026-05-30-063) — impossible tools are walled off', () => {
-  it('adds the no-COI same-realm warning only in a selected toolchain Worker', async () => {
+  it('does not claim a script fallback when refusing an unavailable executable', async () => {
     vi.stubGlobal('crossOriginIsolated', false);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -68,7 +68,7 @@ describe('spawn ceiling (F09 / Q-2026-05-30-063) — impossible tools are walled
     Object.defineProperty(globalThis, TOOLCHAIN_REALM, { value: true, configurable: true });
     await collect(spawn('git', ['status']));
     await collect(spawn('git', ['status']));
-    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("spawn('git') surfaces ENOENT-127 and never fake-succeeds", async () => {

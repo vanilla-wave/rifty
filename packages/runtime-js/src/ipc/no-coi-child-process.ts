@@ -3,6 +3,7 @@ import { type ProcessHandle, globalProcessManager } from '@riftydev/kernel';
 import {
   type SpawnWorkerChildOptions,
   activeChildProcessContext,
+  snapshotChildEnvironment,
 } from '../builtins/child_process-worker.ts';
 import { nodeChildSpawnOptions } from '../builtins/node-entry-runtime-config.ts';
 import { resolveVmEngineName } from '../builtins/vm/engine-config.ts';
@@ -21,11 +22,14 @@ export function spawnNoCoiChild(
   inbound: EventEmitter;
 } {
   const parent = activeChildProcessContext();
-  const route = openNoCoiChildRoute(parent.federated);
-  const transport = route.transport;
   const plan = buildChildExecutionPlan(parent.cwd, options.cwd, args[0]);
   if (plan.entryPath === undefined) throw new Error('child entry path is missing');
   const entryPath = plan.entryPath;
+  const argv = ['node', entryPath, ...args.slice(1)];
+  const env = snapshotChildEnvironment(options.env, parent.env);
+  const vmEngine = resolveVmEngineName();
+  const route = openNoCoiChildRoute(parent.federated);
+  const transport = route.transport;
   const control = new MessageChannel();
   const input = new MessageChannel();
   const closePorts = (): void => {
@@ -81,10 +85,8 @@ export function spawnNoCoiChild(
             };
             const finish = (code: number): void => {
               if (settled) return;
-              handle.exitCode = code;
               try {
-                handle.emit('exit', code, null);
-                handle.emit('close', code, null);
+                io.complete(code);
               } finally {
                 cleanup();
               }
@@ -97,7 +99,9 @@ export function spawnNoCoiChild(
             worker.addEventListener('error', (event) => {
               event.preventDefault();
               if (settled) return;
-              stderr.push(`${event.message}\n`);
+              stderr.push(
+                `${event.message || 'no-COI child Worker failed during startup or execution'}\n`,
+              );
               finish(1);
             });
             control.port1.onmessage = (event: MessageEvent) => {
@@ -130,12 +134,12 @@ export function spawnNoCoiChild(
                 transport,
                 pid: handle.pid,
                 ppid: parent.pid,
-                argv: ['node', entryPath, ...args.slice(1)],
+                argv,
                 cwd: plan.cwd,
-                env: options.env ?? parent.env,
+                env,
                 ipc: options.ipc,
                 execArgv: options.execArgv ?? [],
-                vmEngine: resolveVmEngineName(),
+                vmEngine,
               } satisfies NoCoiChildInit,
               [control.port2, input.port2],
             );

@@ -7,7 +7,7 @@
 
 ## Open questions
 
-- I3 depends on the existing COI cutover PR #379 (`esbuild-upstream-twin`) — owner: agent — integrate its reviewed result, reconcile shared stdio/ref repairs, then retire the remaining no-COI client in PR #380; destination unchanged.
+- I3 no-COI cutover — owner: agent — run installed-package and packed-graph proof; preserve the shared COI client per the user amendment.
 
 - Acceptance and runtime gaps exposed by upstream bytes — owner: agent — run the shared Node/browser carrier after each repair.
 

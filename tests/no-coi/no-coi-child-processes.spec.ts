@@ -8,6 +8,7 @@ import { expect, test } from './fixtures/test.ts';
 
 const exec = promisify(execFile);
 const root = process.cwd().replaceAll('\\', '/');
+const coiPort = Number(process.env.RIFTY_NO_COI_ORACLE_PORT ?? 5412);
 const archive = join(
   root,
   'tests/integration/fixtures/registry/rollup-companions/packages/esbuild-wasm-0.28.0.tgz',
@@ -21,7 +22,12 @@ const upstreamFiles = [
   'esbuild.wasm',
 ];
 
-const cases = [
+const cases: {
+  entry: string;
+  persistence: 'preferred' | 'ephemeral';
+  relative?: boolean;
+  coi?: boolean;
+}[] = [
   ...[
     'parent.cjs',
     'esbuild.cjs',
@@ -30,12 +36,18 @@ const cases = [
     'nested.cjs',
     'fork.cjs',
     'signal.cjs',
+    'close-authority.cjs',
+    'snapshot.cjs',
     'unref-pipes.cjs',
   ].map((entry) => ({ entry, persistence: 'preferred' as const })),
   ...['parent.cjs', 'esbuild.cjs'].map((entry) => ({ entry, persistence: 'ephemeral' as const })),
+  { entry: 'parent.cjs', persistence: 'ephemeral', relative: true },
+  { entry: 'parent.cjs', persistence: 'ephemeral', coi: true },
 ];
-for (const { entry, persistence } of cases) {
-  test(`no-COI child processes match Node: ${entry} (${persistence})`, async ({ page }) => {
+for (const { entry, persistence, relative = false, coi = false } of cases) {
+  test(`no-COI child processes match Node: ${entry} (${persistence}${relative ? ', relative URL' : ''}${coi ? ', COI host' : ''})`, async ({
+    page,
+  }) => {
     test.setTimeout(120_000);
     const directory = await mkdtemp(join(tmpdir(), 'rifty-no-coi-child-'));
     try {
@@ -64,16 +76,18 @@ for (const { entry, persistence } of cases) {
         body: JSON.stringify({ version: process.version, entry, ...oracle }),
         contentType: 'application/json',
       });
-      await page.goto('/no-coi-harness.html');
+      await page.goto(
+        coi ? `http://localhost:${coiPort}/unit-harness.html` : '/no-coi-harness.html',
+      );
       const observed = await page.evaluate(
-        async ({ root, files, entry, persistence }) => {
+        async ({ root, files, entry, persistence, relative }) => {
           const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
           const sandbox = await createSandbox({
             requireCrossOriginIsolation: false,
             serviceWorkerUrl: '/sw.js',
             storage: { persistence },
             toolchain: {
-              workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
+              workerUrl: `${relative ? '.' : ''}/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
             },
           });
           Reflect.set(globalThis, 'noCoiChildSandbox', sandbox);
@@ -101,10 +115,10 @@ for (const { entry, persistence } of cases) {
             throw error;
           }
         },
-        { root, files, entry, persistence },
+        { root, files, entry, persistence, relative },
       );
-      expect(observed.coi).toBe(false);
-      expect(observed.sab).toBe('undefined');
+      expect(observed.coi).toBe(coi);
+      expect(observed.sab).toBe(coi ? 'function' : 'undefined');
       if (persistence === 'ephemeral') expect(observed.backend).toBe('memory');
       expect(observed.result, JSON.stringify(observed.result)).toMatchObject({
         status: 'exited',
