@@ -147,7 +147,15 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
   barrier into the owner Worker. Its relative resource URL must use `fetchHost`
   after Node globals install; guest fetch correctly rejects that URL. Isolated
   RED on 9adc4a9a3; only the harness transport changes, all saving/UI assertions
-  remain. Other relative test requests run in the page or VFS-only workers.
+  remain. That first sweep covered e2e/browser-unit, omitting no-COI.
+
+- No-COI follow-up: console-eval native-flush barrier and admitted-run CLI also
+  used relative URLs. Both reproduce RED on df58483c7; real Node 24 rejects
+  both inputs before dispatch. Resolve URLs in the host page before embedding
+  guest code; retain Node fetch, real network gates and all Stop/interactive
+  assertions. Full `tests/` + product/tool source sweep: remaining relative
+  fetch calls run in browser pages or standalone VFS workers; production
+  browser resource I/O already uses `fetchHost`. No runtime exception added.
 
 ## Consequences
 
