@@ -375,7 +375,8 @@ describe('@riftydev/workbench extraction boundary', () => {
     // ADR-0487: package JSON/spec helpers split from the ratcheted npm command.
     // ADR-0531: guest layout module; legacy index parsing split from the
     // ratcheted playground project authority.
-    expect(packageProductionFiles).toHaveLength(175);
+    // ADR-0543: dependency snapshot projection selects the target runtime tier.
+    expect(packageProductionFiles).toHaveLength(176);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 
