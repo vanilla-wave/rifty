@@ -92,7 +92,7 @@ const run = (stage, unit, extra = '', phase = 'Units', tag = short(unit)) =>
 
 const review = (checkpoint, unit, base, prev, phase, tag, evidence) =>
   agent(
-    `You are the fresh independent reviewer (REV-11), read-only: never edit tracked files, never commit. Invoke rifty-review for ${checkpoint} of ${unit} against BASE ${base}. Read ${CANON} §Review rules and apply its evidence bar; use raw evidence (diff, contract, carriers, probes in a detached scratch copy); inspect changed checking criteria against BASE (PR-4). Execute only discriminating probes: the gate already run at this sha (pnpm pr:check, lanes) is evidence you read from the stage report, never re-run.${
+    `You are the fresh independent reviewer (REV-11), read-only: never edit tracked files, never commit. Invoke rifty-review for ${checkpoint} of ${unit} against BASE ${base}. Read ${CANON} §Review rules and apply its evidence bar; use raw evidence (diff, contract, carriers, probes in a detached scratch copy); inspect changed checking criteria against BASE (PR-4). Execute only discriminating probes: the gate already run at this sha (pnpm pr:check, lanes) is evidence you read from the stage report, never re-run — its log counts only when its 'tree:' stamp names the reviewed sha and a clean tree, else report the gate as missing.${
       evidence ? ` Stage report: ${evidence}` : ''
     }${
       prev ? ` Verify pass: the prior verdict is ${prev}; review the actual changed tree, including whether the fixes work; prior rulings are evidence, not immunity.` : ''
@@ -207,9 +207,16 @@ for (let i = 0; !st.mapEmpty || !st.hasCarrier; i++) {
 }
 
 phase('Close')
-const cl = await checkpoint('Final+GREEN', `the whole goal ${DIR} end to end — every invariant executed on the real scenario (CLOSE 1)`, st.branchBase, 'Close', 'goal')
+// PR-6: the full gate once, before CLOSE 1; its report is the CLOSE reviewer's evidence.
+const gate = await agent(
+  `Gate before CLOSE 1 for goal ${DIR} (${CANON} PR-6): with a PR, wait for gh pr checks at HEAD and report the result and sha; with no PR CI run pnpm pr:check --all once at HEAD, tee its log, report the log path, its 'tree:' stamp and the sha. A red lane is repaired per rifty-fix here and the gate re-run; an unrepairable red → 'left-path' with what is red. ${LEAF} Return per schema.`,
+  { label: 'gate', phase: 'Close', schema: EXIT },
+)
+if (!gate) return stop('harness', 'gate returned nothing')
+if (gate.outcome !== 'done') return stop(gate.outcome, gate.report)
+const cl = await checkpoint('Final+GREEN', `the whole goal ${DIR} end to end — every invariant executed on the real scenario (CLOSE 1)`, st.branchBase, 'Close', 'goal', gate.report)
 if (cl.outcome !== 'done') return stop(cl.outcome, cl.report)
-const done = await run('CLOSE', null, 'CLOSE 1 passed (landing verdict recorded per REV-8). Do CLOSE 2–4, then merge per PR-6 and DEC-3; wait for gh pr checks at HEAD; with no PR CI run pnpm pr:check --all once at HEAD instead.', 'Close')
+const done = await run('CLOSE', null, 'CLOSE 1 passed (landing verdict recorded per REV-8). Do CLOSE 2–4, then merge per PR-6 and DEC-3 (the gate at HEAD is green: ' + gate.report + '); a capture written at CLOSE 2 gets the RDY-6 written-result check.', 'Close')
 if (!done) return stop('harness', 'CLOSE returned nothing')
 if (done.outcome !== 'done') return stop(done.outcome, done.report)
 return { closed: true, goal, landed, report: done.report }

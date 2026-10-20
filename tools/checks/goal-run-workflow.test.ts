@@ -70,6 +70,7 @@ const GOAL = { goal: 'g' };
 
 // Leaves that let a run reach CLOSE once the unit loop is done.
 const closing = {
+  gate: [done({ report: 'gate green @ sha-c' })],
   'review:Final+GREEN': [pass()],
   'Final+GREEN': [done()],
   CLOSE: [done({ report: 'merged' })],
@@ -106,6 +107,7 @@ describe('goal-run workflow sequencing', () => {
       IMPLEMENT: [done({ report: 'green; pr:check log /tmp/g.log @ sha-i' })],
       'review:Final+GREEN': [pass('v-fg'), pass('v-goal')],
       'Final+GREEN': [done(), done()],
+      gate: [done({ report: 'gate green @ sha-c' })],
       CLOSE: [done({ report: 'merged' })],
     });
     expect(labels).toEqual([
@@ -120,6 +122,7 @@ describe('goal-run workflow sequencing', () => {
       'Final+GREEN:u1',
       'RECHART:u1',
       'state:2',
+      'gate',
       'review:Final+GREEN:goal',
       'Final+GREEN:goal',
       'CLOSE',
@@ -140,7 +143,10 @@ describe('goal-run workflow sequencing', () => {
     );
     expect(prompt('review:Final+GREEN:u1')).toContain('never re-run');
     expect(prompt('IMPLEMENT:u1')).toContain('pr:check once');
-    expect(prompt('CLOSE')).toContain('--all once');
+    expect(prompt('gate')).toContain('--all once');
+    expect(prompt('review:Final+GREEN:goal')).toContain('Stage report: gate green @ sha-c');
+    expect(prompt('CLOSE')).toContain('gate green @ sha-c');
+    expect(calls.find((c) => c.label === 'gate')?.phase).toBe('Close');
   });
 
   it('picks up a seeded carrier unit instead of re-charting while the carrier is uncommitted', async () => {
@@ -174,12 +180,7 @@ describe('goal-run workflow sequencing', () => {
       PICKUP: [{ outcome: 'declined', report: 'draft deleted' }],
       ...closing,
     });
-    expect(declined.labels.slice(0, 4)).toEqual([
-      'state:initial',
-      'PICKUP:u1',
-      'state:1',
-      'review:Final+GREEN:goal',
-    ]);
+    expect(declined.labels.slice(0, 4)).toEqual(['state:initial', 'PICKUP:u1', 'state:1', 'gate']);
     expect(declined.result.closed).toBe(true);
     // Only PICKUP may decline: a declined IMPLEMENT is a unit leaving the path, never a skipped Final+GREEN.
     const late = await trace(GOAL, {
@@ -220,6 +221,7 @@ describe('goal-run workflow sequencing', () => {
       'review:Final+GREEN': [fail('v1', B1), fail('v2', B1, B2), pass()],
       'Final+GREEN': [done({ report: 'fixed B1; pr:check log /tmp/f.log @ sha-f' }), left, done()],
       RECHART: [done()],
+      gate: [done()],
       CLOSE: [done()],
     });
     const reception = calls.filter((c) => c.label === 'Final+GREEN:u1');
@@ -252,6 +254,7 @@ describe('goal-run workflow sequencing', () => {
             : fail(`v${++n}`, { authority: 'I1', summary: `defect ${n}` }),
         'Final+GREEN': [done(), done(), done()],
         RECHART: [done()],
+        gate: [done()],
         CLOSE: [done()],
       },
     );
@@ -271,6 +274,7 @@ describe('goal-run workflow sequencing', () => {
       'Final+GREEN': [done({ disputed: [B1.summary] }), done(), done(), done()],
       critic: [{ rulings: [{ summary: B1.summary, ruling: 'FALSE' }] }],
       RECHART: [done()],
+      gate: [done()],
       CLOSE: [done()],
     });
     expect(labels.slice(2, 6)).toEqual([
@@ -295,6 +299,7 @@ describe('goal-run workflow sequencing', () => {
       'review:Final+GREEN': [malformed, pass(), pass()],
       'Final+GREEN': [done(), done()],
       RECHART: [done()],
+      gate: [done()],
       CLOSE: [done()],
     });
     expect(once.labels.filter((l) => l === 'review:Final+GREEN:u1')).toHaveLength(2);
@@ -324,7 +329,13 @@ describe('goal-run workflow sequencing', () => {
       stop: 'harness',
       report: expect.stringContaining('record leaf'),
     });
+    const gateNull = await trace(GOAL, { state: [st({ mapEmpty: true })], gate: [null] });
+    expect(gateNull.result).toMatchObject({
+      stop: 'harness',
+      report: expect.stringContaining('gate'),
+    });
     const close = await trace(GOAL, {
+      gate: [done()],
       state: [st({ mapEmpty: true })],
       'review:Final+GREEN': [pass()],
       'Final+GREEN': [done()],

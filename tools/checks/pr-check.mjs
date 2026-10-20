@@ -121,6 +121,16 @@ export function mergeBase(cwd = process.cwd()) {
   }
 }
 
+/** HEAD sha and tree state, stamped in the header so a saved log binds to one commit. */
+export function headStamp(cwd = process.cwd()) {
+  try {
+    const run = (args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+    return { head: run(['rev-parse', 'HEAD']), dirty: run(['status', '--porcelain']) !== '' };
+  } catch {
+    return null;
+  }
+}
+
 /** Changed paths of the working tree (tracked + untracked) vs the origin/main merge-base; null when unknown. */
 export function workingTreePaths(cwd = process.cwd(), base = mergeBase(cwd)) {
   if (base === null) return null;
@@ -223,6 +233,10 @@ async function main() {
   }
   const skipped = TASKS.filter((t) => !tasks.includes(t)).map((t) => t.name);
   console.log(`pr:check — ${tasks.length} checks, sequential; ${hostLoad()}`);
+  const stamp = headStamp(cwd);
+  console.log(
+    `  tree: ${stamp ? `HEAD ${stamp.head}${stamp.dirty ? " + uncommitted changes (not a commit's gate)" : ' clean'}` : 'not a git checkout'}`,
+  );
   if (diffClass === 'docs-only') {
     console.log(`  docs-only diff (${paths?.length ?? 0} paths): skipping ${skipped.join(', ')}`);
   } else if (all) {

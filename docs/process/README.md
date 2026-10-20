@@ -191,7 +191,9 @@ number plus the observed baseline) and BASE. The tree is clean. A fresh
 independent reviewer (`rifty-review`) reads raw authorities, diff and
 artifacts — never the implementer's diagnosis; it may execute discriminating
 probes/mutants in a detached scratch copy, never the gate already run at the
-reviewed sha (its `pnpm pr:check` log is evidence); it never edits the work. Harness mechanics: `traps.md`
+reviewed sha (its `pnpm pr:check` log is evidence when its `tree:` stamp names
+the reviewed sha and a clean tree, else the gate is missing); it never edits
+the work. Harness mechanics: `traps.md`
 §Harness. An invalid report is a harness failure, not a review: retry once, then
 report the error.
 
@@ -352,12 +354,13 @@ violation, and blocking on a demand no declared authority makes.
   settles it; ask the informed frontier together; revisit dependent choices
   after an answer. A probe establishes behavior, not consent. An unanswered
   user question keeps the goal `draft`. Final written-result check: before a
-  refine, a FIT or a user-facing capture is complete, one fresh read-only reviewer
+  refine, a FIT or a capture written outside a run is complete, one fresh
+  read-only reviewer
   reads the final draft set with the original request, the user's answers and
   the evidence; verify its findings by `REV-12`; material edits get a new pass;
   no approval of the report. A capture or contract written inside an
-  authorized run gets no separate pass: its checkpoint reviewer reads it
-  (`REV-12`). Amendments: a user decision amends a ready goal in
+  authorized run is read by its next checkpoint reviewer (`REV-12`), not by a
+  separate pass; one written after the last review (CLOSE 2) gets the pass. Amendments: a user decision amends a ready goal in
   place — `amend: <date> — user: <their words> — <changed obligations and why>`
   — rechart dependencies, recheck changed promises (`RDY-8`), keep valid
   evidence. Silence, a technical failure, an ADR or a reviewer demand is not
@@ -399,8 +402,8 @@ violation, and blocking on a demand no declared authority makes.
   disjoint files; the parent owns integration and final verification.
 - **DEC-5 Fresh contexts.** Three: the independent reviewer at a checkpoint
   (`REV-11`); one critic — a disputed blocker, an overturned decision or the
-  premise (`docs/backlog/README.md` §Challenge); the written-result check at
-  the end of refine/FIT (`RDY-6`). Orchestrator, worker and runner are one
+  premise (`docs/backlog/README.md` §Challenge); the `RDY-6` written-result
+  check. Orchestrator, worker and runner are one
   driver across all stages: the session, or on Claude Code the `goal-run`
   script, whose stage leaves are fresh by construction and hand over through
   the journal (one read-only state leaf, because the script has no file

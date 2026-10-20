@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -10,6 +10,7 @@ import {
   TASKS,
   classifyDiff,
   failedFiles,
+  headStamp,
   runChecks,
   scopeTasks,
   selectTasks,
@@ -144,5 +145,21 @@ describe('pr:check scopes the test lanes to the diff (PR-6)', () => {
     ).toContain('test:parity');
     expect(scopeTasks(TASKS, null, 'abc123')).toBe(TASKS);
     expect(scopeTasks(TASKS, ['packages/io/src/a.ts'], null)).toBe(TASKS);
+  });
+});
+
+describe('pr:check stamps the commit it ran on (REV-8 gate evidence)', () => {
+  it('headStamp names HEAD and whether the tree is clean', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'rifty-headstamp-'));
+    const git = (...args: string[]) =>
+      execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
+    git('init', '-q');
+    writeFileSync(join(repo, 'a.txt'), 'a\n');
+    git('add', '.');
+    git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'a');
+    expect(headStamp(repo)).toEqual({ head: git('rev-parse', 'HEAD'), dirty: false });
+    writeFileSync(join(repo, 'a.txt'), 'b\n');
+    expect(headStamp(repo)?.dirty).toBe(true);
+    rmSync(repo, { recursive: true, force: true });
   });
 });
