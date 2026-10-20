@@ -125,3 +125,23 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
 - Generated port is versioned runtime code, not a claim of arbitrary undici
   package/network support. Source upgrades require fresh differential proof.
 - Browser-only network restrictions remain explicit; no server deployment.
+
+## Bundle measurement (2026-10-20)
+
+Production `pnpm build:playground`, baseline carrier 2a6a30728 (no product
+edits) versus implementation 169d8bd94. Individual emitted JS assets, not
+transitive download totals. Byte lengths; gzip uses Python `gzip.compress`
+(level 9, mtime 0) on both builds. No new size limit. Kernel growth includes
+explicit activation of the existing builtin registry, required by production
+bootstrap; generated undici class output is 107 KB.
+
+| Asset prefix | Before bytes | After bytes | Delta bytes | Before gzip | After gzip | Delta gzip |
+|---|---:|---:|---:|---:|---:|---:|
+| node-entry-bootstrap | 874375 | 878897 | +4522 | 263274 | 264818 | +1544 |
+| quickjs-kernel-worker-host | 198549 | 663843 | +465294 | 56745 | 197316 | +140571 |
+| workbench-owner-bootstrap | 1206219 | 1212167 | +5948 | 354672 | 356795 | +2123 |
+| dev-server-child-bootstrap | 759804 | 764193 | +4389 | 230274 | 231704 | +1430 |
+| ts-lsp-worker-entry | 3842025 | 3848134 | +6109 | 1095809 | 1097923 | +2114 |
+
+Reproduce: match each prefix in `apps/playground/dist/assets/*.js`, read
+its bytes and `len(gzip.compress(bytes, mtime=0))` on each revision.

@@ -97,7 +97,8 @@ row('fetch-shape',[fetch.name,fetch.length]);
 row('stream-alias',ReadableStream.prototype.values === ReadableStream.prototype[Symbol.asyncIterator]);
 row('wrapped-function-record',[...new Headers(Blob.prototype.stream)]);
 const unicode=new FormData();unicode.set('text',String.fromCharCode(0xd800,97,0xdc00,0xd83d,0xde00,0xfeff));
-row('usv',unicode.get('text'));
+// Codepoints preserve the BOM assertion through terminal display serialization.
+row('usv',Array.from(unicode.get('text'),character=>character.codePointAt(0)));
 const record = Object.defineProperty({visible:'yes'}, 'hidden', {value:'also'});
 row('record', [...new Headers(record)]);
 const calls = [];
