@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { riftyProcess } from '@riftydev/runtime-js/builtins/process';
+import { getProcessCwd, riftyProcess } from '@riftydev/runtime-js/builtins/process';
+import { ref, unref } from '@riftydev/runtime-js/internal';
 import { builtinShadowSubstitutionCatalog } from '@riftydev/shadow-registry/internal';
 import {
   ESBUILD_RUNTIME_ADAPTER_ID,
@@ -12,7 +13,6 @@ import {
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { expect, it } from 'vitest';
 import { runNoCoiProjectCommand } from './no-coi-project-command.ts';
-import { workbenchRuntimeAdapterOwnership } from './workbench-runtime-adapters.ts';
 
 const require = createRequire(
   new URL('../../../../tools/shadow-registry/package.json', import.meta.url),
@@ -83,7 +83,7 @@ it('uses each fresh Node invocation cwd for esbuild, preserving its imported cwd
       fs.writeFileSync(path, new TextEncoder().encode(file.content));
     }
     Object.defineProperty(globalThis, 'self', { configurable: true, value: globalThis });
-    // The saved-toolchain/open path (ADR-0417) activates through entry preparation.
+    // Retained COI adapter: no-COI Worker execution uses the upstream client.
     await preparePackageEntryRuntime({
       kind: 'eval',
       root: '/project',
@@ -94,7 +94,8 @@ it('uses each fresh Node invocation cwd for esbuild, preserving its imported cwd
         },
       ],
       fs,
-      ...workbenchRuntimeAdapterOwnership(),
+      getCwd: getProcessCwd,
+      refs: { ref, unref },
     });
     setSyncMirror(fs);
     Object.defineProperty(globalThis, 'process', { configurable: true, value: riftyProcess });

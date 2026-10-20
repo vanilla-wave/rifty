@@ -315,7 +315,11 @@ describe('walkOpfsTree', () => {
       dirs: new Set(['/']),
     });
     const idx = await walkOpfsTree(root);
-    expect(idx.get('/foo.txt')).toEqual({ kind: 'file', size: 3 });
+    expect(idx.get('/foo.txt')).toEqual({
+      kind: 'file',
+      size: 3,
+      metadata: { ino: expect.any(Number), birthtime: 0, ctime: 0 },
+    });
   });
 
   it('recurses into nested directories', async () => {
@@ -329,8 +333,16 @@ describe('walkOpfsTree', () => {
     const idx = await walkOpfsTree(root);
     expect(idx.get('/a')?.kind).toBe('dir');
     expect(idx.get('/a/b')?.kind).toBe('dir');
-    expect(idx.get('/a/b/leaf.txt')).toEqual({ kind: 'file', size: 1 });
-    expect(idx.get('/a/sibling.txt')).toEqual({ kind: 'file', size: 10 });
+    expect(idx.get('/a/b/leaf.txt')).toEqual({
+      kind: 'file',
+      size: 1,
+      metadata: { ino: expect.any(Number), birthtime: 0, ctime: 0 },
+    });
+    expect(idx.get('/a/sibling.txt')).toEqual({
+      kind: 'file',
+      size: 10,
+      metadata: { ino: expect.any(Number), birthtime: 0, ctime: 0 },
+    });
   });
 });
 
@@ -366,7 +378,11 @@ describe('crswap reservation (torn-state × OPFS read surface)', () => {
       dirs: new Set(['/', '/dir']),
     });
     const idx = await walkOpfsTree(root);
-    expect(idx.get('/dir/x.js')).toEqual({ kind: 'file', size: 1 });
+    expect(idx.get('/dir/x.js')).toEqual({
+      kind: 'file',
+      size: 1,
+      metadata: { ino: expect.any(Number), birthtime: 0, ctime: 0 },
+    });
     expect(idx.get('/dir/x.js.crswap')).toBeUndefined();
     expect([...(idx.get('/dir')?.children ?? [])]).toEqual(['x.js']);
   });
@@ -378,7 +394,11 @@ describe('crswap reservation (torn-state × OPFS read surface)', () => {
     });
     const idx = await walkOpfsTree(root);
     expect(idx.get('/odd.crswap')?.kind).toBe('dir');
-    expect(idx.get('/odd.crswap/inner.txt')).toEqual({ kind: 'file', size: 1 });
+    expect(idx.get('/odd.crswap/inner.txt')).toEqual({
+      kind: 'file',
+      size: 1,
+      metadata: { ino: expect.any(Number), birthtime: 0, ctime: 0 },
+    });
   });
 
   it('create ops refuse reserved *.crswap names with EINVAL, target named', () => {

@@ -1,6 +1,14 @@
 # Changelog
 
+- Preserve immediate fork disconnect and send ordering; match Node24 parent-disconnect terminal events.
+
+- Transport complete numeric Stats fields from VFS; upstream no-COI esbuild can resolve build files.
+
 ## [Unreleased]
+
+- Wait for child bootstrap readiness before transferring init ports; dynamic host wrappers retain startup messages.
+
+- No-COI Node children use isolated Workers and live owner FS via SW; support child ref/unref, transported stdin Buffers, spec stdio write callbacks and async fs.read(0) (ADR-0539).
 
 - `os.homedir()` keeps an explicitly empty `HOME` (`''`), as Node; `os.tmpdir()` still falls through empty `TMPDIR`/`TMP`/`TEMP`.
 

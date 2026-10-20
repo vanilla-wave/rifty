@@ -11,6 +11,8 @@ code: [packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/sr
 
 ## Context
 
+2026-10-20 — No-COI child work (PR #380) adds child refs and independent readable-pipe refs, proven by real Node/browser unref + upstream esbuild natural exit. Writable stdin ref surface and this goal’s full COI acceptance remain unproven.
+
 Finding (2026-10-16, evidence §Node-surface gaps, §Discriminating layers):
 
 - `const c=spawn('node',['-e','1']);console.log(typeof c.ref,typeof c.unref,typeof c.stdin.unref,typeof c.stdout.unref)`

@@ -1,3 +1,4 @@
+import type { FsStat } from './stat-metadata.ts';
 import type { VfsDirent } from './types.ts';
 
 /**
@@ -26,7 +27,7 @@ export interface FsSync {
   readdirSync(path: string): readonly VfsDirent[];
   mkdirSync(path: string, options: { recursive?: boolean }): void;
   rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void;
-  statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number };
+  statSync(path: string): FsStat;
   /**
    * Non-throwing stat: returns `null` on a genuine miss instead of throwing
    * (ADR-0083). `statSync` stays throwing (Node `fs.statSync` parity) — this is
@@ -34,9 +35,7 @@ export interface FsSync {
    * double-probe to one call. `null` is the contract, not a stub. Precedent:
    * ADR-0029/0041 grew this interface the same way.
    */
-  statSyncOrNull(
-    path: string,
-  ): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } | null;
+  statSyncOrNull(path: string): FsStat | null;
   /**
    * Set access/modification timestamps (ms) on `path`. Mirrors
    * `node:fs.utimesSync` (ADR-0029). `MemoryFsSync` writes through to the

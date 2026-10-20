@@ -35,6 +35,7 @@ import {
   encodeNodeIpcMessage,
 } from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
+import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { memoryUsage } from './loud-members.ts';
@@ -409,7 +410,8 @@ function makeStdinReader(
   if (port) {
     port.onmessage = (ev: MessageEvent): void => {
       const data = ev.data;
-      if (typeof data === 'string' || data instanceof Uint8Array) push(data);
+      if (typeof data === 'string') push(data);
+      else if (data instanceof Uint8Array) push(Buffer.from(data));
       else if (isStdinEofFrame(data)) end();
     };
     port.start();

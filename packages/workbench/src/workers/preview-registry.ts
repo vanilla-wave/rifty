@@ -1,5 +1,5 @@
 import { buildPreviewPath } from '@riftydev/io';
-import { installedBinPreviewLabel } from '@riftydev/shadow-registry/runtime';
+import { installedBinPreviewLabel } from '@riftydev/shadow-registry/runtime/common';
 import type {
   DevServerStatus,
   OwnerPtyRunAdmission,

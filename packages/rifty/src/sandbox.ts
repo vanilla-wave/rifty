@@ -20,6 +20,8 @@ import {
 import {
   type SerializedRequest,
   type SerializedResponse,
+  type SyncFsBridge,
+  connectSyncFsBridge,
   registerServiceWorker,
   setupPreviewBridge,
 } from '@riftydev/service-worker';
@@ -199,8 +201,7 @@ const TOOLCHAIN_CAPABILITY_REPORT = freezeDeep({
     { feature: 'child_process.spawn.stdio', status: 'working' },
     {
       feature: 'child_process.spawn',
-      status: 'degraded',
-      warning: 'same-realm execution shares one event loop; first use warns once',
+      status: 'working',
     },
     {
       feature: 'worker_threads.Worker',
@@ -210,7 +211,7 @@ const TOOLCHAIN_CAPABILITY_REPORT = freezeDeep({
     {
       feature: 'os.parallelism',
       status: 'degraded',
-      warning: 'one shared event loop; reports one available CPU',
+      warning: 'reports one CPU; host parallelism is not exposed',
       value: 1,
     },
     {
@@ -332,6 +333,7 @@ async function bootSandbox(
         ...(registryUrl === undefined ? {} : { registryUrl }),
         vmEngine: startup.vmEngine ?? 'rewrite',
         capabilities,
+        childProcesses: !options.skipServiceWorker && swError === undefined,
         ...(swError === undefined ? {} : { swError }),
       },
       logger,
@@ -414,16 +416,44 @@ async function bootToolchainSandbox(
     readonly vmEngine: NonNullable<RuntimeOptions['vmEngine']>;
     readonly capabilities: CapabilityCheck;
     readonly swError?: string;
+    readonly childProcesses: boolean;
   },
   logger: Pick<Console, 'warn' | 'error'>,
   events: ReturnType<typeof createSandboxEvents>,
 ): Promise<ToolchainSandbox> {
   let current: ToolchainRuntimeController = spawnToolchainRuntime(options);
+  let childBridge: SyncFsBridge | null = null;
+  let childPort: MessagePort | null = null;
+  const closeChildBridge = (): void => {
+    childBridge?.dispose();
+    childBridge = null;
+    childPort?.close();
+    childPort = null;
+  };
+  const connectChildren = async (): Promise<void> => {
+    closeChildBridge();
+    if (!options.childProcesses || typeof navigator === 'undefined' || !navigator.serviceWorker)
+      return;
+    const channel = new MessageChannel();
+    try {
+      childBridge = await connectSyncFsBridge((bytes, reply, caller) =>
+        channel.port1.postMessage({ bytes, caller }, [reply]),
+      );
+      childPort = channel.port1;
+      current.connectChildProcesses(childBridge.endpoint, channel.port2);
+    } catch (error) {
+      channel.port1.close();
+      channel.port2.close();
+      closeChildBridge();
+      logger.warn(`[rifty] no-COI children unavailable: ${String(error)}`);
+    }
+  };
   let vfs: VfsBootInfo;
   const detachStartup = logToolchainStartup(current, logger);
   const detachOpening = current.on(events.emit);
   try {
     await current.toolchainReady;
+    if (options.childProcesses) await connectChildren();
     vfs = current.toolchainVfs;
   } catch (error) {
     current.dispose();
@@ -564,6 +594,7 @@ async function bootToolchainSandbox(
   function disposeSandbox(): void {
     if (disposed) return;
     disposed = true;
+    closeChildBridge();
     tearPreview?.();
     tearPreview = null;
     detachCurrent();
@@ -613,12 +644,14 @@ async function bootToolchainSandbox(
       if (pendingWrites > 0) unflushedMarker = true;
       if (disposed) throw new Error('Sandbox was disposed during restart');
       current.dispose();
+      closeChildBridge();
 
       current = spawnToolchainRuntime(options);
       attachCurrent();
       const detachStartup = logToolchainStartup(current, logger);
       try {
         await current.toolchainReady;
+        if (options.childProcesses) await connectChildren();
         vfs = current.toolchainVfs;
       } finally {
         detachStartup();
@@ -683,7 +716,18 @@ async function bootToolchainSandbox(
     capabilityReport: freezeDeep({
       ...TOOLCHAIN_CAPABILITY_REPORT,
       features: [
-        ...TOOLCHAIN_CAPABILITY_REPORT.features,
+        ...TOOLCHAIN_CAPABILITY_REPORT.features.map((feature) =>
+          feature.feature.startsWith('child_process.spawn') && childBridge === null
+            ? {
+                feature: feature.feature,
+                status: 'throwing' as const,
+                error: {
+                  name: 'NotImplementedError' as const,
+                  feature: 'child_process.spawn.service-worker',
+                },
+              }
+            : feature,
+        ),
         options.vmEngine === 'quickjs'
           ? { feature: 'node:vm', status: 'working' as const }
           : {

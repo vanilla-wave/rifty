@@ -86,3 +86,5 @@ ADR-0047 remains the WASI-preview1 CLI forcing-consumer decision. Its gojs-moot 
 ## Corrections (active)
 
 - 2026-09-07 — ADR-0384 supersedes package-adaptation owner/carrier clauses and `.vite` archive classification where applicable; all other decisions remain active.
+
+- 2026-10-20 — ADR-0539 supersedes generated-client startup in no-COI only: untouched upstream Node entry runs through SW children. COI carrier and its declared ceilings remain.

@@ -3,4 +3,4 @@ export {
   DEFAULT_VITE8_VERSION,
   DEFAULT_VITE8_CONFIG_PATH,
   DEFAULT_VITE8_CONFIG_JS,
-} from '@riftydev/shadow-registry/runtime';
+} from '@riftydev/shadow-registry/runtime/common';

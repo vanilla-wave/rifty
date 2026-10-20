@@ -16,7 +16,11 @@ export const fsMatrix = {
       '✅',
       'Sorted names; `withFileTypes`; `{ recursive: true }` BFS walk + `Dirent.parentPath` (no removed-in-v24 `path` alias)',
     ],
-    ['`existsSync` / `statSync`', '✅', '`Stats` shape plus `throwIfNoEntry: false` parity'],
+    [
+      '`existsSync` / `statSync`',
+      '⚠️',
+      'Numeric `Stats` shape/entry identity and `throwIfNoEntry: false` parity; rename ctime transitions remain incomplete (`runtime-js/fs-stats-node-fields`), atime-value fidelity separately tracked.',
+    ],
     ['`rmSync({ recursive })`', '✅', 'Tree removal'],
     [
       '`copyFileSync` / `renameSync` / `cpSync`',

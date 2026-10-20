@@ -28,6 +28,8 @@ import {
 } from './worker-stdio-drain.ts';
 
 export interface ProcessIO {
+  /** Publish a handler process's terminal outcome through its manager. */
+  complete(code: number): boolean;
   write(stream: 'stdout' | 'stderr', chunk: string): void;
   /** Send a structured IPC message (used by fork). */
   send(message: unknown): void;
@@ -37,16 +39,7 @@ export interface ProcessIO {
   signal: AbortSignal;
 }
 
-/**
- * Discriminator tagging which spawn path produced the handle. Callers MUST
- * branch on this field rather than reaching for `handle.ports`:
- *
- *   - `'same-realm'` — produced by `ProcessManager.spawn(...)`. Runs the
- *     supplied handler in the parent realm; `ports` is always `undefined`.
- *   - `'worker'` — produced by `ProcessManager.spawnWorker(...)`. Backed by
- *     a real `kernel.spawnWorker` Worker realm (ADR-0011 phase 2); `ports`
- *     carries the parent-side stdio `MessagePort`s.
- */
+/** Handler-based or kernel-Worker process; raw stdio ports exist only on Worker handles. */
 export type ProcessHandleKind = 'same-realm' | 'worker';
 
 /**
@@ -82,12 +75,6 @@ export interface ProcessListeningControl {
   readonly previewScope?: string;
 }
 
-/**
- * Fields common to both spawn branches. Each variant carries its own `send`
- * signature: same-realm routes through an in-realm `EventEmitter`,
- * Worker-backed through a `MessagePort` pair (ADR-0045). Callers narrow on
- * `handle.kind` first.
- */
 interface ProcessHandleBase extends EventEmitter {
   readonly pid: number;
   readonly ppid: number;
@@ -99,13 +86,10 @@ interface ProcessHandleBase extends EventEmitter {
   exitCode: number | null;
   signalCode: string | null;
   kill(signal?: string): boolean;
+  controlKill?(pid: number, signal: string): boolean;
 }
 
-/**
- * Same-realm `spawn(...)` handle — `ports` is `undefined` by construction.
- * Carries `send()` for fork-mode IPC; callers MUST narrow on
- * `handle.kind === 'same-realm'` before reaching for it.
- */
+/** Handler process; its control loop may own an external Worker (ADR-0539). */
 export interface SameRealmProcessHandle extends ProcessHandleBase {
   readonly kind: 'same-realm';
   readonly ports?: undefined;
@@ -230,6 +214,11 @@ export interface SpawnOptions {
   cwd?: string;
   threadIdentity?: { readonly pid: number; readonly ppid: number };
   federated?: boolean;
+  /** A host-managed Worker uses the existing process federation authority. */
+  remoteControl?: {
+    readonly context: SyncRpcCallerContext;
+    kill(pid: number, signal: string): boolean;
+  };
 }
 
 /** Root cwd for processes that have no parent. */
@@ -483,6 +472,9 @@ export class ProcessManager {
       treeParentPid: ppid,
       published: true,
       upstreamAuthority: federation !== null,
+      ...(options.remoteControl === undefined
+        ? {}
+        : { physicalRoute: options.remoteControl.context }),
       remoteListening: false,
       command,
       cwd: initialCwd,
@@ -520,6 +512,7 @@ export class ProcessManager {
       kill(signal = 'SIGTERM'): boolean {
         return manager.killRecordTree(record, signal);
       }
+      readonly controlKill = options.remoteControl?.kill.bind(options.remoteControl);
     }
 
     const handle = new Handle();
@@ -616,6 +609,8 @@ export class ProcessManager {
     childToParent.on('stderr', (chunk) => handle.emit('stderr', chunk));
 
     record.handle = handle;
+    if (options.remoteControl !== undefined)
+      this.physicalRoutes.set(options.remoteControl.context, record);
     this.table.set(pid, record);
     try {
       federation?.commit();
@@ -626,6 +621,7 @@ export class ProcessManager {
     }
 
     const io: ProcessIO = {
+      complete: (code) => settle(code, null),
       write(stream, chunk) {
         childToParent.emit(stream, chunk);
       },
@@ -1430,7 +1426,7 @@ export class ProcessManager {
     const route = this.forwardedRoutes.get(pid);
     if (route === undefined || route.killRequested) return route !== undefined;
     const owner = this.physicalOwnerHandle(route.ownerPid, route.ownerRoute);
-    if (owner?.kind !== 'worker' || !owner.controlKill(pid, signal)) return false;
+    if (!owner?.controlKill?.(pid, signal)) return false;
     route.killRequested = true;
     return true;
   }
@@ -1538,7 +1534,7 @@ export class ProcessManager {
     record.terminate = (signal) => {
       if (!this.isLive(record) || killRequested) return false;
       const route = this.physicalOwnerHandle(ownerPid, ownerRoute);
-      if (route?.kind !== 'worker' || !route.controlKill(pid, signal)) return false;
+      if (!route?.controlKill?.(pid, signal)) return false;
       record.terminationRequested = true;
       killRequested = true;
       return true;
@@ -1626,7 +1622,7 @@ export class ProcessManager {
     }
     if (owned) return;
     const route = this.physicalOwnerHandle(ownerPid, ownerRoute);
-    if (route?.kind !== 'worker') {
+    if (route?.controlKill === undefined) {
       throw new Error(`process.listening: owner PID ${ownerPid} has no live worker route`);
     }
     route.emit('control:listening', { ...control, pid });
@@ -1650,7 +1646,7 @@ export class ProcessManager {
       return;
     }
     const owner = this.physicalOwnerHandle(ownerPid, ownerRoute);
-    if (owner?.kind !== 'worker') {
+    if (owner?.controlKill === undefined) {
       throw new Error(`process.peer-death: owner PID ${ownerPid} has no live worker route`);
     }
     const errors: unknown[] = [];
@@ -1691,7 +1687,7 @@ export class ProcessManager {
     const errors: unknown[] = [];
     if (record.remoteListening) {
       const owner = this.physicalOwnerHandle(ownerPid, ownerRoute);
-      if (owner?.kind !== 'worker') {
+      if (owner?.controlKill === undefined) {
         errors.push(new Error(`process.settle: owner PID ${ownerPid} has no live worker route`));
       } else {
         try {

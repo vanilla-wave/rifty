@@ -1,4 +1,5 @@
 import type { ReplicaAdmissionEvent } from './opfs-replica-types.ts';
+import type { FsStat } from './stat-metadata.ts';
 /**
  * Synchronous mirror of a VFS — needed by `fs.readFileSync` and friends.
  *
@@ -59,13 +60,11 @@ export class MemoryFsSync implements FsSync {
     this.#backend.rm(normalizeAbsolute(path), options);
   }
 
-  statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } {
+  statSync(path: string): FsStat {
     return this.#backend.stat(normalizeAbsolute(path));
   }
 
-  statSyncOrNull(
-    path: string,
-  ): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } | null {
+  statSyncOrNull(path: string): FsStat | null {
     // One normalize, no throw: exists() gates stat() so a miss returns null
     // (ADR-0083). The wrapper's statSync normalizes twice (here + via exists);
     // this path normalizes once.

@@ -117,8 +117,7 @@ const expectedCapabilityReport = {
     { feature: 'child_process.spawn.stdio', status: 'working' },
     {
       feature: 'child_process.spawn',
-      status: 'degraded',
-      warning: 'same-realm execution shares one event loop; first use warns once',
+      status: 'working',
     },
     {
       feature: 'worker_threads.Worker',
@@ -128,7 +127,7 @@ const expectedCapabilityReport = {
     {
       feature: 'os.parallelism',
       status: 'degraded',
-      warning: 'one shared event loop; reports one available CPU',
+      warning: 'reports one CPU; host parallelism is not exposed',
       value: 1,
     },
     {
@@ -1240,7 +1239,7 @@ test('capability and no-COI degradation contract — designed RED', async ({ pag
       privateConstructorIsGlobal: true,
       privatePrototypeIsGlobal: true,
     });
-    expect((surfaces.stderr.match(/\[rifty:child_process\].*same-realm/gu) ?? []).length).toBe(1);
+    expect(surfaces.stderr).not.toContain('same-realm');
     expect(surfaces.stdout).not.toContain('thread-console');
     assertHostSnapshot(await hostSnapshot(host), baseline);
   } finally {
@@ -1337,7 +1336,7 @@ test('Chrome Worker clone materializes an accessor protocol as exact data', asyn
       const frame = { type: 'toolchain-ready', vfsBackend: 'memory' };
       Object.defineProperty(frame, 'protocol', {
         enumerable: true,
-        get: () => 'rifty.sandbox-toolchain/v6',
+        get: () => 'rifty.sandbox-toolchain/v7',
       });
       postMessage(frame);
     `;
@@ -1373,7 +1372,7 @@ test('Chrome Worker clone materializes an accessor protocol as exact data', asyn
     plain: true,
     keys: ['protocol', 'type', 'vfsBackend'],
     protocolKind: 'data',
-    protocolValue: 'rifty.sandbox-toolchain/v6',
+    protocolValue: 'rifty.sandbox-toolchain/v7',
   });
 });
 
@@ -1393,7 +1392,7 @@ test('public SDK rejects an invalid real Worker before queued later frames can a
         });
         postMessage({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v6',
+          protocol: 'rifty.sandbox-toolchain/v7',
           vfsBackend: 'memory',
         });
         postMessage({ type: 'ready' });
@@ -1488,7 +1487,7 @@ test('public SDK backend mismatch throws the canonical NotImplementedError', asy
           postMessage({ type: 'ready' });
           postMessage({
             type: 'toolchain-ready',
-            protocol: 'rifty.sandbox-toolchain/v6',
+            protocol: 'rifty.sandbox-toolchain/v7',
             vfsBackend: 'indexeddb',
           });
         `;
@@ -1551,7 +1550,7 @@ test('public SDK waits for both readiness signals in either real Worker order', 
         const NativeWorker = globalThis.Worker;
         const run = async (kind: 'exact' | 'mismatch', backend: 'opfs' | 'memory') => {
           const protocol =
-            kind === 'exact' ? 'rifty.sandbox-toolchain/v6' : 'rifty.sandbox-toolchain/v10';
+            kind === 'exact' ? 'rifty.sandbox-toolchain/v7' : 'rifty.sandbox-toolchain/v10';
           const source = `
           addEventListener('message', (event) => {
             if (event.data === 'release-runtime-ready') postMessage({ type: 'ready' });
@@ -2367,9 +2366,9 @@ test('build parity: headerless SDK dist equals live COI product bytes — design
         substitutionId: 'rifty.shadow-substitution.esbuild.v2',
         catalog: {
           id: 'rifty.shadow-substitutions.builtin.v2',
-          digest: '68b82251f296d987ba8ca8883b14adf2785b507b4ed3b69a84ebcad76b6f7002',
+          digest: '154b129bb7c2d320dece0895afa3715de5c680371ab743f2ffc2aa5f43bd2a62',
         },
-        recipeDigest: '844104d3f7a0f7fb997a3678d63f8d34af0fe52c8f6788413b9bae8a92618c2d',
+        recipeDigest: '781d2de6f8712ed3c99eeeb6df555376ad8ba2c55d191975c76c290482b22fed',
         acquisition: {
           kind: 'registry',
           name: 'esbuild-wasm',

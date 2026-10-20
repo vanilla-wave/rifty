@@ -11,6 +11,8 @@ code: [packages/runtime-js/src/builtins/process-stdio-writer.ts]
 
 ## Context
 
+2026-10-20 — No-COI child work (PR #380) adds callbacks to the shared spec-seeded stdio writer. No-spec/root command sink callbacks remain this item’s scope; its full COI acceptance is not claimed here.
+
 Finding (2026-10-16, evidence §Node-surface gaps, step a, layer f2):
 
 - `node -e "process.stdout.write('a\n',()=>console.log('CB1'))"` → rifty `a`;

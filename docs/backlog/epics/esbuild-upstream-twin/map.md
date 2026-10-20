@@ -65,9 +65,8 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
   `runtime-js/worker-threads-kernel-workerdata-structured-clone`,
   `runtime-js/worker-threads-receive-message-on-port` (user 2026-10-16: loud
   only).
-- No-COI child processes that load `node_modules` — separate goal
-  `epics/no-coi-child-processes` (user 2026-10-16: old runtime stays there
-  meanwhile).
+- No-COI child processes that load `node_modules` — completed by PR #380,
+  ADR-0539; upstream client with required SW, exact 0.28.0 admission retained.
 - Lockfile migration across catalog changes (user 2026-10-16).
 - Verified lanes for Vite other than 7.3.6/8.0.16 (user 2026-10-16: "⚠️ not
   verified").

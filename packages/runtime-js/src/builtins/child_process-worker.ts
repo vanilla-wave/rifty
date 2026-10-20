@@ -116,6 +116,14 @@ export function activeChildProcessContext(): ActiveChildProcessContext {
   };
 }
 
+/** Spawn captures environment values before returning to guest code. */
+export function snapshotChildEnvironment(
+  supplied: Record<string, string> | undefined,
+  inherited: Record<string, string>,
+): Record<string, string> {
+  return { ...(supplied === undefined ? inherited : supplied) };
+}
+
 export function activeProcessStdio(): ParentStdio {
   const process = activeProcess();
   return {
@@ -381,7 +389,7 @@ export function spawnWorkerChild(
   const spec: SpawnWorkerSpec = {
     entry,
     argv: ['rifty', entryPath, ...args.slice(1)],
-    env: options.env === undefined ? parent.env : { ...options.env },
+    env: snapshotChildEnvironment(options.env, parent.env),
     cwd: plan.cwd,
     serve: true,
   };

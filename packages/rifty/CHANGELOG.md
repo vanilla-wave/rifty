@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- No-COI child processes require a controlling rifty Service Worker; report missing transport explicitly while SW-free file/command APIs remain available. Toolchain protocol v7 requires matching Worker assets (ADR-0539).
+
 - Link the shared no-COI agent reference host with explicit initial preparation and saved open; remove automatic snapshot identity/force/reconciliation policy (ADR-0489/0490).
 
 - Add captured toolchain.registryUrl and readonly registryConnected; project/agent npm install reports registry-missing without a connection. Toolchain protocol v6 requires matching copied assets (ADR-0487).

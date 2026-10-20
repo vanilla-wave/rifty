@@ -32,3 +32,8 @@ and permission bits, `ino` stability per path, `nlink`, `uid/gid`, `dev`,
 `bigint: true` — and which are Node-observable versus platform-varying (Node
 values differ by host)? Settled at PICKUP; atime value semantics stay with the
 related item.
+
+## Pickup evidence
+
+- 2026-10-20 — PR #380 imports the shared ADR-0540 metadata fix from upstream-twin 9e639e9c after no-COI Vite baseline RED. `fs/stats-node-fields` parity GREEN; atime-value semantics remain separate. Coordinate final closure with upstream-twin.
+- 2026-10-20 — Final+GREEN advisory: numeric shape/identity/birth are proven; rename does not yet update entry/parent ctime in MemoryBackend/OpfsSync. Owner: upstream-twin Stats closure; next probe: real Node rename ctime transition on file + both parent dirs, then shared-backend repair. Not claimed as full timestamp-value parity by no-COI children.

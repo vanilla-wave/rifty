@@ -36,3 +36,10 @@ snapshot application already exist; the SDK lacks their consumer.
 
 Native no-COI saved-access/snapshot-application cases; packed public producer →
 SDK/copied Worker Vite build/edit/reopen/update/interruption/quota journey.
+
+## Corrections
+
+- 2026-10-20 — ADR-0539, user-approved no-COI legacy retirement: saved-tree
+  esbuild executes its upstream Node entry through SW children, without
+  lock-derived adapter activation. Invalid locks remain untouched; installed
+  builds still run, as Node. Snapshot/replay validation remains mandatory.
