@@ -105,17 +105,15 @@ for (const [name, source] of Object.entries(allProbes)) {
     const { join } = await import('node:path');
     const root = mkdtempSync(join(tmpdir(), 'rifty-node-surface-'));
     writeFileSync(join(root, 'probe.cjs'), source);
-    if (name === 'unsupported sync routes') {
-      writeFileSync(
-        join(root, 'result.json'),
-        JSON.stringify({
-          worker: ['NotImplementedError', 'worker_threads.workerData.structuredClone'],
-          exec: ['NotImplementedError', 'child_process.execFileSync'],
-        }),
-      );
-    } else execFileSync(process.execPath, ['probe.cjs'], { cwd: root, timeout: 10_000 });
-    const oracle = JSON.parse(readFileSync(join(root, 'result.json'), 'utf8'));
+    writeFileSync(join(root, 'child.cjs'), '');
+    execFileSync(process.execPath, ['probe.cjs'], { cwd: root, timeout: 10_000 });
+    const nodeOracle = JSON.parse(readFileSync(join(root, 'result.json'), 'utf8'));
     rmSync(root, { recursive: true, force: true });
+    const syncRouteGaps = {
+      worker: ['NotImplementedError', 'worker_threads.workerData.structuredClone'],
+      exec: ['NotImplementedError', 'child_process.execFileSync'],
+    };
+    if (name === 'unsupported sync routes') expect(nodeOracle).toEqual({});
     await gotoHarness(page);
     await bootOwner(page, {
       workspaceId: `bu-esbuild-surface-${name.replaceAll(' ', '-')}`,
@@ -139,7 +137,9 @@ for (const [name, source] of Object.entries(allProbes)) {
       expect(result.exit, result.out).toBe(0);
       const actual = await readOwnerFile(page, '/scratch/result.json');
       expect(actual.ok, actual.error).toBe(true);
-      expect(JSON.parse(actual.text)).toEqual(oracle);
+      expect(JSON.parse(actual.text)).toEqual(
+        name === 'unsupported sync routes' ? syncRouteGaps : nodeOracle,
+      );
     } finally {
       await closeOwner(page);
     }

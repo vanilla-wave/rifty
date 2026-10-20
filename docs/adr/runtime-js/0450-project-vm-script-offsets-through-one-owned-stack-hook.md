@@ -150,3 +150,8 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
   No filename registry, stack-hook ownership or package-specific predicate.
   Native and Chromium differentials: cjs-stack-boundary; stock esbuild error
   fields stay exact. Remaining generic offsets: backlog/runtime-js/cjs-wrapper-stack-positions.
+- 2026-10-20 — Chromium 148, three fresh contexts: Vite 7.3.6 CJS factory
+  compilation median 3.120 ms versus 1.890 ms with Function alone (+1.230 ms).
+  TypeScript 5.9.3 starts with a license comment, so ordinary require uses one
+  Function; the TS language-service has its own single-Function compiler.
+  No runtime change. Method/raw timings: `docs/backlog/runtime-js/cjs-wrapper-stack-positions.md`.

@@ -1,4 +1,3 @@
-import { closeStdin, readStdin, readStdinSync, statStdin, writeStdio } from './fs-stdio.ts';
 /**
  * Node-compatible `node:fs` (subset).
  *
@@ -21,6 +20,7 @@ import {
   checkedSliceBounds,
 } from './fs-read-arguments.ts';
 import { Dirent, type StatOptions, Stats } from './fs-stats.ts';
+import { closeStdin, readStdin, readStdinSync, statStdin, writeStdio } from './fs-stdio.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { statfsSync } from './loud-members.ts';
 import { runNodeCallback } from './process-lifecycle-events.ts';

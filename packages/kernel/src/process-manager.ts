@@ -1,4 +1,3 @@
-import { bindPortAsWritable } from './worker-stdin-writer.ts';
 /**
  * Minimal process manager: per-PID table, parent/child links, dispatch.
  *
@@ -19,6 +18,7 @@ import type { SyncRpcCallerContext } from './ipc/sync-dispatch.ts';
 import { readKernelProcessSpec, readKernelSyncApi } from './shared-globals.ts';
 import { type SpawnWorkerSpec, spawnKernelWorker } from './spawn-worker.ts';
 import type { WorkerStdioPorts } from './worker-entry.ts';
+import { bindPortAsWritable } from './worker-stdin-writer.ts';
 import {
   type WorkerStdioOutputReceiver,
   abandonWorkerOutput,

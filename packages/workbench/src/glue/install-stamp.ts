@@ -1,4 +1,3 @@
-import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
 /**
  * Install stamp (ADR-0135): `<root>/node_modules/.rifty-install-stamp.json`
  * marks "this node_modules was installed for project SLUG". It certifies seed
@@ -15,6 +14,8 @@ import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
  * Every transition is owned by `install-stamp-authority.ts`; pending stamps
  * never satisfy reuse and are promoted only after a clean durability proof.
  */
+
+import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
 import {
   type PersistFailureReport,
   type Vfs,

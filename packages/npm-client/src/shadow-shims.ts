@@ -1,5 +1,3 @@
-import { NotImplementedError } from '@riftydev/io';
-import { type InternalsShim, internalsShims } from '@riftydev/shadow-registry';
 /**
  * Install-time application of shadow-registry internals shims (ADR-0188).
  *
@@ -10,6 +8,9 @@ import { type InternalsShim, internalsShims } from '@riftydev/shadow-registry';
  * `/workspace`-rooted overlay. Runs on live resolve, lockfile replay, and the
  * eddy-seeded path alike (all converge on `install()`'s post-link step).
  */
+
+import { NotImplementedError } from '@riftydev/io';
+import { type InternalsShim, internalsShims } from '@riftydev/shadow-registry';
 import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
 import { type Vfs, joinPath } from '@riftydev/vfs';
 import { parseNpmAlias } from './npm-alias.ts';

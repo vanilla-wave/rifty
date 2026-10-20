@@ -1,4 +1,5 @@
 /** Read-only claim, manifest/lock and durability-report classification (ADR-0261). */
+import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
 import { type FsSync, type PersistFailureReport, type Vfs, joinPath } from '@riftydev/vfs';
 import {
   type InstallStamp,
@@ -269,4 +270,3 @@ export function claimFailed(report: PersistFailureReport | undefined, root: stri
   const path = installStampPath(root);
   return failureAt(report, (candidate) => candidate === path);
 }
-import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';

@@ -42,3 +42,4 @@ matrix. A partial read followed by stream consumption proves shared ownership;
 EOF/close and pending-operation teardown discriminate loss and retained holds.
 
 - 2026-10-20 — same-realm `ProcessIO.write` accepts string or Uint8Array; output events retain bytes, avoiding decode/re-encode loss. Pending input writes each reuse a WorkerReference until their callback, including Writable-queued requests; no hook into a bypassable `_write` method.
+- 2026-10-20 — supersedes the previous line's reference timing: input write references start at transport `_write` dispatch, not `write` admission; corked bytes do not retain an unreferenced parent (ADR-0152). Writable installs `options.write` as its own replaceable `_write`, so transport dispatch uses the reference hook.
