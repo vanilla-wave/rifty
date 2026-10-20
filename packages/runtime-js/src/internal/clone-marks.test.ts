@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { installCloneAdmission } from './clone-admission.ts';
-import { admitClone, markAsUncloneable } from './clone-marks.ts';
+import { admitClone, isMarkedAsUncloneable, markAsUncloneable } from './clone-marks.ts';
 
 const refused = (fn: () => unknown) =>
   expect(fn).toThrowError(
@@ -10,21 +10,31 @@ const refused = (fn: () => unknown) =>
       message: 'Cannot clone object of unsupported type.',
     }),
   );
+const tag = <T>(value: T): T => {
+  markAsUncloneable(value);
+  return value;
+};
+const MARKS = Symbol.for('rifty.runtime-js.clone-marks.v1');
+
+describe('clone marks record', () => {
+  it('one realm-global record: a second bundle copy sees the same tags', () => {
+    const record = (globalThis as Record<symbol, unknown>)[MARKS] as {
+      uncloneable: WeakSet<object>;
+      state: { any: boolean };
+    };
+    const fromOtherBundle = {};
+    record.uncloneable.add(fromOtherBundle);
+    record.state.any = true;
+    expect(isMarkedAsUncloneable(fromOtherBundle)).toBe(true);
+    refused(() => admitClone({ fromOtherBundle }));
+    const local = tag({});
+    expect(record.uncloneable.has(local)).toBe(true);
+    expect(Object.isFrozen(record)).toBe(true);
+  });
+});
 
 describe('admitClone', () => {
-  it('fast path: a realm without tags returns the value, reading nothing', () => {
-    let reads = 0;
-    const graph = {
-      get a() {
-        reads++;
-        return 1;
-      },
-    };
-    expect(admitClone(graph)).toBe(graph);
-    expect(reads).toBe(0);
-  });
-
-  it('refuses tagged objects anywhere the serializer would reach them', () => {
+  it('fast path and ordinary reach', () => {
     class Tagged {
       constructor() {
         markAsUncloneable(this);
@@ -44,15 +54,94 @@ describe('admitClone', () => {
     refused(() => admitClone(new Set([{ x: tagged }])));
     refused(() => admitClone(new Guest()));
     refused(() => admitClone(Object.assign(Object.create(null), { tagged })));
-    refused(() => admitClone({ [Symbol.toStringTag]: 'Date', tagged }));
-    refused(() => admitClone(new Error('x', { cause: tagged })));
-    refused(() => admitClone(new Error('x', { cause: { deep: tagged } })));
     expect(() => admitClone(tagged)).toThrowError(DOMException);
   });
 
+  it('spoofed prototypes and tags are ordinary objects (V8 JS_OBJECT_TYPE)', () => {
+    const tagged = tag({});
+    const hide = (proto: object | null) =>
+      Object.create(proto, { h: { value: tagged, enumerable: true } });
+    refused(() => admitClone(hide(Date.prototype)));
+    refused(() => admitClone(hide({ constructor: Date })));
+    refused(() => admitClone(hide(Error.prototype)));
+    refused(() => admitClone(hide(Blob.prototype)));
+    refused(() => admitClone({ [Symbol.toStringTag]: 'Blob', h: tagged }));
+    refused(() => admitClone({ [Symbol.toStringTag]: 'Date', h: tagged }));
+    const spoofedError = Object.assign(new Error('x', { cause: tagged }), {
+      [Symbol.toStringTag]: 'Error',
+    });
+    refused(() => admitClone(spoofedError));
+  });
+
+  it('intrinsics and platform objects are leaves; their own tag is ignored (V8 slots)', () => {
+    const date = tag(new Date(5));
+    const list = tag([1, 2]);
+    const map = tag(new Map([[1, 2]]));
+    const set = tag(new Set([1]));
+    const buffer = tag(new ArrayBuffer(4));
+    const view = tag(new Uint8Array(2));
+    const wrapper = tag(new Number(3));
+    const regexp = tag(/x/g);
+    const blob = new Blob(['x']);
+    const projected = admitClone({
+      date,
+      list,
+      map,
+      set,
+      buffer,
+      view,
+      wrapper,
+      regexp,
+      blob,
+    }) as Record<string, unknown>;
+    expect(projected.date).toBe(date);
+    expect(projected.list).toEqual([1, 2]);
+    expect(projected.map).toEqual(new Map([[1, 2]]));
+    expect(projected.set).toEqual(new Set([1]));
+    expect(projected.buffer).toBe(buffer);
+    expect(projected.view).toBe(view);
+    expect(projected.wrapper).toBe(wrapper);
+    expect(projected.regexp).toBe(regexp);
+    expect(projected.blob).toBe(blob);
+    expect(admitClone(null)).toBe(null);
+    const fn = () => {};
+    expect(admitClone(fn)).toBe(fn);
+    // The array itself is tagged but recursed: the plain object inside is caught.
+    refused(() => admitClone(tag([tag({})])));
+    refused(() => admitClone(tag(new Map([['k', tag({})]]))));
+  });
+
+  it('Map/Set entries are snapshotted before values are read, as V8 copies the table', () => {
+    const tagged = tag({});
+    const deleting = new Map<string, unknown>();
+    deleting.set('a', {
+      get g() {
+        deleting.delete('b');
+        return 1;
+      },
+    });
+    deleting.set('b', tagged);
+    refused(() => admitClone(deleting));
+    const adding = new Map<string, unknown>();
+    adding.set('a', {
+      get g() {
+        adding.set('c', 1);
+        return 1;
+      },
+    });
+    expect([...(admitClone(adding) as Map<string, unknown>).keys()]).toEqual(['a']);
+    const growing = new Set<unknown>();
+    growing.add({
+      get g() {
+        growing.add(tagged);
+        return 1;
+      },
+    });
+    expect((admitClone(growing) as Set<unknown>).size).toBe(1);
+  });
+
   it('reads an accessor exactly once and projects it as data', () => {
-    const tagged = {};
-    markAsUncloneable(tagged);
+    const tagged = tag({});
     let reads = 0;
     const graph = {
       get a() {
@@ -73,7 +162,7 @@ describe('admitClone', () => {
     );
   });
 
-  it('keeps cycles, shared references, holes and leaves by reference', () => {
+  it('keeps cycles, shared references and holes', () => {
     const shared = { s: 1 };
     const holes: unknown[] = [1];
     holes[2] = 3;
@@ -90,23 +179,14 @@ describe('admitClone', () => {
     expect(copy.a).toBe(copy.b);
     expect(copy.list.length).toBe(4);
     expect(1 in copy.list).toBe(false);
-    const buffer = new ArrayBuffer(8);
-    const view = new Uint8Array(2);
-    const date = new Date();
-    const regexp = /x/g;
-    const projected = admitClone({ buffer, view, date, regexp }) as Record<string, unknown>;
-    expect(projected.buffer).toBe(buffer);
-    expect(projected.view).toBe(view);
-    expect(projected.date).toBe(date);
-    expect(projected.regexp).toBe(regexp);
-    expect(admitClone(null)).toBe(null);
-    const fn = () => {};
-    expect(admitClone(fn)).toBe(fn);
   });
 
-  it('follows V8 for Errors: own data cause only, other own props and accessors ignored', () => {
-    const tagged = {};
-    markAsUncloneable(tagged);
+  it('Errors: by reference, tag honoured, own data cause walked, accessors/own props ignored', () => {
+    const tagged = tag({});
+    refused(() => admitClone(tag(new Error('tagged'))));
+    refused(() => admitClone(new Error('x', { cause: { deep: [tagged] } })));
+    const plain = new RangeError('x', { cause: { a: 1 } });
+    expect(admitClone(plain)).toBe(plain);
     const withProp = Object.assign(new Error('x'), { tagged });
     expect(admitClone(withProp)).toBe(withProp);
     let reads = 0;
@@ -120,29 +200,21 @@ describe('admitClone', () => {
     });
     expect(admitClone(accessorCause)).toBe(accessorCause);
     expect(reads).toBe(0);
-    const primitiveCause = new TypeError('y', { cause: 'why' });
-    expect(admitClone(primitiveCause)).toBe(primitiveCause);
-    let causeReads = 0;
-    const getterCause = new TypeError('z', {
+    let deepReads = 0;
+    const getterUnderCause = new Error('x', {
       cause: {
-        get k() {
-          causeReads++;
-          return 2;
+        get g() {
+          deepReads++;
+          return tagged;
         },
       },
     });
-    const copy = admitClone(getterCause) as Error;
-    expect(copy).not.toBe(getterCause);
-    expect(copy).toBeInstanceOf(TypeError);
-    expect(copy.message).toBe('z');
-    expect(copy.stack).toBe(getterCause.stack);
-    expect(copy.cause).toEqual({ k: 2 });
-    expect(causeReads).toBe(1);
+    refused(() => admitClone(getterUnderCause));
+    expect(deepReads).toBe(1);
   });
 
   it('ignores non-enumerable, symbol-keyed and inherited reach', () => {
-    const tagged = {};
-    markAsUncloneable(tagged);
+    const tagged = tag({});
     const hidden = Object.create(
       { inherited: tagged },
       {
@@ -155,11 +227,10 @@ describe('admitClone', () => {
 });
 
 describe('installCloneAdmission', () => {
-  it('routes structuredClone through one admission: getter read once, transfer kept', () => {
+  it('routes structuredClone through one admission: getter read once, transfers and Errors intact', () => {
     installCloneAdmission();
     installCloneAdmission();
-    const tagged = {};
-    markAsUncloneable(tagged);
+    const tagged = tag({});
     refused(() => structuredClone({ a: [tagged] }));
     let reads = 0;
     const buffer = new ArrayBuffer(8);
@@ -180,5 +251,19 @@ describe('installCloneAdmission', () => {
     expect(buffer.byteLength).toBe(0);
     expect(copy.x).toBe(copy.y);
     expect(structuredClone.name).toBe('structuredClone');
+
+    const error = new RangeError('x', { cause: { a: 1 } });
+    const cloned = structuredClone(error);
+    expect(cloned).toBeInstanceOf(RangeError);
+    expect(cloned.message).toBe('x');
+    expect(cloned.stack).toBe(error.stack);
+    expect(cloned.cause).toEqual({ a: 1 });
+
+    const { port1, port2 } = new MessageChannel();
+    const moved = structuredClone({ port: port1 }, { transfer: [port1] });
+    expect(moved.port).toBeInstanceOf(MessagePort);
+    expect(moved.port).not.toBe(port1);
+    moved.port.close();
+    port2.close();
   });
 });

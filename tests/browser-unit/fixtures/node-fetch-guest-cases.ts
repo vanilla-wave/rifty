@@ -192,6 +192,24 @@ attempt('clone-guest-class', () => structuredClone(new (class G { constructor() 
 attempt('clone-getter-once', () => { let reads = 0; structuredClone({ get a() { reads++; return 1; } }); return reads; });
 attempt('clone-transfer-nested', () => { const buf = new ArrayBuffer(8); const out = structuredClone({ deep: { buf } }, { transfer: [buf] }); return [buf.byteLength, out.deep.buf.byteLength]; });
 attempt('clone-shared-cycle-holes', () => { const s = {}; const c = { a: s, b: s, list: [1, , 3] }; c.self = c; const out = structuredClone(c); return [out.a === out.b, out.self === out, out.list.length, 1 in out.list]; });
+const tag = (o) => { markAsUncloneable(o); return o; };
+const hide = (proto) => Object.create(proto, { h: { value: new Headers(), enumerable: true } });
+attempt('clone-spoof-date-proto', () => structuredClone(hide(Date.prototype)));
+attempt('clone-spoof-error-proto', () => structuredClone(hide(Error.prototype)));
+attempt('clone-spoof-blob-proto', () => structuredClone(hide(Blob.prototype)));
+attempt('clone-spoof-ctor-date', () => structuredClone(hide({ constructor: Date })));
+attempt('clone-spoof-tag-blob', () => structuredClone({ [Symbol.toStringTag]: 'Blob', h: new Headers() }));
+attempt('clone-map-getter-delete', () => { const m = new Map(); m.set('a', { get g() { m.delete('b'); return 1; } }); m.set('b', new Headers()); return [...structuredClone(m).keys()]; });
+attempt('clone-map-getter-add', () => { const m = new Map(); m.set('a', { get g() { m.set('c', 1); return 1; } }); return [...structuredClone(m).keys()]; });
+attempt('clone-error-cause-intact', () => { const e = new RangeError('x', { cause: { a: 1 } }); const c = structuredClone(e); return [c.name, c.message, c.stack === e.stack, c.cause, c instanceof RangeError]; });
+attempt('clone-error-cause-getter', () => { let n = 0; const e = new Error('x', { cause: { get g() { n++; return new Headers(); } } }); try { structuredClone(e); return ['ok', n]; } catch (err) { return [err.name, n]; } });
+attempt('clone-tagged-date', () => structuredClone(tag(new Date(5))).getTime());
+attempt('clone-tagged-array', () => structuredClone(tag([1, 2])));
+attempt('clone-tagged-array-nested-plain', () => structuredClone(tag([tag({})])));
+attempt('clone-tagged-map', () => [...structuredClone(tag(new Map([[1, 2]])))]);
+attempt('clone-tagged-error', () => structuredClone(tag(new Error('e'))).message);
+attempt('clone-tagged-buffer', () => structuredClone(tag(new ArrayBuffer(4))).byteLength);
+attempt('clone-port-transfer', () => { const { port1, port2 } = new MessageChannel(); const out = structuredClone({ port: port1 }, { transfer: [port1] }); const ok = out.port instanceof MessagePort && out.port !== port1; out.port.close(); port2.close(); return ok; });
 row('keys', Object.keys(new Headers({a:'1'})));
 attempt('port-postmessage', () => {
  const { port1, port2 } = new MessageChannel();
