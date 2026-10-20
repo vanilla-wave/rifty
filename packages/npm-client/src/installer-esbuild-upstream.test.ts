@@ -13,6 +13,41 @@ import { extractTarGz } from './unpacker.ts';
 
 const versions = ['0.21.5', '0.25.12', '0.28.2'];
 const root = '/project';
+
+for (const from of ['coi', 'no-coi'] as const) {
+  it.fails(
+    `re-materializes the same attested 0.28.0 acquisition offline: ${from}`,
+    async () => {
+      const f = await fixture('0.28.2');
+      await manifest(f.vfs, '0.28.0');
+      const before = await install({
+        vfs: f.vfs,
+        cwd: root,
+        registry: f.registry,
+        runtimeTier: from,
+      });
+      const bytes = await tree(f.vfs, `${root}/node_modules/esbuild-wasm`);
+      const requests = f.requests.length;
+      const to = from === 'coi' ? 'no-coi' : 'coi';
+      const result = await install({ vfs: f.vfs, cwd: root, runtimeTier: to });
+      expect(result.lockfile.packages['node_modules/esbuild-wasm']).toEqual(
+        before.lockfile.packages['node_modules/esbuild-wasm'],
+      );
+      expect(await tree(f.vfs, `${root}/node_modules/esbuild-wasm`)).toEqual(bytes);
+      expect(f.requests).toHaveLength(requests);
+      const plan = shadowSubstitutionPlanForInstallResult(result);
+      expect(plan.bindings).toHaveLength(to === 'coi' ? 0 : 1);
+      expect(result.lockfile.packages['node_modules/esbuild']?.riftyShadowRecipe).toBe(
+        to === 'coi'
+          ? 'rifty.shadow-substitution.esbuild.wasm-node.v1'
+          : 'rifty.shadow-substitution.esbuild.v2',
+      );
+      if (to === 'coi') await assertNodeFacade(f.vfs, '0.28.0');
+    },
+    30_000,
+  );
+}
+
 async function fixture(requested: string) {
   const entries = await Promise.all(
     [...new Set([requested, '0.28.0'])].map(async (version) => {
