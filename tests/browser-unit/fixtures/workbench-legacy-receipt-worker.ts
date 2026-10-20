@@ -242,7 +242,7 @@ async function run(input: LegacyReceiptInput): Promise<ReceiptSeed | ReceiptReco
   const acquisition = opened.acquisition;
   if (
     acquisition.kind !== 'saved' ||
-    (await installStampSatisfied(vfs, projectRoot, targetId)) === null
+    (await installStampSatisfied(vfs, projectRoot, targetId, 'coi')) === null
   ) {
     throw new Error('legacy target does not retain real saved trust');
   }

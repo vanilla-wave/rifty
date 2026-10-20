@@ -195,17 +195,23 @@ export class ProjectTerminalFsSync implements FsSync {
       if (resolved.kind === 'mount') return this.inner.readdirSync(resolved.owner);
       // Listing a merged ancestor would show a mount over a project entry.
       for (const mount of this.layout.mounts) assertNoCollision(this.layout, this.inner, mount);
-      const own =
-        resolved.owner !== null && this.inner.statSyncOrNull(resolved.owner)?.isDirectory === true
-          ? this.inner.readdirSync(resolved.owner)
-          : [];
-      const mounts = resolved.children.map((name) =>
-        Object.freeze({ name, isFile: false, isDirectory: true }),
-      );
-      return [...own.filter((entry) => !resolved.children.includes(entry.name)), ...mounts].sort(
-        (left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0),
-      );
+      return this.virtualEntries(resolved);
     });
+  }
+
+  private virtualEntries(
+    resolved: Extract<GuestResolution, { kind: 'virtual' }>,
+  ): readonly VfsDirent[] {
+    const own =
+      resolved.owner !== null && this.inner.statSyncOrNull(resolved.owner)?.isDirectory === true
+        ? this.inner.readdirSync(resolved.owner)
+        : [];
+    const mounts = resolved.children.map((name) =>
+      Object.freeze({ name, isFile: false, isDirectory: true }),
+    );
+    return [...own.filter((entry) => !resolved.children.includes(entry.name)), ...mounts].sort(
+      (left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0),
+    );
   }
 
   mkdirSync(path: string, options: { recursive?: boolean }): void {
@@ -242,7 +248,7 @@ export class ProjectTerminalFsSync implements FsSync {
       if (resolved.kind === 'virtual')
         return {
           ...this.#virtual.statSync(normalizePath(path)),
-          nlink: 2 + this.readdirSync(path).filter((entry) => entry.isDirectory).length,
+          nlink: 2 + this.virtualEntries(resolved).filter((entry) => entry.isDirectory).length,
         };
       return this.inner.statSync(resolved.owner);
     });
@@ -255,7 +261,7 @@ export class ProjectTerminalFsSync implements FsSync {
       if (resolved.kind === 'virtual')
         return {
           ...this.#virtual.statSync(normalizePath(path)),
-          nlink: 2 + this.readdirSync(path).filter((entry) => entry.isDirectory).length,
+          nlink: 2 + this.virtualEntries(resolved).filter((entry) => entry.isDirectory).length,
         };
       return this.inner.statSyncOrNull(resolved.owner);
     });

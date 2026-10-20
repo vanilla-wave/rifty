@@ -439,10 +439,11 @@ export async function installStampSatisfied(
   vfs: Vfs,
   root: string,
   slug = '',
+  runtimeTier?: ShadowRuntimeTier,
 ): Promise<InstallStamp | null> {
   const stamp = await readInstallStamp(vfs, root);
   if (!stamp) return null;
-  if (!stampTrusted(stamp)) return null;
+  if (!stampTrusted(stamp, runtimeTier)) return null;
   if (stamp.slug !== slug) return null;
   if (!(await vfs.exists(joinPath(root, 'node_modules')))) return null;
   const packageJsonText = await readPackageJsonText(vfs, root);
@@ -472,6 +473,7 @@ export async function installStampSatisfiedForPackageJson(
   root: string,
   slug: string,
   packageJsonText: string,
+  runtimeTier?: ShadowRuntimeTier,
 ): Promise<InstallStamp | null> {
   if (!isAbsolute(root)) return null;
   const expectedDeps = effectiveDepsFromPackageJsonText(packageJsonText);
@@ -482,7 +484,7 @@ export async function installStampSatisfiedForPackageJson(
   if (!currentDeps || !depsInclude(currentDeps, expectedDeps)) return null;
   const stamp = await readInstallStamp(vfs, root);
   if (!stamp) return null;
-  if (!stampTrusted(stamp)) return null;
+  if (!stampTrusted(stamp, runtimeTier)) return null;
   if (stamp.slug !== slug) return null;
   if (!(await vfs.exists(joinPath(root, 'node_modules')))) return null;
   if (stamp.packageJsonText !== currentText) return null;
@@ -510,6 +512,7 @@ export function installStampSatisfiedForPackageJsonSync(
   root: string,
   slug: string,
   packageJsonText: string,
+  runtimeTier?: ShadowRuntimeTier,
 ): InstallStamp | null {
   if (!isAbsolute(root)) return null;
   const expectedDeps = effectiveDepsFromPackageJsonText(packageJsonText);
@@ -520,7 +523,7 @@ export function installStampSatisfiedForPackageJsonSync(
   if (!currentDeps || !depsInclude(currentDeps, expectedDeps)) return null;
   const stamp = readInstallStampSync(fs, root);
   if (!stamp) return null;
-  if (!stampTrusted(stamp)) return null;
+  if (!stampTrusted(stamp, runtimeTier)) return null;
   if (stamp.slug !== slug) return null;
   if (!fs.existsSync(joinPath(root, 'node_modules'))) return null;
   if (stamp.packageJsonText !== currentText) return null;

@@ -37,3 +37,5 @@ numbers cannot describe browser storage.
 Stock guests receive complete numeric Stats without invented host values.
 Adapters must preserve metadata; custom providers lacking it fail explicitly.
 Carriers: `esbuild-node-surfaces.spec.ts`, VFS stat/rename and fs watch suites.
+
+- 2026-10-20 — virtual-ancestor link counts use the private merged-entry projection; public readdir collision validation remains only on listings. Root stat/exists stays readable when project tmp collides with a mount (ADR-0531); real namespace/browser regression.

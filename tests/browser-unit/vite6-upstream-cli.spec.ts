@@ -63,8 +63,12 @@ test('Vite 6.4.4 npm install and npx build reach the upstream CLI', async ({ pag
     });
     if (oracle.error) throw oracle.error;
     expect(oracle.status, oracle.stderr).toBe(1);
-    expect(oracle.stdout).toContain('vite v6.4.4 building for production');
-    expect(oracle.stderr).toContain('Could not resolve entry module "index.html"');
+    expect(stripVTControlCharacters(oracle.stdout)).toContain(
+      'vite v6.4.4 building for production',
+    );
+    expect(stripVTControlCharacters(oracle.stderr)).toContain(
+      'Could not resolve entry module "index.html"',
+    );
     await context.route('**/npm-registry/**', async (route) => {
       const url = new URL(route.request().url());
       const response = await route.fetch({
