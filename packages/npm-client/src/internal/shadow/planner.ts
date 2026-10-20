@@ -852,6 +852,14 @@ export function registryShadowEmbeddedSourcesFromLockfile(
         acquisitionEntry.dependencies,
         `lockfile package ${acquisitionInstallPath} dependencies`,
       );
+      const acquisitionOptionalDependencies = optionalStringRecord(
+        acquisitionEntry.optionalDependencies,
+        `lockfile package ${acquisitionInstallPath} optionalDependencies`,
+      );
+      if (!matchesStringRecord(acquisitionOptionalDependencies, projection.optionalDependencies))
+        throw brokenShadowTrace(
+          `registry shadow substitution ${substitution.substitutionId} optional dependency projection drifted`,
+        );
       if (!matchesStringRecord(acquisitionDependencies, projection.dependencies)) {
         throw brokenShadowTrace(
           `registry shadow substitution ${substitution.substitutionId} dependency projection drifted`,
@@ -895,7 +903,10 @@ export function registryShadowEmbeddedSourcesFromLockfile(
       const dependencies: RegistryShadowEmbeddedDependency[] = [];
       for (const name of projection.bundledDependencies) {
         const range = projection.dependencies[name] ?? projection.optionalDependencies[name];
-        if (range === undefined || acquisitionDependencies[name] !== range) {
+        if (
+          range === undefined ||
+          (acquisitionDependencies[name] ?? acquisitionOptionalDependencies[name]) !== range
+        ) {
           throw brokenShadowTrace(
             `registry shadow substitution ${substitution.substitutionId} bundled dependency ${name} range drifted`,
           );

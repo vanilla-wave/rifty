@@ -212,10 +212,10 @@ describe('upstream esbuild install policy', () => {
     expect(await f.vfs.readFileText(`${root}/package-lock.json`)).toBe(lock);
     expect(await tree(f.vfs, `${root}/node_modules`)).toEqual(beforeTree);
   }, 60_000);
-  it.each(['recipe', 'version', 'file', 'legacy-version'] as const)(
+  it.each(['recipe', 'version', 'file', 'legacy-version', 'legacy-optional'] as const)(
     'rejects corrupt dynamic %s identity before publication',
     async (field) => {
-      const legacy = field === 'legacy-version';
+      const legacy = field.startsWith('legacy-');
       const f = await fixture(legacy ? '0.28.0' : '0.25.12');
       await manifest(f.vfs, legacy ? '^0.28.0' : '^0.25.0');
       const options = {
@@ -229,7 +229,9 @@ describe('upstream esbuild install policy', () => {
       const beforeTree = await tree(f.vfs, `${root}/node_modules`);
       const lock = JSON.parse(await f.vfs.readFileText(`${root}/package-lock.json`));
       const fact = lock.rifty.shadowSubstitutions.applied[0];
-      if (field === 'recipe') fact.recipeDigest = '0'.repeat(64);
+      if (field === 'legacy-optional')
+        lock.packages['node_modules/esbuild-wasm'].optionalDependencies = { phantom: '1.0.0' };
+      else if (field === 'recipe') fact.recipeDigest = '0'.repeat(64);
       else if (field === 'version' || field === 'legacy-version') fact.trigger.version = '0.28.2';
       else fact.materialization.files[0].sha256 = '0'.repeat(64);
       const tampered = JSON.stringify(lock);

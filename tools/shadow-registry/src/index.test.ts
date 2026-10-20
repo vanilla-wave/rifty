@@ -20,10 +20,10 @@ describe('shadow-registry', () => {
     expect(bakedOverrides['sass-embedded']).toBe('sass@1.100.0');
   });
 
-  it('derives every registry-backed builtin redirect from the owner-decoded catalog', () => {
+  it('derives default-tier registry redirects from the owner-decoded catalog', () => {
     const registryRedirects = Object.fromEntries(
       builtinShadowSubstitutionCatalog.recipes.flatMap((recipe) =>
-        recipe.acquisition.kind === 'registry'
+        recipe.acquisition.kind === 'registry' && recipe.runtimeTier !== 'coi'
           ? [
               [
                 recipe.trigger.name,
