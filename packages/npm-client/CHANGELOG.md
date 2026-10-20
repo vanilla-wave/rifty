@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Current-catalog tier changes replay the same verified registry source offline; one receipt writer also projects snapshot facades without changing acquisition pins (ADR-0543).
+
+- Explicit `runtimeTier: 'coi'` resolves esbuild ranges to unchanged upstream esbuild-wasm plus a versioned facade; offline trace replay validates specialization. Omitted/no-coi tier keeps 0.28.0 and names incompatible ranges/pins.
 - Registry and eddy resource requests use host fetch, preserving browser URLs after Node Fetch classes install (ADR-0541).
 
 - Dependency specs naming a dist-tag other than `latest` are a loud ceiling again: `NotImplementedError('npm-client.dependency-spec.dist-tag')` after the packument read, before any tarball or lock write. The alias repair had let `createRegistrySource` consult `dist-tags[spec]`, so a fresh install matched npm but the warm replay re-resolved the moved tag online and rewrote the lock where npm keeps its pin (independent Final C1, widened to all specs by the inline review of PR #375). Real-npm reference: `installer-dist-tag.parity.test.ts`; tracked in `backlog/npm-client/dist-tag-dependency-spec-replay`.

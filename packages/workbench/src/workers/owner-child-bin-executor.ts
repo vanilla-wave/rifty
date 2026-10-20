@@ -46,6 +46,7 @@ export function buildChildSpawnSpec(
     ...(projectedBindings.length === 0 ? {} : { runtimeBindings: projectedBindings }),
   });
   return {
+    stdinMode: 'pull',
     entry,
     argv: ['rifty', req.shimPath, ...req.args],
     env: { ...req.env },
@@ -81,6 +82,7 @@ export function createOwnerChildBinExecutor(
         env: ctx.env,
         cwd: ctx.cwd,
         isTTY: ctx.isTTY === true,
+        ...(ctx.stdoutIsFile === undefined ? {} : { stdoutIsFile: ctx.stdoutIsFile }),
         cols: ctx.cols,
         rows: ctx.rows,
       },

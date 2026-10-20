@@ -145,7 +145,7 @@ describe('Writable decodeStrings ownership', () => {
           length: shouldDecode ? 2 : 1,
           stateDecodeStrings: expectedState,
           sink: shouldDecode ? 'buffer:c3a9' : 'string:é',
-          callbackError: undefined,
+          callbackError: null,
         });
         target.destroy();
       },

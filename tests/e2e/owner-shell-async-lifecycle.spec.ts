@@ -128,15 +128,13 @@ test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', 
   });
 
   test('kernel worker-entry transform served by dev server contains no @vite/client injection (contamination guard)', async ({
-    page,
     request,
     browserName,
   }) => {
     test.skip(browserName !== 'chromium', 'dev-server fetch — chromium only for COI parity');
 
-    // Navigate first so the dev server is warm (webServer may lazily compile).
-    await bootProjectFiles(page);
-    await expectViteDevServerReady(page);
+    // webServer supplies the real host; this GET transforms the module on demand.
+    // Guest startup/drain is covered by the two functional tests above.
 
     // Fetch the LIVE Vite dev-server transform of the KERNEL worker-entry module —
     // the one Vite injects `@vite/client` into. Kernel is a workspace package

@@ -1,0 +1,63 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS for this follow-up; merge after green PR CI at the delivered HEAD. Local pr:check 28/28 PASS, unit 201.9s and parity 134.7s, no reruns in the final pass. Prior accepted goal CLOSE is not re-reviewed.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "ca685b8ae8ee0fdbadb5dbff48b5beeb99414311",
+  "unit_goal_source": "PR #379 follow-up requested in /tmp/pr379-handoff-fixes.md; BASE 5bd1e4b066da0cd76183092439d2b315e31c70f0; HEAD ca685b8ae8ee0fdbadb5dbff48b5beeb99414311. Earlier accepted landing authority: docs/backlog/npm-client/reference/esbuild-upstream-twin-final-green.json. Scope is the handoff corrections and their exact compiler-asset pin consequence, not the earlier epic.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Stdio compatibility documentation identifies raw fd operations and the no-COI synchronous-input gap; ADR-0542 reference timing matches transport dispatch",
+      "source": "acceptance",
+      "trace": "ADR-0542 + ADR-0152",
+      "status": "pass",
+      "citation": "tools/compat-matrix-generator/fs-matrix.js:53; docs/public/compat/fs.md:24; docs/adr/kernel/0542-share-worker-stdin-between-synchronous-descriptors-and-streams.md:45; packages/runtime-js/src/builtins/fs-stdio.ts:28; packages/runtime-js/src/builtins/process-stdin-reader.ts:222; packages/runtime-js/src/internal/child-pipe-reference.ts:22; tests/browser-unit/fs-stdio-fds.spec.ts:8; tests/browser-unit/esbuild-node-surfaces.spec.ts:78",
+      "note": "Source and existing carriers agree: descriptor access bypasses the public write method; push-only hosts lack blocking pull stdin; corked input does not acquire a transport reference. Correction is appended, old decision remains historical. Generated docs match their source; current compat-drift gate PASS. Current 13-case Node/Chromium surface run includes both cork cases, /tmp/pr379-node-surfaces.log. No new runtime behavior or promise introduced."
+    },
+    {
+      "row": "Local npx compatibility lists the implemented invocation and named acquisition/options/package-spec/interactive gaps",
+      "source": "acceptance",
+      "trace": "ADR-0545",
+      "status": "pass",
+      "citation": "docs/public/compat/package-tooling.md:27; packages/shell/src/commands/npx.ts:7; tests/browser-unit/local-npx.spec.ts:1; packages/shell/tests/npx-refusals.test.ts:1",
+      "note": "Read the command implementation and existing proof: leading --no-install/-- and installed-bin resolution remain owned by the existing resolver; unsupported invocation forms retain their exact NotImplementedError features. Documentation-only statement of accepted behavior."
+    },
+    {
+      "row": "Unsupported sync-route oracle executes real Node while preserving every existing explicit rifty gap expectation",
+      "source": "frozen-artifact",
+      "trace": "ADR-0543 + PR #379 BASE unsupported-sync-routes baseline",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-node-surfaces.spec.ts:21; tests/browser-unit/esbuild-node-surfaces.spec.ts:109; tests/browser-unit/esbuild-node-surfaces.spec.ts:140; /tmp/pr379-independent-node-oracle.json; /tmp/pr379-followup-independent-evidence.json; /tmp/pr379-node-surfaces.log",
+      "note": "PR-4: read old criterion from BASE. Old branch hand-wrote the rifty errors without running Node. New branch runs the unchanged probe on Node with the same empty child fixture already present in rifty, asserts {}, then checks the unchanged exact two error-name/feature tuples in rifty. Independent Node v24.16.0 execution produced {}; programmatic old/new comparison confirms unchanged probe and exact rifty gaps. All 13 actual Node/Chromium surface cases PASS; no weakened assertion or hidden product repair."
+    },
+    {
+      "row": "Compiler output exception remains exact after import ordering changes its dependency fingerprints",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391 exact emitted-output exception",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:103; docs/adr/distribution/0391-attest-copyable-runtime-asset-exceptions-to-the-esbuild-retirement-gate.md:58; tools/checks/esbuild-legacy-retirement.test.ts:1; tests/e2e-prod/typescript-starter-editor.spec.ts:32; /tmp/pr379-independent-asset-verify.json; /tmp/pr379-retirement-tests.log; /tmp/pr379-prod-typescript.log; /tmp/pr379-prcheck-final.log",
+      "note": "PR-4: initial unchanged pin reproduced a sole retirement RED, including independent isolated execution. BASE/current worker artifacts both 10022694 bytes; independent hashing verifies old 86a44c9e749fe4d5fcc318e2f77542e63c6f53db55463eddab2cca52a942d38b and new 233d8b195a32eb12f7f8875c28ec7921d641af42ef027cb5250a02c1b3e922e4. Raw diff is exactly six import specifier hashes; narrow normalization of literal import hashes yields byte equality. All five changed production files preserve their statements, only imports move. Pin update changes only SHA; size, general 2 MB ceiling and every negative criterion remain unchanged. Independent isolated gate now PASS; existing negative tests 10/10 and actual production TS editor 1/1 PASS. Final clean gate 28/28 PASS, no isolated reruns; the earlier red run is not counted as green."
+    },
+    {
+      "row": "Strict-CJS compilation cost is measured on real TypeScript and Vite journeys and recorded without changing the compiler",
+      "source": "frozen-artifact",
+      "trace": "PR #379 handoff section 5 measurement scenario + ADR-0450",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/cjs-wrapper-stack-positions.md:39; docs/adr/runtime-js/0450-project-vm-script-offsets-through-one-owned-stack-hook.md:153; packages/runtime-js/src/module-loader/cjs-factory.ts:6; packages/ts-language-service/src/lib-dts.ts:256; /tmp/pr379-measure/raw.jsonl; /tmp/pr379-measure/instrument.py; /tmp/pr379-measure/pr379-measure.spec.ts; /tmp/pr379-followup-independent-evidence.json",
+      "note": "Read instrumentation, actual 6+6 passing browser logs and raw timings; independently recomputed all Vite totals: 13 factories/181162 characters, six strict factories, median 3.120 versus 1.890 ms, difference 1.230 ms. Recorded TS samples match raw values; ordinary require has no first-line strict directive, while language-service uses its separate single Function compiler. Measurement explicitly limits the claim to construction time and host-specific samples; no end-to-end speed claim. Instrumentation and alternative compiler are absent from the committed diff; existing diagnostic-gap obligation remains intact."
+    }
+  ],
+  "axes": [
+    { "axis": "Completeness", "verdict": "pass", "findings": [] },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    { "axis": "Bugs", "verdict": "pass", "findings": [] },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+  ],
+  "adjudication": []
+}

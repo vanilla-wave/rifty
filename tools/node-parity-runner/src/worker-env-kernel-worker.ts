@@ -20,6 +20,7 @@ import {
   type WorkerSpawnSpec,
   runEntryLifecycle,
 } from '../../../packages/kernel/src/worker-entry.ts';
+import { workerInputReader } from '../../../packages/kernel/src/worker-stdin-rpc.ts';
 import {
   bindWorkerStdioOutput,
   sealWorkerOutput,
@@ -407,6 +408,7 @@ function installStdioDeliveryFault(spec: WorkerSpawnSpec): Promise<void> | undef
 }
 
 async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
+  if (spec.stdinMode === 'pull') exposePhysicalWorkerMarkers();
   const stdioDeliveryProof = installStdioDeliveryFault(spec);
   const stdout = bindDesiredWorkerStdioOutput(
     spec.stdio.stdout,
@@ -436,6 +438,7 @@ async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
       stdout,
       stderr,
       stdin: spec.stdio.stdin,
+      ...(spec.stdinMode === 'pull' ? { input: workerInputReader(createSyncApi(spec)) } : {}),
       ipc: spec.stdio.ipc,
     },
   });

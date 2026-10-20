@@ -107,6 +107,7 @@ export function createOwnerExecSyncRunner(
             runtimeBindings: projectedBindings,
           }),
           argv: spec.argv,
+          stdinMode: 'pull',
           env: { ...spec.env },
           cwd: spec.cwd,
         },
@@ -203,13 +204,14 @@ export function buildNodeChildSpawnSpec(
   previewScope?: string,
   guestRoots?: GuestRoots,
   runtimeBindings: readonly NodeEntryRuntimeBinding[] = [],
+  stdoutIsFile?: boolean,
 ): SpawnWorkerSpec {
   const projectedBindings = projectOwnerChildRuntimeBindings(runtimeBindings, guestRoots);
   const common = {
     remoteFs: true,
     ...(guestRoots ?? {}),
     ...(previewScope === undefined ? {} : { previewScope }),
-    terminal: childTerminalBootstrap({ isTTY: tty, cols, rows }),
+    terminal: childTerminalBootstrap({ isTTY: tty, cols, rows, stdoutIsFile }),
     runtimeBindings: projectedBindings,
   } as const;
   const launch: NodeEntryLaunch =
@@ -229,6 +231,7 @@ export function buildNodeChildSpawnSpec(
         };
   const workerEntry = buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, launch);
   return {
+    stdinMode: 'pull',
     entry: workerEntry,
     argv:
       typeof execution === 'string'
@@ -309,6 +312,7 @@ export function createOwnerChildNodeExecutor(
           hooks.previewScope,
           hooks.guestRoots,
           reservation.snapshot.runtimeBindings,
+          ctx.stdoutIsFile,
         ),
       );
     } catch (error) {

@@ -7,9 +7,11 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
-import type {
-  BuiltinShadowSubstitutionRecipe,
-  ShadowRegistryDependencyProjection,
+import {
+  type BuiltinShadowSubstitutionRecipe,
+  type ShadowRegistryDependencyProjection,
+  builtinRecipeById,
+  canReprojectShadowRecipe,
 } from '@riftydev/shadow-registry/internal';
 import type { FetchAndUnpackCtx, FetchAndUnpackResult } from '../../fetch-and-unpack.ts';
 import type { ResolvedPin } from '../../installer-walk.ts';
@@ -25,6 +27,7 @@ import type {
   RegistryShadowEmbeddedSource,
   ShadowSubstitutionPlan,
 } from './planner.ts';
+import { registryMetadataProjection } from './registry-projection.ts';
 
 export interface PinnedShadowState {
   readonly substitution: AppliedShadowSubstitution;
@@ -96,20 +99,19 @@ function exactStringMembership(actual: unknown, expected: readonly string[]): bo
 
 export function assertRegistryShadowProjection(
   recipe: BuiltinShadowSubstitutionRecipe,
-  manifest: VersionManifest,
+  manifest: Pick<VersionManifest, 'dependencies' | 'optionalDependencies' | 'peerDependencies'> & {
+    readonly bundleDependencies?: unknown;
+    readonly bundledDependencies?: unknown;
+  },
 ): ShadowRegistryDependencyProjection {
   if (recipe.acquisition.kind !== 'registry') {
     throw new TypeError(`shadow recipe ${recipe.id} has no registry acquisition`);
   }
   const projection = recipe.acquisition.dependencyProjection;
-  const manifestWithBundleAliases = manifest as VersionManifest & {
-    readonly bundleDependencies?: unknown;
-    readonly bundledDependencies?: unknown;
-  };
-  const bundleAliases = [
-    manifestWithBundleAliases.bundleDependencies,
-    manifestWithBundleAliases.bundledDependencies,
-  ].filter((value) => value !== undefined);
+  if (projection === null) return registryMetadataProjection(manifest);
+  const bundleAliases = [manifest.bundleDependencies, manifest.bundledDependencies].filter(
+    (value) => value !== undefined,
+  );
   const expectedOptionalDependencies = {
     ...projection.optionalDependencies,
     ...projection.omittedOptionalDependencies,
@@ -194,7 +196,11 @@ export function replayedShadowFact(
 ): AppliedShadowSubstitution | undefined {
   return plan.substitutions.find((fact) => {
     if (
-      fact.substitutionId !== recipe.id ||
+      (fact.substitutionId !== recipe.id &&
+        !canReprojectShadowRecipe(
+          builtinRecipeById(fact.substitutionId, fact.trigger.version),
+          recipe,
+        )) ||
       fact.materialization.installPath !== materializationInstallPath
     ) {
       return false;
@@ -258,7 +264,8 @@ export function assertRegistryShadowEmbeddedManifests(
   if (acquisition.kind !== 'registry') {
     throw new TypeError(`shadow recipe ${pin.shadow.recipe.id} has no registry acquisition`);
   }
-  const projection = acquisition.dependencyProjection;
+  const projection = acquisition.dependencyProjection ?? pin.shadow.projection;
+  if (!projection) throw new TypeError('range recipe metadata is missing');
   const embeddedDependencies: RegistryShadowEmbeddedDependency[] = [];
   for (const name of projection.bundledDependencies) {
     const range = projection.dependencies[name] ?? projection.optionalDependencies[name];

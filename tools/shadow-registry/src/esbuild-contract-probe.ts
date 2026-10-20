@@ -398,7 +398,7 @@ function createNormalizer(workspace: EsbuildContractWorkspace): (value: string) 
     normalized = normalized.replace(/(?:\.\.[\\/])+<root>/g, '<root>');
     normalized = normalized.replace(/\n\s+at [\s\S]*$/, '');
     normalized = normalized.replace(
-      /(?:[A-Za-z]:)?[^:\n]*[\\/]node_modules[\\/](?:\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?esbuild[\\/]lib[\\/]main\.js/g,
+      /(?:[A-Za-z]:)?[^:\n]*[\\/]node_modules[\\/](?:\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?esbuild(?:-wasm)?[\\/]lib[\\/]main\.js/g,
       '<esbuild>/lib/main.js',
     );
     return normalized;

@@ -137,3 +137,21 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
 - Unchanged, outside this ADR: eval-shaped host-realm frames, the absent
   default `displayErrors` decoration, and Chromium's `undefined` default hook
   before any offset script (evidence §Discovered).
+
+## CJS compiler boundary
+
+- 2026-10-20 — CJS does not use the vm hook: non-configurable guest hooks
+  must preserve ordinary require and raw filenames. A standalone strict
+  directive on line one with a single-line filename permits an anonymous
+  indirect-eval factory prefix on
+  that non-executable line; executable lines retain native coordinates.
+  Captured eval; Function validates the body before eval to prevent wrapper
+  escape. Other source shapes retain the existing Function compiler (+2 lines).
+  No filename registry, stack-hook ownership or package-specific predicate.
+  Native and Chromium differentials: cjs-stack-boundary; stock esbuild error
+  fields stay exact. Remaining generic offsets: backlog/runtime-js/cjs-wrapper-stack-positions.
+- 2026-10-20 — Chromium 148, three fresh contexts: Vite 7.3.6 CJS factory
+  compilation median 3.120 ms versus 1.890 ms with Function alone (+1.230 ms).
+  TypeScript 5.9.3 starts with a license comment, so ordinary require uses one
+  Function; the TS language-service has its own single-Function compiler.
+  No runtime change. Method/raw timings: `docs/backlog/runtime-js/cjs-wrapper-stack-positions.md`.

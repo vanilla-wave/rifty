@@ -26,7 +26,7 @@ import {
   isSabIpcSupported,
   readRootProcessSnapshot,
 } from '@riftydev/kernel';
-import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
+import { referenceChildPipe } from '../internal/child-pipe-reference.ts';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
 import {
@@ -35,6 +35,7 @@ import {
   encodeNodeIpcMessage,
 } from '../internal/node-ipc-serialization.ts';
 import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts';
+import { WorkerReference } from '../internal/worker-reference.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { spawnNoCoiChild } from '../ipc/no-coi-child-process.ts';
 import { inspect } from '../repl/inspect.ts';
@@ -45,7 +46,6 @@ import {
   collectChildProcessOutput,
   normalizeBufferedExecutionOptions,
 } from './child_process-output.ts';
-import { type RefableChildPipe, referenceChildPipe } from './child_process-ref.ts';
 import { execSync } from './child_process-sync.ts';
 import {
   type SpawnStdio,
@@ -58,7 +58,7 @@ import {
   spawnWorkerChild,
 } from './child_process-worker.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
-import { spawnSync } from './loud-members.ts';
+import { execFileSync, spawnSync } from './loud-members.ts';
 import { nodeChildSpawnOptions } from './node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
 import {
@@ -127,8 +127,8 @@ interface ExecFileOptions extends ExecOptions {
 class ChildProcess extends EventEmitter {
   /** Allocated by `ProcessManager` — PID space is unified across the runtime. */
   readonly pid: number;
-  readonly stdout: RefableChildPipe;
-  readonly stderr: RefableChildPipe;
+  readonly stdout: Readable;
+  readonly stderr: Readable;
   readonly stdin: Writable;
   readonly stdio: readonly (Readable | Writable | null)[];
   killed = false;
@@ -139,7 +139,8 @@ class ChildProcess extends EventEmitter {
   private readonly handle: ProcessHandle;
   private readonly ownerProcess: unknown;
   private readonly ownerBootstrap: ReturnType<typeof readActiveNodeProcessBootstrap>;
-  #keepaliveHeld = true;
+  readonly #reference = new WorkerReference();
+  readonly #pipeReferences: WorkerReference[] = [];
   #ipcClosedByParent = false;
   /** Bus the child's script subscribes to for parent-sent `'childMessage'`
    * events. Exposed to the spawner via `internalIpc()`. */
@@ -163,22 +164,22 @@ class ChildProcess extends EventEmitter {
     this.ownerBootstrap = readActiveNodeProcessBootstrap();
     this.pid = handle.pid;
     this.stdin = (streams.expose[0] ? streams.stdin : null) as unknown as Writable;
-    const stdoutRef = streams.expose[1] ? referenceChildPipe(streams.stdout) : null;
-    const stderrRef = streams.expose[2] ? referenceChildPipe(streams.stderr) : null;
-    this.stdout = (stdoutRef?.stream ?? null) as unknown as RefableChildPipe;
-    this.stderr = (stderrRef?.stream ?? null) as unknown as RefableChildPipe;
+    this.stdout = (streams.expose[1] ? streams.stdout : null) as unknown as Readable;
+    this.stderr = (streams.expose[2] ? streams.stderr : null) as unknown as Readable;
     const stdio: (Readable | Writable | null)[] = [this.stdin, this.stdout, this.stderr];
     while (stdio.length < streams.slots) stdio.push(null);
     this.stdio = stdio;
-    refEventLoop();
+    this.#reference.ref();
+    for (const stream of this.stdio) {
+      if (stream === null) continue;
+      this.#pipeReferences.push(referenceChildPipe(stream, stream === this.stdin));
+    }
     handle.on('exit', (code, signal) => {
       this.finishIpc();
       this.emitToOwner('exit', code, signal);
     });
     handle.on('close', (code, signal) => {
       this.#releaseKeepalive();
-      stdoutRef?.close();
-      stderrRef?.close();
       const parentEnded = readNodeProcessTerminal(this.ownerProcess) !== null;
       if (parentEnded) {
         streams.stdout.removeAllListeners();
@@ -263,22 +264,16 @@ class ChildProcess extends EventEmitter {
   }
 
   #releaseKeepalive(): void {
-    if (!this.#keepaliveHeld) return;
-    this.#keepaliveHeld = false;
-    unrefEventLoop();
+    WorkerReference.dispose(this.#reference);
+    for (const reference of this.#pipeReferences) WorkerReference.dispose(reference);
   }
 
-  ref(): this {
-    if (!this.#keepaliveHeld && this.handle.exitCode === null && this.handle.signalCode === null) {
-      this.#keepaliveHeld = true;
-      refEventLoop();
-    }
-    return this;
+  ref(): void {
+    this.#reference.ref();
   }
 
-  unref(): this {
-    this.#releaseKeepalive();
-    return this;
+  unref(): void {
+    this.#reference.unref();
   }
 
   get exitCode(): number | null {
@@ -431,6 +426,7 @@ export function spawn(
       env: opts.env,
       ipc: ipc ?? 'none',
       execArgv,
+      stdoutIsFile: stdio.stdout?.isFile,
     });
     if (handle.kind !== 'worker') throw new Error('child_process.spawn: expected Worker handle');
     const child = new ChildProcess(handle, ipc, {
@@ -759,13 +755,14 @@ export function fork(
 // `execSync` lives in `./child_process-sync.ts` to keep the SAB-vs-fallback
 // branch with its helpers. Re-exported here for the public `child_process`
 // surface.
-export { execSync };
+export { execSync, execFileSync };
 
 export const ChildProcess_ = ChildProcess;
 
 const child_process = {
   spawn,
   spawnSync,
+  execFileSync,
   exec,
   execFile,
   fork,

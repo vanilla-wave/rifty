@@ -23,6 +23,8 @@ import type {
   WorkerStdioPorts,
 } from './worker-entry.ts';
 import { type WorkerLike, makeKernelWorker } from './worker-like.ts';
+import { registerWorkerInput } from './worker-stdin-rpc.ts';
+import type { WorkerInput } from './worker-stdin.ts';
 import {
   createWorkerOutputState,
   isWorkerOutputChildSealed,
@@ -43,6 +45,8 @@ export {
  * reuse a PID or share a SAB across processes.
  */
 export interface SpawnWorkerSpec {
+  /** Bounded pull input; callers otherwise retain the MessagePort push protocol. */
+  readonly stdinMode?: 'pull';
   readonly entry: WorkerEntryDescriptor;
   readonly argv: readonly string[];
   readonly env: Readonly<Record<string, string>>;
@@ -100,6 +104,7 @@ export interface SpawnWorkerIdentity {
 
 /** Outcome of the spawn. Cleanup runs on `kill` and on natural exit. */
 export interface SpawnWorkerResult {
+  readonly stdinWriter?: Pick<WorkerInput, 'write' | 'end'>;
   readonly pid: number;
   readonly ppid: number;
   readonly worker: WorkerLike;
@@ -152,6 +157,7 @@ export function spawnKernelWorker(
   const { pid, ppid } = identity;
 
   let terminated = false;
+  let inputBinding: ReturnType<typeof registerWorkerInput> | undefined;
   let ring: SabRing | null = null;
   let worker: WorkerLike | null = null;
   let dispatcher: SyncRpcDispatcher | null = null;
@@ -188,6 +194,11 @@ export function spawnKernelWorker(
   function tearDownWorker(): void {
     if (terminated) return;
     terminated = true;
+    try {
+      inputBinding?.dispose();
+    } catch {
+      /* a terminal write callback cannot prevent resource teardown */
+    }
     if (dispatcher !== null && ring !== null) {
       try {
         dispatcher.detach(ring);
@@ -378,6 +389,7 @@ export function spawnKernelWorker(
       env: spec.env,
       cwd: spec.cwd,
       stdio: childPorts,
+      ...(spec.stdinMode === undefined ? {} : { stdinMode: spec.stdinMode }),
       outputState: createWorkerOutputState(),
       syncRing: createdRing.sab,
       payloadCapacity,
@@ -389,6 +401,11 @@ export function spawnKernelWorker(
     worker = makeKernelWorker(url);
     dispatcher = getKernelDispatcher();
     callerContext = dispatcher.attach(ring, { callerPid: pid });
+    if (spec.stdinMode === 'pull') {
+      inputBinding = registerWorkerInput(dispatcher, callerContext, () =>
+        stdinCh.port1.postMessage({ kind: 'stdin:ready' }),
+      );
+    }
 
     const init: WorkerInitMessage = { type: 'init', spec: fullSpec };
     worker.postMessage(init, [
@@ -422,6 +439,7 @@ export function spawnKernelWorker(
     worker,
     ports,
     spec: fullSpec,
+    ...(inputBinding === undefined ? {} : { stdinWriter: inputBinding.input }),
     dispatcher,
     callerContext,
     ring,

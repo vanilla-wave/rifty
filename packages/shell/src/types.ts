@@ -63,6 +63,8 @@ export interface CommandContext {
    * width on this (ADR-0089): emitting SGR into a file/stream corrupts it.
    */
   readonly isTTY?: boolean;
+  /** stdout targets a shell file redirect rather than a pipe. */
+  readonly stdoutIsFile?: boolean;
   /** Terminal width / height when {@link isTTY}; consumers fall back to 80×24. */
   readonly cols?: number;
   readonly rows?: number;

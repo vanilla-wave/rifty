@@ -1,4 +1,5 @@
 /** One serialized owner for root-bound install-stamp claims (ADR-0261). */
+import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
 import {
   type FsSync,
   type PersistFailureReport,
@@ -9,13 +10,14 @@ import {
 } from '@riftydev/vfs';
 import {
   type InstallStamp,
-  createInstallStamp,
   installStampPath,
   installTreeDir,
   lockfileMatchesStamp,
   lockfilePath,
+  pendingInstallStamp,
   sha256Hex,
   stampTrusted,
+  trustedInstallStamp,
 } from './install-stamp.ts';
 
 import {
@@ -245,37 +247,14 @@ async function removeStamp(io: StampIo, root: string): Promise<void> {
   await io.vfs.rm(path, { force: true });
 }
 
-function pendingStamp(identity: InstallStampIdentity, epoch: string, packages = 0): InstallStamp {
-  const stamp = createInstallStamp(identity.root, identity.packageJsonText, {
-    slug: identity.slug,
-    packages,
-    durability: 'pending',
-    epoch,
-  });
-  if (!stamp) throw new Error('install stamp identity is not valid package.json');
-  return stamp;
-}
-
-function trustedStamp(
-  identity: InstallStampIdentity,
-  packages: number,
-  lockfileSha256?: string,
-): InstallStamp {
-  const stamp = createInstallStamp(identity.root, identity.packageJsonText, {
-    slug: identity.slug,
-    packages,
-    ...(lockfileSha256 === undefined ? {} : { lockfileSha256 }),
-  });
-  if (!stamp) throw new Error('install stamp identity is not valid package.json');
-  return stamp;
-}
-
 export function createInstallStampAuthority(options: {
+  readonly runtimeTier?: ShadowRuntimeTier;
   readonly vfs: Vfs;
   readonly fsSync?: InstallStampAuthoritySyncFs;
   readonly claimIo?: InstallStampClaimIo;
 }): InstallStampAuthority {
   const io: StampIo = options;
+  const runtimeTier = options.runtimeTier;
   const authorityId = ++authoritySequence;
   let epochSequence = 0;
   const roots = new Map<string, RootClaimState>();
@@ -305,7 +284,7 @@ export function createInstallStampAuthority(options: {
       state.materialized = false;
       return;
     }
-    const trusted = stampTrusted(stamp);
+    const trusted = stampTrusted(stamp, runtimeTier);
     state.phase = trusted ? 'trusted' : 'pending';
     state.epoch = trusted ? null : (stamp.epoch ?? null);
     state.slug = stamp.slug;
@@ -417,7 +396,7 @@ export function createInstallStampAuthority(options: {
     const state = stateFor(input.root);
     if (state.phase === 'pending') return pendingForInput(state, input);
     if (state.phase === 'absent') return { status: 'absent' };
-    const classified = await classifyCheck(io, input);
+    const classified = await classifyCheck(io, input, runtimeTier);
     // A demote/revoke can fence this async read after it observed trusted.
     // The in-memory transition wins; never return that stale trust verdict.
     const phaseAfterRead = currentPhase(state);
@@ -438,7 +417,7 @@ export function createInstallStampAuthority(options: {
     const state = stateFor(input.root);
     if (state.phase === 'pending') return pendingForInput(state, input);
     if (state.phase === 'absent') return { status: 'absent' };
-    const classified = classifyCheckSync(io.fsSync, input);
+    const classified = classifyCheckSync(io.fsSync, input, runtimeTier);
     if (state.phase === 'unknown') updatePhaseFromStamp(state, classified.stamp);
     else if (classified.diskPhase !== 'trusted') state.phase = classified.diskPhase;
     return classified.result;
@@ -459,7 +438,7 @@ export function createInstallStampAuthority(options: {
 
     return enqueue(state, async () => {
       const prior = await readStamp(io, input.root);
-      const trustedPrior = prior && stampTrusted(prior) ? prior : null;
+      const trustedPrior = prior && stampTrusted(prior, runtimeTier) ? prior : null;
       const packageJsonText = await readDemotionManifest(io, input.root, prior);
       const installTreeExists = await directoryExists(io, installTreeDir(input.root));
       const dependencyTreeExists = prior !== null || installTreeExists;
@@ -505,7 +484,7 @@ export function createInstallStampAuthority(options: {
           await writeRawStamp(
             io,
             input.root,
-            pendingStamp({ ...input, packageJsonText }, epoch),
+            pendingInstallStamp({ ...input, packageJsonText }, epoch, 0, runtimeTier),
             !installTreeExists,
           );
           wrotePending = true;
@@ -580,7 +559,7 @@ export function createInstallStampAuthority(options: {
       readStampSync(io.fsSync, identity.root) === null &&
       io.fsSync.existsSync(installTreeDir(identity.root))
     ) {
-      const pending = pendingStamp(identity, epoch, packages);
+      const pending = pendingInstallStamp(identity, epoch, packages, runtimeTier);
       writeRawStampSync(
         io,
         identity.root,
@@ -595,7 +574,12 @@ export function createInstallStampAuthority(options: {
       let stamp = await readStamp(io, identity.root);
       const treeExists = await pathExists(io, installTreeDir(identity.root));
       if (stamp === null && treeExists) {
-        await writeRawStamp(io, identity.root, pendingStamp(identity, epoch, packages), true);
+        await writeRawStamp(
+          io,
+          identity.root,
+          pendingInstallStamp(identity, epoch, packages, runtimeTier),
+          true,
+        );
         stamp = await readStamp(io, identity.root);
         state.materialized = true;
       }
@@ -659,10 +643,11 @@ export function createInstallStampAuthority(options: {
       if (state.epoch !== epoch || state.slug !== identity.slug) {
         return { kind: 'stale' as const };
       }
-      const stamp = trustedStamp(
+      const stamp = trustedInstallStamp(
         identity,
         packages,
         lockfileBytes === null ? undefined : sha256Hex(lockfileBytes),
+        runtimeTier,
       );
       // ADR-0358 stamp full fence (one per trusted transition): all earlier
       // persists REALLY settle. Fence→write microtask window: guarded scope

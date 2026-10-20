@@ -30,6 +30,7 @@ import {
   projectNodeEvalError,
 } from '../module-loader/loader.ts';
 import { formatNodeEvalPrintValue } from '../repl/inspect.ts';
+import { refreshRuntimeJsProcessBuiltin } from './index.ts';
 import { type UncaughtOrigin, dispatchUncaughtException } from './process-lifecycle-events.ts';
 
 const utf8 = new TextDecoder();
@@ -194,6 +195,7 @@ function exportedPromise(ns: Record<string, unknown>): PromiseLike<unknown> | nu
 
 /** Import the resolved Node entry (or a `.bin` launcher's target) via the loader. */
 export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
+  refreshRuntimeJsProcessBuiltin();
   if (opts.kind === 'eval') {
     // Capture the installed process capabilities before guest code can replace
     // `process`, its streams, or their methods. Late eval terminals are runtime

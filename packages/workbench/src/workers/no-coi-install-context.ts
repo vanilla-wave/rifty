@@ -21,6 +21,7 @@ export function createNoCoiInstallContext() {
     claims: guarded.claims,
     installerVfs: new InstallMirrorVfs(raw instanceof OpfsFsSync ? raw : undefined, native),
     stamps: createInstallStampAuthority({
+      runtimeTier: 'no-coi',
       vfs: new SyncMirrorVfs(),
       fsSync: guarded.fs,
       claimIo: guarded.claims,

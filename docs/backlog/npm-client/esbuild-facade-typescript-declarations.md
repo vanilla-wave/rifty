@@ -3,7 +3,7 @@ area: npm-client
 status: draft
 title: The synthesized esbuild facade ships the real `lib/main.d.ts` and `types` entry like esbuild@0.28.0
 created: 2026-09-27
-why: real esbuild publishes `types: lib/main.d.ts`; the facade materializes `bin/esbuild`, `lib/main.cjs`, `package.json` only, so `import from 'esbuild'` loses types in the IDE with no error and no compat row — while the sass page records its identical gap as ❌
+why: legacy no-COI facade still lacks declarations; COI has a types path, while classic/exports-aware and IDE resolution proof remains
 user_story: As a developer editing `scripts/build.ts` with `import { build } from 'esbuild'` in a rifty project, I want the same declarations `tsc` sees on real Node, but today the installed `esbuild` package has no `types` and the language service falls back to implicit any
 epic: honest-substitution-signals
 sources: [ADR-0371, ADR-0361, docs/public/compat/esbuild-js-api.md, docs/public/compat/sass-embedded.md, docs/backlog/npm-client/reference/shadow-registry-retro-intake-evidence.md]
@@ -11,6 +11,12 @@ code: [tools/shadow-registry/src/internal/catalog-source.ts, tools/compat-matrix
 ---
 
 ## Context
+
+2026-10-20: COI facade now has `types: ../esbuild-wasm/lib/main.d.ts` and no
+`exports` (ADR-0543); every verified twin retains its original declarations.
+The finding below remains for legacy no-COI. This item still owns actual
+classic/exports-aware/IDE resolution proof; the data-path change does not
+close that proof.
 
 Finding (observed on `99fdf6c91`): `ESBUILD_ALIAS_PACKAGE`
 (`tools/shadow-registry/src/internal/catalog-source.ts:36-48`) declares

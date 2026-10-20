@@ -124,6 +124,7 @@ export class Worker extends EventEmitter {
    * realm and `terminate` routes through it. */
   private workerHandle: ProcessHandle | null = null;
   private readonly references: WorkerReferences;
+  private readonly encodedWorkerData: string | undefined;
 
   constructor(script: WorkerScript, opts: WorkerOptions = {}) {
     super();
@@ -151,6 +152,11 @@ export class Worker extends EventEmitter {
     try {
       // Node's workerData getter observes installed stdio and an allocated thread id.
       this.workerData = opts.workerData;
+      // Fail before a caller can block in Atomics.wait; no async error can
+      // reach that caller. Clone once at construction, as Node does.
+      this.encodedWorkerData = this.launch.kernelBacked
+        ? encodeWorkerData(this.workerData)
+        : undefined;
     } catch (error) {
       this.stdio?.stdout.unpipe();
       this.stdio?.stderr.unpipe();
@@ -213,7 +219,7 @@ export class Worker extends EventEmitter {
         );
       }
       const env: Record<string, string> = { ...this.env };
-      const encodedWorkerData = encodeWorkerData(this.workerData);
+      const encodedWorkerData = this.encodedWorkerData;
       const entry = buildConfiguredNodeEntryWorkerEntry({
         kind: 'worker-thread',
         remoteFs: true,

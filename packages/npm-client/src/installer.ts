@@ -90,6 +90,8 @@ export interface PackumentCacheLike {
 }
 
 export interface InstallOptions {
+  /** Host-selected execution tier; omitted retains the no-COI legacy policy. */
+  runtimeTier?: 'coi' | 'no-coi';
   vfs: Vfs;
   cwd: string;
   /** Absent capability permits local replay; required network misses fail (ADR-0398). */
@@ -294,7 +296,13 @@ export async function install(
     opts,
   } = request;
   throwIfAborted(opts.signal);
-  assertDirectShadowRecipeAdmissions(dependencies, optionalDependencies, rootName, opts.overrides);
+  assertDirectShadowRecipeAdmissions(
+    dependencies,
+    optionalDependencies,
+    rootName,
+    opts.overrides,
+    opts.runtimeTier,
+  );
   const tarballCache: TarballCache = opts.tarballCache ?? new VfsTarballCache(opts.vfs);
   const fetchCtx: FetchAndUnpackCtx = {
     cache: tarballCache,
@@ -319,6 +327,7 @@ export async function install(
     optionalDependencies,
     rootName,
     opts.overrides,
+    opts.runtimeTier,
   );
 
   const priorLockfile = await readExistingLockfile(opts.vfs, opts.cwd);

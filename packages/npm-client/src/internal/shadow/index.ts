@@ -10,3 +10,4 @@ export {
   companionInstallPathsForInstallResult,
   shadowSubstitutionPlanForInstallResult,
 } from './install-result.ts';
+export { reprojectShadowLockfile } from './runtime-tier.ts';

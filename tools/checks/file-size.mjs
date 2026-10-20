@@ -51,7 +51,7 @@ const NON_PROD_RE = /\.(?:test|spec|fault|contract)\.[cm]?[jt]sx?$|\.d\.ts$/;
 export const BASELINE = [
   { file: 'packages/shell/src/commands/git.ts', max: 3064 },
   { file: 'packages/runtime-js/src/module-loader/function-import-routing.ts', max: 2806 },
-  { file: 'packages/kernel/src/process-manager.ts', max: 2392 },
+  { file: 'packages/kernel/src/process-manager.ts', max: 2365 },
   { file: 'packages/workbench/src/workers/playground-project-authority.ts', max: 2356 },
   { file: 'tools/node-parity-runner/src/run-in-rifty.ts', max: 2069 },
   { file: 'packages/runtime-js/src/builtins/vm/membrane.ts', max: 2058 },
@@ -66,7 +66,6 @@ export const BASELINE = [
   { file: 'packages/ts-language-service/src/service.ts', max: 1377 },
   { file: 'packages/workbench/src/workers/package-acquisition-authority.ts', max: 1374 },
   { file: 'apps/playground/src/components/editor-host-core.ts', max: 1270 },
-  { file: 'packages/runtime-js/src/builtins/process.ts', max: 1226 },
   {
     file: 'packages/workbench/src/workbench/internal/playground-session-tools-transport.ts',
     max: 1191,
@@ -78,21 +77,21 @@ export const BASELINE = [
   { file: 'packages/git/src/git.ts', max: 1118 },
   { file: 'packages/workbench/src/workbench/internal/typescript-relay-client.ts', max: 1083 },
   { file: 'packages/net/src/cross-realm/preview-port.ts', max: 1067 },
-  { file: 'tools/compat-matrix-generator/cli.js', max: 1050 },
   { file: 'apps/playground/src/components/FileExplorer.tsx', max: 1043 },
   { file: 'packages/workbench/src/glue/npm-shell-command.ts', max: 1042 },
   { file: 'packages/runtime-js/src/builtins/vm/rewrite-engine.ts', max: 1021 },
   { file: 'packages/runtime-js/src/builtins/fs-streams.ts', max: 1016 },
   { file: 'packages/workbench/src/glue/pty-client.ts', max: 1012 },
   { file: 'packages/net/src/http/server.ts', max: 1010 },
+  { file: 'packages/runtime-js/src/builtins/process.ts', max: 1003 },
   { file: 'packages/net/src/http/upgrade-socket.ts', max: 976 },
   { file: 'apps/playground/src/templates/socket-lab.ts', max: 968 },
   { file: 'packages/runtime-js/src/module-loader/resolver.ts', max: 953 },
   { file: 'packages/workbench/src/glue/install-stamp-authority.ts', max: 904 },
+  { file: 'tools/compat-matrix-generator/cli.js', max: 894 },
   { file: 'packages/ts-language-service/src/worker/protocol.ts', max: 890 },
   { file: 'packages/workbench/src/workers/workbench-project-vfs.ts', max: 875 },
   { file: 'packages/runtime-js/src/builtins/crypto.ts', max: 874 },
-  { file: 'packages/io/src/streams/writable.ts', max: 802 },
 ];
 
 /** @returns {{ file: string, lines: number }[]} every prod source file under `rel` */

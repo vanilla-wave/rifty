@@ -33,6 +33,7 @@ export interface BinSpawnRequest {
   readonly env: Record<string, string>;
   readonly cwd: string;
   readonly isTTY: boolean;
+  readonly stdoutIsFile?: boolean;
   readonly cols?: number;
   readonly rows?: number;
   /** Host-minted preview correlation; never part of guest `process.env`. */

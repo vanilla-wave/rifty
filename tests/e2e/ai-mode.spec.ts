@@ -506,7 +506,10 @@ test('agent leaf-component write reaches the live React preview before and after
     console.log('AGENT LEAF FIRST', JSON.stringify(messages));
     await expect(frame.getByLabel('Agent first search')).toBeVisible({ timeout: 15_000 });
     await send(page, 'Rename the search input and build.');
-    await expect(page.getByTestId('ai-panel')).toHaveAttribute('data-status', 'done');
+    // Includes a real stock-WASM production build, not just one UI update.
+    await expect(page.getByTestId('ai-panel')).toHaveAttribute('data-status', 'done', {
+      timeout: 120_000,
+    });
     await expect(frame.getByLabel('Agent second search')).toBeVisible({ timeout: 15_000 });
     expect(
       await frame

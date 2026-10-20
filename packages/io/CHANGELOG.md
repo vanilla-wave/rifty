@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Writable constructor write/writev/final options install the native replaceable _write/_writev/_final hooks; transport wrappers observe active writes instead of buffered admissions.
+
+- Writable uses Node tick callbacks (success = null) and a cursor over the existing reentrant buffer; completed slots release payloads.
 - `fetchHost` / `HOST_FETCH` separate browser resource I/O from guest Node Fetch semantics (ADR-0541): relative asset URLs remain host URLs.
 - `fetchNodeNetwork` retains native-compatible HTTP egress inputs while the runtime owns response-body keepalive (ADR-0541).
 

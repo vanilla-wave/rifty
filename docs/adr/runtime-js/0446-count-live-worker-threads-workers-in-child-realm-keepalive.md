@@ -147,3 +147,7 @@ Each gap is a named row in `docs/public/compat/process.md`:
   `packages/runtime-js/src/internal/event-loop-keepalive.ts`,
   `packages/workbench/src/workers/node-entry-bootstrap.ts`
 - `docs/backlog/runtime-js/reference/worker-threads-handle-keepalive-evidence.md`
+
+## Corrections
+
+- 2026-10-20 — Unsupported kernel workerData is encoded once in the constructor before reference acquisition; synchronous named refusal prevents Atomics.wait deadlock (esbuild-upstream-twin I2).

@@ -177,7 +177,7 @@ async function run(input: Input) {
   const warm = await owner.openProject(definition('saved-opfs'));
   if (
     warm.acquisition.kind !== 'saved' ||
-    (await installStampSatisfied(vfs, projectRoot, 'saved-opfs')) === null
+    (await installStampSatisfied(vfs, projectRoot, 'saved-opfs', 'coi')) === null
   ) {
     throw new Error('named snapshot seed was not trusted before the fault');
   }

@@ -20,3 +20,6 @@ half. Outside the no-COI agent host kit; the install half is delivered under ADR
 ## Out of scope
 
 - `npx` fetching an uninstalled package; `yarn`/`pnpm`/`bun` execution (loud).
+
+Local installed-bin execution shipped under ADR-0545; this draft retains
+unsupported-manager/install wording.

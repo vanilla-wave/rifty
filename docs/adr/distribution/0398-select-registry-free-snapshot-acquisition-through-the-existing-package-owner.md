@@ -62,3 +62,8 @@ Closed public/owner shapes, real owner/catalog admission and alternate-call
 REDs; real installer overload/cache/fault carriers; mandatory packed public
 producer Vite build/dev and saved-state proof with hostile registry counters.
 This changes host acquisition policy, not Node/npm resolution semantics.
+
+- 2026-10-20 — ADR-0543: explicit runtime-tier snapshot preparation reuses the
+  verified current-catalog source, projecting only generated facade/receipt;
+  no full reinstall or registry capability. Selected-tier claim identity is
+  still owned by the existing stamp authority.

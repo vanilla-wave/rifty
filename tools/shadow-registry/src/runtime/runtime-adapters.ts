@@ -1,8 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { type FsSync, isAbsolute, normalizePath } from '@riftydev/vfs';
+import type { ShadowRuntimeTier } from '../internal/recipe-selection.ts';
 import { shadowSha256 as sha256Hex } from '../internal/sync-sha256.ts';
-// @ts-expect-error hash-pinned generated JS has no hand-maintained declaration.
-import * as generatedRuntime from './generated/esbuild-runtime.js';
 import {
   type RuntimeEsbuildCjsOuter,
   publishRuntimeEsbuild,
@@ -36,8 +35,6 @@ interface GeneratedRuntimeModule {
   setEsbuildRuntimeCwd(cwd: string): void;
 }
 
-const generated = generatedRuntime as unknown as GeneratedRuntimeModule;
-
 function isOnCwdAncestry(root: string, cwd: string): boolean {
   return root === '/' || root === cwd || cwd.startsWith(`${root}/`);
 }
@@ -65,6 +62,7 @@ function isNestedPackageRootOnCwdAncestry(packageRoot: string, cwd: string): boo
 
 async function startGeneratedEsbuildRuntime(
   options: EsbuildRuntimeOptions,
+  generated: GeneratedRuntimeModule,
 ): Promise<RuntimeEsbuildCjsOuter> {
   const ownedBytes = new Uint8Array(options.bytes.byteLength);
   ownedBytes.set(options.bytes);
@@ -118,7 +116,12 @@ async function activateEsbuild(
     );
   }
   if (runtimeEsbuildBindingMatches(fs, normalizedCwd)) return;
-  const outer = await startGeneratedEsbuildRuntime({ bytes, fs, cwd: normalizedCwd, refs });
+  // @ts-expect-error hash-pinned generated JS has no hand-maintained declaration.
+  const generated = (await import('./generated/esbuild-runtime.js')) as GeneratedRuntimeModule;
+  const outer = await startGeneratedEsbuildRuntime(
+    { bytes, fs, cwd: normalizedCwd, refs },
+    generated,
+  );
   publishRuntimeEsbuild(
     outer,
     { fs, cwd: normalizedCwd },
@@ -129,6 +132,7 @@ async function activateEsbuild(
 export function assertPackageRuntimeBindings(options: {
   readonly bindings: readonly PackageRuntimeBinding[];
   readonly cwd: string;
+  readonly runtimeTier?: ShadowRuntimeTier;
 }): void {
   const activated = new Set<string>();
   for (const binding of options.bindings) {
@@ -139,11 +143,15 @@ export function assertPackageRuntimeBindings(options: {
     if (binding.adapterId !== ESBUILD_RUNTIME_ADAPTER_ID) {
       throw new NotImplementedError(`runtime-adapter.${binding.adapterId}`);
     }
+    if (options.runtimeTier === 'coi') {
+      throw new NotImplementedError('runtime-adapter.esbuild.coi');
+    }
   }
   for (const binding of options.bindings) assertEsbuildPackagePath(binding, options.cwd);
 }
 
 export async function activatePackageRuntimeAdapters(options: {
+  readonly runtimeTier?: ShadowRuntimeTier;
   readonly bindings: readonly PackageRuntimeBinding[];
   readonly fs: FsSync;
   readonly cwd: string;

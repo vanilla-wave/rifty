@@ -1,5 +1,7 @@
+import { execFileSync } from 'node:child_process';
 import { NotImplementedError } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
+import { Buffer } from './buffer.ts';
 import { riftyProcess, writeProcessStdin } from './process.ts';
 
 describe('process.stdin host bridge', () => {
@@ -31,7 +33,20 @@ describe('process.stdin host bridge', () => {
     const bytes = new Uint8Array([0x68, 0x69]);
     writeProcessStdin(bytes);
 
-    expect(chunks).toEqual([bytes]);
+    const oracle = JSON.parse(
+      execFileSync(
+        process.execPath,
+        [
+          '-e',
+          "process.stdin.on('data', chunk => console.log(JSON.stringify({buffer:Buffer.isBuffer(chunk),bytes:[...chunk]})))",
+        ],
+        { input: bytes, encoding: 'utf8' },
+      ),
+    );
+    expect(chunks).toHaveLength(1);
+    expect({ buffer: Buffer.isBuffer(chunks[0]), bytes: [...(chunks[0] as Uint8Array)] }).toEqual(
+      oracle,
+    );
   });
 
   it('decodes byte chunks when utf8 encoding is requested', () => {

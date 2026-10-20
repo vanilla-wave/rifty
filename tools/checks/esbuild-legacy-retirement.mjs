@@ -56,6 +56,8 @@ export const ALLOWED_SHADOW_PRODUCTION_SOURCES = Object.freeze([
   'packages/npm-client/src/internal/shadow/index.ts',
   'packages/npm-client/src/internal/shadow/install-result.ts',
   'packages/npm-client/src/internal/shadow/planner.ts',
+  'packages/npm-client/src/internal/shadow/registry-projection.ts',
+  'packages/npm-client/src/internal/shadow/runtime-tier.ts',
   'packages/npm-client/src/internal/shadow/schema-one-identity.ts',
   'packages/npm-client/src/internal/shadow/substitution.ts',
 ]);
@@ -99,8 +101,8 @@ const WORKBENCH_COMPILER_OUTPUTS = Object.freeze({
     sha256: '39be666ac003c7361e9fbcd88abdda1ed51052350ade9b57b4d2716f1e296498',
   },
   'typescript-worker.js': {
-    bytes: 10_022_694,
-    sha256: '79a851d1e25953241f1dec2889b40ebec29beabd62ea79245047d40787925909',
+    bytes: 10022694,
+    sha256: '9313cfd4d42497dba1d134b7358d82c20f8195f5eeb9bc3839be623dc5aefb9a',
   },
 });
 const WORKBENCH_WASM_OUTPUTS = Object.freeze({

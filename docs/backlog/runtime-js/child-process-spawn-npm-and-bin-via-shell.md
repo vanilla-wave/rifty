@@ -22,3 +22,15 @@ resolving the same commands via PATH. Outside the no-COI agent host kit.
 ## Out of scope
 
 - Native binaries, `sh -c` with shell syntax beyond the rifty shell's grammar (loud).
+
+## Question
+
+- 2026-10-20 — file-stdout sweep also hit `spawn(process.execPath, ['child.cjs'])`:
+  Node 24.16.0 wrote `payload`; Chromium produced an empty file. Initial probe
+  omitted the child's exit assertion, so its exact refusal remains unproven.
+  `process.execPath` is `/usr/local/bin/rifty`; the Worker selector accepts only
+  `node`. Reproduce with a materialized child writing `payload`, capture
+  error/close/output before selecting a repair. `spawn('node', …)` passes the
+  actual inherited-fd carrier (`tests/browser-unit/file-stdout.spec.ts`).
+  Owner: runtime-js; trigger: this item's pickup. Same command-selection
+  boundary; outside esbuild-upstream-twin's observed stock entry paths.

@@ -7,6 +7,7 @@ interface ChildTerminalSize {
 
 export interface ChildTerminalContext {
   readonly isTTY?: boolean;
+  readonly stdoutIsFile?: boolean;
   readonly cols?: number;
   readonly rows?: number;
   readonly terminal?: {
@@ -25,6 +26,7 @@ export function childTerminalBootstrap(ctx: ChildTerminalContext): NodeEntryTerm
   return {
     stdinIsTTY: false,
     stdoutIsTTY: isTTY,
+    ...(ctx.stdoutIsFile === undefined ? {} : { stdoutIsFile: ctx.stdoutIsFile }),
     stderrIsTTY: isTTY,
     cols: ctx.cols ?? 80,
     rows: ctx.rows ?? 24,

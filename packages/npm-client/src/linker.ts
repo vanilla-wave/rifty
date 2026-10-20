@@ -9,7 +9,7 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
-import { builtinShadowSubstitutionCatalog } from '@riftydev/shadow-registry/internal';
+import { builtinRecipeById } from '@riftydev/shadow-registry/internal';
 import { type Vfs, joinPath, normalizePath } from '@riftydev/vfs';
 import {
   type RegistryShadowEmbeddedSource,
@@ -479,10 +479,20 @@ export function buildPreparedInstallLockfile(
     throw new TypeError('trusted installer shadow plan invariant failed');
   }
   const lockfile = buildPreparedLockfile(rootName, rootVersion, packages, rootDependencyMaps);
+  appendRegistryShadowEmbeddedSources(lockfile, plan, embeddedSources);
+  return recordShadowSubstitutionPlan(lockfile, plan);
+}
+
+/** One receipt writer for installs and current-catalog tier projection. */
+export function recordShadowSubstitutionPlan(
+  lockfile: Lockfile,
+  plan: ShadowSubstitutionPlan,
+): Lockfile {
+  if (!Object.isFrozen(plan) || !Object.isFrozen(plan.substitutions)) {
+    throw new TypeError('trusted installer shadow plan invariant failed');
+  }
   for (const substitution of plan.substitutions) {
-    const recipe = builtinShadowSubstitutionCatalog.recipes.find(
-      (candidate) => candidate.id === substitution.substitutionId,
-    );
+    const recipe = builtinRecipeById(substitution.substitutionId, substitution.trigger.version);
     if (!recipe) {
       throw new NotImplementedError(
         `shadow-registry.substitutionRecipe.${substitution.substitutionId}`,
@@ -499,7 +509,6 @@ export function buildPreparedInstallLockfile(
     else entry.bin = { ...recipe.materialization.bin };
     entry.riftyShadowRecipe = substitution.substitutionId;
   }
-  appendRegistryShadowEmbeddedSources(lockfile, plan, embeddedSources);
   if (plan.substitutions.length === 0) return lockfile;
   return {
     ...lockfile,
@@ -517,9 +526,7 @@ function appendRegistryShadowEmbeddedSources(
   const remainingSources = [...embeddedSources];
   for (const substitution of plan.substitutions) {
     if (substitution.acquisition.kind !== 'registry') continue;
-    const recipe = builtinShadowSubstitutionCatalog.recipes.find(
-      (candidate) => candidate.id === substitution.substitutionId,
-    );
+    const recipe = builtinRecipeById(substitution.substitutionId, substitution.trigger.version);
     if (!recipe) {
       throw new NotImplementedError(
         `shadow-registry.substitutionRecipe.${substitution.substitutionId}`,
@@ -528,8 +535,7 @@ function appendRegistryShadowEmbeddedSources(
     if (recipe.acquisition.kind !== 'registry') {
       throw new TypeError(`shadow substitution ${substitution.substitutionId} acquisition drifted`);
     }
-    const bundledNames = recipe.acquisition.dependencyProjection.bundledDependencies;
-    if (bundledNames.length === 0) continue;
+    if (recipe.acquisition.dependencyProjection?.bundledDependencies.length === 0) continue;
 
     const acquisitionInstallPath = registryAcquisitionInstallPath(substitution);
     const matchingIndexes = remainingSources.flatMap((source, index) =>
@@ -553,6 +559,9 @@ function appendRegistryShadowEmbeddedSources(
       );
     }
     remainingSources.splice(sourceIndex, 1);
+    const projection = recipe.acquisition.dependencyProjection ?? source.projection;
+    if (!projection) throw new TypeError('range recipe metadata is missing');
+    const bundledNames = projection.bundledDependencies;
 
     const dependenciesByName = new Map(
       source.dependencies.map((dependency) => [dependency.name, dependency]),
@@ -573,9 +582,7 @@ function appendRegistryShadowEmbeddedSources(
     }
 
     for (const name of bundledNames) {
-      const range =
-        recipe.acquisition.dependencyProjection.dependencies[name] ??
-        recipe.acquisition.dependencyProjection.optionalDependencies[name];
+      const range = projection.dependencies[name] ?? projection.optionalDependencies[name];
       const dependency = dependenciesByName.get(name);
       const installPath = `${acquisitionInstallPath}/node_modules/${name}`;
       if (
@@ -583,7 +590,7 @@ function appendRegistryShadowEmbeddedSources(
         dependency?.range !== range ||
         dependency.installPath !== installPath ||
         !matchesRange(dependency.version, range) ||
-        parentEntry.dependencies?.[name] !== range ||
+        (parentEntry.dependencies?.[name] ?? parentEntry.optionalDependencies?.[name]) !== range ||
         Object.hasOwn(lockfile.packages, installPath)
       ) {
         throw new TypeError(
@@ -592,7 +599,7 @@ function appendRegistryShadowEmbeddedSources(
       }
     }
 
-    parentEntry.bundleDependencies = [...bundledNames];
+    if (bundledNames.length > 0) parentEntry.bundleDependencies = [...bundledNames];
     for (const name of bundledNames) {
       const dependency = dependenciesByName.get(name);
       if (!dependency) {

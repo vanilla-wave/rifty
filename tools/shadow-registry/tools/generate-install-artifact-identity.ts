@@ -2,7 +2,11 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { bakedOverrides, internalsShims } from '../src/index.ts';
-import { identityForRecipe, identityPolicyProjection } from '../src/install-artifact-recipe.ts';
+import {
+  coiIdentityForRecipeIdentity,
+  identityForRecipe,
+  identityPolicyProjection,
+} from '../src/install-artifact-recipe.ts';
 import { builtinShadowSubstitutionCatalog } from '../src/internal/index.ts';
 import { emnapiCoreOrphanedReferencePatchPolicy } from '../src/runtime/emnapi-core-install-policy.ts';
 
@@ -20,6 +24,7 @@ interface RuntimeManifest {
 interface InstallArtifactIdentityFile {
   readonly schema: 1;
   readonly identity: string;
+  readonly coiIdentity: string;
 }
 
 async function readJson(url: URL): Promise<unknown> {
@@ -46,7 +51,8 @@ async function readRuntimeOutputIdentity(): Promise<RuntimeManifest['output'] | 
 }
 
 export async function buildInstallArtifactIdentityFile(): Promise<InstallArtifactIdentityFile> {
-  return { schema: 1, identity: identityForRecipe(await buildInstallArtifactRecipe()) };
+  const identity = identityForRecipe(await buildInstallArtifactRecipe());
+  return { schema: 1, identity, coiIdentity: coiIdentityForRecipeIdentity(identity) };
 }
 
 export async function buildInstallArtifactRecipe() {

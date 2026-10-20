@@ -44,6 +44,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0347 | Idempotent process-manager kill during settlement |
 | 0351 | Async pre-entry readiness gates worker entry |
 | 0366 | Binary request frames for hot fs sync-RPC |
+| 0542 | Share worker stdin between synchronous descriptors and streams |
 
 ### runtime-js
 
@@ -115,6 +116,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0539 | Serve no-COI child filesystem calls through Service Worker |
 | 0540 | [Expose virtual filesystem Stats metadata for stock Node guests](runtime-js/0540-expose-virtual-filesystem-stats-metadata-for-stock-node-guests.md) |
 | 0541 | Run Node Fetch classes over the browser I/O boundary |
+| 0544 | Initialize redirected stdout lazily through Node filesystem writes |
 
 ### runtime-wasi
 
@@ -202,6 +204,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0530 | Installed Vite CLI runs upstream bytes; trackKeepalivePromise removed |
 | 0533 | Vite runs upstream bytes at every project root; root policies removed |
 | 0534 | napi-rs packages launch with NAPI_RS_FORCE_WASI=1 |
+| 0543 | Resolve COI esbuild ranges to unmodified upstream Node twins |
 
 ### playground
 
@@ -325,6 +328,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0330 | Lifecycle failures remain exceptional through Shell |
 | 0357 | Git facade carries exact storage read failures; absence is proven, never inferred |
 | 0362 | One command resolution authority across execution and owner-backed discovery |
+| 0545 | Execute local npx binaries through the existing command resolver |
 
 ### terminal
 

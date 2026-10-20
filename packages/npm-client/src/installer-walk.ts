@@ -5,7 +5,11 @@
  * `pinToPackage` materialization seam.
  */
 
-import type { BuiltinShadowSubstitutionRecipe } from '@riftydev/shadow-registry/internal';
+import type {
+  BuiltinShadowSubstitutionRecipe,
+  ShadowRegistryDependencyProjection,
+  ShadowRuntimeTier,
+} from '@riftydev/shadow-registry/internal';
 import {
   type FetchAndUnpackCtx,
   type FetchAndUnpackResult,
@@ -105,6 +109,7 @@ export interface ResolvedPin {
   readonly installPath?: string;
   readonly shadow?: Readonly<{
     recipe: BuiltinShadowSubstitutionRecipe;
+    projection?: ShadowRegistryDependencyProjection;
     trigger: Readonly<{ name: string; requestedRange: string | null; version: string }>;
     acquisition:
       | Readonly<{ kind: 'synthetic' }>
@@ -173,13 +178,14 @@ export function lockfileReuseDecision(
   range: string | null,
   ctx: ResolveContext,
   overrides: OverrideMap | undefined,
+  runtimeTier?: ShadowRuntimeTier,
 ): LockfileReuseDecision {
   const {
     override,
     effectiveName,
     effectiveRange,
     installName = effectiveName,
-  } = resolveEffectivePackageRequest(name, range, ctx.parentName, overrides);
+  } = resolveEffectivePackageRequest(name, range, ctx.parentName, overrides, runtimeTier);
   const hit = pinnedEntryForParent(lockfile, installName, ctx.parentLockfilePath);
   const recipe = builtinRecipeForRequest(
     name,
@@ -187,6 +193,7 @@ export function lockfileReuseDecision(
     ctx.parentName,
     overrides,
     hit?.entry.version,
+    runtimeTier,
   );
   const companion =
     ctx.companionTriggerVersion !== undefined &&
@@ -336,7 +343,8 @@ export async function walkAndPin(
   ): [string, string][] {
     const bundled =
       pin.shadow?.recipe.acquisition.kind === 'registry'
-        ? pin.shadow.recipe.acquisition.dependencyProjection.bundledDependencies
+        ? ((pin.shadow.recipe.acquisition.dependencyProjection ?? pin.shadow.projection)
+            ?.bundledDependencies ?? [])
         : [];
     return Object.entries(dependencies).filter(([name]) => !bundled.includes(name));
   }
@@ -750,6 +758,7 @@ async function pinToPackage(
       pin.shadow.recipe.materialization.name,
     );
     const fact = attestBuiltinShadowSubstitution({
+      substitutionId: pin.shadow.recipe.id,
       trigger: pin.shadow.trigger,
       installPath: materializationInstallPath,
       acquisition:
@@ -768,12 +777,20 @@ async function pinToPackage(
     });
     pinnedShadowSubstitutions.set(pkg, {
       substitution: fact,
-      ...(embeddedDependencies.length === 0
+      ...(embeddedDependencies.length === 0 &&
+      !(
+        pin.shadow.recipe.acquisition.kind === 'registry' &&
+        pin.shadow.recipe.acquisition.dependencyProjection === null
+      )
         ? {}
         : {
             embeddedSource: {
               acquisitionInstallPath: installPath,
               dependencies: embeddedDependencies,
+              ...(pin.shadow.recipe.acquisition.kind === 'registry' &&
+              pin.shadow.recipe.acquisition.dependencyProjection === null
+                ? { projection: pin.shadow.projection }
+                : {}),
             },
           }),
     });

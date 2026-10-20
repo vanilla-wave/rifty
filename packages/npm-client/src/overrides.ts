@@ -10,6 +10,7 @@
  * target-string parsing.
  */
 import { bakedOverrides } from '@riftydev/shadow-registry';
+import { type ShadowRuntimeTier, builtinRecipeForTier } from '@riftydev/shadow-registry/internal';
 import { parseNpmAlias } from './npm-alias.ts';
 import { isLooseSemverRange } from './semver-loose-range.ts';
 
@@ -36,10 +37,18 @@ export function resolveOverride(
   name: string,
   parent: string | undefined,
   userOverrides: OverrideMap = {},
+  runtimeTier?: ShadowRuntimeTier,
 ): ResolvedOverrideTarget | null {
   const user = userOverride(name, parent, userOverrides);
   if (user && 'spec' in user) return { name, range: user.spec, source: 'user' };
   if (user) return { ...user.target, source: 'user' };
+  const recipe = builtinRecipeForTier(name, runtimeTier);
+  if (recipe?.acquisition.kind === 'registry')
+    return {
+      name: recipe.acquisition.name,
+      range: recipe.admission.kind === 'requested-range' ? null : recipe.acquisition.version,
+      source: 'baked',
+    };
   const builtin = bakedOverrides[name];
   if (builtin) return { ...parseTarget(builtin), source: 'baked' };
   return null;

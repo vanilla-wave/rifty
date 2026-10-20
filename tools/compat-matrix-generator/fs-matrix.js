@@ -50,6 +50,16 @@ export const fsMatrix = {
       '✅',
       '`open`/`close`/`read`/`write`/`fstat`/`ftruncate`; sequential and positional IO',
     ],
+    [
+      '`fs` on stdio descriptors 0–2',
+      '⚠️',
+      'COI: `read`/`readSync`/`readFileSync(0)`, `fstatSync(0)` (FIFO/character mode), `closeSync(0)` and `write`/`writeSync(1\\|2)` use raw descriptors; writes bypass replaced `process.stdout.write`. Pipe positions throw `ESPIPE`. Kernel pull stdin (ADR-0542); `tests/browser-unit/fs-stdio-fds.spec.ts`, `tests/browser-unit/file-stdout.spec.ts`.',
+    ],
+    [
+      'No-COI synchronous stdin',
+      '❌',
+      "`readSync`/`readFileSync(0)` throw `NotImplementedError('fs.readSync.stdin')`: no-COI children receive push-MessagePort stdin, without a pull pipe. Async `fs.read(0)` and `process.stdin` work.",
+    ],
     ['`truncate` / zero fill', '✅', 'Sync and promises paths'],
     ['`mkdtemp` / `opendir`', '✅', 'Sync and promises; async directory iteration'],
     [

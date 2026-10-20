@@ -793,12 +793,8 @@ globalThis.onmessage = ({ data }) => {
       RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
     });
 
-    const worker = new Worker('/workspace/w.mjs', { workerData: new Date(0) });
-    const error = await new Promise<unknown>((resolve) => {
-      worker.once('error', resolve);
-    });
-
-    expect(error).toEqual(
+    // Goal esbuild-upstream-twin I2: refusal must precede Atomics.wait.
+    expect(() => new Worker('/workspace/w.mjs', { workerData: new Date(0) })).toThrow(
       expect.objectContaining({
         name: 'NotImplementedError',
         feature: 'worker_threads.workerData.structuredClone',
@@ -820,12 +816,8 @@ globalThis.onmessage = ({ data }) => {
       RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
     });
 
-    const worker = new Worker('/workspace/w.mjs', { workerData: { z: -0 } });
-    const error = await new Promise<unknown>((resolve) => {
-      worker.once('error', resolve);
-    });
-
-    expect(error).toEqual(
+    // Goal esbuild-upstream-twin I2: refusal must precede Atomics.wait.
+    expect(() => new Worker('/workspace/w.mjs', { workerData: { z: -0 } })).toThrow(
       expect.objectContaining({
         name: 'NotImplementedError',
         feature: 'worker_threads.workerData.structuredClone',

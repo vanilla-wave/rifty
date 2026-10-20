@@ -44,3 +44,5 @@ Move the Node-API surface out of `@riftydev/kernel` into `@riftydev/runtime-js`:
 - ADR 0011 — kernel spawn pipeline and the recursive-spawn handshake this ADR closes.
 - ADR 0019 — `cwd` ownership on `ProcessRecord`; `ProcessSpec.cwd` is the same field, propagated unchanged.
 - ADR 0024 / ADR 0033 — file-size budget context (new `runtime-js/src/ipc/*` files stay within per-file budget; `runtime-js/src/builtins/child_process.ts` does not grow).
+
+- 2026-10-20 — ADR-0542 lifts stdin to an optional semantic input capability. Kernel transport owns bytes and caller identity; Node fd/stream semantics stay in runtime-js. The default dispatcher remains unregistered until a caller opts into pull stdin.

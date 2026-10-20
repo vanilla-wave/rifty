@@ -1,5 +1,7 @@
 # Changelog
 
+- Preserve Buffer chunks on process.stdin after merging shared descriptor reads with no-COI children.
+
 - Preserve immediate fork disconnect and send ordering; match Node24 parent-disconnect terminal events.
 
 - Transport complete numeric Stats fields from VFS; upstream no-COI esbuild can resolve build files.
@@ -8,6 +10,17 @@
 
 - Guest Fetch instances and `markAsUncloneable` graphs throw Node's `DataCloneError` (code 25) on `structuredClone`, realm/`MessagePort`/`Worker`/`parentPort`/`BroadcastChannel` `postMessage` (kernel and same-realm workers), nested values, Error `cause` and getters included: one admission projection (`internal/clone-marks.ts`) hands every native clone a graph read once (ADR-0541).
 
+- Child stdin retains only dispatched transport writes; corked buffers no longer keep an unreferenced parent alive, including a corked successor after an active write.
+
+- Async explicit process exits retain their drain status without leaking an internal exit signal as a browser error (ADR-0445).
+
+- CJS with a standalone first-line strict directive preserves source positions without a stack hook, including frozen guest hooks; stock esbuild validation points at original source. Other CJS shapes retain the recorded +2-line gap.
+
+- File stdout initializes lazily through the current fs.writeSync; inherited child output uses captured descriptors (ADR-0544).
+
+- fs consumes real stdio descriptors; kernel stdin supports synchronous reads, async reads share process.stdin consumption. hrtime and crypto retain platform sources when guests replace the globals (stock esbuild-wasm 0.21).
+
+- Stock Node guest prerequisites: stdio write callbacks/encoding; ChildProcess and pipe references; synchronous named workerData/execFileSync refusals; complete VFS-backed numeric Stats (ADR-0540).
 - Early Fetch preload no longer caches the fallback `node:process`: child IPC, stdio and Worker construction observe the seeded child process. JS Fetch classes serialize own enumerable properties through advanced IPC as Node (ADR-0541).
 
 - Pre-aborted Fetch preserves abort priority and unstarted body cancellation; collected Responses leave retained errored bodies undisturbed. Locked bodies with custom cancel reject `fetch.abortBodyState`; active upload abort retains Node's continued-read behavior (ADR-0541).

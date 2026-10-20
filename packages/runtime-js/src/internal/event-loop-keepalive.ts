@@ -511,7 +511,8 @@ export function handleRealmUnhandledRejection(reason: unknown, promise: unknown)
   if (beginNodeEvalUnhandled(reason, 'rejection')) return true;
   const fatal = outcome?.kind === 'unhandled' ? terminateFatal(outcome.error) : null;
   recordRejection(fatal ?? reason);
-  return fatal !== null;
+  // A current exit signal still settles the drain, but is never a guest error.
+  return isRiftyProcessExit(reason) || fatal !== null;
 }
 
 export function installUnhandledErrorTrap(
