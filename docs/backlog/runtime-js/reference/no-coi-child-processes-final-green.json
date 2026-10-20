@@ -1,0 +1,238 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Goal end-to-end acceptance verified; proceed CLOSE cleanup and pass-binding, then merge only on green CI at HEAD. Independent Node/Chromium run: 18/18 passed (1.3m), /tmp/no-coi-close-review-browser.log. Packed emitted graph independently passed; reviewed packed helper/repeated upstream transforms and installed-Vite continuation on the same immutable consumer. COI CJS/ESM/Vite, byte-identical COI/no-COI build output, Stats RED/GREEN and snapshot identity artifacts inspected. PR-4: exact alias/catalog/replay bytes updated without weakening negative criteria; all snapshot package versions preserved; compiler exact-pin change is generated import hashes only. Recorded advisory ctime semantics remain outside the accepted no-COI outcome. Full pr:check PASS 27/27 on clean reviewed HEAD: test:run 232.8s, test:parity 145.3s (/tmp/no-coi-delivery-pr-check.log). Initial replay fixture failure repaired by exact byte/hash update; isolated 94/94 replay cases pass; no criterion weakening.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "59da8edb51d440449b599aa5b3c9887549494256",
+  "unit_goal_source": "docs/backlog/runtime-js/no-coi-esbuild-retirement.md against BASE 7eac405577dcd885171f618fed0df2847e277d28; CLOSE of docs/backlog/epics/no-coi-child-processes/goal.md against original BASE 3207b33acb3c; PR #380. Raw PR body/comments, Contract+RED 09be0e47178a079b4cac4d1c40656af957570583 and prior runtime Final+GREEN read. User amendments accept active SW only for children and retain shared COI client for upstream-twin.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Acceptance 1: installed esbuild transforms twice with Node output; legacy realm slot and generated client absent",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-esbuild-retirement.spec.ts:79",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: packed no-COI graph excludes generated client and public packed SDK still executes helper/upstream transforms",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-esbuild-graph-proof.mjs:7; tests/integration/no-coi-child-browser-proof.mjs:109",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: preserve installed Vite build/rebuild baseline and shared COI client",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-installed-cli.spec.ts:35; tests/browser-unit/esbuild-vite-contract.spec.ts:1124",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: installed alias repeated fresh invocations equal native Node stdout/stderr/status",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-esbuild-retirement.spec.ts:37",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 1: raw upstream esbuild transform equals Node without package-byte patches",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:61",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: shebang helper loads dependencies, isolates globals/builtins, uses async pipes and live bidirectional FS",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/child-process-programs.ts:2",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: absent SW gives named child gap while ordinary SDK file/command operations work",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:141",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: parent.cjs close, environment, dependency, globals/builtins, bytes and live FS match actual Node execution",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:70",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: untouched esbuild.cjs transforms and terminates naturally",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/child-process-programs.ts:39",
+      "note": ""
+    },
+    {
+      "row": "Peer death: terminal outcome and released Worker resources, no successful missing output",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:129",
+      "note": ""
+    },
+    {
+      "row": "Unavailable SW during spawn: named transport error without same-realm fallback",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:141",
+      "note": ""
+    },
+    {
+      "row": "Owner FS error: preserved Node/VFS error without stale copy",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/child-process-programs.ts:44",
+      "note": ""
+    },
+    {
+      "row": "Scenario: nonempty asynchronous stdin/stdout/stderr equals native Node",
+      "source": "acceptance",
+      "trace": "scenario + I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:123",
+      "note": ""
+    },
+    {
+      "row": "SyncRpcDispatcher.dispatch reuses registered FS/process semantics across transports",
+      "source": "public-api",
+      "trace": "ADR-0539",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:48",
+      "note": ""
+    },
+    {
+      "row": "ProcessIO.complete and SpawnOptions.remoteControl retain kernel terminal and nested identity authority",
+      "source": "public-api",
+      "trace": "ADR-0539",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/child-process-programs.ts:67",
+      "note": ""
+    },
+    {
+      "row": "connectSyncFsBridge and installSyncFsInterceptor route real child requests through SW/Window to live owner",
+      "source": "public-api",
+      "trace": "ADR-0539",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:82",
+      "note": ""
+    },
+    {
+      "row": "ToolchainRuntimeController.connectChildProcesses supplies the matched Worker URL and live bridge",
+      "source": "public-api",
+      "trace": "ADR-0539",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:45",
+      "note": ""
+    },
+    {
+      "row": "ChildProcess.ref/unref and independently referenced readable pipes preserve natural completion and delayed output",
+      "source": "public-api",
+      "trace": "I1 + I2 + ADR-0539",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/child-process-programs.ts:109",
+      "note": ""
+    },
+    {
+      "row": "FsStat transports numeric metadata, file type, stable inode/birth identity and link counts through stat/lstat/fstat",
+      "source": "public-api",
+      "trace": "ADR-0540",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/fs/stats-node-fields.case.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Client-free registry runtime/common public subpath preserves packed SDK execution while excluding generated esbuild client",
+      "source": "public-api",
+      "trace": "ADR-0539",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:1203; tests/integration/no-coi-child-browser-proof.mjs:109",
+      "note": ""
+    },
+    {
+      "row": "Current exact catalog/recipe identities match regenerated snapshots and retained COI contract; unchanged package versions",
+      "source": "frozen-artifact",
+      "trace": "I3 + ADR-0539",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-vite-contract.spec.ts:1052; tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2365",
+      "note": ""
+    },
+    {
+      "row": "Updated replay-authority exact alias fixture retains rejection-before-effects negative criteria",
+      "source": "frozen-artifact",
+      "trace": "I3 + ADR-0539",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-shadow-recipe-v2-replay-authority.contract.test.ts:80",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/vfs/src/memory-backend.ts:314; packages/vfs/src/opfs-sync.ts:1027",
+          "summary": "New numeric Stats coverage does not establish all timestamp transitions: rename preserves stale entry/parent ctime. Outside I1–I4; recorded in the existing upstream-twin Stats item with owner and next probe, and generator-backed public fs matrix marks partial support. No full timestamp-value parity claimed.",
+          "authority": "",
+          "evidence": "Read rename implementations and tools/node-parity-runner/cases/fs/stats-node-fields.case.ts: the carrier asserts shape, stable inode/birth and link count, not ctime transition. Disposition recorded at docs/backlog/runtime-js/fs-stats-node-fields.md:39 and tools/compat-matrix-generator/fs-matrix.js:19."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
