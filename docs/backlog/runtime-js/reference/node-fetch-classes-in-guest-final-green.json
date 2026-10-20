@@ -1,9 +1,9 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "Final+GREEN/CLOSE accepted: 0 blockers, 1 advisory childSaw NOTE. Committed pr:check 28/28 GREEN (3 broad-run Vitest timeouts passed mandatory isolated reruns), no-COI 2, browser 15 and Wasm/progress 15 GREEN; production and packed-consumer proof retained for unchanged product source. Merge after re-bound pass-binding and green CI at HEAD.",
+  "merge_call": "Final+GREEN/CLOSE accepted: 0 blockers, 1 advisory childSaw NOTE, 39 coverage PASS, no residuals. Merged-tree browser 50/50, no-COI 26/26 plus interactive network carrier 1/1, production 1/1, packed consumer 1/1 (267.82s), pr:check 28/28 (unit 223.6s, parity 150.3s, no isolated rerun). Sandbox-support factual capture written-result check PASS; cause remains unknown. Merge only after re-bound pass-binding and green PR CI at the newly published HEAD; old 42a3 CI is not green and does not authorize merge.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "3fe0e53bb18f01200a7f9cd23f3328ac828d9858",
-  "unit_goal_source": "PR #381 https://github.com/vanilla-wave/rifty/pull/381; goal node-fetch-classes-in-guest / unit node-fetch-guest-carrier, accepted I1–I3 and user-approved browser transport with explicit ceilings; raw goal/unit authority preserved at 207e9db6b4bf84b525d396d5378080ae1244c5b1; BASE 3207b33acb3cb74d54be2cff6d33200cb32bf556; Contract+RED preparation 2a6a30728d5af714ef2598bf84158b89dc65e48e, PR comment 6278683544; full Final+GREEN/CLOSE verify including every established failed-job observation from CI run 39352801104 at clean 3fe0e53bb18f01200a7f9cd23f3328ac828d9858. Product source unchanged from cfe3ba10f1a1a4baaea59ba8c9dd58642705174d; carrier placement corrected and full gate rerun at reviewed tree.",
+  "reviewed_sha": "3301e4c465a7da0deb5da2c7bf678b3b086bbc9c",
+  "unit_goal_source": "PR #381 https://github.com/vanilla-wave/rifty/pull/381; goal node-fetch-classes-in-guest / unit node-fetch-guest-carrier; accepted I1–I3, real Hono/body/network scenario, Node 24.16.0 and existing browser transport with explicit ceilings; measured bundle growth without new limit; WebSocket/EventSource/server transport excluded. Raw accepted goal/unit at 207e9db6b4bf84b525d396d5378080ae1244c5b1; Contract+RED 2a6a30728d5af714ef2598bf84158b89dc65e48e (PR comment 6278683544), original BASE 3207b33acb3cb74d54be2cff6d33200cb32bf556. Current review BASE 7f8d0e8d7dea72f271e1060e074f5be9a8285223; clean committed product/test tree 3301e4c465a7da0deb5da2c7bf678b3b086bbc9c; verify full PR diff plus integration delta against 42a3d462692a7748d44a4745a9ab110fe30442cd. Read raw sources, preparation carrier, PR comments, current carriers and receipts; retained 3fe0e53 review is history, not immunity. Latest sandbox-support draft wording separately checked against raw CI run39366901741/job118446158154, trace artifact12240234469 and unchanged-head local rerun; only documentation wording differs from reviewed commit. Current receipts: /tmp/rifty-fetch-main-browser.log, /tmp/rifty-fetch-main-no-coi.log, /tmp/rifty-fetch-main-no-coi-interactive.log, /tmp/rifty-fetch-main-prod.log, /tmp/rifty-fetch-main-packed.log, /tmp/rifty-fetch-main-pr-check.log.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -209,7 +209,7 @@
       "note": ""
     },
     {
-      "row": "Exact compiler asset fingerprint updated after real build; old size ceiling and negative payload criteria retained, packed consumer executed",
+      "row": "PR-4 compiler pin merge: old main exact-size/SHA criterion retained; merged asset independently measured 10022694 bytes, SHA256 dfdb491807cbb35df7d30759775c5ee2e6cefe04a75d5c19818306658285fe2d; other ceilings and negative payload tests unchanged, current packed consumer GREEN",
       "source": "frozen-artifact",
       "trace": "ADR-0391",
       "status": "pass",
@@ -217,7 +217,7 @@
       "note": ""
     },
     {
-      "row": "Requested worker bundle growth measured without new limit; independently recomputed five emitted assets with matching Python gzip settings",
+      "row": "Requested bundle growth measured against the same merged main 7f8d0e8d7 without a new limit; reviewer independently recomputed five actual emitted assets with Python gzip level9/mtime0 and matched ADR0541 table",
       "source": "acceptance",
       "trace": "scenario",
       "status": "pass",
@@ -273,11 +273,11 @@
       "note": ""
     },
     {
-      "row": "No-COI admitted install/run baseline preserved: guest CLI receives the absolute endpoint URL; real route gates, busy-admission rejection, host interactivity and output/release assertions unchanged; actual RED and committed GREEN",
+      "row": "No-COI admitted install/run baseline preserved after main merge: guest CLI gets absolute endpoint URL; unchanged real network gates, busy rejection, host interactivity, output/release assertions pass on the new child transport",
       "source": "acceptance",
       "trace": "ADR-0541",
       "status": "pass",
-      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2690",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2689",
       "note": ""
     },
     {
@@ -311,6 +311,14 @@
       "status": "pass",
       "citation": "tests/e2e/fetch-keepalive-webassembly-streaming.spec.ts:327",
       "note": ""
+    },
+    {
+      "row": "Integration with main no-COI child transport preserves seeded process, Buffer stdin, kernel-owned completion and SDK lifecycle; auto-merges keep both changes, real Node/Chromium child hierarchy/stdio/IPC/startup and agent mutation carriers pass (26/26)",
+      "source": "acceptance",
+      "trace": "ADR-0539+ADR-0541",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:53",
+      "note": ""
     }
   ],
   "axes": [
@@ -323,7 +331,7 @@
           "location": "tests/browser-unit/fixtures/advanced-ipc-cases.ts:41",
           "summary": "NOTE: optional childSaw snapshot would retain explicit first-hop observation in the new Fetch-class IPC carrier, which currently inspects the returned value. No current contract violation established: the shared codec uses native structuredClone and only rebrands Buffer on receive, has no Fetch-specific reconstruction, and the existing generic values carrier observes childSaw for ordinary classes/records. Producer retained this as advisory without expanding the carrier; coverage remains pass, no residual.",
           "authority": "",
-          "evidence": "Read current browser-only program and packages/runtime-js/src/internal/node-ipc-advanced.ts:329/:371; inspect existing DESCRIBE_SOURCE/ECHO_CHILD_SOURCE generic carrier. Same-source live Node/Chromium fetch-classes program GREEN in committed browser run. No wrong-first-hop product mutant demonstrated; optional hardening only."
+          "evidence": "Read current browser-only Fetch-class round-trip and packages/runtime-js/src/internal/node-ipc-advanced.ts:329/:371: native clone plus Buffer-only rebranding, no Fetch reconstruction. Existing generic carrier records childSaw. Same-source live Node/Chromium carrier passes at3301 in /tmp/rifty-fetch-main-browser.log. No demonstrated wrong-first-hop product mutant; optional hardening only."
         }
       ]
     },

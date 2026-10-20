@@ -51,8 +51,9 @@ poisoned-cache]`, its second probe is `sw-denied`). CI runs: 39172935764
 Occurrence 2026-10-20 (PR #381, head `42a3d4626`):
 [CI job 118446158154](https://github.com/vanilla-wave/rifty/actions/runs/39366901741/job/118446158154)
 failed only `sw-denied` (:248), test 240 after 2.3s; 339 passed, 1 skipped overall
-(22.3 min). Error unchanged at :79. Artifact 12240234469 contains only
-`test.trace`, no browser-side trace or crash/close cause.
+(22.3 min). Error unchanged at :79. Artifact 12240234469 contains runner
+`test.trace` plus source/error-context resources, no browser-side trace or
+crash/close cause.
 
 Unchanged-head local command `RIFTY_PLAYGROUND_PORT=5388 pnpm test:browser-unit
 sandbox-support.spec.ts --grep 'SW registration denial differs'`: 1/1 pass
