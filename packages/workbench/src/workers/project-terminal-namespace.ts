@@ -11,6 +11,7 @@ import {
   type GuestLayout,
   type GuestMount,
   type GuestResolution,
+  guestPrivateRoot,
   guestText,
   ownerToGuestPath,
   resolveGuestPath,
@@ -231,11 +232,41 @@ export class ProjectTerminalFsSync implements FsSync {
     });
   }
 
+  private virtualStat(
+    path: string,
+    resolved: Extract<GuestResolution, { kind: 'virtual' }>,
+  ): ReturnType<FsSync['statSync']> {
+    const nlink = 2 + this.readdirSync(path).filter((entry) => entry.isDirectory).length;
+    const covered = resolved.owner === null ? null : this.inner.statSyncOrNull(resolved.owner);
+    if (covered?.isDirectory) return { ...covered, nlink };
+    // Share identity across transient namespace views and remote callers through the owner VFS.
+    const backing = normalizePath(
+      `${guestPrivateRoot(this.layout.projectRoot)}/ancestors${normalizePath(path)}`,
+    );
+    try {
+      let stat = this.inner.statSyncOrNull(backing);
+      if (stat === null) {
+        this.inner.mkdirSync(backing, { recursive: true });
+        stat = this.inner.statSync(backing);
+      }
+      if (!stat.isDirectory) throw new VfsError('ENOTDIR', backing);
+      return { ...stat, nlink };
+    } catch (error) {
+      if (error instanceof VfsError) {
+        const guest = normalizePath(path);
+        throw new VfsError(error.code, guest, error.message.replaceAll(backing, guest), {
+          cause: error,
+        });
+      }
+      throw error;
+    }
+  }
+
   statSync(path: string): ReturnType<FsSync['statSync']> {
     return this.run(() => {
       const resolved = this.resolve(path);
       if (resolved.kind === 'absent') throw new VfsError('ENOENT', normalizePath(path));
-      if (resolved.kind === 'virtual') return { isFile: false, isDirectory: true };
+      if (resolved.kind === 'virtual') return this.virtualStat(path, resolved);
       return this.inner.statSync(resolved.owner);
     });
   }
@@ -244,7 +275,7 @@ export class ProjectTerminalFsSync implements FsSync {
     return this.run(() => {
       const resolved = this.resolve(path);
       if (resolved.kind === 'absent') return null;
-      if (resolved.kind === 'virtual') return { isFile: false, isDirectory: true };
+      if (resolved.kind === 'virtual') return this.virtualStat(path, resolved);
       return this.inner.statSyncOrNull(resolved.owner);
     });
   }

@@ -92,3 +92,10 @@ parameter, no playground UI — is the agent's carrier (goal §Decisions).
   and archive root `/` (`:613-615`) mean the project root, not the guest
   filesystem root; a persisted cwd outside the project falls back to the
   project root.
+
+## Corrections (active)
+
+- 2026-10-20 — ADR-0540: virtual ancestors lazily obtain metadata from
+  `privateRoot/ancestors/<guest path>` through the owner VFS. Covering project
+  directories retain their identity; diagnostics expose guest paths only.
+  Private metadata remains outside project publication, like tmp/home.

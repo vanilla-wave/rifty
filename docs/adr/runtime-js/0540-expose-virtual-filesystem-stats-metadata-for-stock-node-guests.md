@@ -32,6 +32,11 @@ numbers cannot describe browser storage.
   BigIntStats remains a named gap; atime update policy remains its existing
   separate obligation.
 
+- Virtual namespace ancestors use private owner VFS directories for metadata;
+  transient views/remote callers share identity. A covering project directory
+  retains its own metadata; nlink counts visible child directories. No alternate
+  inode allocator or weakened incomplete-provider check.
+
 ## Consequences
 
 Stock guests receive complete numeric Stats without invented host values.

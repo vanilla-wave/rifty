@@ -1,5 +1,7 @@
 # Changelog
 
+- Preserve immediate fork disconnect and send ordering; match Node24 parent-disconnect terminal events.
+
 - Transport complete numeric Stats fields from VFS; upstream no-COI esbuild can resolve build files.
 
 ## [Unreleased]

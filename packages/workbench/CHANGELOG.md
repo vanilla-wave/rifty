@@ -1,5 +1,7 @@
 # Changelog
 
+- Supply owner-stable Stats metadata for virtual namespace directories, retaining guest-only error paths.
+
 - No-COI install/open/snapshot no longer activate the generated esbuild client; builds use SW children.
 
 ## [Unreleased]

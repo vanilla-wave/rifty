@@ -35,6 +35,8 @@ const cases: {
     'kill.cjs',
     'nested.cjs',
     'fork.cjs',
+    'disconnect.cjs',
+    'send-disconnect.cjs',
     'signal.cjs',
     'close-authority.cjs',
     'snapshot.cjs',

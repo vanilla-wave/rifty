@@ -31,6 +31,11 @@ without COI: `docs/backlog/runtime-js/reference/no-coi-child-processes-spike.mjs
    Physical child routes reuse kernel federation for nested PID/control identity;
    the live owner binds each route token to its existing caller context. Process
    and readable-pipe references are independent, as Node's `unref` requires.
+   Outgoing port forwarding exists before the child is returned; send/disconnect
+   share the same microtask order. Incoming IPC uses the existing ProcessHandle
+   events, distinguishing child disconnect from a parent request.
+   Node 24.16.0 emits exit but omits close after parent disconnect; the shared
+   ChildProcess preserves that observed behavior (`parent-disconnect-close` parity).
 5. The Workbench no-COI Worker entry selects owner/child bootstrap. SDK retains
    bridge ownership through restart/disposal. File operations use the owner's
    current project policy and ordinary persistence/flush path.

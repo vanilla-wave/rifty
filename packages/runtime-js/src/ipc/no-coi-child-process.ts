@@ -32,14 +32,19 @@ export function spawnNoCoiChild(
   const transport = route.transport;
   const control = new MessageChannel();
   const input = new MessageChannel();
+  const inbound = new EventEmitter();
   const closePorts = (): void => {
+    inbound.removeAllListeners();
     control.port1.close();
     control.port2.close();
     input.port1.close();
     input.port2.close();
     route.close();
   };
-  const inbound = new EventEmitter();
+  // The port buffers startup messages; the returned child must already be able to send.
+  inbound.on('send', (payload) => control.port1.postMessage({ kind: 'ipc:message', payload }));
+  inbound.on('disconnect-request', () => control.port1.postMessage({ kind: 'ipc:disconnect' }));
+  inbound.on('signal', (signal) => control.port1.postMessage({ kind: 'control:signal', signal }));
   const stdout = new Readable({ read() {} });
   const stderr = new Readable({ read() {} });
   const stdin = new Writable({
@@ -80,7 +85,6 @@ export function spawnNoCoiChild(
               worker.terminate();
               closePorts();
               io.signal.removeEventListener('abort', cleanup);
-              inbound.removeAllListeners();
               resolve();
             };
             const finish = (code: number): void => {
@@ -114,20 +118,11 @@ export function spawnNoCoiChild(
               } else if (frame?.kind === 'control:self-signal') {
                 handle.kill(frame.signal);
               } else if (frame?.kind === 'ipc:message') {
-                inbound.emit('message', frame.payload);
+                handle.emit('message', frame.payload);
               } else if (frame?.kind === 'ipc:disconnect') {
-                inbound.emit('disconnect');
+                handle.emit('disconnect');
               }
             };
-            inbound.on('send', (payload) =>
-              control.port1.postMessage({ kind: 'ipc:message', payload }),
-            );
-            inbound.on('disconnect-request', () =>
-              control.port1.postMessage({ kind: 'ipc:disconnect' }),
-            );
-            inbound.on('signal', (signal) =>
-              control.port1.postMessage({ kind: 'control:signal', signal }),
-            );
             worker.postMessage(
               {
                 type: 'no-coi-child-init',

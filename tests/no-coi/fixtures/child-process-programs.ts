@@ -123,6 +123,25 @@ child.send({ value:42 });
   'node_modules/helper/fork.cjs': `
 process.on('message', message => { process.send({value:message.value}); process.disconnect(); });
 `,
+  'disconnect.cjs': `
+const child = require('node:child_process').fork('node_modules/helper/disconnect.cjs', [], {silent:true});
+child.stdout.on('data', chunk => process.stdout.write(chunk));
+child.stderr.on('data', chunk => process.stderr.write(chunk));
+child.on('close', code => console.log('fork-close', code, child.connected));
+child.disconnect();
+`,
+  'send-disconnect.cjs': `
+const child = require('node:child_process').fork('node_modules/helper/disconnect.cjs', [], {silent:true});
+child.stdout.on('data', chunk => process.stdout.write(chunk));
+child.stderr.on('data', chunk => process.stderr.write(chunk));
+child.on('close', code => console.log('fork-close', code, child.connected));
+child.send({value:42});
+child.disconnect();
+`,
+  'node_modules/helper/disconnect.cjs': `
+process.on('message', message => console.log(JSON.stringify(message)));
+process.on('exit', () => console.log('child-connected', process.connected));
+`,
   'signal.cjs': `
 const { spawn } = require('node:child_process');
 const child = spawn(process.execPath, ['node_modules/helper/signal.cjs']);

@@ -140,6 +140,7 @@ class ChildProcess extends EventEmitter {
   private readonly ownerProcess: unknown;
   private readonly ownerBootstrap: ReturnType<typeof readActiveNodeProcessBootstrap>;
   #keepaliveHeld = true;
+  #ipcClosedByParent = false;
   /** Bus the child's script subscribes to for parent-sent `'childMessage'`
    * events. Exposed to the spawner via `internalIpc()`. */
   readonly inboundIpc: EventEmitter = new EventEmitter();
@@ -185,7 +186,8 @@ class ChildProcess extends EventEmitter {
       }
       if (!streams.stdout._readableState.ended) streams.stdout.push(null);
       if (!streams.stderr._readableState.ended) streams.stderr.push(null);
-      if (parentEnded) return;
+      // Node 24 leaves its IPC close count pending after parent disconnect (parity-pinned).
+      if (parentEnded || this.#ipcClosedByParent) return;
       if (handle.kind === 'same-realm') {
         queueMicrotask(() => this.emitToOwner('close', code, signal));
       } else {
@@ -212,15 +214,14 @@ class ChildProcess extends EventEmitter {
       };
       this.disconnect = (): void => {
         if (!this.connected) return;
+        this.#ipcClosedByParent = true;
         if (handle.kind === 'worker') handle.disconnect();
         this.finishIpc();
       };
-      if (handle.kind === 'worker') {
-        handle.on('message', (message) => {
-          this.emitToOwner('message', decodeNodeIpcMessage(message, ipc));
-        });
-        handle.on('disconnect', () => this.finishIpc());
-      }
+      handle.on('message', (message) => {
+        this.emitToOwner('message', decodeNodeIpcMessage(message, ipc));
+      });
+      handle.on('disconnect', () => this.finishIpc());
     }
   }
 
@@ -403,15 +404,16 @@ export function spawn(
       expose: stdio.expose,
       slots: stdio.slots,
     });
-    remote.inbound.on('message', (payload) =>
-      child.emit('message', decodeNodeIpcMessage(payload, ipc ?? 'json')),
-    );
-    remote.inbound.on('disconnect', () => child.disconnect?.());
     child.inboundIpc.on('childMessage', (payload) =>
       remote.inbound.emit('send', encodeNodeIpcMessage(payload, ipc ?? 'json')),
     );
     child.inboundIpc.on('signal', (signal) => remote.inbound.emit('signal', signal));
-    if (ipc !== null) child.once('disconnect', () => remote.inbound.emit('disconnect-request'));
+    if (ipc !== null) {
+      // Match the send() microtask boundary so accepted messages precede disconnect.
+      child.once('disconnect', () =>
+        queueMicrotask(() => remote.inbound.emit('disconnect-request')),
+      );
+    }
     forwardWorkerStdio(
       {
         stdin: () => remote.stdin,
