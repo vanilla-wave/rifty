@@ -11,8 +11,9 @@
  * null-prototype instances, spoofed prototypes/`Symbol.toStringTag` — honour it
  * and recurse own enumerable string keys (accessors read once); Errors honour
  * it and recurse their own data `cause`. Leaves (platform objects, functions,
- * Proxies, intrinsics) stay by reference: transfer-list identity and the native
- * judgement are untouched. undici tags every Fetch class instance.
+ * Proxies, intrinsics) stay by reference and never check a tag: transfer-list
+ * identity and the native judgement are untouched. undici tags every Fetch
+ * class instance.
  *
  * Tags live in one realm-global record so every bundle copy (node-entry child,
  * kernel host) sees the same marks.
@@ -146,13 +147,14 @@ function errorBrand(value: object): boolean {
 }
 
 /**
- * Platform (WebIDL/host) object? Walk to the first prototype that is a platform
- * or intrinsic prototype (owns `Symbol.toStringTag`, or is the `prototype` of a
- * native constructor) and probe the value with one of its own accessors:
- * "Illegal invocation" = a JS object wearing that prototype (ordinary for V8);
- * success = platform object. Without an accessor, a tagged native prototype is
- * platform (WebAssembly.Module); a bare intrinsic one (`Date.prototype`,
- * `Error.prototype` on a non-Date/Error) is ordinary.
+ * Platform (WebIDL/host) object? Walk to the first prototype that owns
+ * `Symbol.toStringTag` or is the `prototype` of a native constructor. A JS
+ * constructor there (undici's classes) means ordinary. A native one is probed
+ * with one of its own accessors on the value: "Illegal invocation" = a JS object
+ * wearing that prototype (ordinary for V8); success = platform object. Without
+ * an accessor, a tagged native prototype is platform (WebAssembly.Module); a
+ * bare intrinsic one (`Date.prototype`, `Error.prototype` on a non-Date/Error)
+ * is ordinary.
  */
 function isPlatformObject(value: object): boolean {
   for (let proto = getPrototypeOf(value); proto !== null; proto = getPrototypeOf(proto)) {
@@ -163,13 +165,16 @@ function isPlatformObject(value: object): boolean {
       typeof ctor === 'function' &&
       getDescriptor(ctor, 'prototype')?.value === proto &&
       apply(functionToString, ctor, []).includes('[native code]');
-    if (!hasTag && !nativeCtor) continue;
+    if (!nativeCtor) {
+      if (hasTag) return false; // JS class wearing a tag (undici Response): ordinary
+      continue;
+    }
     for (const key of ownKeys(proto)) {
       if (key === toStringTag) continue;
       const get = getDescriptor(proto, key)?.get;
       if (get !== undefined) return branded(get as NativeMethod, value);
     }
-    return hasTag && nativeCtor;
+    return hasTag;
   }
   return false;
 }
@@ -178,15 +183,21 @@ function define(target: object, key: string, value: unknown): void {
   defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true });
 }
 
-function project(value: unknown, copies: WeakMap<object, unknown>): unknown {
+interface Walk {
+  readonly copies: WeakMap<object, unknown>;
+  /** A real Error with an object `cause` was met: its subgraph cannot be projected. */
+  errorCause: boolean;
+}
+
+function project(value: unknown, walk: Walk): unknown {
   if (!isObjectLike(value) || typeof value === 'function') return value;
-  const seen = copies.get(value);
+  const seen = walk.copies.get(value);
   if (seen !== undefined) return seen;
   if (installedProxyIdentity()?.isProxy(value) === true) return value;
   if (isArray(value)) {
     const copy = new ArrayCtor((value as unknown[]).length);
-    copies.set(value, copy);
-    projectOwn(value, copy, copies);
+    walk.copies.set(value, copy);
+    projectOwn(value, copy, walk);
     return copy;
   }
   if (branded(mapBrand, value)) {
@@ -199,9 +210,9 @@ function project(value: unknown, copies: WeakMap<object, unknown>): unknown {
       },
     ]);
     const copy = new MapCtor();
-    copies.set(value, copy);
+    walk.copies.set(value, copy);
     for (let i = 0; i < keys.length; i++) {
-      apply(mapSet, copy, [project(keys[i], copies), project(values[i], copies)]);
+      apply(mapSet, copy, [project(keys[i], walk), project(values[i], walk)]);
     }
     return copy;
   }
@@ -209,45 +220,53 @@ function project(value: unknown, copies: WeakMap<object, unknown>): unknown {
     const entries: unknown[] = [];
     apply(setForEach, value, [(entry: unknown) => entries.push(entry)]);
     const copy = new SetCtor();
-    copies.set(value, copy);
-    for (const entry of entries) apply(setAdd, copy, [project(entry, copies)]);
+    walk.copies.set(value, copy);
+    for (const entry of entries) apply(setAdd, copy, [project(entry, walk)]);
     return copy;
   }
   if (isIntrinsic(value)) return value;
-  if (apply(weakHas, marks.uncloneable, [value]) === true) throw dataCloneError();
   if (errorBrand(value)) {
-    copies.set(value, value);
+    if (apply(weakHas, marks.uncloneable, [value]) === true) throw dataCloneError();
+    walk.copies.set(value, value);
     const cause = getDescriptor(value, 'cause');
-    if (cause !== undefined && 'value' in cause) project(cause.value, copies);
+    if (cause !== undefined && 'value' in cause && isObjectLike(cause.value)) {
+      walk.errorCause = true;
+      project(cause.value, walk);
+    }
     return value;
   }
   if (isPlatformObject(value)) return value;
+  if (apply(weakHas, marks.uncloneable, [value]) === true) throw dataCloneError();
   const copy = {};
-  copies.set(value, copy);
-  projectOwn(value, copy, copies);
+  walk.copies.set(value, copy);
+  projectOwn(value, copy, walk);
   return copy;
 }
 
 /** Own enumerable string keys in `Reflect.ownKeys` order; each accessor read once. */
-function projectOwn(source: object, copy: object, copies: WeakMap<object, unknown>): void {
+function projectOwn(source: object, copy: object, walk: Walk): void {
   for (const key of ownKeys(source)) {
     if (typeof key !== 'string') continue;
     const descriptor = getDescriptor(source, key);
     if (descriptor === undefined || descriptor.enumerable !== true) continue;
     const raw = 'value' in descriptor ? descriptor.value : reflectGet(source, key);
-    define(copy, key, project(raw, copies));
+    define(copy, key, project(raw, walk));
   }
 }
 
 /**
- * Admit `value` for a structured clone: the projection the native clone gets
- * (`value` itself while this realm has no `markAsUncloneable` tag). Throws the
- * realm's `DOMException('Cannot clone object of unsupported type.',
- * 'DataCloneError')` when the graph reaches a tagged ordinary object or Error.
- * An Error stays by reference, so a getter beneath its `cause` is read here and
- * again by the native clone.
+ * Admit `value` for a structured clone and return what the native clone gets:
+ * `value` itself while this realm has no `markAsUncloneable` tag; otherwise a
+ * projection with every accessor read once. Throws the realm's
+ * `DOMException('Cannot clone object of unsupported type.', 'DataCloneError')`
+ * when the graph reaches a tagged ordinary object or Error. A graph holding a
+ * real Error with an object `cause` is only walked: the original goes to the
+ * native clone (an Error cannot be copied, and its cause may alias the rest of
+ * the graph), so its getters are read again there.
  */
 export function admitClone(value: unknown): unknown {
   if (!marks.state.any) return value;
-  return project(value, new WeakMap());
+  const walk: Walk = { copies: new WeakMap(), errorCause: false };
+  const projection = project(value, walk);
+  return walk.errorCause ? value : projection;
 }

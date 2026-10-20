@@ -210,6 +210,13 @@ attempt('clone-tagged-map', () => [...structuredClone(tag(new Map([[1, 2]])))]);
 attempt('clone-tagged-error', () => structuredClone(tag(new Error('e'))).message);
 attempt('clone-tagged-buffer', () => structuredClone(tag(new ArrayBuffer(4))).byteLength);
 attempt('clone-port-transfer', () => { const { port1, port2 } = new MessageChannel(); const out = structuredClone({ port: port1 }, { transfer: [port1] }); const ok = out.port instanceof MessagePort && out.port !== port1; out.port.close(); port2.close(); return ok; });
+attempt('clone-transfer-getter', () => { const msg = { v: 1 }; return structuredClone(msg, { get transfer() { msg.v = 2; return []; } }); });
+attempt('clone-tagged-port-transfer', () => { const { port1, port2 } = new MessageChannel(); tag(port1); const out = structuredClone({ p: port1 }, { transfer: [port1] }); const ok = out.p instanceof MessagePort; out.p.close(); port2.close(); return ok; });
+attempt('clone-tagged-module', () => structuredClone(tag(new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])))) instanceof WebAssembly.Module);
+attempt('clone-error-alias', () => { const shared = { s: 1 }; const e = new Error('x', { cause: { x: shared } }); const c = structuredClone({ e, peer: shared }); return [c.e.cause.x === c.peer, c.e.cause.x]; });
+attempt('clone-error-cycle', () => { const e = new Error('x'); const cause = {}; cause.err = e; e.cause = cause; const c = structuredClone(e); return c.cause.err === c; });
+attempt('clone-error-cause-tagged-peer', () => structuredClone({ e: new Error('x', { cause: { a: 1 } }), h: new Headers() }));
+attempt('clone-blob', () => { const b = structuredClone({ b: new Blob(['xy']) }).b; return [b instanceof Blob, b.size]; });
 row('keys', Object.keys(new Headers({a:'1'})));
 attempt('port-postmessage', () => {
  const { port1, port2 } = new MessageChannel();

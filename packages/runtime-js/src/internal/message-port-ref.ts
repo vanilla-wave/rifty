@@ -24,7 +24,7 @@ interface MessagePortRefState {
 }
 
 type NativeMethod = (this: unknown, ...args: unknown[]) => unknown;
-type Forward = (list: readonly unknown[]) => unknown;
+export type Forward = (list: readonly unknown[]) => unknown;
 
 const STATE = Symbol.for('rifty.runtime-js.message-port-ref.v1');
 const TRANSFERRED_HINT =
@@ -95,7 +95,7 @@ function readSequence(iterable: object, method: NativeMethod): unknown[] {
  * TypeError. Options keep the caller's object as prototype, so any other member
  * the native reads (`includeUserActivation`) is read from it, once.
  */
-function readTransfer(
+export function readTransfer(
   argument: unknown,
   sequenceOverload: boolean,
 ): { readonly list: readonly unknown[]; readonly forward: Forward } | null {

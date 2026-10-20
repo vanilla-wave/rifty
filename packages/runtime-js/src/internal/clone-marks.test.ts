@@ -73,6 +73,30 @@ describe('admitClone', () => {
     refused(() => admitClone(spoofedError));
   });
 
+  it('a JS class with Symbol.toStringTag and brand-checking getters is ordinary (undici Response)', () => {
+    const brand = new WeakSet<object>();
+    class Response {
+      field: object;
+      constructor(field: object) {
+        brand.add(this);
+        this.field = field;
+      }
+      get status(): number {
+        if (!brand.has(this)) throw new TypeError('Illegal invocation');
+        return 200;
+      }
+      get [Symbol.toStringTag](): string {
+        return 'Response';
+      }
+    }
+    refused(() => admitClone({ a: [new Response(tag({}))] }));
+    refused(() => admitClone(tag(new Response({}))));
+    const plain = new Response({ k: 1 });
+    expect(admitClone({ plain })).toEqual({ plain: { field: { k: 1 } } });
+  });
+
+  // Platform leaves need a native constructor: MessagePort/WebAssembly.Module below; Chromium's
+  // native Blob is graded by the browser row (Node's Blob is a JS class the Node host serializes itself).
   it('intrinsics and platform objects are leaves; their own tag is ignored (V8 slots)', () => {
     const date = tag(new Date(5));
     const list = tag([1, 2]);
@@ -82,7 +106,6 @@ describe('admitClone', () => {
     const view = tag(new Uint8Array(2));
     const wrapper = tag(new Number(3));
     const regexp = tag(/x/g);
-    const blob = new Blob(['x']);
     const projected = admitClone({
       date,
       list,
@@ -92,7 +115,6 @@ describe('admitClone', () => {
       view,
       wrapper,
       regexp,
-      blob,
     }) as Record<string, unknown>;
     expect(projected.date).toBe(date);
     expect(projected.list).toEqual([1, 2]);
@@ -102,7 +124,6 @@ describe('admitClone', () => {
     expect(projected.view).toBe(view);
     expect(projected.wrapper).toBe(wrapper);
     expect(projected.regexp).toBe(regexp);
-    expect(projected.blob).toBe(blob);
     expect(admitClone(null)).toBe(null);
     const fn = () => {};
     expect(admitClone(fn)).toBe(fn);
@@ -213,6 +234,26 @@ describe('admitClone', () => {
     expect(deepReads).toBe(1);
   });
 
+  it('a graph holding an Error with an object cause is walked, not projected (aliasing kept)', () => {
+    const shared = { s: 1 };
+    const error = new Error('x', { cause: { x: shared } });
+    const graph = { error, peer: shared };
+    expect(admitClone(graph)).toBe(graph);
+    const primitiveCause = { error: new Error('x', { cause: 'why' }), peer: shared };
+    expect(admitClone(primitiveCause)).not.toBe(primitiveCause);
+    refused(() => admitClone({ error, bad: tag({}) }));
+  });
+
+  it('leaves never check their tag: tagged intrinsics and platform objects pass to native', () => {
+    const module = tag(new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])));
+    expect((admitClone({ module }) as { module: unknown }).module).toBe(module);
+    const { port1, port2 } = new MessageChannel();
+    tag(port1);
+    expect((admitClone({ port1 }) as { port1: unknown }).port1).toBe(port1);
+    port1.close();
+    port2.close();
+  });
+
   it('ignores non-enumerable, symbol-keyed and inherited reach', () => {
     const tagged = tag({});
     const hidden = Object.create(
@@ -260,10 +301,37 @@ describe('installCloneAdmission', () => {
     expect(cloned.cause).toEqual({ a: 1 });
 
     const { port1, port2 } = new MessageChannel();
+    tag(port1);
     const moved = structuredClone({ port: port1 }, { transfer: [port1] });
     expect(moved.port).toBeInstanceOf(MessagePort);
     expect(moved.port).not.toBe(port1);
     moved.port.close();
     port2.close();
+    const module = tag(new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])));
+    expect(structuredClone(module)).toBeInstanceOf(WebAssembly.Module);
+
+    // Native order: the transfer argument is read before the message is serialized.
+    const mutated = { v: 1 };
+    const clone = structuredClone(mutated, {
+      get transfer() {
+        mutated.v = 2;
+        return [];
+      },
+    });
+    expect(clone.v).toBe(2);
+
+    const peerShared = { s: 1 };
+    const aliased = structuredClone({
+      error: new Error('x', { cause: { x: peerShared } }),
+      peer: peerShared,
+    });
+    expect(aliased.error.cause).toEqual({ x: { s: 1 } });
+    expect((aliased.error.cause as { x: unknown }).x).toBe(aliased.peer);
+    const cyclicError = new Error('cycle');
+    const cause: { err?: unknown } = {};
+    cause.err = cyclicError;
+    cyclicError.cause = cause;
+    const cycled = structuredClone(cyclicError);
+    expect((cycled.cause as { err: unknown }).err).toBe(cycled);
   });
 });
