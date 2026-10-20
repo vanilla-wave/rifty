@@ -25,6 +25,7 @@ import type {
   RegistryShadowEmbeddedSource,
   ShadowSubstitutionPlan,
 } from './planner.ts';
+import { registryMetadataProjection } from './registry-projection.ts';
 
 export interface PinnedShadowState {
   readonly substitution: AppliedShadowSubstitution;
@@ -102,6 +103,7 @@ export function assertRegistryShadowProjection(
     throw new TypeError(`shadow recipe ${recipe.id} has no registry acquisition`);
   }
   const projection = recipe.acquisition.dependencyProjection;
+  if (projection === null) return registryMetadataProjection(manifest);
   const manifestWithBundleAliases = manifest as VersionManifest & {
     readonly bundleDependencies?: unknown;
     readonly bundledDependencies?: unknown;
@@ -258,7 +260,8 @@ export function assertRegistryShadowEmbeddedManifests(
   if (acquisition.kind !== 'registry') {
     throw new TypeError(`shadow recipe ${pin.shadow.recipe.id} has no registry acquisition`);
   }
-  const projection = acquisition.dependencyProjection;
+  const projection = acquisition.dependencyProjection ?? pin.shadow.projection;
+  if (!projection) throw new TypeError('range recipe metadata is missing');
   const embeddedDependencies: RegistryShadowEmbeddedDependency[] = [];
   for (const name of projection.bundledDependencies) {
     const range = projection.dependencies[name] ?? projection.optionalDependencies[name];

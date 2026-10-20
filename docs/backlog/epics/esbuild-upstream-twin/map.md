@@ -7,34 +7,15 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 0. `npm-client/esbuild-upstream-twin-carrier` — **carrier** — I1/I2/I5;
    executable install + stock build + complete tarball-byte comparison, RED.
 
-1. `runtime-js/process-stdio-write-callback` — **stdio-cb** — I3; the stock
-   entry's first deadlock; independent (the end surface stays in
-   `runtime-js/process-stdio-writable-end-surface`, not this goal).
-2. `runtime-js/child-process-ref-unref` — **child-unref** — I3; independent.
-3. `runtime-js/fs-stdio-fds` — **fd-0-2** — I3; independent.
-4. `runtime-js/fs-stats-node-fields` — **stats** — I3; independent.
-5. `runtime-js/worker-threads-unsupported-workerdata-no-silent-hang` —
-   **sync-loud** — I2 `*Sync` clause; independent.
-6. `npm-client/esbuild-upstream-range-install` — **range-install** — I1/I4/I5;
+1. `npm-client/esbuild-upstream-range-install` — **range-install** — I1/I4/I5;
    explicit installer tier + range template + byte/offline/no-COI proof.
-7. `npm-client/esbuild-upstream-twin-cutover` — **cutover** — I1, I2, I4,
-   I5, I6; blocked by 1-5; carries the version-agnostic differential suite,
+2. `npm-client/esbuild-upstream-twin-cutover` — **cutover** — I1, I2, I4,
+   I5, I6; depends on range-install; carries the version-agnostic differential suite,
    the no-COI split, the COI Vite gate removal, the DEC-2 ADR and the compat
    pages.
 
 ## Open questions
 
-- Install shape behind the `esbuild` name (bcrypt-style redirect vs a thin
-  facade re-exporting `esbuild-wasm`; `require('esbuild/package.json')`,
-  `.bin/esbuild`; Node's equivalent is an npm alias whose `name` is
-  `esbuild-wasm` — rifty refuses `npm:` aliases, `installer-request.ts:211`)
-  and the per-tier install (COI resolves the range; no-COI keeps main's 0.28.0
-  recipe) — owner: agent — cutover pickup, ADR.
-- Older Node entries on the verified set: 0.21.x redefines `globalThis.crypto`
-  and builds `performance` from `process.hrtime`, `crypto` from
-  `randomFillSync` (evidence §Older entries); the spike ran 0.28.0 only —
-  owner: agent — probe 0.21.x/0.25.x at cutover pickup; a new gap becomes a
-  child item.
 - Offline oracle capture for the verified set in CI (Node + esbuild-wasm
   tarballs from registry fixtures; TTY stdout for CLI rows, evidence §Stock
   entry) — owner: agent — cutover pickup.

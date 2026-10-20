@@ -66,5 +66,7 @@ No migration of old catalog traces; goal explicitly accepts EBROKENLOCK.
 
 ## Decisions
 
+ready-verdict: 2026-10-20 — Contract+RED @ a05c687620265e48c13213bf2a04c8401e0bc74d
+
 - 2026-10-20 — RDY-5 split the installer wall from cutover; destination unchanged.
 - 2026-10-20 — ADR-0543 selects explicit tier, requested-range template and thin facade.

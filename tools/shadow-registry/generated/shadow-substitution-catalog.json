@@ -5,6 +5,7 @@
     {
       "schema": 2,
       "id": "rifty.shadow-substitution.esbuild.v2",
+      "runtimeTier": "no-coi",
       "trigger": {
         "name": "esbuild",
         "version": "0.28.0"
@@ -56,7 +57,54 @@
       "binding": {
         "adapterId": "rifty.runtime-adapter.esbuild.v1"
       },
-      "digest": "844104d3f7a0f7fb997a3678d63f8d34af0fe52c8f6788413b9bae8a92618c2d"
+      "digest": "ae4c52626239b37efab6c3b2b59d8a44c0da27eb53b6b1406e2532bf665b1682"
+    },
+    {
+      "schema": 2,
+      "id": "rifty.shadow-substitution.esbuild.wasm-node.v1",
+      "runtimeTier": "coi",
+      "trigger": {
+        "name": "esbuild",
+        "version": "$version"
+      },
+      "admission": {
+        "kind": "requested-range",
+        "unsupportedFeature": "esbuild.version"
+      },
+      "acquisition": {
+        "kind": "registry",
+        "name": "esbuild-wasm",
+        "version": "$version",
+        "dependencyProjection": null
+      },
+      "materialization": {
+        "name": "esbuild",
+        "version": "$version",
+        "bin": {
+          "esbuild": "bin/esbuild"
+        },
+        "files": [
+          {
+            "path": "bin/esbuild",
+            "content": "#!/usr/bin/env node\nrequire('esbuild-wasm/bin/esbuild');\n",
+            "sha256": "b15a1c61c6c2e46ca36f703cce9e9fc5dfff5975777376885742666f3eac89d6",
+            "bytes": 57
+          },
+          {
+            "path": "lib/main.cjs",
+            "content": "module.exports = require('esbuild-wasm');\n",
+            "sha256": "7336693b4bc6a19339ac861baf8c8c5db1f06c00fd610d6757895ec05ca0bbca",
+            "bytes": 42
+          },
+          {
+            "path": "package.json",
+            "content": "{\n  \"name\": \"esbuild\",\n  \"version\": \"$version\",\n  \"main\": \"./lib/main.cjs\",\n  \"types\": \"../esbuild-wasm/lib/main.d.ts\",\n  \"bin\": {\n    \"esbuild\": \"./bin/esbuild\"\n  }\n}\n",
+            "sha256": "24848d58bab60b3119c994984e06624ff7d5a49a3d49cde07a0b71a445d18cc0",
+            "bytes": 168
+          }
+        ]
+      },
+      "digest": "452460fef2f5cf988e88b8285efb0ecc0cf3285c94278b2e44956d5926799051"
     },
     {
       "schema": 2,
@@ -179,5 +227,5 @@
       "digest": "eb0ca99df87e4df12d1fc3ec5b7fe8eb563cf68fe9527d7997c7e650fca95712"
     }
   ],
-  "digest": "68b82251f296d987ba8ca8883b14adf2785b507b4ed3b69a84ebcad76b6f7002"
+  "digest": "769dc18b62837c559d193fe46a214517f813cc274a06fa45e607263ab50f4ef6"
 }

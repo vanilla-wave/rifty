@@ -3,6 +3,7 @@
  * warn pass + collision/override predicates. No install state.
  */
 
+import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
 import type { PinnedPackage } from './installer-walk.ts';
 import type { OverrideMap } from './overrides.ts';
 import { resolveEffectivePackageRequest } from './shadow-shims.ts';
@@ -31,6 +32,7 @@ export function hasEffectiveTopLevelNameCollision(
   optionalDependencies: Record<string, string>,
   rootName: string,
   overrides: OverrideMap | undefined,
+  runtimeTier?: ShadowRuntimeTier,
 ): boolean {
   const seen = new Set<string>();
   for (const request of [dependencies, optionalDependencies]) {
@@ -40,6 +42,7 @@ export function hasEffectiveTopLevelNameCollision(
         range,
         rootName,
         overrides,
+        runtimeTier,
       );
       if (seen.has(installName)) return true;
       seen.add(installName);

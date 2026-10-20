@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add requested-range, tier-selected esbuild Node recipe (ADR-0543); retain the no-COI generated-client recipe. Catalog identity changes invalidate earlier traces; generated runtime bytes unchanged.
+
 - The baked `bcrypt` substitution pins `bcryptjs@3.0.3` (the requested `bcrypt` range no longer reaches `bcryptjs`, whose newest is 3.0.3); the install still fails at the lock save (`npm-client/bcrypt-substitution-install`, compat ❌). `NAPI_RS_FORCE_WASI=1` launch preparation declared (ADR-0534).
 
 - **Breaking:** Vite's bundled Chokidar root-watch and root-URL rewrites (`viteRootWatchPatchPolicy`, `viteRootUrlPatchPolicy`) and the runtime exports `planInstalledConsumerFiles`/`prepareInstalledConsumerFiles` are removed (ADR-0533, supersedes ADR-0433): installed Vite chunks are upstream bytes at every project root; the install-artifact recipe drops both entries.

@@ -1,3 +1,4 @@
+import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
 /**
  * ADR-0182 opt-in eddy fast path (extracted from installer.ts, move-only):
  * bundle acquisition attempts (prefetch → pinned GET → POST), streamed
@@ -66,7 +67,13 @@ export function existingLockfilePreemptsEddy(
   if (!existingLockfile) return false;
   if (!shadowPlan) throw new TypeError('decoded lockfile shadow plan is missing');
   if (
-    hasEffectiveTopLevelNameCollision(dependencies, optionalDependencies, rootName, opts.overrides)
+    hasEffectiveTopLevelNameCollision(
+      dependencies,
+      optionalDependencies,
+      rootName,
+      opts.overrides,
+      opts.runtimeTier,
+    )
   ) {
     return false;
   }
@@ -78,6 +85,7 @@ export function existingLockfilePreemptsEddy(
       optionalDependencies,
       rootName,
       opts.overrides,
+      opts.runtimeTier,
     ).ownership !== 'metadata'
   );
 }
@@ -419,6 +427,7 @@ async function consumeEddyResponse(
         optionalDependencies,
         rootName,
         opts.overrides,
+        opts.runtimeTier,
       );
       if (requestAnalysis.ownership !== 'replay') {
         return 'bundle lockfile does not cover the request (or an override forces a re-resolve)';
@@ -525,6 +534,7 @@ function analyzeLockfileRequest(
   optionalDependencies: Record<string, string>,
   rootName: string,
   overrides: OverrideMap | undefined,
+  runtimeTier?: ShadowRuntimeTier,
 ): LockfileRequestAnalysis {
   const reachablePaths = new Set<string>();
   const embeddedPaths = new Set(
@@ -538,7 +548,15 @@ function analyzeLockfileRequest(
   };
 
   const visit = (name: string, range: string | null, ctx: ResolveContext): void => {
-    const decision = lockfileReuseDecision(lockfile, shadowPlan, name, range, ctx, overrides);
+    const decision = lockfileReuseDecision(
+      lockfile,
+      shadowPlan,
+      name,
+      range,
+      ctx,
+      overrides,
+      runtimeTier,
+    );
     if (decision.kind === 'miss') {
       recordOwnership(registryOwnsIncrementalMiss(decision, ctx) ? 'metadata' : 'broken');
       return;
@@ -548,6 +566,7 @@ function analyzeLockfileRequest(
       range,
       ctx.parentName,
       overrides,
+      runtimeTier,
     );
     const hit = pinnedEntryForParent(lockfile, installName, ctx.parentLockfilePath);
     const recipe = builtinRecipeForRequest(
@@ -556,6 +575,7 @@ function analyzeLockfileRequest(
       ctx.parentName,
       overrides,
       hit?.entry.version,
+      runtimeTier,
     );
     if (
       !hit ||

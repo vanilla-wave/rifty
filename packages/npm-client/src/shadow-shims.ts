@@ -1,3 +1,5 @@
+import { NotImplementedError } from '@riftydev/io';
+import { type InternalsShim, internalsShims } from '@riftydev/shadow-registry';
 /**
  * Install-time application of shadow-registry internals shims (ADR-0188).
  *
@@ -8,8 +10,7 @@
  * `/workspace`-rooted overlay. Runs on live resolve, lockfile replay, and the
  * eddy-seeded path alike (all converge on `install()`'s post-link step).
  */
-import { NotImplementedError } from '@riftydev/io';
-import { type InternalsShim, internalsShims } from '@riftydev/shadow-registry';
+import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
 import { type Vfs, joinPath } from '@riftydev/vfs';
 import { parseNpmAlias } from './npm-alias.ts';
 import {
@@ -54,9 +55,15 @@ export function resolveEffectivePackageRequest(
   range: string | null,
   parent: string | undefined,
   userOverrides: OverrideMap | undefined,
+  runtimeTier?: ShadowRuntimeTier,
 ): EffectivePackageRequest {
   const spec = userOverrideSpec(name, parent, userOverrides);
-  const override = resolveOverride(name, parent, spec === null ? userOverrides : undefined);
+  const override = resolveOverride(
+    name,
+    parent,
+    spec === null ? userOverrides : undefined,
+    runtimeTier,
+  );
   const alias = parseNpmAlias(spec ?? range);
   const effectiveName = override?.name ?? alias?.name ?? name;
   const effectiveRange = override?.range ?? (spec === null ? alias?.range : spec) ?? range;

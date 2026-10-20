@@ -265,7 +265,7 @@ function decodeAdmission(value: unknown, path: string): ShadowRecipeAdmission {
     record(raw, ['kind', 'unsupportedFeature'], path);
   }
   const kind = raw.kind;
-  if (kind !== 'semver-admits' && kind !== 'exact-only') {
+  if (kind !== 'semver-admits' && kind !== 'exact-only' && kind !== 'requested-range') {
     throw new ShadowRegistryCodecError(`${path}.kind`, 'unsupported admission');
   }
   const item = record(raw, ['kind', 'unsupportedFeature'], path);
@@ -275,7 +275,11 @@ function decodeAdmission(value: unknown, path: string): ShadowRecipeAdmission {
   };
 }
 
-function decodeAcquisition(value: unknown, path: string): ShadowRecipeAcquisition {
+function decodeAcquisition(
+  value: unknown,
+  path: string,
+  template: boolean,
+): ShadowRecipeAcquisition {
   const raw = plainObject(value, path);
   const kind = raw.kind;
   if (kind === 'synthetic') {
@@ -287,11 +291,14 @@ function decodeAcquisition(value: unknown, path: string): ShadowRecipeAcquisitio
     return {
       kind,
       name: packageName(item.name, `${path}.name`),
-      version: exactVersion(item.version, `${path}.version`),
-      dependencyProjection: decodeDependencyProjection(
-        item.dependencyProjection,
-        `${path}.dependencyProjection`,
-      ),
+      version:
+        template && item.version === '$version'
+          ? '$version'
+          : exactVersion(item.version, `${path}.version`),
+      dependencyProjection:
+        template && item.dependencyProjection === null
+          ? null
+          : decodeDependencyProjection(item.dependencyProjection, `${path}.dependencyProjection`),
     };
   }
   throw new ShadowRegistryCodecError(`${path}.kind`, 'unsupported acquisition');
@@ -458,22 +465,28 @@ function decodeRecipe(value: unknown, path: string): BuiltinShadowSubstitutionRe
     throw new ShadowRegistryCodecError(path, 'must be a plain object');
   }
   const hasBinding = Object.hasOwn(value, 'binding');
+  const hasTier = Object.hasOwn(value, 'runtimeTier');
   const item = record(
     value,
-    hasBinding
-      ? [
-          'schema',
-          'id',
-          'digest',
-          'trigger',
-          'admission',
-          'acquisition',
-          'materialization',
-          'binding',
-        ]
-      : ['schema', 'id', 'digest', 'trigger', 'admission', 'acquisition', 'materialization'],
+    [
+      'schema',
+      'id',
+      'digest',
+      'trigger',
+      'admission',
+      'acquisition',
+      'materialization',
+      ...(hasBinding ? ['binding'] : []),
+      ...(hasTier ? ['runtimeTier'] : []),
+    ],
     path,
   );
+  const admission = decodeAdmission(item.admission, `${path}.admission`);
+  const template = admission.kind === 'requested-range';
+  const versionValue = (value: unknown, path: string): string =>
+    template && value === '$version' ? '$version' : exactVersion(value, path);
+  if (hasTier && item.runtimeTier !== 'coi' && item.runtimeTier !== 'no-coi')
+    throw new ShadowRegistryCodecError(`${path}.runtimeTier`, 'unsupported tier');
   if (item.schema !== 2) {
     throw new ShadowRegistryCodecError(`${path}.schema`, 'unsupported schema');
   }
@@ -495,7 +508,7 @@ function decodeRecipe(value: unknown, path: string): BuiltinShadowSubstitutionRe
     }
   }
   const materializationName = packageName(materialization.name, `${path}.materialization.name`);
-  const materializationVersion = exactVersion(
+  const materializationVersion = versionValue(
     materialization.version,
     `${path}.materialization.version`,
   );
@@ -506,15 +519,25 @@ function decodeRecipe(value: unknown, path: string): BuiltinShadowSubstitutionRe
     bin,
     `${path}.materialization`,
   );
+  const acquisition = decodeAcquisition(item.acquisition, `${path}.acquisition`, template);
+  if (
+    template &&
+    (trigger.version !== '$version' ||
+      materializationVersion !== '$version' ||
+      acquisition.kind !== 'registry' ||
+      acquisition.version !== '$version')
+  )
+    throw new ShadowRegistryCodecError(path, 'range recipe version placeholders must agree');
   const recipeWithoutDigest = {
     schema: 2 as const,
     id: identifier(item.id, `${path}.id`),
     trigger: {
       name: packageName(trigger.name, `${path}.trigger.name`),
-      version: exactVersion(trigger.version, `${path}.trigger.version`),
+      version: versionValue(trigger.version, `${path}.trigger.version`),
     },
-    admission: decodeAdmission(item.admission, `${path}.admission`),
-    acquisition: decodeAcquisition(item.acquisition, `${path}.acquisition`),
+    admission,
+    ...(hasTier ? { runtimeTier: item.runtimeTier as 'coi' | 'no-coi' } : {}),
+    acquisition,
     materialization: {
       name: materializationName,
       version: materializationVersion,
@@ -558,6 +581,17 @@ export function decodeShadowSubstitutionCatalog(value: unknown): BuiltinShadowSu
     'catalog.recipes',
     'identity',
   );
+  const triggers = new Set<string>();
+  for (const recipe of recipes) {
+    for (const tier of recipe.runtimeTier === undefined
+      ? ['coi', 'no-coi']
+      : [recipe.runtimeTier]) {
+      const key = `${recipe.trigger.name}:${tier}`;
+      if (triggers.has(key))
+        throw new ShadowRegistryCodecError('catalog.recipes', `ambiguous trigger ${key}`);
+      triggers.add(key);
+    }
+  }
   const payload = {
     schema: 2 as const,
     id: identifier(item.id, 'catalog.id'),

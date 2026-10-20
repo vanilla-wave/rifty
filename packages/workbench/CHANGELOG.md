@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Refresh install identity and baked snapshots for the tier-aware catalog; retain every committed dependency version.
+
 - Node children select pull stdin; virtual guest ancestors carry VFS entry metadata for complete Node Stats (ADR-0540/0542).
 
 - A repeated `pty:open` of a live session keeps that session's login-`HOME` provenance; it is dropped when the session's close settles.

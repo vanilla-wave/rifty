@@ -456,6 +456,7 @@ export const builtinShadowCatalogSource: ShadowCatalogDefinition = {
     {
       schema: 2,
       id: 'rifty.shadow-substitution.esbuild.v2',
+      runtimeTier: 'no-coi',
       trigger: { name: 'esbuild', version: '0.28.0' },
       admission: {
         kind: 'semver-admits',
@@ -485,6 +486,42 @@ export const builtinShadowCatalogSource: ShadowCatalogDefinition = {
         ],
       },
       binding: { adapterId: 'rifty.runtime-adapter.esbuild.v1' },
+    },
+    {
+      schema: 2,
+      id: 'rifty.shadow-substitution.esbuild.wasm-node.v1',
+      runtimeTier: 'coi',
+      trigger: { name: 'esbuild', version: '$version' },
+      admission: { kind: 'requested-range', unsupportedFeature: 'esbuild.version' },
+      acquisition: {
+        kind: 'registry',
+        name: 'esbuild-wasm',
+        version: '$version',
+        dependencyProjection: null,
+      },
+      materialization: {
+        name: 'esbuild',
+        version: '$version',
+        bin: { esbuild: 'bin/esbuild' },
+        files: [
+          file('bin/esbuild', "#!/usr/bin/env node\nrequire('esbuild-wasm/bin/esbuild');\n"),
+          file('lib/main.cjs', "module.exports = require('esbuild-wasm');\n"),
+          file(
+            'package.json',
+            `${JSON.stringify(
+              {
+                name: 'esbuild',
+                version: '$version',
+                main: './lib/main.cjs',
+                types: '../esbuild-wasm/lib/main.d.ts',
+                bin: { esbuild: './bin/esbuild' },
+              },
+              null,
+              2,
+            )}\n`,
+          ),
+        ],
+      },
     },
     {
       schema: 2,
