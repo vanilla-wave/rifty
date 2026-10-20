@@ -38,3 +38,9 @@ Negative probes substitute real esbuild bytes under admitted names, mutate
 allowed WASM, add unknown inline WASM and exceed compiler limits. Hash-named
 imports can change the TypeScript worker fingerprint after ordinary runtime
 edits; that pin update stays explicit. No ADR is superseded.
+
+## Corrections
+
+- 2026-10-20 — ADR-0541 native resource-fetch imports change the TypeScript
+  worker fingerprint (+30 bytes); re-pin exact bytes/SHA only. Compiler chunk,
+  2 MB ceiling and negative payload tests unchanged; packed consumer proof.
