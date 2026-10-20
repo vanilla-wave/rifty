@@ -92,7 +92,6 @@ export const BASELINE = [
   { file: 'packages/ts-language-service/src/worker/protocol.ts', max: 890 },
   { file: 'packages/workbench/src/workers/workbench-project-vfs.ts', max: 875 },
   { file: 'packages/runtime-js/src/builtins/crypto.ts', max: 874 },
-  { file: 'packages/io/src/streams/writable.ts', max: 802 },
 ];
 
 /** @returns {{ file: string, lines: number }[]} every prod source file under `rel` */
