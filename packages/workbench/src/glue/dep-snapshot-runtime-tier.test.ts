@@ -1,6 +1,9 @@
 import { Buffer as NativeBuffer } from 'node:buffer';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { RegistryClient, extractTarGz, install } from '@riftydev/npm-client';
 import { planShadowSubstitutionsFromLockfile } from '@riftydev/npm-client/internal';
@@ -53,6 +56,35 @@ it.fails(
           ),
           file.path,
         ).toBe(0);
+      }
+      const nativeRoot = mkdtempSync(join(tmpdir(), 'rifty-tier-snapshot-'));
+      try {
+        const copy = (source: string, target: string): void => {
+          for (const entry of result.fsSync.readdirSync(source)) {
+            const from = `${source}/${entry.name}`;
+            const to = join(target, entry.name);
+            if (entry.isDirectory) copy(from, to);
+            else {
+              mkdirSync(dirname(to), { recursive: true });
+              writeFileSync(to, result.fsSync.readFileBytesSync(from));
+            }
+          }
+        };
+        copy('/target/node_modules', join(nativeRoot, 'node_modules'));
+        const run = (name: string) =>
+          execFileSync(
+            process.execPath,
+            [
+              '--input-type=module',
+              '-e',
+              `import esbuild,{transform,version} from '${name}';const result=await transform('let x:number=1',{loader:'ts'});console.log(JSON.stringify({version,same:transform===esbuild.transform,code:result.code}));esbuild.stop();`,
+            ],
+            { cwd: nativeRoot, encoding: 'utf8', timeout: 30_000 },
+          );
+        const oracle = run('esbuild-wasm');
+        expect(run('esbuild')).toBe(oracle);
+      } finally {
+        rmSync(nativeRoot, { recursive: true, force: true });
       }
       expect(result.lock.packages['node_modules/esbuild'].riftyShadowRecipe).toBe(
         'rifty.shadow-substitution.esbuild.wasm-node.v1',
