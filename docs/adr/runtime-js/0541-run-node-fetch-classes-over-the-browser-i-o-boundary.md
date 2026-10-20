@@ -143,6 +143,12 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
   30 chunks with zero cancel callbacks. The permanent differential aborts on
   the fourth pull; adding reader cancellation would break this baseline.
 
+- CI follow-up: `project-opening-progress.spec.ts` injects a real native-write
+  barrier into the owner Worker. Its relative resource URL must use `fetchHost`
+  after Node globals install; guest fetch correctly rejects that URL. Isolated
+  RED on 9adc4a9a3; only the harness transport changes, all saving/UI assertions
+  remain. Other relative test requests run in the page or VFS-only workers.
+
 ## Consequences
 
 - Hono headers/File bodies, clone/direct readers and detached body lifetime use
