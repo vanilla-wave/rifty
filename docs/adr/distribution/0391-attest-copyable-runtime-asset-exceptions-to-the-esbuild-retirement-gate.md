@@ -56,3 +56,4 @@ edits; that pin update stays explicit. No ADR is superseded.
 
 - 2026-10-20 — integrate Fetch main40837803b with upstream esbuild: derive the TypeScript worker pin from the combined build; exact bytes/hash only, all other ceilings unchanged.
 - 2026-10-20 — correct the two size claims above Corrections: current TypeScript worker is 10,022,694 bytes, SHA-256 `86a44c9e749fe4d5fcc318e2f77542e63c6f53db55463eddab2cca52a942d38b`. `tools/checks/esbuild-legacy-retirement.mjs` remains the authority.
+- 2026-10-20 — PR #379 import ordering changes six hashed imports in that worker, no compiler body bytes. BASE rebuild reproduces the previous hash; current 10,022,694-byte output is SHA-256 `233d8b195a32eb12f7f8875c28ec7921d641af42ef027cb5250a02c1b3e922e4`. Exact pin updated; ceilings and negative-payload criteria unchanged.
