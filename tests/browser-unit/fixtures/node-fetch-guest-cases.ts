@@ -190,6 +190,25 @@ export function networkFetchCase(url: string): string {
  row('cancelled-state',[cancelled.bodyUsed,surviving.bodyUsed]);
  const redirected=await fetch(${JSON.stringify(`${url}/redirect`)});
  row('redirect-metadata',[redirected.status,redirected.statusText,redirected.url === ${JSON.stringify(`${url}/metadata`)},redirected.redirected,redirected.headers.get('x-fetch-proof'),await redirected.text()]);
+ for(const mode of ['normal','closed','errored','locked','cancel-reject','closed-override','errored-override','public-cancel-throws','public-cancel-returns']) {
+   const abortReason=new Error('preabort'),sourceError=new Error('source'),cancelError=new Error('cancel');
+   const observed=[];const listener=error=>observed.push(error===cancelError?'cancel':error===sourceError?'source':error===abortReason?'abort':'other');
+   process.on('unhandledRejection',listener);
+   const pre=new AbortController();pre.abort(abortReason);
+   let pulls=0,stream,witness;const cancellations=[];const blob=new Blob(['x']);
+   blob.stream=()=>{stream=new ReadableStream({
+     start(c){if(mode.startsWith('errored'))c.error(sourceError);if(mode.startsWith('closed'))c.close();},
+     pull(c){pulls++;c.enqueue(Uint8Array.of(65));c.close();},
+     cancel(reason){cancellations.push(reason===abortReason);if(mode==='cancel-reject')return Promise.reject(cancelError);},
+   });witness=new Response(stream);
+     if(mode.endsWith('override')||mode.startsWith('public-cancel'))stream.cancel=reason=>{cancellations.push(reason===abortReason);if(mode==='public-cancel-throws')throw cancelError;if(mode==='public-cancel-returns')return undefined;return Promise.resolve();};
+     if(mode==='locked')stream.getReader();return stream;};
+   try {await fetch(${JSON.stringify(url)},{method:'POST',headers:{cookie:'a=1'},body:blob,signal:pre.signal});row('preabort-'+mode,'accepted');}
+   catch(error){row('preabort-'+mode,[error===abortReason,error===cancelError,error.name]);}
+   await new Promise(resolve=>setTimeout(resolve,20));
+   row('preabort-state-'+mode,[pulls,cancellations,stream.locked,witness.bodyUsed,observed]);
+   process.off('unhandledRejection',listener);
+ }
  const controller=new AbortController(); controller.abort();
  try {await fetch(${JSON.stringify(url)}, {signal:controller.signal});} catch(e) {row('abort',e.name);}
  const active = new AbortController();
@@ -205,6 +224,19 @@ export function networkFetchCase(url: string): string {
  const guard=setTimeout(()=>{row('upload-abort-late',true);finishUpload();},1000);guard.unref();
  try {await upload;} catch(e) {row('upload-abort',e.name);}
  clearTimeout(guard);
+ {
+   const controller=new AbortController(),reason=new Error('active upload');
+   let pulls=0,cancels=0,finish;const finished=new Promise(resolve=>{finish=resolve;});
+   const blob=new Blob([new Uint8Array(30)]);
+   blob.stream=()=>new ReadableStream({async pull(c){
+     await new Promise(resolve=>setTimeout(resolve,5));pulls++;
+     if(pulls===4)controller.abort(reason);
+     if(cancels===0){c.enqueue(Uint8Array.of(pulls));if(pulls===30){c.close();finish();}}
+   },cancel(){cancels++;finish();}});
+   try{await fetch(${JSON.stringify(url)},{method:'POST',body:blob,signal:controller.signal});}
+   catch(error){row('active-upload-abort',error===reason);}
+   await finished;row('active-upload-source',[pulls,cancels]);
+ }
  const urlDescriptor=Object.getOwnPropertyDescriptor(Request.prototype,'url');
  Object.defineProperty(Request.prototype,'url',{configurable:true,get(){throw new Error('public url getter');}});
  try {row('private-request',await (await fetch(${JSON.stringify(url)})).text());}

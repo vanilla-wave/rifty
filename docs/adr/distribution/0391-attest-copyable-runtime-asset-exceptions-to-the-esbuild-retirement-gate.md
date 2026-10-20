@@ -44,3 +44,5 @@ edits; that pin update stays explicit. No ADR is superseded.
 - 2026-10-20 — ADR-0541 native resource-fetch imports change the TypeScript
   worker fingerprint (+30 bytes); re-pin exact bytes/SHA only. Compiler chunk,
   2 MB ceiling and negative payload tests unchanged; packed consumer proof.
+- 2026-10-20 — Fetch abort/finalization correction changes hashed imports again;
+  TypeScript worker byte size unchanged, exact SHA re-pinned. Same ceilings.

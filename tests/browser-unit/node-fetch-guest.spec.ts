@@ -223,6 +223,25 @@ test('Node Fetch goal: multipart network response has one body state', async ({ 
         expect.soft(ceiling.exit, `${name}: ${ceiling.out}`).toBe(0);
         expect.soft(rows(ceiling.out), name).toEqual([`FETCH|NotImplementedError:${feature}`]);
       }
+      const lockedOverrideSource = `(async()=>{
+        const aborter=new AbortController();aborter.abort(new Error('stop'));
+        let calls=0,reader,stream;const blob=new Blob(['x']);
+        blob.stream=()=>{stream=new ReadableStream({start(c){c.enqueue(Uint8Array.of(65));c.close();}});
+          reader=stream.getReader();stream.cancel=()=>{calls++;return Promise.resolve();};return stream;};
+        let result;
+        try{await fetch(${JSON.stringify(url)},{method:'POST',body:blob,signal:aborter.signal});result=['accepted'];}
+        catch(error){result=[error.name,error.feature??null];}
+        console.log('FETCH|locked-override='+JSON.stringify([...result,calls,stream.locked,(await reader.read()).value[0]]));
+      })().catch(error=>{console.error(error);process.exitCode=1;});`;
+      const lockedOracle = await runNodeOracle(lockedOverrideSource);
+      expect(lockedOracle.code, lockedOracle.stderr).toBe(0);
+      expect(rows(lockedOracle.stdout)).toEqual(['FETCH|locked-override=["Error",null,1,true,65]']);
+      await writeOwnerFile(page, '/scratch/locked-override.cjs', lockedOverrideSource);
+      const lockedOverride = await runOwnerCommand(page, 'node locked-override.cjs', 20_000);
+      expect(lockedOverride.exit, lockedOverride.out).toBe(0);
+      expect(rows(lockedOverride.out)).toEqual([
+        'FETCH|locked-override=["NotImplementedError","fetch.abortBodyState",0,true,65]',
+      ]);
       // User-approved browser transport ceiling, deliberately distinct from Node's wire behavior.
       await writeOwnerFile(
         page,

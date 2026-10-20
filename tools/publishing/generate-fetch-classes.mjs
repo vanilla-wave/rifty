@@ -70,11 +70,15 @@ const result = await build({
             edit('util.types.isProxy(V)', '__riftyFetchPlatform.isProxy(V)');
           }
           if (name === 'lib/web/fetch/body.js') {
-            // Native cancellation of an errored stream rejects without changing it;
-            // this finalizer already ignores cancellation rejection.
+            // Native cancel disturbs even errored streams; inspect native state
+            // before finalization instead of approximating Node isErrored.
             edit(
               '!isDisturbed(stream) && !isErrored(stream)',
               '!__riftyFetchPlatform.isDisturbed(stream)',
+            );
+            edit(
+              "stream.cancel('Response object has been garbage collected').catch(noop)",
+              "__riftyFetchPlatform.finalizeBody(stream, 'Response object has been garbage collected')",
             );
             edit(
               'assert(webidl.is.ReadableStream(stream))',

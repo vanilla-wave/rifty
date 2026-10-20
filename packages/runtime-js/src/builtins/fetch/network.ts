@@ -153,6 +153,16 @@ export function createGuestFetch(classes: FetchClasses, nativeFetch: typeof fetc
     const requestObject = new classes.Request(input, init);
     const request = classes.getRequestState(requestObject);
     const signal = requestObject.signal;
+    if (signal.aborted) {
+      const cancel =
+        request.body === null
+          ? undefined
+          : installFetchPlatformBindings().prepareBodyAbort(request.body.stream);
+      // Node rejects first; a synchronous user cancel throw remains a separate failure.
+      const rejected = Promise.reject<Response>(signal.reason);
+      cancel?.(signal.reason);
+      return rejected;
+    }
     checkTransport(
       request,
       classes.getRequestDispatcher(requestObject) ??

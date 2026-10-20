@@ -44,8 +44,14 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
    nor locks it. Observe bodies and every public reader/lock/disturb entry
    before mutation, including reader constructors: guest-overridden `tee()`
    can return already locked branches. No inferred `bodyUsed` ledger. An
-   internal byte controller's `desiredSize === null` is its errored state;
-   finalization may cancel an errored stream and ignore its rejection.
+   internal byte controller's `desiredSize === null` is its errored state.
+   For arbitrary unlocked streams, captured native reader `closed` Promise
+   identity before/after `releaseLock()` distinguishes readable from terminal
+   synchronously, without reading or disturbing. Terminal fulfillment means
+   closed; rejection means errored. This follows the
+   [Streams release algorithm](https://streams.spec.whatwg.org/#readable-stream-reader-generic-release).
+   Finalization keeps Node's locked/disturbed guards, cancels readable/closed
+   streams and skips errored streams; no inferred state ledger.
    WebIDL USVString uses the existing file-URL well-formed-string conversion,
    implemented with ES2022 primitives; no newer String builtin is required.
 4. `fetch` constructs the JS Request, rejects unsupported request headers or
@@ -66,6 +72,12 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
    64 KiB limit reject `fetch.keepalive`.
    Read the upstream private request state and body reader, not overridable
    public getters/Body methods. Abort settles even during upload preparation.
+   A pre-aborted request rejects before transport admission and synchronously
+   cancels a readable unstarted body, preserving Node's reason and user-cancel
+   failures. Already locked bodies with native cancel stay untouched; a locked
+   body with custom cancel rejects `fetch.abortBodyState` because its hidden
+   state cannot be inspected without stealing the caller's reader. Aborting
+   an active buffered upload leaves its reader running, as Node 24 does.
 5. One ref from network dispatch to that stream's EOF/cancel/error; no own
    consumer methods or second body view. Bounded eager pulling admits small
    unread completed bodies; a backpressured unread body retains ADR-0158's
@@ -118,6 +130,19 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
   Response: keep one transport ref, observe before public stream operations,
   preserve original Proxy kind through the membrane; differential carriers.
 
+## Review correction (2026-10-20)
+
+- Pre-aborted requests previously checked transport first and never cancelled
+  the body. Live Node/Chromium RED: Cookie hid the abort reason; one pull instead
+  of zero, no cancel. `node-fetch-guest.spec.ts` now compares readable, closed,
+  errored, locked and throwing/rejecting custom-cancel states against Node.
+- Cancelling an errored stream DOES set disturbed. Real fetched Responses plus
+  GC (`node-fetch-finalization.spec.ts`) exposed retained `bodyUsed=true`
+  against Node's false. One native-state probe serves abort and finalization.
+- Active upload abort is not a defect: Node and Chromium guest both read all
+  30 chunks with zero cancel callbacks. The permanent differential aborts on
+  the fourth pull; adding reader cancellation would break this baseline.
+
 ## Consequences
 
 - Hono headers/File bodies, clone/direct readers and detached body lifetime use
@@ -129,7 +154,7 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
 ## Bundle measurement (2026-10-20)
 
 Production `pnpm build:playground`, baseline carrier 2a6a30728 (no product
-edits) versus implementation 169d8bd94. Individual emitted JS assets, not
+edits) versus the corrected implementation in this PR. Individual emitted JS assets, not
 transitive download totals. Byte lengths; gzip uses Python `gzip.compress`
 (level 9, mtime 0) on both builds. No new size limit. Kernel growth includes
 explicit activation of the existing builtin registry, required by production
@@ -138,8 +163,8 @@ bootstrap; generated undici class output is 107 KB.
 | Asset prefix | Before bytes | After bytes | Delta bytes | Before gzip | After gzip | Delta gzip |
 |---|---:|---:|---:|---:|---:|---:|
 | node-entry-bootstrap | 874375 | 878897 | +4522 | 263274 | 264818 | +1544 |
-| quickjs-kernel-worker-host | 198549 | 663843 | +465294 | 56745 | 197316 | +140571 |
-| workbench-owner-bootstrap | 1206219 | 1212167 | +5948 | 354672 | 356795 | +2123 |
+| quickjs-kernel-worker-host | 198549 | 665004 | +466455 | 56745 | 197669 | +140924 |
+| workbench-owner-bootstrap | 1206219 | 1212112 | +5893 | 354672 | 356729 | +2057 |
 | dev-server-child-bootstrap | 759804 | 764193 | +4389 | 230274 | 231704 | +1430 |
 | ts-lsp-worker-entry | 3842025 | 3848134 | +6109 | 1095809 | 1097923 | +2114 |
 

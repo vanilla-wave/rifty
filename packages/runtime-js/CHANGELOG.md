@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Pre-aborted Fetch preserves abort priority and unstarted body cancellation; collected Responses leave retained errored bodies undisturbed. Locked bodies with custom cancel reject `fetch.abortBodyState`; active upload abort retains Node's continued-read behavior (ADR-0541).
+
 - `process.emitWarning` supports string/Error overloads, nextTick events, default stderr and deprecation controls; lowercase `Request` method `patch` now warns once instead of crashing. Warning-file redirection remains a named unsupported feature (ADR-0541).
 
 - Native Node embedding no longer stays alive after importing the immediate scheduler: its MessagePort references follow pending immediates; cold QuickJS preload exits normally.

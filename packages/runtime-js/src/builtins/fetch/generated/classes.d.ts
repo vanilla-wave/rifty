@@ -50,6 +50,7 @@ declare function createFetchClasses(
     isProxy(value: unknown): boolean;
     isDisturbed(value: unknown): boolean;
     trackBody(stream: ReadableStream<Uint8Array>): void;
+    finalizeBody(stream: ReadableStream<Uint8Array>, reason: string): void;
     toUSVString(value: string): string;
     isUSVString(value: string): boolean;
     emitWarning(message: string, options: { code: string }): void;
