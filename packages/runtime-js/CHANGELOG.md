@@ -6,7 +6,7 @@
 
 ## [Unreleased]
 
-- Guest Fetch instances and `markAsUncloneable` graphs throw Node's `DataCloneError` (code 25) on `structuredClone`, realm/`MessagePort`/`Worker`/`parentPort`/`BroadcastChannel` `postMessage`, nested values and getters included: one admission walk (`internal/clone-marks.ts`) ahead of every native clone (ADR-0541).
+- Guest Fetch instances and `markAsUncloneable` graphs throw Node's `DataCloneError` (code 25) on `structuredClone`, realm/`MessagePort`/`Worker`/`parentPort`/`BroadcastChannel` `postMessage` (kernel and same-realm workers), nested values, Error `cause` and getters included: one admission projection (`internal/clone-marks.ts`) hands every native clone a graph read once (ADR-0541).
 
 - Early Fetch preload no longer caches the fallback `node:process`: child IPC, stdio and Worker construction observe the seeded child process. JS Fetch classes serialize own enumerable properties through advanced IPC as Node (ADR-0541).
 

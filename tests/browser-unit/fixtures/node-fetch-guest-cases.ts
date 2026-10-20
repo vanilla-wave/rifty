@@ -185,6 +185,13 @@ attempt('clone-getter', () => structuredClone({ get a() { return new Headers(); 
 attempt('clone-subclass', () => structuredClone(new H()));
 attempt('clone-marked', () => structuredClone(marked));
 attempt('clone-control', () => structuredClone({x:1}));
+attempt('clone-spoofed-tag', () => structuredClone({ [Symbol.toStringTag]: 'Date', h: new Headers() }));
+attempt('clone-error-cause', () => structuredClone(new Error('x', { cause: new Headers() })));
+attempt('clone-error-own-prop', () => Object.keys(structuredClone(Object.assign(new Error('x'), { h: new Headers() }))));
+attempt('clone-guest-class', () => structuredClone(new (class G { constructor() { this.h = new Headers(); } })()));
+attempt('clone-getter-once', () => { let reads = 0; structuredClone({ get a() { reads++; return 1; } }); return reads; });
+attempt('clone-transfer-nested', () => { const buf = new ArrayBuffer(8); const out = structuredClone({ deep: { buf } }, { transfer: [buf] }); return [buf.byteLength, out.deep.buf.byteLength]; });
+attempt('clone-shared-cycle-holes', () => { const s = {}; const c = { a: s, b: s, list: [1, , 3] }; c.self = c; const out = structuredClone(c); return [out.a === out.b, out.self === out, out.list.length, 1 in out.list]; });
 row('keys', Object.keys(new Headers({a:'1'})));
 attempt('port-postmessage', () => {
  const { port1, port2 } = new MessageChannel();
