@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Final+GREEN/CLOSE PASS: referrer, pre-abort cancellation и errored-body finalization исправлены; metadata advisory закрыта, active-upload cancellation NOTE подтверждена Node. Committed pr:check 28/28, browser 7, production и packed consumer GREEN. Merge после re-bound pass-binding и green CI at HEAD.",
+  "merge_call": "Final+GREEN/CLOSE PASS: CI saving-UI harness regression fixed without weakening its native-write barrier or assertions; product proof from d7 retained. Committed target e2e GREEN; pr:check 28/28 GREEN, two broad-run unit timeouts passed the mandatory isolated rerun. Merge after re-bound pass-binding and green CI at HEAD.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "d7eb2ad79bd57ce2f36aeb31a40e4a410ab26762",
-  "unit_goal_source": "PR #381 https://github.com/vanilla-wave/rifty/pull/381; goal node-fetch-classes-in-guest / unit node-fetch-guest-carrier, accepted I1–I3 and user-approved browser transport with explicit ceilings; raw goal/unit authority preserved at 207e9db6b4bf84b525d396d5378080ae1244c5b1; BASE 3207b33acb3cb74d54be2cff6d33200cb32bf556; Contract+RED preparation 2a6a30728d5af714ef2598bf84158b89dc65e48e, PR comment 6278683544; Final+GREEN/CLOSE verify of corrected result d7eb2ad79bd57ce2f36aeb31a40e4a410ab26762.",
+  "reviewed_sha": "8c39b7c8c7fd753c3badb0858a37cd2970365091",
+  "unit_goal_source": "PR #381 https://github.com/vanilla-wave/rifty/pull/381; goal node-fetch-classes-in-guest / unit node-fetch-guest-carrier, accepted I1–I3 and user-approved browser transport with explicit ceilings; raw goal/unit authority preserved at 207e9db6b4bf84b525d396d5378080ae1244c5b1; BASE 3207b33acb3cb74d54be2cff6d33200cb32bf556; Contract+RED preparation 2a6a30728d5af714ef2598bf84158b89dc65e48e, PR comment 6278683544; prior product Final+GREEN/CLOSE d7eb2ad79bd57ce2f36aeb31a40e4a410ab26762; current verify including CI harness baseline project-opening-progress at 8c39b7c8c7fd753c3badb0858a37cd2970365091.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -221,7 +221,7 @@
       "source": "acceptance",
       "trace": "scenario",
       "status": "pass",
-      "citation": "docs/adr/runtime-js/0541-run-node-fetch-classes-over-the-browser-i-o-boundary.md:154",
+      "citation": "docs/adr/runtime-js/0541-run-node-fetch-classes-over-the-browser-i-o-boundary.md:160",
       "note": ""
     },
     {
@@ -254,6 +254,14 @@
       "trace": "I3+ADR-0541",
       "status": "pass",
       "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:227",
+      "note": ""
+    },
+    {
+      "row": "Existing saving-UI baseline preserved after Node globals install: real owner-worker native-write barrier uses fetchHost for its relative resource URL; CI/local RED and committed GREEN, unchanged route, record filter, UI progress/geometry and release assertions; PR-4 old criterion retained",
+      "source": "acceptance",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "tests/e2e/project-opening-progress.spec.ts:3",
       "note": ""
     }
   ],
