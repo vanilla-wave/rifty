@@ -188,6 +188,8 @@ export function networkFetchCase(url: string): string {
  row('cancelled-branch',await Response.prototype.text.call(surviving));
  await cancellation;
  row('cancelled-state',[cancelled.bodyUsed,surviving.bodyUsed]);
+ const redirected=await fetch(${JSON.stringify(`${url}/redirect`)});
+ row('redirect-metadata',[redirected.status,redirected.statusText,redirected.url === ${JSON.stringify(`${url}/metadata`)},redirected.redirected,redirected.headers.get('x-fetch-proof'),await redirected.text()]);
  const controller=new AbortController(); controller.abort();
  try {await fetch(${JSON.stringify(url)}, {signal:controller.signal});} catch(e) {row('abort',e.name);}
  const active = new AbortController();

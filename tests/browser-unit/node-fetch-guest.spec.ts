@@ -94,6 +94,19 @@ test('Node Fetch goal: multipart network response has one body state', async ({ 
     }
     response.setHeader('access-control-allow-origin', '*');
     response.setHeader('access-control-allow-headers', '*');
+    if (request.url?.endsWith('/redirect')) {
+      response.writeHead(302, { location: './metadata' });
+      response.end();
+      return;
+    }
+    if (request.url?.endsWith('/metadata')) {
+      response.writeHead(207, 'Multi-Status', {
+        'x-fetch-proof': 'exposed',
+        'access-control-expose-headers': 'x-fetch-proof',
+      });
+      response.end('redirect body');
+      return;
+    }
     if (request.url?.endsWith('/referrer')) {
       response.end(request.headers.referer ?? '');
       return;
