@@ -1,11 +1,18 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
-import { bootOwner, closeOwner, execLine, gotoHarness } from './fixtures.ts';
+import {
+  bootOwner,
+  closeOwner,
+  execLine,
+  execLineUntil,
+  gotoHarness,
+  writeOwnerFile,
+} from './fixtures.ts';
 
 const version = '8.15.0';
 const archivePath = fileURLToPath(
@@ -17,7 +24,6 @@ for (const nested of [false, true]) {
   test(`local npx resolves installed bin and forwards arguments: nested=${nested}`, async ({
     page,
   }) => {
-    test.fail(true, 'local npx is not implemented yet');
     const root = mkdtempSync(join(tmpdir(), 'rifty-npx-'));
     let opened = false;
     try {
@@ -99,6 +105,49 @@ for (const nested of [false, true]) {
       expect(run.exit, run.out).toBe(0);
       expect(run.out.replaceAll('\r\n', '\n')).toBe(oracle);
       expect(registryRequests).toHaveLength(before);
+      if (!nested) {
+        const invalid = spawnSync(
+          'env',
+          [
+            '-u',
+            'NO_COLOR',
+            '-u',
+            'FORCE_COLOR',
+            'npx',
+            '--no-install',
+            '--',
+            'acorn',
+            '--ecmaBAD',
+          ],
+          {
+            cwd: root,
+            encoding: 'utf8',
+            timeout: 30_000,
+          },
+        );
+        expect(invalid.error).toBeUndefined();
+        expect(invalid.status).toBe(1);
+        const failed = await execLine(page, 'npx --no-install -- acorn --ecmaBAD');
+        expect(failed.exit).toBe(invalid.status);
+        expect(failed.out.replaceAll('\r\n', '\n')).toBe(invalid.stdout + invalid.stderr);
+        // A real local program wins over the shell's echo builtin and keeps cancellation.
+        await writeOwnerFile(
+          page,
+          '/scratch/local-echo.cjs',
+          '#!/usr/bin/env node\nprocess.stdout.write("LOCAL_READY\\n"); setInterval(() => {}, 1000);',
+        );
+        await writeOwnerFile(
+          page,
+          '/scratch/node_modules/.bin/echo',
+          "#!/usr/bin/env node\nimport('../../local-echo.cjs');\n",
+        );
+        const directCancelled = await execLineUntil(page, 'node local-echo.cjs', 'LOCAL_READY');
+        const cancelled = await execLineUntil(page, 'npx -- echo', 'LOCAL_READY');
+        expect(cancelled.out).toContain('LOCAL_READY');
+        expect(cancelled.exit).toEqual(directCancelled.exit);
+        expect(cancelled.exit).toEqual({ code: null, signal: 'SIGTERM' });
+        expect(registryRequests).toHaveLength(before);
+      }
     } finally {
       if (opened) await closeOwner(page);
       rmSync(root, { recursive: true, force: true });

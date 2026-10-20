@@ -39,6 +39,7 @@ const SYNOPSIS: Record<string, string> = {
   printf: 'format and print arguments',
   cp: 'copy files and directories',
   mv: 'move or rename files',
+  npx: 'run an installed local package executable',
   help: 'list commands and show per-command help',
 };
 

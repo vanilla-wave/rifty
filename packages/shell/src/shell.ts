@@ -16,6 +16,7 @@ import { suggestCommandName } from './command-suggestion.ts';
 import { hasGlobMeta, matchSegment } from './commands/_glob.ts';
 import { resolve } from './commands/_shared.ts';
 import type { ShellJobListItem } from './commands/jobs.ts';
+import { npx } from './commands/npx.ts';
 import { type ShellCompletionResult, createShellCompleter } from './language-service.ts';
 import { type Token, isOp, tokenize } from './tokenize.ts';
 import type {
@@ -222,7 +223,7 @@ const ABORTED = Symbol('shell.aborted');
 const SIGINT_EXIT = 130;
 
 /** Package managers that get a directed npm nudge instead of `command not found`. */
-const PACKAGE_MANAGERS = new Set(['npx', 'yarn', 'pnpm', 'bun']);
+const PACKAGE_MANAGERS = new Set(['yarn', 'pnpm', 'bun']);
 
 /** Directed nudge for a recognized package manager (rifty wires only npm). */
 function packageManagerNudge(cmd: string): string | null {
@@ -293,6 +294,14 @@ export class Shell {
       () => this.registeredCommandNames(),
     );
     for (const [name, cmd] of Object.entries(builtins)) this.commands.set(name, cmd);
+    this.commands.set(
+      'npx',
+      npx(
+        (name, cwd) => this.commandResolver.resolveBin(name, cwd),
+        this.execBin,
+        this.assertCommand,
+      ),
+    );
   }
 
   get cwd(): string {

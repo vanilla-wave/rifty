@@ -10,7 +10,7 @@ for (const [command, feature] of [
   ['npx --package name command', 'shell.npx.options'],
   ['npx', 'shell.npx.interactive'],
 ] as const) {
-  it.fails(`names the unsupported local-npx boundary: ${command}`, async () => {
+  it(`names the unsupported local-npx boundary: ${command}`, async () => {
     const { fsSync } = createMemoryFs();
     const shell = new Shell({ fileSystem: fsSync });
     const result = await shell.run(command);
@@ -20,7 +20,7 @@ for (const [command, feature] of [
   });
 }
 
-it.fails('applies host command policy to the selected local bin', async () => {
+it('applies host command policy to the selected local bin', async () => {
   const { fsSync } = createMemoryFs();
   fsSync.mkdirSync('/node_modules/.bin', { recursive: true });
   fsSync.writeFileSync(

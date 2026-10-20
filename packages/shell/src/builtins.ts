@@ -72,6 +72,7 @@ export const CORE_COMMAND_NAMES = [
   'printf',
   'cp',
   'mv',
+  'npx',
 ] as const;
 
 export function coreCommandNames(): string[] {

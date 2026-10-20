@@ -46,4 +46,5 @@ retains their availability wording and yarn/pnpm/bun scope.
 
 ## Decisions
 
+- ready-verdict: 2026-10-20 — Contract+RED @ 9bc660fd183db2f979db244a0e8aa8266cd175f3
 - 2026-10-20 — ADR-0545; existing command resolver and BinExecutor retain ownership.
