@@ -1,9 +1,9 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "Repairs and complete goal acceptance verified at b04b9f673adcd15903e15faab8246c767203c13d; commit this rebound landing verdict, validate pass-binding, merge only on green CI at HEAD. Raw P1 sources, baseline diff, ADRs and RED/revert-check artifacts independently inspected. Fresh independent Node v24.16.0/Chromium: 20/20 children, installed esbuild and Vite build/rebuild/stop (/tmp/no-coi-review-independent-browser.log); guest Stats 1/1 (/tmp/no-coi-review-independent-browser-stats.log); namespace/Stats 41/41 and child_process parity 29/29. Retirement negative criteria 10/10. PR-4 compiler old/new full hashes match exact pins; 10022694 bytes identical after import-hash normalization (/tmp/no-coi-review-independent-compiler.log). Browser directory-link normalization does not weaken ADR-0540: host absolute nlink differs by filesystem, exact visible-directory model remains pinned in real-VFS unit tests. Prior accepted packed/COI/snapshot/replay obligations and 22 traced rows retained where unchanged; fresh browser proof exercises the repaired composed result. Full pr:check 27/27 PASS at reviewed clean HEAD: test:run 191.3s without retry, test:parity 147.4s (/tmp/no-coi-review-repair-pr-check.log). No new blocker or required residual; existing advisory timestamp ceiling remains outside I1-I4.",
+  "merge_call": "CI repairs and complete goal acceptance verified at c0b8ba740baa15d13e46e9ee461821dd238ed9ef; bind this landing verdict and merge only on green CI at final HEAD. Independent raw authority/PR/BASE-diff review found no new blocker. Inspected original CI failures, local packed/recovery/dynamic-wrapper REDs and readiness revert-check. Full packed runner PASS: 16 first-party + 178 external tarballs, snapshot/native interruption+quota, reference hosts with/without registry, Pi-agent, Workbench build/HMR/reopen/scoped preview and benchmark (/tmp/no-coi-ci-packed-final.log). Complete native Chromium no-COI suite 233/233 PASS in 9.3m, including Node child oracles, dynamic wrappers, no-SW SDK, installed esbuild, recovery and warm-open (/tmp/no-coi-ci-full-suite.log). pnpm pr:check 27/27 PASS: diff-related test:run 202.4s without retry; full Node parity 124.2s (/tmp/no-coi-ci-repair-prcheck.log). Independently ran retirement negative gates 10/10 (/tmp/no-coi-ci-review-gate.log), native Node24.16/Vite7.3.6 valid/corrupt-lock builds (both exit0, identical asset, lock unchanged; /tmp/no-coi-ci-review-lock-oracle.log), and old/new compiler full-SHA/size comparison (10022694 bytes; identical after import-hash normalization only; /tmp/no-coi-ci-review-compiler.log). PR-4: obsolete malformed-lock refusal and no-SW host criteria contradicted accepted upstream/SW cutover; replacements assert actual compiled output, unchanged lock and controlling SW URL. Integrity/conflict/interruption/quota/replay/registry-denial criteria retained. Readiness fixes listener publication at one bootstrap boundary without retry/timer/new queue; prior send/disconnect and kernel cleanup retained. Unchanged prior 28 rows/evidence retained under REV-1, three repair rows added; existing ctime advisory remains outside I1-I4.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "b04b9f673adcd15903e15faab8246c767203c13d",
-  "unit_goal_source": "PR #380 observed-defect repairs against BASE fd8abe2cd02d238d62e0c3780127a08630f980d7; raw observations discussion_r4320365199, discussion_r4320365205 and issuecomment-6280684604; Node v24.16.0 baseline and ADR-0531/0539/0540. CLOSE rebind of no-coi-child-processes: original goal and unit authorities read with git show 59da8edb51d440449b599aa5b3c9887549494256 under docs/backlog/epics/no-coi-child-processes (goal.md) and docs/backlog/runtime-js (no-coi-child-processes.md, no-coi-esbuild-retirement.md). Unchanged obligations reuse the accepted landing record docs/backlog/runtime-js/reference/no-coi-child-processes-final-green.json at BASE, reviewed product 59da8edb51d440449b599aa5b3c9887549494256.",
+  "reviewed_sha": "c0b8ba740baa15d13e46e9ee461821dd238ed9ef",
+  "unit_goal_source": "PR #380 observed CI-defect repairs against BASE 6c5223c7841b01de7c0e43058bb477f240dee80d, frozen candidate c0b8ba740baa15d13e46e9ee461821dd238ed9ef. Raw PR body and CI logs /tmp/no-coi-ci-light-failure.log, /tmp/no-coi-ci-suite-failure.log read before conclusions; real RED artifacts /tmp/no-coi-ci-packed-red.log, /tmp/no-coi-ci-recovery-red.log, /tmp/no-coi-child-wrapper-red.log and /tmp/no-coi-child-startup-revert.log. Old/new judging criteria independently compared from BASE; /tmp/no-coi-packed-obsolete-lock-red.log and /tmp/no-coi-ci-packed-green.log capture obsolete-criterion failures. CLOSE rebind of no-coi-child-processes: original goal and unit authorities read with git show 59da8edb51d440449b599aa5b3c9887549494256 under docs/backlog/epics/no-coi-child-processes (goal.md) and docs/backlog/runtime-js (no-coi-child-processes.md, no-coi-esbuild-retirement.md). User amendments: children require SW, ordinary SDK remains usable without SW; retire no-COI legacy only, retain shared COI client. ADR-0539/0420 corrections reviewed. Unchanged obligations reuse accepted landing verdict docs/backlog/runtime-js/reference/no-coi-child-processes-final-green.json at BASE (reviewed product b04b9f673adcd15903e15faab8246c767203c13d).",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -13,7 +13,7 @@
       "source": "acceptance",
       "trace": "I3",
       "status": "pass",
-      "citation": "tests/no-coi/no-coi-esbuild-retirement.spec.ts:79",
+      "citation": "tests/no-coi/no-coi-esbuild-retirement.spec.ts:86",
       "note": ""
     },
     {
@@ -45,7 +45,7 @@
       "source": "acceptance",
       "trace": "I1",
       "status": "pass",
-      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:50",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:53",
       "note": ""
     },
     {
@@ -61,7 +61,7 @@
       "source": "acceptance",
       "trace": "I4",
       "status": "pass",
-      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:143",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:148",
       "note": ""
     },
     {
@@ -69,7 +69,7 @@
       "source": "acceptance",
       "trace": "I2",
       "status": "pass",
-      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:50",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:53",
       "note": ""
     },
     {
@@ -85,7 +85,7 @@
       "source": "fault-matrix",
       "trace": "I2",
       "status": "pass",
-      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:182",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:187",
       "note": ""
     },
     {
@@ -93,7 +93,7 @@
       "source": "fault-matrix",
       "trace": "I4",
       "status": "pass",
-      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:143",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:148",
       "note": ""
     },
     {
@@ -109,7 +109,7 @@
       "source": "acceptance",
       "trace": "scenario + I2",
       "status": "pass",
-      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:50",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:53",
       "note": ""
     },
     {
@@ -117,7 +117,7 @@
       "source": "public-api",
       "trace": "ADR-0539",
       "status": "pass",
-      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:50",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:53",
       "note": ""
     },
     {
@@ -133,7 +133,7 @@
       "source": "public-api",
       "trace": "ADR-0539",
       "status": "pass",
-      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:50",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:53",
       "note": ""
     },
     {
@@ -141,7 +141,7 @@
       "source": "public-api",
       "trace": "ADR-0539",
       "status": "pass",
-      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:50",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:53",
       "note": ""
     },
     {
@@ -189,7 +189,7 @@
       "source": "fault-matrix",
       "trace": "I2 + ADR-0539",
       "status": "pass",
-      "citation": "tests/no-coi/fixtures/child-process-programs.ts:126; tests/no-coi/no-coi-child-processes.spec.ts:50",
+      "citation": "tests/no-coi/fixtures/child-process-programs.ts:126; tests/no-coi/no-coi-child-processes.spec.ts:53",
       "note": ""
     },
     {
@@ -197,7 +197,7 @@
       "source": "fault-matrix",
       "trace": "I2 + ADR-0539",
       "status": "pass",
-      "citation": "tests/no-coi/fixtures/child-process-programs.ts:133; tests/no-coi/no-coi-child-processes.spec.ts:50",
+      "citation": "tests/no-coi/fixtures/child-process-programs.ts:133; tests/no-coi/no-coi-child-processes.spec.ts:53",
       "note": ""
     },
     {
@@ -230,6 +230,30 @@
       "trace": "ADR-0391 + I3",
       "status": "pass",
       "citation": "tools/checks/esbuild-legacy-retirement.mjs:96; tools/checks/esbuild-legacy-retirement.test.ts:1",
+      "note": ""
+    },
+    {
+      "row": "Dedicated Worker bootstrap publishes the init listener before init/port transfer; dynamic host wrappers preserve Node helper and immediate send/disconnect behavior, memory/OPFS recovery still works",
+      "source": "fault-matrix",
+      "trace": "I1 + I2 + ADR-0539",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:49; tests/no-coi/no-coi-dev-hmr.spec.ts:965; tests/no-coi/no-coi-dev-hmr.spec.ts:1297",
+      "note": ""
+    },
+    {
+      "row": "Packed snapshot/reference and warm-open Vite hosts use the controlling rifty SW while ordinary no-SW SDK behavior and named child refusal remain",
+      "source": "fault-matrix",
+      "trace": "I3 + I4 + ADR-0539",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:62; tests/integration/reference-host-browser-proof.mjs:325; tests/no-coi/no-coi-warm-open.spec.ts:90; tests/no-coi/no-coi-child-processes.spec.ts:148",
+      "note": ""
+    },
+    {
+      "row": "Saved installed tree runs upstream esbuild/Vite with malformed lock unchanged; no legacy lock-derived adapter activation",
+      "source": "fault-matrix",
+      "trace": "I3 + ADR-0539 + ADR-0420",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-esbuild-retirement.spec.ts:41; tests/no-coi/no-coi-esbuild-retirement.spec.ts:95; tests/integration/no-coi-snapshot-browser-proof.mjs:105",
       "note": ""
     }
   ],
@@ -266,7 +290,7 @@
         {
           "severity": "concern",
           "location": "packages/vfs/src/memory-backend.ts:314; packages/vfs/src/opfs-sync.ts:1027",
-          "summary": "New numeric Stats coverage does not establish all timestamp transitions: rename preserves stale entry/parent ctime. Outside I1\u2013I4; recorded in the existing upstream-twin Stats item with owner and next probe, and generator-backed public fs matrix marks partial support. No full timestamp-value parity claimed.",
+          "summary": "New numeric Stats coverage does not establish all timestamp transitions: rename preserves stale entry/parent ctime. Outside I1–I4; recorded in the existing upstream-twin Stats item with owner and next probe, and generator-backed public fs matrix marks partial support. No full timestamp-value parity claimed.",
           "authority": "",
           "evidence": "Read rename implementations and tools/node-parity-runner/cases/fs/stats-node-fields.case.ts: the carrier asserts shape, stable inode/birth and link count, not ctime transition. Disposition recorded at docs/backlog/runtime-js/fs-stats-node-fields.md:39 and tools/compat-matrix-generator/fs-matrix.js:19."
         }
