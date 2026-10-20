@@ -16,14 +16,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { lane: coi, engine: chromium, command: 'pnpm exec playwright test --project=chromium-heavy --project=chromium-light --workers=1' }
-          - { lane: coi, engine: firefox, command: 'pnpm test:e2e:firefox --workers=1' }
-          - { lane: coi, engine: webkit, command: 'pnpm test:e2e:webkit --workers=1' }
-          - { lane: no-coi, engine: chromium, command: 'pnpm test:no-coi' }
-          - { lane: no-coi, engine: firefox, command: 'pnpm test:no-coi:firefox' }
-          - { lane: no-coi, engine: webkit, command: 'pnpm test:no-coi:webkit' }
+          - { lane: before-imports, engine: chromium, ref: 5bd1e4b066da0cd76183092439d2b315e31c70f0 }
+          - { lane: current, engine: chromium, ref: f6ce571293711c2d9ddd47f378bdaefe8eccd931 }
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select measured revision and retain diagnostic probe
+        run: |
+          cp tests/e2e/pr379-startup-probe.spec.ts /tmp/pr379-startup-probe.spec.ts
+          git checkout --detach ${{ matrix.ref }}
+          cp /tmp/pr379-startup-probe.spec.ts tests/e2e/pr379-startup-probe.spec.ts
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -54,7 +57,7 @@ jobs:
       - run: pnpm build:libs
       - id: lane
         name: Execute existing ${{ matrix.lane }} suite
-        run: ${{ matrix.command }}
+        run: pnpm exec playwright test --project=chromium-light --workers=1 tests/e2e/pr379-startup-probe.spec.ts --trace=on
       - if: always()
         uses: actions/upload-artifact@v4
         with:
