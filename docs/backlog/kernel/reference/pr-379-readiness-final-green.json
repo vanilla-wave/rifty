@@ -1,0 +1,71 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS for the readiness-budget follow-up at 62f80e384da4ba55cbcc1ebe9c5ee3725dc1adb9; merge only after green PR CI at delivered HEAD. Corrected Chromium cases 2/2 PASS (28.8s); pr:check 28/28 PASS, unit 193.2s and parity 136.9s, no isolated reruns. This accepts harness calibration, not a runtime startup-performance repair.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "62f80e384da4ba55cbcc1ebe9c5ee3725dc1adb9",
+  "unit_goal_source": "PR #379 observed Chromium readiness baseline: tests/e2e/m1-terminal-shell.spec.ts:240 and tests/e2e/project-switch.spec.ts:217; BASE f6ce571293711c2d9ddd47f378bdaefe8eccd931, HEAD 62f80e384da4ba55cbcc1ebe9c5ee3725dc1adb9. Scope: two readiness budgets and factual CI follow-up. Earlier accepted goal and handoff landing verdicts remain authority; the startup draft is evidence, not a new ready contract.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "The seeded npm script still launches the installed Vite CLI in a second terminal and produces observable server readiness without command-resolution errors.",
+      "source": "frozen-artifact",
+      "trace": "PR #379 BASE tests/e2e/m1-terminal-shell.spec.ts:240-260 observed scenario",
+      "status": "pass",
+      "citation": "tests/e2e/m1-terminal-shell.spec.ts:240; tests/e2e/helpers/playground.ts:480; docs/backlog/kernel/vite-startup-readiness-ci.md:66; /tmp/pr379-readiness-green.log; /tmp/pr379-readiness-independent-criteria.json",
+      "note": "PR-4 independently read old criteria from git: 90s primary boot, 30s second readiness; the June override predates the upstream-WASM path. New second readiness uses the already-existing 60s helper default, outer budget 180s accommodates both starts. Exact helper, port, terminal selection and all negative assertions are unchanged; reversing only the explicit budget edits restores byte-identical BASE specs. Raw failed CI runs 39446198603 and 39451668584 each exhausted the original 30s poll in all three attempts. Independently parsed retry1 traces end with :5173 queryCount=0 at 289408.047/293510.797ms; their later error-context snapshots contain the real vite :5173 option. Thus those attempts reach the same functional predicate after its deadline; evidence does not establish CPU/transport cause or duration of every failure. The original criterion also passes on unchanged Linux baseline/current and exact-shard diagnostic runs; instrumentation retains 30s and rethrows any original failure, never converts it to PASS. Recorded baseline/current timings and the clean-setup three repetitions match raw logs; no diagnostic late branch ran. Current real Chromium scenario PASS10.9s. No declared 30s latency obligation found in the original scenario, accepted landing authority, or mission; no demonstrated correctness gap is hidden by this bounded calibration."
+    },
+    {
+      "row": "Starter selection activates a fresh scratch with coherent project surfaces and a real dev server before and after switching starters.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0165 decisions 3-4 + PR #379 BASE tests/e2e/project-switch.spec.ts:217-244 observed scenario",
+      "status": "pass",
+      "citation": "tests/e2e/project-switch.spec.ts:217; docs/adr/playground/0165-multi-project-management-with-durable-scratch.md:25; tests/e2e/helpers/playground.ts:480; docs/backlog/kernel/vite-startup-readiness-ci.md:71; /tmp/pr379-readiness-green.log",
+      "note": "PR-4: old initial Vite-specific 30s override becomes the unchanged 60s helper default; outer 120s becomes 180s. The second-start predicate, root/project identity checks, service-worker prerequisite and UI assertions remain byte-identical. Raw heavy retry1 has no :5174 at its final poll and does not independently establish later success; this uncertainty is preserved. Linux baseline primary startup measured 36.883s after bootProjectFiles returned, while the unchanged exact local scenario previously passed; this supports the same cold-start budget class rather than a claimed runtime fix. Current real Chromium starter-switch scenario PASS11.6s, including the unchanged second-start and surface checks. ADR-0165 requires coherent teardown/activation/restart, not a 30s startup SLO. No runtime, retries, worker counts, accepted support claim or latency policy changed."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}
