@@ -12,16 +12,18 @@ import {
 import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import {
+  getProcessCwd,
   installProcessGlobals,
   riftyProcess,
   setProcessCwd,
 } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
+import { ref, unref } from '@riftydev/runtime-js/internal';
+import { activatePackageRuntimeAdapters } from '@riftydev/shadow-registry/runtime';
 import { asyncVfs, syncMirror } from '@riftydev/vfs';
 import { installMemoryFs } from '@riftydev/vfs/internal';
 import { installWorkerRealmCompat } from '../../../packages/runtime-js/src/ipc/worker-realm-compat.ts';
 import { finalizePackageInstallFiles } from '../../../packages/workbench/src/workers/package-install-finalizer.ts';
-import { activateWorkbenchRuntimeAdapters } from '../../../packages/workbench/src/workers/workbench-runtime-adapters.ts';
 import {
   prepareViteCli,
   viteCliPreparationFromArgs,
@@ -183,7 +185,9 @@ async function capturedNodeRun(options: {
 async function activateViteRuntime(): Promise<void> {
   if (installResult === null) throw new Error('install must complete first');
   const plan = shadowSubstitutionPlanForInstallResult(installResult);
-  await activateWorkbenchRuntimeAdapters({
+  await activatePackageRuntimeAdapters({
+    getCwd: getProcessCwd,
+    refs: { ref, unref },
     bindings: plan.bindings.map((binding) => ({
       ...binding,
       packagePath: `${root}/${binding.packagePath}`,
