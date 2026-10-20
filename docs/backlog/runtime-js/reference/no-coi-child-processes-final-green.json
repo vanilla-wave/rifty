@@ -1,9 +1,9 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "CI repairs and complete goal acceptance verified at c0b8ba740baa15d13e46e9ee461821dd238ed9ef; bind this landing verdict and merge only on green CI at final HEAD. Independent raw authority/PR/BASE-diff review found no new blocker. Inspected original CI failures, local packed/recovery/dynamic-wrapper REDs and readiness revert-check. Full packed runner PASS: 16 first-party + 178 external tarballs, snapshot/native interruption+quota, reference hosts with/without registry, Pi-agent, Workbench build/HMR/reopen/scoped preview and benchmark (/tmp/no-coi-ci-packed-final.log). Complete native Chromium no-COI suite 233/233 PASS in 9.3m, including Node child oracles, dynamic wrappers, no-SW SDK, installed esbuild, recovery and warm-open (/tmp/no-coi-ci-full-suite.log). pnpm pr:check 27/27 PASS: diff-related test:run 202.4s without retry; full Node parity 124.2s (/tmp/no-coi-ci-repair-prcheck.log). Independently ran retirement negative gates 10/10 (/tmp/no-coi-ci-review-gate.log), native Node24.16/Vite7.3.6 valid/corrupt-lock builds (both exit0, identical asset, lock unchanged; /tmp/no-coi-ci-review-lock-oracle.log), and old/new compiler full-SHA/size comparison (10022694 bytes; identical after import-hash normalization only; /tmp/no-coi-ci-review-compiler.log). PR-4: obsolete malformed-lock refusal and no-SW host criteria contradicted accepted upstream/SW cutover; replacements assert actual compiled output, unchanged lock and controlling SW URL. Integrity/conflict/interruption/quota/replay/registry-denial criteria retained. Readiness fixes listener publication at one bootstrap boundary without retry/timer/new queue; prior send/disconnect and kernel cleanup retained. Unchanged prior 28 rows/evidence retained under REV-1, three repair rows added; existing ctime advisory remains outside I1-I4.",
+  "merge_call": "Final+GREEN/CLOSE verified at ac1e383a61ac36f66636bfc9a6025a7d8baae3b7; no remaining blocker; bind this verdict and merge only after green CI at final HEAD. Independently ran Stats plus boundary negative tests: 14/14 (/tmp/no-coi-boundary-review-focused.log), direct runtime-adapter-boundary gate: 28 generic modules and 7 Sass-forbidden categories (/tmp/no-coi-boundary-review-gate-green.log), and compiler byte comparison: both 10022694 bytes, SHA256 3e4e79930957f3e36119cbc3f5be07e157798e400991c7d9ce5352dd28248951, byte-identical to immutable accepted packed consumer (/tmp/no-coi-boundary-review-compiler.log). Inspected actual GREEN artifacts: 49 namespace/Stats/extraction/retained-COI unit tests (/tmp/no-coi-boundary-stats-green.log); 8 project-location/Vite7/Vite8/guest-Stats browser cases (/tmp/no-coi-location-green.log); 24 gate/extraction/retained-registry tests (/tmp/no-coi-retired-adapter-gates-green.log); 2 real in-realm Worker/fault browser cases (/tmp/no-coi-legacy-fixture-browser-green.log). Full pnpm pr:check --all passed all 27 checks, including full unit and Node parity (/tmp/no-coi-boundary-prcheck-all-final.log). Earlier interrupted run is not acceptance evidence. PR-4: exact 175-file closure/equality and no unreachable runtime assertions unchanged; wrapper was unexecuted. Direct registry consumers retain production cwd/ref ownership and all acceptance assertions. Boundary scanner/fail-on-missing unchanged, only removed source path retired; Sass negative injection still executes on retained registry adapter. Ancestor stat projects existing metadata without admitting colliding descendants; readdir/access still EEXIST; real owner accepts next command and closes. Prior full packed consumer (16 first-party + 178 external tarballs) and 233/233 no-COI suite accepted at BASE remain valid for unchanged dependencies under REV-1. All I1-I4 closed; pre-existing ctime advisory remains outside goal.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "c0b8ba740baa15d13e46e9ee461821dd238ed9ef",
-  "unit_goal_source": "PR #380 observed CI-defect repairs against BASE 6c5223c7841b01de7c0e43058bb477f240dee80d, frozen candidate c0b8ba740baa15d13e46e9ee461821dd238ed9ef. Raw PR body and CI logs /tmp/no-coi-ci-light-failure.log, /tmp/no-coi-ci-suite-failure.log read before conclusions; real RED artifacts /tmp/no-coi-ci-packed-red.log, /tmp/no-coi-ci-recovery-red.log, /tmp/no-coi-child-wrapper-red.log and /tmp/no-coi-child-startup-revert.log. Old/new judging criteria independently compared from BASE; /tmp/no-coi-packed-obsolete-lock-red.log and /tmp/no-coi-ci-packed-green.log capture obsolete-criterion failures. CLOSE rebind of no-coi-child-processes: original goal and unit authorities read with git show 59da8edb51d440449b599aa5b3c9887549494256 under docs/backlog/epics/no-coi-child-processes (goal.md) and docs/backlog/runtime-js (no-coi-child-processes.md, no-coi-esbuild-retirement.md). User amendments: children require SW, ordinary SDK remains usable without SW; retire no-COI legacy only, retain shared COI client. ADR-0539/0420 corrections reviewed. Unchanged obligations reuse accepted landing verdict docs/backlog/runtime-js/reference/no-coi-child-processes-final-green.json at BASE (reviewed product b04b9f673adcd15903e15faab8246c767203c13d).",
+  "reviewed_sha": "ac1e383a61ac36f66636bfc9a6025a7d8baae3b7",
+  "unit_goal_source": "PR #380 observed extraction-boundary and root mount-collision repairs against BASE 7a262c5406ec8498f96a09e6a87cf477e43965e6; frozen candidate ac1e383a61ac36f66636bfc9a6025a7d8baae3b7. Raw PR body, BASE diff, original CI artifacts /tmp/no-coi-ci-unit-old.log and /tmp/no-coi-ci-browser-old.log, local REDs /tmp/no-coi-extraction-red.log and /tmp/no-coi-root-collision-red.log, focused RED /tmp/no-coi-ancestor-stat-red.log and discriminating revert /tmp/no-coi-ancestor-stat-revert.log reviewed. Also verified missing removed-module gate failure /tmp/no-coi-boundary-review-gate-red.log and final fix. CLOSE rebind of no-coi-child-processes: original goal and child unit slugs no-coi-child-processes/no-coi-esbuild-retirement read with git show 59da8edb51d440449b599aa5b3c9887549494256 (goal under docs/backlog/epics/no-coi-child-processes; units under docs/backlog/runtime-js). Accepted user amendments require SW only for children, keep ordinary no-SW SDK, retire no-COI legacy and retain shared COI client. ADR-0531 original/correction, ADR-0361 and ADR-0344 checked. Prior 31-row landing verdict and accepted packed/no-COI evidence at BASE reused for unchanged obligations under REV-1.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -221,7 +221,7 @@
       "source": "fault-matrix",
       "trace": "ADR-0531 D7",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/project-terminal-stats.test.ts:66",
+      "citation": "packages/workbench/src/workers/project-terminal-stats.test.ts:86",
       "note": ""
     },
     {
@@ -254,6 +254,30 @@
       "trace": "I3 + ADR-0539 + ADR-0420",
       "status": "pass",
       "citation": "tests/no-coi/no-coi-esbuild-retirement.spec.ts:41; tests/no-coi/no-coi-esbuild-retirement.spec.ts:95; tests/integration/no-coi-snapshot-browser-proof.mjs:105",
+      "note": ""
+    },
+    {
+      "row": "Existing ancestor statSync/statSyncOrNull remains usable with file or directory mount collision; listing/descendant stat still EEXIST and real terminal executes next command and closes",
+      "source": "fault-matrix",
+      "trace": "ADR-0531",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/project-terminal-stats.test.ts:65; tests/browser-unit/project-location.spec.ts:373",
+      "note": ""
+    },
+    {
+      "row": "No-COI retirement removes unused wrapper while exact production closure and runtime build reachability remain strict; retained COI registry admission, live cwd/ref ownership and real Worker execution survive",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/tests/extraction-boundary.contract.test.ts:338; packages/workbench/tests/extraction-boundary.contract.test.ts:382; packages/workbench/src/workers/no-coi-project-esbuild-cwd.test.ts:22; tests/integration/workbench-runtime-adapters.contract.test.ts:19; tests/browser-unit/child-fs-in-realm-lane.spec.ts:9",
+      "note": ""
+    },
+    {
+      "row": "Generic adapter boundary and every Sass-forbidden category retain negative detection after deleted-wrapper path retirement, including the retained registry adapter",
+      "source": "frozen-artifact",
+      "trace": "ADR-0361 + ADR-0344",
+      "status": "pass",
+      "citation": "tools/checks/runtime-adapter-boundary.test.ts:95; tools/checks/runtime-adapter-boundary.test.ts:118",
       "note": ""
     }
   ],
