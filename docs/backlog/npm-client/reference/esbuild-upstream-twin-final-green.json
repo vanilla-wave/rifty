@@ -1,9 +1,9 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "Final+GREEN/CLOSE retained after independent Fetch-merge verification: 19 coverage rows PASS, no blockers, one captured outside-goal concern. Current pr:check28/28 and real browser/prod/no-COI/byte/packed composition PASS. Final HEAD CI remains delivery condition; merge not requested.",
+  "merge_call": "Final+GREEN/CLOSE retained after independent PR-4 verification of test-only contamination-guard correction at13cfd2f2c:20coveragePASS,0blockers,one captured outside-goal concern. Independent cold GREEN/original-defect mutant RED, unchanged A/B functional probes3PASS, full pr:check28/28PASS without reruns. Inherited runtime/browser/packed proof remains valid. Final HEAD CI remains delivery condition; merge not requested.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "15613d90921e39e19b0074b92994f8f91195e3ac",
-  "unit_goal_source": "PR #379 post-CLOSE integration of accepted main PR #381 Node Fetch (ADR-0541). Frozen merge 15613d90921e39e19b0074b92994f8f91195e3ac; BASE 7731649d5cc829e3c9e824837fd0469ab97d9ca6; other parent 40837803b656523a4ff08d6a83625fe81e9897d0. Current authority: both accepted parent baselines, ADR-0541 and unchanged esbuild I1-I6 inherited from the amended goal frozen at 1f292220518c9dc0b4b147270cab0a1302c47aa1 and preceding CLOSE landing record. The goal was deleted by accepted cleanup; no live contract is invented. Raw both-parent diffs and main Fetch accepted authority reviewed; changed dependencies re-proven on current composition.",
+  "reviewed_sha": "13cfd2f2c5d0fafd3175349c65df58ece93e4cfb",
+  "unit_goal_source": "PR #379 post-CLOSE observed CI harness regression in owner-shell-async-lifecycle contamination test C; BASE fe391c12ea5c5907c6b99e47236da41981fec37c, test-only HEAD 13cfd2f2c5d0fafd3175349c65df58ece93e4cfb. Authority is the existing deterministic live host-transform criterion in tests/e2e/owner-shell-async-lifecycle.spec.ts plus ADR-0152 and unchanged functional A/B baseline. Inherited accepted Fetch composition156 and frozen amended esbuild goal1f retain their proof; completed goal was deleted, no live contract is invented. Runtime, packed graphs and all acceptance assertions are unchanged; only redundant guest startup before host HTTP transform inspection is removed.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -159,6 +159,14 @@
       "status": "pass",
       "citation": "docs/adr/runtime-js/0541-run-node-fetch-classes-over-the-browser-i-o-boundary.md:1; tests/browser-unit/node-fetch-guest.spec.ts:49; tests/e2e-prod/node-fetch-guest.spec.ts:13; tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2804; /tmp/esbuild-fetch-browser-composition.log; /tmp/esbuild-fetch-prod.log; /tmp/esbuild-fetch-byte-proof.log",
       "note": "Accepted main Fetch authority read independently. Current real Hono/body/multipart/finalization3PASS plus production bundle names/platform-state1PASS35.6s, noCOI21 and exactbyte1PASS. PR-4 interactive-network fixture now passes browser-resolved absolute URL to guest, as native Node requires; original hold/read/UI assertions retained. Host fetch captured at existing infrastructure boundary; no esbuild package/version branch, extra admission or duplicate reference owner added."
+    },
+    {
+      "row": "Post-CLOSE PR-4 contamination guard preserves exact live transform discrimination without unrelated guest startup",
+      "source": "frozen-artifact",
+      "trace": "ADR-0152 + named deterministic contamination-guard baseline",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-async-lifecycle.spec.ts:42; tests/e2e/owner-shell-async-lifecycle.spec.ts:130; /tmp/esbuild-old468-light5-artifact/playwright-report/coi-results.json; /tmp/esbuild-contamination-independent-green.log; /tmp/esbuild-contamination-independent-mutant.log; /tmp/esbuild-contamination-guard-green.log; /tmp/esbuild-contamination-prcheck.log",
+      "note": "Read BASE criterion and raw CI JSON/trace: A/B passed32.247/34.186s; C failed all3attempts at guest-ready wait before request.get, default30s. Current oldC isolatedPASS is not called a runtime repair. Change retains identical live host /@fs worker-entry URL, HTTP200 and both negative markers; A/B lifecycle/loud-rejection assertions and budgets unchanged. Reviewer independently ran actual newC on a fresh Vite server with no global setup/app warmup:PASS562ms; restored original literal await import(entry.url) defect in scratch and newC failed574ms at /@vite/client assertion; scratch restored. Parent full A/B/C3PASS20.4s and cold baseline/mutant artifacts agree. This removes an unrelated prerequisite rather than hiding the original contamination defect. Product tree unchanged since156; inherited browser/packed proof remains valid. Current fullgate28/28PASS,unit183.7s/parity127.5s,no reruns."
     }
   ],
   "axes": [
