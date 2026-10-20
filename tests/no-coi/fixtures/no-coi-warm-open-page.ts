@@ -22,7 +22,7 @@ export async function boot(workerUrl: string): Promise<{ openType: string; coi: 
   try {
     sandbox = await createSandbox({
       requireCrossOriginIsolation: false,
-      skipServiceWorker: true,
+      serviceWorkerUrl: '/sw.js',
       toolchain: { workerUrl },
     });
   } finally {

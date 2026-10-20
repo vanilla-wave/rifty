@@ -119,4 +119,6 @@ export function installNoCoiChildWorker(): void {
     });
   };
   scope.addEventListener('message', listener as EventListener);
+  // A host wrapper may load this module dynamically after Worker message dispatch starts.
+  scope.postMessage({ type: 'no-coi-child-ready' });
 }

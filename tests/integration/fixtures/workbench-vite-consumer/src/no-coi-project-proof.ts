@@ -62,7 +62,7 @@ const api = {
     try {
       sandbox = await createSandbox({
         requireCrossOriginIsolation: false,
-        skipServiceWorker: true,
+        serviceWorkerUrl: new URL('sw.js', new URL(workerUrl, location.href)).href,
         storage: { namespace, persistence: 'required' },
         startupTimeoutMs: 60_000,
         toolchain: { workerUrl: selectedUrl },
@@ -118,6 +118,8 @@ const api = {
       binPath: '/project/node_modules/.bin/vite',
       args: ['build'],
     });
+    if (result.exitCode !== 0)
+      throw new Error(`Packed Vite build failed (${result.exitCode}): ${output}`);
     const html = await api.read('/dist/index.html');
     const asset = html.match(/src="([^"]+\.js)"/u)?.[1];
     if (!asset) throw new Error(`Vite emitted no JS asset: ${html}`);

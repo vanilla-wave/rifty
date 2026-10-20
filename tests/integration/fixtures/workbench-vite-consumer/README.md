@@ -30,8 +30,8 @@ pnpm test:packed-consumer
 `src/host.ts` is the copyable composition used by this packed consumer and
 `tools/agent-bench/src/no-coi-page.ts`. Supply copied worker/probe URLs, namespace,
 root, a catalog model and API key, optional registry/policy values, and UI callbacks.
-Only `modes.nonCoi` determines support; disposable service-worker probe rows do
-not imply a runtime service worker. Defaults are unrestricted inside the project
+`modes.nonCoi` determines base support; `createSandbox` also registers the copied
+Service Worker required by upstream build children. Defaults are unrestricted inside the project
 root and the agent's100-call/600-second limits. Text-only content is a model flag.
 
 Initial `prepare({snapshot,files})` applies the supplied snapshot with SDK

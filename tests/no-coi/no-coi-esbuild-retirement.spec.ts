@@ -37,6 +37,11 @@ test('installed no-COI esbuild uses upstream children without loading the legacy
       cwd: oracleRoot,
       env: { NO_COLOR: '1', PATH: dirname(process.execPath) },
     });
+    await writeFile(join(oracleRoot, 'package-lock.json'), '{broken');
+    const corruptLockOracle = await exec(process.execPath, ['probe.cjs'], {
+      cwd: oracleRoot,
+      env: { NO_COLOR: '1', PATH: dirname(process.execPath) },
+    });
     await page.goto('/no-coi-harness.html');
     const observed = await page.evaluate(
       async ({ root, program }) => {
@@ -67,7 +72,11 @@ test('installed no-COI esbuild uses upstream children without loading the legacy
           const first = await project.run('node probe.cjs').completion;
           const slot = await project.run('node slot.cjs').completion;
           const second = await project.run('node probe.cjs').completion;
-          return { first, second, slot, coi: crossOriginIsolated };
+          await project.fs.writeFile('package-lock.json', '{broken');
+          await sandbox.toolchain.open({ cwd: '/cutover' });
+          const corruptLock = await project.run('node probe.cjs').completion;
+          const lock = await project.fs.readFile('package-lock.json', 'utf8');
+          return { first, second, slot, corruptLock, lock, coi: crossOriginIsolated };
         } finally {
           sandbox.dispose();
         }
@@ -83,6 +92,13 @@ test('installed no-COI esbuild uses upstream children without loading the legacy
         stderr: oracle.stderr,
       });
     expect(observed.slot).toMatchObject({ status: 'exited', exitCode: 0, stdout: 'false\n' });
+    expect(observed.corruptLock).toMatchObject({
+      status: 'exited',
+      exitCode: 0,
+      stdout: corruptLockOracle.stdout,
+      stderr: corruptLockOracle.stderr,
+    });
+    expect(observed.lock).toBe('{broken');
     expect(loaded.filter((url) => url.includes('/generated/esbuild-runtime.js'))).toEqual([]);
   } finally {
     await rm(oracleRoot, { recursive: true, force: true });

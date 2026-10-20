@@ -41,6 +41,8 @@ without COI: `docs/backlog/runtime-js/reference/no-coi-child-processes-spike.mjs
    current project policy and ordinary persistence/flush path.
    Invocation teardown applies the kernel's existing descendant-retirement policy,
    so an idle unref'd service cannot mutate the next reused invocation.
+   Child publishes readiness after installing its init listener; parent transfers
+   init/ports only then. Dynamic host imports can yield before listener installation.
 
 6. No-COI installed esbuild uses the untouched esbuild-wasm Node entry, selected
    by the existing toolchain-realm marker; COI retains its registry runtime slot.
@@ -48,6 +50,9 @@ without COI: `docs/backlog/runtime-js/reference/no-coi-child-processes-spike.mjs
    COI generated client. Exact installation admission remains unchanged.
    This supersedes ADR-0384/0226 bundled-client startup for no-COI only, per the
    explicit user decision; their COI behavior remains.
+   No-COI saved-tree execution needs no legacy lock-derived adapter binding
+   (ADR-0420); malformed lockfiles remain untouched and do not prevent upstream
+   execution. Snapshot validation and explicit install rules remain unchanged.
 
 ## Consequences
 

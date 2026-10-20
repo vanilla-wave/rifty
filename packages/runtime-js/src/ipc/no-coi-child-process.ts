@@ -123,21 +123,26 @@ export function spawnNoCoiChild(
                 handle.emit('disconnect');
               }
             };
-            worker.postMessage(
-              {
-                type: 'no-coi-child-init',
-                transport,
-                pid: handle.pid,
-                ppid: parent.pid,
-                argv,
-                cwd: plan.cwd,
-                env,
-                ipc: options.ipc,
-                execArgv: options.execArgv ?? [],
-                vmEngine,
-              } satisfies NoCoiChildInit,
-              [control.port2, input.port2],
-            );
+            const initialize = (event: MessageEvent): void => {
+              if (event.data?.type !== 'no-coi-child-ready' || settled) return;
+              worker.removeEventListener('message', initialize);
+              worker.postMessage(
+                {
+                  type: 'no-coi-child-init',
+                  transport,
+                  pid: handle.pid,
+                  ppid: parent.pid,
+                  argv,
+                  cwd: plan.cwd,
+                  env,
+                  ipc: options.ipc,
+                  execArgv: options.execArgv ?? [],
+                  vmEngine,
+                } satisfies NoCoiChildInit,
+                [control.port2, input.port2],
+              );
+            };
+            worker.addEventListener('message', initialize);
           });
         },
         parent.pid,

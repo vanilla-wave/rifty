@@ -27,6 +27,7 @@ const cases: {
   persistence: 'preferred' | 'ephemeral';
   relative?: boolean;
   coi?: boolean;
+  wrapper?: boolean;
 }[] = [
   ...[
     'parent.cjs',
@@ -45,9 +46,11 @@ const cases: {
   ...['parent.cjs', 'esbuild.cjs'].map((entry) => ({ entry, persistence: 'ephemeral' as const })),
   { entry: 'parent.cjs', persistence: 'ephemeral', relative: true },
   { entry: 'parent.cjs', persistence: 'ephemeral', coi: true },
+  { entry: 'parent.cjs', persistence: 'ephemeral', wrapper: true },
+  { entry: 'send-disconnect.cjs', persistence: 'ephemeral', wrapper: true },
 ];
-for (const { entry, persistence, relative = false, coi = false } of cases) {
-  test(`no-COI child processes match Node: ${entry} (${persistence}${relative ? ', relative URL' : ''}${coi ? ', COI host' : ''})`, async ({
+for (const { entry, persistence, relative = false, coi = false, wrapper = false } of cases) {
+  test(`no-COI child processes match Node: ${entry} (${persistence}${relative ? ', relative URL' : ''}${coi ? ', COI host' : ''}${wrapper ? ', dynamic wrapper' : ''})`, async ({
     page,
   }) => {
     test.setTimeout(120_000);
@@ -82,14 +85,16 @@ for (const { entry, persistence, relative = false, coi = false } of cases) {
         coi ? `http://localhost:${coiPort}/unit-harness.html` : '/no-coi-harness.html',
       );
       const observed = await page.evaluate(
-        async ({ root, files, entry, persistence, relative }) => {
+        async ({ root, files, entry, persistence, relative, wrapper }) => {
           const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
           const sandbox = await createSandbox({
             requireCrossOriginIsolation: false,
             serviceWorkerUrl: '/sw.js',
             storage: { persistence },
             toolchain: {
-              workerUrl: `${relative ? '.' : ''}/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
+              workerUrl: wrapper
+                ? `/@fs${root}/tests/no-coi/fixtures/no-coi-toolchain-memory-worker.ts`
+                : `${relative ? '.' : ''}/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
             },
           });
           Reflect.set(globalThis, 'noCoiChildSandbox', sandbox);
@@ -117,7 +122,7 @@ for (const { entry, persistence, relative = false, coi = false } of cases) {
             throw error;
           }
         },
-        { root, files, entry, persistence, relative },
+        { root, files, entry, persistence, relative, wrapper },
       );
       expect(observed.coi).toBe(coi);
       expect(observed.sab).toBe(coi ? 'function' : 'undefined');
