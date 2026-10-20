@@ -20,10 +20,10 @@ differential suite over a declared verified set; other admitted versions are
 labelled "not verified", never refused. Adding a verified version is a list
 entry plus a suite run. The platform gains the Node behavior the stock entry
 needs (stdio write callbacks, `ChildProcess#ref/unref`, fs on fds 0-2, full
-`fs.Stats`), which every Node CLI uses. Without COI the stock entry hits a
-platform wall (same-realm children cannot load `node_modules`); there today's
-generated 0.28.0 client stays as declared `platform-gap` debt until no-COI
-child processes land. Faithful-runtime payoff: the 13 patches and their
+`fs.Stats`), which every Node CLI uses. No-COI now runs the upstream 0.28.0
+Node client through isolated SW-backed children (ADR-0539, PR #380), with
+exact admission retained under I4. The remaining generated client belongs to
+this COI goal. Faithful-runtime payoff: the 13 patches and their
 per-version anchors leave the COI path; upstream bytes run where rifty used to
 rewrite them. With the client gone, the COI Vite version gate that existed only
 to start it goes too: any installed Vite runs, Vite 7.3.6 and 8.0.16
