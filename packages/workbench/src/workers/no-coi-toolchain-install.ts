@@ -4,6 +4,7 @@ import {
   shadowSubstitutionPlanForInstallResult,
 } from '@riftydev/npm-client/internal';
 import type { ToolchainInstallRequest } from '@riftydev/runtime-js/internal';
+import type { PackageRuntimeBinding as WorkbenchRuntimeBinding } from '@riftydev/shadow-registry/runtime';
 import type { CommandContext } from '@riftydev/shell';
 import { type Vfs, normalizePath, syncMirror } from '@riftydev/vfs';
 import {
@@ -11,7 +12,6 @@ import {
   executeNpmInstallOperation,
 } from '../glue/npm-shell-command.ts';
 import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
-import type { WorkbenchRuntimeBinding } from './workbench-runtime-adapters.ts';
 
 /** Saved files remain accessible; invalid lock grants no adapter capability. */
 export async function prepareSavedToolchain(cwd: string) {

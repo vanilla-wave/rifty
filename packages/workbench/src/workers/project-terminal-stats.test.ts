@@ -62,6 +62,26 @@ it('keeps a covering project root identity while counting visible mount director
   expect(stat.nlink).toBe(2 + view.readdirSync('/').filter((entry) => entry.isDirectory).length);
 });
 
+it.each(['file', 'directory'])(
+  'keeps ancestor stat usable when a project %s collides with a nested mount',
+  (kind) => {
+    const { fsSync } = createMemoryFs();
+    fsSync.mkdirSync(ownerRoot, { recursive: true });
+    const view = new ProjectTerminalFsSync(fsSync, createGuestLayout('/', ownerRoot));
+    const root = view.statSync('/');
+    if (kind === 'file') fsSync.writeFileSync(`${ownerRoot}/tmp`, new Uint8Array());
+    else fsSync.mkdirSync(`${ownerRoot}/tmp`, {});
+    for (const stat of [view.statSync('/'), view.statSyncOrNull('/')]) {
+      expect(stat?.metadata?.ino).toBe(root.metadata?.ino);
+      expect(stat?.isDirectory).toBe(true);
+      expect(stat?.nlink).toBe(root.nlink);
+    }
+    expect(() => view.readdirSync('/')).toThrow(/EEXIST.*\/tmp/u);
+    expect(() => view.statSync('/tmp')).toThrow(/EEXIST.*\/tmp/u);
+    expect(() => view.statSyncOrNull('/tmp')).toThrow(/EEXIST.*\/tmp/u);
+  },
+);
+
 it.each(['ancestors', 'ancestors/home'])(
   'rejects malformed %s backing with a guest-only error',
   (slot) => {

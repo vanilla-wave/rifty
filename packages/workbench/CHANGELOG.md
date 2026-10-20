@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+- Keep ancestor Stats available across nested mount collisions; listing/child access still refuses loudly.
+- Remove the unused no-COI adapter wrapper after upstream cutover; shared COI client retained.
+
 - Compose separate no-COI child realms from the toolchain entry; retire invocation children at process completion (ADR-0539).
 
 - A repeated `pty:open` of a live session keeps that session's login-`HOME` provenance; it is dropped when the session's close settles.

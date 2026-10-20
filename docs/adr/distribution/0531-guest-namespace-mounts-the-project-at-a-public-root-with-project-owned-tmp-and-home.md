@@ -99,3 +99,6 @@ parameter, no playground UI — is the agent's carrier (goal §Decisions).
   `privateRoot/ancestors/<guest path>` through the owner VFS. Covering project
   directories retain their identity; diagnostics expose guest paths only.
   Private metadata remains outside project publication, like tmp/home.
+- 2026-10-20 — ancestor stat computes merged link metadata without admitting
+  colliding child mounts. Listing the ancestor and touching the conflicting
+  mount still reject; ordinary cwd/terminal lifecycle remains usable.

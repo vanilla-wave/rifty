@@ -192,17 +192,23 @@ export class ProjectTerminalFsSync implements FsSync {
       if (resolved.kind === 'mount') return this.inner.readdirSync(resolved.owner);
       // Listing a merged ancestor would show a mount over a project entry.
       for (const mount of this.layout.mounts) assertNoCollision(this.layout, this.inner, mount);
-      const own =
-        resolved.owner !== null && this.inner.statSyncOrNull(resolved.owner)?.isDirectory === true
-          ? this.inner.readdirSync(resolved.owner)
-          : [];
-      const mounts = resolved.children.map((name) =>
-        Object.freeze({ name, isFile: false, isDirectory: true }),
-      );
-      return [...own.filter((entry) => !resolved.children.includes(entry.name)), ...mounts].sort(
-        (left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0),
-      );
+      return this.virtualEntries(resolved);
     });
+  }
+
+  private virtualEntries(
+    resolved: Extract<GuestResolution, { kind: 'virtual' }>,
+  ): readonly VfsDirent[] {
+    const own =
+      resolved.owner !== null && this.inner.statSyncOrNull(resolved.owner)?.isDirectory === true
+        ? this.inner.readdirSync(resolved.owner)
+        : [];
+    const mounts = resolved.children.map((name) =>
+      Object.freeze({ name, isFile: false, isDirectory: true }),
+    );
+    return [...own.filter((entry) => !resolved.children.includes(entry.name)), ...mounts].sort(
+      (left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0),
+    );
   }
 
   mkdirSync(path: string, options: { recursive?: boolean }): void {
@@ -236,7 +242,8 @@ export class ProjectTerminalFsSync implements FsSync {
     path: string,
     resolved: Extract<GuestResolution, { kind: 'virtual' }>,
   ): ReturnType<FsSync['statSync']> {
-    const nlink = 2 + this.readdirSync(path).filter((entry) => entry.isDirectory).length;
+    // A colliding child mount must not make its existing ancestor inaccessible.
+    const nlink = 2 + this.virtualEntries(resolved).filter((entry) => entry.isDirectory).length;
     const covered = resolved.owner === null ? null : this.inner.statSyncOrNull(resolved.owner);
     if (covered?.isDirectory) return { ...covered, nlink };
     // Share identity across transient namespace views and remote callers through the owner VFS.
