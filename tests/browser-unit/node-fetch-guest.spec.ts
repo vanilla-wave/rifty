@@ -54,6 +54,8 @@ test('Node Fetch goal: real Hono and body lifecycle match live Node', async ({ p
     const oracle = await runNodeOracle(fixture.source);
     expect(oracle.code, `${fixture.name}: ${oracle.stderr}`).toBe(0);
     expect(rows(oracle.stdout).length, fixture.name).toBeGreaterThan(0);
+    if (fixture.name === 'patch-method-warning')
+      expect(oracle.stderr).toContain('[UNDICI-FETCH-patch] Warning:');
     oracles.set(fixture.name, oracle);
   }
   await gotoHarness(page);
@@ -70,6 +72,8 @@ test('Node Fetch goal: real Hono and body lifecycle match live Node', async ({ p
       const run = await runOwnerCommand(page, `node ${fixture.name}.cjs`, 40_000);
       expect.soft(run.timedOut, `${fixture.name}: ${run.out}`).toBe(false);
       expect.soft(run.exit, `${fixture.name}: ${run.out}`).toBe(oracles.get(fixture.name)?.code);
+      if (fixture.name === 'patch-method-warning')
+        expect.soft(run.out).toContain('[UNDICI-FETCH-patch] Warning:');
       expect
         .soft(rows(run.out), `${fixture.name}: ${run.out}`)
         .toEqual(rows(oracles.get(fixture.name)?.stdout ?? ''));
@@ -82,6 +86,7 @@ test('Node Fetch goal: real Hono and body lifecycle match live Node', async ({ p
 test('Node Fetch goal: multipart network response has one body state', async ({ page }) => {
   test.setTimeout(120_000);
   let unreadEnded = false;
+  let cacheHits = 0;
   const server = createServer((request, response) => {
     if (request.url?.endsWith('/disconnect')) {
       request.destroy();
@@ -89,6 +94,11 @@ test('Node Fetch goal: multipart network response has one body state', async ({ 
     }
     response.setHeader('access-control-allow-origin', '*');
     response.setHeader('access-control-allow-headers', '*');
+    if (request.url?.endsWith('/cache')) {
+      response.setHeader('cache-control', 'public, max-age=3600');
+      response.end(JSON.stringify([++cacheHits, request.headers.host !== 'override.test']));
+      return;
+    }
     if (request.url?.endsWith('/unread')) {
       response.writeHead(200);
       response.flushHeaders();
@@ -111,6 +121,10 @@ test('Node Fetch goal: multipart network response has one body state', async ({ 
     request.on('data', (chunk: Buffer) => chunks.push(chunk));
     request.on('end', () => {
       const text = Buffer.concat(chunks).toString();
+      if (request.url?.endsWith('/native-http')) {
+        response.end(text);
+        return;
+      }
       const boundary = /boundary=(.*)/.exec(request.headers['content-type'] ?? '')?.[1];
       response.end(
         JSON.stringify([
@@ -140,6 +154,41 @@ test('Node Fetch goal: multipart network response has one body state', async ({ 
       expect.soft(run.timedOut, run.out).toBe(false);
       expect.soft(rows(run.out), run.out).toEqual(rows(oracle.stdout));
       expect.soft(run.exit, run.out).toBe(oracle.code);
+      const cacheSource = `(async()=>{
+        for(const cache of ['default','force-cache','only-if-cached']) {
+          const values=[];
+          for(let i=0;i<2;i++) values.push(await(await fetch(${JSON.stringify(`${url}/cache`)},{cache,mode:'same-origin',headers:{host:'override.test'}})).json());
+          console.log('FETCH|cache='+JSON.stringify(values));
+        }
+      })().catch(e=>{console.error(e);process.exitCode=1;});`;
+      cacheHits = 0;
+      const cacheOracle = await runNodeOracle(cacheSource);
+      expect(cacheOracle.code, cacheOracle.stderr).toBe(0);
+      cacheHits = 0;
+      await writeOwnerFile(page, '/scratch/cache.cjs', cacheSource);
+      const cacheRun = await runOwnerCommand(page, 'node cache.cjs', 20_000);
+      expect.soft(cacheRun.exit, cacheRun.out).toBe(0);
+      expect.soft(rows(cacheRun.out), cacheRun.out).toEqual(rows(cacheOracle.stdout));
+      for (const [name, init, setup, feature] of [
+        ['user-agent', "{headers:{'user-agent':'guest'}}", '', 'fetch.requestHeaders'],
+        ['dispatcher', '{dispatcher:{}}', '', 'fetch.dispatcher'],
+        [
+          'global-dispatcher',
+          '{}',
+          "globalThis[Symbol.for('undici.globalDispatcher.1')]={};",
+          'fetch.dispatcher',
+        ],
+      ]) {
+        await writeOwnerFile(
+          page,
+          '/scratch/ceiling.cjs',
+          `${setup}
+          fetch(${JSON.stringify(url)},${init}).then(()=>console.log('FETCH|accepted'),e=>console.log('FETCH|'+e.name+':'+e.feature));`,
+        );
+        const ceiling = await runOwnerCommand(page, 'node ceiling.cjs', 20_000);
+        expect.soft(ceiling.exit, `${name}: ${ceiling.out}`).toBe(0);
+        expect.soft(rows(ceiling.out), name).toEqual([`FETCH|NotImplementedError:${feature}`]);
+      }
       // User-approved browser transport ceiling, deliberately distinct from Node's wire behavior.
       await writeOwnerFile(
         page,
@@ -180,6 +229,32 @@ test('Node Fetch goal: multipart network response has one body state', async ({ 
       expect(unreadEnded, 'guest must not exit at headers while network body remains pending').toBe(
         true,
       );
+      const workerUrl = `/@fs${fileURLToPath(new URL('./fixtures/node-network-fetch-worker.ts', import.meta.url))}`;
+      const nativeTransport = await page.evaluate(
+        async ({ workerUrl, url }) => {
+          const workerModule = await import(/* @vite-ignore */ `${workerUrl}?worker&url`);
+          return new Promise((resolve, reject) => {
+            const worker = new Worker(workerModule.default, { type: 'module' });
+            const timeout = setTimeout(() => {
+              worker.terminate();
+              reject(new Error('native HTTP transport timed out'));
+            }, 20_000);
+            worker.onmessage = ({ data }) => {
+              clearTimeout(timeout);
+              worker.terminate();
+              resolve(data);
+            };
+            worker.onerror = (event) => {
+              clearTimeout(timeout);
+              worker.terminate();
+              reject(new Error(event.message));
+            };
+            worker.postMessage({ url });
+          });
+        },
+        { workerUrl, url: `${url}/native-http` },
+      );
+      expect(nativeTransport).toEqual({ held: true, text: 'hello', jsResponse: true, refs: 0 });
     } finally {
       await closeOwner(page);
     }

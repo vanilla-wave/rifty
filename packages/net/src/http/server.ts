@@ -1,3 +1,4 @@
+import { fetchNodeNetwork } from '@riftydev/io';
 /**
  * HTTP `Server` + `request()` client over the port registry.
  *
@@ -607,7 +608,7 @@ export function request(
         const response =
           route.kind === 'local'
             ? await dispatchToPort(route.port, new Request(url, init))
-            : await fetch(url, init);
+            : await fetchNodeNetwork(url, init);
         const incoming = new IncomingMessageFromFetch(response);
         cb?.(incoming);
         emitter.emit('response', incoming);

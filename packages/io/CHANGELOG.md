@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - `fetchHost` / `HOST_FETCH` separate browser resource I/O from guest Node Fetch semantics (ADR-0541): relative asset URLs remain host URLs.
+- `fetchNodeNetwork` retains native-compatible HTTP egress inputs while the runtime owns response-body keepalive (ADR-0541).
 
 - `openHostBroadcastChannel(name)` / `HOST_BROADCAST_CHANNEL`: rifty's own channels open the realm's native `BroadcastChannel`, never the guest global that holds the event loop (ADR-0529).
 

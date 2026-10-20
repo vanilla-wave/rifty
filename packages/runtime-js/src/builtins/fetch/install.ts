@@ -1,8 +1,8 @@
-import { HOST_FETCH } from '@riftydev/io';
+import { HOST_FETCH, NODE_NETWORK_FETCH } from '@riftydev/io';
 import { Buffer } from '../buffer.ts';
 import { loadBuiltin } from '../index.ts';
 import createFetchClasses from './generated/classes.js';
-import { createGuestFetch } from './network.ts';
+import { createGuestFetch, createNodeNetworkFetch } from './network.ts';
 import { installFetchPlatformBindings } from './platform.ts';
 
 const installed = Symbol.for('rifty.fetch.installed');
@@ -37,5 +37,9 @@ export function installNodeFetch(target: FetchTarget = globalThis): void {
     FormData: classes.FormData,
     fetch: createGuestFetch(classes, nativeFetch),
   });
+  if (target === globalThis)
+    Object.defineProperty(globalThis, NODE_NETWORK_FETCH, {
+      value: createNodeNetworkFetch(classes, nativeFetch),
+    });
   Object.defineProperty(target, installed, { value: true });
 }

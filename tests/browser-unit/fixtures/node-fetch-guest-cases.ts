@@ -26,6 +26,34 @@ app.request('/x', {method:'POST', headers:{cookie:'a=1'}, body:form})
 
 export const fetchGuestCases: readonly FetchGuestCase[] = [
   {
+    name: 'patch-method-warning',
+    source: `${preamble}
+// Ignore unrelated host-launch warnings; the constructor's code is the obligation.
+process.on('warning',warning=>{if(warning.code === 'UNDICI-FETCH-patch') row('warning',[warning.name,warning.code,warning.message]);});
+row('patch-methods',[new Request('http://example.test/',{method:'patch'}).method,new Request('http://example.test/',{method:'patch'}).method]);
+`,
+  },
+  {
+    name: 'warning-api',
+    source: `${preamble}
+process.removeAllListeners('warning');
+const original=Object.assign(new Error('fetch-warning-error'),{name:'Given',code:'GIVEN',detail:'kept'});
+process.on('warning',warning=>{if(warning.message.startsWith('fetch-warning-')) row('warning-api',[warning.name,warning.code,warning.message,warning.detail,warning === original]);});
+row('warning-returns',[
+ process.emitWarning('fetch-warning-plain'),
+ process.emitWarning('fetch-warning-coded','Custom','CODE'),
+ process.emitWarning('fetch-warning-options',{type:'Options',code:'OPT',detail:'detail'}),
+ process.emitWarning(original,'Ignored','IGNORED'),
+].map(value=>typeof value));
+original.message='fetch-warning-mutated';
+for(const args of [[undefined],[null],[1],[true],[{}],[[]],[Symbol('x')],[function named(){}],['x',1],['x',null],['x',undefined,1]]) {
+ try {process.emitWarning(...args);row('warning-invalid','accepted');}
+ catch(e) {row('warning-invalid',[e.name,e.code,e.message]);}
+}
+process.noDeprecation=true;process.emitWarning('fetch-warning-hidden','DeprecationWarning');process.noDeprecation=false;
+`,
+  },
+  {
     name: 'custom-tee-state',
     source: `${preamble}
 (async () => {
@@ -68,6 +96,8 @@ row('identity', [Headers, Request, Response, FormData].map(C => [C.name,C.length
 row('fetch-shape',[fetch.name,fetch.length]);
 row('stream-alias',ReadableStream.prototype.values === ReadableStream.prototype[Symbol.asyncIterator]);
 row('wrapped-function-record',[...new Headers(Blob.prototype.stream)]);
+const unicode=new FormData();unicode.set('text',String.fromCharCode(0xd800,97,0xdc00,0xd83d,0xde00,0xfeff));
+row('usv',unicode.get('text'));
 const record = Object.defineProperty({visible:'yes'}, 'hidden', {value:'also'});
 row('record', [...new Headers(record)]);
 const calls = [];

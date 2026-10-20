@@ -1,4 +1,7 @@
+import { toWellFormed } from '../../internal/posix-file-url.ts';
 import { proxyIdentity } from '../../internal/proxy-identity.ts';
+import { publicNodeProcess } from '../process-public.ts';
+import type { NodeProcess } from '../process.ts';
 import { isDisturbed as nodeStreamIsDisturbed } from '../stream.ts';
 
 const key = Symbol.for('rifty.fetch.platform');
@@ -7,6 +10,9 @@ export interface FetchPlatformBindings {
   readonly isProxy: (value: unknown) => boolean;
   readonly isDisturbed: (value: unknown) => boolean;
   readonly trackBody: (stream: ReadableStream<Uint8Array>) => void;
+  readonly toUSVString: (value: string) => string;
+  readonly isUSVString: (value: string) => boolean;
+  readonly emitWarning: (message: string, options: { code: string }) => void;
 }
 
 /** Node's private predicates, scoped to Fetch; install before guest entry. */
@@ -57,6 +63,10 @@ export function installFetchPlatformBindings(): FetchPlatformBindings {
       return disturbed.has(stream) || isLocked;
     },
     trackBody,
+    toUSVString: toWellFormed,
+    isUSVString: (value: string) => toWellFormed(value) === value,
+    emitWarning: (message: string, options: { code: string }) =>
+      (publicNodeProcess() as NodeProcess).emitWarning(message, options),
   });
 
   // Observe before public lock/disturb operations, including direct readers.
@@ -76,7 +86,7 @@ export function installFetchPlatformBindings(): FetchPlatformBindings {
     if (typeof descriptor?.value !== 'function') continue;
     let wrapped = methods.get(descriptor.value);
     if (wrapped === undefined) {
-      wrapped = remember(
+      const created = remember(
         new NativeProxy(descriptor.value, {
           apply(original, self, args) {
             trackBody(self);
@@ -84,7 +94,8 @@ export function installFetchPlatformBindings(): FetchPlatformBindings {
           },
         }),
       );
-      methods.set(descriptor.value, wrapped);
+      methods.set(descriptor.value, created);
+      wrapped = created;
     }
     Object.defineProperty(prototype, name, { ...descriptor, value: wrapped });
   }

@@ -1,4 +1,4 @@
-import { NotImplementedError } from '@riftydev/io';
+import { type NodeNetworkFetch, NotImplementedError } from '@riftydev/io';
 import { ref, unref } from '../../internal/event-loop-keepalive.ts';
 import type { BodyState, FetchClasses, RequestState } from './generated/classes.js';
 import { installFetchPlatformBindings } from './platform.ts';
@@ -15,7 +15,6 @@ const forbiddenHeaders = new Set([
   'date',
   'dnt',
   'expect',
-  'host',
   'keep-alive',
   'origin',
   'referer',
@@ -24,6 +23,7 @@ const forbiddenHeaders = new Set([
   'trailer',
   'transfer-encoding',
   'upgrade',
+  'user-agent',
   'via',
 ]);
 
@@ -131,6 +131,9 @@ function networkBody(
 
 /** One network body, owned by the JS Response; consumers never get a second view. */
 export function createGuestFetch(classes: FetchClasses, nativeFetch: typeof fetch): typeof fetch {
+  const dispatcherKey = Symbol.for('undici.globalDispatcher.1');
+  const realm = globalThis as typeof globalThis & { [dispatcherKey]?: unknown };
+  const hostDispatcher = realm[dispatcherKey];
   const guestFetch = async function fetch(
     input: RequestInfo | URL,
     init: RequestInit | undefined = undefined,
@@ -140,17 +143,13 @@ export function createGuestFetch(classes: FetchClasses, nativeFetch: typeof fetc
     const requestObject = new classes.Request(input, init);
     const request = classes.getRequestState(requestObject);
     const signal = requestObject.signal;
-    checkTransport(request, classes.getRequestDispatcher(requestObject));
+    checkTransport(
+      request,
+      classes.getRequestDispatcher(requestObject) ??
+        (realm[dispatcherKey] !== hostDispatcher ? realm[dispatcherKey] : undefined),
+    );
     const url = request.urlList[request.urlList.length - 1] as URL;
-    ref();
-    let released = false;
-    const release = (): void => {
-      if (!released) {
-        released = true;
-        unref();
-      }
-    };
-    try {
+    return holdNetwork(async (release) => {
       signal.throwIfAborted();
       // HTTP/1 upload streams are not supported by native Chromium fetch.
       // Consume the real JS multipart/body bytes; native never re-encodes them.
@@ -165,32 +164,74 @@ export function createGuestFetch(classes: FetchClasses, nativeFetch: typeof fetc
         body,
         signal,
         redirect: request.redirect,
-        cache: request.cache,
+        // Node 24 has no HTTP cache, including force-cache/only-if-cached.
+        cache: 'no-store',
         credentials: 'omit',
         integrity: request.integrity,
         keepalive: request.keepalive,
         mode: 'cors',
         referrerPolicy: request.referrerPolicy,
       });
-      if (response.type === 'opaque' || response.type === 'opaqueredirect') {
-        throw new NotImplementedError('fetch.opaqueResponse');
-      }
-      const stream = response.body === null ? null : networkBody(response.body, signal, release);
-      if (stream === null) release();
-      const state = classes.makeResponse({
-        type: 'basic',
-        status: response.status,
-        statusText: response.statusText,
-        urlList: response.redirected ? [url, new URL(response.url)] : [new URL(response.url)],
-        headersList: classes.getHeadersList(new classes.Headers(response.headers)),
-        body: stream === null ? null : { stream, source: null, length: null },
-      });
-      return classes.fromInnerResponse(state, 'immutable');
-    } catch (error) {
-      release();
-      throw error;
-    }
+      return responseFromHost(response, url, signal, classes, release);
+    });
   };
   Object.defineProperty(guestFetch, 'name', { value: 'fetch', configurable: true });
   return guestFetch;
+}
+
+/** The same lifetime owner serves Fetch and the existing native HTTP egress. */
+function holdNetwork(run: (release: () => void) => Promise<Response>): Promise<Response> {
+  ref();
+  let released = false;
+  const release = (): void => {
+    if (!released) {
+      released = true;
+      unref();
+    }
+  };
+  return run(release).catch((error) => {
+    release();
+    throw error;
+  });
+}
+
+function responseFromHost(
+  response: Response,
+  url: URL,
+  signal: AbortSignal,
+  classes: FetchClasses,
+  release: () => void,
+): Response {
+  if (response.type === 'opaque' || response.type === 'opaqueredirect')
+    throw new NotImplementedError('fetch.opaqueResponse');
+  const stream = response.body === null ? null : networkBody(response.body, signal, release);
+  if (stream === null) release();
+  return classes.fromInnerResponse(
+    classes.makeResponse({
+      type: 'basic',
+      status: response.status,
+      statusText: response.statusText,
+      urlList: response.redirected ? [url, new URL(response.url)] : [new URL(response.url)],
+      headersList: classes.getHeadersList(new classes.Headers(response.headers)),
+      body: stream === null ? null : { stream, source: null, length: null },
+    }),
+    'immutable',
+  );
+}
+
+/** Preserve ADR-0181's native streaming HTTP transport, sharing only the body/ref owner. */
+export function createNodeNetworkFetch(
+  classes: FetchClasses,
+  nativeFetch: typeof fetch,
+): NodeNetworkFetch {
+  return (url, init) =>
+    holdNetwork(async (release) =>
+      responseFromHost(
+        await nativeFetch(url, init),
+        new URL(url),
+        init.signal ?? new AbortController().signal,
+        classes,
+        release,
+      ),
+    );
 }

@@ -39,10 +39,10 @@ Reuse goal premise and user's explicit browser-transport choice.
 
 | axis × operation | honest outcome | artifact / fault target | trace |
 |---|---|---|---|
-| abort × fetch/body | rejects; hold released | network carrier abort | I3 |
-| source error × body consumer | rejects; cannot reread | body error case | I2 |
-| unavailable transport × fetch | rejects; process exits | connection failure | I3 |
-| forbidden wire header × fetch | named unsupported error | Cookie case | I3 |
+| abort × fetch/body | rejects; hold released | network carrier abort | → I3 |
+| source error × body consumer | rejects; cannot reread | body error case | → I2 |
+| unavailable transport × fetch | rejects; process exits | connection failure | → I3 |
+| forbidden wire header × fetch | named unsupported error | Cookie case | → I3 |
 
 ## Out of scope
 

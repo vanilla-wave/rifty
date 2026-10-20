@@ -8,12 +8,16 @@ export interface ProxyIdentity {
 export function createProxyIdentity(): ProxyIdentity {
   const kinds = new WeakMap<object, boolean>();
   const Original = globalThis.Proxy;
+  const apply = Reflect.apply;
+  const construct = Reflect.construct;
+  const get = WeakMap.prototype.get;
+  const set = WeakMap.prototype.set;
   const record = (value: object, proxy: boolean): void => {
-    kinds.set(value, proxy);
+    apply(set, kinds, [value, proxy]);
   };
   const revocable = new Original(Original.revocable, {
     apply(original, self, args) {
-      const pair = Reflect.apply(original, self, args) as { proxy: object; revoke: () => void };
+      const pair = apply(original, self, args) as { proxy: object; revoke: () => void };
       record(pair.proxy, true);
       return pair;
     },
@@ -24,7 +28,7 @@ export function createProxyIdentity(): ProxyIdentity {
   });
   globalThis.Proxy = new Original(Original, {
     construct(original, args, newTarget) {
-      const proxy = Reflect.construct(original, args, newTarget) as object;
+      const proxy = construct(original, args, newTarget) as object;
       record(proxy, true);
       return proxy;
     },
@@ -33,7 +37,7 @@ export function createProxyIdentity(): ProxyIdentity {
     isProxy(value: unknown): boolean {
       return (
         ((typeof value === 'object' && value !== null) || typeof value === 'function') &&
-        kinds.get(value) === true
+        apply(get, kinds, [value]) === true
       );
     },
     record,

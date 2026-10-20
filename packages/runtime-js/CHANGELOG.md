@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- `process.emitWarning` supports string/Error overloads, nextTick events, default stderr and deprecation controls; lowercase `Request` method `patch` now warns once instead of crashing. Warning-file redirection remains a named unsupported feature (ADR-0541).
+
+- Native Node embedding no longer stays alive after importing the immediate scheduler: its MessagePort references follow pending immediates; cold QuickJS preload exits normally.
+
 - Node guest `Request`/`Response`/`Headers`/`FormData` now use undici 7.25.0 (Node 24.16.0): Hono header retention, multipart/File bodies, clone/tee, locking/bodyUsed and detached reads match live Node. One network stream/ref replaces native Body wrappers; unsupported browser wire headers/dispatchers/opaque responses reject explicitly. VM headers preserve semantic Proxy identity. ADR-0541.
 
 - `os.homedir()` keeps an explicitly empty `HOME` (`''`), as Node; `os.tmpdir()` still falls through empty `TMPDIR`/`TMP`/`TEMP`.

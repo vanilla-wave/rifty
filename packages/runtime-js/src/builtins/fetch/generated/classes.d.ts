@@ -49,6 +49,9 @@ declare function createFetchClasses(
     isProxy(value: unknown): boolean;
     isDisturbed(value: unknown): boolean;
     trackBody(stream: ReadableStream<Uint8Array>): void;
+    toUSVString(value: string): string;
+    isUSVString(value: string): boolean;
+    emitWarning(message: string, options: { code: string }): void;
   },
 ): FetchClasses;
 export default createFetchClasses;
