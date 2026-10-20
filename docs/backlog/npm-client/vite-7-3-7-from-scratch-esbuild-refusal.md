@@ -1,12 +1,12 @@
 ---
 area: npm-client
 status: draft
-title: A from-scratch React + Vite 7 install now resolves `vite@7.3.7` and the esbuild runtime refuses it (`supports exact Vite 7.3.6; executed 7.3.7`)
+title: Retire the exact Vite 7 starter pin after the COI upstream-twin cutover
 created: 2026-10-16
-why: the heavy e2e `react-vite-build.spec.ts` fails with no rifty change because `^7` ranges resolve the newly published 7.3.7, which the exact-7.3.6 esbuild runtime policy refuses loudly
-user_story: As a developer creating the "Real npm project" React starter, I want `npm run dev`/`build` to work, but today the fresh install takes vite 7.3.7 and Vite refuses to start with `vite esbuild runtime supports exact Vite 7.3.6; executed 7.3.7`
+why: COI now runs installed Vite through stock esbuild, but starters still seed exact 7.3.6 rather than the intended ^7 range
+user_story: As a developer creating the React starter, I want its Vite dependency to follow ^7, but the template still pins 7.3.6
 sources: [tests/e2e/react-vite-build.spec.ts, docs/backlog/runtime-js/reference/guest-package-patches-refine-evidence-2026-10-15.md]
-code: [tools/shadow-registry/src/runtime/vite-esbuild-runtime.ts]
+code: [apps/playground/src/vite-project-policy.ts, apps/playground/src/templates/vite-version.contract.test.ts]
 ---
 
 ## Context
@@ -23,9 +23,10 @@ restores `^7` and retires that pin. The proven-version admission policy for Vite
 separate refine in the guest-package-patches handoff (§Фон); this records the
 user-visible failure it now causes.
 
-In COI the refusal goes with `epics/esbuild-upstream-twin` I6 (the
-exact-7.3.6 gate is removed at its cutover, user 2026-10-16); retiring the
-starter pin and proving `^7` lanes stays this item's.
+2026-10-20: ADR-0543 removes the COI refusal. The original failure above is
+history; no-COI retains its legacy policy. Retiring the starter pin and proving
+`^7` lanes remains this item's owner/trigger; the upstream-twin goal does not
+claim that retirement.
 
 ## Challenge
 

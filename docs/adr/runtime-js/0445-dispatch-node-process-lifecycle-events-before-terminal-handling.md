@@ -161,3 +161,11 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   crashes), and a command's eval fatal rejection or a terminal with a live
   non-timer handle replaces the realm (draft
   `distribution/no-coi-command-unhandled-rejection-exit`).
+
+
+## Corrections
+
+- 2026-10-20 — a current async exit signal cancels browser rejection reporting,
+  while the drain retains the original status. Native Node24 async exit(1):
+  status1, empty stderr; real stock Vite failed build reproduced the internal
+  error leak. Other uncaught errors keep the existing dispatch/fatal behavior.

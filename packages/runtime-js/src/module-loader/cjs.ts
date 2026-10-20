@@ -2,8 +2,8 @@ import { NotImplementedError } from '@riftydev/io';
 import { basename, dirname, joinPath } from '@riftydev/vfs';
 import type { ImportExpression, Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
-import { hostScriptSourceURL } from '../builtins/vm/script-offsets.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import { compileCjsFactory } from './cjs-factory.ts';
 import { type Edit, applyEdits, uniqueHelperName } from './cjs-source-rewrite.ts';
 import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
@@ -1765,20 +1765,21 @@ function compileCjsSource(
     dynamicImportHelperName,
     globalKeyHelperName,
   );
-  // Function adds two physical lines; Node's CJS compileFunction does not.
-  const sourceURL = hostScriptSourceURL('', filename, -2, 0);
   let fn: CjsFactory;
   try {
-    fn = new Function(
-      'module',
-      'exports',
-      'require',
-      '__filename',
-      '__dirname',
-      dynamicImportHelperName,
-      functionHelperName,
-      globalKeyHelperName,
-      `${source}\n//# sourceURL=${sourceURL}`,
+    fn = compileCjsFactory(
+      [
+        'module',
+        'exports',
+        'require',
+        '__filename',
+        '__dirname',
+        dynamicImportHelperName,
+        functionHelperName,
+        globalKeyHelperName,
+      ],
+      source,
+      filename,
     ) as CjsFactory;
   } catch (error) {
     // `new Function` SyntaxError has no file context — surface a directed

@@ -640,7 +640,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
                   if (verified.status === 'mismatch') {
                     return { status: 'rejected' as const, reason: 'snapshot-id-mismatch' };
                   }
-                  const snapshot = await prepareDepSnapshotForRuntimeTier(verified.snapshot, 'coi');
+                  const snapshot = verified.snapshot;
                   if (snapshot.templateId !== materialization.snapshot.templateId) {
                     return { status: 'rejected' as const, reason: 'snapshot-template-mismatch' };
                   }
@@ -648,7 +648,12 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
                     status: 'candidate' as const,
                     snapshot: {
                       snapshotId: materialization.snapshot.snapshotId,
-                      identity: snapshot.installArtifactIdentity,
+                      // Candidate compatibility; restore/apply preflight still verifies and projects bytes.
+                      identity:
+                        snapshot.installArtifactIdentity ===
+                        installArtifactIdentityForTier('no-coi')
+                          ? installArtifactIdentity
+                          : snapshot.installArtifactIdentity,
                       packageJsonText: snapshot.packageJsonText,
                       payload: snapshot,
                     },

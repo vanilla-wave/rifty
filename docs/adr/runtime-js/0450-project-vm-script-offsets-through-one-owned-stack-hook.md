@@ -138,9 +138,15 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
   default `displayErrors` decoration, and Chromium's `undefined` default hook
   before any offset script (evidence §Discovered).
 
-## CJS correction
+## CJS compiler boundary
 
-- 2026-10-20 — the CJS loader reuses this projection with lineOffset -2:
-  Function adds two physical lines while Node compileFunction does not. Native
-  Node differential covers stack text and guest hooks during/after require.
-  No second stack hook owner; vm/source-map windows retain their authority.
+- 2026-10-20 — CJS does not use the vm hook: non-configurable guest hooks
+  must preserve ordinary require and raw filenames. A standalone strict
+  directive on line one with a single-line filename permits an anonymous
+  indirect-eval factory prefix on
+  that non-executable line; executable lines retain native coordinates.
+  Captured eval; Function validates the body before eval to prevent wrapper
+  escape. Other source shapes retain the existing Function compiler (+2 lines).
+  No filename registry, stack-hook ownership or package-specific predicate.
+  Native and Chromium differentials: cjs-stack-boundary; stock esbuild error
+  fields stay exact. Remaining generic offsets: backlog/runtime-js/cjs-wrapper-stack-positions.

@@ -226,7 +226,7 @@ async function seedWarmOwner(
     valid.payload.packageJsonText,
   );
   const stamp = readInstallStampSync(composition.authority, root);
-  expect(stamp !== null && stampTrusted(stamp)).toBe(true);
+  expect(stamp !== null && stampTrusted(stamp, 'coi')).toBe(true);
   for (const file of valid.payload.tarballCache.files) {
     expect(
       Buffer.compare(

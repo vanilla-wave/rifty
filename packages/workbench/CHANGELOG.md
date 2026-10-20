@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Physical COI owner selects stock esbuild for install/snapshot/claims and Node bootstrap. No-COI retains its explicit legacy policy.
+- Physical COI owner selects stock esbuild for install/snapshot/claims and Node bootstrap. No-COI retains its explicit legacy policy. Snapshot mismatch discriminators and restore failure phases remain stable across tier projection.
 
 - Explicit snapshot runtime tier shares restore/application preflight; only generated facade/receipt changes, while COI install claims carry a distinct policy identity (ADR-0543).
 

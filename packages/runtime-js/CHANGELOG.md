@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-- CJS error positions use the existing stack projection to remove Function wrapper lines, including guest stack hooks; stock package validation points at the original source.
+- Async explicit process exits retain their drain status without leaking an internal exit signal as a browser error (ADR-0445).
+
+- CJS with a standalone first-line strict directive preserves source positions without a stack hook, including frozen guest hooks; stock esbuild validation points at original source. Other CJS shapes retain the recorded +2-line gap.
 
 - File stdout initializes lazily through the current fs.writeSync; inherited child output uses captured descriptors (ADR-0544).
 

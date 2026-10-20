@@ -119,7 +119,7 @@ async function seed(endpoint: Endpoint, state: ManifestState) {
     }
     const sourceRoot = opened.projectRoot;
     const prior = readInstallStampSync(h.authority, sourceRoot);
-    expect(prior !== null && stampTrusted(prior)).toBe(true);
+    expect(prior !== null && stampTrusted(prior, 'coi')).toBe(true);
     await h.packages.mutations.guardedMutation(
       [
         { kind: 'replace', path: `${sourceRoot}/package.json` },
@@ -185,7 +185,7 @@ function expectRestored(h: Owner, root: string): void {
     ).toBe(0);
   }
   const stamp = readInstallStampSync(h.authority, root);
-  expect(stamp !== null && stampTrusted(stamp)).toBe(true);
+  expect(stamp !== null && stampTrusted(stamp, 'coi')).toBe(true);
   expect(
     stamp?.packageJsonText,
     'verified payload owns final manifest/claim before readiness',

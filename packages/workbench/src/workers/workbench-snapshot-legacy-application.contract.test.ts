@@ -48,7 +48,7 @@ async function historicalProject(fs: DurableOwnerFs, root: string, slug: string)
   write(fs, `${root}/package.json`, fixture.payload.packageJsonText);
   const vfs = new SyncMirrorVfs();
   setSyncMirror(fs, { async: vfs });
-  const stamps = createInstallStampAuthority({ vfs, fsSync: fs });
+  const stamps = createInstallStampAuthority({ vfs, fsSync: fs, runtimeTier: 'coi' });
   const claim = await stamps.demote({ root, slug }, { flush: () => fs.flush() });
   await stamps.prepareTreeMutation(claim);
   await restoreDepSnapshot(fs, root, fixture.payload);
@@ -255,7 +255,7 @@ describe('I8 snapshot policy preserves pending legacy adoption', () => {
         .soft(decoder.decode(h.authority.readFileBytesSync(`${root}/package-lock.json`)))
         .toBe(fixture.payload.lockfile);
       const stamp = readInstallStampSync(h.authority, root);
-      expect.soft(stamp !== null && stampTrusted(stamp)).toBe(true);
+      expect.soft(stamp !== null && stampTrusted(stamp, 'coi')).toBe(true);
       expect.soft(stamp).toMatchObject({ root, slug: h.id, packages: fixture.payload.packages });
       expect.soft(h.installStampClaims.read(root)).not.toEqual(sourceClaim);
       expect.soft(h.authority.existsSync(h.sourceRoot)).toBe(false);
@@ -384,7 +384,7 @@ describe('I8 legacy projects remain usable after adoption', () => {
           replacement.payload.lockfile,
         );
         const stamp = readInstallStampSync(h.authority, root);
-        expect(stamp !== null && stampTrusted(stamp)).toBe(true);
+        expect(stamp !== null && stampTrusted(stamp, 'coi')).toBe(true);
         expect(stamp).toMatchObject({
           root,
           slug: h.id,
@@ -414,7 +414,7 @@ describe('I8 legacy projects remain usable after adoption', () => {
         expectRetainedFiles({ ...h, ...restarted }, root);
         expect(restarted.authority.existsSync(h.sourceRoot)).toBe(false);
         const reopenedStamp = readInstallStampSync(restarted.authority, root);
-        expect(reopenedStamp !== null && stampTrusted(reopenedStamp)).toBe(true);
+        expect(reopenedStamp !== null && stampTrusted(reopenedStamp, 'coi')).toBe(true);
         expectPendingSibling(restarted, siblingBefore);
       } finally {
         await opened?.close();
@@ -473,7 +473,7 @@ describe('I8 legacy projects remain usable after adoption', () => {
         expect(h.authority.existsSync(scratchRoot)).toBe(false);
         expectRetainedFiles(h, root);
         const stamp = readInstallStampSync(h.authority, root);
-        expect(stamp !== null && stampTrusted(stamp)).toBe(true);
+        expect(stamp !== null && stampTrusted(stamp, 'coi')).toBe(true);
         expect(stamp).toMatchObject({ root, slug: savedId });
         expect(h.network.requests).toEqual([fixture.descriptor.assetUrl]);
         await h.authority.flush();
@@ -497,7 +497,7 @@ describe('I8 legacy projects remain usable after adoption', () => {
         expect(restarted.authority.existsSync(h.sourceRoot)).toBe(false);
         expect(restarted.authority.existsSync(scratchRoot)).toBe(false);
         const reopenedStamp = readInstallStampSync(restarted.authority, root);
-        expect(reopenedStamp !== null && stampTrusted(reopenedStamp)).toBe(true);
+        expect(reopenedStamp !== null && stampTrusted(reopenedStamp, 'coi')).toBe(true);
         expect(reopenedStamp).toMatchObject({ root, slug: savedId });
         expectPendingSibling(restarted, siblingBefore);
       } finally {
@@ -539,7 +539,7 @@ async function seedCompletedReceipt(id: 'scratch' | 'legacy-project') {
     const root = opened.projectRoot;
     expectRetainedFiles(h, root);
     const stamp = readInstallStampSync(h.authority, root);
-    expect(stamp !== null && stampTrusted(stamp)).toBe(true);
+    expect(stamp !== null && stampTrusted(stamp, 'coi')).toBe(true);
     await h.authority.flush();
     const receipt = h.fs.trace.find((entry) => {
       if (
@@ -639,7 +639,7 @@ function expectFollowingMutation(
     );
   }
   const stamp = readInstallStampSync(h.authority, root);
-  expect(stamp !== null && stampTrusted(stamp)).toBe(true);
+  expect(stamp !== null && stampTrusted(stamp, 'coi')).toBe(true);
   expect(stamp).toMatchObject({
     root,
     slug: id,
@@ -859,7 +859,8 @@ describe('I8 real saved trust replaces legacy snapshot-initializer identity reje
         ).toBeUndefined();
         expect(opened?.acquisition).toEqual({ kind: 'saved' });
         const stamp = readInstallStampSync(h.authority, saved.root);
-        if (claimState === 'trusted') expect(stamp !== null && stampTrusted(stamp)).toBe(true);
+        if (claimState === 'trusted')
+          expect(stamp !== null && stampTrusted(stamp, 'coi')).toBe(true);
         else expect(stamp).toBeNull();
         expect(network.requests).toEqual([]);
         expect(h.catalog.snapshot()).toEqual(catalogBefore);
@@ -1045,7 +1046,7 @@ it('ADR-0397 unproved retirement compensation fences the owner until fresh durab
       expect(recovered.fs.liveSnapshot()).toEqual(before.tree);
       expect(recovered.fs.durableSnapshot()).toEqual(before.tree);
       const stamp = readInstallStampSync(recovered.authority, before.root);
-      expect(stamp !== null && stampTrusted(stamp)).toBe(true);
+      expect(stamp !== null && stampTrusted(stamp, 'coi')).toBe(true);
       expect(recovered.installStampClaims.read(before.root)).toEqual(
         before.tree.files[installStampPath(before.root)],
       );

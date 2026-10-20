@@ -257,6 +257,9 @@ test.describe('Project activation/open compensation', () => {
     const alphaName = `Activation-A-${tag}`;
     const betaName = `Activation-B-${tag}`;
 
+    // Keep interception enabled across the later owner-script hold/unroute.
+    // Toggling Fetch after stock esbuild enters Atomics.wait stalls CDP.
+    await page.route('**/*', (route) => route.fallback());
     await bootProjectFiles(page);
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
