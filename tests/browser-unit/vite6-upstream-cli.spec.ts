@@ -38,10 +38,12 @@ test('Vite 6.4.4 npm install and npx build reach the upstream CLI', async ({ pag
   const registry = await startInstalledRegistry(packages);
   let ownerOpen = false;
   try {
-    // Same real closure on Node; esbuild uses the selected stock wasm twin.
+    // Same upstream wasm twins on Node, without host-native optional binaries.
     for (const [name, entry] of packages) {
-      if (name === 'esbuild') continue;
-      const destination = join(root, 'node_modules', name === 'esbuild-wasm' ? 'esbuild' : name);
+      if (name === 'esbuild' || name === 'rollup') continue;
+      const installedName =
+        name === 'esbuild-wasm' ? 'esbuild' : name === '@rollup/wasm-node' ? 'rollup' : name;
+      const destination = join(root, 'node_modules', installedName);
       mkdirSync(destination, { recursive: true });
       execFileSync('tar', ['-xzf', entry.tarball, '--strip-components=1', '-C', destination]);
     }
