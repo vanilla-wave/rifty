@@ -82,6 +82,7 @@ export function createOwnerChildBinExecutor(
         env: ctx.env,
         cwd: ctx.cwd,
         isTTY: ctx.isTTY === true,
+        ...(ctx.stdoutIsFile === undefined ? {} : { stdoutIsFile: ctx.stdoutIsFile }),
         cols: ctx.cols,
         rows: ctx.rows,
       },

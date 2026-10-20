@@ -5,7 +5,6 @@ title: In COI, an `esbuild@<range>` request installs and runs unmodified upstrea
 created: 2026-10-16
 why: today `esbuild` is one exact recipe (0.28.0) over a generated, 13-patch browser-client runtime; every other version is refused and adding one means re-porting anchors, re-entering hashes and re-capturing a native oracle across 66 non-doc files
 epic: esbuild-upstream-twin
-blocked_by: [shell/npx-local-bins]
 sources: [docs/backlog/npm-client/reference/esbuild-upstream-twin-refine-evidence-2026-10-16.md, ADR-0226, ADR-0371, ADR-0361, ADR-0316, ADR-0375, ADR-0384, docs/public/compat/esbuild-js-api.md]
 code: [tools/shadow-registry/src/internal/catalog-source.ts, tools/shadow-registry/src/runtime/runtime-adapters.ts, tools/shadow-registry/src/runtime/vite-esbuild-runtime.ts, tools/shadow-registry/tools/generate-esbuild-runtime.ts, packages/npm-client/src/internal/shadow/admission.ts, tools/compat-matrix-generator/cli.js]
 ---

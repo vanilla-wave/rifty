@@ -167,12 +167,20 @@ function snapshotTerminal(value: unknown): NodeEntryTerminalBootstrap {
   exact(
     terminal,
     ['stdinIsTTY', 'stdoutIsTTY', 'stderrIsTTY', 'cols', 'rows'],
-    [],
+    ['stdoutIsFile'],
     'dev-server bootstrap terminal',
   );
   return Object.freeze({
     stdinIsTTY: booleanField(terminal.stdinIsTTY, 'dev-server bootstrap terminal.stdinIsTTY'),
     stdoutIsTTY: booleanField(terminal.stdoutIsTTY, 'dev-server bootstrap terminal.stdoutIsTTY'),
+    ...(terminal.stdoutIsFile === undefined
+      ? {}
+      : {
+          stdoutIsFile: booleanField(
+            terminal.stdoutIsFile,
+            'dev-server bootstrap terminal.stdoutIsFile',
+          ),
+        }),
     stderrIsTTY: booleanField(terminal.stderrIsTTY, 'dev-server bootstrap terminal.stderrIsTTY'),
     cols: positiveInteger(terminal.cols, 'dev-server bootstrap terminal.cols'),
     rows: positiveInteger(terminal.rows, 'dev-server bootstrap terminal.rows'),

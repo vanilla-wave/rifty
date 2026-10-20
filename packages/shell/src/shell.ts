@@ -831,6 +831,7 @@ export class Shell {
       // A redirected OR non-final-pipe sink is never a TTY (ADR-0089): force
       // isTTY false so `ls --color=auto > f` / `ls | cat` write no SGR bytes.
       isTTY,
+      ...(redirectTo ? { stdoutIsFile: true } : {}),
       get cols() {
         return terminal?.current().cols ?? options.cols;
       },

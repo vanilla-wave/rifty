@@ -22,7 +22,7 @@ export interface NodeStdioWriter extends EventEmitter {
     encodingOrCallback?: Encoding | WriteCallback,
     callback?: WriteCallback,
   ): boolean;
-  isTTY: boolean;
+  isTTY?: boolean;
   fd: number;
   columns?: number;
   rows?: number;

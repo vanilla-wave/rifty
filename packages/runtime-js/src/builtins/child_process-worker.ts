@@ -16,6 +16,7 @@ import {
 } from './process-bootstrap-identity.ts';
 import { publicNodeProcess } from './process-public.ts';
 import { stdinInheritHook } from './process-stdin-inherit.ts';
+import { type OutputFdSource, PROCESS_FDS, type ProcessFdSources } from './stdio-fd-source.ts';
 
 type Listener = (...args: unknown[]) => void;
 
@@ -26,6 +27,7 @@ export interface ReadableSource {
 }
 
 export interface WritableTarget {
+  readonly isFile?: boolean;
   write(chunk: unknown): unknown;
   end?(): unknown;
 }
@@ -118,10 +120,25 @@ export function activeChildProcessContext(): ActiveChildProcessContext {
 
 export function activeProcessStdio(): ParentStdio {
   const process = activeProcess();
+  const sources = (process as { [PROCESS_FDS]?: ProcessFdSources } | undefined)?.[PROCESS_FDS];
+  const rawOutput = (source: OutputFdSource): WritableTarget => ({
+    isFile: source.isFile,
+    write(chunk) {
+      if (typeof chunk !== 'string' && !(chunk instanceof Uint8Array))
+        throw new TypeError('stdio chunk must be bytes or string');
+      source.write(typeof chunk === 'string' ? new TextEncoder().encode(chunk) : chunk);
+    },
+  });
   return {
-    stdin: readable(process?.stdin),
-    stdout: writable(process?.stdout),
-    stderr: writable(process?.stderr),
+    get stdin() {
+      return readable(process?.stdin);
+    },
+    get stdout() {
+      return sources?.stdout ? rawOutput(sources.stdout) : writable(process?.stdout);
+    },
+    get stderr() {
+      return sources?.stderr ? rawOutput(sources.stderr) : writable(process?.stderr);
+    },
   };
 }
 
@@ -350,6 +367,7 @@ export function forkExecArgv(value: unknown): readonly string[] {
 }
 
 export interface SpawnWorkerChildOptions {
+  readonly stdoutIsFile?: boolean;
   readonly cwd?: string;
   readonly env?: Record<string, string>;
   /** The fork's public IPC lane (`serialization`); `none` for a plain spawn. */
@@ -374,6 +392,18 @@ export function spawnWorkerChild(
     remoteFs: true,
     ipc: options.ipc,
     nodeServe: true,
+    ...(options.stdoutIsFile
+      ? {
+          terminal: {
+            stdinIsTTY: false,
+            stdoutIsTTY: false,
+            stdoutIsFile: true,
+            stderrIsTTY: false,
+            cols: 80,
+            rows: 24,
+          },
+        }
+      : {}),
     ...(options.execArgv === undefined || options.execArgv.length === 0
       ? {}
       : { execArgv: options.execArgv }),

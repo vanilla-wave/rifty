@@ -40,3 +40,4 @@ imports can change the TypeScript worker fingerprint after ordinary runtime
 edits; that pin update stays explicit. No ADR is superseded.
 
 - 2026-10-20 — upstream-twin runtime changes regenerate TypeScript-worker chunk imports; exact size stays 10,022,664 bytes. Pin refreshed; packed toolchain surface (15 first-party/73 external tarballs, Chromium agent/build) and retirement gate pass. No directory/size exemption added.
+- 2026-10-20 — file-stdout imports refresh that same 10,022,664-byte worker to SHA-256 `9f116077cae2641f90db386a56f9dc72d9ef09fa1352ec1edff19473a5eda9dd`; packed toolchain surface and exact retirement gate pass.

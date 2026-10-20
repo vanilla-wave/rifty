@@ -11,6 +11,7 @@ export const NODE_ENTRY_BOOTSTRAP_PROTOCOL = 'rifty.node-entry/v6' as const;
 export interface NodeEntryTerminalBootstrap {
   readonly stdinIsTTY: boolean;
   readonly stdoutIsTTY: boolean;
+  readonly stdoutIsFile?: boolean;
   readonly stderrIsTTY: boolean;
   readonly cols: number;
   readonly rows: number;
@@ -287,7 +288,14 @@ function previewScopeValue(value: unknown): string | undefined {
   return value;
 }
 
-const TERMINAL_FIELDS = ['stdinIsTTY', 'stdoutIsTTY', 'stderrIsTTY', 'cols', 'rows'] as const;
+const TERMINAL_FIELDS = [
+  'stdinIsTTY',
+  'stdoutIsTTY',
+  'stdoutIsFile',
+  'stderrIsTTY',
+  'cols',
+  'rows',
+] as const;
 
 /** Package-internal exact-own snapshot shared by entry and late process bootstraps. */
 export function snapshotNodeEntryTerminalBootstrap(
@@ -298,12 +306,16 @@ export function snapshotNodeEntryTerminalBootstrap(
   assertAllowedOwnFields(record, TERMINAL_FIELDS, owner);
   const stdinIsTTY = requiredOwnField(record, 'stdinIsTTY', owner);
   const stdoutIsTTY = requiredOwnField(record, 'stdoutIsTTY', owner);
+  const stdoutIsFile = optionalOwnField(record, 'stdoutIsFile');
   const stderrIsTTY = requiredOwnField(record, 'stderrIsTTY', owner);
   const cols = requiredOwnField(record, 'cols', owner);
   const rows = requiredOwnField(record, 'rows', owner);
   return Object.freeze({
     stdinIsTTY: booleanValue(stdinIsTTY, 'stdinIsTTY', owner),
     stdoutIsTTY: booleanValue(stdoutIsTTY, 'stdoutIsTTY', owner),
+    ...(stdoutIsFile === undefined
+      ? {}
+      : { stdoutIsFile: booleanValue(stdoutIsFile, 'stdoutIsFile', owner) }),
     stderrIsTTY: booleanValue(stderrIsTTY, 'stderrIsTTY', owner),
     cols: positiveInteger(cols, `${owner} cols`),
     rows: positiveInteger(rows, `${owner} rows`),

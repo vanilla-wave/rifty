@@ -376,6 +376,7 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
       env: opts.env,
       ipc: ipc ?? 'none',
       execArgv,
+      stdoutIsFile: stdio.stdout?.isFile,
     });
     if (handle.kind !== 'worker') throw new Error('child_process.spawn: expected Worker handle');
     const child = new ChildProcess(handle, ipc, {

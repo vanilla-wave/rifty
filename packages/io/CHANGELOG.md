@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Writable uses Node tick callbacks (success = null) and a cursor over the existing reentrant buffer; completed slots release payloads.
+
 - `openHostBroadcastChannel(name)` / `HOST_BROADCAST_CHANNEL`: rifty's own channels open the realm's native `BroadcastChannel`, never the guest global that holds the event loop (ADR-0529).
 
 - `Readable.pipe` follows Node's end rule: `dest.end()` is skipped only for a literal `{end: false}` or the realm's

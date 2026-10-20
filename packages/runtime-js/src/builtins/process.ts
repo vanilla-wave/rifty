@@ -50,6 +50,7 @@ import {
   readNodeProcessBootstrapIdentity,
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
+import { installLazyFileStdout } from './process-file-stdout.ts';
 import {
   NODE_PROCESS_IDENTITY,
   type NodeProcessRelease,
@@ -238,6 +239,7 @@ type StdinListener = (...args: unknown[]) => void;
 export type { NodeStdin } from './process-stdin-reader.ts';
 
 interface ProcessTerminalBootstrap {
+  readonly stdoutIsFile?: boolean;
   readonly stdinIsTTY: boolean;
   readonly stdoutIsTTY: boolean;
   readonly stderrIsTTY: boolean;
@@ -269,12 +271,6 @@ function processTerminalBootstrap(launch: NodeEntryLaunch | undefined): ProcessT
 
 export { resetNodeProcessExit, toUint8ExitCode } from './process-lifecycle-events.ts';
 
-/**
- * Node's `process.exitCode`/`process.exit(code)` coercion contract: a numeric
- * string coerces to its number; a non-integer number or a non-coercible value
- * throws LOUDLY (Fidelity — never silently swallow an invalid exit code, which is
- * what real Node does at the setter). undefined/null reset to 0.
- */
 export function coerceExitCode(v: unknown): number {
   if (v === undefined || v === null) return 0;
   if (typeof v === 'number') {
@@ -312,9 +308,7 @@ export class NodeProcess extends EventEmitter {
   readonly platform = NODE_PROCESS_IDENTITY.platform;
   readonly arch = NODE_PROCESS_IDENTITY.arch;
   readonly version = NODE_PROCESS_IDENTITY.version;
-  // Shallow copy so per-process mutation (e.g. process.versions.x = …) works
-  // without throwing and doesn't leak across processes (ADR-0150: each
-  // foreground CLI gets an isolated child worker). `Record` keeps absent-key reads type-safe.
+  // Each process owns mutable version fields (ADR-0150).
   readonly versions: Record<string, string> = { ...NODE_PROCESS_IDENTITY.versions };
   readonly features = { require_module: true } as const;
   declare readonly release: NodeProcessRelease;
@@ -343,6 +337,7 @@ export class NodeProcess extends EventEmitter {
       if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(signal.exitCode);
     },
   });
+  #stdoutIsFile = false;
   stdout: NodeStdioWriter;
   stderr: NodeStdioWriter;
   stdin: NodeStdin;
@@ -452,6 +447,7 @@ export class NodeProcess extends EventEmitter {
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
       const terminal = processTerminalBootstrap(launch);
+      this.#stdoutIsFile = terminal.stdoutIsFile === true;
       const size = { cols: terminal.cols, rows: terminal.rows };
       this.stdout = makeStdioWriter(spec.stdio.stdout, 1, terminal.stdoutIsTTY, size, nextTick);
       this.stderr = makeStdioWriter(spec.stdio.stderr, 2, terminal.stderrIsTTY, size, nextTick);
@@ -499,6 +495,7 @@ export class NodeProcess extends EventEmitter {
       this.#stdinPush = reader.push;
     }
     captureProcessStdio(this);
+    if (this.#stdoutIsFile) installLazyFileStdout(this);
   }
 
   override addListener(event: string | symbol, listener: StdinListener): this {
@@ -763,7 +760,7 @@ export class NodeProcess extends EventEmitter {
     }
     this.#latestTtyControlSize = { cols, rows };
     let changed = false;
-    for (const stream of [this.stdout, this.stderr]) {
+    for (const stream of this.#stdoutIsFile ? [this.stderr] : [this.stdout, this.stderr]) {
       if (!stream.isTTY || (stream.columns === cols && stream.rows === rows)) continue;
       stream.columns = cols;
       stream.rows = rows;
@@ -777,7 +774,9 @@ export class NodeProcess extends EventEmitter {
     const snapshot = snapshotNodeEntryTerminalBootstrap(terminal, 'process terminal bootstrap');
     const size = this.#latestTtyControlSize ?? { cols: snapshot.cols, rows: snapshot.rows };
     this.stdin.isTTY = snapshot.stdinIsTTY;
-    applyTtyShape(this.stdout, snapshot.stdoutIsTTY, size);
+    if (snapshot.stdoutIsFile && !this.#stdoutIsFile) installLazyFileStdout(this);
+    this.#stdoutIsFile = snapshot.stdoutIsFile === true;
+    if (!this.#stdoutIsFile) applyTtyShape(this.stdout, snapshot.stdoutIsTTY, size);
     applyTtyShape(this.stderr, snapshot.stderrIsTTY, size);
   }
 

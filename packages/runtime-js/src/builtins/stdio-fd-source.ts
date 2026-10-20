@@ -1,4 +1,6 @@
 /** Registered across the pre-entry and node-entry runtime bundle copies. */
+import type { NodeStdioWriter } from './process-stdio-writer.ts';
+
 export const STDIN_FD = Symbol.for('rifty.runtime-js.stdin-fd.v1');
 export interface StdinFdSource {
   readonly closed: boolean;
@@ -10,11 +12,14 @@ export interface StdinFdSource {
 export const OUTPUT_FD = Symbol.for('rifty.runtime-js.output-fd.v1');
 export const PROCESS_FDS = Symbol.for('rifty.runtime-js.process-fds.v1');
 export interface OutputFdSource {
+  isFile?: boolean;
   readonly closed: boolean;
   write(bytes: Uint8Array): void;
   close(): void;
 }
 export interface ProcessFdSources {
+  /** Bound by the active builtin bundle; invoked only on the first stdout access. */
+  createFileStdout?: () => NodeStdioWriter;
   readonly stdin?: StdinFdSource;
   readonly stdinIsTTY: boolean;
   readonly stdout?: OutputFdSource;

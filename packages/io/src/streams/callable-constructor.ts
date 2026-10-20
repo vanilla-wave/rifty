@@ -141,6 +141,7 @@ export function initializeWritable(receiver: Writable, options: WritableOptions 
   const objectMode = options.objectMode ?? false;
   target._writableState = {
     buffered: [],
+    bufferedIndex: 0,
     length: 0,
     highWaterMark: options.highWaterMark ?? getDefaultHighWaterMark(objectMode),
     objectMode,

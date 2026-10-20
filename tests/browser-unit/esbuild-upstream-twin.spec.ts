@@ -92,67 +92,67 @@ for (const requestedName of ['esbuild', 'esbuild-wasm']) {
     test(`upstream twin ${requestedName}@${version}: install, stock entry, bundle and complete upstream bytes`, async ({
       page,
     }) => {
-      test.fail(true, 'esbuild-upstream-twin: admission and file stdout remain RED');
+      test.fail(requestedName === 'esbuild', 'Workbench COI range selection remains RED');
       test.setTimeout(240_000);
       const root = mkdtempSync(join(tmpdir(), 'rifty-upstream-twin-'));
-      const archive = readFileSync(
-        fileURLToPath(
-          new URL(
-            `../integration/fixtures/registry/esbuild-upstream/esbuild-wasm-${version}.tgz`,
-            import.meta.url,
-          ),
-        ),
-      );
-      const packageRoot = join(root, `node_modules/${requestedName}`);
-      const projectFiles = {
-        ...PROJECT_FILES,
-        'build.mjs': PROJECT_FILES['build.mjs'].replace(
-          "from 'esbuild'",
-          `from '${requestedName}'`,
-        ),
-      };
-      mkdirSync(packageRoot, { recursive: true });
-      const archivePath = join(root, 'upstream.tgz');
-      writeFileSync(archivePath, archive);
-      execFileSync('tar', ['-xzf', archivePath, '--strip-components=1', '-C', packageRoot]);
-      mkdirSync(join(root, 'node_modules/.bin'), { recursive: true });
-      symlinkSync(`../${requestedName}/bin/esbuild`, join(root, 'node_modules/.bin/esbuild'));
-      writeFileSync(
-        join(root, 'package.json'),
-        JSON.stringify({ name: 'upstream-oracle', private: true }),
-      );
-      const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'));
-      for (const [path, contents] of Object.entries(projectFiles)) {
-        mkdirSync(join(root, path, '..'), { recursive: true });
-        writeFileSync(join(root, path), contents);
-      }
-      const oracle = execFileSync(process.execPath, ['build.mjs'], {
-        cwd: root,
-        encoding: 'utf8',
-        timeout: 30_000,
-      });
-      expect(oracle).toBe('');
-      const expectedBundle = readFileSync(join(root, 'dist/out.js'), 'utf8');
-      execFileSync(process.execPath, ['api.cjs', requestedName], {
-        cwd: root,
-        encoding: 'utf8',
-        timeout: 30_000,
-      });
-      const expectedApi = JSON.parse(readFileSync(join(root, 'api-result.json'), 'utf8'));
-      const expectedCli = Object.fromEntries(
-        (['pipe', 'tty', 'file'] as const).map((mode) => [
-          mode,
-          nativeCli(root, requestedName, mode),
-        ]),
-      );
-      const expectedFiles = Object.fromEntries(
-        filesUnder(packageRoot).map((path) => [
-          path,
-          sha256(readFileSync(join(packageRoot, path))),
-        ]),
-      );
       let ownerOpen = false;
       try {
+        const archive = readFileSync(
+          fileURLToPath(
+            new URL(
+              `../integration/fixtures/registry/esbuild-upstream/esbuild-wasm-${version}.tgz`,
+              import.meta.url,
+            ),
+          ),
+        );
+        const packageRoot = join(root, `node_modules/${requestedName}`);
+        const projectFiles = {
+          ...PROJECT_FILES,
+          'build.mjs': PROJECT_FILES['build.mjs'].replace(
+            "from 'esbuild'",
+            `from '${requestedName}'`,
+          ),
+        };
+        mkdirSync(packageRoot, { recursive: true });
+        const archivePath = join(root, 'upstream.tgz');
+        writeFileSync(archivePath, archive);
+        execFileSync('tar', ['-xzf', archivePath, '--strip-components=1', '-C', packageRoot]);
+        mkdirSync(join(root, 'node_modules/.bin'), { recursive: true });
+        symlinkSync(`../${requestedName}/bin/esbuild`, join(root, 'node_modules/.bin/esbuild'));
+        writeFileSync(
+          join(root, 'package.json'),
+          JSON.stringify({ name: 'upstream-oracle', private: true }),
+        );
+        const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'));
+        for (const [path, contents] of Object.entries(projectFiles)) {
+          mkdirSync(join(root, path, '..'), { recursive: true });
+          writeFileSync(join(root, path), contents);
+        }
+        const oracle = execFileSync(process.execPath, ['build.mjs'], {
+          cwd: root,
+          encoding: 'utf8',
+          timeout: 30_000,
+        });
+        expect(oracle).toBe('');
+        const expectedBundle = readFileSync(join(root, 'dist/out.js'), 'utf8');
+        execFileSync(process.execPath, ['api.cjs', requestedName], {
+          cwd: root,
+          encoding: 'utf8',
+          timeout: 30_000,
+        });
+        const expectedApi = JSON.parse(readFileSync(join(root, 'api-result.json'), 'utf8'));
+        const expectedCli = Object.fromEntries(
+          (['pipe', 'tty', 'file'] as const).map((mode) => [
+            mode,
+            nativeCli(root, requestedName, mode),
+          ]),
+        );
+        const expectedFiles = Object.fromEntries(
+          filesUnder(packageRoot).map((path) => [
+            path,
+            sha256(readFileSync(join(packageRoot, path))),
+          ]),
+        );
         await page.route('**/npm-registry/**', async (route) => {
           const path = new URL(route.request().url()).pathname;
           if (path.endsWith('.tgz')) {

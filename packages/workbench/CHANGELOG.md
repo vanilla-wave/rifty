@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Propagate file stdout through Node/bin child bootstrap; preserve pipe/TTY selection (ADR-0544).
+
 - Refresh install identity and baked snapshots for the tier-aware catalog; retain every committed dependency version.
 
 - Node children select pull stdin; virtual guest ancestors carry VFS entry metadata for complete Node Stats (ADR-0540/0542).

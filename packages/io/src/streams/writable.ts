@@ -8,8 +8,8 @@
  * downstream callers inspect `w._writableState.{destroyed,ended,finished,length}`).
  * Fields mirror Node's `internal/streams/state.js`.
  */
-
 import { Buffer, type Encoding } from '../buffer.ts';
+import { readBuiltinUncached } from '../builtin-registry.ts';
 import { EventEmitter } from '../event-emitter.ts';
 import {
   type CallableStreamConstructor,
@@ -76,7 +76,8 @@ type EndCallback = (error?: Error | null) => void;
  * downstream callers read/write are surfaced.
  */
 export interface WritableState {
-  buffered: BufferedWrite[];
+  buffered: Array<BufferedWrite | null>;
+  bufferedIndex: number;
   /** Total byte (or entry, object mode) count across `buffered`. */
   length: number;
   highWaterMark: number;
@@ -118,6 +119,22 @@ export interface WritableState {
   drainScheduled: boolean;
   /** True when the next flush may batch buffered chunks through `_writev`. */
   writevBatch: boolean;
+}
+
+const noopWrite = (): void => {};
+
+function deferWritable(callback: () => void): void {
+  const process = readBuiltinUncached('process');
+  if (typeof process?.nextTick === 'function') process.nextTick(callback);
+  else queueMicrotask(callback);
+}
+
+/** Only the unconsumed tail owns callbacks; consumed slots are cleared during a drain. */
+function takeBuffered(state: WritableState): BufferedWrite[] {
+  const entries = state.buffered.slice(state.bufferedIndex) as BufferedWrite[];
+  state.buffered = [];
+  state.bufferedIndex = 0;
+  return entries;
 }
 
 function unknownEncodingError(encoding: string): TypeError & { code: string } {
@@ -260,7 +277,7 @@ class WritableImplementation extends EventEmitter {
     // Flush synchronously on the final uncork (Node semantics) — not via a
     // microtask, so a `write()` after `uncork()` in the same tick starts a
     // fresh batch rather than joining this one.
-    if (state.corked === 0 && !state.writing && state.buffered.length > 0) {
+    if (state.corked === 0 && !state.writing && state.buffered.length > state.bufferedIndex) {
       state.writevBatch = true;
       this.drainBuffer();
     }
@@ -275,7 +292,7 @@ class WritableImplementation extends EventEmitter {
     const state = this._writableState;
     if (state.drainScheduled) return;
     state.drainScheduled = true;
-    queueMicrotask(() => {
+    deferWritable(() => {
       state.drainScheduled = false;
       this.drainBuffer();
     });
@@ -288,16 +305,16 @@ class WritableImplementation extends EventEmitter {
   ): boolean {
     const state = this._writableState;
     const encoding = typeof encodingOrCb === 'string' ? encodingOrCb : 'utf8';
-    const cbFinal = (typeof encodingOrCb === 'function' ? encodingOrCb : cb) ?? (() => {});
+    const cbFinal = (typeof encodingOrCb === 'function' ? encodingOrCb : cb) ?? noopWrite;
     // Node contract after destroy/end/finished: sync return false, cb errors next tick.
     if (state.destroyed || state.errored) {
       const err = state.errored ?? new Error('Cannot call write after a stream was destroyed');
-      queueMicrotask(() => cbFinal(err));
+      deferWritable(() => cbFinal(err));
       return false;
     }
     if (state.ending || state.finished) {
       const err = new Error('write after end');
-      queueMicrotask(() => {
+      deferWritable(() => {
         cbFinal(err);
         // Match Node: emit so unattended writes-after-end surface.
         if (this.listenerCount('error') > 0) this.emit('error', err);
@@ -330,19 +347,25 @@ class WritableImplementation extends EventEmitter {
     synchronous: boolean,
     destroyAfterError: boolean,
   ): void {
+    if (
+      !error &&
+      !this._writableState.needDrain &&
+      entries.every((entry) => entry.cb === noopWrite)
+    )
+      return;
     const publish = (): void => {
       const state = this._writableState;
       if (!error && state.needDrain && (state.length === 0 || state.length < state.highWaterMark)) {
         state.needDrain = false;
         this.emit('drain');
       }
-      for (const entry of entries) entry.cb(error);
+      for (const entry of entries) entry.cb(error ?? null);
       if (error && destroyAfterError && !state.destroyed) {
         this.publishEndCallbacks(error);
         this.destroy(error);
       }
     };
-    if (synchronous) queueMicrotask(publish);
+    if (synchronous) deferWritable(publish);
     else publish();
   }
 
@@ -354,50 +377,37 @@ class WritableImplementation extends EventEmitter {
     // releases the buffer. A stray scheduled drain mustn't flush a corked
     // stream (Node never calls `clearBuffer` while `corked > 0`).
     if (state.corked > 0) return;
-    // Sync-drain loop: process buffered chunks whose `_write` completes
-    // synchronously in this same tick (collapsing the old one-chunk-per-
-    // microtask chain). Break the moment a chunk's `done` is deferred (async
-    // `_write`) — that `done` re-arms via scheduleDrain(); or on error/destroy.
     while (true) {
       // Post-destroy: error every pending callback synchronously and bail.
       if (state.destroyed) {
         const err = state.errored ?? new Error('Premature close');
-        const queue = state.buffered.slice();
-        state.buffered.length = 0;
+        const queue = takeBuffered(state);
         state.length = 0;
         for (const entry of queue) entry.cb(err);
         return;
       }
-      if (state.buffered.length === 0) {
+      if (state.buffered.length === state.bufferedIndex) {
+        state.buffered = [];
+        state.bufferedIndex = 0;
         if (state.ending && !state.finished && !state.errored) this.doFinal();
         return;
       }
-      // `_writev` path (Node's `doWrite` writev branch): use it when present AND
-      // either 2+ chunks are buffered, OR there is no real `_write` (then
-      // `_writev` IS the write impl, even for a single chunk). With a real
-      // `_write`, a single buffered chunk routes to `_write` below. The batch is
-      // the loop's terminal action this pass (its `done` advances/re-arms).
       const writev = this.resolveWritev();
-      const canBatch = state.writevBatch && state.buffered.length > 1;
+      const canBatch = state.writevBatch && state.buffered.length - state.bufferedIndex > 1;
       if (writev && (canBatch || !this.hasRealWrite())) {
         state.writevBatch = false;
         if (this.flushViaWritev(writev)) continue;
         return;
       }
-      const next = state.buffered.shift();
+      const next = state.buffered[state.bufferedIndex];
+      state.buffered[state.bufferedIndex++] = null;
       if (!next) {
         if (state.ending && !state.finished && !state.errored) this.doFinal();
         return;
       }
       state.writing = true;
       const nextSize = state.objectMode ? 1 : chunkSize(next.chunk);
-      // `true` only while `_write` runs synchronously — lets `done` tell sync
-      // from async completion. A sync `done` leaves the loop to advance; an
-      // async `done` (called after `writeImpl` returns) re-arms scheduleDrain().
       let inSyncWrite = true;
-      // Set by `done` when the loop may advance to the next chunk in-tick
-      // (success path, sync completion). Error/destroy leave it false so the
-      // loop stops, matching the old one-shot-then-return behaviour.
       let mayContinueSync = false;
       const done = (err?: Error | null): void => {
         state.writing = false;
@@ -429,16 +439,16 @@ class WritableImplementation extends EventEmitter {
       inSyncWrite = false;
       // Continue only on a clean synchronous completion; stop on async-pending
       // (`done` deferred → re-arms via scheduleDrain), error, or destroy.
-      if (!mayContinueSync) return;
+      if (!mayContinueSync) {
+        if (state.bufferedIndex > 256) {
+          state.buffered.splice(0, state.bufferedIndex);
+          state.bufferedIndex = 0;
+        }
+        return;
+      }
     }
   }
 
-  /**
-   * The batched-write implementation, if one exists: the `{ writev }` ctor
-   * option, else a subclass-defined `_writev` method (the base class has none —
-   * so `this._writev` is truthy only when a subclass overrode it, exactly like
-   * Node gating `clearBuffer` on `stream._writev`).
-   */
   private resolveWritev():
     | ((this: Writable, chunks: WriteChunk[], cb: (err?: Error | null) => void) => void)
     | undefined {
@@ -456,20 +466,11 @@ class WritableImplementation extends EventEmitter {
     return this.writeImpl !== undefined || this._write !== Writable.prototype._write;
   }
 
-  /**
-   * Flush ALL currently-buffered chunks through `_writev` in one call. Mirrors
-   * the single-write `done` contract for the whole batch: on success every
-   * entry's callback fires and a `'drain'` is emitted if owed; an error (or a
-   * `destroy` during the write) errors every batched callback and destroys the
-   * stream. Returns `true` iff the batch completed synchronously and cleanly
-   * (the drain loop may continue); `false` on async-pending / error / destroy.
-   */
   private flushViaWritev(
     writev: (this: Writable, chunks: WriteChunk[], cb: (err?: Error | null) => void) => void,
   ): boolean {
     const state = this._writableState;
-    const batch = state.buffered.slice();
-    state.buffered.length = 0;
+    const batch = takeBuffered(state);
     let removed = 0;
     for (const entry of batch) removed += state.objectMode ? 1 : chunkSize(entry.chunk);
     const chunks: WriteChunk[] = batch.map((e) => ({ chunk: e.chunk, encoding: e.encoding }));
@@ -505,7 +506,7 @@ class WritableImplementation extends EventEmitter {
 
   private takeErroredWrites(inFlight: readonly BufferedWrite[]): BufferedWrite[] {
     const state = this._writableState;
-    const queued = state.buffered.splice(0);
+    const queued = takeBuffered(state);
     state.length = 0;
     state.writevBatch = false;
     return [...inFlight, ...queued];
@@ -522,7 +523,7 @@ class WritableImplementation extends EventEmitter {
     const state = this._writableState;
     // end() implies an uncork: drop any outstanding cork depth so the buffered
     // chunks flush (Node clears `corked` on end).
-    if (state.corked > 0 && state.buffered.length > 0) state.writevBatch = true;
+    if (state.corked > 0 && state.buffered.length > state.bufferedIndex) state.writevBatch = true;
     state.corked = 0;
     let cbFinal: EndCallback | undefined;
     if (typeof chunkOrCb === 'function') {
@@ -535,11 +536,11 @@ class WritableImplementation extends EventEmitter {
     }
     if (cbFinal) {
       if (state.finished) {
-        queueMicrotask(() => cbFinal(streamAlreadyFinishedError()));
+        deferWritable(() => cbFinal(streamAlreadyFinishedError()));
       } else if (state.destroyed) {
         if (state.errored) {
           const publish = (): void => cbFinal(streamDestroyedError());
-          if (state.closed) queueMicrotask(publish);
+          if (state.closed) deferWritable(publish);
           else this.once('close', publish);
         }
         return this;
@@ -562,14 +563,14 @@ class WritableImplementation extends EventEmitter {
       if (state.destroyed || state.closed || state.finished) return;
       if (err) {
         state.errored = err;
-        if (inSyncFinal) queueMicrotask(() => this.destroyInternal(err, true));
+        if (inSyncFinal) deferWritable(() => this.destroyInternal(err, true));
         else {
           this.publishEndCallbacks(err);
           this.destroy(err);
         }
       } else {
         this.emit('prefinish');
-        queueMicrotask(() => {
+        deferWritable(() => {
           if (state.destroyed || state.errored || state.finished) return;
           state.finished = true;
           this.publishEndCallbacks(null);
@@ -602,11 +603,10 @@ class WritableImplementation extends EventEmitter {
     // Error queued writes' callbacks. Can't cancel the chunk currently in
     // `_write` (already running on the user's stack), but its `done` closure
     // checks `state.destroyed` before emitting drain/finish.
-    const queue = state.buffered.slice();
-    state.buffered.length = 0;
+    const queue = takeBuffered(state);
     state.length = 0;
     const destroyErr = err ?? streamDestroyedError();
-    queueMicrotask(() => {
+    deferWritable(() => {
       for (const entry of queue) entry.cb(destroyErr);
       if (!endCallbacksAfterClose) this.publishEndCallbacks(destroyErr);
       // Match Node: emit error (if any) then close on the next tick.
