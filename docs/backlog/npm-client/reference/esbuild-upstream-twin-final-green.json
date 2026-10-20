@@ -1,0 +1,277 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS unit: оба CJS findings и все12 старых CI observations проверены. Merge только после завершения clean pr:check, зелёного HEAD CI и CLOSE; goal пока не завершён.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "c8eab80cb5efb6f9a64a78c23bbf200785ba5573",
+  "unit_goal_source": "docs/backlog/npm-client/esbuild-upstream-twin-cutover.md @ c8eab80cb5efb6f9a64a78c23bbf200785ba5573; BASE 10504415d848c89f2d032d7199bb9658cb0d3238; goal docs/backlog/epics/esbuild-upstream-twin/goal.md; PR #379; original CJS findings fixed @5a370da8; new CI reception verified @c8eab80c",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "CLOSE step4 / REV-9: finish clean gate and remove completed linked children",
+      "location": "docs/backlog/epics/esbuild-upstream-twin/map.md:5",
+      "summary": "I1–I6 end-to-end acceptance is proven, with no remaining known functional obligation. I5 CI execution is proven by all6 esbuild/esbuild-wasm×3versions PASS in /tmp/esbuild-ci-browser-unit-plain.log:444–454; same-HEAD Linux oracle is not a separate invariant. Current clean pr:check still running and carrier/cutover documents remain linked. After clean gate and CLOSE cleanup, goal_complete may become true; green final HEAD CI remains PR-6 delivery condition before reporting done/merge, not an invented goal invariant."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: physical COI fresh/terminal install, snapshot restore/application and claims select upstream policy; ranges, complete trees and pinned offline replay",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-upstream-twin.spec.ts:107; tests/browser-unit/esbuild-upstream-host.spec.ts:4; tests/browser-unit/esbuild-vite-contract.spec.ts:1246; packages/workbench/src/workers/workbench-snapshot-apply-preparation.contract.test.ts:203; /tmp/esbuild-coi-cutover-composed.log; /tmp/esbuild-coi-vite7-final-probe.log; /tmp/esbuild-cutover-independent-final-units.log",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: COI never imports generated runtime; rejects legacy binding before activation; no-COI retains lazy generated runtime",
+      "source": "acceptance",
+      "trace": "I1+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-upstream-host.spec.ts:4; packages/workbench/src/workers/node-entry-runtime-preparation.contract.test.ts:14; tools/shadow-registry/src/runtime/runtime-adapters.ts:119; /tmp/esbuild-cutover-independent-final-units.log; /tmp/esbuild-cutover-packed.log",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: shared live stock Node differential for all verified versions, async/lifecycle and CLI; all Sync methods named loud on both routes",
+      "source": "acceptance",
+      "trace": "I2+I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-upstream-twin.spec.ts:152; tests/browser-unit/esbuild-upstream-twin.spec.ts:243; tests/browser-unit/fixtures/esbuild-upstream-api.cjs:1; /tmp/esbuild-coi-cutover-composed.log",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: Vite 7 build/dev/HMR/optimize, Vite 8 existing lanes, Vite 6 real CLI and no COI gate; starter unchanged",
+      "source": "acceptance",
+      "trace": "I2+I6",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-vite-contract.spec.ts:1010; tests/browser-unit/vite6-upstream-cli.spec.ts:14; tests/e2e/m7-preview-sw.spec.ts:101; tests/e2e/vite7-build-preview.spec.ts:46; /tmp/esbuild-coi-vite7-final-probe.log; /tmp/esbuild-coi-vite-migrated-2.log; /tmp/esbuild-cutover-vite7-hmr-build.log",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: no-COI behavior, exact ADR-0375 bytes, named incompatible range/pin refusals and explicit host policy",
+      "source": "acceptance",
+      "trace": "I4+ADR-0375",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2376; packages/npm-client/src/installer-esbuild-upstream.test.ts:205; packages/workbench/src/glue/dep-snapshot-runtime-tier.test.ts:164; /tmp/esbuild-no-coi-byte-proof.log",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: version-list/archive-only inputs, ordinary browser-unit CI, accurate compat and retained adaptation classification",
+      "source": "acceptance",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tools/shadow-registry/esbuild-upstream-verified.json:1; tests/browser-unit/esbuild-upstream-twin.spec.ts:21; .github/workflows/ci.yml:280; tools/compat-matrix-generator/esbuild-matrix.js:118; docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md:26",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: identical stock API/lifecycle script on Node and Chromium",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/esbuild-upstream-api.cjs:1; tests/browser-unit/esbuild-upstream-twin.spec.ts:155; tests/browser-unit/esbuild-upstream-twin.spec.ts:238; /tmp/esbuild-coi-cutover-composed.log",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: installed local npx with pipe/TTY/file stdout equals live Node outputs and exit",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-upstream-twin.spec.ts:51; tests/browser-unit/esbuild-upstream-twin.spec.ts:268; /tmp/esbuild-coi-cutover-composed.log",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: preserve ten contract and seven policy groups with stock COI oracle; no-COI/native fixtures unchanged",
+      "source": "acceptance",
+      "trace": "I2+I4+ADR-0375",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/esbuild-stock-node-oracle.ts:18; tests/browser-unit/esbuild-vite-contract.spec.ts:1124; tools/shadow-registry/src/esbuild-contract-probe.ts:135; tools/shadow-registry/src/esbuild-contract-probe.ts:233; /tmp/esbuild-coi-vite7-final-probe.log; /tmp/esbuild-no-coi-byte-proof.log",
+      "note": ""
+    },
+    {
+      "row": "Fault: sibling host-policy drift, instant snapshot and fresh install both select stock",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-upstream-host.spec.ts:4; tests/browser-unit/esbuild-upstream-twin.spec.ts:107; /tmp/esbuild-coi-cutover-composed.log",
+      "note": ""
+    },
+    {
+      "row": "Fault: legacy binding in COI fails before generated runtime import",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/node-entry-runtime-preparation.contract.test.ts:14; /tmp/esbuild-cutover-independent-final-units.log",
+      "note": ""
+    },
+    {
+      "row": "Fault: current policy saved tree reopens offline and wrong-tier claims remain untrusted",
+      "source": "fault-matrix",
+      "trace": "I1+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-vite-contract.spec.ts:1246; packages/workbench/src/glue/dep-snapshot-runtime-tier.test.ts:234; /tmp/esbuild-coi-vite7-final-probe.log",
+      "note": ""
+    },
+    {
+      "row": "Fault: unsupported no-COI pin refuses before destination mutation",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-runtime-tier.test.ts:164; packages/npm-client/src/installer-esbuild-upstream.test.ts:227",
+      "note": ""
+    },
+    {
+      "row": "ADR-0543 runtimeTier API preserves omitted-tier legacy behavior and explicit COI rejection before activation",
+      "source": "public-api",
+      "trace": "ADR-0543",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/runtime/entry-preparation.ts:16; tools/shadow-registry/src/runtime/runtime-adapters.ts:145; packages/workbench/src/workers/node-entry-runtime-preparation.contract.test.ts:14; /tmp/esbuild-cutover-independent-final-units.log",
+      "note": ""
+    },
+    {
+      "row": "PR-4 exact compiler asset refresh keeps byte count and exact-only exception; file-size ratchet tightens",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:104; tools/checks/file-size.mjs:80; /tmp/esbuild-cutover-retirement-final.log; /tmp/esbuild-cutover-packed.log",
+      "note": ""
+    },
+    {
+      "row": "CJS strict-first-line stock positions match Node without stack-slot ownership; other source shapes preserve explicit baseline +2",
+      "source": "public-api",
+      "trace": "ADR-0450",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/cjs-factory.ts:6; packages/runtime-js/src/module-loader/cjs-stack-positions.test.ts:28; /tmp/esbuild-cutover-independent-verify.log; /tmp/esbuild-cjs-browser-final.log",
+      "note": "PR-4 accepted: original two generic Node comparisons retained as it.fails, documented outside-goal preexisting gap; stock10+7 error fields unchanged. DEC-5 critic required native Function body validation; committed body/filename escape REDs and independent tests pass."
+    },
+    {
+      "row": "Resolved initial CJS finding 1",
+      "source": "public-api",
+      "trace": "ADR-0450 + named CJS baseline at BASE10504415",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/cjs-factory.ts:6; packages/runtime-js/src/module-loader/cjs-stack-boundary.test.ts:48; /tmp/esbuild-cutover-independent-verify.log",
+      "note": "FIXED @5a370da8. Original finding: Каждая CJS-компиляция теперь требует переопределяемый Error.prepareStackTrace. Гость закрепляет свой hook через Object.defineProperty(..., {configurable:false}), затем обычный require соседнего модуля падает vm.runInThisContext.frozenError; до изменения работал. Fault class: scope widening / global stack-slot ownership; baseline CJS loading regressed. Сохранить рабочий require и новую коррекцию координат; добавить регрессионный carrier. Original evidence: Independent scratch /tmp/esbuild-cutover-review-scratch from git archive HEAD. review-entry.cjs: Object.defineProperty(Error, 'prepareStackTrace', { value: () => 'owned', configurable: false, writable: true }); module.exports = require('./dep.cjs'); dep.cjs exports42. node -e require(entry) => Node v24.16.0 value42 (/tmp/esbuild-review-frozen-native.log). node --import tsx review-probe.ts at HEAD => NotImplementedError feature vm.runInThisContext.frozenError (/tmp/esbuild-review-frozen-head.log). Same probe with only cjs.ts restored from BASE => return42 (/tmp/esbuild-review-frozen-base.log). Main tree remained clean/frozen. Independent committed tests: 3 files/8 cases PASS (/tmp/esbuild-cutover-independent-final-units.log); they do not cover this regression. Verify: original unchanged probes now return42 (/tmp/esbuild-review-frozen-verify.log), raw /app/entry.cjs,line3,column29 (/tmp/esbuild-review-hook-origin-verify.log), equal BASE; independent8files/63tests PASS incl2 explicit expected-failure baseline cases. Chromium strict/frozen/filename/escape and stockVite suites pass in /tmp/esbuild-cjs-browser-final.log."
+    },
+    {
+      "row": "Resolved initial CJS finding 2",
+      "source": "public-api",
+      "trace": "ADR-0450 + named CJS baseline at BASE10504415",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/cjs-factory.ts:6; packages/runtime-js/src/module-loader/cjs-stack-boundary.test.ts:48; /tmp/esbuild-cutover-independent-verify.log",
+      "note": "FIXED @5a370da8. Original finding: Уже скомпилированный CJS frame теряет исходный filename после defineProperty гостевого stack hook: getScriptNameOrSourceURL возвращает rifty-vm://-2/0/%2Fapp%2Fentry.cjs вместо прежнего /app/entry.cjs. Fault class: provenance leakage after stack-owner bypass. Fallback только при следующей компиляции этого не исправляет. Прежний line+2 у такого hook — baseline limitation; encoded filename — новая регрессия. Original evidence: Independent source /tmp/esbuild-cutover-review-scratch/review-hook-origin.cjs: function capture() { return new Error('position').stack; }; Object.defineProperty(Error, 'prepareStackTrace', { configurable: false, writable: true, value: (_, sites) => ({ file: sites[0].getScriptNameOrSourceURL(), line: sites[0].getLineNumber(), column: sites[0].getColumnNumber() }) }); module.exports = capture(); Node24.16.0 reports physical ordinary filename,line1,column29 (/tmp/esbuild-review-hook-origin-native.log). node --import tsx review-hook-origin.ts with BASE cjs.ts => /app/entry.cjs,line3,column29 (/tmp/esbuild-review-hook-origin-base.log); same HEAD => rifty-vm://-2/0/%2Fapp%2Fentry.cjs,line3,column29 (/tmp/esbuild-review-hook-origin-head.log). No second require: initial compile succeeds, hook overwrites projection before formatting. Verify: original unchanged probes now return42 (/tmp/esbuild-review-frozen-verify.log), raw /app/entry.cjs,line3,column29 (/tmp/esbuild-review-hook-origin-verify.log), equal BASE; independent8files/63tests PASS incl2 explicit expected-failure baseline cases. Chromium strict/frozen/filename/escape and stockVite suites pass in /tmp/esbuild-cjs-browser-final.log."
+    },
+    {
+      "row": "Current async explicit exit preserves native status and empty stderr without browser internal-signal report",
+      "source": "public-api",
+      "trace": "ADR-0445",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:103; tests/browser-unit/node-async-exit.spec.ts:5; /tmp/esbuild-async-exit-red.log; /tmp/esbuild-cutover-independent-verify.log; /tmp/esbuild-async-exit-browser-green.log",
+      "note": ""
+    },
+    {
+      "row": "No-COI incompatible-runtime snapshot keeps prior typed mismatch before projection; source candidate preserves baseline phase",
+      "source": "fault-matrix",
+      "trace": "I4 + ADR-0543",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-snapshot-application.ts:35; packages/workbench/src/workers/owner-package-state.ts:651; /tmp/esbuild-snapshot-kind-red.log; /tmp/esbuild-snapshot-kind-green.log; /tmp/esbuild-cutover-independent-verify.log",
+      "note": ""
+    },
+    {
+      "row": "Full packed SDK/Workbench/agent/snapshot/scoped-preview journeys preserve real runtime graph",
+      "source": "acceptance",
+      "trace": "I1+I2+I4",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:953; /tmp/esbuild-packed-final-green.log",
+      "note": "16first-party+178external tarballs; earlier15+73 evidence was surface-only and is not substituted for this full run."
+    },
+    {
+      "row": "All three install-stamp reuse predicates honor explicit host tier, preserve omitted legacy default and lockhash refusal",
+      "source": "public-api",
+      "trace": "I1+I4+ADR-0543",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/install-stamp.ts:438; packages/workbench/src/glue/install-stamp-tier-predicates.test.ts:15; /tmp/esbuild-stamp-predicates-red.log; /tmp/esbuild-round2-independent-verify.log; /tmp/esbuild-ci-round2-browser.log",
+      "note": "Independent83tests include43old stamp tests+2selected-tier tests+38namespace tests. Both physical OPFS fixtures selectcoi; five kill/restore cases PASS without weakened bytes/rollback checks."
+    },
+    {
+      "row": "Virtual root stat/exists preserve baseline readability at nested mount collision while public listings still refuse",
+      "source": "public-api",
+      "trace": "I3+ADR-0540+ADR-0531",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/project-terminal-namespace.ts:203; packages/workbench/src/workers/project-terminal-namespace.test.ts:388; /tmp/esbuild-root-stat-red.log; /tmp/esbuild-round2-independent-verify.log; /tmp/esbuild-ci-round2-browser.log",
+      "note": "One existing merged-entry calculation factored privately; no additional state. Public readdir collision guards remain; stat/statOrNull/exists real-regression carrier and physical project-root teardown PASS."
+    },
+    {
+      "row": "PR-4 saved COI faults use actual lazy stock service and live Node oracle; no-COI adapter failures retained",
+      "source": "frozen-artifact",
+      "trace": "I1+I2+I4+ADR-0543",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/esbuild-saved-node-oracle.ts:7; tests/browser-unit/saved-project-adapter-use.spec.ts:18; /tmp/esbuild-round2-independent-native.log; /tmp/esbuild-ci-round2-browser.log; /tmp/esbuild-legacy-adapter-preserved.log",
+      "note": "Original criterion required generated adapter failure at require. Stock Node reference independently returns require success, corruptpayload transform exit1/service-stopped, missing/protocol-invalidlock transform exit0/exactcode. Same script and archive run both hosts; native client error/return+exit compared, generated module requests remain zero; noCOI old2cases unchangedPASS."
+    },
+    {
+      "row": "PR-4 historical network measurement retains exact0.28.0 artifact and live archive criterion with fixture-only override",
+      "source": "frozen-artifact",
+      "trace": "I1+I4+ADR-0375",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-network-measurement.spec.ts:154; /tmp/esbuild-ci-round2-browser.log",
+      "note": "Only fixture manifest gains esbuild0.28.0 override. Committed historical measurement and response/hash/hostWASM criteria unchanged; production starter and requested-range admission unchanged."
+    },
+    {
+      "row": "Vite6 native ANSI reachability assertion uses same control-code normalization as guest, no error/status or timeout weakening",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/browser-unit/vite6-upstream-cli.spec.ts:66; /tmp/esbuild-ci-round2-browser.log",
+      "note": "FORCE_COLOR=1 executed carrierPASS. Oracle retains own CLI build marker, missing-index error and exit1; version remains notverified."
+    },
+    {
+      "row": "Unchanged OPFS 26811-file performance and durability baseline passes isolated recheck after old CI failure",
+      "source": "acceptance",
+      "trace": "Named baseline OPFS parallel-drain #256 I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-parallel-drain.spec.ts:136; /tmp/esbuild-opfs-performance-isolated.log",
+      "note": "No code/criterion change: faithful40659ms/product11728ms, raw3.466857x; exact trees and pendingflush boundsPASS. Not a substitute for final Linux HEAD CI."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}
