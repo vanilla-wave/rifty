@@ -3,10 +3,11 @@ import { bootOwner, closeOwner, execLine, gotoHarness, readOwnerFile } from './f
 
 test('COI instant Vite snapshot runs upstream esbuild without loading the generated runtime', async ({
   page,
+  context,
 }) => {
   test.fail(true, 'COI snapshot still restores the legacy generated-runtime recipe');
   const generatedRequests: string[] = [];
-  page.on('request', (request) => {
+  context.on('request', (request) => {
     if (request.url().includes('/generated/esbuild-runtime.js'))
       generatedRequests.push(request.url());
   });

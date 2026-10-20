@@ -11,6 +11,31 @@ afterEach(() => {
 });
 
 describe('node-entry runtime preparation', () => {
+  it.fails(
+    'physical COI entry refuses a legacy binding before reading its generated runtime',
+    async () => {
+      const fs = new MemoryFsSync();
+      const read = vi.spyOn(fs, 'readFileBytesSync');
+      await expect(
+        prepareNodeEntryRuntime({
+          kind: 'eval',
+          root: '/workspace',
+          fs,
+          runtimeBindings: [
+            {
+              adapterId: 'rifty.runtime-adapter.esbuild.v1',
+              packagePath: '/workspace/node_modules/esbuild-wasm',
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({
+        name: 'NotImplementedError',
+        feature: 'runtime-adapter.esbuild.coi',
+      });
+      expect(read).not.toHaveBeenCalled();
+    },
+  );
+
   it('does not read adapter files for an admitted empty binding set', async () => {
     const fs = new MemoryFsSync();
     const read = vi.spyOn(fs, 'readFileBytesSync');

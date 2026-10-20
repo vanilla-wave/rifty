@@ -1,48 +1,96 @@
 ---
 area: npm-client
 status: draft
-title: In COI, an `esbuild@<range>` request installs and runs unmodified upstream `esbuild-wasm` of the resolved version through its own Node entry, proven by one version-agnostic differential suite
+title: Select stock esbuild Node twins throughout the COI Workbench host
 created: 2026-10-16
-why: today `esbuild` is one exact recipe (0.28.0) over a generated, 13-patch browser-client runtime; every other version is refused and adding one means re-porting anchors, re-entering hashes and re-capturing a native oracle across 66 non-doc files
+why: installer/runtime prerequisites pass but the physical host still restores and activates the legacy recipe
 epic: esbuild-upstream-twin
-blocked_by: [npm-client/esbuild-tier-materialization]
-sources: [docs/backlog/npm-client/reference/esbuild-upstream-twin-refine-evidence-2026-10-16.md, ADR-0226, ADR-0371, ADR-0361, ADR-0316, ADR-0375, ADR-0384, docs/public/compat/esbuild-js-api.md]
-code: [tools/shadow-registry/src/internal/catalog-source.ts, tools/shadow-registry/src/runtime/runtime-adapters.ts, tools/shadow-registry/src/runtime/vite-esbuild-runtime.ts, tools/shadow-registry/tools/generate-esbuild-runtime.ts, packages/npm-client/src/internal/shadow/admission.ts, tools/compat-matrix-generator/cli.js]
+sources: [ADR-0543, ADR-0226, ADR-0371, ADR-0361, ADR-0316, ADR-0375, ADR-0384]
+code: [packages/workbench/src/workers/owner-package-state.ts, packages/workbench/src/glue/npm-shell-command.ts, tools/shadow-registry/src/runtime/runtime-adapters.ts, tools/shadow-registry/src/runtime/entry-preparation.ts, tools/compat-matrix-generator/cli.js]
 ---
 
 ## Context
 
-Finding (2026-10-16, evidence file). With the four Node-surface gaps
-shimmed in-guest (layers f1-f5), unmodified `esbuild-wasm@0.28.0` gives
-Node-identical transform, stdin-resolve build, `outfile` build and CLI
-`--bundle` output under COI. Under no-COI the same-realm child refuses
-`node_modules` (`child_process.same-realm.require`), so there the generated
-client stays (goal I4). Cost of today's per-version route: evidence §Today's
-cost.
+Range install, stock Node stdio/child behavior, local npx and current-catalog
+snapshot projection are accepted prerequisites. Physical Workbench still uses
+the default no-COI policy; runtime-adapters statically imports the generated
+client. The new host selects existing policies at their composition points.
 
-Scope from the goal: I1 (install shape: upstream bytes, no generated client in
-COI), I2 (async API, lifecycle, CLI with pipe/TTY/file stdout = esbuild-wasm
-on Node 24 for the verified set: the latest 0.21.x, 0.25.x and 0.28.x at
-pickup; `*Sync` loud on both routes; Vite 7.3.6 lanes), I4 (no-COI resolution
-and client as on main, other versions loud naming the tier, declared
-`platform-gap` row), I5 (version-agnostic suite; compat page verified /
-"⚠️ not verified"), I6 (COI Vite gate removed; Vite 7.3.6/8.0.16 verified,
-others "⚠️ not verified"). Keeps `honest-substitution-signals` I2 (facade
-`types`) true for every installed version; the ADR-0226 D4
-validation-before-gap loss for COI `*Sync` is named in the DEC-2 ADR (goal
-§Decisions). The Vite 7.3.6 starter pin (`vite-project-policy.ts:11-12`)
-stays; its esbuild-runtime reason and `vite-version.contract.test.ts` anchor
-re-point here (map §Open questions).
+## Acceptance
 
-## Question
+1. Physical COI owner selects COI for fresh/terminal install, snapshot
+   restore/application and install claims. The scenario's three ranges resolve
+   to upstream 0.21.5/0.25.12/0.28.2, complete upstream trees unchanged; saved
+   trees reopen offline. Snapshot pins, including 0.28.0, stay unchanged. → I1
+2. No generated esbuild module loads in COI, including an instant Vite snapshot
+   and direct Node entry. Legacy binding activation is refused before import;
+   no silent fallback. No-COI loads its existing generated client on demand. → I1/I4
+3. All verified versions run the same async/lifecycle/CLI pipe/TTY/file suite
+   against stock esbuild-wasm on Node 24. Every Sync method remains named loud
+   on both upstream routes. Existing generated-client checks remain the
+   no-COI authority; COI assertions use the live stock oracle. → I2/I5
+4. Vite 7.3.6 build/dev/HMR/optimize and Vite 8.0.16 existing lanes pass;
+   Vite 6.4.4 `npm install && npx vite build` reaches its real CLI. No COI
+   version gate; other versions remain not verified. Starter pin unchanged. → I2/I6
+5. No-COI install/build and ADR-0375 exact fixture bytes stay unchanged;
+   incompatible ranges/pins name no-COI. Both hosts pass their explicit policy
+   to the accepted installer/snapshot/claim owners. → I4; ADR-0375
+6. CI executes the version-agnostic differential; only a version string and
+   original archive are per-version inputs. Compat names verified versions,
+   other admitted versions not verified, Sync partial; adaptation inventory
+   distinguishes retired COI patches and retained no-COI platform debt. → I4/I5/I6
 
-Which install shape and tier split deliver I1/I4 with the fewest mechanisms
-(map §Open questions: redirect vs thin facade vs Node's npm-alias identity —
-`require('esbuild/package.json').name`; per-tier resolution), which current
-contract rows map onto the esbuild-wasm-on-Node oracle (rows today emulating
-native — `native-target-errno`, `native-validation-provenance` — change
-expected output), what the older Node entries need (map §Open questions,
-0.21.x), whether the Vite install patches and the 7.3.6-copied CLI grammar
-hold for Vite 5/6 (map §Open questions, I6), and which surfaces the first
-differential run shows as loud gaps?
-Settled at PICKUP with the DEC-2 ADR named in the goal.
+## Reference contract
+
+Node 24.16.0 + unmodified esbuild-wasm 0.21.5/0.25.12/0.28.2; browser carrier
+`esbuild-upstream-twin.spec.ts` executes the identical source/CLI under both
+hosts. Raw package versions already pass; esbuild alias remains expected RED.
+`esbuild-upstream-host.spec.ts` proves instant snapshot policy and records
+context-wide generated-module requests. `vite6-upstream-cli.spec.ts` uses real
+registry archives and Node's own build-action error for a missing index.html;
+this proves CLI reachability, not an additional verified Vite lane.
+
+## Parity cases
+
+1. Shared stock API: initialize/reinitialize, transform + diagnostics, build,
+   metadata, plugin hooks, context rebuild/cancel/watch/serve, dispose,
+   stop/restart. Same script on Node and Chromium, all verified versions. → I2
+2. Real local npx CLI with TTY/pipe/file: compare output/file/exit to Node;
+   Node 24 file-stdout quirk preserved by generic Writable semantics. → I2
+3. Existing Vite config graph, dependency optimizer/prebundle, module identity,
+   large transform and validation rows move to stock wasm Node oracle; existing
+   no-COI/native fixtures remain intact. → I2/I4; ADR-0375
+
+## Fault matrix
+
+| Boundary / axis | Outcome / carrier | Trace |
+|---|---|---|
+| Host policy / sibling drift | instant snapshot and fresh install both select stock entry | I1 |
+| Runtime activation / provenance lie | legacy binding in COI fails before generated import | I1 |
+| Saved tree / offline source | current policy claim reopens without registry; wrong-tier claim is not trusted | I1/I4 |
+| No-COI install / unsupported pin | named tier refusal; prior files preserved | I4 |
+
+Accepted snapshot preflight, package acquisition FIFO and stamp authority keep
+ownership. No new cache, lock, ledger or transport.
+
+## Challenge
+
+challenge: 2026-10-20 — clear; prerequisite carriers settle the earlier Node
+and install questions. Reuse explicit runtimeTier, accepted snapshot projection
+and bound claim authority. A facade loading either runtime conditionally would
+violate I1; an admission list would violate I5/I6. Goal's checked premise and
+rejected routes apply unchanged.
+
+## Out of scope
+
+Real Sync execution, no-COI stock child support, catalog migration, additional
+verified Vite lanes, retirement of the starter pin. Their existing goal
+boundaries remain. No change to ADR-0375 fixture pins or byte oracle.
+
+## Decisions
+
+- 2026-10-20 — ADR-0543 owns host policy and stock oracle; DEC-2 corrections
+  name the COI supersession of ADR-0226/0316/0371/0361 and retained no-COI debt.
+- 2026-10-20 — PR-4: COI's generated publication/native-error assertions
+  contradict the chosen stock oracle. Replace with live stock output/module
+  identity, preserve all scenario rows and no-COI native fixtures.
