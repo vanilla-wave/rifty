@@ -1,5 +1,9 @@
 # Changelog
 
+- Preserve immediate fork disconnect and send ordering; match Node24 parent-disconnect terminal events.
+
+- Transport complete numeric Stats fields from VFS; upstream no-COI esbuild can resolve build files.
+
 ## [Unreleased]
 
 - Early Fetch preload no longer caches the fallback `node:process`: child IPC, stdio and Worker construction observe the seeded child process. JS Fetch classes serialize own enumerable properties through advanced IPC as Node (ADR-0541).
@@ -11,6 +15,9 @@
 - Native Node embedding no longer stays alive after importing the immediate scheduler: its MessagePort references follow pending immediates; cold QuickJS preload exits normally.
 
 - Node guest `Request`/`Response`/`Headers`/`FormData` now use undici 7.25.0 (Node 24.16.0): Hono header retention, multipart/File bodies, clone/tee, locking/bodyUsed and detached reads match live Node. One network stream/ref replaces native Body wrappers; unsupported browser wire headers/dispatchers/opaque responses reject explicitly. VM headers preserve semantic Proxy identity. ADR-0541.
+- Wait for child bootstrap readiness before transferring init ports; dynamic host wrappers retain startup messages.
+
+- No-COI Node children use isolated Workers and live owner FS via SW; support child ref/unref, transported stdin Buffers, spec stdio write callbacks and async fs.read(0) (ADR-0539).
 
 - `os.homedir()` keeps an explicitly empty `HOME` (`''`), as Node; `os.tmpdir()` still falls through empty `TMPDIR`/`TMP`/`TEMP`.
 

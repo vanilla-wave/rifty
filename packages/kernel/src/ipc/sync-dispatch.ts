@@ -316,40 +316,9 @@ export class SyncRpcDispatcher {
       this.writeError(ring, err, '<decodeRequest>');
       return;
     }
-    const registration = this.handlers.get(req.method);
-    if (!registration) {
-      this.writeError(
-        ring,
-        Object.assign(new Error(`SyncRpcDispatcher: no handler for '${req.method}'`), {
-          code: 'ERPCNOHANDLER',
-        }),
-        req.method,
-      );
-      return;
-    }
-    let payload: unknown = req.payload;
-    if (isBinaryRequest(req)) {
-      if (registration.decodeBinaryRequest === undefined) {
-        this.writeError(
-          ring,
-          Object.assign(
-            new TypeError(`SyncRpcDispatcher: '${req.method}' does not accept binary requests`),
-            { code: 'ERPCBINARYUNSUPPORTED' },
-          ),
-          req.method,
-        );
-        return;
-      }
-      try {
-        payload = registration.decodeBinaryRequest(req.payload);
-      } catch (err) {
-        this.writeError(ring, err, req.method);
-        return;
-      }
-    }
     let result: unknown;
     try {
-      result = registration.handler(payload, this.callerContexts.get(ring) ?? {});
+      result = this.dispatch(req, this.callerContexts.get(ring) ?? {});
     } catch (err) {
       this.writeError(ring, err, req.method);
       return;
@@ -362,6 +331,27 @@ export class SyncRpcDispatcher {
       return;
     }
     this.writeValue(ring, result, req.method);
+  }
+
+  /** Semantic dispatch shared by SAB and no-COI SW transports (ADR-0539). */
+  dispatch(req: DecodedSyncRpcRequest, caller: SyncRpcCallerContext = {}): unknown {
+    const registration = this.handlers.get(req.method);
+    if (!registration) {
+      throw Object.assign(new Error(`SyncRpcDispatcher: no handler for '${req.method}'`), {
+        code: 'ERPCNOHANDLER',
+      });
+    }
+    let payload: unknown = req.payload;
+    if (isBinaryRequest(req)) {
+      if (registration.decodeBinaryRequest === undefined) {
+        throw Object.assign(
+          new TypeError(`SyncRpcDispatcher: '${req.method}' does not accept binary requests`),
+          { code: 'ERPCBINARYUNSUPPORTED' },
+        );
+      }
+      payload = registration.decodeBinaryRequest(req.payload);
+    }
+    return registration.handler(payload, caller);
   }
 
   private writeValue(ring: SabRing, value: unknown, method: string): void {

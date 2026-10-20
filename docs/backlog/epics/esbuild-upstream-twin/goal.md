@@ -20,10 +20,10 @@ differential suite over a declared verified set; other admitted versions are
 labelled "not verified", never refused. Adding a verified version is a list
 entry plus a suite run. The platform gains the Node behavior the stock entry
 needs (stdio write callbacks, `ChildProcess#ref/unref`, fs on fds 0-2, full
-`fs.Stats`), which every Node CLI uses. Without COI the stock entry hits a
-platform wall (same-realm children cannot load `node_modules`); there today's
-generated 0.28.0 client stays as declared `platform-gap` debt until no-COI
-child processes land. Faithful-runtime payoff: the 13 patches and their
+`fs.Stats`), which every Node CLI uses. No-COI now runs the upstream 0.28.0
+Node client through isolated SW-backed children (ADR-0539, PR #380), with
+exact admission retained under I4. The remaining generated client belongs to
+this COI goal. Faithful-runtime payoff: the 13 patches and their
 per-version anchors leave the COI path; upstream bytes run where rifty used to
 rewrite them. With the client gone, the COI Vite version gate that existed only
 to start it goes too: any installed Vite runs, Vite 7.3.6 and 8.0.16
@@ -46,7 +46,7 @@ COI playground unless stated.
    `NotImplementedError` and exits — no hang.
 4. The Vite 7.3.6 starter: `npm run build`, `vite dev` (HMR), `vite optimize`
    work as today, now through the stock entry.
-5. No-COI SDK host (ADR-0375): installs and builds exactly as on main — the
+5. No-COI SDK host with active rifty SW (ADR-0539): installs and builds as on main — the
    Vite 7.3.6 build resolves `esbuild@0.28.0` and emits today's bytes; a
    project requesting `esbuild@^0.25.0`, or a lockfile pinning `0.28.2`, fails
    with a named `NotImplementedError` naming the no-COI tier.
@@ -96,12 +96,11 @@ COI playground unless stated.
    read/fstat on fd 0 and write on fds 1/2 behave as Node (incl.
    `fs.readFileSync(0)`); `stat`/`lstat`/`fstat` return every numeric
    `fs.Stats` field Node returns.
-4. I4. In no-COI, esbuild requests resolve and behave as on main — a range
-   admitting 0.28.0 gets 0.28.0 and the generated client (ADR-0375 Vite 7.3.6
-   build bytes); any other request or locked version fails with a named
-   `NotImplementedError` naming the no-COI tier; the retained generated client
-   is a declared `platform-gap` adaptation whose kill condition is
-   `epics/no-coi-child-processes`.
+4. I4. In no-COI, a range admitting 0.28.0 gets 0.28.0 through the upstream
+   Node client and required rifty SW (ADR-0539, same Vite 7.3.6 build bytes);
+   any other request or locked version fails with a named
+   `NotImplementedError` naming the no-COI tier. The no-COI generated client
+   was retired by PR #380; the shared COI client remains this goal's obligation.
 5. I5. A verified version's only per-version inputs are its version string and
    upstream tarballs — the oracle is produced by running the same suite on
    Node; no hand-entered hash, patch anchor, catalog recipe or per-version
@@ -145,6 +144,8 @@ direction (f1-f5 show the four gaps are the minimal set).
 
 ## Decisions
 
+- amend: 2026-10-20 — user: «В этом ПР убрать legacy из no-COI; COI-клиент оставить до отдельной цели». PR #380 completes the no-COI dependency (ADR-0539; `runtime-js/reference/no-coi-child-processes-final-green.json`); I4 now records upstream Node + SW. Exact 0.28.0 admission, named no-COI-tier refusal for other requests/locks, and every COI obligation remain.
+
 - tier: works — replaces a refused install and a rewritten client with Node
   behavior; no crash/fault-injection promise (2026-10-16).
 - 2026-10-16 — user: «Штатный esbuild-wasm (Recommended)» — `esbuild@R` →
@@ -169,7 +170,7 @@ direction (f1-f5 show the four gaps are the minimal set).
   no-COI остаётся нынешний esbuild 0.28.0 с патчами как объявленный долг;
   kill = child-процессы в no-COI (отдельная цель). Мульти-версии сразу —
   только в COI. Патчи умирают позже.») — no-COI keeps the generated 0.28.0
-  client as declared debt until the separate goal `epics/no-coi-child-processes`
+  client as declared debt until the separate goal `no-coi-child-processes` (completed: ADR-0539)
   (seeded draft; FIT decides feasibility, infeasible → back to the user). Agent reading of
   «остаётся нынешний»: no-COI resolution stays main's (0.28.0 for admitting
   ranges), so one manifest may resolve 0.28.2 in COI and 0.28.0 in no-COI, and
@@ -216,7 +217,7 @@ direction (f1-f5 show the four gaps are the minimal set).
   `substitution-environment`/`handle-mapping`, kill none; this evidence makes
   the 7 Node-entry stand-in ids `platform-gap` under `fault-classes.md`
   §Guest-package adaptations (COI: kill = this goal's cutover; no-COI client:
-  kill = `epics/no-coi-child-processes`); the 5 `gate-*` ids and
+  kill = `no-coi-child-processes` (completed: ADR-0539)); the 5 `gate-*` ids and
   `native-target-errno` stay `substitution-environment` with kill = the
   cutover in COI; the Vite version-gate row's COI kill = I6 — rows corrected
   in this PR.

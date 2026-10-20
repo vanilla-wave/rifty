@@ -69,7 +69,7 @@ export const ALLOWED_COORDINATION_SOURCES = Object.freeze([
   'packages/workbench/src/glue/vfs-snapshot-port.ts',
   'packages/workbench/src/workbench/service-worker-control.ts',
   'tools/shadow-registry/src/runtime/generated/esbuild-runtime.js',
-  'packages/workbench/src/workers/no-coi-toolchain-worker.ts',
+  'packages/workbench/src/workers/no-coi-toolchain-owner.ts',
 ]);
 
 const SELF = new Set([
@@ -100,7 +100,7 @@ const WORKBENCH_COMPILER_OUTPUTS = Object.freeze({
   },
   'typescript-worker.js': {
     bytes: 10_022_694,
-    sha256: '76c918ebc977a62427f0ef565ead0644859c6a728eb4bb5c71386083e267edf7',
+    sha256: 'dfdb491807cbb35df7d30759775c5ee2e6cefe04a75d5c19818306658285fe2d',
   },
 });
 const WORKBENCH_WASM_OUTPUTS = Object.freeze({

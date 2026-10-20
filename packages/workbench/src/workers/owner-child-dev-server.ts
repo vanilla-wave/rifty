@@ -11,7 +11,7 @@ import {
   observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
 import type { NodeEntryRuntimeBinding } from '@riftydev/runtime-js/builtins/node-entry-url';
-import { preparePackageServerEnvironment } from '@riftydev/shadow-registry/runtime';
+import { preparePackageServerEnvironment } from '@riftydev/shadow-registry/runtime/common';
 import type { ProcessExit } from '@riftydev/shell';
 import {
   type ChildTerminalContext,

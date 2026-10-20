@@ -180,8 +180,8 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
 
 ## Bundle measurement (2026-10-20)
 
-Production `pnpm build:playground`, baseline carrier 2a6a30728 (no product
-edits) versus the corrected implementation in this PR. Individual emitted JS assets, not
+Production `pnpm build:playground`, baseline main 7f8d0e8d7 in an isolated
+checkout versus this PR after integrating that same main. Individual emitted JS assets, not
 transitive download totals. Byte lengths; gzip uses Python `gzip.compress`
 (level 9, mtime 0) on both builds. No new size limit. Kernel growth includes
 explicit activation of the existing builtin registry, required by production
@@ -189,11 +189,11 @@ bootstrap; generated undici class output is 107 KB.
 
 | Asset prefix | Before bytes | After bytes | Delta bytes | Before gzip | After gzip | Delta gzip |
 |---|---:|---:|---:|---:|---:|---:|
-| node-entry-bootstrap | 874375 | 878897 | +4522 | 263274 | 264818 | +1544 |
-| quickjs-kernel-worker-host | 198549 | 664990 | +466441 | 56745 | 197660 | +140915 |
-| workbench-owner-bootstrap | 1206219 | 1212112 | +5893 | 354672 | 356729 | +2057 |
-| dev-server-child-bootstrap | 759804 | 764193 | +4389 | 230274 | 231704 | +1430 |
-| ts-lsp-worker-entry | 3842025 | 3848134 | +6109 | 1095809 | 1097923 | +2114 |
+| node-entry-bootstrap | 880885 | 885407 | +4522 | 265682 | 267225 | +1543 |
+| quickjs-kernel-worker-host | 199125 | 671590 | +472465 | 56947 | 200097 | +143150 |
+| workbench-owner-bootstrap | 1207843 | 1213846 | +6003 | 355276 | 357348 | +2072 |
+| dev-server-child-bootstrap | 766394 | 770785 | +4391 | 232678 | 234227 | +1549 |
+| ts-lsp-worker-entry | 3844600 | 3850707 | +6107 | 1096545 | 1098762 | +2217 |
 
 Reproduce: match each prefix in `apps/playground/dist/assets/*.js`, read
 its bytes and `len(gzip.compress(bytes, mtime=0))` on each revision.

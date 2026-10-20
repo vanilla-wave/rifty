@@ -1,5 +1,10 @@
 export { registerServiceWorker } from './register.ts';
 export {
+  connectSyncFsBridge,
+  installSyncFsInterceptor,
+  type SyncFsBridge,
+} from './sync-fs-bridge.ts';
+export {
   configurePreviewServiceWorkerUrl,
   previewPrefixFromServiceWorkerUrl,
 } from './preview-configuration.ts';

@@ -152,6 +152,9 @@ export class FSWatcher extends EventEmitter {
 }
 
 interface FileSnapshot {
+  metadata?: import('@riftydev/vfs').StatMetadata;
+  atime?: number;
+  nlink?: number;
   exists: boolean;
   size: number;
   mtime: number;
@@ -163,6 +166,7 @@ function snapshotFile(p: string): FileSnapshot {
   try {
     const s = syncMirror().statSync(p);
     return {
+      ...s,
       exists: true,
       size: s.size ?? 0,
       mtime: s.mtime ?? 0,
@@ -380,6 +384,7 @@ interface PollListener {
  */
 function toStats(snap: FileSnapshot): Stats {
   return new Stats({
+    ...snap,
     isFile: snap.isFile,
     isDirectory: snap.isDirectory,
     size: snap.size,

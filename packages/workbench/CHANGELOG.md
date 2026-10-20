@@ -1,8 +1,16 @@
 # Changelog
 
+- Supply owner-stable Stats metadata for virtual namespace directories, retaining guest-only error paths.
+
+- No-COI install/open/snapshot no longer activate the generated esbuild client; builds use SW children.
+
 ## [Unreleased]
 
 - Asset/registry/owner resource fetches keep host semantics when Node guest Fetch classes are installed (ADR-0541).
+- Keep ancestor Stats available across nested mount collisions; listing/child access still refuses loudly.
+- Remove the unused no-COI adapter wrapper after upstream cutover; shared COI client retained.
+
+- Compose separate no-COI child realms from the toolchain entry; retire invocation children at process completion (ADR-0539).
 
 - A repeated `pty:open` of a live session keeps that session's login-`HOME` provenance; it is dropped when the session's close settles.
 

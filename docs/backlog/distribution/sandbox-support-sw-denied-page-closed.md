@@ -3,7 +3,7 @@ area: distribution
 status: draft
 title: Diagnose page closed during sandbox-support SW-denied probe
 created: 2026-09-24
-why: browser-unit CI went red once on a checkSandboxSupport fault spec with the page closed mid-probe; it does not reproduce locally
+why: repeated browser-unit CI failures close the page mid-probe; the cause remains unknown and local runs pass
 sources: [https://github.com/vanilla-wave/rifty/actions/runs/36020399983]
 code: [tests/browser-unit/sandbox-support.spec.ts, packages/workbench/src/support/check-sandbox-support.ts]
 ---
@@ -47,3 +47,15 @@ poisoned-cache]`, its second probe is `sw-denied`). CI runs: 39172935764
 (`d785f4faf`, :248 + :372); 39179010506 on the same `d785f4faf` passed both.
 3 of the last 6 browser-unit runs. Local Chromium 148.0.7778.96, whole file
 `--repeat-each=8`: 280/280. Still no browser-side cause captured.
+
+Occurrence 2026-10-20 (PR #381, head `42a3d4626`):
+[CI job 118446158154](https://github.com/vanilla-wave/rifty/actions/runs/39366901741/job/118446158154)
+failed only `sw-denied` (:248), test 240 after 2.3s; 339 passed, 1 skipped overall
+(22.3 min). Error unchanged at :79. Artifact 12240234469 contains only
+`test.trace`, no browser-side trace or crash/close cause.
+
+Unchanged-head local command `RIFTY_PLAYGROUND_PORT=5388 pnpm test:browser-unit
+sandbox-support.spec.ts --grep 'SW registration denial differs'`: 1/1 pass
+(4.8s, test 354ms). No speculative product/test change; the browser-close cause
+is still unproven. The separately required main merge does not explain this
+CI run, whose merge base was 3207b33ac.

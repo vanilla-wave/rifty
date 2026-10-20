@@ -33,7 +33,6 @@ const EXPECTED_GENERIC_RUNTIME_ADAPTER_MODULES = Object.freeze([
   'packages/workbench/src/workers/owner-child-dev-server.ts',
   'packages/workbench/src/workers/node-entry-bootstrap.ts',
   'packages/workbench/src/workers/node-entry-runtime-preparation.ts',
-  'packages/workbench/src/workers/workbench-runtime-adapters.ts',
   'packages/workbench/src/workers/package-install-finalizer.ts',
   'packages/workbench/src/workers/package-install-generic-finalizer.ts',
   'packages/workbench/src/workers/preview-producer-bindings.ts',
@@ -67,7 +66,6 @@ const EXPECTED_SASS_FORBIDDEN_SURFACE = Object.freeze({
     'packages/workbench/src/workers/workbench-owner-storage.ts',
   ]),
   esbuildAdapter: Object.freeze([
-    'packages/workbench/src/workers/workbench-runtime-adapters.ts',
     'tools/shadow-registry/src/runtime/esbuild-runtime-fs.ts',
     'tools/shadow-registry/src/runtime/vite-esbuild-runtime.ts',
   ]),
@@ -117,7 +115,7 @@ describe('runtime adapter generic-module boundary', () => {
         ['packages/kernel/src/sass-contract.ts', 'SASS_KERNEL_RUNTIME'],
         ['packages/workbench/src/sass-contract.ts', 'SASS_WORKBENCH_RUNTIME'],
         ['packages/workbench/src/workers/owner-storage.ts', 'SASS_MANAGER_STORE_MESSAGE_PORT'],
-        ['packages/workbench/src/workers/workbench-runtime-adapters.ts', 'SASS_ESBUILD_ADAPTER'],
+        ['tools/shadow-registry/src/runtime/vite-esbuild-runtime.ts', 'SASS_ESBUILD_ADAPTER'],
       ] as const;
       for (const [path, identifier] of injections) write(path, `${identifier};\n`);
 

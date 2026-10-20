@@ -1,8 +1,10 @@
+import type { Encoding } from '@riftydev/io';
 /**
  * `process.stdout`/`process.stderr` writers + TTY control shape for
  * `NodeProcess` (`process.ts`); split out of it by concern.
  */
 import type { KernelStdioOutputWriter } from '@riftydev/kernel';
+import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 
 // --- stdio plumbing (shared by spec + no-spec processes) ---
@@ -16,7 +18,11 @@ function encodeChunk(chunk: string | Uint8Array): Uint8Array {
 type StdioCallback = () => void;
 
 export interface NodeStdioWriter extends EventEmitter {
-  write(chunk: string | Uint8Array): boolean;
+  write(
+    chunk: string | Uint8Array,
+    encodingOrCallback?: string | StdioCallback,
+    callback?: StdioCallback,
+  ): boolean;
   isTTY: boolean;
   fd: number;
   columns?: number;
@@ -95,11 +101,20 @@ export function makeStdioWriter(
   const stream = Object.assign(new EventEmitter(), {
     isTTY,
     fd,
-    write(chunk: string | Uint8Array) {
-      const bytes = encodeChunk(chunk);
+    write(
+      chunk: string | Uint8Array,
+      encodingOrCallback?: string | StdioCallback,
+      callback?: StdioCallback,
+    ) {
+      const bytes =
+        typeof chunk === 'string' && typeof encodingOrCallback === 'string'
+          ? Buffer.from(chunk, encodingOrCallback as Encoding)
+          : encodeChunk(chunk);
       // A passed-in view may share storage with its caller; the semantic writer
       // owns transport, while this adapter preserves Node's non-detaching write.
       port.write(typeof chunk === 'string' ? bytes : new Uint8Array(bytes));
+      const done = typeof encodingOrCallback === 'function' ? encodingOrCallback : callback;
+      if (done !== undefined) queueMicrotask(done);
       return true;
     },
   }) as NodeStdioWriter;

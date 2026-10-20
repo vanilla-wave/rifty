@@ -1,5 +1,7 @@
 # Changelog
 
+- Supply session-local inode/clock/link metadata through memory and OPFS stats for stock Node guests.
+
 ## [Unreleased]
 
 - `VfsErrorCode` gains `EXDEV` (rename across mounts, ADR-0531).

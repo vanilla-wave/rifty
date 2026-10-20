@@ -11,6 +11,8 @@ code: [packages/runtime-js/src/builtins/fs.ts]
 
 ## Context
 
+2026-10-20 — No-COI child work (PR #380) adds async fs.read(0) over the real stdin pipe for upstream esbuild. Other fd-0/1/2 operations and this goal’s COI suite remain this item’s scope.
+
 Finding (2026-10-16, evidence §Node-surface gaps), rifty vs Node 24.16.0:
 
 - `echo hi | node -e "require('fs').read(0,Buffer.alloc(10),0,10,null,(e,n,b)=>console.log('READ',e&&e.code,n,b&&b.toString('utf8',0,n)))"`

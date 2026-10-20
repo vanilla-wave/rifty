@@ -48,3 +48,6 @@ edits; that pin update stays explicit. No ADR is superseded.
   TypeScript worker byte size unchanged, exact SHA re-pinned. Same ceilings.
 - 2026-10-20 — Fetch bootstrap process-cache repair changes the import hash;
   same TypeScript worker byte size and ceilings, exact SHA re-pinned.
+- 2026-10-20 — Merge main7f8d0e8d7 (no-COI child transport): resolve competing
+  TypeScript worker pins from the merged build, not either parent. Byte size
+  unchanged; ceilings and negative probes retained.

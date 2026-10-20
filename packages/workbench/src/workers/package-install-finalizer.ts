@@ -1,7 +1,7 @@
 import {
   type InstalledFilePreparation,
   planToolchainInstallFiles,
-} from '@riftydev/shadow-registry/runtime';
+} from '@riftydev/shadow-registry/runtime/common';
 import { syncMirror } from '@riftydev/vfs';
 import type { GenericPackageInstallFinalizerOptions } from './package-install-generic-finalizer.ts';
 

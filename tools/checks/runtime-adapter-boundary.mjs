@@ -35,7 +35,6 @@ export const GENERIC_RUNTIME_ADAPTER_MODULES = Object.freeze([
   'packages/workbench/src/workers/owner-child-dev-server.ts',
   'packages/workbench/src/workers/node-entry-bootstrap.ts',
   'packages/workbench/src/workers/node-entry-runtime-preparation.ts',
-  'packages/workbench/src/workers/workbench-runtime-adapters.ts',
   'packages/workbench/src/workers/package-install-finalizer.ts',
   'packages/workbench/src/workers/package-install-generic-finalizer.ts',
   'packages/workbench/src/workers/preview-producer-bindings.ts',
@@ -69,7 +68,6 @@ export const SASS_FORBIDDEN_SURFACE = Object.freeze({
     'packages/workbench/src/workers/workbench-owner-storage.ts',
   ]),
   esbuildAdapter: Object.freeze([
-    'packages/workbench/src/workers/workbench-runtime-adapters.ts',
     'tools/shadow-registry/src/runtime/esbuild-runtime-fs.ts',
     'tools/shadow-registry/src/runtime/vite-esbuild-runtime.ts',
   ]),

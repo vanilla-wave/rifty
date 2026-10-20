@@ -132,7 +132,7 @@ function buildEsbuildMatrix(policyValue) {
     file: 'esbuild-js-api.md',
     title: 'Compatibility matrix — esbuild JavaScript API',
     intro:
-      `Current claim for direct guest CJS/ESM and the Vite-facing esbuild API. Policy is exact \`${sourcePackage}@${version}\` ` +
+      `The rows below describe the retained COI client. No-COI SDK hosts use the untouched upstream Node client through SW-backed children (ADR-0539); an active rifty SW is required. No-COI transform/build and fresh invocation parity are browser-proven. Policy is exact \`${sourcePackage}@${version}\` ` +
       `with \`${consumerPackage}@${consumerVersion}\` as an integration consumer; ${finalGreen ? 'Final+GREEN is browser-proven.' : 'Contract+RED is merged, Final+GREEN is not.'} ` +
       `Every API row is an exact-version ceiling (⚠️): a request the \`esbuild@${version}\` recipe does not admit is refused at install.`,
     rows: [

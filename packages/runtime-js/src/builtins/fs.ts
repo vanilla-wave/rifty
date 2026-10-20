@@ -14,7 +14,13 @@ import { VfsError } from '@riftydev/vfs';
 import { Buffer, type Encoding } from './buffer.ts';
 import { fsError, withSyscall } from './fs-errors.ts';
 import { type PathLike, pathToString, resolvePath } from './fs-path.ts';
+import {
+  type FdReadOptions,
+  assertNonNegativeInteger,
+  checkedSliceBounds,
+} from './fs-read-arguments.ts';
 import { type StatOptions, Stats } from './fs-stats.ts';
+import { readStandardInput } from './fs-stdin.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { statfsSync } from './loud-members.ts';
 import { runNodeCallback } from './process-lifecycle-events.ts';
@@ -83,12 +89,6 @@ interface ParsedOpenFlags {
   truncate: boolean;
   append: boolean;
   directory: boolean;
-}
-
-interface FdReadOptions {
-  offset?: number;
-  length?: number;
-  position?: number | null;
 }
 
 // ADR-0153: faithful Node Linux-ABI fs constants (real numeric values; gap lives at the
@@ -173,20 +173,6 @@ function statStrictOrNull(np: string): { isFile: boolean; isDirectory: boolean }
   } catch (err) {
     if (err instanceof VfsError && err.code === 'ENOENT') return null;
     throw err;
-  }
-}
-
-function assertNonNegativeInteger(value: number, name: string): void {
-  if (!Number.isInteger(value) || value < 0) {
-    throw new RangeError(`${name} must be a non-negative integer`);
-  }
-}
-
-function checkedSliceBounds(buffer: Uint8Array, offset: number, length: number): void {
-  assertNonNegativeInteger(offset, 'offset');
-  assertNonNegativeInteger(length, 'length');
-  if (offset + length > buffer.byteLength) {
-    throw new RangeError('offset + length exceeds buffer length');
   }
 }
 
@@ -1318,7 +1304,7 @@ export function read(
           : cb
   ) as ReadCallback;
   Promise.resolve()
-    .then(() => readSync(fd, buffer, options))
+    .then(() => (fd === 0 ? readStandardInput(buffer, options) : readSync(fd, buffer, options)))
     .then(
       (bytesRead) => runNodeCallback(cbFinal, null, bytesRead, buffer),
       (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),

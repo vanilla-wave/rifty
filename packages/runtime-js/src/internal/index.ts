@@ -2,6 +2,8 @@ export {
   setRuntimeWorkerFsComposition,
   invalidateRuntimeWorkerModules,
 } from './worker-fs-composition.ts';
+export { installNoCoiChildFsOwner, NO_COI_CHILD_NAME } from '../ipc/no-coi-child-transport.ts';
+export { installNoCoiChildWorker } from '../ipc/no-coi-child-worker.ts';
 export { installConsole } from '../repl/console.ts';
 export { captureTimerBoundary, clearTimersSince } from '../builtins/timers.ts';
 export { ref, unref } from './event-loop-keepalive.ts';

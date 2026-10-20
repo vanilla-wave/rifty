@@ -11,11 +11,19 @@
  */
 import { VfsError } from './errors.ts';
 import { dirnameNormalized, normalizeAbsolute, segments } from './path.ts';
+import { type StatMetadata, createStatMetadata } from './stat-metadata.ts';
 
-type FileNode = { kind: 'file'; data: Uint8Array; mtime: number; atime: number };
+type FileNode = {
+  kind: 'file';
+  data: Uint8Array;
+  mtime: number;
+  atime: number;
+  metadata: StatMetadata;
+};
 type Dirent = { name: string; isFile: boolean; isDirectory: boolean };
 type DirNode = {
   kind: 'dir';
+  metadata: StatMetadata;
   children: Map<string, Node>;
   mtime: number;
   atime: number;
@@ -34,12 +42,19 @@ const encoder = new TextEncoder();
 
 function makeDir(): DirNode {
   const now = Date.now();
-  return { kind: 'dir', children: new Map(), mtime: now, atime: now, sortedDirents: null };
+  return {
+    kind: 'dir',
+    children: new Map(),
+    mtime: now,
+    atime: now,
+    sortedDirents: null,
+    metadata: createStatMetadata(now),
+  };
 }
 
 function makeFile(data: Uint8Array): FileNode {
   const now = Date.now();
-  return { kind: 'file', data, mtime: now, atime: now };
+  return { kind: 'file', data, mtime: now, atime: now, metadata: createStatMetadata(now) };
 }
 
 export interface MemoryStat {
@@ -47,6 +62,9 @@ export interface MemoryStat {
   isDirectory: boolean;
   size: number;
   mtime: number;
+  atime: number;
+  metadata: StatMetadata;
+  nlink: number;
 }
 
 export class MemoryBackend {
@@ -110,6 +128,10 @@ export class MemoryBackend {
     const existing = parentNode.children.get(name);
     if (existing && existing.kind === 'dir') throw new VfsError('EISDIR', path);
     const file = makeFile(bytes);
+    if (existing?.kind === 'file') {
+      file.metadata = { ...existing.metadata, ctime: file.mtime };
+      file.atime = existing.atime;
+    }
     // Strictly-monotonic mtime on overwrite: two writes within one clock tick
     // must still bump mtime, else a same-size content edit is invisible to an
     // mtime-trusting stat cache — e.g. isomorphic-git's racy-clean index
@@ -231,9 +253,20 @@ export class MemoryBackend {
         isDirectory: false,
         size: node.data.byteLength,
         mtime: node.mtime,
+        atime: node.atime,
+        metadata: { ...node.metadata },
+        nlink: 1,
       };
     }
-    return { isFile: false, isDirectory: true, size: 0, mtime: node.mtime };
+    return {
+      isFile: false,
+      isDirectory: true,
+      size: 0,
+      mtime: node.mtime,
+      atime: node.atime,
+      metadata: { ...node.metadata },
+      nlink: 2 + [...node.children.values()].filter((child) => child.kind === 'dir').length,
+    };
   }
 
   utimes(path: string, atimeMs: number, mtimeMs: number): void {
@@ -241,6 +274,7 @@ export class MemoryBackend {
     if (!node) throw new VfsError('ENOENT', path);
     node.atime = atimeMs;
     node.mtime = mtimeMs;
+    node.metadata.ctime = Date.now();
   }
 
   copyFile(src: string, dst: string): void {
