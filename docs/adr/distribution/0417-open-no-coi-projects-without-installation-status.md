@@ -74,4 +74,6 @@ Policy only, not implementation proof. Public SDK contracts and real no-COI
 browser/OPFS interruption tests precede shipping. No changes to Workbench dirty
 UI, SQLite, command Stop, namespace migration or guest isolation.
 
+## Corrections (active)
+
 - 2026-10-20 — ADR-0539: no-COI uses upstream Node esbuild through SW children; no adapter activation at install/open. Shared COI client remains.

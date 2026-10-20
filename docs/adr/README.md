@@ -481,6 +481,7 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0226 / 0384 / 0417 no-COI generated-client activation | 0539 / note 2026-10-20 | upstream Node client through SW children; shared COI client retained |
 | 0163 decision 1 production base, decision 4 Netlify-not-owning `/npm-registry` + smoke target, TL;DR "Netlify static only" | 0528 / note 2026-10-14 | Yandex VMs unreachable; production registry route is a same-origin Netlify proxy rewrite to `registry.npmjs.org`, eddy OFF in the production build; decisions 2, 3, 5 + Yandex config stand as runbook |
 | 0445 rule 5 control-port-only exit request; Consequences "no-COI command keeps its own settlement" | note 2026-09-25 | the drain settles with the active process's first terminal (every kernel child unchanged); no-COI command and runBin report that status, the command replaces its realm only when a live non-timer handle outlives it |
 | 0326 advanced-IPC-serialization loud-gap + launch-plan `ipc: 'none' \| 'json'` clauses | 0448 / notes 2026-09-23, 2026-09-25 | fork `serialization: 'advanced'` rides the public lane as a native structured clone with Node's view/refusal rules; handles, callbacks/options, channel `ref()`/`unref()` stay gaps; launch plan `ipc` gains `'advanced'` |
