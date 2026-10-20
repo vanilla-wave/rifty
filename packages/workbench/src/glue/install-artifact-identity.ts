@@ -12,10 +12,11 @@ const coiIdentity = (generated as { readonly coiIdentity?: unknown }).coiIdentit
 if (typeof coiIdentity !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(coiIdentity)) {
   throw new Error('Malformed generated COI install-artifact identity');
 }
+const checkedCoiIdentity = coiIdentity;
 
 /** The same catalog can materialize different executable trees in the two hosts. */
 export function installArtifactIdentityForTier(runtimeTier: ShadowRuntimeTier = 'no-coi'): string {
   if (runtimeTier === 'no-coi') return installArtifactIdentity;
-  if (runtimeTier === 'coi') return coiIdentity;
+  if (runtimeTier === 'coi') return checkedCoiIdentity;
   throw new TypeError('Unknown install runtime tier');
 }
