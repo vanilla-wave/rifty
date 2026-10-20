@@ -12,6 +12,7 @@ export interface RequestState {
   cache: RequestCache;
   integrity: string;
   keepalive: boolean;
+  referrer: URL | 'client' | 'no-referrer';
   referrerPolicy: ReferrerPolicy;
 }
 interface ResponseState {

@@ -57,7 +57,9 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
    global dispatchers reject; Host is replaced from the URL by both Node and
    Chromium. Disable native HTTP caching: Node 24 always reaches the server,
    even for force-cache/only-if-cached. Browser-generated wire headers remain
-   transport-owned. HTTP/1 uploads are materialized because
+   transport-owned. Empty referrer and same-browser-origin referrer URLs pass
+   through; cross-origin caller referrers reject `fetch.referrer` unless their
+   no-referrer policy already removes the header. HTTP/1 uploads are materialized because
    Chromium cannot send a streaming HTTP/1 request: buffered bodies retain
    their bytes; streaming-source uploads reject `fetch.streamingUpload` rather
    than silently losing duplex semantics. Keepalive bodies over the browser's
@@ -71,7 +73,9 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
    holds; pure JS bodies do not acquire a network ref. WebAssembly streaming
    retains its existing loud ceiling.
 6. Install through the existing Fetch/web-global bootstrap before guest code,
-   including standalone runtime and no-COI workers. `@riftydev/io` exposes
+   including standalone runtime and no-COI workers. Explicitly activate the
+   existing builtin registry: production tree shaking drops implicit registration
+   imported only through the registry re-export (production boot RED). `@riftydev/io` exposes
    `HOST_FETCH`/`fetchHost` for infrastructure resources: WASM/lib.d.ts assets,
    npm/eddy and owner resource requests retain native relative-URL semantics.
    `fetchNodeNetwork` preserves ADR-0181 native-compatible HTTP egress inputs

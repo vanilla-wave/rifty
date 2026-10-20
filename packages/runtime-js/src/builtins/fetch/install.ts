@@ -1,6 +1,6 @@
 import { HOST_FETCH, NODE_NETWORK_FETCH } from '@riftydev/io';
 import { Buffer } from '../buffer.ts';
-import { loadBuiltin } from '../index.ts';
+import { ensureRuntimeJsBuiltinsRegistered, loadBuiltin } from '../index.ts';
 import createFetchClasses from './generated/classes.js';
 import { createGuestFetch, createNodeNetworkFetch } from './network.ts';
 import { installFetchPlatformBindings } from './platform.ts';
@@ -20,6 +20,7 @@ export function installNodeFetch(target: FetchTarget = globalThis): void {
       : target.fetch.bind(target);
   if (target === globalThis && !Object.hasOwn(realm, HOST_FETCH))
     Object.defineProperty(realm, HOST_FETCH, { value: nativeFetch });
+  ensureRuntimeJsBuiltinsRegistered();
   const classes = createFetchClasses(
     (id) => {
       const builtin = loadBuiltin(id);

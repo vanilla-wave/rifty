@@ -46,6 +46,16 @@ function checkTransport(request: RequestState, dispatcher: unknown): void {
   }
 }
 
+/** Chromium accepts caller referrers only from its own origin. */
+function transportReferrer(request: RequestState): string | undefined {
+  const referrer = request.referrer;
+  if (referrer === 'no-referrer' || request.referrerPolicy === 'no-referrer') return '';
+  if (referrer === 'client') return undefined;
+  if (typeof location !== 'undefined' && referrer.origin !== location.origin)
+    throw new NotImplementedError('fetch.referrer');
+  return referrer.href;
+}
+
 /** Caller cancellation settles even when a guest-supplied Blob stream stalls. */
 function uploadBytes(
   body: BodyState,
@@ -148,6 +158,7 @@ export function createGuestFetch(classes: FetchClasses, nativeFetch: typeof fetc
       classes.getRequestDispatcher(requestObject) ??
         (realm[dispatcherKey] !== hostDispatcher ? realm[dispatcherKey] : undefined),
     );
+    const referrer = transportReferrer(request);
     const url = request.urlList[request.urlList.length - 1] as URL;
     return holdNetwork(async (release) => {
       signal.throwIfAborted();
@@ -170,6 +181,7 @@ export function createGuestFetch(classes: FetchClasses, nativeFetch: typeof fetc
         integrity: request.integrity,
         keepalive: request.keepalive,
         mode: 'cors',
+        referrer,
         referrerPolicy: request.referrerPolicy,
       });
       return responseFromHost(response, url, signal, classes, release);

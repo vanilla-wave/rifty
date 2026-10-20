@@ -94,6 +94,10 @@ test('Node Fetch goal: multipart network response has one body state', async ({ 
     }
     response.setHeader('access-control-allow-origin', '*');
     response.setHeader('access-control-allow-headers', '*');
+    if (request.url?.endsWith('/referrer')) {
+      response.end(request.headers.referer ?? '');
+      return;
+    }
     if (request.url?.endsWith('/cache')) {
       response.setHeader('cache-control', 'public, max-age=3600');
       response.end(JSON.stringify([++cacheHits, request.headers.host !== 'override.test']));
@@ -169,9 +173,26 @@ test('Node Fetch goal: multipart network response has one body state', async ({ 
       const cacheRun = await runOwnerCommand(page, 'node cache.cjs', 20_000);
       expect.soft(cacheRun.exit, cacheRun.out).toBe(0);
       expect.soft(rows(cacheRun.out), cacheRun.out).toEqual(rows(cacheOracle.stdout));
+      const localReferrer = `${new URL(page.url()).origin}/source`;
+      const referrerSource = `(async()=>{
+        for(const init of [{referrer:''},{referrer:${JSON.stringify(localReferrer)},referrerPolicy:'unsafe-url'},{referrer:'https://example.test/source',referrerPolicy:'no-referrer'}])
+          console.log('FETCH|referrer='+JSON.stringify(await(await fetch(${JSON.stringify(`${url}/referrer`)},init)).text()));
+      })().catch(e=>{console.error(e);process.exitCode=1;});`;
+      const referrerOracle = await runNodeOracle(referrerSource);
+      expect(referrerOracle.code, referrerOracle.stderr).toBe(0);
+      await writeOwnerFile(page, '/scratch/referrer.cjs', referrerSource);
+      const referrerRun = await runOwnerCommand(page, 'node referrer.cjs', 20_000);
+      expect.soft(referrerRun.exit, referrerRun.out).toBe(0);
+      expect.soft(rows(referrerRun.out), referrerRun.out).toEqual(rows(referrerOracle.stdout));
       for (const [name, init, setup, feature] of [
         ['user-agent', "{headers:{'user-agent':'guest'}}", '', 'fetch.requestHeaders'],
         ['dispatcher', '{dispatcher:{}}', '', 'fetch.dispatcher'],
+        [
+          'referrer',
+          "{referrer:'https://example.test/source',referrerPolicy:'unsafe-url'}",
+          '',
+          'fetch.referrer',
+        ],
         [
           'global-dispatcher',
           '{}',
