@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Final+GREEN/CLOSE PASS: referrer blocker и metadata advisory закрыты; committed pr:check (28 checks), live Node/Chromium, production, packed consumer и Hono GREEN. Merge после docs-only CLOSE cleanup, pass-binding и green CI at HEAD.",
+  "merge_call": "Final+GREEN/CLOSE PASS: referrer, pre-abort cancellation и errored-body finalization исправлены; metadata advisory закрыта, active-upload cancellation NOTE подтверждена Node. Committed pr:check 28/28, browser 7, production и packed consumer GREEN. Merge после re-bound pass-binding и green CI at HEAD.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "207e9db6b4bf84b525d396d5378080ae1244c5b1",
-  "unit_goal_source": "PR #381 https://github.com/vanilla-wave/rifty/pull/381; goal node-fetch-classes-in-guest / unit node-fetch-guest-carrier, accepted I1–I3 and user-approved browser transport with explicit ceilings; BASE 3207b33acb3cb74d54be2cff6d33200cb32bf556; Contract+RED preparation 2a6a30728d5af714ef2598bf84158b89dc65e48e, PR comment 6278683544; Final+GREEN and CLOSE tree 207e9db6b4bf84b525d396d5378080ae1244c5b1.",
+  "reviewed_sha": "d7eb2ad79bd57ce2f36aeb31a40e4a410ab26762",
+  "unit_goal_source": "PR #381 https://github.com/vanilla-wave/rifty/pull/381; goal node-fetch-classes-in-guest / unit node-fetch-guest-carrier, accepted I1–I3 and user-approved browser transport with explicit ceilings; raw goal/unit authority preserved at 207e9db6b4bf84b525d396d5378080ae1244c5b1; BASE 3207b33acb3cb74d54be2cff6d33200cb32bf556; Contract+RED preparation 2a6a30728d5af714ef2598bf84158b89dc65e48e, PR comment 6278683544; Final+GREEN/CLOSE verify of corrected result d7eb2ad79bd57ce2f36aeb31a40e4a410ab26762.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -77,7 +77,7 @@
       "source": "fault-matrix",
       "trace": "I3",
       "status": "pass",
-      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:212",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:244",
       "note": ""
     },
     {
@@ -85,7 +85,7 @@
       "source": "fault-matrix",
       "trace": "I3",
       "status": "pass",
-      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:226",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:248",
       "note": ""
     },
     {
@@ -149,7 +149,7 @@
       "source": "acceptance",
       "trace": "I2+I3",
       "status": "pass",
-      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:252",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:271",
       "note": ""
     },
     {
@@ -165,7 +165,7 @@
       "source": "public-api",
       "trace": "ADR-0541",
       "status": "pass",
-      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:266",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:285",
       "note": ""
     },
     {
@@ -221,7 +221,39 @@
       "source": "acceptance",
       "trace": "scenario",
       "status": "pass",
-      "citation": "docs/adr/runtime-js/0541-run-node-fetch-classes-over-the-browser-i-o-boundary.md:129",
+      "citation": "docs/adr/runtime-js/0541-run-node-fetch-classes-over-the-browser-i-o-boundary.md:154",
+      "note": ""
+    },
+    {
+      "row": "Pre-aborted body blocker fixed: native readable/closed/errored/locked states, retained bodyUsed, original abort reason, transport-admission priority and public/underlying cancel failures match Node; preabort and terminal-state mutants killed",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0541",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:193",
+      "note": ""
+    },
+    {
+      "row": "Caller-locked body with overridden cancel rejects fetch.abortBodyState explicitly without invoking it or stealing the reader; real Node comparison records the intentional boundary; ceiling mutant killed",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0541",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-guest.spec.ts:226",
+      "note": ""
+    },
+    {
+      "row": "Errored-body finalization blocker fixed: real fetched Responses are collected; readable/closed retained streams become disturbed, errored retained stream remains undisturbed as Node; finalizer-error mutant killed",
+      "source": "fault-matrix",
+      "trace": "I2+ADR-0541",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-fetch-finalization.spec.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Active-upload cancellation advice disposition NOTE: real Node and guest both reject the abort reason then read 30 chunks with zero cancel callbacks; permanent differential guards against applying reader.cancel",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0541",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:227",
       "note": ""
     }
   ],
