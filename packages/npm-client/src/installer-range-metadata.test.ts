@@ -2,7 +2,7 @@
 // Stock upstream acceptance remains installer-esbuild-upstream.test.ts.
 import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import {
@@ -63,17 +63,18 @@ async function setup(bundled = false) {
   files['package.json'] = enc.encode(JSON.stringify(manifest));
   tarballs['esbuild-wasm'] = await pack(files);
   manifests['esbuild-wasm'] = manifest;
-  if (bundled) {
-    writeFileSync('/tmp/esbuild-review-bundled.tgz', tarballs['esbuild-wasm']);
-    writeFileSync('/tmp/esbuild-review-peer.tgz', tarballs.peer);
-  }
+  const tarball = (name: string): Uint8Array => {
+    const bytes = tarballs[name];
+    if (!bytes) throw new Error(`Unknown fixture tarball ${name}`);
+    return bytes;
+  };
   const calls: string[] = [];
   const registry = new RegistryClient({
     baseUrl: 'https://review.test',
     fetch: async (input) => {
       const name = new URL(input).pathname.slice(1);
       calls.push(name);
-      if (name.endsWith('.tgz')) return new Response(new Uint8Array(tarballs[name.slice(0, -4)]));
+      if (name.endsWith('.tgz')) return new Response(new Uint8Array(tarball(name.slice(0, -4))));
       const m = manifests[name];
       if (!m) throw Error(`Unexpected ${name}`);
       return Response.json({
@@ -84,7 +85,7 @@ async function setup(bundled = false) {
             ...m,
             dist: {
               tarball: `https://review.test/${name}.tgz`,
-              integrity: `sha512-${createHash('sha512').update(tarballs[name]).digest('base64')}`,
+              integrity: `sha512-${createHash('sha512').update(tarball(name)).digest('base64')}`,
             },
           },
         },
@@ -106,12 +107,12 @@ describe('range recipe metadata and replay', () => {
       const options = { vfs: f.vfs, cwd: '/p', registry: f.registry, runtimeTier: 'coi' as const };
       const installed = await install(options);
       const lock = await f.vfs.readFileText('/p/package-lock.json');
-      expect(installed.lockfile.packages['node_modules/esbuild-wasm'].dependencies).toEqual({
+      expect(installed.lockfile.packages['node_modules/esbuild-wasm']!.dependencies).toEqual({
         ordinary: '1.0.0',
       });
-      expect(installed.lockfile.packages['node_modules/esbuild-wasm'].optionalDependencies).toEqual(
-        { optional: '1.0.0' },
-      );
+      expect(
+        installed.lockfile.packages['node_modules/esbuild-wasm']!.optionalDependencies,
+      ).toEqual({ optional: '1.0.0' });
       const prefix = bundled ? '/p/node_modules/esbuild-wasm/node_modules' : '/p/node_modules';
       for (const name of ['ordinary', 'optional'])
         expect(await f.vfs.readFileText(`${prefix}/${name}/index.js`)).toBe(
