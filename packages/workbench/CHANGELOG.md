@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+- Reuse predicates accept the selected runtime tier; virtual-ancestor Stats keep metadata readable while directory listings reject mount collisions.
+
+- Physical COI owner selects stock esbuild for install/snapshot/claims and Node bootstrap. No-COI retains its explicit legacy policy. Snapshot mismatch discriminators and restore failure phases remain stable across tier projection.
+
+- Explicit snapshot runtime tier shares restore/application preflight; only generated facade/receipt changes, while COI install claims carry a distinct policy identity (ADR-0543).
+
+- Propagate file stdout through Node/bin child bootstrap; preserve pipe/TTY selection (ADR-0544).
+
+- Refresh install identity and baked snapshots for the tier-aware catalog; retain every committed dependency version.
+
+- Node children select pull stdin; virtual guest ancestors carry VFS entry metadata for complete Node Stats (ADR-0540/0542).
 - Asset/registry/owner resource fetches keep host semantics when Node guest Fetch classes are installed (ADR-0541).
 - Keep ancestor Stats available across nested mount collisions; listing/child access still refuses loudly.
 - Remove the unused no-COI adapter wrapper after upstream cutover; shared COI client retained.

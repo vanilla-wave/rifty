@@ -121,6 +121,7 @@ export function makeRecursiveRunner(): NodeEntryRunner {
     const nested = globalProcessManager.spawnWorker(
       'node',
       {
+        stdinMode: 'pull',
         entry,
         // The URL-entry payload says bin:false + remoteFs:true + nodeServe:false:
         // execSync reads the owner store, runs to completion, and never exposes

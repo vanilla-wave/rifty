@@ -43,7 +43,7 @@ if (!lightningcssRecipe || lightningcssRecipe.acquisition.kind !== 'registry') {
 
 const registryRedirects = Object.fromEntries(
   builtinShadowSubstitutionCatalog.recipes.flatMap((recipe) =>
-    recipe.acquisition.kind === 'registry'
+    recipe.acquisition.kind === 'registry' && recipe.admission.kind !== 'requested-range'
       ? [[recipe.trigger.name, `${recipe.acquisition.name}@${recipe.acquisition.version}`] as const]
       : [],
   ),

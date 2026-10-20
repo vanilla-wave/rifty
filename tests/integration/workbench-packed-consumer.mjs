@@ -955,7 +955,10 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     try {
       const strictPage = await strictContext.newPage();
       const strictErrors = [];
-      strictPage.on('pageerror', (error) => strictErrors.push(error.message));
+      strictPage.on('pageerror', (error) => {
+        console.error('Snapshot-only page error:', error.stack ?? error.message);
+        strictErrors.push(error.message);
+      });
       await strictPage.goto(`${previewOrigin}/?snapshot-only`, { waitUntil: 'domcontentloaded' });
       const strictProof = await strictPage.evaluate(async () => {
         const opened = await window.__RIFTY_PACKED_SNAPSHOT_ONLY__;

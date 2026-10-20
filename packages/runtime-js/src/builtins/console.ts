@@ -31,7 +31,7 @@
  * `const { Console } = require('node:console')` work.
  */
 import { inspect } from '../repl/inspect.ts';
-import { riftyProcess } from './process.ts';
+import { publicNodeProcess } from './process-public.ts';
 import { format } from './util.ts';
 
 /** A writable-stream-shaped sink: anything exposing `write(chunk)`. */
@@ -339,7 +339,22 @@ function formatDuration(ms: number): string {
  * `process.stdout.write` forwards to the realm's global `console.log` (see
  * `builtins/process.ts`), preserving existing stdout/stderr wiring.
  */
-const defaultConsole = new Console(riftyProcess.stdout, riftyProcess.stderr);
+// Same-realm children share this module, but each process owns its lazy console sinks.
+const defaultStreams = new WeakMap<object, Partial<Record<'stdout' | 'stderr', WritableLike>>>();
+function writeDefault(stream: 'stdout' | 'stderr', chunk: string): unknown {
+  const process = publicNodeProcess() as { stdout: WritableLike; stderr: WritableLike };
+  let streams = defaultStreams.get(process);
+  if (!streams) {
+    streams = {};
+    defaultStreams.set(process, streams);
+  }
+  streams[stream] ??= process[stream];
+  return streams[stream].write(chunk);
+}
+const defaultConsole = new Console(
+  { write: (chunk) => writeDefault('stdout', chunk) },
+  { write: (chunk) => writeDefault('stderr', chunk) },
+);
 
 // Node's module export is the default instance augmented with the `Console`
 // constructor as a property.

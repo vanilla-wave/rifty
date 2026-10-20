@@ -1,0 +1,231 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN/CLOSE retained after independent PR-4 verification of aggregate packed-consumer watchdog calibration at a8a75ccfe:21coveragePASS,0blockers,one captured outside-goal concern. Corrected real packed gate PASS365.247s; format-only follow-up AST-equivalent; clean fullgate28/28PASS (unit193.3s,parity159.4s). Internal operation/benchmark deadlines and all functional assertions unchanged. Final HEAD CI remains delivery condition; merge not requested.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "a8a75ccfee9d351e4365ae10051e4bc8b6b1bdc4",
+  "unit_goal_source": "PR #379 post-CLOSE observed packed-consumer aggregate watchdog failure at BASE 4c3208d2e00b71a53028217d050e01f4defddc24; test-only correction aff3b5db2815b4c4ebc69238c90ed70a7585666f plus format-only follow-up a8a75ccfee9d351e4365ae10051e4bc8b6b1bdc4. Authority: existing packed Workbench external-consumer behavior and assertions, unchanged main408 baseline, original wrapper7dbe9b4913 and later serial benchmark addition2534d1e97. No runtime defect is claimed: unchanged runtime passed preceding Linux CI814.063s and current isolated313.923s. Inherited accepted Fetch composition156, contamination correction13cfd and amended esbuild goal frozen1f retain proof; deleted completed goal is historical authority only, not a fabricated live contract.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "I1: COI requested ranges execute pristine stock Node twins, complete upstream trees and no generated module across fresh install/snapshot/offline reuse",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-upstream-twin.spec.ts:107; tests/browser-unit/esbuild-upstream-host.spec.ts:4; /tmp/esbuild-merge-upstream-vite.log; historical amended goal docs/backlog/epics/esbuild-upstream-twin/goal.md @ 1f292220518c9dc0b4b147270cab0a1302c47aa1; /tmp/esbuild-fetch-browser-composition.log",
+      "note": "Current Fetch merge32cases include all6version/name combinations, actual API/CLI/fulltree, instant zero-generated snapshot and Vite offline reopen. Prior recipe/admission proofs retained; no admission list added."
+    },
+    {
+      "row": "I2: same stock Node async/lifecycle and CLI pipe/TTY/file behavior on all verified versions; named Sync gaps and full Vite7 stock probe retained",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-upstream-twin.spec.ts:152; tests/browser-unit/esbuild-vite-contract.spec.ts:1010; /tmp/esbuild-merge-upstream-vite.log; /tmp/esbuild-fetch-browser-composition.log",
+      "note": "Current Fetch composition32/32PASS5.2m includes Vite7 exact ten contract+seven policy groups, direct CJS/ESM, Vite8 helper+ordinary build/preview and Fetch3. No stock output/error fields dropped."
+    },
+    {
+      "row": "I3: generic COI stdio callbacks, active versus corked stdin lifetime, child/pipe refs and complete numeric Stats retained after shared-owner merge",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-node-surfaces.spec.ts:102; tests/browser-unit/guest-directory-stats.spec.ts:23; /tmp/esbuild-merge-node-final.log; /tmp/esbuild-cork-final-review.json; /tmp/esbuild-fetch-browser-composition.log",
+      "note": "Current Fetch merge reruns all14Node/Stats cases, including active/corked/unref lifecycle. Cork repair and its598stream/13browser proof retained; no hidden write dispatch restored. I3 follows COI scenario context; I4 separately specifies no-COI scope."
+    },
+    {
+      "row": "Amended I4: no-COI exact0.28.0 runs upstream Node via required SW; exact COI/no-COI Vite build bytes and named incompatible range/pin refusal retained",
+      "source": "acceptance",
+      "trace": "I4+ADR-0539+ADR-0375",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:53; tests/no-coi/no-coi-esbuild-retirement.spec.ts:15; tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2375; packages/npm-client/src/installer-esbuild-upstream.test.ts:205; /tmp/esbuild-merge-no-coi.log; /tmp/esbuild-merge-byte-proof.log; /tmp/esbuild-fetch-no-coi.log; /tmp/esbuild-fetch-byte-proof.log",
+      "note": "Current merge21real no-COI child/fork/upstream cases PASS22.9s; exact pinned2180-module dist comparison PASS1.5m. User-amended upstream Node+SW authority retained; no generated-client D4 authority restored."
+    },
+    {
+      "row": "I5: version-string/original-archive-only shared differential remains in CI with finite verified set, no allowlist or per-version runtime patch",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tools/shadow-registry/esbuild-upstream-verified.json:1; tests/browser-unit/esbuild-upstream-twin.spec.ts:21; .github/workflows/ci.yml:280; /tmp/esbuild-ci-browser-unit-plain.log:444; /tmp/esbuild-merge-upstream-vite.log; /tmp/esbuild-fetch-browser-composition.log",
+      "note": "Earlier executed Linux CI all6version/name combinations PASS; unchanged matrix wiring reruns all6 against live Node at current Fetch merge. I5 does not separately require a same-HEAD Linux oracle; final HEAD CI remains delivery condition."
+    },
+    {
+      "row": "I6: COI installed Vite bypasses version/startup grammar gate; Vite7/8 lanes pass and other versions remain not verified",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/runtime/vite-node-entry-edge.ts:36; tests/browser-unit/vite6-upstream-cli.spec.ts:14; /tmp/esbuild-ci-round2-browser.log; /tmp/esbuild-merge-upstream-vite.log; /tmp/esbuild-fetch-browser-composition.log",
+      "note": "Current32case composition explicitly reruns Vite6 own-CLI reachability plus Vite7 wide/direct/offline and Vite8 build/preview. No gate restored, starter pins/no-COI admission unchanged."
+    },
+    {
+      "row": "Merge preserves shared stdin owner instead of combining duplicate fd readers; raw unencoded stdin bytes are native Buffers",
+      "source": "public-api",
+      "trace": "I3+ADR-0542+ADR-0539",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process-stdin-reader.ts:126; packages/runtime-js/src/builtins/fs-stdio.ts:26; packages/runtime-js/src/ipc/install-process-stdin.test.ts:90; /tmp/esbuild-merge-independent-units.log; /tmp/esbuild-merge-independent-stdin-verify.log; /tmp/esbuild-fetch-independent-seams.log",
+      "note": "Old fs-stdin.ts removed, all descriptor/stream reads share one source. Initial independent6files had65PASS and1old host Uint8Array golden failure; live Node artifact proves Buffer, corrected host criterion then independent17stdin cases PASS. Runtime source unchanged from411 to1f. Current Fetch merge independently reruns both stdin suites17/17 with process warnings installed; shared reader/captured descriptor source and lazy file stdout remain intact."
+    },
+    {
+      "row": "Merged child terminal, environment snapshot, parent disconnect and raw binary output preserve both parents",
+      "source": "public-api",
+      "trace": "I3+ADR-0539+ADR-0152",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/child_process.ts:180; packages/runtime-js/src/builtins/child_process-worker.ts:121; packages/kernel/src/process-manager.ts:31; /tmp/esbuild-merge-independent-child-parity.log; packages/runtime-js/src/builtins/child_process-exec.ts:427; /tmp/esbuild-fetch-browser-composition.log; /tmp/esbuild-fetch-no-coi.log",
+      "note": "Independent29child_process parity cases all match Node, including parent-disconnect-close, spawn-input-snapshot, terminal-process-authority and binary stdout. Main terminal authority plus branch byte-preserving ProcessIO/cork refs retained; duplicate child_process-ref.ts owner removed. Fetch merge retains main runtimeProxy constructor wrapper plus branch binary output, callback/nextTick and stdio capture; currentCOI/no-COI real child suites pass."
+    },
+    {
+      "row": "Owner-stable synthetic/mounted Stats preserve numeric fields and root readability without weakening collision listings",
+      "source": "public-api",
+      "trace": "I3+ADR-0540+ADR-0531",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/project-terminal-namespace.ts:238; packages/workbench/src/workers/project-terminal-stats.test.ts:31; /tmp/esbuild-merge-independent-units.log; /tmp/esbuild-merge-independent-stats-parity.log; /tmp/esbuild-merge-node-final.log; /tmp/esbuild-fetch-browser-composition.log",
+      "note": "Independent38namespace+6Stats tests and native Stats parity PASS. Main owner-backed metadata identity retained; branch collision repair folds into same private merged entries; public readdir/descendant collisions stay loud."
+    },
+    {
+      "row": "No SW remains a named child boundary while ordinary no-SW SDK remains usable; child startup failure settles",
+      "source": "fault-matrix",
+      "trace": "I4+ADR-0539",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-child-processes.spec.ts:148; tests/no-coi/no-coi-child-processes.spec.ts:187; /tmp/esbuild-merge-no-coi.log; /tmp/esbuild-fetch-no-coi.log",
+      "note": "Current real browser no-SW and native startup-fault cases PASS. Existing landed SW transport uses manager terminal/caller authority, not a new snapshot/cache/ref owner in this merge."
+    },
+    {
+      "row": "Rebaked snapshot versions remain identical to both parents; recipe/identity artifacts are current",
+      "source": "frozen-artifact",
+      "trace": "I1+I4+ADR-0543",
+      "status": "pass",
+      "citation": "apps/playground/src/generated/baked-snapshot-identities.json:1; /tmp/esbuild-merge-snapshot-check.log; /tmp/esbuild-merge-independent-snapshot-pins.json",
+      "note": "Reviewer parsed all3 compressed lockfiles at c289, main7f8 and merge411: every package-path/version map identical. Counts incl root: typescript 15, vite 14, vite8 22; no pin drift disguised by rebake."
+    },
+    {
+      "row": "PR-4 compat follows amended no-COI upstream+SW authority; legacy D4 gates no longer described as active; COI verified/Sync status retained",
+      "source": "frozen-artifact",
+      "trace": "I4+I5+I6+ADR-0539+ADR-0543",
+      "status": "pass",
+      "citation": "tools/compat-matrix-generator/esbuild-matrix.js:5; tools/checks/esbuild-compat-matrix.test.ts:7; docs/public/compat/esbuild-js-api.md:5",
+      "note": "Both old criteria read from parents. Matrix removes generated-client D4 rows only because active execution retired by explicit user amendment and current browser/packed proof; no-COI claim limited to0.28transform/build, no expansion to fullCOI API matrix."
+    },
+    {
+      "row": "PR-4 exact compiler asset pin remains narrow, original2MB general ceiling preserved, Writable grandfather removed after shrink",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:103; tools/checks/file-size.mjs:95; /tmp/esbuild-merge-clean-prcheck.log; /tmp/esbuild-fetch-merge-retirement.log; /tmp/esbuild-fetch-merge-prcheck.log",
+      "note": "Reviewer independently hashed current emitted asset:10022694bytes,SHA86a44c9e749fe4d5fcc318e2f77542e63c6f53db55463eddab2cca52a942d38b. Same byte size as prior composition; new Fetch graph changes chunk identity. Exact-only exception, negative payload tests and general2MB ceiling unchanged. Writable grandfather deletion retained. Current retirement and full gate PASS."
+    },
+    {
+      "row": "PR-4 host stdin hand-golden replaced by live Node byte+Buffer oracle; original bytes/count maintained",
+      "source": "frozen-artifact",
+      "trace": "I3+real Node24.16.0 stdin baseline",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process-stdin.test.ts:33; /tmp/esbuild-merge-independent-native-stdin.log; /tmp/esbuild-merge-independent-stdin-verify.log; /tmp/esbuild-fetch-independent-seams.log",
+      "note": "Independent initial failure and nativeprobe agreed with driver: raw Uint8Array expectation was incompatible with NodeBuffer. New assertion keeps exact[104,105],onechunk and adds Buffer type parity; no runtime rollback or weakened byte check."
+    },
+    {
+      "row": "Merged published graphs, budgets and complete real packed SDK/Workbench/agent/snapshot journeys pass",
+      "source": "acceptance",
+      "trace": "I1+I2+I4+ADR-0539",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-esbuild-graph-proof.mjs:5; tests/integration/workbench-packed-consumer.mjs:953; /tmp/esbuild-merge-packed-surface.log; /tmp/esbuild-merge-packed-full.log; /tmp/esbuild-fetch-packed-surface.log; /tmp/esbuild-fetch-packed-full.log",
+      "note": "Current Fetch composition surface15firstparty+73externalPASS; unchanged budgets:generic909582/1124000B,toolchain1038279/1284000B. Fullrunner16firstparty+178externalPASS:strictTS/build,freshChromium,realregistryVite/HMR/sqlite,noCOIgraphs/children,agents,archives,snapshot-only,scopedpreview/reopen and finalbenchmarkhost. Prior packed proof not substituted."
+    },
+    {
+      "row": "Current clean local full gate and retained exported adapter boundary",
+      "source": "acceptance",
+      "trace": "I1+I4+ADR-0543",
+      "status": "pass",
+      "citation": "/tmp/esbuild-merge-clean-prcheck.log; tools/shadow-registry/src/runtime/README.md:3; tools/shadow-registry/src/runtime/runtime-adapters.ts:145; /tmp/esbuild-fetch-merge-prcheck.log",
+      "note": "Current28/28PASS,unit185.7s/parity127s,no reruns; new main Fetch drift gate retained. Dormant low-level adapter export preserves prior API; active COI rejects legacy bindings and no-COI host uses common preparation. I1 forbids loaded client, not deleting every exported compatibility entry. No new state owner or untraced retirement demanded."
+    },
+    {
+      "row": "Post-CLOSE PR-4 exact Workbench production inventory accommodates the one authorized helper without weakening closure or no-orphans rules",
+      "source": "frozen-artifact",
+      "trace": "ADR-0543 + named extraction-boundary baseline",
+      "status": "pass",
+      "citation": "packages/workbench/tests/extraction-boundary.contract.test.ts:379; packages/workbench/src/glue/dep-snapshot-runtime-tier.ts:12; /tmp/esbuild-extraction-independent-inventory.json; /tmp/esbuild-extraction-independent-green.log; /tmp/esbuild-extraction-prcheck.log; /tmp/esbuild-fetch-merge-focused.log",
+      "note": "Independent tracked-file inventory with the unchanged production classifier: main7f8=175, HEAD53=176; sole addition glue/dep-snapshot-runtime-tier.ts, no deletions. BASE raw isolated RED1FAIL/4PASS read. Exact source-closure set equality, unresolved/escaped edges, runtime-bearing no-orphans, eight sealed entries,223-file historical extraction and lower-package checks are unchanged. Independent isolated5/5PASS. Current full27/27PASS (unit196.6s,parity129.3s,no reruns). Diff-scoped prior local gate missed dynamically enumerated source inventory; new direct test change is selected now. No product/test acceptance field relaxed, no runtime changes or reopened goal obligation. Fetch merge adds no Workbench production file; exact176 and all closure checks retained, focused5/5PASS."
+    },
+    {
+      "row": "Fetch merge preserves both accepted parents at shared process, installer and CJS/proxy seams",
+      "source": "public-api",
+      "trace": "I1+I2+I3+I4+ADR-0541+ADR-0542+ADR-0543",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process.ts:495; packages/runtime-js/src/builtins/child_process-exec.ts:427; packages/npm-client/src/eddy-fast-path.ts:1; /tmp/esbuild-fetch-independent-seams.log",
+      "note": "Raw diff against both parents and combined conflicts inspected. Retains shared stdin/captured stdio/lazy file stdout plus installProcessWarnings; ShadowRuntimeTier plus host fetch; main runtimeProxy plus binary/callback behavior. Independent frozen archive13files/95testsPASS:stdin17,active-process/preloading,warning/scheduler faults,npm network seams,CJS factory/escape/frozen-hook/raw-filename/collision/source-map/vm projection. Prior strict-CJS repair retained; broad nonstrict+2 expected-failure residual remains explicit."
+    },
+    {
+      "row": "Node Fetch integration preserves real guest/prod behavior and host infrastructure network boundary without weakening esbuild or no-COI criteria",
+      "source": "acceptance",
+      "trace": "ADR-0541+I1+I2+I4",
+      "status": "pass",
+      "citation": "docs/adr/runtime-js/0541-run-node-fetch-classes-over-the-browser-i-o-boundary.md:1; tests/browser-unit/node-fetch-guest.spec.ts:49; tests/e2e-prod/node-fetch-guest.spec.ts:13; tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2804; /tmp/esbuild-fetch-browser-composition.log; /tmp/esbuild-fetch-prod.log; /tmp/esbuild-fetch-byte-proof.log",
+      "note": "Accepted main Fetch authority read independently. Current real Hono/body/multipart/finalization3PASS plus production bundle names/platform-state1PASS35.6s, noCOI21 and exactbyte1PASS. PR-4 interactive-network fixture now passes browser-resolved absolute URL to guest, as native Node requires; original hold/read/UI assertions retained. Host fetch captured at existing infrastructure boundary; no esbuild package/version branch, extra admission or duplicate reference owner added."
+    },
+    {
+      "row": "Post-CLOSE PR-4 contamination guard preserves exact live transform discrimination without unrelated guest startup",
+      "source": "frozen-artifact",
+      "trace": "ADR-0152 + named deterministic contamination-guard baseline",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-async-lifecycle.spec.ts:42; tests/e2e/owner-shell-async-lifecycle.spec.ts:130; /tmp/esbuild-old468-light5-artifact/playwright-report/coi-results.json; /tmp/esbuild-contamination-independent-green.log; /tmp/esbuild-contamination-independent-mutant.log; /tmp/esbuild-contamination-guard-green.log; /tmp/esbuild-contamination-prcheck.log",
+      "note": "Read BASE criterion and raw CI JSON/trace: A/B passed32.247/34.186s; C failed all3attempts at guest-ready wait before request.get, default30s. Current oldC isolatedPASS is not called a runtime repair. Change retains identical live host /@fs worker-entry URL, HTTP200 and both negative markers; A/B lifecycle/loud-rejection assertions and budgets unchanged. Reviewer independently ran actual newC on a fresh Vite server with no global setup/app warmup:PASS562ms; restored original literal await import(entry.url) defect in scratch and newC failed574ms at /@vite/client assertion; scratch restored. Parent full A/B/C3PASS20.4s and cold baseline/mutant artifacts agree. This removes an unrelated prerequisite rather than hiding the original contamination defect. Product tree unchanged since156; inherited browser/packed proof remains valid. Current fullgate28/28PASS,unit183.7s/parity127.5s,no reruns."
+    },
+    {
+      "row": "Post-CLOSE PR-4 aggregate packed-consumer watchdog accounts for the later serial benchmark without relaxing operation or product assertions",
+      "source": "frozen-artifact",
+      "trace": "named packed Workbench external-consumer baseline; original wrapper7dbe9b4913 and benchmark addition2534d1e97",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.test.ts:12; tests/integration/workbench-packed-consumer.test.ts:56; tests/integration/workbench-packed-consumer.mjs:1256; tools/agent-bench/tests/reference-host.spec.ts:15; /tmp/esbuild-4c-light1-plain.log; /tmp/esbuild-fe-packed-ci-plain.log; /tmp/esbuild-4c-packed-isolated.log; /tmp/esbuild-packed-budget-green.log; /tmp/esbuild-packed-budget-prcheck.log; /tmp/esbuild-packed-budget-format-ast.json; /tmp/esbuild-packed-budget-prcheck-clean.log",
+      "note": "Independent raw/source/history review: original wrapper820s/Vitest900s unchanged since7dbe;2534 later adds a serial benchmark child600s after full packed journey without updating wrapper. main408 criteria identical. Earlier Linux fe391PASS814.063s leaves5.937s watchdog margin; fe\u21924c changes only unrelated testC+verdict. Current CI completes Chromium/scoped-preview then outer watchdog kills runner143 at820s during buffered benchmark; artifact does not establish a runtime hang or benchmark-local timeout. Exact current baseline isolatedPASS313.923s. Correction only outer820+600=1420s and prior80s Vitest reserve; SIGKILL60s, benchmark600s, inner operation deadlines, code0/success marker and every functional/profile assertion unchanged. No new scheduler/mode or skipped workload. Prior runtime/browser/packed acceptance inputs unchanged. Corrected actual packed gate PASS365.247s. Initial prcheck stopped after lint formatting failure; subsequent a8 follow-up independently has identical normalized TypeScript AST to aff3 (kinds/identifiers/literals/ordered children), so packed proof remains applicable. Final clean prcheck28/28PASS,unit193.3s/parity159.4s,no failed-file isolation reruns; initial lint-stopped run is not counted GREEN."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/ipc/no-coi-child-process.ts:50",
+          "summary": "No-COI MessagePort stdin acknowledges postMessage before peer delivery: large pending write can report success and release an unreferenced parent early; unread peer exit loses Node EPIPE. Captured in existing kernel/binary-stdio-messageport-backpressure with runtime-js/kernel owner, trigger, durable two-case probe and compat\u274c. Outside current accepted result, not an I4 repair deferred from this goal.",
+          "authority": "",
+          "evidence": "Independent frozen actual Chromium+SW vs Node24.16.0: /tmp/esbuild-merge-independent-no-coi-pending.log gives delayed-reader marker Node true vs noCOI false; /tmp/esbuild-merge-independent-no-coi-pending-death.log gives Node callback EPIPE/errors[EPIPE] vs noCOI callbacknull/errors[], with only child.unref in the death case. Parent repeated committed source docs/backlog/kernel/reference/no-coi-stdin-write-completion.mjs in /tmp/esbuild-no-coi-stdin-durable-repro.log. Original main7f8 source writer is identical. Scope ruling: User scenario defaults to COI; I3 any-program generalizes COI guests, I4 explicitly preserves main no-COI0.28build/admission. OriginalI4 retained the no-COI platform wall, amendment changes I4 only. Requiring fullI3 cross-tier would strengthen destination. Concern recorded, not unit/goal residual."
+        }
+      ]
+    }
+  ],
+  "adjudication": []
+}

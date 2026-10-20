@@ -1,7 +1,9 @@
 import { NotImplementedError } from '@riftydev/io';
 import {
   type BuiltinShadowSubstitutionRecipe,
-  builtinShadowSubstitutionCatalog,
+  type ShadowRuntimeTier,
+  builtinRecipeForTier,
+  specializeShadowRecipe,
 } from '@riftydev/shadow-registry/internal';
 import { type OverrideMap, userOverrideSpec } from '../../overrides.ts';
 import { matchesRange } from '../../semver.ts';
@@ -21,15 +23,25 @@ export function builtinRecipeForRequest(
   parent: string | undefined,
   overrides: OverrideMap | undefined,
   replayedEntryVersion?: string,
+  runtimeTier?: ShadowRuntimeTier,
 ): BuiltinShadowSubstitutionRecipe | null {
-  const { override } = resolveEffectivePackageRequest(name, range, parent, overrides);
+  const { override } = resolveEffectivePackageRequest(name, range, parent, overrides, runtimeTier);
   if (override?.source === 'user') return null;
-  const recipe = builtinShadowSubstitutionCatalog.recipes.find(
-    (candidate) => candidate.trigger.name === name,
-  );
+  const recipe = builtinRecipeForTier(name, runtimeTier);
   if (!recipe) return null;
   // A user version/range override IS the edge spec the recipe admits (ADR-0451).
   const requested = userOverrideSpec(name, parent, overrides) ?? range;
+  if (
+    recipe.runtimeTier === 'no-coi' &&
+    replayedEntryVersion !== undefined &&
+    replayedEntryVersion !== attestedProductVersion(recipe)
+  ) {
+    throw new NotImplementedError(
+      recipe.admission.unsupportedFeature,
+      `no-COI cannot run lock pin ${replayedEntryVersion}`,
+    );
+  }
+
   // Replay admits only a CONSISTENT recorded fact: the pinned entry is the
   // attested product AND the recorded range semantically admits the trigger
   // version (npm refuses an out-of-sync lock too — `npm ci` EUSAGE).
@@ -56,12 +68,13 @@ export function assertDirectShadowRecipeAdmissions(
   optionalDependencies: Readonly<Record<string, string>>,
   rootName: string,
   overrides: OverrideMap | undefined,
+  runtimeTier?: ShadowRuntimeTier,
 ): void {
   for (const [name, range] of [
     ...Object.entries(dependencies),
     ...Object.entries(optionalDependencies),
   ]) {
-    builtinRecipeForRequest(name, range, rootName, overrides);
+    builtinRecipeForRequest(name, range, rootName, overrides, undefined, runtimeTier);
   }
 }
 
@@ -75,20 +88,22 @@ export function registryRecipeForResolution(
   if (
     recipe?.acquisition.kind !== 'registry' ||
     recipe.acquisition.name !== effectiveName ||
-    recipe.acquisition.version !== version
+    (recipe.acquisition.version !== version && recipe.admission.kind !== 'requested-range')
   ) {
     return null;
   }
-  return recipe;
+  return specializeShadowRecipe(recipe, version);
 }
 
 export function assertShadowRecipeAdmission(
   recipe: Readonly<{
     trigger: Pick<BuiltinShadowSubstitutionRecipe['trigger'], 'version'>;
     admission: BuiltinShadowSubstitutionRecipe['admission'];
+    runtimeTier?: ShadowRuntimeTier;
   }>,
   requestedRange: string | null,
 ): void {
+  if (recipe.admission.kind === 'requested-range') return;
   const admitted =
     recipe.admission.kind === 'semver-admits'
       ? matchesRange(recipe.trigger.version, requestedRange)
@@ -96,6 +111,6 @@ export function assertShadowRecipeAdmission(
   if (admitted) return;
   throw new NotImplementedError(
     recipe.admission.unsupportedFeature,
-    `shadow recipe does not admit ${requestedRange ?? '*'}`,
+    `${recipe.runtimeTier === 'no-coi' ? 'no-COI ' : ''}shadow recipe does not admit ${requestedRange ?? '*'}`,
   );
 }

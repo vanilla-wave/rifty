@@ -8,12 +8,24 @@ import {
   sealedWorkbenchFixtureUrl,
   writeOwnerFile,
 } from './fixtures.ts';
+import {
+  SAVED_ESBUILD_PROBE,
+  captureSavedEsbuildOracle,
+  savedEsbuildTranscript,
+} from './fixtures/esbuild-saved-node-oracle.ts';
 
 for (const fault of ['payload', 'shadow-provenance', 'missing-lock'] as const) {
-  test(`saved Vite ${fault} still runs independent Node and fails at esbuild use`, async ({
+  test(`saved Vite ${fault} keeps Node access and matches stock esbuild use`, async ({
     page,
+    context,
   }) => {
     test.setTimeout(240_000);
+    const oracle = captureSavedEsbuildOracle(fault);
+    expect(oracle.exit, oracle.stderr).toBe(fault === 'payload' ? 1 : 0);
+    const generated: string[] = [];
+    context.on('request', (request) => {
+      if (request.url().includes('/generated/esbuild-runtime.js')) generated.push(request.url());
+    });
     await gotoHarness(page);
     const options = {
       workspaceId: 'pr323-adapter',
@@ -40,6 +52,7 @@ for (const fault of ['payload', 'shadow-provenance', 'missing-lock'] as const) {
           { expectedVersion: lock.version },
         );
       }, sealedWorkbenchFixtureUrl);
+    await writeOwnerFile(page, '/scratch/probe.cjs', SAVED_ESBUILD_PROBE);
     await closeOwner(page);
     await bootOwner(page, options);
     try {
@@ -47,9 +60,10 @@ for (const fault of ['payload', 'shadow-provenance', 'missing-lock'] as const) {
       console.log('[pr323-adapter]', JSON.stringify(local));
       expect(local.exit).toBe(0);
       expect(local.out).toContain('independent Node');
-      const adapter = await execLine(page, 'node -e "require(\'esbuild\')"');
-      expect(adapter.exit).not.toBe(0);
-      expect(adapter.out).toMatch(/wasm size|not initialized|not available|unavailable/);
+      const adapter = await execLine(page, 'node probe.cjs');
+      expect(adapter.exit, adapter.out).toBe(oracle.exit);
+      expect(savedEsbuildTranscript(adapter.out)).toEqual(oracle.transcript);
+      expect(generated).toEqual([]);
     } finally {
       await closeOwner(page);
     }

@@ -130,9 +130,9 @@ type FinalImplementation = (this: Writable, callback: (error?: Error | null) => 
 
 interface WritableInitializationTarget {
   _writableState: WritableState;
-  writeImpl?: WriteImplementation;
-  writevImpl?: WritevImplementation;
-  finalImpl?: FinalImplementation;
+  _write?: WriteImplementation;
+  _writev?: WritevImplementation;
+  _final?: FinalImplementation;
   endCallbacks: Array<(error?: Error | null) => void>;
 }
 
@@ -141,6 +141,7 @@ export function initializeWritable(receiver: Writable, options: WritableOptions 
   const objectMode = options.objectMode ?? false;
   target._writableState = {
     buffered: [],
+    bufferedIndex: 0,
     length: 0,
     highWaterMark: options.highWaterMark ?? getDefaultHighWaterMark(objectMode),
     objectMode,
@@ -157,8 +158,8 @@ export function initializeWritable(receiver: Writable, options: WritableOptions 
     drainScheduled: false,
     writevBatch: false,
   };
-  if (typeof options.write === 'function') target.writeImpl = options.write;
-  if (typeof options.writev === 'function') target.writevImpl = options.writev;
-  if (typeof options.final === 'function') target.finalImpl = options.final;
+  if (typeof options.write === 'function') target._write = options.write;
+  if (typeof options.writev === 'function') target._writev = options.writev;
+  if (typeof options.final === 'function') target._final = options.final;
   target.endCallbacks = [];
 }

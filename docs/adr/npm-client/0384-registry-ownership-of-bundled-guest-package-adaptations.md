@@ -37,4 +37,4 @@ PR #314 accepts SDK rebuilds, all existing adaptations and optional public Vite 
 
 ## Corrections (active)
 
-- 2026-10-20 — ADR-0539: no-COI uses upstream Node esbuild through SW children; no adapter activation at install/open. Shared COI client remains.
+- 2026-10-20 — ADR-0539 removes generated-client startup from no-COI; ADR-0543 removes it from COI. Both run stock Node entries. The Alternatives rejection of general Node capability fixes is superseded by differential proof; registry ownership of retained adaptations remains.

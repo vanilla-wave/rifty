@@ -66,7 +66,7 @@ describe('I3 explicit npm command retains local behavior without acquisition cap
       await h.packages.quiesce();
       expect(h.authority.readFileBytesSync(`${root}/node_modules/ms/index.js`)).toEqual(original);
       const stamp = readInstallStampSync(h.authority, root);
-      expect(stamp !== null && stampTrusted(stamp)).toBe(true);
+      expect(stamp !== null && stampTrusted(stamp, 'coi')).toBe(true);
       expect(network.requests).toEqual([]);
     } finally {
       await opened.close();

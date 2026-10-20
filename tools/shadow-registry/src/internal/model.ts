@@ -6,7 +6,7 @@ export interface ShadowMaterializationFile {
 }
 
 export interface ShadowRecipeAdmission {
-  readonly kind: 'semver-admits' | 'exact-only';
+  readonly kind: 'semver-admits' | 'exact-only' | 'requested-range';
   readonly unsupportedFeature: string;
 }
 
@@ -25,7 +25,7 @@ export type ShadowRecipeAcquisition =
       kind: 'registry';
       name: string;
       version: string;
-      dependencyProjection: ShadowRegistryDependencyProjection;
+      dependencyProjection: ShadowRegistryDependencyProjection | null;
     }>;
 
 export interface BuiltinShadowSubstitutionRecipe {
@@ -34,6 +34,7 @@ export interface BuiltinShadowSubstitutionRecipe {
   readonly digest: string;
   readonly trigger: Readonly<{ name: string; version: string }>;
   readonly admission: Readonly<ShadowRecipeAdmission>;
+  readonly runtimeTier?: 'coi' | 'no-coi';
   readonly acquisition: ShadowRecipeAcquisition;
   readonly materialization: Readonly<{
     name: string;

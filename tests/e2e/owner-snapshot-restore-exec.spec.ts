@@ -85,6 +85,9 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
     const marker = `restore-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     const projectName = `Restore-${Date.now()}`;
 
+    // Enable interception before stock esbuild Workers enter Atomics.wait.
+    // Later owner-script holds must not toggle Fetch in those blocked Workers.
+    await page.route('**/*', (route) => route.fallback());
     await resetSandboxThroughUi(page);
     await pickStarter(page, 'project-files');
     await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 60_000 });

@@ -1,16 +1,5 @@
 import { NotImplementedError } from '@riftydev/io';
-/**
- * Node-compatible `node:crypto` (subset).
- *
- * Implements the synchronous `createHash` API that Vite + most tooling
- * relies on (sha256, sha1, md5) using a pure-JS hash core — SubtleCrypto
- * cannot be used because it is async-only.
- *
- * Randoms route through `crypto.getRandomValues`: `randomUUID`, sync/async
- * `randomBytes`/`randomFill`, and `randomInt` (unbiased rejection sampling).
- * `hash` is a one-shot over the sync hash cores. Unimplemented algos/APIs stay
- * loud: `NotImplementedError`.
- */
+/** Synchronous Node hashes use JS cores; random sources use captured Web Crypto. */
 import { Buffer } from './buffer.ts';
 
 // `latin1` is Node's alias for `binary` (identical single-byte codec).
@@ -146,6 +135,15 @@ export function hash(
 // Largest `randomBytes` size Node accepts (INT32_MAX); larger throws
 // ERR_OUT_OF_RANGE. The Web Crypto `getRandomValues` cap is far lower (65536
 // bytes/call), so the fill core below chunks to stay faithful for big sizes.
+// Node random sources do not follow a guest replacement of globalThis.crypto.
+const platformCrypto = globalThis.crypto;
+const platformRandom = platformCrypto?.getRandomValues.bind(platformCrypto);
+const platformUuid = platformCrypto?.randomUUID.bind(platformCrypto);
+function randomView(view: Uint8Array): void {
+  if (!platformRandom) throw new NotImplementedError('crypto.getRandomValues');
+  platformRandom(view);
+}
+
 const MAX_RANDOM_BYTES = 2 ** 31 - 1;
 const MAX_RANDOM_CHUNK = 65536;
 
@@ -157,7 +155,7 @@ const MAX_RANDOM_CHUNK = 65536;
 function fillRandom(view: ArrayBufferView): void {
   const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
   for (let off = 0; off < bytes.length; off += MAX_RANDOM_CHUNK) {
-    crypto.getRandomValues(bytes.subarray(off, Math.min(off + MAX_RANDOM_CHUNK, bytes.length)));
+    randomView(bytes.subarray(off, Math.min(off + MAX_RANDOM_CHUNK, bytes.length)));
   }
 }
 
@@ -307,7 +305,7 @@ const RAND_MAX = 2 ** 48 - 1;
 
 function random48(): number {
   const b = new Uint8Array(6);
-  crypto.getRandomValues(b);
+  randomView(b);
   return (
     b[0]! * 2 ** 40 + b[1]! * 2 ** 32 + b[2]! * 2 ** 24 + b[3]! * 2 ** 16 + b[4]! * 2 ** 8 + b[5]!
   );
@@ -372,13 +370,14 @@ export function randomInt(
 }
 
 export function randomUUID(): string {
-  return crypto.randomUUID();
+  if (!platformUuid) throw new NotImplementedError('crypto.randomUUID');
+  return platformUuid();
 }
 
 // Node 17+ exposes the Web Crypto `getRandomValues` directly on
 // `node:crypto`. Vite uses it during config hashing.
 export function getRandomValues<T extends ArrayBufferView>(view: T): T {
-  crypto.getRandomValues(view as unknown as Uint8Array);
+  randomView(view as unknown as Uint8Array);
   return view;
 }
 
@@ -485,7 +484,7 @@ export const constants = Object.freeze({
   defaultCipherList,
 });
 
-const webcrypto = typeof crypto !== 'undefined' ? crypto : undefined;
+const webcrypto = platformCrypto;
 
 const cryptoModule = {
   constants,

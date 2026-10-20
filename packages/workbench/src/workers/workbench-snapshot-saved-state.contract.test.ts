@@ -41,7 +41,7 @@ async function seed(endpoint: Endpoint, edited: boolean) {
   expect(stamp).not.toBeNull();
   const parsedStamp = readInstallStampSync(h.authority, opened.projectRoot);
   expect(parsedStamp).not.toBeNull();
-  expect(parsedStamp !== null && stampTrusted(parsedStamp)).toBe(true);
+  expect(parsedStamp !== null && stampTrusted(parsedStamp, 'coi')).toBe(true);
   expect(network.requests).toEqual([snapshotAssetUrl]);
   expect(h.authority.readFileBytesSync(`${opened.projectRoot}/main.cjs`)).toEqual(
     encoder.encode(savedSnapshotSource),

@@ -111,6 +111,7 @@ export {
   type KernelProcessSpec,
   type KernelProcessStdioPorts,
   type KernelStdioOutputWriter,
+  type KernelStdioInputReader,
   type KernelSyncApi,
   type KernelSyncBinaryCall,
   type KernelSyncCall,

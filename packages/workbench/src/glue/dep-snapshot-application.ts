@@ -1,8 +1,9 @@
 import { TARBALL_CACHE_ROOT } from '@riftydev/npm-client';
 import { planShadowSubstitutionsFromLockfile } from '@riftydev/npm-client/internal';
+import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
 import type { PersistFailureReport } from '@riftydev/vfs';
 import { assertPreparedDependencySnapshot } from './dep-snapshot-preparation.ts';
-import { type DepSnapshotV3, verifyDepSnapshotReplayCache } from './dep-snapshot.ts';
+import { type DepSnapshotV3, prepareDepSnapshotForRuntimeTier } from './dep-snapshot.ts';
 import {
   type WorkspaceOverlayFs,
   prepareWorkspaceArchiveOverlay,
@@ -21,15 +22,16 @@ function encodedText(text: string): string {
 export async function prepareDepSnapshotApplication(
   fs: WorkspaceOverlayFs,
   root: string,
-  snapshot: DepSnapshotV3,
+  source: DepSnapshotV3,
   options: {
     readonly conflict: 'error' | 'overwrite';
+    readonly runtimeTier?: ShadowRuntimeTier;
     readonly onProgress?: (written: number, total: number) => void;
     readonly preflightRoot?: string;
     readonly flush: () => Promise<PersistFailureReport | undefined>;
   },
 ) {
-  await verifyDepSnapshotReplayCache(snapshot);
+  const snapshot = await prepareDepSnapshotForRuntimeTier(source, options.runtimeTier);
   assertPreparedDependencySnapshot(snapshot);
   const project = decodeWorkspaceArchive(
     {

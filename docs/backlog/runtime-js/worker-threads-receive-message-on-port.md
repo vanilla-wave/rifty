@@ -17,7 +17,7 @@ esbuild-wasm `lib/main.js:2237` calls it after `Atomics.wait` on every
 `*Sync` call. Browsers have no synchronous MessagePort read, so real support
 needs a sync-capable channel (with prompt Worker start and port transfer in
 workerData — the two related items); the user kept real sync outside
-`epics/esbuild-upstream-twin` («Только «громко, не hang»», 2026-10-16).
+the closed `esbuild-upstream-twin` goal (ADR-0543) («Только «громко, не hang»», 2026-10-16).
 
 ## Question
 

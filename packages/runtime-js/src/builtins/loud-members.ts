@@ -15,6 +15,10 @@ export function spawnSync(..._args: unknown[]): never {
   throw new NotImplementedError('child_process.spawnSync');
 }
 
+export function execFileSync(..._args: unknown[]): never {
+  throw new NotImplementedError('child_process.execFileSync');
+}
+
 export function memoryUsage(..._args: unknown[]): never {
   throw new NotImplementedError('process.memoryUsage');
 }

@@ -50,7 +50,13 @@ export interface KernelStdioOutputWriter {
   write(bytes: Uint8Array): void;
 }
 
+export interface KernelStdioInputReader {
+  read(length: number, wait: boolean): Uint8Array | null;
+  close(): void;
+}
+
 export interface KernelProcessStdioPorts {
+  readonly input?: KernelStdioInputReader;
   readonly stdout: KernelStdioOutputWriter;
   readonly stderr: KernelStdioOutputWriter;
   readonly stdin: MessagePort;

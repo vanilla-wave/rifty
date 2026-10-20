@@ -259,7 +259,7 @@ describe('I6 catalog-owned orphan Scratch retention', () => {
       );
       expect(network.requests).toEqual([snapshot.descriptor.assetUrl]);
       const stamp = readInstallStampSync(h.authority, scratchRoot);
-      expect(stamp !== null && stampTrusted(stamp)).toBe(true);
+      expect(stamp !== null && stampTrusted(stamp, 'coi')).toBe(true);
     } finally {
       await opened?.close();
       await h.close();
@@ -681,7 +681,7 @@ describe('I6 catalog-owned orphan Scratch retention', () => {
       );
       expect(fs.statSyncOrNull(`${scratchRoot}/oversize.bin`)).toBeNull();
       const stamp = readInstallStampSync(composition.authority, scratchRoot);
-      expect(stamp !== null && stampTrusted(stamp)).toBe(true);
+      expect(stamp !== null && stampTrusted(stamp, 'coi')).toBe(true);
       expect(network.requests).toEqual([snapshot.descriptor.assetUrl]);
     } finally {
       await opened?.close();

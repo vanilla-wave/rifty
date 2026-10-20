@@ -8,6 +8,7 @@ import { normalizePath } from '@riftydev/vfs';
 import {
   type DepSnapshotV3,
   fetchVerifiedDepSnapshot,
+  prepareDepSnapshotForRuntimeTier,
   prepareDepSnapshotRestore,
 } from '../glue/dep-snapshot.ts';
 import {
@@ -16,7 +17,7 @@ import {
   revalidateLearnedPin,
   writeLearnedPin,
 } from '../glue/eddy-learned-pins.ts';
-import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
+import { installArtifactIdentityForTier } from '../glue/install-artifact-identity.ts';
 import { decideInstallPrefetch, startInstallPrefetch } from '../glue/install-prefetch.ts';
 import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
 import {
@@ -55,6 +56,7 @@ import {
 import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
 
 const enc = new TextEncoder();
+const installArtifactIdentity = installArtifactIdentityForTier('coi');
 
 import type {
   FirstMaterializationOwnerPackageConfig,
@@ -142,6 +144,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
   const resolverBundleBaseUrl = options.resolverBundleBaseUrl;
   const resolverPin = options.resolverPin;
   const stamps = createInstallStampAuthority({
+    runtimeTier: 'coi',
     vfs: options.vfs,
     fsSync: options.fsSync,
     claimIo: options.installStampClaims,
@@ -206,6 +209,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
   };
 
   const baseNpmDeps: Omit<NpmShellCommandDeps, 'packageAcquisitionAuthority'> = {
+    runtimeTier: 'coi',
     vfs: options.vfs,
     ...(registry === undefined ? {} : { registry }),
     ...(options.install ? { install: options.install } : {}),
@@ -293,12 +297,13 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         const payload = snapshot.payload as DepSnapshotV3 | undefined;
         if (!payload) return { status: 'rejected', reason: 'snapshot-payload-missing' };
         try {
-          const prepared = await prepareDepSnapshotRestore(options.fsSync, project.root, payload);
+          const selected = await prepareDepSnapshotForRuntimeTier(payload, 'coi');
+          const prepared = await prepareDepSnapshotRestore(options.fsSync, project.root, selected);
           const config = configFor(project);
           const lockfile =
-            payload.lockfile.length === 0
+            selected.lockfile.length === 0
               ? { lockfileVersion: 3, packages: {} }
-              : (JSON.parse(payload.lockfile) as unknown);
+              : (JSON.parse(selected.lockfile) as unknown);
           return {
             status: 'ready',
             packages: payload.packages,
@@ -643,7 +648,12 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
                     status: 'candidate' as const,
                     snapshot: {
                       snapshotId: materialization.snapshot.snapshotId,
-                      identity: snapshot.installArtifactIdentity,
+                      // Candidate compatibility; restore/apply preflight still verifies and projects bytes.
+                      identity:
+                        snapshot.installArtifactIdentity ===
+                        installArtifactIdentityForTier('no-coi')
+                          ? installArtifactIdentity
+                          : snapshot.installArtifactIdentity,
                       packageJsonText: snapshot.packageJsonText,
                       payload: snapshot,
                     },

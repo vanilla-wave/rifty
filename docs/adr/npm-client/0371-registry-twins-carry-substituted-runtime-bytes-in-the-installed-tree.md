@@ -97,3 +97,5 @@ Alternatives:
 ## Corrections (active)
 
 - 2026-09-07 — ADR-0384 supersedes package-adaptation owner/carrier clauses and `.vite` archive classification where applicable; all other decisions remain active.
+
+- 2026-10-20 — ADR-0543 replaces COI exact-0.28.0 generated binding/hash/startup with an unmodified selected stock Node twin. No-COI retains the generated runtime. Installed-tree/offline authority and absence of a separate CAS, transport or lifecycle remain.

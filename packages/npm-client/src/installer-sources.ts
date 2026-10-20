@@ -95,7 +95,15 @@ function createIncrementalSource(
   let metadataUsed = false;
   const useRegistry = (name: string, range: string | null, ctx: ResolveContext): boolean => {
     if (ctx.parentOrigin === 'root' && opts.updateNames?.includes(name)) return true;
-    const decision = lockfileReuseDecision(lockfile, shadowPlan, name, range, ctx, opts.overrides);
+    const decision = lockfileReuseDecision(
+      lockfile,
+      shadowPlan,
+      name,
+      range,
+      ctx,
+      opts.overrides,
+      opts.runtimeTier,
+    );
     return decision.kind === 'miss' && registryOwnsIncrementalMiss(decision, ctx);
   };
 
@@ -156,7 +164,13 @@ function createLockfileSource(
         override,
         effectiveName,
         installName = effectiveName,
-      } = resolveEffectivePackageRequest(name, range, ctx.parentName, opts.overrides);
+      } = resolveEffectivePackageRequest(
+        name,
+        range,
+        ctx.parentName,
+        opts.overrides,
+        opts.runtimeTier,
+      );
       const hit = pinnedEntryForParent(lockfile, installName, ctx.parentLockfilePath);
       const registryName = hit?.entry.name ?? installName;
       if (hit && typeof hit.entry.version === 'string')
@@ -169,6 +183,7 @@ function createLockfileSource(
         ctx.parentName,
         opts.overrides,
         hit?.entry.version,
+        opts.runtimeTier,
       );
       const synthetic = recipe?.acquisition.kind === 'synthetic' ? recipe : null;
       if (!hit) {
@@ -266,6 +281,10 @@ function createLockfileSource(
         shadowRecipe?.acquisition.kind === 'registry'
           ? embeddedSources.find((source) => source.acquisitionInstallPath === installPath)
           : undefined;
+      const projection =
+        shadowRecipe && shadowFact?.substitutionId !== shadowRecipe.id
+          ? assertRegistryShadowProjection(shadowRecipe, entry)
+          : embeddedSource?.projection;
       if (synthetic) {
         substitutions.line(
           `npm: ${name}@${range ?? '*'} materialized from shadow registry (${synthetic.id})`,
@@ -289,6 +308,7 @@ function createLockfileSource(
           ? {
               shadow: {
                 recipe: shadowRecipe,
+                ...(projection ? { projection } : {}),
                 trigger: {
                   name,
                   requestedRange: range,
@@ -372,13 +392,21 @@ function createRegistrySource(
     prefetch(name, range, ctx): void {
       // Advisory warm-up only — admission throws belong to resolve's boundary.
       try {
-        const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
+        const recipe = builtinRecipeForRequest(
+          name,
+          range,
+          ctx.parentName,
+          opts.overrides,
+          undefined,
+          opts.runtimeTier,
+        );
         if (recipe?.acquisition.kind === 'synthetic') return;
         const { effectiveName } = resolveEffectivePackageRequest(
           name,
           range,
           ctx.parentName,
           opts.overrides,
+          opts.runtimeTier,
         );
         void loadPackument(effectiveName);
       } catch {
@@ -387,7 +415,14 @@ function createRegistrySource(
     },
 
     async resolve(name, range, ctx, onSelection): Promise<ResolvedPin> {
-      const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
+      const recipe = builtinRecipeForRequest(
+        name,
+        range,
+        ctx.parentName,
+        opts.overrides,
+        undefined,
+        opts.runtimeTier,
+      );
       const synthetic = recipe?.acquisition.kind === 'synthetic' ? recipe : null;
       if (synthetic) {
         const manifest = syntheticManifest(synthetic);
@@ -423,7 +458,13 @@ function createRegistrySource(
         effectiveName,
         effectiveRange,
         installName = effectiveName,
-      } = resolveEffectivePackageRequest(name, range, ctx.parentName, opts.overrides);
+      } = resolveEffectivePackageRequest(
+        name,
+        range,
+        ctx.parentName,
+        opts.overrides,
+        opts.runtimeTier,
+      );
 
       const packument = await loadPackument(effectiveName);
       const versions = Object.keys(packument.versions);
@@ -512,6 +553,7 @@ function createRegistrySource(
           ? {
               shadow: {
                 recipe: shadowRecipe,
+                ...(shadowProjection ? { projection: shadowProjection } : {}),
                 trigger: {
                   name,
                   requestedRange: range,

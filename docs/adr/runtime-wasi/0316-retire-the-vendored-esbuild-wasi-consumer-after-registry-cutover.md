@@ -88,3 +88,7 @@ provenance and acceptance instead of retaining the product carrier.
 - This ADR supersedes ADR-0047 and corrects old carrier/provider clauses in
   ADR-0011, ADR-0051–0053, ADR-0070, ADR-0135, ADR-0172–0173, ADR-0188,
   ADR-0193, and ADR-0226. ADR-0049 is unchanged.
+
+## Corrections
+
+- 2026-10-20 — ADR-0543 limits the exact generated product runtime and esbuild.cli gap to no-COI. COI delegates to the selected upstream Node bin. Vendored preview1 removal, explicit showcase/pinned WASI fixture and zero-preview1-request authorities remain.

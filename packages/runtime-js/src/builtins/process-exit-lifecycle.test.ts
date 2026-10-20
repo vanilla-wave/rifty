@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process';
+import { execPath } from 'node:process';
 import { NotImplementedError } from '@riftydev/io';
 import type { KernelProcessSpec } from '@riftydev/kernel';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -98,6 +100,23 @@ describe('process.exit re-entry (ADR-0445)', () => {
 // no-listener rejection's status 1 is final at once — a later task's exit(0)
 // (reviewer probe: `setTimeout(() => process.exit(0), 1)`) never overrides it.
 describe('fatal unhandled rejection (ADR-0445)', () => {
+  it('an async explicit exit retains status without reporting an internal exit error', async () => {
+    const native = spawnSync(execPath, ['-e', 'Promise.resolve().then(() => process.exit(1));'], {
+      encoding: 'utf8',
+    });
+    expect(native.status).toBe(1);
+    expect(native.stderr).toBe('');
+    const { process, frames, stderr } = processWithControl();
+    const pending = Promise.resolve().then(() => process.exit(1));
+    const signal: unknown = await pending.catch((error: unknown) => error);
+    const canceled = handleRealmUnhandledRejection(signal, pending);
+    await tick();
+    expect(frames).toEqual([{ kind: 'control:self-exit', code: native.status }]);
+    expect(stderr.join('')).toBe(native.stderr);
+    expect(canceled).toBe(true);
+    await expect(awaitDrain()).rejects.toMatchObject({ code: 'RIFTY_PROCESS_EXIT', exitCode: 1 });
+  });
+
   it('prints and requests status 1 at the trap; a later exit(0) requests nothing', async () => {
     const { process, frames, stderr } = processWithControl();
     const seen: unknown[] = [];

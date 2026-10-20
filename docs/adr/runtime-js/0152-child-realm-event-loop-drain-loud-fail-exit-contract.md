@@ -68,3 +68,9 @@ The Vite HMR client `setInterval` was injected by the bundler into the entry chu
 - `docs/backlog/runtime-js/keepalive-residual-gaps.md` — residual keepalive gaps (detached fetch + nested-child backstop); supersedes the closed `timer-unref-keepalive.md`
 - `docs/public/compat/process.md` — drain-cap divergence row + keepalive scope
 - ADR-0150, ADR-0144, ADR-0085, ADR-0039
+
+## Corrections
+
+- 2026-10-20 — ChildProcess and child pipes reuse WorkerReference; output handles retain while referenced, idle stdin does not, pending stdin writes retain until transport completion independently of unref (esbuild-upstream-twin I3).
+
+- 2026-10-20 — child stdin request references start at transport `_write`, not buffered `write` admission. Corked bytes do not hold an unreferenced parent; active writes still hold independently of pipe unref. Native/Chromium cork-only, corked-successor and backpressure probes; Writable constructor hooks now expose the same replaceable methods as Node.

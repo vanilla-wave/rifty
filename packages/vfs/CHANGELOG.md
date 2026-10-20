@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- Entry-owned session inode and creation/change clocks in FsStat; Memory/OPFS sync preserve identity on overwrite/rename and expose link count/atime (ADR-0540).
+
 - `VfsErrorCode` gains `EXDEV` (rename across mounts, ADR-0531).
 
 - Observe native replica admission before hydration; retain actual contention cause on occupied guard expiry without changing wait/fallback semantics (ADR-0486).

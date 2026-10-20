@@ -74,7 +74,7 @@ async function seedSavedState() {
       treeRevision: h.authority.treeRevision,
     });
     const editedStamp = readInstallStampSync(h.authority, sourceRoot);
-    expect(editedStamp !== null && stampTrusted(editedStamp)).toBe(true);
+    expect(editedStamp !== null && stampTrusted(editedStamp, 'coi')).toBe(true);
     await opened.close();
     opened = undefined;
     const definition = savedSnapshotDefinition(id, original.descriptor);
@@ -130,7 +130,7 @@ function expectApplied(h: Owner, artifact: SavedSnapshotFixture): void {
   ])
     expect(decoder.decode(h.authority.readFileBytesSync(`${root}${path}`))).toBe(text);
   const stamp = readInstallStampSync(h.authority, root);
-  expect(stamp !== null && stampTrusted(stamp)).toBe(true);
+  expect(stamp !== null && stampTrusted(stamp, 'coi')).toBe(true);
   expect(stamp).toMatchObject({
     root,
     slug: id,

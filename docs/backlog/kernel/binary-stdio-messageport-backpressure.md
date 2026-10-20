@@ -1,15 +1,58 @@
 ---
 area: kernel
 status: draft
-title: Binary stdio over MessagePort with backpressure (replace JSON-over-UTF-8 framing)
+title: MessagePort stdin completion and pipe backpressure
 created: 2026-06-08
-why: only JSON sync-RPC framing landed; raw-byte inter-process stdio with backpressure left as a separate pass, no closing ADR
-user_story: As a dev piping a fast producer into a slow child (`a | b`, `child.stdin.write(bigBuffer)`), I want byte-stream stdio honouring Writable `drain`, but today child stdio is JSON-framed over the `MessagePort` with no flow control so a fast producer unbounded-buffers.
-sources: [A-021, ADR-0011, TASKS M6]
+why: No-COI child stdin reports write completion before delivery and loses EPIPE on unread peer exit.
+user_story: As a developer writing a large buffer to an unreferenced child, I want its callback and parent lifetime to follow Node, but no-COI reports success before the child reads or exits.
+sources: [ADR-0011, ADR-0539, docs/backlog/kernel/reference/no-coi-stdin-write-completion.mjs, docs/public/compat/process.md]
+code: [packages/runtime-js/src/ipc/no-coi-child-process.ts, packages/kernel/src/worker-stdin.ts, packages/kernel/src/worker-stdin-rpc.ts]
 ---
+
 ## Context
-ADR-0011 phase 3 implemented JSON-over-UTF-8 framing for sync RPC (sync-rpc.ts / sync-client.ts / sync-dispatch.ts). The inter-process pipe bus is JSON, not raw bytes. M6 open acceptance "Pipe stdio over MessagePort with backpressure" is the same gap: child stdio is currently posted as framed messages, not byte-streamed with flow control. A-021 phase 2 (binary stdio with backpressure) was explicitly deferred to a separate pass and never closed by a later ADR.
-## Options / Next
-Replace JSON framing on the stdio path with raw-byte chunks streamed over the per-process stdio `MessagePort`s (allocated by `kernel.spawnWorker`), honouring Writable backpressure / drain so a fast producer can't unbounded-buffer a slow child. Distinct from the SyncRpc sync-call wire (that stays). Coordinate with the perf-area SyncRpc-v2 binary-frame work to avoid double-churning the wire.
-## Reversibility
-REVERSIBLE in shape but touches the kernel↔runtime-js stdio contract; if it widens a public IPC method it tips IRREVERSIBLE → own ADR. Verify against the perf SyncRpc-v2 binary-frame item before designing the frame.
+
+2026-10-20 refresh of the existing MessagePort backpressure finding. Its old
+JSON-only framing claim was stale: COI now uses binary bounded `WorkerInput`
+(64 KiB); no-COI posts stdin bytes and immediately calls the Writable callback.
+The no-COI issue exists on main `7f8d0e8d7`, before PR #379's merge.
+
+Same program on Node 24.16.0 and actual Chromium SDK + SW, ephemeral storage:
+
+- 8 MiB write, `child.unref()` and `child.stdin.unref()`, delayed reader writes
+  a marker before reading: Node callback sees marker `true`; no-COI `false`.
+- 8 MiB write, only `child.unref()`, child exits without reading: Node callback
+  and error event report `EPIPE`; no-COI callback is `null`, error events `[]`.
+
+Both parent commands exit 0. Raw review runs:
+`/tmp/esbuild-merge-independent-no-coi-pending.log` and
+`/tmp/esbuild-merge-independent-no-coi-pending-death.log`.
+Durable executable: `reference/no-coi-stdin-write-completion.mjs`.
+Start `pnpm --filter @riftydev/playground dev:no-coi`, then from repository root:
+
+```sh
+pnpm exec node docs/backlog/kernel/reference/no-coi-stdin-write-completion.mjs http://127.0.0.1:5411
+```
+
+Executed unchanged on Node 24.16.0 + Chromium: both rows above reproduced;
+`/tmp/esbuild-no-coi-stdin-durable-repro.log`. It prints native/browser results
+and exits 1 while mismatches remain.
+Compat ❌: `docs/public/compat/process.md`, no-COI stdin completion row.
+
+## Scope and next probe
+
+Owner: runtime-js/kernel. Trigger: no-COI pending writes, unreferenced parents,
+peer death, or the next child-pipe backpressure unit. This factual draft does
+not prescribe a replacement transport. The broader stdout/stderr backpressure
+question from this item remains unmeasured; inspect at pickup.
+
+Class-kill inventory: `WorkerInput`, `registerWorkerInput`, `workerInputReader`
+and `bindPortAsWritable` already own COI capacity/completion. No-COI has a
+separate immediate MessagePort writer. Reuse or unify the existing authority
+before adding another acknowledgment/FIFO mechanism; nested SW caller routing
+must be checked before choosing that route.
+
+Dedup: existing item updated; stdio-stream-slot and raw-stdin drafts concern
+fd sharing/inheritance and terminal modes, respectively. No declined match.
+PR #379 reviewer classifies this outside its accepted result: scenario defaults
+to COI; amended I4 retains the no-COI 0.28.0 build/admission baseline, not full
+cross-tier I3 parity. No active-goal obligation is deferred here.

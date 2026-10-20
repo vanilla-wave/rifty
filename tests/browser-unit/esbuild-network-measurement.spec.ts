@@ -151,7 +151,7 @@ test('records matched cold Vite 7 install/build esbuild response bytes', async (
         templateId: 'browser-unit:esbuild-network-measurement-v1',
         files: {
           '/package.json':
-            '{"name":"esbuild-network-measurement","private":true,"type":"module"}\n',
+            '{"name":"esbuild-network-measurement","private":true,"type":"module","overrides":{"esbuild":"0.28.0"}}\n',
           '/index.html': '<div id="app"></div><script type="module" src="/src/main.js"></script>\n',
           '/src/main.js': "document.getElementById('app').textContent = 'measurement';\n",
           '/vite.config.js': 'export default { optimizeDeps: { noDiscovery: true } };\n',

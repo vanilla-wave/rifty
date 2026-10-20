@@ -41,6 +41,8 @@
 
 ## e2e
 
+- **late-fetch-interception**: Playwright route/unroute can stall CDP when a stock esbuild Worker is blocked in Atomics.wait. Enable interception before boot; retain a pass-through route while adding/removing later owner-script holds. Keep the original reload/storage assertions.
+
 - **stale-foreign-server-port**: e2e tests PRE-change code (phantom pass/fail) → `reuseExistingServer` grabbed a sibling worktree's dev server on default 5273 → always set a dedicated `RIFTY_PLAYGROUND_PORT`; `lsof -nP -iTCP:5273 -sTCP:LISTEN` when results look wrong.
 - **pipe-masks-playwright-exit**: `playwright ... | grep | tail` returns tail's 0 → capture playwright's exit directly, never through a pipe.
 - **project-first-boot**: `goto('/')` then expecting LIVE/`$ vite` hangs → cold boot shows the chooser, no auto-boot (only `?preset=` deep-link boots) → `pickStarter`/`selectPreset` first, or wait launcher visible + close it and use Terminal 1.

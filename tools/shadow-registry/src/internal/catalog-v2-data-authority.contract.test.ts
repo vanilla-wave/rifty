@@ -1000,6 +1000,12 @@ describe('shadow recipe v2 data authority', () => {
         schema: 2,
         admission: { kind: 'semver-admits', unsupportedFeature: 'esbuild.version' },
       },
+      // ADR-0543: the legacy and COI recipes coexist under explicit tiers.
+      {
+        id: 'rifty.shadow-substitution.esbuild.wasm-node.v1',
+        schema: 2,
+        admission: { kind: 'requested-range', unsupportedFeature: 'esbuild.version' },
+      },
       {
         id: 'rifty.shadow-substitution.lightningcss.v2',
         schema: 2,

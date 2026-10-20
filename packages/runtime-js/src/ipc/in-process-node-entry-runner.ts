@@ -22,7 +22,9 @@ import {
   readActiveNodeProcessBootstrap,
   setActiveNodeProcessBootstrap,
 } from '../builtins/process-bootstrap-identity.ts';
+import { makeStdioWriter } from '../builtins/process-stdio-writer.ts';
 import { resetNodeProcessExit, riftyProcess } from '../builtins/process.ts';
+import { captureProcessStdio } from '../builtins/stdio-fd-source.ts';
 import { type NodeEntryRunner, concatChunks } from './recursive-runner.ts';
 
 /**
@@ -49,22 +51,20 @@ import { type NodeEntryRunner, concatChunks } from './recursive-runner.ts';
 export function makeInProcessNodeEntryRunner(): NodeEntryRunner {
   return async (spec) => {
     const chunks: Uint8Array[] = [];
-    const enc = new TextEncoder();
-    const capture = {
-      write(chunk: unknown): boolean {
-        if (chunk instanceof Uint8Array) chunks.push(new Uint8Array(chunk));
-        else chunks.push(enc.encode(String(chunk)));
-        return true;
-      },
-      isTTY: false,
-      fd: 1,
-    };
+    const capture = makeStdioWriter(
+      { write: (bytes) => chunks.push(new Uint8Array(bytes)) },
+      1,
+      false,
+      { cols: 80, rows: 24 },
+      riftyProcess.nextTick,
+    );
     const g = globalThis as { process?: unknown };
     const prevGlobalProcess = g.process;
     const prevActiveProcess = readActiveNodeProcessBootstrap();
     const prevStdout = riftyProcess.stdout;
     const prevExitCode = riftyProcess.exitCode;
     (riftyProcess as { stdout: unknown }).stdout = capture;
+    const restoreDescriptors = captureProcessStdio(riftyProcess);
     resetNodeProcessExit(riftyProcess);
     // Make the loader-run child read `riftyProcess` as the ambient `process`
     // (its stdout/exitCode now route to our capture), the same realm shape the
@@ -83,6 +83,7 @@ export function makeInProcessNodeEntryRunner(): NodeEntryRunner {
     } catch (err) {
       exitCode = exitCodeFromThrow(err);
     } finally {
+      restoreDescriptors();
       g.process = prevGlobalProcess;
       setActiveNodeProcessBootstrap(
         prevActiveProcess?.process ?? null,

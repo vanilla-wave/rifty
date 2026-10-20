@@ -26,21 +26,15 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
   `toolchain-build/ts-language-service-types-package-fallback`)? — owner: agent
   — probe at pickup of item 3; if not, I2's IDE half is `blocked_by` that item
   and the tree half still closes.
-- Do the declarations ride as a facade file (bytes copied from the twin at
-  materialization) or as a `types` path into `../esbuild-wasm/lib/main.d.ts`?
-  — owner: agent — ADR-0371 (twins carry bytes) + TS resolution probe decide.
-- `epics/esbuild-upstream-twin` cutover changes the esbuild install shape and
-  admits every COI esbuild version (goal `amend:` 2026-10-16) — owner: agent —
-  whichever of item 3 and that cutover lands second keeps I2 true for every
-  installed version; item 1's esbuild refusal example applies to no-COI.
+- COI esbuild now points `types` to `../esbuild-wasm/lib/main.d.ts`
+  (ADR-0543; exact upstream declaration bytes verified). Item 3 retains the
+  legacy no-COI facade and classic/exports-aware/IDE resolution proof.
 
 ## Out of scope
 
 - sass-embedded admission widening — `npm-client/sass-embedded-semver-admission`.
-- Catalog trigger-name uniqueness —
-  `npm-client/shadow-catalog-trigger-name-uniqueness`; more esbuild versions —
-  `epics/esbuild-upstream-twin` (versions from the twin's range; a
-  tier-keyed recipe is open in its install-shape fog).
+- COI esbuild ranges and per-tier catalog selection: delivered by ADR-0543.
+  Catalog decode rejects overlapping trigger-name/tier selectors.
 - Repairing the lightningcss shim (`init()` never called) —
   `playground/vite8-lightningcss-wasm-init`; the page reports observed status.
 - npm peer placement and bin reify authorities —

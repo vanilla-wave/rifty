@@ -56,7 +56,7 @@ async function seed(endpoint: Endpoint = 'scratch') {
   }
   const root = `/.rifty/workbench/v2/projects/${id}/tree`;
   const stamp = readInstallStampSync(h.authority, root);
-  expect(stamp !== null && stampTrusted(stamp)).toBe(true);
+  expect(stamp !== null && stampTrusted(stamp, 'coi')).toBe(true);
   expect(network.requests).toEqual([first.descriptor.assetUrl]);
   await h.authority.flush();
   return { ...h, network, id, root };

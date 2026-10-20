@@ -49,9 +49,14 @@ export async function installToolchainPackages(
   const registry = new RegistryClient({ baseUrl: input.registryUrl });
   let result: InstallResult;
   let packageJsonText: string | undefined;
-  if (npm === undefined) result = await install({ vfs, cwd: input.cwd, registry });
+  if (npm === undefined)
+    result = await install({ vfs, cwd: input.cwd, registry, runtimeTier: 'no-coi' });
   else {
-    const installed = await executeNpmInstallOperation(npm.request, npm.context, { vfs, registry });
+    const installed = await executeNpmInstallOperation(npm.request, npm.context, {
+      vfs,
+      registry,
+      runtimeTier: 'no-coi',
+    });
     if ('status' in installed || installed.packageJsonText === null)
       throw new Error('Toolchain installation requires a project package.json');
     result = installed.result;

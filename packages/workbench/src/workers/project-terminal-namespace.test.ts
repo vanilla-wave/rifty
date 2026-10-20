@@ -383,3 +383,18 @@ describe('project terminal namespace', () => {
     expect(String(stderr[0])).not.toContain(ROOT);
   });
 });
+
+describe('virtual ancestor metadata', () => {
+  it('keeps root stat readable when a project entry collides with a nested mount', () => {
+    const fsSync = seededProject();
+    fsSync.mkdirSync(`${ROOT}/feature`, { recursive: true });
+    const fs = createProjectTerminalNamespace({ layout: LAYOUT, fileSystem: fsSync }).fileSystem;
+    const before = fs.statSync('/');
+    fsSync.mkdirSync(`${ROOT}/tmp`, { recursive: true });
+    expect(() => fs.readdirSync('/')).toThrow(/EEXIST.*\/tmp/);
+    expect(() => fs.readdirSync('/tmp')).toThrow(/EEXIST.*\/tmp/);
+    expect(fs.statSync('/')).toMatchObject({ isDirectory: true, nlink: before.nlink });
+    expect(fs.statSyncOrNull('/')).toMatchObject({ isDirectory: true, nlink: before.nlink });
+    expect(fs.existsSync('/')).toBe(true);
+  });
+});

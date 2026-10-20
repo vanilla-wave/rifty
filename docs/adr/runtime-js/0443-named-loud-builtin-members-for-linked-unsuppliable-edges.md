@@ -68,3 +68,7 @@ and the ADR-0348 note/README row admission wording fixed in place.
 - The `docs/public/compat/modules.md` rule "an unimplemented Node method remains a link-time
   miss" gains this exception.
 - A later real implementation replaces the loud member and its ❌ row.
+
+## Corrections
+
+- 2026-10-20 — child_process.execFileSync added as a named loud member; stock esbuild-wasm chooses it when worker threads are disabled (esbuild-upstream-twin I2).

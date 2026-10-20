@@ -1,3 +1,4 @@
+import { Buffer as NativeBuffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -384,9 +385,12 @@ describe('shadow substitution installer boundary', () => {
       bindings: [],
     });
     expect(await vfs.exists('/project/node_modules/esbuild')).toBe(false);
-    expect(await vfs.readFile('/project/node_modules/esbuild-wasm/esbuild.wasm')).toEqual(
-      exactEsbuildWasm,
-    );
+    expect(
+      NativeBuffer.compare(
+        await vfs.readFile('/project/node_modules/esbuild-wasm/esbuild.wasm'),
+        exactEsbuildWasm,
+      ),
+    ).toBe(0);
   });
 
   it('acquires the exact esbuild-wasm twin in-tree and lockfile-replays it offline', async () => {
@@ -432,9 +436,12 @@ describe('shadow substitution installer boundary', () => {
     expect(await vfs.readFile('/project/node_modules/esbuild/lib/main.cjs')).toEqual(firstMain);
     expect(await vfs.readFile('/project/node_modules/esbuild/bin/esbuild')).toEqual(firstBin);
     expect(await vfs.readFile('/project/node_modules/esbuild/package.json')).toEqual(firstPackage);
-    expect(await vfs.readFile('/project/node_modules/esbuild-wasm/esbuild.wasm')).toEqual(
-      firstWasm,
-    );
+    expect(
+      NativeBuffer.compare(
+        await vfs.readFile('/project/node_modules/esbuild-wasm/esbuild.wasm'),
+        firstWasm,
+      ),
+    ).toBe(0);
     expect(replay.lockfile).toEqual(first.lockfile);
   });
 
@@ -592,9 +599,12 @@ describe('esbuild-wasm registry-twin fault publication', () => {
         },
       ),
     ).resolves.toMatchObject({ lockfile: { lockfileVersion: 3 } });
-    expect(await vfs.readFile('/project/node_modules/esbuild-wasm/esbuild.wasm')).toEqual(
-      exactEsbuildWasm,
-    );
+    expect(
+      NativeBuffer.compare(
+        await vfs.readFile('/project/node_modules/esbuild-wasm/esbuild.wasm'),
+        exactEsbuildWasm,
+      ),
+    ).toBe(0);
   });
 
   it.each(
@@ -704,9 +714,12 @@ describe('esbuild-wasm registry-twin fault publication', () => {
         },
       ),
     ).resolves.toMatchObject({ lockfile: { lockfileVersion: 3 } });
-    expect(await vfs.readFile('/project/node_modules/esbuild-wasm/esbuild.wasm')).toEqual(
-      exactEsbuildWasm,
-    );
+    expect(
+      NativeBuffer.compare(
+        await vfs.readFile('/project/node_modules/esbuild-wasm/esbuild.wasm'),
+        exactEsbuildWasm,
+      ),
+    ).toBe(0);
   });
 });
 

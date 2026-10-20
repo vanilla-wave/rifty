@@ -51,7 +51,7 @@ function publicFailure(error: unknown): Error {
 function assertTrusted(h: Awaited<ReturnType<typeof openSnapshotOnlyOwner>>, root: string) {
   const stamp = readInstallStampSync(h.authority, root);
   expect(stamp).not.toBeNull();
-  expect(stamp !== null && stampTrusted(stamp)).toBe(true);
+  expect(stamp !== null && stampTrusted(stamp, 'coi')).toBe(true);
   expect(
     JSON.parse(
       new TextDecoder().decode(

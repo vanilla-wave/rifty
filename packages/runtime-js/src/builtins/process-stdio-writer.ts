@@ -1,29 +1,28 @@
-import type { Encoding } from '@riftydev/io';
 /**
  * `process.stdout`/`process.stderr` writers + TTY control shape for
  * `NodeProcess` (`process.ts`); split out of it by concern.
  */
 import type { KernelStdioOutputWriter } from '@riftydev/kernel';
-import { Buffer } from './buffer.ts';
+import { Buffer, type Encoding } from './buffer.ts';
 import { EventEmitter } from './events.ts';
+import { OUTPUT_FD, type OutputFdSource } from './stdio-fd-source.ts';
 
 // --- stdio plumbing (shared by spec + no-spec processes) ---
 
-const STDIO_ENCODER = new TextEncoder();
-
-function encodeChunk(chunk: string | Uint8Array): Uint8Array {
-  return typeof chunk === 'string' ? STDIO_ENCODER.encode(chunk) : chunk;
+function encodeChunk(chunk: string | Uint8Array, encoding: Encoding = 'utf8'): Uint8Array {
+  return typeof chunk === 'string' ? Buffer.from(chunk, encoding) : chunk;
 }
 
 type StdioCallback = () => void;
+type WriteCallback = (error?: Error | null) => void;
 
 export interface NodeStdioWriter extends EventEmitter {
   write(
     chunk: string | Uint8Array,
-    encodingOrCallback?: string | StdioCallback,
-    callback?: StdioCallback,
+    encodingOrCallback?: Encoding | WriteCallback,
+    callback?: WriteCallback,
   ): boolean;
-  isTTY: boolean;
+  isTTY?: boolean;
   fd: number;
   columns?: number;
   rows?: number;
@@ -97,26 +96,52 @@ export function makeStdioWriter(
   fd: number,
   isTTY: boolean,
   size: { readonly cols: number; readonly rows: number },
+  defer: (callback: () => void) => void,
 ): NodeStdioWriter {
+  let closed = false;
+  const badFd = () => Object.assign(new Error('bad file descriptor'), { code: 'EBADF' });
+  const descriptor: OutputFdSource = {
+    get closed() {
+      return closed;
+    },
+    write(bytes) {
+      if (closed) throw badFd();
+      port.write(new Uint8Array(bytes));
+    },
+    close() {
+      if (closed) throw badFd();
+      closed = true;
+    },
+  };
   const stream = Object.assign(new EventEmitter(), {
     isTTY,
     fd,
     write(
       chunk: string | Uint8Array,
-      encodingOrCallback?: string | StdioCallback,
-      callback?: StdioCallback,
+      encodingOrCallback?: Encoding | WriteCallback,
+      callback?: WriteCallback,
     ) {
-      const bytes =
-        typeof chunk === 'string' && typeof encodingOrCallback === 'string'
-          ? Buffer.from(chunk, encodingOrCallback as Encoding)
-          : encodeChunk(chunk);
+      const cb = typeof encodingOrCallback === 'function' ? encodingOrCallback : callback;
+      const bytes = encodeChunk(
+        chunk,
+        typeof encodingOrCallback === 'string' ? encodingOrCallback : undefined,
+      );
       // A passed-in view may share storage with its caller; the semantic writer
       // owns transport, while this adapter preserves Node's non-detaching write.
-      port.write(typeof chunk === 'string' ? bytes : new Uint8Array(bytes));
-      const done = typeof encodingOrCallback === 'function' ? encodingOrCallback : callback;
-      if (done !== undefined) queueMicrotask(done);
+      try {
+        descriptor.write(bytes);
+      } catch (error) {
+        const failure = error instanceof Error ? error : new Error(String(error));
+        defer(() => {
+          cb?.(failure);
+          stream.emit('error', failure);
+        });
+        return false;
+      }
+      if (cb) defer(() => cb(null));
       return true;
     },
   }) as NodeStdioWriter;
+  Object.defineProperty(stream, OUTPUT_FD, { value: descriptor });
   return isTTY ? attachTtyControls(stream, size) : stream;
 }
