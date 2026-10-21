@@ -125,7 +125,7 @@ describe('npm shell command → REAL install → real eddy (stub-drift tripwire)
             : projectRuntimeShellLine(
                 'echo project-started',
                 { kind: 'install', snapshotFailures: [] },
-                '/proj',
+                '/',
               );
         const result = await shell.run(line);
         expect(result.exitCode).toBe(0);

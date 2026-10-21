@@ -4,10 +4,14 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { RegistryClient, type VersionManifest, extractTarGz, install } from '@riftydev/npm-client';
+import { Shell } from '@riftydev/shell';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import ts from 'typescript';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createTsLanguageService } from '../../packages/ts-language-service/src/index.ts';
+import { createTestNpmPackageAcquisitionAuthority } from '../../packages/workbench/src/glue/npm-shell-command.test-fixture.ts';
+import { createNpmShellCommand } from '../../packages/workbench/src/glue/npm-shell-command.ts';
+import { registryFixture, registryUrl } from './fixtures/registry/rollup-companions/fixture.mjs';
 
 const root = '/project';
 const source =
@@ -33,6 +37,122 @@ it('the generated esbuild compat page states the declaration surface and its pro
   expect(page).toContain('| TypeScript declarations | ✅ |');
   expect(page).toContain('tests/integration/esbuild-declarations.test.ts');
 });
+
+it('Vite 7 install exposes the Eddy decline, usable esbuild types and the refused no-COI range', async () => {
+  const { vfs, fsSync } = createMemoryFs();
+  const fixture = await registryFixture();
+  const lightningBytes = readFileSync(
+    new URL(
+      '../../tools/shadow-registry/src/fixtures/lightningcss-wasm-1.32.0.tgz',
+      import.meta.url,
+    ),
+  );
+  const lightningFiles = await extractTarGz(lightningBytes);
+  const lightning = JSON.parse(
+    new TextDecoder().decode(lightningFiles['package.json']),
+  ) as VersionManifest;
+  const registry = new RegistryClient({
+    baseUrl: registryUrl,
+    // Missing optional native archives are a fixture egress boundary, not a retry scenario.
+    maxRetries: 0,
+    fetch: async (input, init) => {
+      const path = new URL(input).pathname;
+      if (path === '/lightningcss.tgz') return new Response(new Uint8Array(lightningBytes));
+      if (path === '/lightningcss-wasm')
+        return Response.json({
+          name: lightning.name,
+          'dist-tags': { latest: lightning.version },
+          versions: {
+            [lightning.version]: {
+              ...lightning,
+              dist: {
+                tarball: `${registryUrl}/lightningcss.tgz`,
+                integrity: `sha512-${createHash('sha512').update(lightningBytes).digest('base64')}`,
+              },
+            },
+          },
+        });
+      return fixture.fetch(input, init);
+    },
+  });
+  await vfs.mkdir(root, { recursive: true });
+  const dependencies = { vite: '7.3.6', esbuild: '^0.28.0', lightningcss: '^1.30.0' };
+  const writeProject = () =>
+    vfs.writeFile(
+      `${root}/package.json`,
+      JSON.stringify({ name: 'honest-vite', private: true, dependencies }),
+    );
+  await writeProject();
+  vi.stubGlobal('fetch', async () => {
+    throw new Error('resolver unreachable');
+  });
+  const deps = {
+    vfs,
+    registry,
+    resolverUrl: 'https://eddy.invalid/resolve',
+    resolverClosureHash: () => 'a'.repeat(64),
+  };
+  const shell = new Shell({ cwd: root });
+  shell.registerCommand(
+    'npm',
+    createNpmShellCommand({
+      ...deps,
+      packageAcquisitionAuthority: createTestNpmPackageAcquisitionAuthority(deps),
+    }),
+  );
+  try {
+    const result = await shell.run('npm install');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatch(/npm: installed \d+ package\(s\) in /);
+    expect
+      .soft(result.stderr)
+      .toContain(
+        'npm: fast install (eddy) unavailable, using standard install — get: resolver unreachable; post: resolver unreachable',
+      );
+    expect(
+      JSON.parse(await vfs.readFileText(`${root}/node_modules/vite/package.json`)).version,
+    ).toBe('7.3.6');
+    expect(
+      JSON.parse(await vfs.readFileText(`${root}/node_modules/lightningcss/package.json`)).version,
+    ).toBe('1.32.0');
+    await vfs.mkdir(`${root}/scripts`, { recursive: true });
+    await vfs.writeFile(`${root}/scripts/build.ts`, source);
+    await vfs.writeFile(
+      `${root}/tsconfig.json`,
+      JSON.stringify({
+        compilerOptions: {
+          strict: true,
+          skipLibCheck: true,
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          types: [],
+        },
+        files: ['scripts/build.ts'],
+      }),
+    );
+    writeCompiler(fsSync);
+    const service = await createTsLanguageService({ fsSync, projectRoot: root });
+    try {
+      expect
+        .soft(service.getSemanticDiagnostics(`${root}/scripts/build.ts`).map(({ code }) => code))
+        .toEqual([2322]);
+      expect
+        .soft(service.getDefinition(`${root}/scripts/build.ts`, { line: 1, character: 1 })[0]?.uri)
+        .toContain('/node_modules/esbuild-wasm/lib/main.d.ts');
+    } finally {
+      service.dispose();
+    }
+    dependencies.esbuild = '^0.21.0';
+    await writeProject();
+    const refused = await shell.run('npm install');
+    expect(refused.exitCode).not.toBe(0);
+    expect.soft(refused.stderr).toContain('esbuild@^0.21.0');
+    expect.soft(refused.stderr).toContain('0.28.0');
+    expect.soft(refused.stderr).toContain('semver-admits');
+  } finally {
+    vi.unstubAllGlobals();
+  }
+}, 30_000);
 
 async function archive(version: string, name = 'esbuild-wasm') {
   const directory = version === '0.28.0' ? 'rollup-companions/packages' : 'esbuild-upstream';
