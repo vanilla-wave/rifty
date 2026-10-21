@@ -10,12 +10,11 @@
  */
 
 import { assertCloneable } from './clone-marks.ts';
-import { ownerOf, readTransfer, wrapMethod } from './message-port-ref.ts';
+import { copyList, ownerOf, readTransfer, setOwn, wrapMethod } from './message-port-ref.ts';
 
 const INSTALLED = Symbol.for('rifty.runtime-js.clone-admission.v1');
-// Captured at load: the wrapper runs after guest code may have patched Array/Reflect.
+// Captured at load: the wrapper runs after guest code may have patched `Reflect`.
 const apply = Reflect.apply;
-const arraySlice = Array.prototype.slice as (this: unknown[]) => unknown[];
 
 export function installCloneAdmission(): void {
   const realm = globalThis as typeof globalThis & { [INSTALLED]?: true };
@@ -29,12 +28,12 @@ export function installCloneAdmission(): void {
       receiver: unknown,
       args: unknown[],
     ): unknown => {
-      const forwarded = apply(arraySlice, args, []) as unknown[];
+      const forwarded = copyList(args);
       const read =
         transfer !== null && args.length >= 2
           ? readTransfer(args[1], transfer === 'sequence')
           : null;
-      if (read !== null) forwarded[1] = read.forward(read.list);
+      if (read !== null) setOwn(forwarded, 1, read.forward(read.list));
       assertCloneable(args[0]);
       return apply(native, receiver, forwarded);
     };

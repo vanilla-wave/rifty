@@ -264,14 +264,22 @@ describe('installCloneAdmission', () => {
     expect(ceilingReads).toBe(1);
   });
 
-  it('touches only captured primordials: guest patches never run during admission', () => {
+  it('touches only captured primordials: guest patches never run during admission', async () => {
     installCloneAdmission();
-    tag({});
     const probe = { v: 1, deep: { list: [1, { k: 2 }], map: new Map([['m', { n: 3 }]]) } };
     const tagged = tag({});
+    const { port1, port2 } = new MessageChannel();
+    const delivered = new Promise<unknown>((resolve) => {
+      port2.onmessage = (event) => resolve(event.data);
+    });
     let patchedCalls = 0;
+    let iteratorNextCalls = 0;
+    let callerIteratorCalls = 0;
     let clone: unknown;
     let callsAfterClone = -1;
+    let nextAfterClone = -1;
+    let callsAfterPost = -1;
+    let nextAfterPost = -1;
     let callsAfterRefusal = -1;
     let refusal: unknown;
     const mutate = () => {
@@ -287,9 +295,17 @@ describe('installCloneAdmission', () => {
       arrayIterator: Array.prototype[Symbol.iterator],
       iteratorNext: arrayIteratorProto.next,
       slice: Array.prototype.slice,
+      push: Array.prototype.push,
+      isArray: Array.isArray,
+      objectCreate: Object.create,
       reflectApply: Reflect.apply,
       mapForEach: Map.prototype.forEach,
       setForEach: Set.prototype.forEach,
+      species: Object.getOwnPropertyDescriptor(Array, Symbol.species) as PropertyDescriptor,
+      constructor: Object.getOwnPropertyDescriptor(
+        Array.prototype,
+        'constructor',
+      ) as PropertyDescriptor,
     };
     try {
       Set.prototype.add = function (this: Set<unknown>, value: unknown) {
@@ -300,18 +316,33 @@ describe('installCloneAdmission', () => {
         mutate();
         return saved.setHas.call(this, value);
       };
+      // The caller's own transfer list `[]` is read through these, once, as native would.
       Array.prototype[Symbol.iterator] = function (this: unknown[]) {
-        mutate();
+        callerIteratorCalls++;
         return saved.arrayIterator.call(this);
       };
       arrayIteratorProto.next = function (this: Iterator<unknown>) {
-        mutate();
+        iteratorNextCalls++;
         return saved.iteratorNext.call(this);
       };
       Array.prototype.slice = function (this: unknown[], ...args: [number?, number?]) {
         mutate();
         return saved.slice.apply(this, args);
       };
+      Array.prototype.push = function (this: unknown[], ...items: unknown[]) {
+        mutate();
+        return saved.push.apply(this, items);
+      };
+      Array.isArray = ((value: unknown) => {
+        mutate();
+        return saved.isArray(value);
+      }) as typeof Array.isArray;
+      Object.create = ((proto: object | null, properties?: PropertyDescriptorMap) => {
+        mutate();
+        return properties === undefined
+          ? saved.objectCreate(proto)
+          : saved.objectCreate(proto, properties);
+      }) as typeof Object.create;
       Reflect.apply = ((
         target: (...args: unknown[]) => unknown,
         self: unknown,
@@ -328,6 +359,20 @@ describe('installCloneAdmission', () => {
         mutate();
         return saved.setForEach.apply(this, args as [() => void]);
       } as typeof Set.prototype.forEach;
+      Object.defineProperty(Array, Symbol.species, {
+        get() {
+          mutate();
+          return Array;
+        },
+        configurable: true,
+      });
+      Object.defineProperty(Array.prototype, 'constructor', {
+        get() {
+          mutate();
+          return Array;
+        },
+        configurable: true,
+      });
       Object.defineProperty(Object.prototype, 'value', {
         get() {
           mutate();
@@ -335,9 +380,13 @@ describe('installCloneAdmission', () => {
         },
         configurable: true,
       });
-      // Only the admission + native clone run while patched; assertions follow the restore.
-      clone = structuredClone(probe);
+      // Only admission + native run while patched; assertions follow the restore.
+      clone = structuredClone(probe, { transfer: [] });
       callsAfterClone = patchedCalls;
+      nextAfterClone = iteratorNextCalls;
+      port1.postMessage(probe, []);
+      callsAfterPost = patchedCalls;
+      nextAfterPost = iteratorNextCalls;
       try {
         structuredClone({ hidden: [tagged] });
       } catch (error) {
@@ -345,19 +394,35 @@ describe('installCloneAdmission', () => {
       }
       callsAfterRefusal = patchedCalls;
     } finally {
+      // First: descriptor literals below must not see the `Object.prototype.value` getter.
+      Reflect.deleteProperty(Object.prototype, 'value');
       Set.prototype.add = saved.setAdd;
       Set.prototype.has = saved.setHas;
       Array.prototype[Symbol.iterator] = saved.arrayIterator;
       arrayIteratorProto.next = saved.iteratorNext;
       Array.prototype.slice = saved.slice;
+      Array.prototype.push = saved.push;
+      Array.isArray = saved.isArray;
+      Object.create = saved.objectCreate;
       Reflect.apply = saved.reflectApply;
       Map.prototype.forEach = saved.mapForEach;
       Set.prototype.forEach = saved.setForEach;
-      Reflect.deleteProperty(Object.prototype, 'value');
+      Object.defineProperty(Array, Symbol.species, saved.species);
+      Object.defineProperty(Array.prototype, 'constructor', saved.constructor);
     }
+    const expected = { v: 1, deep: { list: [1, { k: 2 }], map: new Map([['m', { n: 3 }]]) } };
     expect(callsAfterClone).toBe(0);
+    expect(callsAfterPost).toBe(0);
     expect(callsAfterRefusal).toBe(0);
-    expect(clone).toEqual({ v: 1, deep: { list: [1, { k: 2 }], map: new Map([['m', { n: 3 }]]) } });
+    // The caller's `[]` is read exactly once per call through its own @@iterator/next (as
+    // native would); the forwarded list is a primordial-only iterable the native call consumes.
+    expect(nextAfterClone).toBe(1);
+    expect(nextAfterPost - nextAfterClone).toBe(1);
+    expect(callerIteratorCalls).toBe(2);
+    expect(clone).toEqual(expected);
+    expect(await delivered).toEqual(expected);
+    port1.close();
+    port2.close();
     expect(refusal).toMatchObject({ name: 'DataCloneError', code: 25 });
   });
 
