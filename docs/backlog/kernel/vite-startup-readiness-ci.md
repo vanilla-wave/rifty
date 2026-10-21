@@ -3,8 +3,8 @@ area: kernel
 status: draft
 title: Explain Vite startup readiness timeouts in CI
 created: 2026-10-20
-why: Two Chromium CI scenarios exhaust unchanged readiness deadlines but pass isolated on the same HEAD.
-sources: [tests/e2e/project-switch.spec.ts, tests/e2e/m1-terminal-shell.spec.ts, tests/e2e/helpers/playground.ts]
+why: Chromium CI Vite readiness deadlines expire since PR #379; browser-unit red on every CI run at or after the merge so far
+sources: [tests/e2e/project-switch.spec.ts, tests/e2e/m1-terminal-shell.spec.ts, tests/e2e/helpers/playground.ts, tests/browser-unit/vite-at-root.spec.ts, tests/browser-unit/esbuild-vite-contract.spec.ts, tests/browser-unit/workbench-vite-lifecycle.spec.ts]
 code: [packages/kernel/src/process-manager.ts, packages/workbench/src/workers/workbench-owner-runtime.ts]
 ---
 
@@ -105,3 +105,51 @@ Class: `frozen-assumption` at the UI readiness judge. Sweep: these are the
 not this Vite CLI. Shared helper/default unchanged; no new mechanism.
 Owner/next probe above remain if the corrected gate fails. Do not increase
 another deadline without new evidence; final-HEAD CI still gates delivery.
+
+## Follow-up — 2026-10-21 (main red, browser-unit)
+
+Observed, undiagnosed; recorded from branch `t3/fetch-uncloneable-clone`
+(PR #382, diff touches no Vite/esbuild path) because its CI cannot go green.
+
+`main` push CI is red since `5e7da8be1` (= PR #379 merge, 2026-10-20T17:20Z):
+[run 39465239157](https://github.com/vanilla-wave/rifty/actions/runs/39465239157)
+browser-unit-chromium fails 4 tests; the previous main run
+[39375394764](https://github.com/vanilla-wave/rifty/actions/runs/39375394764)
+(`40837803b`, PR #381) passed them. Same 4 on PR #382 merged head `646a6c494`,
+[run 39513945622](https://github.com/vanilla-wave/rifty/actions/runs/39513945622).
+Two cited red runs (one `main`, one PR merge-head) against a green
+predecessor, same 4 tests: not a one-off flake; the isolated-PASS caveat
+above no longer holds for this lane.
+
+| test | CI result | green-main baseline |
+|---|---|---|
+| `tests/browser-unit/esbuild-vite-contract.spec.ts:1010` "Vite 7 config graph and dependency optimizer use real esbuild over owner VFS" | 4.0 m = `test.setTimeout(240_000)` exhausted | passed |
+| `tests/browser-unit/vite-at-root.spec.ts:192` "watched dev server at root / \| at default matches real Node + Vite 7.3.6" | 29.0 s / 28.8 s; `:225` `expect(out).toMatch(/VITE v7\.3\.6 {2}ready/u)` received `""` — `runOwnerCommand(page, 'vite --debug hmr', 20_000)` saw no output within its 20 s deadline | 28.3 s / 28.3 s total test time; passed |
+| `tests/browser-unit/workbench-vite-lifecycle.spec.ts:9` "public Workbench keeps one ephemeral owner across exact Vite A to B to A lifecycle" | 28.2 s; every functional and zero-Worker assertion passed, then `:1055` `expect.poll(() => ownerLifecycle.length, {timeout: 5_000}).toBe(7)` received 2 | 24.8 s |
+
+Local, macOS arm64 / Chromium 148, `6482d8c7a` (main `5e7da8be1` merged):
+`RIFTY_PLAYGROUND_PORT=5433 pnpm test:browser-unit tests/browser-unit/vite-at-root.spec.ts`
+→ 6/6 PASS, watched dev server 36.3 s / 37.3 s total;
+`esbuild-vite-contract.spec.ts --grep "dependency optimizer"` → PASS 47.6 s.
+Local passes: the `vite` ready line lands inside its 20 s window there. Local
+vs CI-runner durations are not a causal comparison (same caveat as
+2026-10-20); no pre-#379 local baseline was measured.
+
+Hypothesis, unverified: ADR-0543 runs the unmodified upstream `esbuild-wasm`
+Node entry in COI — WASM compile/instantiate per esbuild service start, no
+generated-runtime fast path — so dev-server `ready` and the dependency
+optimizer take longer and CI runners cross fixed waits. Not established: where
+the time goes (install, CLI spawn, esbuild service start, optimizer, port
+listen, output transport). The lifecycle row is post-close observation
+(2 of 7 owner lifecycle events recorded), sibling of
+`docs/backlog/kernel/workbench-vite-worker-retirement-ci.md`; it may share a
+cause or not — do not merge the two until timestamps say so.
+
+Routing: `rifty-fix` unit on `main`, not inside PR #382. A repair names the
+measured delayed stage (timestamps across install, CLI spawn, esbuild service
+start, optimizer, port listen, output transport — the probe already listed
+above) and carries that evidence; a raised wait budget without a measured
+cause is not a repair (`AGENTS.md` §Fidelity; the PR-4 budget correction above
+was already spent once). Whether a Node-timing reference belongs in acceptance
+is an open fork, not decided here. Owner/trigger unchanged.
+

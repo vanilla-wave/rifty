@@ -24,9 +24,49 @@ interface MessagePortRefState {
 }
 
 type NativeMethod = (this: unknown, ...args: unknown[]) => unknown;
-type Forward = (list: readonly unknown[]) => unknown;
+export type Forward = (list: readonly unknown[]) => unknown;
 
 const STATE = Symbol.for('rifty.runtime-js.message-port-ref.v1');
+// Primordials captured at load: the wrappers run after guest code may have patched
+// `Reflect`, `Object`, `Array.prototype` or the array iterator; guest-observable
+// reads are only the ones the native WebIDL conversion would make, once.
+const apply = Reflect.apply;
+const objectCreate = Object.create;
+const defineProperty = Object.defineProperty;
+const SymbolIterator: typeof Symbol.iterator = Symbol.iterator;
+
+/** `list[index] = value` without consulting `Array.prototype` setters. */
+export function setOwn(list: unknown[], index: number, value: unknown): void {
+  defineProperty(list, index, {
+    __proto__: null,
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  } as PropertyDescriptor);
+}
+
+/** Copy of `args` into a fresh array literal: no `slice`, no species, no iterator. */
+export function copyList(args: readonly unknown[]): unknown[] {
+  const copy: unknown[] = [];
+  for (let i = 0; i < args.length; i++) setOwn(copy, i, args[i]);
+  return copy;
+}
+
+/**
+ * A null-prototype iterable over `list` for the native sequence conversion: the
+ * native call iterates it with these methods, never with the realm's (guest-
+ * patchable) `Array.prototype[@@iterator]` / `%ArrayIteratorPrototype%.next`.
+ */
+function sequenceOf(list: readonly unknown[]): object {
+  let index = 0;
+  const next = (): IteratorResult<unknown> =>
+    index < list.length
+      ? ({ __proto__: null, value: list[index++], done: false } as IteratorResult<unknown>)
+      : ({ __proto__: null, value: undefined, done: true } as IteratorResult<unknown>);
+  const iterator = { __proto__: null, next };
+  return { __proto__: null, [SymbolIterator]: () => iterator };
+}
 const TRANSFERRED_HINT =
   'rifty cannot observe the release of a MessagePort whose pair was split by a transfer (ADR-0447)';
 
@@ -40,7 +80,7 @@ function nativeGetter(target: object, key: PropertyKey): NativeMethod {
   return get as NativeMethod;
 }
 
-function ownerOf(object: object, key: PropertyKey): object | null {
+export function ownerOf(object: object, key: PropertyKey): object | null {
   for (let owner: object | null = object; owner !== null; owner = Object.getPrototypeOf(owner)) {
     if (Object.prototype.hasOwnProperty.call(owner, key)) return owner;
   }
@@ -51,7 +91,7 @@ function ownerOf(object: object, key: PropertyKey): object | null {
  * Replace a method in place, keeping its descriptor attributes, `name` and
  * `length`. The wrapper is a method (no `prototype`, not constructible).
  */
-function wrapMethod(
+export function wrapMethod(
   owner: object,
   key: string,
   wrap: (native: NativeMethod, receiver: unknown, args: unknown[]) => unknown,
@@ -73,17 +113,17 @@ function wrapMethod(
  * native conversion throws its own TypeError when handed the list.
  */
 function readSequence(iterable: object, method: NativeMethod): unknown[] {
-  const iterator = Reflect.apply(method, iterable, []);
+  const iterator = apply(method, iterable, []);
   if (!isObject(iterator))
     throw new TypeError('Result of the Symbol.iterator method is not an object');
   const next = (iterator as { next?: unknown }).next as NativeMethod;
   const list: unknown[] = [];
   for (;;) {
-    const step = Reflect.apply(next, iterator, []);
+    const step = apply(next, iterator, []);
     if (!isObject(step)) throw new TypeError(`Iterator result ${String(step)} is not an object`);
     if ((step as IteratorResult<unknown>).done) return list;
     const value = (step as IteratorResult<unknown>).value;
-    list.push(value);
+    setOwn(list, list.length, value);
     if (!isObject(value)) return list;
   }
 }
@@ -93,36 +133,38 @@ function readSequence(iterable: object, method: NativeMethod): unknown[] {
  * gets instead. `null` = nothing to read (native handles `undefined`/`null`/
  * primitives itself). Non-iterable shapes are forwarded so native throws its own
  * TypeError. Options keep the caller's object as prototype, so any other member
- * the native reads (`includeUserActivation`) is read from it, once.
+ * the native reads (`includeUserActivation`) is read from it, once. A read list
+ * is forwarded as a primordial-only iterable (`sequenceOf`).
  */
-function readTransfer(
+export function readTransfer(
   argument: unknown,
   sequenceOverload: boolean,
 ): { readonly list: readonly unknown[]; readonly forward: Forward } | null {
   if (!isObject(argument)) return null;
   if (sequenceOverload) {
-    const method = (argument as { [Symbol.iterator]?: unknown })[Symbol.iterator];
+    const method = (argument as { [Symbol.iterator]?: unknown })[SymbolIterator];
     if (method !== undefined && method !== null) {
       if (typeof method !== 'function') {
-        return { list: [], forward: () => ({ [Symbol.iterator]: method }) };
+        return { list: [], forward: () => ({ __proto__: null, [SymbolIterator]: method }) };
       }
-      return { list: readSequence(argument, method as NativeMethod), forward: (list) => list };
+      return { list: readSequence(argument, method as NativeMethod), forward: sequenceOf };
     }
   }
   const options = (transfer: unknown): object =>
-    Object.create(argument, {
-      [Symbol.iterator]: { value: undefined },
-      transfer: { value: transfer },
-    });
+    objectCreate(argument, {
+      __proto__: null,
+      [SymbolIterator]: { __proto__: null, value: undefined },
+      transfer: { __proto__: null, value: transfer },
+    } as unknown as PropertyDescriptorMap);
   const transfer = (argument as { transfer?: unknown }).transfer;
   if (!isObject(transfer)) return { list: [], forward: () => options(transfer) };
-  const method = (transfer as { [Symbol.iterator]?: unknown })[Symbol.iterator];
+  const method = (transfer as { [Symbol.iterator]?: unknown })[SymbolIterator];
   if (typeof method !== 'function') {
-    return { list: [], forward: () => options({ [Symbol.iterator]: method }) };
+    return { list: [], forward: () => options({ __proto__: null, [SymbolIterator]: method }) };
   }
   return {
     list: readSequence(transfer, method as NativeMethod),
-    forward: (list) => options(list),
+    forward: (list) => options(sequenceOf(list)),
   };
 }
 
@@ -222,12 +264,12 @@ export function installMessagePortReference(): void {
   const transferring =
     (receiverOk: (receiver: unknown) => boolean, sequenceOverload: boolean) =>
     (native: NativeMethod, receiver: unknown, args: unknown[]): unknown => {
-      if (args.length < 2 || !receiverOk(receiver)) return Reflect.apply(native, receiver, args);
+      if (args.length < 2 || !receiverOk(receiver)) return apply(native, receiver, args);
       const read = readTransfer(args[1], sequenceOverload);
-      if (read === null) return Reflect.apply(native, receiver, args);
+      if (read === null) return apply(native, receiver, args);
       const moving: PortRecord[] = [];
-      for (const item of read.list) {
-        const record = records.get(item as object);
+      for (let i = 0; i < read.list.length; i++) {
+        const record = records.get(read.list[i] as object);
         if (record === undefined) continue;
         if (record.referenced || record.peer.referenced) {
           throw new NotImplementedError(
@@ -235,18 +277,21 @@ export function installMessagePortReference(): void {
             'a referenced MessagePort pair cannot be transferred in rifty (ADR-0447)',
           );
         }
-        moving.push(record);
+        setOwn(moving, moving.length, record);
       }
-      const forwarded = args.slice();
+      const forwarded = copyList(args);
       if (moving.length === 0) {
-        forwarded[1] = read.forward(read.list);
-        return Reflect.apply(native, receiver, forwarded);
+        setOwn(forwarded, 1, read.forward(read.list));
+        return apply(native, receiver, forwarded);
       }
       const probe = new ArrayBuffer(0);
-      forwarded[1] = read.forward([...read.list, probe]);
-      const result = Reflect.apply(native, receiver, forwarded);
-      if (Reflect.apply(isDetached, probe, []) === true) {
-        for (const record of moving) {
+      const withProbe = copyList(read.list);
+      setOwn(withProbe, withProbe.length, probe);
+      setOwn(forwarded, 1, read.forward(withProbe));
+      const result = apply(native, receiver, forwarded);
+      if (apply(isDetached, probe, []) === true) {
+        for (let i = 0; i < moving.length; i++) {
+          const record = moving[i] as PortRecord;
           record.moved = true;
           release(record);
         }

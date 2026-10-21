@@ -64,3 +64,8 @@ export function proxyIdentity(): ProxyIdentity {
   Object.defineProperty(globalThis, key, { value: identity });
   return identity;
 }
+
+/** The realm's identity if bootstrapped; never installs one. */
+export function installedProxyIdentity(): ProxyIdentity | undefined {
+  return (globalThis as unknown as Record<symbol, ProxyIdentity | undefined>)[key];
+}

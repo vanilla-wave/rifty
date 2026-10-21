@@ -170,6 +170,19 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
   URL. All ten Response/PromiseLike ceiling and four priority/reflection
   assertions remain; production response metadata never gets a fake fallback.
 
+- 2026-10-21 — Structured clone of Fetch instances now throws Node's
+  `DataCloneError`: undici's `markAsUncloneable` tags are honoured by one
+  side-effect-free admission walk (`internal/clone-marks.ts`) ahead of every
+  native clone surface; the native clone always gets the original graph. Tags on
+  ordinary objects and real Errors throw as Node; intrinsics (Array, Map, Set,
+  Date, …) ignore theirs as V8. Declared gaps (compat): a tag reached only
+  through an accessor is not seen (❌); a tag on a host object is honoured where
+  Node ignores it (⚠️); a getter deleting a later tagged sibling still throws
+  (⚠️); tag-first precedence in doubly-invalid calls (⚠️). Fork
+  `serialization:'advanced'` is unchanged: rifty's codec serializes own
+  enumerable fields itself, as Node's `v8.serialize` does (`advanced-ipc.spec.ts`
+  fetch-classes/ceilings green on the merged tree).
+
 ## Consequences
 
 - Hono headers/File bodies, clone/direct readers and detached body lifetime use

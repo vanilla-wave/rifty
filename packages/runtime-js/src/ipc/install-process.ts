@@ -44,6 +44,7 @@ import {
 import { resolveVmEngineName } from '../builtins/vm/engine-config.ts';
 import { QUICKJS_WASM_URL_ENV, ensureVmEngineReady } from '../builtins/vm/quickjs-loader.ts';
 import { installWebGlobals } from '../builtins/web-globals.ts';
+import { installCloneAdmission } from '../internal/clone-admission.ts';
 import { installMessagePortReference } from '../internal/message-port-ref.ts';
 import { installNodeStartupOptions } from '../internal/node-startup-options.ts';
 import { installGlobalAlias, installWorkerRealmCompat } from './worker-realm-compat.ts';
@@ -132,6 +133,8 @@ export function installNodeRuntime(
     // Node's `MessagePort#ref` as a counted keepalive handle (ADR-0447): emnapi
     // holds the loop for pending napi async work through it.
     installMessagePortReference();
+    // Node's DataCloneError for markAsUncloneable graphs (Fetch instances) on every clone surface.
+    installCloneAdmission();
     if (resolveVmEngineName() === 'quickjs') return ensureVmEngineReady().then(() => undefined);
   }
 }

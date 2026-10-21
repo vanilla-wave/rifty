@@ -23,6 +23,7 @@ import { installTimerGlobals } from './builtins/timers.ts';
 import { resolveVmEngineName, setVmEngineOverride } from './builtins/vm/engine-config.ts';
 import { ensureVmEngineReady } from './builtins/vm/quickjs-loader.ts';
 import { installWebGlobals } from './builtins/web-globals.ts';
+import { installCloneAdmission } from './internal/clone-admission.ts';
 import {
   isSandboxToolchainRealm,
   isSandboxToolchainResidentTransitionActive,
@@ -50,6 +51,7 @@ if (selectedVmEngine !== undefined) setVmEngineOverride(selectedVmEngine);
 installProcessGlobals();
 installTimerGlobals();
 installWebGlobals();
+installCloneAdmission();
 (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
 
 function post(msg: ToolchainWorkerMessage): void {

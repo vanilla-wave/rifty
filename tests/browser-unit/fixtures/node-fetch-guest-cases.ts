@@ -166,6 +166,84 @@ new Response(new ReadableStream({pull() {return new Promise(() => {});}}))
  .text().then(value => row('unexpected',value), fail);
 `,
   },
+  {
+    // Node: every structured-clone surface refuses Fetch instances + markAsUncloneable tags.
+    name: 'clone-uncloneable',
+    source: `${preamble}
+const fs = require('node:fs');
+const path = require('node:path');
+const { Worker, markAsUncloneable } = require('node:worker_threads');
+const attempt = (label, fn) => { try { row(label, ['accepted', fn()]); } catch (e) { row(label, [e.name, e.message, e.code]); } };
+class H extends Headers {}
+const marked = {x:1}; markAsUncloneable(marked);
+attempt('clone-headers', () => structuredClone(new Headers({a:'1'})));
+attempt('clone-nested-response', () => structuredClone({a:[new Response('x')]}));
+attempt('clone-request', () => structuredClone(new Request('http://example.test/')));
+attempt('clone-formdata', () => structuredClone(new FormData()));
+attempt('clone-map-headers', () => [...structuredClone(new Map([['k', new Headers()]]))]);
+attempt('clone-subclass', () => structuredClone(new H()));
+attempt('clone-marked', () => structuredClone(marked));
+attempt('clone-control', () => structuredClone({x:1}));
+attempt('clone-spoofed-tag', () => structuredClone({ [Symbol.toStringTag]: 'Date', h: new Headers() }));
+attempt('clone-error-cause', () => structuredClone(new Error('x', { cause: new Headers() })));
+attempt('clone-error-own-prop', () => Object.keys(structuredClone(Object.assign(new Error('x'), { h: new Headers() }))));
+attempt('clone-guest-class', () => structuredClone(new (class G { constructor() { this.h = new Headers(); } })()));
+attempt('clone-getter-once', () => { let reads = 0; structuredClone({ get a() { reads++; return 1; } }); return reads; });
+attempt('clone-transfer-nested', () => { const buf = new ArrayBuffer(8); const out = structuredClone({ deep: { buf } }, { transfer: [buf] }); return [buf.byteLength, out.deep.buf.byteLength]; });
+attempt('clone-shared-cycle-holes', () => { const s = {}; const c = { a: s, b: s, list: [1, , 3] }; c.self = c; const out = structuredClone(c); return [out.a === out.b, out.self === out, out.list.length, 1 in out.list]; });
+const tag = (o) => { markAsUncloneable(o); return o; };
+const hide = (proto) => Object.create(proto, { h: { value: new Headers(), enumerable: true } });
+attempt('clone-spoof-date-proto', () => structuredClone(hide(Date.prototype)));
+attempt('clone-spoof-error-proto', () => structuredClone(hide(Error.prototype)));
+attempt('clone-spoof-blob-proto', () => structuredClone(hide(Blob.prototype)));
+attempt('clone-spoof-ctor-date', () => structuredClone(hide({ constructor: Date })));
+attempt('clone-spoof-tag-blob', () => structuredClone({ [Symbol.toStringTag]: 'Blob', h: new Headers() }));
+attempt('clone-map-getter-delete', () => { const m = new Map(); m.set('a', { get g() { m.delete('b'); return 1; } }); m.set('b', new Headers()); return [...structuredClone(m).keys()]; });
+attempt('clone-map-getter-add', () => { const m = new Map(); m.set('a', { get g() { m.set('c', 1); return 1; } }); return [...structuredClone(m).keys()]; });
+attempt('clone-error-cause-intact', () => { const e = new RangeError('x', { cause: { a: 1 } }); const c = structuredClone(e); return [c.name, c.message, c.stack === e.stack, c.cause, c instanceof RangeError]; });
+attempt('clone-tagged-date', () => structuredClone(tag(new Date(5))).getTime());
+attempt('clone-tagged-array', () => structuredClone(tag([1, 2])));
+attempt('clone-tagged-array-nested-plain', () => structuredClone(tag([tag({})])));
+attempt('clone-tagged-map', () => [...structuredClone(tag(new Map([[1, 2]])))]);
+attempt('clone-tagged-error', () => structuredClone(tag(new Error('e'))).message);
+attempt('clone-tagged-buffer', () => structuredClone(tag(new ArrayBuffer(4))).byteLength);
+attempt('clone-port-transfer', () => { const { port1, port2 } = new MessageChannel(); const out = structuredClone({ port: port1 }, { transfer: [port1] }); const ok = out.port instanceof MessagePort && out.port !== port1; out.port.close(); port2.close(); return ok; });
+attempt('clone-transfer-getter', () => { const msg = { v: 1 }; return structuredClone(msg, { get transfer() { msg.v = 2; return []; } }); });
+attempt('clone-error-alias', () => { const shared = { s: 1 }; const e = new Error('x', { cause: { x: shared } }); const c = structuredClone({ e, peer: shared }); return [c.e.cause.x === c.peer, c.e.cause.x]; });
+attempt('clone-error-cycle', () => { const e = new Error('x'); const cause = {}; cause.err = e; e.cause = cause; const c = structuredClone(e); return c.cause.err === c; });
+attempt('clone-error-cause-tagged-peer', () => structuredClone({ e: new Error('x', { cause: { a: 1 } }), h: new Headers() }));
+attempt('clone-blob', () => { const b = structuredClone({ b: new Blob(['xy']) }).b; return [b instanceof Blob, b.size]; });
+row('keys', Object.keys(new Headers({a:'1'})));
+attempt('port-postmessage', () => {
+ const { port1, port2 } = new MessageChannel();
+ try { port1.postMessage(new Headers()); return 'posted'; } finally { port1.close(); port2.close(); }
+});
+attempt('broadcast-postmessage', () => {
+ const channel = new BroadcastChannel('rifty-clone-probe');
+ try { channel.postMessage(new FormData()); return 'posted'; } finally { channel.close(); }
+});
+// Worker probes parentPort.postMessage, then reports through a cloneable message.
+// File entry only: { eval: true } is a separate declared ceiling
+// (NotImplementedError, backlog runtime-js/worker-eval-data-url-entry), not clone admission.
+const workerSource = [
+ "const { parentPort } = require('node:worker_threads');",
+ "let probe; try { parentPort.postMessage(new Headers()); probe = ['accepted', 'posted']; } catch (e) { probe = [e.name, e.message, e.code]; }",
+ 'parentPort.postMessage({ probe });',
+].join('\\n');
+const probeWorker = (label, create) => new Promise((resolve) => {
+ let worker;
+ try { worker = create(); } catch (e) { row(label + '-create', [e.name, e.message, e.code]); resolve(); return; }
+ const guard = setTimeout(() => { row(label + '-timeout', true); worker.terminate().then(resolve, resolve); }, 8000);
+ worker.on('message', (message) => row(label + '-message', message));
+ worker.on('error', (e) => row(label + '-error', [e.name, e.message, e.code]));
+ worker.on('exit', (code) => { clearTimeout(guard); row(label + '-exit', code); resolve(); });
+ attempt(label + '-postmessage', () => { worker.postMessage({ deep: { arr: [1, new Headers()] } }); return 'posted'; });
+});
+const workerFile = path.join(__dirname, 'clone-uncloneable-worker.cjs');
+fs.writeFileSync(workerFile, workerSource);
+probeWorker('worker-file', () => new Worker(workerFile)).catch(fail);
+`,
+  },
 ];
 
 export function networkFetchCase(url: string): string {
@@ -245,3 +323,24 @@ export function networkFetchCase(url: string): string {
 })().catch(fail);
 `;
 }
+
+/**
+ * Declared gaps (`docs/public/compat/process.md`), asserted as the guest outcome,
+ * never compared with the Node oracle: ❌ a tagged object reachable only through
+ * an accessor is not seen (reading the getter would make the native clone read
+ * it twice) — Node throws `DataCloneError`, the guest clones the own enumerable
+ * fields; ⚠️ a tag on a host object is honoured where Node ignores it.
+ */
+export const cloneAccessorCeilingCase: FetchGuestCase = {
+  name: 'clone-accessor-ceiling',
+  source: `${preamble}
+const { markAsUncloneable } = require('node:worker_threads');
+const attempt = (label, fn) => { try { row(label, ['accepted', fn()]); } catch (e) { row(label, [e.name, e.message, e.code]); } };
+attempt('clone-getter', () => structuredClone({ get a() { return new Headers(); } }));
+attempt('clone-error-cause-getter', () => { let n = 0; const e = new Error('x', { cause: { get g() { n++; return new Headers(); } } }); structuredClone(e); return n; });
+// Compat ⚠️ "Tag on a host object": honoured by rifty (DataCloneError), ignored by Node.
+const tag = (o) => { markAsUncloneable(o); return o; };
+attempt('clone-tagged-port-transfer', () => { const { port1, port2 } = new MessageChannel(); tag(port1); const out = structuredClone({ p: port1 }, { transfer: [port1] }); const ok = out.p instanceof MessagePort; out.p.close(); port2.close(); return ok; });
+attempt('clone-tagged-module', () => structuredClone(tag(new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])))) instanceof WebAssembly.Module);
+`,
+};

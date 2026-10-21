@@ -95,6 +95,29 @@ describe('worker_threads same-realm fallback warning (no silent stubs)', () => {
     expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('same-realm fallback: parentPort.postMessage of a markAsUncloneable graph throws DataCloneError, parent receives nothing', async () => {
+    writeFileSync(
+      '/w-uncloneable.mjs',
+      `
+import { markAsUncloneable, parentPort } from 'node:worker_threads';
+
+const marked = { x: 1 };
+markAsUncloneable(marked);
+let probe;
+try { parentPort.postMessage({ deep: [marked] }); probe = 'accepted'; }
+catch (e) { probe = [e.name, e.message, e.code]; }
+parentPort.postMessage({ probe });
+`,
+    );
+    const worker = new Worker('/w-uncloneable.mjs');
+    const messages: unknown[] = [];
+    worker.on('message', (msg) => messages.push(msg));
+    await new Promise<void>((resolve) => worker.on('exit', () => resolve()));
+    expect(messages).toEqual([
+      { probe: ['DataCloneError', 'Cannot clone object of unsupported type.', 25] },
+    ]);
+  });
+
   it('runs ESM worker scripts with live parentPort, workerData, and Node message events', async () => {
     writeFileSync(
       '/w-esm.mjs',

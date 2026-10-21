@@ -15,6 +15,13 @@ import {
   observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
 import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import {
+  assertCloneable,
+  isMarkedAsUncloneable,
+  isMarkedAsUntransferable,
+  markAsUncloneable,
+  markAsUntransferable,
+} from '../internal/clone-marks.ts';
 import { nodeMessageChannel } from '../internal/message-port-ref.ts';
 import { fileURLToPathPosix, isNodeUrl } from '../internal/posix-file-url.ts';
 import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts';
@@ -281,9 +288,6 @@ export class Worker extends EventEmitter {
       this.sameRealmContext = context;
       this.sameRealmParentPort = parentPort;
 
-      // child → parent: worker's parentPort.postMessage → 'message' on the handle.
-      parentPort.postMessage = (msg) => this.emitWorkerMessage(msg);
-
       // Node emits 'online' when the worker starts executing — about to run the
       // script body now.
       this.emitToOwner('online');
@@ -327,6 +331,7 @@ export class Worker extends EventEmitter {
   }
 
   postMessage(msg: unknown): void {
+    assertCloneable(msg);
     if (this.workerHandle?.kind === 'worker') {
       this.workerHandle.send(msg);
       return;
@@ -495,66 +500,13 @@ export const threadId = 0;
 export const workerData: unknown = undefined;
 
 /**
- * Object-graph tags backing `markAsUntransferable` / `markAsUncloneable`.
- *
- * Node stores these flags on internal V8 slots for the native structured-clone
- * serializer. With no in-realm hook into that serializer we use module-scoped
- * `WeakSet`s, which preserve the parity-observable contract (marks round-trip,
- * add no enumerable own properties, re-marking is a no-op) without faking a
- * serializer. Consulted by any in-realm clone / port-transfer path (e.g. a
- * future `MessagePort.postMessage`); the same-realm `Worker` fallback passes by
- * reference and never clones, so it enforces nothing.
+ * `markAsUntransferable` / `markAsUncloneable` live in `internal/clone-marks.ts`
+ * with the admission walk; re-exported here as Node's module surface. The
+ * same-realm `Worker` fallback passes by reference, so both port directions
+ * run `assertCloneable` themselves (`createWorkerPort` is the only `postMessage`
+ * writer) to keep Node's `DataCloneError` observable there too.
  */
-const untransferable = new WeakSet<object>();
-const uncloneable = new WeakSet<object>();
-
-function isObjectLike(value: unknown): value is object {
-  return (typeof value === 'object' && value !== null) || typeof value === 'function';
-}
-
-/**
- * Tag `object` so it is cloned (not transferred) when passed to
- * `postMessage(value, [transferList])`. Mirrors Node: ignores non-objects.
- *
- * @param object - Candidate to mark. Non-objects are ignored.
- */
-export function markAsUntransferable(object: unknown): void {
-  if (isObjectLike(object)) untransferable.add(object);
-}
-
-/**
- * Report whether `object` was tagged by {@link markAsUntransferable}. `false`
- * for primitives/null/undefined, matching Node.
- *
- * @param object - Candidate to test.
- * @returns `true` iff the object carries the untransferable mark.
- */
-export function isMarkedAsUntransferable(object: unknown): boolean {
-  return isObjectLike(object) && untransferable.has(object);
-}
-
-/**
- * Tag `object` so it throws `DataCloneError` if cloned via structuredClone /
- * `postMessage`. undici marks every web-platform class instance this way in its
- * constructor (`webidl.util.markAsUncloneable`), so we record the tag for an
- * in-realm clone path to honour. Mirrors Node: ignores non-objects.
- *
- * @param object - Candidate to mark. Non-objects are ignored.
- */
-export function markAsUncloneable(object: unknown): void {
-  if (isObjectLike(object)) uncloneable.add(object);
-}
-
-/**
- * Report whether `object` was tagged by {@link markAsUncloneable}. Not in
- * Node's public `worker_threads` surface — for rifty's in-realm clone path.
- *
- * @param object - Candidate to test.
- * @returns `true` iff the object carries the uncloneable mark.
- */
-export function isMarkedAsUncloneable(object: unknown): boolean {
-  return isObjectLike(object) && uncloneable.has(object);
-}
+export { isMarkedAsUncloneable, isMarkedAsUntransferable, markAsUncloneable, markAsUntransferable };
 
 function parseWorkerEntry(
   script: WorkerScript,
@@ -613,7 +565,10 @@ function shouldLoadWithModuleLoader(script: string, source: string): boolean {
 function createWorkerPort(postMessage: (msg: unknown) => void): WorkerPort {
   const port = new EventEmitter() as WorkerPort;
   port.onmessage = null;
-  port.postMessage = postMessage;
+  port.postMessage = (msg) => {
+    assertCloneable(msg);
+    postMessage(msg);
+  };
   port.ref = () => port;
   port.unref = () => port;
   port.start = () => {};

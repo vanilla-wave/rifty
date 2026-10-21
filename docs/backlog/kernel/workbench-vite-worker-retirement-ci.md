@@ -50,3 +50,11 @@ under `rifty-fix` / `PR-6`, not a retry loop.
 Dedup: no matching draft in kernel, distribution or toolchain-build; the
 server-shaped lifecycle item concerns premature startup exit, not post-close
 Worker retirement. No new mechanism or performance claim proposed.
+
+2026-10-21: the same A → B → A test now fails in CI runs 39465239157 (`main`)
+and 39513945622 (PR #382 merge-head); red since PR #379 merge `5e7da8be1`, at a different
+assertion — `:1055` `ownerLifecycle.length` 2 of 7 after the zero-Worker poll
+passed — alongside three Vite startup timeouts. Evidence and routing:
+`docs/backlog/kernel/vite-startup-readiness-ci.md` §Follow-up 2026-10-21.
+Trigger fired; isolated-PASS caveat no longer holds.
+

@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+- Guest Fetch instances and `markAsUncloneable` graphs throw Node's `DataCloneError` (code 25) on `structuredClone`, realm/`MessagePort`/`Worker`/`parentPort`/`BroadcastChannel` `postMessage` (kernel and same-realm workers): tags on ordinary objects and real Errors throw as Node, intrinsics ignore theirs; nested data properties, spoofed prototypes, Map/Set entries and Error `cause` included. One side-effect-free admission walk (`internal/clone-marks.ts`, realm-global marks shared across bundles) runs ahead of the native clone, which always gets the original graph; wrapped clone surfaces touch only captured primordials and forward a read transfer list as a primordial-only iterable. Declared gaps: a tag behind a getter is not seen (compat ❌); a tag on a host object is honoured where Node ignores it, and a getter deleting a later tagged sibling still throws (compat ⚠️) (ADR-0541).
+
 - Child stdin retains only dispatched transport writes; corked buffers no longer keep an unreferenced parent alive, including a corked successor after an active write.
 
 - Async explicit process exits retain their drain status without leaking an internal exit signal as a browser error (ADR-0445).
@@ -24,6 +26,8 @@
 - Pre-aborted Fetch preserves abort priority and unstarted body cancellation; collected Responses leave retained errored bodies undisturbed. Locked bodies with custom cancel reject `fetch.abortBodyState`; active upload abort retains Node's continued-read behavior (ADR-0541).
 
 - `process.emitWarning` supports string/Error overloads, nextTick events, default stderr and deprecation controls; lowercase `Request` method `patch` now warns once instead of crashing. Warning-file redirection remains a named unsupported feature (ADR-0541).
+
+- Guest `fetch()`/`new Request()` reject relative URLs as Node (`TypeError` "Failed to parse URL …"), no browser-base-URL exception. Rifty infrastructure resource I/O (wasm, lib.d.ts, npm/eddy, owner assets) goes through `@riftydev/io` `fetchHost`; `node:http` egress through `fetchNodeNetwork` (ADR-0541).
 
 - Native Node embedding no longer stays alive after importing the immediate scheduler: its MessagePort references follow pending immediates; cold QuickJS preload exits normally.
 
