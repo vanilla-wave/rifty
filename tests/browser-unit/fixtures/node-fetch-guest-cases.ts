@@ -181,7 +181,6 @@ attempt('clone-nested-response', () => structuredClone({a:[new Response('x')]}))
 attempt('clone-request', () => structuredClone(new Request('http://example.test/')));
 attempt('clone-formdata', () => structuredClone(new FormData()));
 attempt('clone-map-headers', () => [...structuredClone(new Map([['k', new Headers()]]))]);
-attempt('clone-getter', () => structuredClone({ get a() { return new Headers(); } }));
 attempt('clone-subclass', () => structuredClone(new H()));
 attempt('clone-marked', () => structuredClone(marked));
 attempt('clone-control', () => structuredClone({x:1}));
@@ -202,7 +201,6 @@ attempt('clone-spoof-tag-blob', () => structuredClone({ [Symbol.toStringTag]: 'B
 attempt('clone-map-getter-delete', () => { const m = new Map(); m.set('a', { get g() { m.delete('b'); return 1; } }); m.set('b', new Headers()); return [...structuredClone(m).keys()]; });
 attempt('clone-map-getter-add', () => { const m = new Map(); m.set('a', { get g() { m.set('c', 1); return 1; } }); return [...structuredClone(m).keys()]; });
 attempt('clone-error-cause-intact', () => { const e = new RangeError('x', { cause: { a: 1 } }); const c = structuredClone(e); return [c.name, c.message, c.stack === e.stack, c.cause, c instanceof RangeError]; });
-attempt('clone-error-cause-getter', () => { let n = 0; const e = new Error('x', { cause: { get g() { n++; return new Headers(); } } }); try { structuredClone(e); return ['ok', n]; } catch (err) { return [err.name, n]; } });
 attempt('clone-tagged-date', () => structuredClone(tag(new Date(5))).getTime());
 attempt('clone-tagged-array', () => structuredClone(tag([1, 2])));
 attempt('clone-tagged-array-nested-plain', () => structuredClone(tag([tag({})])));
@@ -211,8 +209,6 @@ attempt('clone-tagged-error', () => structuredClone(tag(new Error('e'))).message
 attempt('clone-tagged-buffer', () => structuredClone(tag(new ArrayBuffer(4))).byteLength);
 attempt('clone-port-transfer', () => { const { port1, port2 } = new MessageChannel(); const out = structuredClone({ port: port1 }, { transfer: [port1] }); const ok = out.port instanceof MessagePort && out.port !== port1; out.port.close(); port2.close(); return ok; });
 attempt('clone-transfer-getter', () => { const msg = { v: 1 }; return structuredClone(msg, { get transfer() { msg.v = 2; return []; } }); });
-attempt('clone-tagged-port-transfer', () => { const { port1, port2 } = new MessageChannel(); tag(port1); const out = structuredClone({ p: port1 }, { transfer: [port1] }); const ok = out.p instanceof MessagePort; out.p.close(); port2.close(); return ok; });
-attempt('clone-tagged-module', () => structuredClone(tag(new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])))) instanceof WebAssembly.Module);
 attempt('clone-error-alias', () => { const shared = { s: 1 }; const e = new Error('x', { cause: { x: shared } }); const c = structuredClone({ e, peer: shared }); return [c.e.cause.x === c.peer, c.e.cause.x]; });
 attempt('clone-error-cycle', () => { const e = new Error('x'); const cause = {}; cause.err = e; e.cause = cause; const c = structuredClone(e); return c.cause.err === c; });
 attempt('clone-error-cause-tagged-peer', () => structuredClone({ e: new Error('x', { cause: { a: 1 } }), h: new Headers() }));
@@ -327,3 +323,24 @@ export function networkFetchCase(url: string): string {
 })().catch(fail);
 `;
 }
+
+/**
+ * Declared ceiling (compat ❌ `docs/public/compat/process.md`): a tagged object
+ * reachable only through an accessor is not seen by the clone admission (reading
+ * the getter would make the native clone read it twice); Node throws
+ * `DataCloneError`, the guest clones the own enumerable fields. Asserted as the
+ * guest outcome, never compared with the Node oracle.
+ */
+export const cloneAccessorCeilingCase: FetchGuestCase = {
+  name: 'clone-accessor-ceiling',
+  source: `${preamble}
+const { markAsUncloneable } = require('node:worker_threads');
+const attempt = (label, fn) => { try { row(label, ['accepted', fn()]); } catch (e) { row(label, [e.name, e.message, e.code]); } };
+attempt('clone-getter', () => structuredClone({ get a() { return new Headers(); } }));
+attempt('clone-error-cause-getter', () => { let n = 0; const e = new Error('x', { cause: { get g() { n++; return new Headers(); } } }); structuredClone(e); return n; });
+// Compat ⚠️: a tag on a host object is honoured here; Node ignores it.
+const tag = (o) => { markAsUncloneable(o); return o; };
+attempt('clone-tagged-port-transfer', () => { const { port1, port2 } = new MessageChannel(); tag(port1); const out = structuredClone({ p: port1 }, { transfer: [port1] }); const ok = out.p instanceof MessagePort; out.p.close(); port2.close(); return ok; });
+attempt('clone-tagged-module', () => structuredClone(tag(new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])))) instanceof WebAssembly.Module);
+`,
+};

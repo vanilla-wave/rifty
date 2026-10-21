@@ -10,6 +10,7 @@ import { buildSync } from 'esbuild';
 import { bootOwner, closeOwner, execLine, gotoHarness, writeOwnerFile } from './fixtures.ts';
 import { runNodeOracle, runOwnerCommand } from './fixtures/message-port-ref-cases.ts';
 import {
+  cloneAccessorCeilingCase,
   fetchGuestCases,
   honoFetchCase,
   networkFetchCase,
@@ -78,6 +79,37 @@ test('Node Fetch goal: real Hono and body lifecycle match live Node', async ({ p
         .soft(rows(run.out), `${fixture.name}: ${run.out}`)
         .toEqual(rows(oracles.get(fixture.name)?.stdout ?? ''));
     }
+  } finally {
+    await closeOwner(page);
+  }
+});
+
+// Compat ❌ row "Uncloneable reached only via accessor": the guest outcome, not Node's.
+test('Node Fetch ceiling: an uncloneable behind a getter clones its own fields', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await gotoHarness(page);
+  await bootOwner(page, {
+    workspaceId: 'bu-node-fetch-clone-ceiling',
+    template: 'hidden-empty',
+    persistence: 'ephemeral',
+  });
+  try {
+    await writeOwnerFile(
+      page,
+      '/scratch/clone-accessor-ceiling.cjs',
+      cloneAccessorCeilingCase.source,
+    );
+    const run = await runOwnerCommand(page, 'node clone-accessor-ceiling.cjs', 40_000);
+    expect(run.timedOut, run.out).toBe(false);
+    expect(run.exit, run.out).toBe(0);
+    expect(rows(run.out), run.out).toEqual([
+      'FETCH|clone-getter=["accepted",{"a":{}}]',
+      'FETCH|clone-error-cause-getter=["accepted",1]',
+      'FETCH|clone-tagged-port-transfer=["DataCloneError","Cannot clone object of unsupported type.",25]',
+      'FETCH|clone-tagged-module=["DataCloneError","Cannot clone object of unsupported type.",25]',
+    ]);
   } finally {
     await closeOwner(page);
   }

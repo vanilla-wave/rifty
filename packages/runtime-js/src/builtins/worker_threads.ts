@@ -16,7 +16,7 @@ import {
 } from '@riftydev/kernel';
 import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import {
-  admitClone,
+  assertCloneable,
   isMarkedAsUncloneable,
   isMarkedAsUntransferable,
   markAsUncloneable,
@@ -330,8 +330,8 @@ export class Worker extends EventEmitter {
     }
   }
 
-  postMessage(value: unknown): void {
-    const msg = admitClone(value);
+  postMessage(msg: unknown): void {
+    assertCloneable(msg);
     if (this.workerHandle?.kind === 'worker') {
       this.workerHandle.send(msg);
       return;
@@ -503,7 +503,7 @@ export const workerData: unknown = undefined;
  * `markAsUntransferable` / `markAsUncloneable` live in `internal/clone-marks.ts`
  * with the admission walk; re-exported here as Node's module surface. The
  * same-realm `Worker` fallback passes by reference, so both port directions
- * run `admitClone` themselves (`createWorkerPort` is the only `postMessage`
+ * run `assertCloneable` themselves (`createWorkerPort` is the only `postMessage`
  * writer) to keep Node's `DataCloneError` observable there too.
  */
 export { isMarkedAsUncloneable, isMarkedAsUntransferable, markAsUncloneable, markAsUntransferable };
@@ -565,7 +565,10 @@ function shouldLoadWithModuleLoader(script: string, source: string): boolean {
 function createWorkerPort(postMessage: (msg: unknown) => void): WorkerPort {
   const port = new EventEmitter() as WorkerPort;
   port.onmessage = null;
-  port.postMessage = (msg) => postMessage(admitClone(msg));
+  port.postMessage = (msg) => {
+    assertCloneable(msg);
+    postMessage(msg);
+  };
   port.ref = () => port;
   port.unref = () => port;
   port.start = () => {};

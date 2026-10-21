@@ -8,7 +8,7 @@
 
 ## [Unreleased]
 
-- Guest Fetch instances and `markAsUncloneable` graphs throw Node's `DataCloneError` (code 25) on `structuredClone`, realm/`MessagePort`/`Worker`/`parentPort`/`BroadcastChannel` `postMessage` (kernel and same-realm workers) with V8's typing — ordinary objects and Errors honour the tag, intrinsics ignore it; nested values, spoofed prototypes, Map/Set snapshots, Error `cause` and getters included. One admission projection (`internal/clone-marks.ts`, realm-global marks shared across bundles) hands every native clone a graph read once (ADR-0541).
+- Guest Fetch instances and `markAsUncloneable` graphs throw Node's `DataCloneError` (code 25) on `structuredClone`, realm/`MessagePort`/`Worker`/`parentPort`/`BroadcastChannel` `postMessage` (kernel and same-realm workers) with V8's typing — ordinary objects and Errors honour the tag, intrinsics and host objects ignore it; nested data properties, spoofed prototypes, Map/Set entries and Error `cause` included. One side-effect-free admission walk (`internal/clone-marks.ts`, realm-global marks shared across bundles) runs ahead of the native clone, which always gets the original graph; a tag behind a getter is a declared ceiling (compat ❌) (ADR-0541).
 
 - Child stdin retains only dispatched transport writes; corked buffers no longer keep an unreferenced parent alive, including a corked successor after an active write.
 

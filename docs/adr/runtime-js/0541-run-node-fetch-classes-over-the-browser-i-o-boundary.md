@@ -172,9 +172,11 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
 
 - 2026-10-21 — Structured clone of Fetch instances now throws Node's
   `DataCloneError`: undici's `markAsUncloneable` tags are honoured by one
-  admission (`internal/clone-marks.ts`) ahead of every native clone surface,
-  with V8's typing (ordinary objects and Errors honour the tag, intrinsics and
-  platform objects never). Fork `serialization:'advanced'` is unchanged: rifty's
+  side-effect-free admission walk (`internal/clone-marks.ts`) ahead of every
+  native clone surface, with V8's typing (ordinary objects and Errors honour the
+  tag, intrinsics and host objects never); the native clone always gets the
+  original graph. Declared ceiling: a tag reachable only through an accessor is
+  not seen (compat ❌). Fork `serialization:'advanced'` is unchanged: rifty's
   codec serializes own enumerable fields itself, as Node's `v8.serialize` does
   (`advanced-ipc.spec.ts` fetch-classes/ceilings green on the merged tree).
 

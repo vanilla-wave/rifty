@@ -1,14 +1,14 @@
 /**
- * Route every native structured-clone entry of a realm through `admitClone`
+ * Guard every native structured-clone entry of a realm with `assertCloneable`
  * (clone-marks.ts): `structuredClone`, realm `postMessage`,
  * `MessagePort#`/`Worker#`/`BroadcastChannel#postMessage`. Native order is
  * kept: the transfer argument is read first (a `transfer` getter may mutate the
- * message), then the message is admitted. Wrapped once per realm; names,
+ * message), then the message is checked and the original is cloned. Wrapped once per realm; names,
  * lengths and descriptors stay native (ADR-0447 transfer wrappers in
  * message-port-ref.ts are untouched and run after this check).
  */
 
-import { admitClone } from './clone-marks.ts';
+import { assertCloneable } from './clone-marks.ts';
 import { ownerOf, readTransfer, wrapMethod } from './message-port-ref.ts';
 
 const INSTALLED = Symbol.for('rifty.runtime-js.clone-admission.v1');
@@ -27,7 +27,7 @@ export function installCloneAdmission(): void {
       const forwarded = args.slice();
       const read = args.length >= 2 ? readTransfer(args[1], sequenceOverload) : null;
       if (read !== null) forwarded[1] = read.forward(read.list);
-      forwarded[0] = admitClone(args[0]);
+      assertCloneable(args[0]);
       return Reflect.apply(native, receiver, forwarded);
     };
   for (const Ctor of [realm.MessagePort, realm.Worker]) {
