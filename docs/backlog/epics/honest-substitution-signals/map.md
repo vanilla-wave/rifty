@@ -4,6 +4,8 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
+Acceptance carrier first: admission.contract.test.ts, npm-shell-eddy-glue.test.ts, esbuild-declarations.test.ts and lightningcss compat tests; certify together before product edits.
+
 1. `npm-client/shadow-admission-refusal-names-substituted-version` —
    **admission-message** — I4; pure npm-client, smallest pattern: one error
    text, one test per recipe; leads because it fixes the surface every later

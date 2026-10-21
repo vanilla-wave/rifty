@@ -31,6 +31,7 @@ import {
   type NpmShellCommandDeps,
   createNpmShellCommand as createProductionNpmShellCommand,
 } from '../../packages/workbench/src/glue/npm-shell-command.ts';
+import { projectRuntimeShellLine } from '../../packages/workbench/src/workbench/internal/project-runtime-acquisition.ts';
 import { PackageAcquisitionError } from '../../packages/workbench/src/workers/package-acquisition-authority.ts';
 import { type EddyServer, createEddyServer, resolveBundle } from '../../services/eddy/src/index.ts';
 import { LOCAL_REGISTRY_BASE_URL, makeLocalFetcher } from './fixtures/local-registry.ts';
@@ -99,6 +100,80 @@ afterEach(async () => {
 });
 
 describe('npm shell command → REAL install → real eddy (stub-drift tripwire)', () => {
+  it.each(['typed', 'automatic'] as const)(
+    'prints Eddy decline once for %s install and completes the real standard tree',
+    async (mode) => {
+      const vfs = new MemoryVfs();
+      await seedProject(vfs);
+      vi.stubGlobal('fetch', async () => {
+        throw new Error('resolver unreachable');
+      });
+      const shell = new Shell({ cwd: '/proj' });
+      shell.registerCommand(
+        'npm',
+        createIntegrationNpmShellCommand({
+          vfs,
+          registry: makeRegistry(),
+          resolverUrl: 'https://eddy.invalid/resolve',
+          resolverClosureHash: () => 'a'.repeat(64),
+        }),
+      );
+      try {
+        const line =
+          mode === 'typed'
+            ? 'npm install'
+            : projectRuntimeShellLine(
+                'echo project-started',
+                { kind: 'install', snapshotFailures: [] },
+                '/proj',
+              );
+        const result = await shell.run(line);
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toMatch(/npm: installed 2 package\(s\) in /);
+        expect(result.stdout).not.toContain('via eddy (fast)');
+        if (mode === 'automatic') expect(result.stdout).toContain('project-started');
+        expect(await vfs.readFileText('/proj/node_modules/debug/package.json')).toContain('4.4.1');
+        expect(result.stderr).toBe(
+          'npm: fast install (eddy) unavailable, using standard install — get: resolver unreachable; post: resolver unreachable\n',
+        );
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  it('prints asynchronous learned-pin write failure without failing the real Eddy install', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createIntegrationNpmShellCommand({
+        vfs,
+        registry: makeRegistry(),
+        resolverUrl: eddyUrl,
+        learnedPins: {
+          get: async () => undefined,
+          set: async () => {
+            throw new Error('pin store unavailable');
+          },
+          revalidate: async () => {},
+        },
+      }),
+    );
+    let stderr = '';
+    const result = await shell.run('npm install', {
+      onChunk: (chunk, stream) => {
+        if (stream === 'stderr') stderr += chunk;
+      },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('via eddy (fast)');
+    await vi.waitFor(() =>
+      expect(stderr).toBe('npm: learned pin write failed: pin store unavailable\n'),
+    );
+  });
+
   it.each([
     { dependencies: { ms: '2.1.3' }, devDependencies: { ms: '2.0.0' } },
     { devDependencies: { ms: '2.0.0' }, optionalDependencies: { ms: '2.1.3' } },

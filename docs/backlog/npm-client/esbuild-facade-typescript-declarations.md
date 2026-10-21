@@ -58,4 +58,26 @@ Dedup: no title/`code:`/map/declined match.
 
 ## Challenge
 
-<!-- finding capture — no premise critic at draft (README §Challenge) -->
+challenge: 2026-10-22 — clear; unchanged goal premise reuses 2026-09-27 challenge.
+
+## Acceptance
+
+1. Real installed esbuild facades in both tiers carry a resolving types entry and declarations byte-identical to the installed upstream twin; Node10, Node16 and Bundler resolution and the VFS language service resolve build declarations (`tests/integration/esbuild-declarations.test.ts`). → I2
+2. Generated esbuild compat page states declarations support and tier scope. → I2
+
+## Out of scope
+
+No runtime API expansion; esbuild.cli and no-COI runtime ceilings unchanged.
+
+## Decisions
+
+- 2026-10-22 — one PR for all goal obligations; no merge (user request).
+
+## Reference contract
+
+- Oracle: real esbuild@0.28.0 and esbuild-wasm@0.21.5/0.25.12/0.28.0/0.28.2 archives; installed TypeScript compiler and public VFS language service run identical source.
+- Mechanism: existing twin-owned lib/main.d.ts, facade types points to installed sibling; no declaration copy or synthetic types.
+
+## Parity cases
+
+1. `pnpm exec vitest run tests/integration/esbuild-declarations.test.ts`: real Node compiler rejects `build({write: 'wrong'})` with 2322; no-COI currently produces 7016 (implicit any), COI resolves upstream bytes; all three resolution modes must match the reference diagnostics and IDE definition target. → I2

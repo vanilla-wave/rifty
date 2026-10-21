@@ -46,4 +46,16 @@ covers node-builtins and shell dimensions, not substitutions.
 
 ## Challenge
 
-<!-- finding capture — no premise critic at draft (README §Challenge) -->
+challenge: 2026-10-22 — clear; unchanged goal premise reuses 2026-09-27 challenge.
+
+## Acceptance
+
+1. Generated and indexed lightningcss page names semver-admits against 1.32.0, lightningcss-wasm@1.32.0, observed facade capabilities, limitations and loud gaps, with existence-checked test citations; default drift gate covers it. → I3
+
+## Out of scope
+
+No lightningcss runtime repair or admission widening.
+
+## Decisions
+
+- 2026-10-22 — one PR for all goal obligations; no merge (user request).

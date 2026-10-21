@@ -55,4 +55,22 @@ honesty — refresh that quote when this lands.
 
 ## Challenge
 
-<!-- finding capture — no premise critic at draft (README §Challenge) -->
+challenge: 2026-10-22 — clear; unchanged goal premise reuses 2026-09-27 challenge.
+
+## Acceptance
+
+1. Typed and automatic project-open installs print the full eddy decline reason once on stderr and complete the standard install (`tests/integration/npm-shell-eddy-glue.test.ts`). → I1
+
+## Out of scope
+
+No new transport/event; pin policy, prefetch, cache and terminal-less acquisition unchanged.
+
+## Decisions
+
+- 2026-10-22 — one PR for all goal obligations; no merge (user request).
+
+## Fault matrix
+
+| axis × operation | honest outcome | artifact | trace |
+|---|---|---|---|
+| network unavailable × eddy GET/POST | full decline reason in terminal, standard install completes | npm-shell-eddy-glue.test.ts typed/automatic | → I1 |

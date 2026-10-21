@@ -36,4 +36,16 @@ Dedup: no title/`code:`/map/declined match; related surface only
 
 ## Challenge
 
-<!-- finding capture — no premise critic at draft (README §Challenge) -->
+challenge: 2026-10-22 — clear; unchanged goal premise reuses 2026-09-27 challenge.
+
+## Acceptance
+
+1. Every refused builtin recipe reports requested name/range, trigger version and admission kind; stable feature id and admitted requests unchanged (`admission.contract.test.ts`). → I4
+
+## Out of scope
+
+No admission widening; requested-range COI recipes continue accepting ranges.
+
+## Decisions
+
+- 2026-10-22 — one PR for all goal obligations; no merge (user request).
