@@ -1,0 +1,126 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Review PASS: B12 закрыт, новых blockers нет. Сливать после зелёного CI HEAD; сейчас CI pending.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "457d6d1d57d284f2719cfe1c8aaefea837e7b298",
+  "unit_goal_source": "PR #382 https://github.com/vanilla-wave/rifty/pull/382 — актуальные Result, Contract and evidence, Fault matrix, Boundaries. Observed-defect baseline: live Node 24.16.0 DataCloneError/25 при structured clone Fetch instances и markAsUncloneable ordinary objects/Errors; backlog-контракта нет. BASE=5e7da8be1877cee631980707384861aa01030e90 (git merge-base origin/main HEAD). Седьмой VERIFY всего unit. Исторический RED/mutant: /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-review.XXXX.ufEsWvbfoO/log:4206. Текущие artifacts: /private/tmp/rifty382-verify7-u2t1rxqm/review-output/. Unit/bootstrap 102/102, compiler gate 10/10, check:arch и fetch-classes --check PASS. Scratch harness errors перепроверены на actual tree. Полный pr:check и browser lanes здесь не запускались; browser GREEN на этом tree предоставлен пользователем. Tracked tree неизменён.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "sibling-drift: clone surfaces используют общий admission и realm-global marks",
+      "source": "fault-matrix",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-fetch-guest-cases.ts:178; packages/runtime-js/src/builtins/worker_threads.test.ts:98; packages/runtime-js/src/internal/clone-marks.test.ts:21",
+      "note": ""
+    },
+    {
+      "row": "frozen-assumption: ordinary/Error tags отвергаются, intrinsic tags игнорируются",
+      "source": "fault-matrix",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/clone-marks.test.ts:123; tests/browser-unit/fixtures/node-fetch-guest-cases.ts:204; /private/tmp/rifty382-verify7-u2t1rxqm/review-output/node-fixture.log:1",
+      "note": ""
+    },
+    {
+      "row": "observable-order: transfer conversion перед admission; walk не запускает accessors",
+      "source": "fault-matrix",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/clone-marks.test.ts:80; packages/runtime-js/src/internal/clone-marks.test.ts:235; packages/runtime-js/src/internal/clone-marks.test.ts:267",
+      "note": ""
+    },
+    {
+      "row": "B12: valid clone values, aliases, cycles, transfers и getter counts сохранены при prototype/species/iterator patches",
+      "source": "public-api",
+      "trace": "PR #382 Result + Node 24.16.0 baseline + ADR-0541",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/clone-marks.test.ts:186; packages/runtime-js/src/internal/clone-marks.test.ts:267; /private/tmp/rifty382-verify7-u2t1rxqm/review-output/intrinsics.log:1; /private/tmp/rifty382-verify7-u2t1rxqm/review-output/transfer-intrinsics.log:1",
+      "note": "node review-output/intrinsics.mjs и transfer-intrinsics.mjs, actual HEAD bundle, v24.16.0: native/rifty value=1, hooks=0 для species/constructor/slice/Reflect.apply/push/Object.create; transfer успешен. Committed test проверяет caller iterator ровно один раз на вызов."
+    },
+    {
+      "row": "Принятые accessor/host-expando/getter-deletes-sibling/tag-first ceilings остаются явными",
+      "source": "frozen-artifact",
+      "trace": "ADR-0541",
+      "status": "pass",
+      "citation": "docs/public/compat/process.md:42; tests/browser-unit/node-fetch-guest.spec.ts:87; packages/runtime-js/src/internal/clone-marks.test.ts:150",
+      "note": ""
+    },
+    {
+      "row": "ADR-0447: referenced-pair refusal до detach; release после успешного native transfer и detached probe; closed-port поведение сохранено",
+      "source": "public-api",
+      "trace": "ADR-0447",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/message-port-ref.ts:264; tests/browser-unit/message-port-ref-keepalive.fault.spec.ts:48; tests/browser-unit/message-port-ref-keepalive.spec.ts:13",
+      "note": "Сравнено с BASE: transfer semantics неизменны; заменены helper plumbing и forwarding."
+    },
+    {
+      "row": "PR-4: compiler pin воспроизведён; BASE критерии и negative payload guards сохранены",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:103; tools/checks/esbuild-legacy-retirement.mjs:253; tools/checks/esbuild-legacy-retirement.test.ts:30",
+      "note": "Независимые BASE/HEAD builds: 10022694 bytes; SHA 233d8b195a32eb12f7f8875c28ec7921d641af42ef027cb5250a02c1b3e922e4 → f3330277722c0ebdcab5f77d61c6ab67d8a656ad7a7e6d8bc2be945ca26f65e9. Отличаются только шесть hashed import filenames; после нормализации byte-identical. Negative tests 10/10."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "packages/runtime-js/src/internal/clone-marks.ts:195",
+          "summary": "Кандидат B13: getter заменяет data-sibling tagged object; Node бросает, rifty принимает.",
+          "authority": "AGENTS.md §Fidelity: предполагаемая необъявленная silent divergence относительно Node 24.16.0; ADR-0541. Кандидат отклонён fresh critic как принятая accessor ceiling; см. adjudication.",
+          "evidence": "node /private/tmp/rifty382-verify7-u2t1rxqm/review-output/getter-insert.mjs, actual HEAD bundle, v24.16.0: {get a(){this.b=tagged;return 1},b:{x:2}} → Node DataCloneError/25, rifty {a:1,b:{x:1}}, reads=1 у обоих. Отличающегося valid Node clone не показано."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": [
+    {
+      "summary": "Кандидат B13: getter заменяет data-sibling tagged object; Node бросает, rifty принимает.",
+      "ruling": "FALSE",
+      "clause": "docs/public/compat/process.md:42 и ADR-0541:178 принимают tag reach, требующий accessor; декларация не ограничена getter return. До getter tagged недостижим через graph. Discriminating carrier: /private/tmp/rifty382-verify7-u2t1rxqm/review-output/getter-insert.mjs:7. Live Node 24.16.0: вызов Node-invalid; нового undeclared divergence или изменённого valid clone не установлено. NOTE, обязательства нет.",
+      "by": "critic"
+    }
+  ]
+}
