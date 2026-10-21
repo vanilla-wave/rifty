@@ -49,12 +49,18 @@ function realmMarks(): CloneMarks {
 
 const marks = realmMarks();
 
+// Primordials captured at load: the walk runs in a realm the guest may have
+// patched (`Set.prototype`, array iteration, `Object.prototype` accessors …) and
+// must never execute guest code before the native clone reads the graph.
 type NativeMethod = (this: unknown, ...args: unknown[]) => unknown;
 const apply = Reflect.apply;
+const WeakSetCtor = WeakSet;
 const weakHas = WeakSet.prototype.has;
 const weakAdd = WeakSet.prototype.add;
 const ownKeys = Reflect.ownKeys;
 const getDescriptor = Object.getOwnPropertyDescriptor;
+const hasOwn = Object.prototype.hasOwnProperty;
+const DOMExceptionCtor = DOMException;
 const isArray = Array.isArray;
 const isView = ArrayBuffer.isView;
 const isError: ((value: unknown) => boolean) | undefined = (
@@ -113,7 +119,7 @@ export function isMarkedAsUncloneable(object: unknown): boolean {
 }
 
 function dataCloneError(): DOMException {
-  return new DOMException(CLONE_MESSAGE, 'DataCloneError');
+  return new DOMExceptionCtor(CLONE_MESSAGE, 'DataCloneError');
 }
 
 function branded(method: NativeMethod, value: object): boolean {
@@ -127,7 +133,10 @@ function branded(method: NativeMethod, value: object): boolean {
 
 function isIntrinsic(value: object): boolean {
   if (isView(value)) return true;
-  for (const brand of intrinsicBrands) if (branded(brand, value)) return true;
+  for (let i = 0; i < intrinsicBrands.length; i++) {
+    const brand = intrinsicBrands[i];
+    if (brand !== undefined && branded(brand, value)) return true;
+  }
   return false;
 }
 
@@ -140,9 +149,10 @@ function refuseTagged(value: object): void {
   if (apply(weakHas, marks.uncloneable, [value]) === true) throw dataCloneError();
 }
 
-function walk(value: unknown, visited: Set<object>): void {
-  if (!isObjectLike(value) || typeof value === 'function' || visited.has(value)) return;
-  visited.add(value);
+function walk(value: unknown, visited: WeakSet<object>): void {
+  if (!isObjectLike(value) || typeof value === 'function') return;
+  if (apply(weakHas, visited, [value]) === true) return;
+  apply(weakAdd, visited, [value]);
   if (installedProxyIdentity()?.isProxy(value) === true) return;
   if (isArray(value)) {
     walkOwnData(value, visited);
@@ -165,18 +175,27 @@ function walk(value: unknown, visited: Set<object>): void {
   refuseTagged(value);
   if (errorBrand(value)) {
     const cause = getDescriptor(value, 'cause');
-    if (cause !== undefined && 'value' in cause) walk(cause.value, visited);
+    if (cause !== undefined && isData(cause)) walk(cause.value, visited);
     return;
   }
   walkOwnData(value, visited);
 }
 
+/** Descriptor is a fresh object; `in` would also see a guest `Object.prototype.value` accessor. */
+function isData(descriptor: PropertyDescriptor): boolean {
+  return apply(hasOwn, descriptor, ['value']) === true;
+}
+
 /** Own enumerable string-keyed data properties; accessors are never read. */
-function walkOwnData(source: object, visited: Set<object>): void {
-  for (const key of ownKeys(source)) {
+function walkOwnData(source: object, visited: WeakSet<object>): void {
+  const keys = ownKeys(source);
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
     if (typeof key !== 'string') continue;
     const descriptor = getDescriptor(source, key);
-    if (descriptor?.enumerable === true && 'value' in descriptor) walk(descriptor.value, visited);
+    if (descriptor !== undefined && descriptor.enumerable === true && isData(descriptor)) {
+      walk(descriptor.value, visited);
+    }
   }
 }
 
@@ -188,5 +207,5 @@ function walkOwnData(source: object, visited: Set<object>): void {
  */
 export function assertCloneable(value: unknown): void {
   if (!marks.state.any) return;
-  walk(value, new Set());
+  walk(value, new WeakSetCtor());
 }

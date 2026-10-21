@@ -264,6 +264,103 @@ describe('installCloneAdmission', () => {
     expect(ceilingReads).toBe(1);
   });
 
+  it('touches only captured primordials: guest patches never run during admission', () => {
+    installCloneAdmission();
+    tag({});
+    const probe = { v: 1, deep: { list: [1, { k: 2 }], map: new Map([['m', { n: 3 }]]) } };
+    const tagged = tag({});
+    let patchedCalls = 0;
+    let clone: unknown;
+    let callsAfterClone = -1;
+    let callsAfterRefusal = -1;
+    let refusal: unknown;
+    const mutate = () => {
+      patchedCalls++;
+      probe.v = 2;
+    };
+    const arrayIteratorProto = Object.getPrototypeOf([][Symbol.iterator]()) as {
+      next: () => IteratorResult<unknown>;
+    };
+    const saved = {
+      setAdd: Set.prototype.add,
+      setHas: Set.prototype.has,
+      arrayIterator: Array.prototype[Symbol.iterator],
+      iteratorNext: arrayIteratorProto.next,
+      slice: Array.prototype.slice,
+      reflectApply: Reflect.apply,
+      mapForEach: Map.prototype.forEach,
+      setForEach: Set.prototype.forEach,
+    };
+    try {
+      Set.prototype.add = function (this: Set<unknown>, value: unknown) {
+        mutate();
+        return saved.setAdd.call(this, value);
+      };
+      Set.prototype.has = function (this: Set<unknown>, value: unknown) {
+        mutate();
+        return saved.setHas.call(this, value);
+      };
+      Array.prototype[Symbol.iterator] = function (this: unknown[]) {
+        mutate();
+        return saved.arrayIterator.call(this);
+      };
+      arrayIteratorProto.next = function (this: Iterator<unknown>) {
+        mutate();
+        return saved.iteratorNext.call(this);
+      };
+      Array.prototype.slice = function (this: unknown[], ...args: [number?, number?]) {
+        mutate();
+        return saved.slice.apply(this, args);
+      };
+      Reflect.apply = ((
+        target: (...args: unknown[]) => unknown,
+        self: unknown,
+        args: unknown[],
+      ) => {
+        mutate();
+        return saved.reflectApply(target, self, args);
+      }) as typeof Reflect.apply;
+      Map.prototype.forEach = function (this: Map<unknown, unknown>, ...args: unknown[]) {
+        mutate();
+        return saved.mapForEach.apply(this, args as [() => void]);
+      } as typeof Map.prototype.forEach;
+      Set.prototype.forEach = function (this: Set<unknown>, ...args: unknown[]) {
+        mutate();
+        return saved.setForEach.apply(this, args as [() => void]);
+      } as typeof Set.prototype.forEach;
+      Object.defineProperty(Object.prototype, 'value', {
+        get() {
+          mutate();
+          return undefined;
+        },
+        configurable: true,
+      });
+      // Only the admission + native clone run while patched; assertions follow the restore.
+      clone = structuredClone(probe);
+      callsAfterClone = patchedCalls;
+      try {
+        structuredClone({ hidden: [tagged] });
+      } catch (error) {
+        refusal = error;
+      }
+      callsAfterRefusal = patchedCalls;
+    } finally {
+      Set.prototype.add = saved.setAdd;
+      Set.prototype.has = saved.setHas;
+      Array.prototype[Symbol.iterator] = saved.arrayIterator;
+      arrayIteratorProto.next = saved.iteratorNext;
+      Array.prototype.slice = saved.slice;
+      Reflect.apply = saved.reflectApply;
+      Map.prototype.forEach = saved.mapForEach;
+      Set.prototype.forEach = saved.setForEach;
+      Reflect.deleteProperty(Object.prototype, 'value');
+    }
+    expect(callsAfterClone).toBe(0);
+    expect(callsAfterRefusal).toBe(0);
+    expect(clone).toEqual({ v: 1, deep: { list: [1, { k: 2 }], map: new Map([['m', { n: 3 }]]) } });
+    expect(refusal).toMatchObject({ name: 'DataCloneError', code: 25 });
+  });
+
   it('BroadcastChannel.postMessage takes one argument: a stray options getter never runs', async () => {
     installCloneAdmission();
     const sender = new BroadcastChannel('rifty-clone-admission-probe');

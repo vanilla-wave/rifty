@@ -13,6 +13,9 @@ import { assertCloneable } from './clone-marks.ts';
 import { ownerOf, readTransfer, wrapMethod } from './message-port-ref.ts';
 
 const INSTALLED = Symbol.for('rifty.runtime-js.clone-admission.v1');
+// Captured at load: the wrapper runs after guest code may have patched Array/Reflect.
+const apply = Reflect.apply;
+const arraySlice = Array.prototype.slice as (this: unknown[]) => unknown[];
 
 export function installCloneAdmission(): void {
   const realm = globalThis as typeof globalThis & { [INSTALLED]?: true };
@@ -26,14 +29,14 @@ export function installCloneAdmission(): void {
       receiver: unknown,
       args: unknown[],
     ): unknown => {
-      const forwarded = args.slice();
+      const forwarded = apply(arraySlice, args, []) as unknown[];
       const read =
         transfer !== null && args.length >= 2
           ? readTransfer(args[1], transfer === 'sequence')
           : null;
       if (read !== null) forwarded[1] = read.forward(read.list);
       assertCloneable(args[0]);
-      return Reflect.apply(native, receiver, forwarded);
+      return apply(native, receiver, forwarded);
     };
   for (const Ctor of [realm.MessagePort, realm.Worker]) {
     if (typeof Ctor === 'function') wrapMethod(Ctor.prototype, 'postMessage', admit('sequence'));
