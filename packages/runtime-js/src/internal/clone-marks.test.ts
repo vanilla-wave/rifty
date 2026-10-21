@@ -147,6 +147,22 @@ describe('assertCloneable', () => {
     port2.close();
   });
 
+  it('compat ⚠️: a getter deleting a later tagged sibling still throws (walk never runs getters)', () => {
+    const tagged = tag({});
+    let reads = 0;
+    const graph: { b?: object; readonly a: number } = {
+      get a() {
+        reads++;
+        Reflect.deleteProperty(graph, 'b');
+        return 1;
+      },
+      b: tagged,
+    };
+    refused(() => assertCloneable(graph));
+    expect(reads).toBe(0);
+    expect(graph.b).toBe(tagged);
+  });
+
   it('ignores non-enumerable, symbol-keyed and inherited reach; cycles terminate', () => {
     const tagged = tag({});
     const hidden = Object.create(
@@ -246,5 +262,31 @@ describe('installCloneAdmission', () => {
     };
     expect(structuredClone(behindGetter)).toEqual({ a: {} });
     expect(ceilingReads).toBe(1);
+  });
+
+  it('BroadcastChannel.postMessage takes one argument: a stray options getter never runs', async () => {
+    installCloneAdmission();
+    const sender = new BroadcastChannel('rifty-clone-admission-probe');
+    const receiver = new BroadcastChannel('rifty-clone-admission-probe');
+    try {
+      const delivered = new Promise<unknown>((resolve) => {
+        receiver.onmessage = (event) => resolve(event.data);
+      });
+      const msg = { v: 1 };
+      let reads = 0;
+      (sender.postMessage as (...args: unknown[]) => void)(msg, {
+        get transfer() {
+          reads++;
+          msg.v = 2;
+          return [];
+        },
+      });
+      expect(await delivered).toEqual({ v: 1 });
+      expect(reads).toBe(0);
+      refused(() => sender.postMessage({ deep: [tag({})] }));
+    } finally {
+      sender.close();
+      receiver.close();
+    }
   });
 });

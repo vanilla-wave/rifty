@@ -12,10 +12,12 @@
  * `Symbol.toStringTag`) and Errors honour the tag; intrinsics typed by internal
  * slot (Array, Map, Set, Date, RegExp, buffers, views, wrappers) ignore theirs;
  * functions and Proxies are leaves. A host object reads as ordinary: no own
- * enumerable data properties, no side effect, native still judges it. Ceiling:
- * a tagged object reachable only through an accessor is not seen (reading it
- * would make the native clone read it twice) — compat ❌. undici tags every
- * Fetch class instance.
+ * enumerable data properties, no side effect, native still judges it — a tag
+ * on it is honoured where Node ignores it (compat ⚠️). Ceilings: a tagged
+ * object reachable only through an accessor is not seen (compat ❌); a getter
+ * whose side effect removes a later tagged sibling still throws (compat ⚠️) —
+ * running getters would make the native clone read them twice. undici tags
+ * every Fetch class instance.
  *
  * Tags live in one realm-global record so every bundle copy (node-entry child,
  * kernel host) sees the same marks.
@@ -58,10 +60,8 @@ const isView = ArrayBuffer.isView;
 const isError: ((value: unknown) => boolean) | undefined = (
   Error as { isError?: (value: unknown) => boolean }
 ).isError;
-const objectToString = Object.prototype.toString;
 const mapForEach = Map.prototype.forEach;
 const setForEach = Set.prototype.forEach;
-const toStringTag = Symbol.toStringTag;
 
 const getter = (proto: object, key: string): NativeMethod => {
   const get = getDescriptor(proto, key)?.get;
@@ -131,9 +131,9 @@ function isIntrinsic(value: object): boolean {
   return false;
 }
 
+/** `Error.isError` (Chromium ≥134, Node 24); without it Errors read as ordinary — no getter runs. */
 function errorBrand(value: object): boolean {
-  if (isError !== undefined) return isError(value);
-  return apply(objectToString, value, []) === '[object Error]' && !(toStringTag in value);
+  return isError?.(value) === true;
 }
 
 function refuseTagged(value: object): void {

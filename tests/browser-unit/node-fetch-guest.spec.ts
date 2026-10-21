@@ -84,7 +84,7 @@ test('Node Fetch goal: real Hono and body lifecycle match live Node', async ({ p
   }
 });
 
-// Compat ❌ row "Uncloneable reached only via accessor": the guest outcome, not Node's.
+// Compat ❌ "Uncloneable reached only via accessor" + ⚠️ "Tag on a host object": guest outcome, not Node's.
 test('Node Fetch ceiling: an uncloneable behind a getter clones its own fields', async ({
   page,
 }) => {

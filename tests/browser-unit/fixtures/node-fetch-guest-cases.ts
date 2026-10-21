@@ -325,11 +325,11 @@ export function networkFetchCase(url: string): string {
 }
 
 /**
- * Declared ceiling (compat ❌ `docs/public/compat/process.md`): a tagged object
- * reachable only through an accessor is not seen by the clone admission (reading
- * the getter would make the native clone read it twice); Node throws
- * `DataCloneError`, the guest clones the own enumerable fields. Asserted as the
- * guest outcome, never compared with the Node oracle.
+ * Declared gaps (`docs/public/compat/process.md`), asserted as the guest outcome,
+ * never compared with the Node oracle: ❌ a tagged object reachable only through
+ * an accessor is not seen (reading the getter would make the native clone read
+ * it twice) — Node throws `DataCloneError`, the guest clones the own enumerable
+ * fields; ⚠️ a tag on a host object is honoured where Node ignores it.
  */
 export const cloneAccessorCeilingCase: FetchGuestCase = {
   name: 'clone-accessor-ceiling',
@@ -338,7 +338,7 @@ const { markAsUncloneable } = require('node:worker_threads');
 const attempt = (label, fn) => { try { row(label, ['accepted', fn()]); } catch (e) { row(label, [e.name, e.message, e.code]); } };
 attempt('clone-getter', () => structuredClone({ get a() { return new Headers(); } }));
 attempt('clone-error-cause-getter', () => { let n = 0; const e = new Error('x', { cause: { get g() { n++; return new Headers(); } } }); structuredClone(e); return n; });
-// Compat ⚠️: a tag on a host object is honoured here; Node ignores it.
+// Compat ⚠️ "Tag on a host object": honoured by rifty (DataCloneError), ignored by Node.
 const tag = (o) => { markAsUncloneable(o); return o; };
 attempt('clone-tagged-port-transfer', () => { const { port1, port2 } = new MessageChannel(); tag(port1); const out = structuredClone({ p: port1 }, { transfer: [port1] }); const ok = out.p instanceof MessagePort; out.p.close(); port2.close(); return ok; });
 attempt('clone-tagged-module', () => structuredClone(tag(new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])))) instanceof WebAssembly.Module);
