@@ -49,6 +49,14 @@ existing no-COI byte oracle and the Vite starter pin remain independent.
 
 ## Corrections
 
+- 2026-10-22 — no-COI also points `types` at the installed twin's unchanged
+  `lib/main.d.ts`; remove its `exports`, matching upstream/COI package shape.
+  The field resolves in Node10, Node16 and Bundler modes without copying
+  declarations or an invalid exports target outside the package. Native
+  esbuild 0.28.0 declaration bytes match the twin; real VFS language-service
+  diagnostics and definitions match native TypeScript (5.9.3, Node 24.16.0):
+  `tests/integration/esbuild-declarations.test.ts`.
+
 - 2026-10-20 — current-catalog tier changes may retain the exact attested
   acquisition/version/bin placement. The selected recipe validates retained
   metadata before publication; cache SRI and the strict trace reader remain

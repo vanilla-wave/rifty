@@ -71,3 +71,5 @@ is the quotable number; h2/h3 comparison remains gated by
 ## Corrections (active)
 
 - 2026-09-08 — ADR-0398 requires configured registry for Eddy and its standard fallback; absent registry plus Eddy rejects before callbacks. Configured-registry behavior remains.
+
+- 2026-10-22 — Shell renders the existing `provenance.eddyFallback.reason` once on stderr after standard install; learned-pin write failures use the same terminal sink. Console diagnostics and acquisition/pin policy unchanged.

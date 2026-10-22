@@ -827,8 +827,13 @@ export async function executeNpmInstallOperation(
       void Promise.resolve()
         .then(() => learnedPins.set(eddyRequest.key, closureHash, learnedPin?.closureHash ?? null))
         .catch((err) => {
-          console.warn(`npm: learned pin write failed: ${(err as Error).message}`);
+          ctx.stderr.write(`npm: learned pin write failed: ${(err as Error).message}\n`);
         });
+    }
+    if (result.provenance.eddyFallback) {
+      ctx.stderr.write(
+        `npm: fast install (eddy) unavailable, using standard install — ${result.provenance.eddyFallback.reason}\n`,
+      );
     }
     const via = result.source === 'eddy' ? ' via eddy (fast)' : '';
     ctx.stdout.write(

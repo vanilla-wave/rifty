@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: The synthesized esbuild facade ships the real `lib/main.d.ts` and `types` entry like esbuild@0.28.0
 created: 2026-09-27
 why: legacy no-COI facade still lacks declarations; COI has a types path, while classic/exports-aware and IDE resolution proof remains
@@ -70,6 +70,8 @@ challenge: 2026-10-22 — clear; unchanged goal premise reuses 2026-09-27 challe
 No runtime API expansion; esbuild.cli and no-COI runtime ceilings unchanged.
 
 ## Decisions
+
+ready-verdict: 2026-10-22 — Contract+RED @ 095810e2bbf38bf371530e914b3765087d2789ad
 
 - 2026-10-22 — one PR for all goal obligations; no merge (user request).
 

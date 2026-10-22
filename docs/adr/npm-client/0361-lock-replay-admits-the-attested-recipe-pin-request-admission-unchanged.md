@@ -184,3 +184,5 @@ bin, and replay authorities above stand.
 - 2026-09-08 — ADR-0384 moves concrete consumer adaptation/startup ownership to registry; generic recipe/admission/replay authorities remain unchanged.
 
 - 2026-10-20 — ADR-0543 adds COI requested-range acquisition and exact-pin replay/projection. Integrity, strict traces, offline replay, collisions and user overrides remain. Acquisition-bin suppression remains: the materialized esbuild facade owns its bin and delegates the stock twin executable.
+
+- 2026-10-22 — Refusal hints include requested name/range, trigger version and admission kind for every restricted recipe. Stable feature ids, request matching and replay authority unchanged.

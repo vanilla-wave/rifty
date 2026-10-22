@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: A refused substitution request names the substituted version and admission rule beside the package and range
 created: 2026-09-27
 why: the admission gate renders `Not implemented: esbuild.version (shadow recipe does not admit ^0.21.0)` — the package only through the feature id, and neither the exact version rifty substitutes nor the rule, so an honest ceiling reads like an internal bug
@@ -47,5 +47,7 @@ challenge: 2026-10-22 — clear; unchanged goal premise reuses 2026-09-27 challe
 No admission widening; requested-range COI recipes continue accepting ranges.
 
 ## Decisions
+
+ready-verdict: 2026-10-22 — Contract+RED @ 095810e2bbf38bf371530e914b3765087d2789ad
 
 - 2026-10-22 — one PR for all goal obligations; no merge (user request).

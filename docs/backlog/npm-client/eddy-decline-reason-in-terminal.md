@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: The eddy fast-path decline reason reaches the npm install terminal output, including the automatic install of a from-scratch project open
 created: 2026-09-27
 why: success is announced in the terminal (`via eddy (fast)`) while the decline goes to `console.warn`, so a user whose fast path failed sees only a slower install and never the reason
@@ -66,6 +66,8 @@ challenge: 2026-10-22 — clear; unchanged goal premise reuses 2026-09-27 challe
 No new transport/event; pin policy, prefetch, cache and terminal-less acquisition unchanged.
 
 ## Decisions
+
+ready-verdict: 2026-10-22 — Contract+RED @ 095810e2bbf38bf371530e914b3765087d2789ad
 
 - 2026-10-22 — one PR for all goal obligations; no merge (user request).
 

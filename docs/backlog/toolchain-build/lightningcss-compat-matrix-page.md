@@ -1,6 +1,6 @@
 ---
 area: toolchain-build
-status: draft
+status: ready
 title: lightningcss gets a generated compat page like esbuild and sass-embedded
 created: 2026-09-27
 why: lightningcss is the third builtin substitution (`lightningcss → lightningcss-wasm@1.32.0`, semver-admits) but has zero mentions in `docs/public`, so a user hitting `NotImplementedError('lightningcss.version')` or a transform failure has no claim surface
@@ -57,5 +57,7 @@ challenge: 2026-10-22 — clear; unchanged goal premise reuses 2026-09-27 challe
 No lightningcss runtime repair or admission widening.
 
 ## Decisions
+
+ready-verdict: 2026-10-22 — Contract+RED @ 095810e2bbf38bf371530e914b3765087d2789ad
 
 - 2026-10-22 — one PR for all goal obligations; no merge (user request).
