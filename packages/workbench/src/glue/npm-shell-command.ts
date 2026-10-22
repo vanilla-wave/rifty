@@ -827,7 +827,9 @@ export async function executeNpmInstallOperation(
       void Promise.resolve()
         .then(() => learnedPins.set(eddyRequest.key, closureHash, learnedPin?.closureHash ?? null))
         .catch((err) => {
-          ctx.stderr.write(`npm: learned pin write failed: ${(err as Error).message}\n`);
+          const message = `npm: learned pin write failed: ${(err as Error).message}`;
+          console.warn(message);
+          ctx.stderr.write(`${message}\n`);
         });
     }
     if (result.provenance.eddyFallback) {
