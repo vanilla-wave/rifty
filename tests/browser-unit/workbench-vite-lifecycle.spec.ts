@@ -1047,20 +1047,93 @@ if (import.meta.hot) import.meta.hot.accept();
   expect(result.ownerCarrierConstructions).toBe(1);
   expect(ownerCarrierObserved).toBe(true);
   expect(ownerEntryLoads).toBe(1);
-  await expect
-    .poll(() => page.workers().filter((worker) => worker.url() === workerAssets.kernel).length, {
-      timeout: 5_000,
-    })
-    .toBe(0);
-  await expect.poll(() => ownerLifecycle.length, { timeout: 5_000 }).toBe(7);
-  expect(ownerLifecycle.slice(0, 5)).toEqual([
-    'owner-started',
-    'project-a-closed',
-    'project-b-closed',
-    'reopened-project-a-closed',
-    'workbench-close-started',
-  ]);
-  // Playwright observes Worker.close on the driver event loop; its callback
-  // may run on either side of the page's already-settled close continuation.
-  expect(ownerLifecycle.slice(5).sort()).toEqual(['owner-closed', 'workbench-closed']);
+  try {
+    await expect
+      .poll(() => page.workers().filter((worker) => worker.url() === workerAssets.kernel).length, {
+        timeout: 5_000,
+      })
+      .toBe(0);
+    await expect.poll(() => ownerLifecycle.length, { timeout: 5_000 }).toBe(7);
+    expect(ownerLifecycle.slice(0, 5)).toEqual([
+      'owner-started',
+      'project-a-closed',
+      'project-b-closed',
+      'reopened-project-a-closed',
+      'workbench-close-started',
+    ]);
+    // Playwright observes Worker.close on the driver event loop; its callback
+    // may run on either side of the page's already-settled close continuation.
+    expect(ownerLifecycle.slice(5).sort()).toEqual(['owner-closed', 'workbench-closed']);
+  } catch (error) {
+    const observedWorkers = page.workers().filter((worker) => worker.url() === workerAssets.kernel);
+    const observedLifecycle = [...ownerLifecycle];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<{ status: 'unresponsive' }>((resolve) => {
+      timer = setTimeout(() => resolve({ status: 'unresponsive' }), 2_500);
+    });
+    try {
+      const workerReads = observedWorkers.map(async (worker, index) => ({
+        index,
+        url: worker.url(),
+        identity: await Promise.race([
+          expired,
+          worker
+            .evaluate(() => {
+              const realm = globalThis as unknown as {
+                readonly name?: string;
+                readonly __riftyProcessSpec__?: {
+                  readonly pid: number;
+                  readonly ppid: number;
+                  readonly argv: readonly string[];
+                  readonly cwd: string;
+                };
+              };
+              const spec = realm.__riftyProcessSpec__;
+              return {
+                name: realm.name,
+                pid: spec?.pid,
+                ppid: spec?.ppid,
+                argv: spec?.argv,
+                cwd: spec?.cwd,
+              };
+            })
+            .then(
+              (identity) => ({ status: 'responded', ...identity }),
+              (failure: unknown) => ({ status: 'unavailable', error: String(failure) }),
+            ),
+        ]),
+      }));
+      const targetRead = (async () => {
+        const cdp = await page.context().newCDPSession(page);
+        try {
+          const { targetInfo: pageTarget } = await cdp.send('Target.getTargetInfo');
+          const { targetInfos } = await cdp.send('Target.getTargets');
+          return {
+            status: 'responded',
+            pageContextId: pageTarget.browserContextId,
+            workers: targetInfos
+              .filter(
+                (target) =>
+                  target.type === 'worker' &&
+                  target.url === workerAssets.kernel &&
+                  target.browserContextId === pageTarget.browserContextId,
+              )
+              .map(({ targetId, url, browserContextId }) => ({ targetId, url, browserContextId })),
+          };
+        } finally {
+          void cdp.detach().catch(() => {});
+        }
+      })().catch((failure: unknown) => ({ status: 'unavailable', error: String(failure) }));
+      const [workers, targets] = await Promise.all([
+        Promise.all(workerReads),
+        Promise.race([expired, targetRead]),
+      ]);
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\nWorker retirement diagnostics: ${JSON.stringify({ ownerLifecycle: observedLifecycle, workers, targets })}`,
+        { cause: error },
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 });

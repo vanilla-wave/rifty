@@ -3,7 +3,7 @@ area: kernel
 status: draft
 title: Explain retained Worker observations after Workbench Vite close in CI
 created: 2026-10-20
-why: One Chromium CI run observed two kernel Workers after close; isolated reproduction passed.
+why: Chromium CI intermittently retains kernel-Worker observations after close; identities and physical liveness remain unproven.
 sources: [tests/browser-unit/workbench-vite-lifecycle.spec.ts]
 code: [packages/kernel/src/process-manager.ts, packages/kernel/src/spawn-worker.ts]
 ---
@@ -58,3 +58,24 @@ passed — alongside three Vite startup timeouts. Evidence and routing:
 `docs/backlog/kernel/vite-startup-readiness-ci.md` §Follow-up 2026-10-21.
 Trigger fired; isolated-PASS caveat no longer holds.
 
+
+## Follow-up — 2026-10-22 (PR #383)
+
+[CI job 119569092888](https://github.com/vanilla-wave/rifty/actions/runs/39700601423/job/119569092888)
+on HEAD `028db5c28` passed 384 tests; only this lifecycle case failed. All
+functional assertions passed. The unchanged five-second zero-Worker poll
+observed three kernel-URL Workers, versus the earlier two. No lifecycle,
+kernel or worker code changed in the PR's product diff.
+
+Trace artifact `playwright-report-browser-unit`, data
+`5cff43aa461c1b2f09691255d928b5560927f767.zip`, records expected revoked-preview
+503s but no retained Worker identities. It does not distinguish physical
+liveness from driver observation. Failure-only diagnostics retain both five-
+second assertions and identify pid/ppid/argv/cwd (never environment), Worker
+name and CDP target state under bounded reads. A responsive realm after close
+would prove physical liveness; an unresponsive read alone proves neither
+retirement nor a leak. Current owner/trigger and green-HEAD delivery gate stand.
+
+Exact local lifecycle replay passed before/after failure diagnostics (27.3/27.9 s;
+Chromium 148.0.7778.96), with unchanged zero-Worker/7-event assertions and
+five-second polls. Isolated PASS is not a runtime repair.
