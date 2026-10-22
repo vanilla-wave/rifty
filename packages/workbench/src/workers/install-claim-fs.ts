@@ -14,6 +14,12 @@ import {
 } from './install-claim-guard.ts';
 
 export interface InstallClaimFs extends FsSync {
+  /** Throwaway resource prototype; detached bytes, unchanged claim authority. */
+  readFileRangeSync?(
+    path: string,
+    offset: number,
+    length: number,
+  ): { readonly size: number; readonly bytes: Uint8Array };
   loadFixture(files: Readonly<Record<string, string>>): void;
   flush(options?: FlushOptions): Promise<PersistFailureReport | undefined>;
   fence(): Promise<void>;
@@ -45,6 +51,14 @@ export function createInstallClaimFs(raw: FsSync): {
     },
     existsSync: raw.existsSync.bind(raw),
     readFileBytesSync: (path) => raw.readFileBytesSync(path).slice(),
+    ...(Reflect.get(globalThis, Symbol.for('rifty.prototype.no-coi-resources.v1')) === true
+      ? {
+          readFileRangeSync(path: string, offset: number, length: number) {
+            const bytes = raw.readFileBytesSync(path);
+            return { size: bytes.length, bytes: bytes.slice(offset, offset + length) };
+          },
+        }
+      : {}),
     readdirSync: raw.readdirSync.bind(raw),
     statSync: raw.statSync.bind(raw),
     statSyncOrNull: raw.statSyncOrNull.bind(raw),

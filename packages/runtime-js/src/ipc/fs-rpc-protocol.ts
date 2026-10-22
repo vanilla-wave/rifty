@@ -101,10 +101,10 @@ export function decodeFsReadRangeRequest(payload: Uint8Array): FsReadRangeReques
 }
 
 /** ADR-0365: encode total size + exact first chunk as one binary reply. */
-export function encodeReadFileHead(bytes: Uint8Array): Uint8Array {
+export function encodeReadFileHead(bytes: Uint8Array, size = bytes.length): Uint8Array {
   const firstChunk = bytes.subarray(0, FS_RPC_CHUNK);
   const reply = new Uint8Array(READ_HEAD_HEADER_BYTES + firstChunk.length);
-  new DataView(reply.buffer).setFloat64(0, bytes.length, true);
+  new DataView(reply.buffer).setFloat64(0, size, true);
   reply.set(firstChunk, READ_HEAD_HEADER_BYTES);
   return reply;
 }

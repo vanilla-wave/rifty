@@ -49,6 +49,9 @@ import { openNoCoiInvocationScope } from './no-coi-invocation-scope.ts';
 import { startResidentNodeEntry } from './resident-node-entry.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
+// Throwaway resource benchmark: OPFS-only recovery; never a shipped storage policy.
+const prototypeResources =
+  Reflect.get(globalThis, Symbol.for('rifty.prototype.no-coi-resources.v1')) === true;
 installNoCoiChildFsOwner(self);
 
 const TOOLCHAIN_REALM = Symbol.for('rifty.runtime-js.sandbox-toolchain.v1');
@@ -93,6 +96,7 @@ function snapshotFiles(): {
   files: readonly ToolchainRecoveryFile[];
   directories: readonly string[];
 } {
+  if (prototypeResources && runtimeBackend === 'opfs') return { files: [], directories: [] };
   const fs = syncMirror();
   const files: ToolchainRecoveryFile[] = [];
   const directories: string[] = [];
@@ -284,6 +288,8 @@ async function restoreActivation(state: ToolchainActivationState): Promise<void>
   activationCwd = state.cwd;
   activationBindings = state.bindings;
   if (runtimeBackend === null) throw new Error('toolchain VFS backend is not ready');
+  if (prototypeResources && state.vfsBackend === 'opfs' && runtimeBackend !== 'opfs')
+    throw new Error('Resource prototype requires OPFS recovery; backend fallback is unsupported');
   const { prepareSavedToolchain } = await import('./no-coi-toolchain-install.ts');
   if (runtimeBackend === 'memory' || runtimeBackend !== state.vfsBackend) {
     const fs = syncMirror();

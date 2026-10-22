@@ -18,6 +18,7 @@ import {
 } from '@riftydev/vfs';
 import {
   FS_METHODS,
+  FS_RPC_CHUNK,
   type FsStatShape,
   base64ToBytes,
   decodeFsPathRequest,
@@ -26,6 +27,15 @@ import {
 } from './fs-rpc-protocol.ts';
 
 export type VfsAccessor = () => FsSync;
+
+/** Throwaway no-COI resource prototype; no public FsSync surface change. */
+type PrototypeRangeFs = FsSync & {
+  readFileRangeSync?(
+    path: string,
+    offset: number,
+    length: number,
+  ): { readonly size: number; readonly bytes: Uint8Array };
+};
 
 type Req = Record<string, unknown>;
 const str = (r: Req, k: string): string => {
@@ -87,7 +97,15 @@ export function installRuntimeJsFsHandlers(
   // One current owner read carries total size + first chunk (ADR-0365).
   dispatcher.register(
     FS_METHODS.readFileHead,
-    (p): Uint8Array => encodeReadFileHead(getVfs().readFileBytesSync(str(obj(p), 'path'))),
+    (p): Uint8Array => {
+      const vfs = getVfs() as PrototypeRangeFs;
+      const path = str(obj(p), 'path');
+      if (vfs.readFileRangeSync !== undefined) {
+        const range = vfs.readFileRangeSync(path, 0, FS_RPC_CHUNK);
+        return encodeReadFileHead(range.bytes, range.size);
+      }
+      return encodeReadFileHead(vfs.readFileBytesSync(path));
+    },
     { decodeBinaryRequest: decodeFsPathRequest },
   );
 
@@ -100,7 +118,10 @@ export function installRuntimeJsFsHandlers(
       const path = str(r, 'path');
       const offset = num(r, 'offset');
       const length = num(r, 'length');
-      const bytes = getVfs().readFileBytesSync(path);
+      const vfs = getVfs() as PrototypeRangeFs;
+      if (vfs.readFileRangeSync !== undefined)
+        return vfs.readFileRangeSync(path, offset, length).bytes;
+      const bytes = vfs.readFileBytesSync(path);
       if (offset >= bytes.length) return new Uint8Array(0);
       return bytes.subarray(offset, Math.min(bytes.length, offset + length));
     },

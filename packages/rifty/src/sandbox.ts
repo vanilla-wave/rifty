@@ -421,6 +421,8 @@ async function bootToolchainSandbox(
   logger: Pick<Console, 'warn' | 'error'>,
   events: ReturnType<typeof createSandboxEvents>,
 ): Promise<ToolchainSandbox> {
+  const prototypeResources =
+    Reflect.get(globalThis, Symbol.for('rifty.prototype.no-coi-resources.v1')) === true;
   let current: ToolchainRuntimeController = spawnToolchainRuntime(options);
   let childBridge: SyncFsBridge | null = null;
   let childPort: MessagePort | null = null;
@@ -599,6 +601,10 @@ async function bootToolchainSandbox(
     tearPreview = null;
     detachCurrent();
     current.dispose();
+    if (prototypeResources) {
+      activation = null;
+      residentRequest = null;
+    }
     events.clear();
   }
 

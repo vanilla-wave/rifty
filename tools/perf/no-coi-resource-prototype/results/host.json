@@ -1,0 +1,8 @@
+{
+  "platform": "darwin",
+  "arch": "arm64",
+  "release": "25.6.0",
+  "cpu": "Apple M3 Pro",
+  "logicalCpus": 12,
+  "ramBytes": 38654705664
+}

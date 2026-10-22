@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Prototype branch only: opt-in no-COI resource experiment; default behavior unchanged, not for release.
+
 - No-COI child processes require a controlling rifty Service Worker; report missing transport explicitly while SW-free file/command APIs remain available. Toolchain protocol v7 requires matching Worker assets (ADR-0539).
 
 - Link the shared no-COI agent reference host with explicit initial preparation and saved open; remove automatic snapshot identity/force/reconciliation policy (ADR-0489/0490).

@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+- Prototype branch only: opt-in no-COI resource experiment; default behavior unchanged, not for release.
+
 - Guest Fetch instances and `markAsUncloneable` graphs throw Node's `DataCloneError` (code 25) on `structuredClone`, realm/`MessagePort`/`Worker`/`parentPort`/`BroadcastChannel` `postMessage` (kernel and same-realm workers): tags on ordinary objects and real Errors throw as Node, intrinsics ignore theirs; nested data properties, spoofed prototypes, Map/Set entries and Error `cause` included. One side-effect-free admission walk (`internal/clone-marks.ts`, realm-global marks shared across bundles) runs ahead of the native clone, which always gets the original graph; wrapped clone surfaces touch only captured primordials and forward a read transfer list as a primordial-only iterable. Declared gaps: a tag behind a getter is not seen (compat ❌); a tag on a host object is honoured where Node ignores it, and a getter deleting a later tagged sibling still throws (compat ⚠️) (ADR-0541).
 
 - Child stdin retains only dispatched transport writes; corked buffers no longer keep an unreferenced parent alive, including a corked successor after an active write.

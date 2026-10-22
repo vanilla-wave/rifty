@@ -1,0 +1,71 @@
+{
+  "runtime": "v24.16.0",
+  "root": "/tmp/rifty-no-coi-real-project-seed",
+  "manifest": {
+    "name": "rifty-child-fs-benchmark",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "dependencies": {
+      "@gravity-ui/icons": "2.22.0",
+      "@gravity-ui/uikit": "7.48.1",
+      "date-fns": "4.4.0",
+      "express": "4.21.2",
+      "react": "19.2.8",
+      "react-dom": "19.2.8",
+      "vite": "7.3.6"
+    },
+    "overrides": {
+      "@gravity-ui/icons": "2.22.0",
+      "esbuild": "0.28.0"
+    }
+  },
+  "lockSha256": "1223ab117fb9d8a210d817ec12e3d49c7aef04fee240a1512c0da0c8aea3b62b",
+  "expectedRendered": ["agent-loop app", "1970-01-01", "act", "bench-seed", "iteration bench-seed"],
+  "results": [
+    {
+      "minify": true,
+      "elapsedMs": 1079.7075,
+      "modulesTransformed": 2195,
+      "files": [
+        {
+          "path": "assets/index-BHgTQdzV.js",
+          "bytes": 251888,
+          "sha256": "a3d566aa388cc0c67e6322ff81735b0ac9a819fc03fc566f7ed9497b18d9155c"
+        },
+        {
+          "path": "assets/index-D_b_PuBr.css",
+          "bytes": 137605,
+          "sha256": "22dbca2a2cb9a1500b709fb294015cc7778d274e7d486d72cfc65dce80ac137e"
+        },
+        {
+          "path": "index.html",
+          "bytes": 184,
+          "sha256": "f19b23421feb74e88b62425a868482d33216a6220ffbc896ef3495bd674e56b4"
+        }
+      ]
+    },
+    {
+      "minify": false,
+      "elapsedMs": 1096.8376250000001,
+      "modulesTransformed": 2195,
+      "files": [
+        {
+          "path": "assets/index-C99YUQB2.js",
+          "bytes": 692522,
+          "sha256": "a3dce5b7f976e1cec45a140f68f3f2a0a62b4fba248370381e94adfc49bba71f"
+        },
+        {
+          "path": "assets/index-D12zk3ct.css",
+          "bytes": 148283,
+          "sha256": "970108f476dc573aed8db185ceddf740ab88f02c8ad408c8a803b1f38b89fca6"
+        },
+        {
+          "path": "index.html",
+          "bytes": 184,
+          "sha256": "16cac182ae1eca421ad52910d48ead0289d90acb33bf6edeb7be6f480a3529b2"
+        }
+      ]
+    }
+  ]
+}

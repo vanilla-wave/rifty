@@ -170,6 +170,9 @@ function createRuntimeController(
   opts: ToolchainRuntimeOptions,
   toolchainMode: boolean,
 ): RuntimeController | ToolchainRuntimeController {
+  // Throwaway benchmark switch; baseline recovery remains unchanged.
+  const prototypeResources =
+    Reflect.get(globalThis, Symbol.for('rifty.prototype.no-coi-resources.v1')) === true;
   const startup = captureRuntimeStartupOptions(opts);
   const startupTimeoutMs = startup.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS;
   const handlers = new Set<(event: RuntimeEvent) => void>();
@@ -314,7 +317,8 @@ function createRuntimeController(
 
   const fs: RuntimeFs = createRuntimeFs(async (operation) => {
     const result = await requestFs({ ...operation, id: nextId++ });
-    if (result.ok) activationState = applyRecoveryFsOperation(activationState, operation);
+    if (result.ok && !(prototypeResources && activationState?.vfsBackend === 'opfs'))
+      activationState = applyRecoveryFsOperation(activationState, operation);
     return result;
   });
 
@@ -525,6 +529,10 @@ function createRuntimeController(
         pending.clear();
       }
       rejectToolchainHandshake(terminated);
+      if (prototypeResources) {
+        activationState = null;
+        residentRequest = null;
+      }
       handlers.clear();
       ready = false;
     },
@@ -621,7 +629,10 @@ function createRuntimeController(
         if (!result.ok) throw deserializeError(result.error);
         if (result.value === undefined || !('fsResult' in result.value))
           throw new Error('Invalid project fs response');
-        if (result.value.fsResult.ok)
+        if (
+          result.value.fsResult.ok &&
+          !(prototypeResources && activationState?.vfsBackend === 'opfs')
+        )
           activationState = applyRecoveryFsOperation(activationState, scoped);
         return result.value.fsResult;
       });
