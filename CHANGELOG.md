@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Close honest-substitution-signals I1–I4 (PR #383); real Vite7 install/type/refusal acceptance and independent Final+GREEN retained in `docs/backlog/npm-client/reference/honest-substitution-signals-final-green.json`.
+
 - Surface substitution ceilings in terminal errors and generated lightningcss compatibility; esbuild declarations resolve from unchanged upstream twin bytes in both tiers.
 
 - Docs: refine + FIT of goal `docs/backlog/epics/esbuild-upstream-twin` — in COI, `esbuild@<range>` runs unmodified upstream esbuild-wasm (any resolved version, declared verified set, esbuild-wasm-on-Node oracle); the COI exact-Vite-7.3.6 gate goes with the generated client (other Vite "⚠️ not verified"); no-COI keeps the generated 0.28.0 client as declared debt. Spike evidence `docs/backlog/npm-client/reference/esbuild-upstream-twin-refine-evidence-2026-10-16.md`; question `shadow-catalog-second-version-per-name` absorbed; draft goal `no-coi-child-processes` seeded; 7 esbuild Node-entry stand-in patch ids reclassified `platform-gap` in the ADR-0384 inventory (`registry-package-adaptations-evidence.md`; gates/errno stay `substitution-environment`, kill = cutover); `honest-substitution-signals` amended (scenario 4 holds in no-COI); discoveries filed (no-COI run state leak, `receiveMessageOnPort`, shell `$?`, `head -NUM`).
