@@ -153,3 +153,37 @@ cause is not a repair (`AGENTS.md` §Fidelity; the PR-4 budget correction above
 was already spent once). Whether a Node-timing reference belongs in acceptance
 is an open fork, not decided here. Owner/trigger unchanged.
 
+
+## Follow-up — 2026-10-22 (PR #383)
+
+Same three browser-unit failures repeated on unrelated substitution-signal work:
+[CI job 119560414308](https://github.com/vanilla-wave/rifty/actions/runs/39698003871/job/119560414308),
+Chromium 148.0.7778.96; 382 passed, three failed. Exact local isolation without
+changes passed: config graph 42.0 s, watched root/default 40.9/39.1 s.
+
+The retained Playwright trace supplies the missing aggregate-budget evidence.
+In the config-graph case, commands completed in order: dev 56.190 s, build
+25.759 s, preview 27.304 s, optimize 27.812 s, later optimize 26.506 s,
+build 29.399 s, offline build 29.481 s. Initial boot took 2.142 s; reopen
+1.111 s. All preceding assertions completed. Final offline dev was submitted
+at elapsed 231.292 s, leaving only 8.708 s of the outer 240 s before cleanup.
+Trace: `playwright-report-browser-unit` artifact, data
+`e46c24fdae0d4fac2ce55dbe6113e8e1d0b35df3.zip`, `0-trace.trace` before/after
+call timestamps. This establishes aggregate test-budget exhaustion, not the
+runtime component responsible for expensive startup.
+
+PR-4 independent assessment accepted: config-graph outer budget 360 s, with
+all inner deadlines/assertions unchanged. The watcher oracle explicitly
+excludes timing; its carrier killed the CLI after 20 s from submission,
+before readiness. Wait for actual `VITE ready` (bounded 120 s), then retain
+the same 20 s observation window and all prior output; early exit/error or
+missing readiness fails. Root/default assertions and outer 420 s unchanged.
+These are judge corrections, not runtime performance repairs. Linux CI must
+still prove the corrected cases; the runtime owner/next probe above remain.
+
+A separate Problems test on PR #383's third CI run exposed an outer 30 s
+budget cutting its already-declared 90 s startup assertion:
+[job 119575205881](https://github.com/vanilla-wave/rifty/actions/runs/39702501022/job/119575205881).
+Its outer budget is 120 s; inner 90 s and every Problems assertion unchanged.
+Exact local test passed before/after (6.1/7.0 s); this is not proof of the
+original CI delay's cause. No further deadline expansion without new evidence.

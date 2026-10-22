@@ -11,7 +11,6 @@ import {
   sealedWorkbenchFixtureUrl,
   writeOwnerFile,
 } from './fixtures.ts';
-import { runOwnerCommand } from './fixtures/message-port-ref-cases.ts';
 
 // Goal project-location-independence I3: installed Vite carries no root-location
 // policy, and a project placed at `/` takes the code paths real Node + Vite 7.3.6
@@ -185,6 +184,70 @@ export default {
 };
 `;
 
+async function observeWatchedVite(page: Page): Promise<{
+  readonly out: string;
+  readonly startupMs: number;
+  readonly observationMs: number;
+}> {
+  return page.evaluate(async (fixtureUrl) => {
+    const fixture = await import(/* @vite-ignore */ fixtureUrl);
+    const terminal = fixture.currentProject().terminals.open();
+    let out = '';
+    let readyAt: number | null = null;
+    let resolveReady!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      resolveReady = resolve;
+    });
+    const detach = terminal.attach((chunk: string) => {
+      out += chunk;
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: terminal logger uses TTY colors.
+      const plain = out.replace(/\u001b\[[0-9;]*m/gu, '').replaceAll('\r', '');
+      if (readyAt === null && /VITE v7\.3\.6 {2}ready/u.test(plain)) {
+        readyAt = performance.now();
+        resolveReady();
+      }
+    });
+    let startupTimer: ReturnType<typeof setTimeout> | undefined;
+    let observationTimer: ReturnType<typeof setTimeout> | undefined;
+    const startedAt = performance.now();
+    try {
+      const run = terminal.run('vite --debug hmr');
+      const exited = run.exited.then((exit: unknown) => {
+        throw new Error(
+          `Watched Vite exited before observation completed: ${JSON.stringify(exit)}\n${out}`,
+        );
+      });
+      await Promise.race([
+        ready,
+        exited,
+        new Promise<never>((_resolve, reject) => {
+          startupTimer = setTimeout(() => {
+            reject(new Error(`Watched Vite did not become ready within 120000ms\n${out}`));
+          }, 120_000);
+        }),
+      ]);
+      clearTimeout(startupTimer);
+      if (readyAt === null) throw new Error('Watched Vite readiness timestamp missing');
+      await Promise.race([
+        exited,
+        new Promise<void>((resolve) => {
+          observationTimer = setTimeout(resolve, 20_000);
+        }),
+      ]);
+      return {
+        out,
+        startupMs: readyAt - startedAt,
+        observationMs: performance.now() - readyAt,
+      };
+    } finally {
+      clearTimeout(startupTimer);
+      clearTimeout(observationTimer);
+      detach();
+      await terminal.close();
+    }
+  }, sealedWorkbenchFixtureUrl);
+}
+
 for (const location of [
   { label: 'root /', publicProjectRoot: '/', phantom: true },
   { label: 'default', publicProjectRoot: undefined, phantom: false },
@@ -216,8 +279,16 @@ for (const location of [
       const install = await execLine(page, 'npm install');
       expect(install.exit, install.out).toBe(0);
       await writeOwnerFile(page, '/scratch/vite.config.js', WATCHED_CONFIG);
-      // No edit during the window; the oracle saw the first restart within 1 s.
-      const dev = await runOwnerCommand(page, 'vite --debug hmr', 20_000);
+      // Observe the running watcher; cold startup consumes none of its 20-second window.
+      const dev = await observeWatchedVite(page);
+      console.log(
+        '[vite-watch]',
+        JSON.stringify({
+          location: location.label,
+          startupMs: dev.startupMs,
+          observationMs: dev.observationMs,
+        }),
+      );
       const out = dev.out
         .replaceAll('\r', '')
         // biome-ignore lint/suspicious/noControlCharactersInRegex: the terminal colors Vite's logger (TTY).

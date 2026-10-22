@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Align Vite browser judges with their oracle: watch for 20s after actual readiness; reserve measured aggregate time for the multi-command esbuild contract, preserving inner deadlines and assertions.
+
+- Let the non-TypeScript Problems e2e test use its existing 90s startup assertion; its outer 30s default previously cut that assertion short. Product deadlines and assertions unchanged.
+
 - Close honest-substitution-signals I1–I4 (PR #383); real Vite7 install/type/refusal acceptance and independent Final+GREEN retained in `docs/backlog/npm-client/reference/honest-substitution-signals-final-green.json`.
 
 - Surface substitution ceilings in terminal errors and generated lightningcss compatibility; esbuild declarations resolve from unchanged upstream twin bytes in both tiers.

@@ -35,16 +35,19 @@ establishes this failure's cause; keep separate until discriminating evidence.
 
 ## Question
 
-Which guest-ready conjunct or request failed after fresh apply, and does it
+Which guest-ready conjunct or request failed after snapshot apply (same-ID or
+fresh), and does it
 reproduce independently of CI load? Capture the actual iframe document,
 network outcomes and owner lifecycle at the existing deadline before selecting
 a repair. Boundary: browser/SW/owner lifecycle; fault axis remains unknown.
 
 Owner: service-worker/Workbench preview maintainer. Trigger: next packed
-fresh-apply timeout, or an isolated replay that reproduces this observation.
+snapshot-apply timeout (same-ID or fresh), or an isolated replay that reproduces this observation.
 No goal/tier expansion or new coordination mechanism proposed.
 
 ## Follow-up
 
 - 2026-10-22 — full local `pnpm test:packed-consumer` PASS, 313.65 s.
 - 2026-10-22 — repeat [CI job 119569093003](https://github.com/vanilla-wave/rifty/actions/runs/39700601423/job/119569093003), HEAD `028db5c28`, failed at `guestFacts` called from line 333: same-ID apply, before the fresh apply. Same 120000 ms predicate timeout after build/source/control assertions. Cause still unknown; current PR investigation continues with bounded DOM/network failure diagnostics, unchanged assertions/deadlines.
+
+- 2026-10-22 — diagnostics-only HEAD `bd660820d` passed the full local packed journey; eight repeated scoped journeys and three more with Chromium CPU throttling rate 4 also passed. Same Chromium 148.0.7778.96 as CI. [Diagnostic CI packed job 119575205897](https://github.com/vanilla-wave/rifty/actions/runs/39702501022/job/119575205897) passed in 18m50s, with unchanged guest assertions and 120000 ms deadline. No runtime repair is claimed; cause remains unproven, owner/trigger above retained.
