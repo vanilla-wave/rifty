@@ -47,21 +47,46 @@ async function hostFacts(page) {
 }
 
 async function guestFacts(page, message) {
-  await page.waitForFunction(
-    (message) => {
-      const document = window.document.querySelector('#preview')?.contentDocument;
-      const logo = document?.querySelector('#logo');
-      return (
-        document?.querySelector('#app')?.textContent === message &&
-        document?.querySelector('#api')?.textContent === 'guest root API\n' &&
-        document?.querySelector('#chunk')?.textContent === 'guest dynamic chunk' &&
-        logo?.complete &&
-        logo.naturalWidth === 7
+  await page
+    .waitForFunction(
+      (message) => {
+        const document = window.document.querySelector('#preview')?.contentDocument;
+        const logo = document?.querySelector('#logo');
+        return (
+          document?.querySelector('#app')?.textContent === message &&
+          document?.querySelector('#api')?.textContent === 'guest root API\n' &&
+          document?.querySelector('#chunk')?.textContent === 'guest dynamic chunk' &&
+          logo?.complete &&
+          logo.naturalWidth === 7
+        );
+      },
+      message,
+      { timeout: 120_000 },
+    )
+    .catch(async (error) => {
+      const state = await page
+        .evaluate(() => {
+          const frame = document.querySelector('#preview');
+          const guest = frame?.contentDocument;
+          const logo = guest?.querySelector('#logo');
+          return {
+            host: location.href,
+            advertised: frame?.src,
+            guest: guest?.URL,
+            readyState: guest?.readyState,
+            app: guest?.querySelector('#app')?.textContent,
+            api: guest?.querySelector('#api')?.textContent,
+            chunk: guest?.querySelector('#chunk')?.textContent,
+            logo: logo && { src: logo.src, complete: logo.complete, width: logo.naturalWidth },
+            html: guest?.documentElement?.outerHTML.slice(0, 4000),
+          };
+        })
+        .catch((diagnosticError) => ({ diagnosticError: String(diagnosticError) }));
+      throw new Error(
+        `${error.message}\nExpected guest message: ${message}\nGuest state: ${JSON.stringify(state)}`,
+        { cause: error },
       );
-    },
-    message,
-    { timeout: 120_000 },
-  );
+    });
   const actual = await page
     .frameLocator('#preview')
     .locator('#app')
@@ -207,6 +232,14 @@ export async function provePackedScopedPreview({
   const requests = [];
   const blocked = [];
   const errors = [];
+  const failedRequests = [];
+  context.on('requestfailed', (request) =>
+    failedRequests.push({ url: request.url(), failure: request.failure() }),
+  );
+  context.on('response', (response) => {
+    if (response.status() >= 400)
+      failedRequests.push({ url: response.url(), status: response.status() });
+  });
   context.on('request', (request) => requests.push(request.url()));
   await context.route('**/*', async (route) => {
     const url = new URL(route.request().url());
@@ -399,6 +432,11 @@ export async function provePackedScopedPreview({
     assert.deepEqual(errors, [], 'scoped public browser errors');
     console.log(
       `Packed scoped preview: /sandbox/ static SW, ${advertised.pathname}, real Vite initial/edit/saved reopen/same-ID overwrite/fresh apply with build/assets/API/HMR/reopen, native SW version ${restarted.versionId} stop/restart; unchanged outside host; zero registry/Eddy`,
+    );
+  } catch (error) {
+    throw new Error(
+      `${error.stack ?? error}\nScoped page errors: ${JSON.stringify(errors)}\nFailed requests: ${JSON.stringify(failedRequests)}\nLast requests: ${JSON.stringify(requests.slice(-40))}`,
+      { cause: error },
     );
   } finally {
     if (!page.isClosed())
