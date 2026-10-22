@@ -79,7 +79,8 @@
     "pr:check": "node tools/checks/pr-check.mjs",
     "postinstall": "playwright install chromium firefox webkit || true",
     "snapshots:bake": "pnpm --filter @riftydev/playground snapshots:bake",
-    "agent-bench": "tsx tools/agent-bench/src/cli.ts"
+    "agent-bench": "tsx tools/agent-bench/src/cli.ts",
+    "bench:no-coi-resources": "node tools/perf/no-coi-resource-prototype.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

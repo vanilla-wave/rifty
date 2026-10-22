@@ -13,6 +13,12 @@ export interface NoCoiProjectFsPolicy {
 }
 
 export interface NoCoiProjectFsInner extends FsSync {
+  /** Throwaway resource prototype; optional internal owner capability. */
+  readFileRangeSync?(
+    path: string,
+    offset: number,
+    length: number,
+  ): { readonly size: number; readonly bytes: Uint8Array };
   loadFixture?(files: Readonly<Record<string, string>>): void;
   flush?(options?: FlushOptions): Promise<PersistFailureReport | undefined>;
   fence?(): Promise<void>;
@@ -68,6 +74,17 @@ export function createNoCoiProjectFs(inner: NoCoiProjectFsInner): NoCoiProjectFs
   const fs: NoCoiProjectFs = {
     existsSync: (path) => inner.existsSync(absolute(path)),
     readFileBytesSync: (path) => inner.readFileBytesSync(absolute(path)).slice(),
+    ...(Reflect.get(globalThis, Symbol.for('rifty.prototype.no-coi-resources.v1')) === true
+      ? {
+          readFileRangeSync(path: string, offset: number, length: number) {
+            const normalized = absolute(path);
+            if (inner.readFileRangeSync !== undefined)
+              return inner.readFileRangeSync(normalized, offset, length);
+            const bytes = inner.readFileBytesSync(normalized);
+            return { size: bytes.length, bytes: bytes.slice(offset, offset + length) };
+          },
+        }
+      : {}),
     readdirSync: (path) => inner.readdirSync(absolute(path)).map((entry) => ({ ...entry })),
     statSync: (path) => ({ ...inner.statSync(absolute(path)) }),
     statSyncOrNull(path) {

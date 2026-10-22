@@ -1,0 +1,14 @@
+{
+  "packages/rifty/src/sandbox.ts": "85b6313ad6e2eb1f2c1f0c336b7bfe684d29fd850be94be62e32628e46c49643",
+  "packages/runtime-js/src/host.ts": "fec42f905b9480dd2bc8f27d6f74843a73861e8af098f7f9134b355392e834bb",
+  "packages/runtime-js/src/ipc/fs-handlers.ts": "3d5421988a33ef08ada8e4f444ea06820928d23e30049c1d4af8412fbd105777",
+  "packages/runtime-js/src/ipc/fs-rpc-protocol.ts": "e78129dbac76587005ee92b5fa46b999cec441ccb1b81333a6b1ebe609ce1100",
+  "packages/workbench/src/workers/install-claim-fs.ts": "83792e30bd49c6311f9d91589df25771caada439bdf45ba71420022fd28c0961",
+  "packages/workbench/src/workers/no-coi-project-fs.ts": "f96ec5b730775d92f01ac9ba231e9c5f4303e80e68d44028b8ccdfff282d8d50",
+  "packages/workbench/src/workers/no-coi-toolchain-owner.ts": "339e10b4afea41e1dbed3b994f9a3671fd958fb0e06e0ab33fafc0ab36bd8dcd",
+  "tools/perf/no-coi-resource-prototype.mjs": "1c52656c14b0b2bd813a988a263be2404b465ab9ce140ef4429596d3d4debba4",
+  "tools/perf/no-coi-resource-prototype/browser.mjs": "b7547707e2aae2db6e53229852f7b47b3e9078e698c799d04201f4a4f3204c0b",
+  "tools/perf/no-coi-resource-prototype/memory.mjs": "9ab7f53c9577ed1e2604d6729e93326d4287b3dec56d8a3e2bcb2f966f05a81b",
+  "tools/perf/child-fs/scenario.mjs": "d2b2307ad98fcfc197b1e0cbc8770578ef88557e275240e93b6e607a7d0e9e56",
+  "packages/workbench/src/workers/no-coi-resource-prototype-worker.ts": "9ab452157052f9812bbb1d9d30c89e047b5233d874b1be6ca3d4d6865bdcf7b5"
+}
