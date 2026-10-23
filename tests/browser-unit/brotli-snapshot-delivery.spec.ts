@@ -1,9 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { brotliCompressSync, brotliDecompressSync, gunzipSync } from 'node:zlib';
-import { chromium } from '@playwright/test';
+import { chromium, expect, test } from '@playwright/test';
 import { build } from 'esbuild';
-import { expect, it } from 'vitest';
 import type { fetchVerifiedDepSnapshot } from '../../packages/workbench/src/glue/dep-snapshot.ts';
 import type { produceDependencySnapshot } from '../../packages/workbench/src/index.ts';
 
@@ -16,7 +15,7 @@ declare global {
   }
 }
 
-it('Chromium public producer → native Brotli oracle → HTTP decoding, identity and bounded failures', async () => {
+test('Chromium public producer → native Brotli oracle → HTTP decoding, identity and bounded failures', async () => {
   const bundle = await build({
     stdin: {
       contents: `import { produceDependencySnapshot } from './packages/workbench/src/index.ts';
@@ -30,9 +29,14 @@ globalThis.brotliProof = { produceDependencySnapshot, fetchVerifiedDepSnapshot }
     write: false,
   });
   const meta = JSON.parse(
-    await readFile(new URL('./fixtures/registry/ms-2.0.0.json', import.meta.url), 'utf8'),
+    await readFile(
+      new URL('../integration/fixtures/registry/ms-2.0.0.json', import.meta.url),
+      'utf8',
+    ),
   ) as { dist: { upstreamTarball: string; upstreamIntegrity: string } };
-  const tgz = await readFile(new URL('./fixtures/registry/ms-2.0.0.tgz', import.meta.url));
+  const tgz = await readFile(
+    new URL('../integration/fixtures/registry/ms-2.0.0.tgz', import.meta.url),
+  );
   const representations = new Map<
     string,
     { bytes: Uint8Array; encoding?: string; length?: number; status?: number }
@@ -186,4 +190,4 @@ globalThis.brotliProof = { produceDependencySnapshot, fetchVerifiedDepSnapshot }
       server.close((error) => (error ? reject(error) : resolve())),
     );
   }
-}, 120_000);
+});

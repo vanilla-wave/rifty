@@ -436,6 +436,9 @@ importers:
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../vfs
+      brotli-compress:
+        specifier: 2.2.2
+        version: 2.2.2
       semver:
         specifier: 7.8.4
         version: 7.8.4
@@ -1919,6 +1922,14 @@ packages:
   brace-expansion@5.0.9:
     resolution: {integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==}
     engines: {node: 20 || >=22}
+
+  brotli-compress@2.2.2:
+    resolution: {integrity: sha512-M9w2FFVdFVWFXijMr8n5kRoDM4H+8xT7oXoX7oAvC1aT5WSfVvCWMFXK5Lcf84//dSLoxsQ42EB7VaRnNlUbkA==}
+    engines: {node: '>=18'}
+
+  brotli-wasm-custom-dictionary@3.1.1:
+    resolution: {integrity: sha512-da41Xo5rtjRuw5Mkz9NiYu4cuCvvR94maPwViAfP0LbI6bIc2TL7bkNfX9NM/2Jjb0JlBI7MU0DU06KnOnhgCA==}
+    engines: {node: '>=v18.0.0'}
 
   browserslist@4.28.2:
     resolution: {integrity: sha512-48xSriZYYg+8qXna9kwqjIVzuQxi+KYWp2+5nCYnYKPTr0LvD89Jqk2Or5ogxz0NUMfIjhh2lIUX/LyX9B4oIg==}
@@ -4107,6 +4118,12 @@ snapshots:
   brace-expansion@5.0.9:
     dependencies:
       balanced-match: 4.0.4
+
+  brotli-compress@2.2.2:
+    dependencies:
+      brotli-wasm-custom-dictionary: 3.1.1
+
+  brotli-wasm-custom-dictionary@3.1.1: {}
 
   browserslist@4.28.2:
     dependencies:

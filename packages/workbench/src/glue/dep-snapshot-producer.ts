@@ -26,6 +26,8 @@ import { effectiveDepsFromPackageJsonText } from './install-stamp.ts';
 import { createProxiedRegistryClient } from './registry-fetch.ts';
 
 export interface ProduceDependencySnapshotOptions {
+  /** HTTP representation; omission preserves gzip (ADR-0546). */
+  readonly encoding?: 'gzip' | 'br';
   readonly packageJsonText: string;
   readonly packageLockText: string;
   readonly registryUrl: string;
@@ -33,6 +35,7 @@ export interface ProduceDependencySnapshotOptions {
 }
 
 export interface ProducedDependencySnapshot {
+  readonly contentEncoding: 'gzip' | 'br';
   readonly archive: Uint8Array<ArrayBuffer>;
   readonly snapshotId: string;
   readonly installArtifactIdentity: string;
@@ -119,6 +122,9 @@ function assertCallerPins(original: Lockfile, result: InstallResult): void {
 export async function produceDependencySnapshot(
   options: ProduceDependencySnapshotOptions,
 ): Promise<ProducedDependencySnapshot> {
+  const contentEncoding = options.encoding === undefined ? 'gzip' : options.encoding;
+  if (contentEncoding !== 'gzip' && contentEncoding !== 'br')
+    throw new TypeError('Dependency snapshot encoding must be gzip or br');
   if (
     typeof options.templateId !== 'string' ||
     options.templateId.length === 0 ||
@@ -163,12 +169,18 @@ export async function produceDependencySnapshot(
   const tar = new Uint8Array(serializeDepSnapshotTar(snapshot));
   if (tar.byteLength > DEFAULT_ASSET_MAX_BYTES)
     throw new Error(`Dependency snapshot exceeds ${DEFAULT_ASSET_MAX_BYTES} decoded bytes`);
-  const archive = await drainByteStreamBounded(
-    new Blob([tar]).stream().pipeThrough(new CompressionStream('gzip')),
-    { label: 'dependency snapshot compression', maxBytes: DEFAULT_ASSET_MAX_BYTES },
-  );
+  const archive =
+    contentEncoding === 'br'
+      ? await (await import('brotli-compress')).compress(tar, { quality: 6 })
+      : await drainByteStreamBounded(
+          new Blob([tar]).stream().pipeThrough(new CompressionStream('gzip')),
+          { label: 'dependency snapshot compression', maxBytes: DEFAULT_ASSET_MAX_BYTES },
+        );
+  if (archive.byteLength > DEFAULT_ASSET_MAX_BYTES)
+    throw new Error(`Dependency snapshot exceeds ${DEFAULT_ASSET_MAX_BYTES} encoded bytes`);
   return Object.freeze({
     archive,
+    contentEncoding,
     snapshotId: await sha256Identity(tar),
     installArtifactIdentity: snapshot.installArtifactIdentity,
   });

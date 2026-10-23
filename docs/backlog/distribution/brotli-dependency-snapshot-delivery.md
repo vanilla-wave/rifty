@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Produce Brotli dependency snapshots through the public Rifty API
 created: 2026-10-23
 why: Embedders need smaller dependency snapshots without maintaining an external recompression step; the current public producer emits only gzip.
@@ -80,7 +80,7 @@ Native decoder equality passed. Reproducible retained measurements follow in
 ## Parity cases
 
 1. Real ms tarball public producer: gzip/Brotli/native decoding, stable identity and repeated bytes (`dep-snapshot-producer.test.ts`). → ADR-0386
-2. Chromium public producer and HTTP reader: same native oracle, real loopback transport (`tests/integration/brotli-snapshot-delivery.test.ts`). → scenario
+2. Chromium public producer and HTTP reader: same native oracle, real loopback transport (`tests/browser-unit/brotli-snapshot-delivery.spec.ts`). → scenario
 
 ## Fault matrix
 
@@ -96,6 +96,10 @@ migration, cache/payload deduplication and mobile performance remain outside
 this unit; raw Brotli yields identity mismatch, not a supported download path.
 
 ## Decisions
+
+- re-cut: 2026-10-23 — relocate unchanged Chromium carrier to browser-unit lane; unit CI intentionally has no browsers; RED authority retained from b185f741e — trace: none.
+
+- ready-verdict: 2026-10-23 — Contract+RED @ b185f741ef636dcd590b75551275785ab591ef94; JSON on PR #387.
 
 - 2026-10-23 — pickup: one existing unit, one PR; no epic split or destination expansion.
 - 2026-10-23 — ADR-0546 selects lazy inline WASM and the additive representation contract; independent DEC-2 critic: clear, supersede only gzip/CompressionStream/no-dependency restrictions.
