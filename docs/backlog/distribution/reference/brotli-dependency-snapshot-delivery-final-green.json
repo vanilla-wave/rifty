@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Final+GREEN PASS; goal acceptance proven. Merge after landing-verdict cleanup and green PR CI at final HEAD. Independently rerun producer/reader: 40/40 PASS; inspected executed Chromium, full packed-consumer and all-28 pr:check logs.",
+  "merge_call": "Final+GREEN verify PASS; goal acceptance remains proven. Independently rerun extraction boundary: 5/5 PASS. Merge after updated landing verdict, cleanup and green CI at final HEAD; prior CI failure is recorded, not treated as green.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "a7c0aee1dab6361296f6e1fb64755599eeaf72f7",
-  "unit_goal_source": "docs/backlog/distribution/brotli-dependency-snapshot-delivery.md; BASE b68e5c782cc04ef6ad8716efd077050678c6d3c7; HEAD a7c0aee1dab6361296f6e1fb64755599eeaf72f7; PR #387. Original baseline scenario, ADR-0386/0387, raw PR body and original packed/browser criteria inspected (PR-4). Contract+RED at b185f741ef636dcd590b75551275785ab591ef94 precedes product code. Browser carrier relocation preserves assertions and the 120s bound; both browser-unit and packed journeys are required CI lanes.",
+  "reviewed_sha": "6efa1e10b14009b3d9f3178a0b255c781b225a9b",
+  "unit_goal_source": "docs/backlog/distribution/brotli-dependency-snapshot-delivery.md; BASE b68e5c782cc04ef6ad8716efd077050678c6d3c7; HEAD 6efa1e10b14009b3d9f3178a0b255c781b225a9b; PR #387. Verify delta since independent Final+GREEN a7c0aee1dab6361296f6e1fb64755599eeaf72f7: one dependency expectation plus evidence/landing record; contract restored byte-identical. Original baseline criterion and current exact-list checks inspected under PR-4 against ADR-0546. Contract+RED at b185f741ef636dcd590b75551275785ab591ef94 and prior 40-test, browser and full packed-consumer evidence remain applicable: no production or acceptance-carrier changes. CI at 57c705ccf had 11249 passes and one extraction-boundary failure, reproduced isolated 1 failed/4 passed; this verify corrects the missed criterion update, with independent 5/5 GREEN and repeated all-28 pr:check including full parity.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -103,6 +103,14 @@
       "status": "pass",
       "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:117",
       "note": "Root API exercised in Node/Chromium and installed-package producer; runtime invalid input at line 131. Existing gzip compression path and all pre-compression validation retained."
+    },
+    {
+      "row": "Dependency boundary admits precisely the declared lower packages plus ADR-0546-approved brotli-compress; no unrelated import/closure/export weakening",
+      "source": "frozen-artifact",
+      "trace": "ADR-0546",
+      "status": "pass",
+      "citation": "packages/workbench/tests/extraction-boundary.contract.test.ts:45",
+      "note": "PR-4: baseline exact dependency set excluded the newly approved encoder. CI and isolated RED expose this exact mismatch; only brotli-compress added. Both source-closure and manifest exact equality remain at lines 392-393; sealed exports, 176-file closure and forbidden imports retained. Independently executed current extraction suite: 5/5 PASS (/tmp/rifty-brotli-final-review-verify-probe.log). Prior Final+GREEN omitted this statically unconnected criterion; correction is explicitly retained in docs/backlog/distribution/reference/brotli-snapshot-production-evidence.md:49."
     }
   ],
   "axes": [
