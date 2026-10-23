@@ -33,3 +33,7 @@ recorded in distribution/reference/embedder-gaps-evidence.md.
 
 Legacy v3 JSON/gzip assets remain usable. The producer will emit this envelope;
 no arbitrary installed-tree import or new package compatibility is implied.
+
+## Corrections
+
+- 2026-10-23 — ADR-0547 adds compact tar v5 with an explicit profile and no replay namespace; v4 remains unchanged.

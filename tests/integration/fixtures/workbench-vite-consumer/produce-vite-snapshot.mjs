@@ -62,6 +62,51 @@ await writeFile(
 );
 console.log('Packed Vite producer: caller npm lock, Vite 7.3.6 tar.gz and identities');
 
+// Same caller inputs and installed payload; only replay transport changes.
+const compact = await produceDependencySnapshot({
+  packageJsonText,
+  packageLockText,
+  registryUrl,
+  templateId,
+  profile: 'compact',
+});
+const compactPath = resolve('dist/producer-vite-compact.tar.gz');
+await writeFile(compactPath, compact.archive);
+const compactControl = JSON.parse(
+  execFileSync('tar', ['-xzOf', compactPath, 'rifty/manifest.json'], { encoding: 'utf8' }),
+);
+assert.equal(compactControl.version, 5, 'compact requires an incompatible-reader version');
+assert.equal(compactControl.profile, 'compact');
+const entries = (path) =>
+  execFileSync('tar', ['-tzf', path], { encoding: 'utf8' }).trim().split('\n');
+assert(
+  !entries(compactPath).some((path) => path.startsWith('rifty/replay-cache')),
+  'compact carries no replay archive namespace',
+);
+const payloadEntries = entries(archivePath).filter((path) => path.startsWith('payload/'));
+assert.deepEqual(
+  entries(compactPath).filter((path) => path.startsWith('payload/')),
+  payloadEntries,
+);
+for (const path of payloadEntries.filter((path) => !path.endsWith('/'))) {
+  assert.deepEqual(
+    execFileSync('tar', ['-xzOf', compactPath, path], { maxBuffer: 64 * 1024 * 1024 }),
+    execFileSync('tar', ['-xzOf', archivePath, path], { maxBuffer: 64 * 1024 * 1024 }),
+    path,
+  );
+}
+assert(compact.archive.length < snapshot.archive.length, 'same-input compact gzip must be smaller');
+await writeFile(
+  resolve('dist/producer-vite-compact.json'),
+  JSON.stringify({
+    snapshotId: compact.snapshotId,
+    templateId,
+  }),
+);
+console.log(
+  `Compact Vite pair: replay ${snapshot.archive.length} B, compact ${compact.archive.length} B`,
+);
+
 const originalManifest = JSON.parse(packageJsonText);
 const updatedManifest = JSON.stringify({
   ...originalManifest,

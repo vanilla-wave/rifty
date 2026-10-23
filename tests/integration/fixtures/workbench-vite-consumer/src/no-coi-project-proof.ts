@@ -84,6 +84,22 @@ const api = {
     }))
       await sandbox.fs.writeFile(`/project${path}`, content);
   },
+  async seedCache() {
+    await sandbox.fs.mkdir('/.rifty/tarball-cache', { recursive: true });
+    await sandbox.fs.writeFile('/.rifty/tarball-cache/unrelated', 'shared-cache-sentinel');
+  },
+  async cacheTree() {
+    const result: Record<string, string> = {};
+    const visit = async (root: string): Promise<void> => {
+      for (const entry of await sandbox.fs.readdir(root)) {
+        const path = `${root}/${entry.name}`;
+        if (entry.type === 'directory') await visit(path);
+        else result[path] = await sandbox.fs.readFile(path, 'utf8');
+      }
+    };
+    await visit('/.rifty/tarball-cache');
+    return result;
+  },
   apply(snapshot: Snapshot, force = false) {
     return sandbox.toolchain.applySnapshot({
       cwd: '/project',
