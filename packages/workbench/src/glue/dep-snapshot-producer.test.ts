@@ -112,7 +112,7 @@ afterEach(async () => {
   );
 });
 describe('public caller-pinned dependency snapshot producer', () => {
-  it.fails('rejects an unknown snapshot profile before registry acquisition', async () => {
+  it('rejects an unknown snapshot profile before registry acquisition', async () => {
     const { options } = await inputs();
     const requests = await registry();
     await expect(producer()({ ...options, ...{ profile: 'unknown' } })).rejects.toThrow(/profile/i);

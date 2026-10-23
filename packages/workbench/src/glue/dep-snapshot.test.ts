@@ -3,7 +3,7 @@ import { type InstallResult, type Packument, RegistryClient, install } from '@ri
 import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  type DepSnapshotV3,
+  type DepSnapshot,
   buildDepSnapshot,
   fetchDepSnapshot,
   parseDepSnapshot,
@@ -77,9 +77,9 @@ class LightningRegistry extends RegistryClient {
   }
 }
 
-let lightningSnapshotPromise: Promise<DepSnapshotV3> | undefined;
+let lightningSnapshotPromise: Promise<DepSnapshot> | undefined;
 
-async function lightningSnapshot(): Promise<DepSnapshotV3> {
+async function lightningSnapshot(): Promise<DepSnapshot> {
   lightningSnapshotPromise ??= (async () => {
     const baked = createMemoryFs();
     await baked.vfs.mkdir(ROOT, { recursive: true });
@@ -224,7 +224,7 @@ describe('dep snapshot (ADR-0135)', () => {
     const missing = {
       ...snapshot,
       tarballCache: { ...snapshot.tarballCache, files: [] },
-    } satisfies DepSnapshotV3;
+    } satisfies DepSnapshot;
     const target = new MemoryFsSync();
     write(target, `${ROOT}/node_modules/keep/index.js`, enc.encode('keep'));
 
@@ -330,7 +330,7 @@ describe('dep snapshot (ADR-0135)', () => {
     const assetFetch = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response(tar.slice().buffer));
-    let snapshot: DepSnapshotV3;
+    let snapshot: DepSnapshot;
     try {
       snapshot = await fetchDepSnapshot('https://host.test/snapshot.tar');
     } finally {
@@ -453,7 +453,7 @@ describe('dep snapshot (ADR-0135)', () => {
             },
           ],
         },
-      } satisfies DepSnapshotV3;
+      } satisfies DepSnapshot;
       const target = new MemoryFsSync();
       write(target, `${ROOT}/node_modules/keep/index.js`, enc.encode('keep'));
 
@@ -481,7 +481,7 @@ describe('dep snapshot (ADR-0135)', () => {
           content: btoa('corrupt'),
         })),
       },
-    } satisfies DepSnapshotV3;
+    } satisfies DepSnapshot;
     const target = new MemoryFsSync();
     write(target, `${ROOT}/node_modules/keep/index.js`, enc.encode('keep'));
     const siblingPath = '/.rifty/tarball-cache/zz/sibling-1.0.0.tgz';
@@ -510,7 +510,7 @@ describe('dep snapshot (ADR-0135)', () => {
       lockfile: baked.lockfile,
       tarballCache: baked.tarballCache,
       nodeModules: baked.nodeModules,
-    } satisfies DepSnapshotV3;
+    } satisfies DepSnapshot;
 
     expect(serializeDepSnapshot(migrationOrder)).toBe(serializeDepSnapshot(baked));
     expect(Object.keys(JSON.parse(serializeDepSnapshot(baked)) as object)).toEqual([
@@ -622,7 +622,7 @@ describe('dep snapshot (ADR-0135)', () => {
       templateId: 'vite',
       slug: 'project-files',
       snapshotUrl: '/snapshots/vite.json.gz',
-      fetchSnapshot: async () => rawSnapshot as unknown as DepSnapshotV3,
+      fetchSnapshot: async () => rawSnapshot as unknown as DepSnapshot,
       install: async () => {
         installed = true;
         return installResult(9);
@@ -681,7 +681,7 @@ describe('dep snapshot (ADR-0135)', () => {
         packages: 8,
       }),
       installArtifactIdentity: `sha256:${'0'.repeat(64)}`,
-    } satisfies DepSnapshotV3;
+    } satisfies DepSnapshot;
 
     const result = await ensureProjectDependencies({
       vfs,

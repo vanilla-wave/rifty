@@ -196,6 +196,12 @@ await sandbox.toolchain.applySnapshot({
 });
 ```
 
+The producer's `profile: 'compact'` omits replay archives while retaining prepared
+Vite/esbuild dependencies. Apply, saved open and explicit reapply use the same APIs;
+compact neither writes nor purges the shared replay cache. Update the Workbench
+producer/copied Worker before using v5. Explicit install keeps existing behavior,
+including cache-miss failures; compact promises no offline reinstall.
+
 No registry URL is needed. Every application validates the bounded input and
 identities, including same-ID/forced calls. Default conflicts reject before
 payload/cache writes; force replaces only payload targets, including descendants

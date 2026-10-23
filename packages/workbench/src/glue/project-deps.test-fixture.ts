@@ -4,7 +4,7 @@ import {
   type PackageAcquisitionAuthority,
   createPackageAcquisitionAuthority,
 } from '../workers/package-acquisition-authority.ts';
-import { type DepSnapshotV3, prepareDepSnapshotRestore } from './dep-snapshot.ts';
+import { type DepSnapshot, prepareDepSnapshotRestore } from './dep-snapshot.ts';
 import {
   type InstallStampAuthority,
   createInstallStampAuthority,
@@ -78,7 +78,7 @@ export function createTestProjectPackageAcquisitionAuthority(
       },
       planSnapshotRestore: async ({ project, snapshot }) => {
         try {
-          const payload = snapshot.payload as DepSnapshotV3;
+          const payload = snapshot.payload as DepSnapshot;
           const prepared = await prepareDepSnapshotRestore(opts.fsSync, project.root, payload);
           const lockfile =
             payload.lockfile.length === 0

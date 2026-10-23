@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+- Public compact v5 dependency snapshots omit replay archives, retain prepared payload and shared cache, and use existing validation/application; default replay unchanged (ADR-0547).
+
 - Reuse predicates accept the selected runtime tier; virtual-ancestor Stats keep metadata readable while directory listings reject mount collisions.
 
 - Physical COI owner selects stock esbuild for install/snapshot/claims and Node bootstrap. No-COI retains its explicit legacy policy. Snapshot mismatch discriminators and restore failure phases remain stable across tier projection.

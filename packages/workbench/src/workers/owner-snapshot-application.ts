@@ -1,5 +1,5 @@
 import { prepareDepSnapshotApplication } from '../glue/dep-snapshot-application.ts';
-import type { DepSnapshotV3 } from '../glue/dep-snapshot.ts';
+import type { DepSnapshot } from '../glue/dep-snapshot.ts';
 import { discoverPackageMutationTransitions } from '../glue/package-mutation-executor.ts';
 import type { OwnerPackageConfig, OwnerPackageStateOptions } from './owner-package-types.ts';
 import type {
@@ -11,7 +11,7 @@ export async function planOwnerSnapshotApplication(
   options: Pick<OwnerPackageStateOptions, 'fsSync' | 'flush'>,
   input: Parameters<NonNullable<PackageAcquisitionAdapter['planSnapshotApplication']>>[0],
 ): Promise<SnapshotApplicationPlan> {
-  const payload = input.snapshot.payload as DepSnapshotV3 | undefined;
+  const payload = input.snapshot.payload as DepSnapshot | undefined;
   if (payload === undefined) throw new Error('Snapshot application payload missing');
   const plan = await prepareDepSnapshotApplication(options.fsSync, input.project.root, payload, {
     runtimeTier: 'coi',

@@ -17,6 +17,7 @@ import { createMemoryFs } from '@riftydev/vfs/internal';
 import { finalizePackageInstallFiles } from '../workers/package-install-finalizer.ts';
 import { DEFAULT_ASSET_MAX_BYTES, drainByteStreamBounded } from './bounded-asset-fetch.ts';
 import {
+  type DepSnapshot,
   buildDepSnapshot,
   serializeDepSnapshotTar,
   sha256Identity,
@@ -30,6 +31,8 @@ export interface ProduceDependencySnapshotOptions {
   readonly packageLockText: string;
   readonly registryUrl: string;
   readonly templateId: string;
+  /** Replay by default; compact omits acquisition archives, not installed dependencies. */
+  readonly profile?: 'replay' | 'compact';
 }
 
 export interface ProducedDependencySnapshot {
@@ -126,6 +129,13 @@ export async function produceDependencySnapshot(
   ) {
     throw new TypeError('templateId must be a non-empty NUL-free string');
   }
+  if (
+    options.profile !== undefined &&
+    options.profile !== 'replay' &&
+    options.profile !== 'compact'
+  ) {
+    throw new TypeError('Unsupported dependency snapshot profile');
+  }
   const registryUrl = registryEndpoint(options.registryUrl);
   const manifest = record(JSON.parse(options.packageJsonText) as unknown, 'package.json');
   const packageJsonText = serializePackageJson(manifest);
@@ -160,7 +170,16 @@ export async function produceDependencySnapshot(
     packages: result.packages.length,
   });
   await verifyDepSnapshotReplayCache(snapshot);
-  const tar = new Uint8Array(serializeDepSnapshotTar(snapshot));
+  const selected: DepSnapshot =
+    options.profile === 'compact'
+      ? {
+          ...snapshot,
+          version: 5,
+          profile: 'compact',
+          tarballCache: { version: 1, root: snapshot.tarballCache.root, files: [] },
+        }
+      : snapshot;
+  const tar = new Uint8Array(serializeDepSnapshotTar(selected));
   if (tar.byteLength > DEFAULT_ASSET_MAX_BYTES)
     throw new Error(`Dependency snapshot exceeds ${DEFAULT_ASSET_MAX_BYTES} decoded bytes`);
   const archive = await drainByteStreamBounded(

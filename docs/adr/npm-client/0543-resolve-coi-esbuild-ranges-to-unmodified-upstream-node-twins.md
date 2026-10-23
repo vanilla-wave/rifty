@@ -83,6 +83,4 @@ existing no-COI byte oracle and the Vite starter pin remain independent.
   0.28.0 through SW children. Its old generated-client semantics/native oracle
   are superseded; exact admission and pinned build-byte proof remain.
 
-## Corrections
-
 - 2026-10-23 — ADR-0547 permits compact v5 tier projection after lock/payload validation without replay archives; ordinary replay validation remains mandatory.

@@ -2,24 +2,14 @@
 
 ## Items
 
-1. `distribution/compact-snapshot-acceptance` — **acceptance carrier** — public
-   producer → native no-COI SDK scenario for I1–I3, committed RED/expected-failure
-   before implementation. No product capability delivered by this step alone.
-
-Later units are cut from the carrier's actual failures: producer/format
-admission first, then any SDK application/lifecycle wall. They remain hypotheses
-until the run exposes them; no separate installer or policy owner is planned.
+1. `distribution/compact-snapshot-acceptance` — public compact producer and
+   no-COI SDK acceptance; Contract+RED passed, full packed GREEN executed;
+   awaiting Final+GREEN/CLOSE. Evidence: `distribution/reference/compact-dependency-snapshots-evidence.md`.
 
 ## Open questions
 
-- Compact profile encoding and public option spelling — owner: agent — inspect
-  codec/admission owners at PICKUP; ADR + old/new reader compatibility probe.
-- Which existing packed no-COI scenario best carries the same-input ordinary/
-  compact pair and saved reopen? — owner: agent — reuse the real Vite producer
-  and browser proof; record exact fixture versions and run the initial RED.
-- Can all compact application paths avoid cache writes without changing
-  runtime projection or persistence settlement? — owner: agent — execute the
-  acceptance carrier through shared preparation, preserve existing owners.
+None. ADR-0547 owns profile/format; existing packed Vite carrier proves the
+shared preparation/application path without cache writes or new persistence state.
 
 ## Out of scope
 

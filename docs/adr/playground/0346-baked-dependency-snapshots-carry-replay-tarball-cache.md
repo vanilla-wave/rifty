@@ -65,6 +65,4 @@ verified replay tarball cache remains the network-byte authority.
 
 - 2026-09-08 — ADR-0394 supersedes decision 4's whole-node_modules replacement for explicit snapshot application; verified cache-before-lock ordering remains.
 
-## Corrections
-
 - 2026-10-23 — ADR-0547 adds explicit compact v5 without replay archives; ordinary v3/v4 retain exact closure/SRI and cache merge.

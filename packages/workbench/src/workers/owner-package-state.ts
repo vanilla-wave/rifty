@@ -6,7 +6,7 @@ import {
 import type { CommandContext } from '@riftydev/shell';
 import { normalizePath } from '@riftydev/vfs';
 import {
-  type DepSnapshotV3,
+  type DepSnapshot,
   fetchVerifiedDepSnapshot,
   prepareDepSnapshotForRuntimeTier,
   prepareDepSnapshotRestore,
@@ -294,7 +294,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         });
       },
       planSnapshotRestore: async ({ project, snapshot }) => {
-        const payload = snapshot.payload as DepSnapshotV3 | undefined;
+        const payload = snapshot.payload as DepSnapshot | undefined;
         if (!payload) return { status: 'rejected', reason: 'snapshot-payload-missing' };
         try {
           const selected = await prepareDepSnapshotForRuntimeTier(payload, 'coi');

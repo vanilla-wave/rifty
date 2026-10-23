@@ -30,6 +30,8 @@ Implementation turns that same carrier GREEN.
 
 ## Decisions
 
+- ready-verdict: 2026-10-23 — Contract+RED @ ec970a6df0f7c7ffa79bab718e99e9373ad9f3c1
+
 - re-cut: 2026-10-23 — carrier and its implementation remain one unit/PR; no added scope — trace: none.
 - 2026-10-23 — ADR-0547 selects v5/profile compact; missing reader/producer behavior has executed RED.
 

@@ -236,6 +236,12 @@ and `payload/node_modules/`. `rifty/manifest.json` and `rifty/replay-cache/` are
 control data, never project files. SnapshotId hashes decoded tar; gzip delivery
 with or without HTTP Content-Encoding works. Legacy v3 JSON/gzip remains readable.
 
+Set `profile: 'compact'` for prepared environments that build installed dependencies
+without reinstalling. Compact v5 omits replay archives; the prepared payload stays
+intact. Default (or `profile: 'replay'`) retains v4 exact replay closure/SRI.
+Updated readers accept both; older readers reject compact before application.
+Compact adds no install ban, offline reinstall guarantee or registry fallback.
+
 The producer uses the shared canonical manifest spelling without changing its
 JSON values. Use the emitted `payload/package.json` bytes when supplying raw
 files to a neutral `npm-dev-server` Playground plan; its snapshot descriptor is
