@@ -35,9 +35,9 @@ Observed 2026-09-02 against production, from `react-vite-starter@8bf5df9c8`:
   (`tools/shadow-registry/generated/shadow-substitution-catalog.json`, #289,
   ADR-0371); whether that shape yields an integrity through `resolveBundle` is
   unproven in-tree.
-- Client side is honest: `packages/npm-client/src/eddy-fast-path.ts:493` warns
-  `npm: fast install (eddy) unavailable, using standard install — …` and falls
-  back (ADR-0182). No install breaks; the speedup is absent for every esbuild
+- Client side is honest: `packages/npm-client/src/eddy-fast-path.ts` records the decline;
+  `packages/workbench/src/glue/npm-shell-command.ts` prints the reason on terminal stderr:
+  `npm: fast install (eddy) unavailable, using standard install — …` and standard installation completes (ADR-0182). No install breaks; the speedup is absent for every esbuild
   closure.
 - Coverage gap: the live smoke's closure contains no esbuild, so both Netlify
   deploy paths report `eddy smoke ok` while the hero path is declined.

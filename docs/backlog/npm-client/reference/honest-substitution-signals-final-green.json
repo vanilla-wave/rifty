@@ -1,0 +1,118 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS Final+GREEN/CLOSE and PR-4 verify: goal I1-I4 remains proved; no merge per user. Driver must complete current pnpm pr:check and green CI at final HEAD before delivery. Recorded CI observations are not claimed repaired.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #383; honest-substitution-signals goal I1-I4 and ready children eddy-decline-reason-in-terminal, esbuild-facade-typescript-declarations, lightningcss-compat-matrix-page, shadow-admission-refusal-names-substituted-version, read at aff8772581121b02ebe562a1c8f2c3eed40f8e19; BASE c392669742a27b1c8c47ca0edaf4c8c579e90edf. Raw goal unchanged; Contract+RED accepted at 095810e2bbf38bf371530e914b3765087d2789ad. PR-4: old sass optional live/replay assertions and old compat generator/default drift command read at BASE; only richer authorized refusal text changes, no weakened admission or optional-edge criterion. Independent execution: Eddy 22/22, admission plus lightningcss 24/24, esbuild declarations plus composed Vite scenario 22/22. Scratch generation matches every committed page; a committed lightningcss page mutant is rejected by generator plus the default git-diff drift command. Snapshot comparison independently confirms unchanged lock.packages and tarballCache, only esbuild/package.json payload changes for vite/typescript and no vite8 payload change; current receipt factory, replay bake and static drift checks inspected. Verify at 15564e5f922fb94e899f77b07a129f174cca00a1 after aff877258: CLOSE removes completed contracts/links only; learned-pin console warning restored alongside terminal stderr, preserving baseline and once-per-terminal output. Independent pin baseline and real-Eddy cases both pass. PR-4 frozen ESBUILD_RECIPE manifest changes only the accepted types/no-exports shape; old/new literal SHA256 and lengths independently verified, no assertion removed or weakened. Independent root acquisition/repeated offline replay case passes; full producer replay file 94/94 and shell suites 152/152 inspected. Original full gate reproduced obsolete manifest literal plus removed console warning; remaining 27 checks including parity passed, post-fix full gate still required. Verify at a1bc2191a495f7c42f4c374417db74892e4dd92b after 15564e5f9: no product-source changes. PR-4 inspected the actual delta and original criteria. Scoped-preview failure diagnostics preserve the 120000ms predicate and all assertions, rethrow failures; full packed local run, eight scoped repeats and three CPU4x runs passed, diagnostic CI packed job 119575205897 passed under unchanged assertions. Unknown apply-timeout cause remains with owner/trigger, no runtime-repair claim. Problems test outer120s enables existing inner90s; exact scenario passed7.0s. Config-graph outer240-to360s is supported by independently inspected CI trace: preceding calls completed, final offline dev began at elapsed231.292s with only8.708s remaining; inner criteria unchanged. Watcher carrier now waits for the actual VITE ready line within120s, retains all output, then observes20s; early exit/rejection/missing readiness still fail. Oracle explicitly excludes timing; root/default predicates and outer420s preserved. Actual corrected three-case run passed41.8/44.6/45.0s, startup5.543/4.944s and observation20.002s. Unknown runtime startup cost remains documented; current final HEAD CI is still a delivery gate. Independent syntax check of scoped diagnostic module passed. Verify at 490482a1f1dea1e6d9c9899c5242905efbb5fdc6 after a1bc2191a: only lifecycle failure diagnostics and factual existing backlog follow-up added (plus review record), no product/nativeWorker changes. Independent normalized comparison proves original zero-Worker, seven-event, order assertions and both5s deadlines unchanged. Catch reads selected pid/ppid/argv/cwd/name and same-browser-context CDP worker targets only, under shared2.5s bound; no environment read; always rethrows with original cause. Raw CI job119569092888 confirms expected0/received3 at5s with384tests passed, identities absent; old/new exact local case passed27.3/27.9s. No physical leak or runtime repair is inferred; existing owner/trigger persists. Prior full pr:check passed including test:run179.4s and parity142.2s; current full rerun and final HEAD CI remain driver gates.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Typed and automatic installs print decline once and complete standard install",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/integration/npm-shell-eddy-glue.test.ts:103",
+      "note": ""
+    },
+    {
+      "row": "Network unavailable at Eddy GET/POST prints reason and completes install",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/integration/npm-shell-eddy-glue.test.ts:103",
+      "note": ""
+    },
+    {
+      "row": "Both-tier types, exact upstream bytes, Node10/Node16/Bundler and real VFS service",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/esbuild-declarations.test.ts:245",
+      "note": ""
+    },
+    {
+      "row": "Generated esbuild page states declarations support and tier scope",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/esbuild-declarations.test.ts:32; tools/compat-matrix-generator/esbuild-matrix.js:9; tools/compat-matrix-generator/cli.js:881; package.json:74",
+      "note": ""
+    },
+    {
+      "row": "Native/VFS compiler diagnostics and definition target match reference",
+      "source": "frozen-artifact",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/esbuild-declarations.test.ts:261",
+      "note": ""
+    },
+    {
+      "row": "Generated indexed lightningcss page names admission/twin/capabilities/gaps/test citations; drift gate",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tools/checks/lightningcss-compat-matrix.test.ts:16; tools/checks/lightningcss-compat-matrix.test.ts:48; tools/compat-matrix-generator/cli.js:795; tools/compat-matrix-generator/cli.js:881; package.json:74",
+      "note": ""
+    },
+    {
+      "row": "Every refusing builtin reports request/version/rule; stable feature and admission",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/npm-client/src/internal/shadow/admission.contract.test.ts:76",
+      "note": ""
+    },
+    {
+      "row": "Vite 7.3.6 install then declaration lookup and changed-range refusal share one project state",
+      "source": "acceptance",
+      "trace": "scenario+I1+I2+I4",
+      "status": "pass",
+      "citation": "tests/integration/esbuild-declarations.test.ts:41",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "490482a1f1dea1e6d9c9899c5242905efbb5fdc6"
+}

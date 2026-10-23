@@ -1011,7 +1011,7 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
   context,
   page,
 }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000);
   const requests: string[] = [];
   context.on('request', (request) => requests.push(request.url()));
   const blockedRegistryRequests: string[] = [];

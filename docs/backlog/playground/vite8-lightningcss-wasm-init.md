@@ -11,6 +11,13 @@ code: [tools/shadow-registry/src/index.ts]
 
 ## Context
 
+2026-10-22 probe: `pnpm test:run tools/checks/lightningcss-compat-matrix.test.ts`
+on Node v24.16.0 + the real 1.32.0 archive: both facade entries transform CSS
+without init via `node` exports (`wasm-node.cjs` / `wasm-node.mjs`). Direct
+default `index.mjs` throws TypeError before init and transforms after init.
+Browser/Vite execution remains unverified; the older finding below must not
+be generalized to the node-conditioned entries.
+
 `SHIM_LIGHTNINGCSS_ESM` sets `export default lightningcss` = `import * as lightningcss`
 (namespace, non-callable) and re-exports named `transform`/`bundle`/etc from
 lightningcss-wasm WITHOUT awaiting `init()`. Native lightningcss `transform` is a
