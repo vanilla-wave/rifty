@@ -58,23 +58,47 @@ as explained before the user's choice.
   deployment assets are outside this producer workflow. No such outcomes
   were requested; this does not weaken existing loader validation.
 
-## Next
+## Acceptance
 
-Owner: distribution maintainer. Trigger: implementation pickup of this item.
-One reviewable producer capability, not an epic or a deployment migration.
-Before implementation, compile the public representation contract and its
-ADR-0387 amendment; choose/probe a codec that serves existing producer hosts,
-record any new dependency decision, and measure its cost on representative
-snapshot data. Exact options, metadata and encoding effort are agent-owned
-implementation choices, not unresolved user questions.
+1. Public producer accepts optional `encoding: 'gzip' | 'br'`; omission retains gzip. Returns `contentEncoding` with archive/identities. Unsupported encodings reject. → scenario
+2. Brotli and gzip decode to identical TAR, snapshotId and installArtifactIdentity; repeated Brotli is deterministic for identical input. Native Node Brotli decoder reads output; original pin/replay rules remain. → ADR-0386
+3. Node and Chromium produce Brotli through the root API without caller codec/recompression. Lazy bundled codec works with installed package assets. → scenario
+4. Packed producer's real caller-locked Vite snapshot delivered with HTTP `Content-Encoding: br` opens through Workbench, builds/runs Vite and preserves existing HMR/saved-state proof. Gzip HTTP alternative remains usable. → scenario
+5. README gives encoding choice, representation headers, negotiation/cache responsibilities and unsupported raw `.tar.br` distinction. → scenario
 
-Compile the real producer → HTTP delivery → Workbench/Vite proof, reference
-interoperability and reachable corrupt/truncated/oversize/error outcomes at
-PICKUP, with Contract+RED before product code. The saved probe only establishes
-reader feasibility; it does not close that end-to-end acceptance. Keep this
-item draft until its implementation contract and required preparation exist.
+## Reference contract
+
+Node v24.16.0 `node:zlib.brotliDecompressSync` independently decodes browser
+and Node output; byte equality with native gunzip of the default representation.
+Existing ADR-0386 TAR identity, ADR-0387 pins and ADR-0346 replay checks unchanged.
+Codec probe: `/tmp/rifty-brotli-codec/probe.mjs` using `brotli-compress@2.2.2`,
+quality 6, real committed Vite snapshot converted by current serializer:
+27,831,808 decoded B → 9,253,244 B; 860 ms; JS inline-WASM entry 1,360,947 B.
+Native decoder equality passed. Reproducible retained measurements follow in
+`reference/brotli-snapshot-production-evidence.md`; no universal ratio promised.
+
+## Parity cases
+
+1. Real ms tarball public producer: gzip/Brotli/native decoding, stable identity and repeated bytes (`dep-snapshot-producer.test.ts`). → ADR-0386
+2. Chromium public producer and HTTP reader: same native oracle, real loopback transport (`tests/integration/brotli-snapshot-delivery.test.ts`). → scenario
+
+## Fault matrix
+
+1. corrupt-input / producer: invalid encoding, unpinned output, corrupt registry tarball reject without emitting an archive. → scenario
+2. corrupt-input + poisoned-cache / delivery: corrupted/truncated HTTP body rejects; valid wrong representation and undecoded raw Brotli mismatch; no trusted snapshot. → scenario
+3. unbounded-read / delivery: encoded Content-Length and decoded body over the existing 128 MiB cap reject. Existing stall bounds remain. → scenario
+4. quota-perm-fail / native encoder + network: refused WASM instantiation and HTTP 503 reject visibly; never substitute gzip while claiming Brotli. → scenario
+
+## Out of scope
+
+Raw Brotli decoding, guest node:zlib, CDN configuration management, default
+migration, cache/payload deduplication and mobile performance remain outside
+this unit; raw Brotli yields identity mismatch, not a supported download path.
 
 ## Decisions
+
+- 2026-10-23 — pickup: one existing unit, one PR; no epic split or destination expansion.
+- 2026-10-23 — ADR-0546 selects lazy inline WASM and the additive representation contract; independent DEC-2 critic: clear, supersede only gzip/CompressionStream/no-dependency restrictions.
 
 - 2026-10-23 — user: «хотелось бы чтобы rifty из коробки поддерживал Brotli тк он эффективнее в сжатии снэпшотов» — built-in production, no caller recompression/codec step.
 - 2026-10-23 — rejected route: external gzip → gunzip → Brotli recipe alone — does not meet the selected built-in producer result.

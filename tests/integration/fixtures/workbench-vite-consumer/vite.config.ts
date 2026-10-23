@@ -44,6 +44,20 @@ export default defineConfig({
             response.end('snapshot fixture is unavailable');
             return;
           }
+          if (request.url === '/producer-vite-snapshot.tar') {
+            // The browser advertises br; gzip remains a separately reachable HTTP alternative.
+            const br = /(?:^|,)\s*br\s*(?:,|$)/.test(request.headers['accept-encoding'] ?? '');
+            const bytes = readFileSync(
+              resolve(`dist/producer-vite-snapshot.tar.${br ? 'br' : 'gz'}`),
+            );
+            response.setHeader('Content-Type', 'application/x-tar');
+            response.setHeader('Content-Encoding', br ? 'br' : 'gzip');
+            response.setHeader('Vary', 'Accept-Encoding');
+            response.setHeader('Content-Length', bytes.length);
+            response.setHeader('Cache-Control', 'no-store');
+            response.end(bytes);
+            return;
+          }
           if (request.url !== '/producer-snapshot-decoded.tar') return next();
           response.setHeader('Content-Type', 'application/x-tar');
           response.setHeader('Content-Encoding', 'gzip');

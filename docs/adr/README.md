@@ -423,6 +423,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0531 | Guest namespace mounts the project at a public root with project-owned tmp and home |
 | 0532 | Commit evaluation summaries as text core only |
 | 0535 | Judge app tasks against a prompt-stated contract |
+| 0546 | Produce browser-compatible Brotli dependency snapshots |
 
 ## Superseded (removed)
 
