@@ -3,7 +3,7 @@ area: kernel
 status: draft
 title: Explain retained Worker observations after Workbench Vite close in CI
 created: 2026-10-20
-why: One Chromium CI run observed two kernel Workers after close; isolated reproduction passed.
+why: Intermittent Chromium Worker retention after Workbench close now reproduces locally; root cause remains undiagnosed.
 sources: [tests/browser-unit/workbench-vite-lifecycle.spec.ts]
 code: [packages/kernel/src/process-manager.ts, packages/kernel/src/spawn-worker.ts]
 ---
@@ -58,3 +58,62 @@ passed — alongside three Vite startup timeouts. Evidence and routing:
 `docs/backlog/kernel/vite-startup-readiness-ci.md` §Follow-up 2026-10-21.
 Trigger fired; isolated-PASS caveat no longer holds.
 
+
+## Follow-up — 2026-10-23, compact snapshots PR #388
+
+Same `:1054` symptom on HEAD `234baef0b0aa07cd7f11ee71e22f88763f1da512`:
+[CI job](https://github.com/vanilla-wave/rifty/actions/runs/39880590890/job/120177259917)
+finished 384 passed / one skipped / one failed. Functional Vite A→B→A
+assertions passed; two kernel Worker observations remained after the unchanged
+five-second close poll. Other PR checks passed, including compact no-COI
+acceptance. This PR changes no kernel/owner teardown implementation.
+
+Unlike the initial isolated PASS, the unchanged spec reproduced locally:
+
+```sh
+RIFTY_PLAYGROUND_PORT=55381 pnpm exec playwright test \
+  --config playwright.browser-unit.config.ts \
+  tests/browser-unit/workbench-vite-lifecycle.spec.ts
+```
+
+RED, 34.7 s: expected zero Workers, observed two at `:1054`.
+Node 24.16.0 / Chromium 148.0.7778.96 / macOS arm64.
+Raw: `/tmp/compact-browser-isolated.log`, `/tmp/compact-browser-ci-red.log`.
+
+Diagnostic copies retained every original assertion/deadline; no product fix:
+
+- Creation/close events identified the retained pair as the owner and last Vite
+  Worker; its esbuild child had emitted Worker.close. Earlier A/B Workers closed.
+  Three repeats: two PASS / one RED (`/tmp/compact-worker-probe-repeat.log`).
+- Native terminate instrumentation recorded before/after calls returning for
+  both retained Workers. Two of three repeats showed two CDP targets at failure; two
+  page.workers() observations remained after 30 additional seconds. Evaluate
+  requests in both timed out. Those extra
+  observations are not proof of a native root cause and do not replace the
+  original assertion (`/tmp/compact-terminate-probe.log`).
+- A passive post-failure sampler, with no pre-failure route/observer changes,
+  caught the original RED in repeat 9 of 10; nine passed. One owned renderer
+  was sampled before a subsequent `ps` raced an exited child process. The
+  diagnostic then failed at `ps`; the failure path after the original assertion
+  had already logged two Workers.
+  `/tmp/compact-passive-stack-series.log`, `/tmp/compact-native-sample-84719.txt`:
+  three DedicatedWorker threads stayed in idle `mach_msg` stacks during the
+  sample. Symbols are stripped; threads are not mapped to target identities.
+- Native controls passed: two-level blocked-child termination, waitAsync arms,
+  startup cuts, and 20 three-level cycles matching
+  owner→Vite→WASM depth. Logs: `/tmp/compact-native-worker-probe.log`,
+  `/tmp/compact-native-async-worker-probe.log`,
+  `/tmp/compact-native-startup-cut-probe.log`,
+  `/tmp/compact-native-three-level-probe.log`. These do not reproduce Rifty's
+  full native lifecycle and establish neither a kernel nor a Chromium cause.
+
+Cause remains undiagnosed. No raised timeout, weaker assertion, retry policy or
+speculative runtime change. Next discriminating probe: correlate passive CDP
+`Target.attachedToTarget` / `Runtime.runIfWaitingForDebugger` /
+`Target.detachedFromTarget` with these instances; if complete, minimize the
+async nested shutdown and obtain symbolized native state. Owner unchanged.
+The caller follows rifty-fix §1: one gate repeat after recording evidence;
+a repeated RED still blocks delivery. A later GREEN is not a repair claim.
+
+Written-result check: 2026-10-23 — independent RDY-6 PASS; factual bounds and
+rifty-fix §1 routing verified against the logs and retained diagnostic sources.
