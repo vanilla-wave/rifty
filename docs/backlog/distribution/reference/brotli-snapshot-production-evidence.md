@@ -64,6 +64,13 @@ Node v24.16.0. Both recovered the exact TAR through native Brotli decoding;
 public producer tests passed 13/13 before and after. This changes an internal
 quality choice under the landed ADR-0546 behavior, with no new API/state promise.
 
+q11 acceptance at `cdb710ac7f8d263cea04ed74f0b51c576a6c5ad4`: Chromium
+delivery/fault carrier 1/1 (18.8 s); packed consumer 1/1 (371.56 s), including
+fresh Vite production, native TAR/identity equality, browser build/dev/HMR
+and saved state. `pnpm pr:check` 28/28: related tests 29.8 s, no isolated
+rerun; parity 167.5 s. Both code-review axes and independent Final+GREEN
+reported no findings; landing verdict: `pr-389-final-green.json`.
+
 ## Carriers
 
 - `pnpm exec vitest run packages/workbench/src/glue/dep-snapshot-producer.test.ts` and `pnpm test:browser-unit brotli-snapshot-delivery.spec.ts`: actual public producers, original registry tarball, Node oracle, Chromium HTTP decoding/faults. No mocked Rifty sibling or codec.
