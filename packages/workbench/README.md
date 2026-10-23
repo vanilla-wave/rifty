@@ -242,6 +242,42 @@ intact. Default (or `profile: 'replay'`) retains v4 exact replay closure/SRI.
 Updated readers accept both; older readers reject compact before application.
 Compact adds no install ban, offline reinstall guarantee or registry fallback.
 
+For Brotli, pass `encoding: 'br'` to the same call and save `archive` as
+`dependencies.tar.br`. `contentEncoding` is `'br'` or `'gzip'`; omitted
+`encoding` keeps gzip. Both representations decode to identical TAR and
+snapshotId. The producer works in Node and Chromium; Brotli lazily loads its
+bundled WASM encoder (about 1.36 MB JS), with no codec/asset supplied by the
+caller. Encoding consumes CPU synchronously inside the async call; use a Worker
+if production must not block a browser UI. Codec/registry failures reject.
+
+Host Brotli as an **HTTP representation of TAR**, not an undecoded download:
+
+```http
+Content-Type: application/x-tar
+Content-Encoding: br
+Content-Length: <archive.byteLength>
+Vary: Accept-Encoding
+```
+
+Generate both variants from the same manifest/lock/template. Configure your
+server/CDN's standard Accept-Encoding negotiation (including quality values
+and explicit exclusions): select Brotli when accepted, gzip when accepted
+otherwise, and identity TAR or 406 when neither is acceptable. For gzip use
+`Content-Encoding: gzip` and that representation's own length. Do not double
+compress either artifact. Workbench's `assetUrl` points at the negotiated TAR
+resource; the browser decodes HTTP before Rifty checks identity and parses TAR.
+
+Cache variants separately by Accept-Encoding; keep `Vary` on negotiated
+responses, use representation-specific ETags, and immutable/versioned URLs
+when serving long-lived cache entries. A snapshotId hashes decoded TAR and
+is not a strong ETag for different encoded byte streams. On mutable URLs use
+revalidation and replace metadata/representations consistently. Host/CDN setup
+belongs to the embedder; verify gzip-only and Brotli clients against deployment.
+
+Raw `.tar.br` without `Content-Encoding: br` is unsupported and fails snapshot
+identity; renaming the file does not decode it. Gzip files without the header
+retain existing magic-byte support. No guest `node:zlib` support is implied.
+
 The producer uses the shared canonical manifest spelling without changing its
 JSON values. Use the emitted `payload/package.json` bytes when supplying raw
 files to a neutral `npm-dev-server` Playground plan; its snapshot descriptor is

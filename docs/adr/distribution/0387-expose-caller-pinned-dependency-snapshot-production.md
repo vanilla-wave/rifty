@@ -46,3 +46,5 @@ snapshot-backed project definition and acquisition path.
 ## Corrections (active)
 
 - 2026-09-08 — ADR-0399 extends only new-path admission to parent/path/version-proven declared companions; all existing companion/ordinary source pins remain exact and ordinary child additions remain refused.
+
+- 2026-10-23 — ADR-0546 supersedes only gzip-only output, CompressionStream-only encoding and no-new-dependency restrictions: optional Brotli with lazy bundled WASM; root API, browser support and pins preserved.

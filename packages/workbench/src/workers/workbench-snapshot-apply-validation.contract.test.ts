@@ -148,6 +148,7 @@ function invalidArtifact(fault: Fault): SavedSnapshotFixture {
     valid.payload.packageJsonText,
   );
   return {
+    contentEncoding: 'gzip',
     archive: new Uint8Array(gzipSync(tar)),
     snapshotId,
     installArtifactIdentity: payload.installArtifactIdentity,

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { brotliDecompressSync, gunzipSync } from 'node:zlib';
 import { produceDependencySnapshot } from '@riftydev/workbench';
 
 const registryUrl = process.argv[2];
@@ -40,6 +41,26 @@ const snapshot = await produceDependencySnapshot({
   registryUrl,
   templateId,
 });
+const started = performance.now();
+const brotli = await produceDependencySnapshot({
+  packageJsonText,
+  packageLockText,
+  registryUrl,
+  templateId,
+  encoding: 'br',
+});
+assert.equal(brotli.contentEncoding, 'br');
+assert.deepEqual(brotliDecompressSync(brotli.archive), gunzipSync(snapshot.archive));
+assert.equal(brotli.snapshotId, snapshot.snapshotId);
+assert.equal(brotli.installArtifactIdentity, snapshot.installArtifactIdentity);
+await writeFile(resolve('dist/producer-vite-snapshot.tar.br'), brotli.archive);
+console.log(
+  JSON.stringify({
+    gzipBytes: snapshot.archive.length,
+    brotliBytes: brotli.archive.length,
+    brotliProductionMs: Math.round(performance.now() - started),
+  }),
+);
 const archivePath = resolve('dist/producer-vite-snapshot.tar.gz');
 await writeFile(archivePath, snapshot.archive);
 const emittedManifest = execFileSync('tar', ['-xzOf', archivePath, 'payload/package.json'], {

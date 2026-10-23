@@ -3,17 +3,20 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { gunzipSync } from 'node:zlib';
+import { brotliDecompressSync, gunzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as workbench from '../index.ts';
+import { decodeDepSnapshotTar } from './dep-snapshot-tar.ts';
 
 interface ProducerOptions {
+  readonly encoding?: 'gzip' | 'br';
   readonly templateId: string;
   readonly packageJsonText: string;
   readonly packageLockText: string;
   readonly registryUrl: string;
 }
 interface Produced {
+  readonly contentEncoding: 'gzip' | 'br';
   readonly archive: Uint8Array;
   readonly snapshotId: string;
   readonly installArtifactIdentity: string;
@@ -112,12 +115,60 @@ afterEach(async () => {
   );
 });
 describe('public caller-pinned dependency snapshot producer', () => {
+  it('composes compact contents with Brotli without changing the decoded v5 snapshot', async () => {
+    const { options } = await inputs();
+    await registry();
+    const compactOptions = { ...options, profile: 'compact' as const };
+    const gzip = await producer()(compactOptions);
+    const br = await producer()({ ...compactOptions, encoding: 'br' });
+    const tar = gunzipSync(gzip.archive);
+    expect(br.contentEncoding).toBe('br');
+    expect(brotliDecompressSync(br.archive)).toEqual(tar);
+    expect(br.snapshotId).toBe(gzip.snapshotId);
+    expect(decodeDepSnapshotTar(tar)).toMatchObject({
+      version: 5,
+      profile: 'compact',
+      tarballCache: { files: [] },
+    });
+  });
   it('rejects an unknown snapshot profile before registry acquisition', async () => {
     const { options } = await inputs();
     const requests = await registry();
     await expect(producer()({ ...options, ...{ profile: 'unknown' } })).rejects.toThrow(/profile/i);
     expect(requests).toEqual([]);
   });
+
+  it('produces native-decodable Brotli with the same TAR and identities as default gzip', async () => {
+    const { options } = await inputs();
+    await registry();
+    const gzip = await producer()(options);
+    const br = await producer()({ ...options, encoding: 'br' });
+    const repeated = await producer()({ ...options, encoding: 'br' });
+    expect(gzip.contentEncoding).toBe('gzip');
+    expect(br.contentEncoding).toBe('br');
+    expect(brotliDecompressSync(br.archive)).toEqual(gunzipSync(gzip.archive));
+    expect(br.snapshotId).toBe(gzip.snapshotId);
+    expect(br.installArtifactIdentity).toBe(gzip.installArtifactIdentity);
+    expect(br.archive).toEqual(repeated.archive);
+    expect(Object.isFrozen(br)).toBe(true);
+  });
+  it('rejects unsupported encoding before registry acquisition', async () => {
+    const { options } = await inputs();
+    const requests = await registry();
+    await expect(producer()({ ...options, encoding: 'zstd' as 'br' })).rejects.toThrow(/encoding/i);
+    expect(requests).toEqual([]);
+  });
+  it('[fault: corrupt-input] Brotli preserves pin and registry-integrity refusal', async () => {
+    const { options, lock } = await inputs();
+    await registry(true);
+    await expect(producer()({ ...options, encoding: 'br' })).rejects.toThrow(/integrity/i);
+    await registry();
+    Reflect.deleteProperty(lock.packages, 'node_modules/ms');
+    await expect(
+      producer()({ ...options, encoding: 'br', packageLockText: JSON.stringify(lock) }),
+    ).rejects.toThrow(/pin|lock/i);
+  });
+
   it('bakes real locked bytes from the configured registry and emits inspectable reproducible identities', async () => {
     const produce = producer();
     const { options } = await inputs();
