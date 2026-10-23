@@ -88,10 +88,18 @@ assert.deepEqual(
   entries(compactPath).filter((path) => path.startsWith('payload/')),
   payloadEntries,
 );
+const compareRoot = resolve('producer-payload-comparison');
+for (const [name, archive] of [
+  ['replay', archivePath],
+  ['compact', compactPath],
+]) {
+  await mkdir(resolve(compareRoot, name), { recursive: true });
+  execFileSync('tar', ['-xzf', archive, '-C', resolve(compareRoot, name)]);
+}
 for (const path of payloadEntries.filter((path) => !path.endsWith('/'))) {
   assert.deepEqual(
-    execFileSync('tar', ['-xzOf', compactPath, path], { maxBuffer: 64 * 1024 * 1024 }),
-    execFileSync('tar', ['-xzOf', archivePath, path], { maxBuffer: 64 * 1024 * 1024 }),
+    await readFile(resolve(compareRoot, 'compact', path)),
+    await readFile(resolve(compareRoot, 'replay', path)),
     path,
   );
 }

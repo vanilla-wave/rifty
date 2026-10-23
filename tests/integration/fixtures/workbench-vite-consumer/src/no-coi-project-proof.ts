@@ -93,7 +93,7 @@ const api = {
     const visit = async (root: string): Promise<void> => {
       for (const entry of await sandbox.fs.readdir(root)) {
         const path = `${root}/${entry.name}`;
-        if (entry.type === 'directory') await visit(path);
+        if (entry.isDirectory) await visit(path);
         else result[path] = await sandbox.fs.readFile(path, 'utf8');
       }
     };
