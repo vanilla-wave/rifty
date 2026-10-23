@@ -44,4 +44,20 @@ at `/tmp/rifty-brotli-packed.log`; reproducible through the commands above.
 After carrier relocation: `RIFTY_PLAYGROUND_PORT=5397 pnpm test:browser-unit
 brotli-snapshot-delivery.spec.ts` passed (1 test, 11.0 s). `pnpm pr:check`
 passed all 28 stages, including related tests (35.9 s, no isolated rerun)
-and full parity (165.7 s). No product or test gate weakened.
+and full parity (165.7 s). No gate skipped; the later dependency-criterion correction is recorded below.
+
+## CI boundary correction
+
+Full CI at 57c705ccf: 11,249 tests passed, one extraction-boundary failure.
+`pnpm exec vitest run packages/workbench/tests/extraction-boundary.contract.test.ts`
+reproduced 1 failed / 4 passed: the exact external-package list omitted the
+ADR-0546-approved `brotli-compress`. Fault class: frozen-assumption at the
+owned package-boundary criterion. Sweep found one owning list, used for both
+import closure and manifest dependencies. Add only this approved dependency;
+retain exact list equality, sealed exports, package closure and forbidden-import
+assertions. This is the explicit PR-4 criterion correction, not a runtime fix.
+
+Boundary correction GREEN: isolated extraction suite 5/5; repeated
+`pnpm pr:check` all 28 PASS (related tests 29.4 s, full parity 158.5 s).
+The source-scanning extraction test is outside Vitest's static import graph;
+full CI exposed the missing criterion update. Product code remains unchanged.
