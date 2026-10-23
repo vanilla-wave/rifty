@@ -6,6 +6,7 @@
 
 ## [Unreleased]
 
+- Public compact v5 dependency snapshots omit replay archives, retain prepared payload and shared cache, and use existing validation/application; default replay unchanged (ADR-0547).
 - Add optional Brotli dependency snapshot production with lazy browser-compatible WASM, explicit contentEncoding, unchanged TAR identities and gzip default (ADR-0546).
 
 - Reuse predicates accept the selected runtime tier; virtual-ancestor Stats keep metadata readable while directory listings reject mount collisions.

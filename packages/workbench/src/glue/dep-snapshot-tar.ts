@@ -1,5 +1,5 @@
 import { TARBALL_CACHE_ROOT } from '@riftydev/npm-client';
-import type { DepSnapshotV3 } from './dep-snapshot.ts';
+import type { DepSnapshot } from './dep-snapshot.ts';
 import type { WorkspaceArchiveFile, WorkspaceArchiveV1 } from './workspace-archive.ts';
 
 const BLOCK = 512;
@@ -223,17 +223,36 @@ export function decodeDepSnapshotTar(bytes: Uint8Array): unknown {
     manifest === null ||
     Array.isArray(manifest) ||
     !('version' in manifest) ||
-    manifest.version !== 4 ||
+    (manifest.version !== 4 && manifest.version !== 5) ||
+    (manifest.version === 5
+      ? !('profile' in manifest) || manifest.profile !== 'compact'
+      : 'profile' in manifest) ||
     Object.keys(manifest).some(
       (key) =>
-        !['version', 'templateId', 'packages', 'deps', 'installArtifactIdentity'].includes(key),
+        ![
+          'version',
+          'profile',
+          'templateId',
+          'packages',
+          'deps',
+          'installArtifactIdentity',
+        ].includes(key),
     )
   ) {
-    fail('invalid version 4 manifest');
+    fail('invalid dependency snapshot manifest');
+  }
+  if (
+    manifest.version === 5 &&
+    entries.some(
+      (entry) =>
+        entry.path === 'rifty/replay-cache' || entry.path.startsWith('rifty/replay-cache/'),
+    )
+  ) {
+    fail('compact snapshot contains replay cache namespace');
   }
   return {
     ...manifest,
-    version: 3,
+    version: manifest.version === 5 ? 5 : 3,
     packageJsonText: fileText('payload/package.json'),
     lockfile: fileText('payload/package-lock.json'),
     nodeModules: archiveFromEntries(entries, 'payload/node_modules', '/workspace/node_modules'),
@@ -270,20 +289,21 @@ function paxPath(path: string): Uint8Array {
 }
 
 /** POSIX PAX, sorted by code unit; no host timestamps, owners or locale ordering. */
-export function encodeDepSnapshotTar(snapshot: DepSnapshotV3): Uint8Array {
+export function encodeDepSnapshotTar(snapshot: DepSnapshot): Uint8Array {
   const entries: TarEntry[] = [];
   const add = (path: string, bytes = new Uint8Array(), directory = false): void => {
     entries.push({ path, bytes, directory });
   };
-  for (const path of ['payload', 'payload/node_modules', 'rifty', 'rifty/replay-cache'])
-    add(path, undefined, true);
+  for (const path of ['payload', 'payload/node_modules', 'rifty']) add(path, undefined, true);
+  if (snapshot.version === 3) add('rifty/replay-cache', undefined, true);
   add('payload/package.json', enc.encode(snapshot.packageJsonText));
   add('payload/package-lock.json', enc.encode(snapshot.lockfile));
   add(
     'rifty/manifest.json',
     enc.encode(
       JSON.stringify({
-        version: 4,
+        version: snapshot.version === 5 ? 5 : 4,
+        ...(snapshot.version === 5 ? { profile: snapshot.profile } : {}),
         templateId: snapshot.templateId,
         packages: snapshot.packages,
         deps: Object.fromEntries(
@@ -297,6 +317,11 @@ export function encodeDepSnapshotTar(snapshot: DepSnapshotV3): Uint8Array {
     [snapshot.nodeModules, 'payload/node_modules'],
     [snapshot.tarballCache, 'rifty/replay-cache'],
   ] as const) {
+    if (snapshot.version === 5 && prefix === 'rifty/replay-cache') {
+      if (archive.files.length || (archive.directories?.length ?? 0))
+        fail('compact snapshot contains replay cache entries');
+      continue;
+    }
     for (const path of archive.directories ?? []) add(`${prefix}/${path}`, undefined, true);
     for (const file of archive.files) {
       if (file.encoding !== 'base64') fail('invalid archive file encoding');

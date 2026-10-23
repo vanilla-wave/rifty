@@ -236,6 +236,12 @@ and `payload/node_modules/`. `rifty/manifest.json` and `rifty/replay-cache/` are
 control data, never project files. SnapshotId hashes decoded tar; gzip delivery
 with or without HTTP Content-Encoding works. Legacy v3 JSON/gzip remains readable.
 
+Set `profile: 'compact'` for prepared environments that build installed dependencies
+without reinstalling. Compact v5 omits replay archives; the prepared payload stays
+intact. Default (or `profile: 'replay'`) retains v4 exact replay closure/SRI.
+Updated readers accept both; older readers reject compact before application.
+Compact adds no install ban, offline reinstall guarantee or registry fallback.
+
 For Brotli, pass `encoding: 'br'` to the same call and save `archive` as
 `dependencies.tar.br`. `contentEncoding` is `'br'` or `'gzip'`; omitted
 `encoding` keeps gzip. Both representations decode to identical TAR and

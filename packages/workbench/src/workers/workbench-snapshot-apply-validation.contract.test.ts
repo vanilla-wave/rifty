@@ -8,7 +8,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { produceDependencySnapshot } from '../glue/dep-snapshot-producer.ts';
 import { decodeDepSnapshotTar } from '../glue/dep-snapshot-tar.ts';
 import {
-  type DepSnapshotV3,
+  type DepSnapshot,
   parseDepSnapshot,
   serializeDepSnapshot,
   serializeDepSnapshotTar,
@@ -312,7 +312,7 @@ describe('I8 explicit snapshot apply validates the artifact before effects over 
                   index === 0 ? { ...file, path: `/${file.path}` } : file,
                 ),
               };
-      const payload = { ...valid.payload, nodeModules } as unknown as DepSnapshotV3;
+      const payload = { ...valid.payload, nodeModules } as unknown as DepSnapshot;
       const json = new TextEncoder().encode(serializeDepSnapshot(payload));
       const snapshotId = `sha256:${createHash('sha256').update(json).digest('hex')}`;
       const artifact: SavedSnapshotFixture = {

@@ -4,13 +4,13 @@ import { resolve } from 'node:path';
 import { withClientServer } from './client-bundle-browser-proof.mjs';
 
 /** Packed public producer/SDK and copied worker; headerless native OPFS throughout. */
-export async function provePackedNoCoiSnapshots(root) {
+export async function provePackedNoCoiSnapshots(root, profile = 'snapshot') {
   const entry = (await readdir(resolve(root, 'dist/assets'))).find((name) =>
     /^noCoiProject-.*\.js$/u.test(name),
   );
   assert(entry, 'missing packed SDK acceptance entry');
   const metadata = JSON.parse(
-    await readFile(resolve(root, 'dist/producer-vite-snapshot.json'), 'utf8'),
+    await readFile(resolve(root, `dist/producer-vite-${profile}.json`), 'utf8'),
   );
   const update = JSON.parse(
     await readFile(resolve(root, 'dist/producer-vite-update.json'), 'utf8'),
@@ -22,11 +22,11 @@ export async function provePackedNoCoiSnapshots(root) {
     context.on('request', (request) => {
       if (/npm-registry|registry\.npmjs|eddy/iu.test(request.url()))
         acquisition.push(request.url());
-      if (/producer-vite-(?:snapshot|update)\.tar\.gz/u.test(request.url()))
+      if (/producer-vite-(?:snapshot|update|compact)\.tar\.gz/u.test(request.url()))
         snapshots.push(request.url());
     });
     const descriptor = {
-      assetUrl: `${base}/dist/producer-vite-snapshot.tar.gz`,
+      assetUrl: `${base}/dist/producer-vite-${profile}.tar.gz`,
       snapshotId: metadata.snapshotId,
       templateId: metadata.templateId,
     };
@@ -40,7 +40,7 @@ export async function provePackedNoCoiSnapshots(root) {
         method,
         args,
       });
-    const boot = async (page, namespace = 'packed-sdk-project', fault = undefined) => {
+    const boot = async (page, namespace = `packed-sdk-${profile}`, fault = undefined) => {
       await page.goto(base);
       await page.evaluate((entry) => import(entry), `/dist/assets/${entry}`);
       assert.deepEqual(
@@ -58,7 +58,10 @@ export async function provePackedNoCoiSnapshots(root) {
       let page = await context.newPage();
       await boot(page);
       await invoke(page, 'seed');
+      await invoke(page, 'seedCache');
+      const cacheBefore = await invoke(page, 'cacheTree');
       await invoke(page, 'apply', descriptor);
+      if (profile === 'compact') assert.deepEqual(await invoke(page, 'cacheTree'), cacheBefore);
       let build = await invoke(page, 'build');
       assert.equal(build.exitCode, 0);
       assert.match(build.js, /packed-sdk-initial/u);
@@ -70,7 +73,10 @@ export async function provePackedNoCoiSnapshots(root) {
       );
       const dependency = `${await invoke(page, 'read', '/node_modules/vite/package.json')}\n `;
       await invoke(page, 'write', '/node_modules/vite/package.json', dependency);
+      if (profile === 'compact') assert.deepEqual(await invoke(page, 'cacheTree'), cacheBefore);
       await invoke(page, 'dispose');
+      await page.close();
+      page = await context.newPage();
       const acquired = snapshots.length;
       await boot(page);
       await invoke(page, 'open');
@@ -82,6 +88,8 @@ export async function provePackedNoCoiSnapshots(root) {
       await assert.rejects(invoke(page, 'apply', descriptor), /conflict/iu);
       assert.equal(await invoke(page, 'read', '/node_modules/vite/package.json'), dependency);
       await invoke(page, 'apply', descriptor, true);
+      assert.equal((await invoke(page, 'build')).exitCode, 0);
+      if (profile === 'compact') assert.deepEqual(await invoke(page, 'cacheTree'), cacheBefore);
       assert.notEqual(changed.snapshotId, descriptor.snapshotId);
       await assert.rejects(invoke(page, 'apply', changed), /conflict/iu);
       await invoke(page, 'apply', changed, true);
@@ -112,7 +120,7 @@ export async function provePackedNoCoiSnapshots(root) {
       await page.close();
 
       page = await context.newPage();
-      await boot(page, 'packed-sdk-interrupted', 'hold');
+      await boot(page, `packed-sdk-interrupted-${profile}`, 'hold');
       await invoke(page, 'seed');
       await invoke(page, 'beginApply', descriptor);
       await page.waitForFunction(() => globalThis.packedSdkProject.state().held, undefined, {
@@ -121,7 +129,7 @@ export async function provePackedNoCoiSnapshots(root) {
       assert.deepEqual(await invoke(page, 'state'), { held: true, applyState: 'pending' });
       await page.close();
       page = await context.newPage();
-      await boot(page, 'packed-sdk-interrupted');
+      await boot(page, `packed-sdk-interrupted-${profile}`);
       await invoke(page, 'open');
       const independent = await invoke(page, 'evaluate', "require('/project/local.cjs');void 0");
       assert.equal(independent.result.ok, true);
@@ -133,7 +141,7 @@ export async function provePackedNoCoiSnapshots(root) {
       await page.close();
 
       page = await context.newPage();
-      await boot(page, 'packed-sdk-quota', 'quota');
+      await boot(page, `packed-sdk-quota-${profile}`, 'quota');
       await invoke(page, 'seed');
       await assert.rejects(invoke(page, 'apply', descriptor), /persist|quota/iu);
       await invoke(page, 'open');
@@ -149,7 +157,7 @@ export async function provePackedNoCoiSnapshots(root) {
         'SDK snapshot/saved use attempted registry/Eddy acquisition',
       );
       console.log(
-        `Packed no-COI SDK: Chromium/${browser.version()}, real Vite 7.3.6 apply/build/edit/reopen/force/update/native interruption+quota; zero registry/Eddy requests`,
+        `Packed no-COI SDK: Chromium/${browser.version()}, ${profile}, real Vite 7.3.6 apply/build/edit/reopen/force/update/native interruption+quota; zero registry/Eddy requests`,
       );
     } finally {
       await context.close();

@@ -658,6 +658,7 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     timeoutMs: 120_000,
   });
   await provePackedNoCoiSnapshots(consumerRoot);
+  await provePackedNoCoiSnapshots(consumerRoot, 'compact');
   await provePackedNoCoiPiAgent(consumerRoot);
   await provePackedReferenceHost(consumerRoot, registry.origin);
   await run('node', ['prepare-orphan-payload.mjs'], {

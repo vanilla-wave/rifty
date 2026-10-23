@@ -18,7 +18,7 @@ import {
 import { produceDependencySnapshot } from '../glue/dep-snapshot-producer.ts';
 import { decodeDepSnapshotTar } from '../glue/dep-snapshot-tar.ts';
 import {
-  type DepSnapshotV3,
+  type DepSnapshot,
   buildDepSnapshot,
   parseDepSnapshot,
   prepareDepSnapshotForRuntimeTier,
@@ -47,7 +47,7 @@ let vite: SavedSnapshotFixture;
 let ms: SavedSnapshotFixture;
 
 function fixture(
-  payload: DepSnapshotV3,
+  payload: DepSnapshot,
   format: 'json' | 'tar',
   label: string,
 ): SavedSnapshotFixture {
@@ -155,7 +155,7 @@ function launch(root: string) {
   });
 }
 
-function expectPayload(fs: FsSync, root: string, payload: DepSnapshotV3): void {
+function expectPayload(fs: FsSync, root: string, payload: DepSnapshot): void {
   for (const [path, text] of [
     ['package.json', payload.packageJsonText],
     ['package-lock.json', payload.lockfile],
@@ -386,7 +386,7 @@ describe('snapshot application preserves prepared source authority', () => {
     const h = await openOwner(raw);
     const initial = definition(raw);
     await h.owner.createScratch({ definition: initial });
-    let prepared: DepSnapshotV3;
+    let prepared: DepSnapshot;
     try {
       const opened = await h.owner.openProject(initial);
       try {

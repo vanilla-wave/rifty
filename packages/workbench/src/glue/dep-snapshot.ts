@@ -7,7 +7,7 @@
  *
  * Snapshot v3 carries the exact package.json text, install-artifact identity,
  * and integrity-verified cache closure that produced the tree (ADR-0346).
- * V4 tar envelopes normalize to this restore model; legacy JSON remains readable.
+ * V4 tar envelopes normalize to v3; compact v5 omits replay archives explicitly.
  */
 import {
   TARBALL_CACHE_ROOT,
@@ -30,8 +30,7 @@ import {
   prepareWorkspaceArchiveImport,
 } from './workspace-archive.ts';
 
-export interface DepSnapshotV3 {
-  readonly version: 3;
+interface DepSnapshotPayload {
   readonly templateId: string;
   readonly packageJsonText: string;
   readonly installArtifactIdentity: string;
@@ -47,6 +46,13 @@ export interface DepSnapshotV3 {
   readonly nodeModules: WorkspaceArchiveV1;
 }
 
+/** Legacy replay model and explicitly incompatible compact format. */
+export type DepSnapshot = DepSnapshotPayload &
+  (
+    | { readonly version: 3; readonly profile?: never }
+    | { readonly version: 5; readonly profile: 'compact' }
+  );
+
 export interface PreparedDepSnapshotRestore {
   applyCache(): void;
   applyPayload(): void;
@@ -54,13 +60,14 @@ export interface PreparedDepSnapshotRestore {
 }
 
 export type VerifiedDepSnapshot =
-  | { readonly status: 'matched'; readonly snapshot: DepSnapshotV3 }
+  | { readonly status: 'matched'; readonly snapshot: DepSnapshot }
   | { readonly status: 'mismatch' };
 
 /** One byte-stable top-level order for bake and provenance tooling. */
-export function serializeDepSnapshot(snapshot: DepSnapshotV3): string {
+export function serializeDepSnapshot(snapshot: DepSnapshot): string {
   return JSON.stringify({
     version: snapshot.version,
+    ...(snapshot.version === 5 ? { profile: snapshot.profile } : {}),
     templateId: snapshot.templateId,
     deps: snapshot.deps,
     packages: snapshot.packages,
@@ -73,7 +80,7 @@ export function serializeDepSnapshot(snapshot: DepSnapshotV3): string {
 }
 
 /** Standard archive envelope (ADR-0386); gzip remains a transport choice. */
-export function serializeDepSnapshotTar(snapshot: DepSnapshotV3): Uint8Array {
+export function serializeDepSnapshotTar(snapshot: DepSnapshot): Uint8Array {
   return encodeDepSnapshotTar(validateDepSnapshot(snapshot));
 }
 
@@ -109,7 +116,7 @@ export function buildDepSnapshot(
     readonly deps: Record<string, string>;
     readonly packages: number;
   },
-): DepSnapshotV3 {
+): Extract<DepSnapshot, { readonly version: 3 }> {
   const packageJsonPath = joinPath(root, 'package.json');
   if (!fs.existsSync(packageJsonPath)) {
     throw new Error('Cannot build dep snapshot without package.json');
@@ -137,15 +144,18 @@ export function buildDepSnapshot(
   };
 }
 
-export function parseDepSnapshot(json: string): DepSnapshotV3 {
+export function parseDepSnapshot(json: string): DepSnapshot {
   return validateDepSnapshot(JSON.parse(json) as unknown);
 }
 
-function validateDepSnapshot(value: unknown): DepSnapshotV3 {
+function validateDepSnapshot(value: unknown): DepSnapshot {
   if (!isRecord(value)) throw new Error('Malformed dep snapshot: expected object');
   const parsed = value;
-  if (parsed.version !== 3) {
+  if (parsed.version !== 3 && parsed.version !== 5) {
     throw new Error(`Unsupported dep snapshot version ${parsed.version}`);
+  }
+  if (parsed.version === 5 ? parsed.profile !== 'compact' : parsed.profile !== undefined) {
+    throw new Error('Malformed dep snapshot profile');
   }
   if (
     typeof parsed.templateId !== 'string' ||
@@ -172,7 +182,7 @@ function validateDepSnapshot(value: unknown): DepSnapshotV3 {
   if (typeof parsed.lockfile !== 'string' || !parsed.tarballCache || !parsed.nodeModules) {
     throw new Error('Malformed dep snapshot: missing lockfile/tarballCache/nodeModules');
   }
-  return parsed as unknown as DepSnapshotV3;
+  return parsed as unknown as DepSnapshot;
 }
 
 /**
@@ -182,7 +192,7 @@ function validateDepSnapshot(value: unknown): DepSnapshotV3 {
 export async function restoreDepSnapshot(
   fs: WorkspaceArchiveFs,
   root: string,
-  snapshot: DepSnapshotV3,
+  snapshot: DepSnapshot,
   options?: { readonly runtimeTier?: ShadowRuntimeTier },
 ): Promise<void> {
   (await prepareDepSnapshotRestore(fs, root, snapshot, options)).apply();
@@ -192,7 +202,7 @@ export async function restoreDepSnapshot(
 export async function prepareDepSnapshotRestore(
   fs: WorkspaceArchiveFs,
   root: string,
-  source: DepSnapshotV3,
+  source: DepSnapshot,
   options: { readonly runtimeTier?: ShadowRuntimeTier } = {},
 ): Promise<PreparedDepSnapshotRestore> {
   const snapshot = await prepareDepSnapshotForRuntimeTier(source, options.runtimeTier);
@@ -203,22 +213,25 @@ export async function prepareDepSnapshotRestore(
     // project root (/scratch or /projects/<id>); re-root the relative tree.
     rebase: true,
   });
-  const tarballCache = prepareWorkspaceArchiveImport(fs, snapshot.tarballCache, {
-    root: TARBALL_CACHE_ROOT,
-    replace: false,
-  });
+  const tarballCache =
+    snapshot.version === 5
+      ? undefined
+      : prepareWorkspaceArchiveImport(fs, snapshot.tarballCache, {
+          root: TARBALL_CACHE_ROOT,
+          replace: false,
+        });
   const lockfile = snapshot.lockfile.length > 0 ? enc.encode(snapshot.lockfile) : null;
   const applyPayload = (): void => {
     nodeModules.apply();
     if (lockfile) fs.writeFileSync(joinPath(root, 'package-lock.json'), lockfile);
   };
   return {
-    applyCache: () => tarballCache.apply(),
+    applyCache: () => tarballCache?.apply(),
     applyPayload,
     apply() {
       // The global cache is shared across projects: merge this exact closure;
       // never replace unrelated warm entries. Publish the lockfile last.
-      tarballCache.apply();
+      tarballCache?.apply();
       applyPayload();
     },
   };
@@ -226,9 +239,9 @@ export async function prepareDepSnapshotRestore(
 
 /** Shared preflight for restore, explicit application and host admission. */
 export async function prepareDepSnapshotForRuntimeTier(
-  snapshot: DepSnapshotV3,
+  snapshot: DepSnapshot,
   runtimeTier?: ShadowRuntimeTier,
-): Promise<DepSnapshotV3> {
+): Promise<DepSnapshot> {
   await verifyDepSnapshotReplayCache(snapshot);
   return projectDependencySnapshotTier(snapshot, runtimeTier);
 }
@@ -303,8 +316,9 @@ function buildReplayCacheArchive(fs: WorkspaceArchiveFs, lockfile: string): Work
   return { version: 1, root: TARBALL_CACHE_ROOT, files };
 }
 
-/** Prove the portable cache is the exact integrity-pinned lockfile closure. */
-export async function verifyDepSnapshotReplayCache(snapshot: DepSnapshotV3): Promise<void> {
+/** Replay requires the exact SRI closure; compact validates the lock without archives. */
+export async function verifyDepSnapshotReplayCache(snapshot: DepSnapshot): Promise<void> {
+  validateDepSnapshot(snapshot);
   if (
     snapshot.tarballCache.version !== 1 ||
     snapshot.tarballCache.root !== TARBALL_CACHE_ROOT ||
@@ -313,6 +327,17 @@ export async function verifyDepSnapshotReplayCache(snapshot: DepSnapshotV3): Pro
     throw new Error('Malformed dep snapshot tarball cache archive');
   }
   const requirements = replayCacheRequirements(snapshot.lockfile);
+  if (snapshot.version === 5) {
+    if (
+      snapshot.tarballCache.files.length !== 0 ||
+      (snapshot.tarballCache.directories !== undefined &&
+        (!Array.isArray(snapshot.tarballCache.directories) ||
+          snapshot.tarballCache.directories.length !== 0))
+    ) {
+      throw new Error('Compact dep snapshot must not contain replay cache entries');
+    }
+    return;
+  }
   const files = new Map<string, string>();
   for (const file of snapshot.tarballCache.files) {
     if (
@@ -386,7 +411,7 @@ async function fetchDepSnapshotBytes(
   return decoded;
 }
 
-function parseFetchedDepSnapshot(url: string, bytes: Uint8Array): DepSnapshotV3 {
+function parseFetchedDepSnapshot(url: string, bytes: Uint8Array): DepSnapshot {
   try {
     const first = bytes.find((byte) => ![9, 10, 13, 32].includes(byte));
     return first === 123 || first === 0xef
@@ -418,6 +443,6 @@ export async function fetchVerifiedDepSnapshot(
   return { status: 'matched', snapshot: parseFetchedDepSnapshot(url, bytes) };
 }
 
-export async function fetchDepSnapshot(url: string): Promise<DepSnapshotV3> {
+export async function fetchDepSnapshot(url: string): Promise<DepSnapshot> {
   return parseFetchedDepSnapshot(url, await fetchDepSnapshotBytes(url));
 }
