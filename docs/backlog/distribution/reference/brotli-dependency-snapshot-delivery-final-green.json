@@ -1,0 +1,150 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS; goal acceptance proven. Merge after landing-verdict cleanup and green PR CI at final HEAD. Independently rerun producer/reader: 40/40 PASS; inspected executed Chromium, full packed-consumer and all-28 pr:check logs.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "a7c0aee1dab6361296f6e1fb64755599eeaf72f7",
+  "unit_goal_source": "docs/backlog/distribution/brotli-dependency-snapshot-delivery.md; BASE b68e5c782cc04ef6ad8716efd077050678c6d3c7; HEAD a7c0aee1dab6361296f6e1fb64755599eeaf72f7; PR #387. Original baseline scenario, ADR-0386/0387, raw PR body and original packed/browser criteria inspected (PR-4). Contract+RED at b185f741ef636dcd590b75551275785ab591ef94 precedes product code. Browser carrier relocation preserves assertions and the 120s bound; both browser-unit and packed journeys are required CI lanes.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Acceptance 1: optional gzip/br selection, gzip default, contentEncoding and invalid encoding rejection",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:117",
+      "note": "Independent execution: producer 13/13; unknown encoding rejects before registry acquisition at line 131."
+    },
+    {
+      "row": "Acceptance 2: native-decodable identical TAR/identities, deterministic repeated Brotli, retained pins/replay",
+      "source": "acceptance",
+      "trace": "ADR-0386",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:117",
+      "note": "Native brotliDecompressSync/gunzipSync compare real ms output; independent retained dep-snapshot suite 27/27, including replay closure."
+    },
+    {
+      "row": "Acceptance 3: Node/Chromium root producer, no caller codec/recompression, installed dependency assets",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/brotli-snapshot-delivery.spec.ts:89",
+      "note": "Chromium source-root carrier PASS in /tmp/rifty-brotli-browser.log; installed tarball root producer passes in tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:45 and /tmp/rifty-brotli-packed.log. Lazy import resolves the pinned inline-WASM ESM entry."
+    },
+    {
+      "row": "Acceptance 4: packed caller-locked Vite over HTTP Brotli builds/runs with HMR/saved-state; gzip alternative",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:62",
+      "note": "Complete installed-package journey PASS (376.94s); retained build/dev/HMR/saved-state assertions at tests/integration/workbench-packed-consumer.mjs:962. HTTP gzip remains matched at tests/browser-unit/brotli-snapshot-delivery.spec.ts:158; packed gzip restore assertions remain at tests/integration/workbench-packed-consumer.mjs:875."
+    },
+    {
+      "row": "Acceptance 5: encoding choice, representation headers, negotiation/cache responsibilities and unsupported raw Brotli",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/README.md:239",
+      "note": "Manual documentation check against declared scope: quality/exclusion-aware negotiation delegated to host, Vary and variant ETags documented, raw .tar.br distinguished from HTTP-decoded TAR."
+    },
+    {
+      "row": "Parity 1: real ms tarball, native gzip/Brotli decoding, stable identities and repeated bytes",
+      "source": "acceptance",
+      "trace": "ADR-0386",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:117",
+      "note": "Independently executed, PASS."
+    },
+    {
+      "row": "Parity 2: Chromium public producer and real loopback HTTP reader, native decoder oracle",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/brotli-snapshot-delivery.spec.ts:89",
+      "note": "Executed browser-unit log PASS; checks actual compressed bytes with Node native decoder and actual Chromium HTTP decoding."
+    },
+    {
+      "row": "Fault 1: invalid encoding, absent pins and corrupt registry tarball refuse archive",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:131",
+      "note": "Independent producer run PASS, including Brotli pin/integrity refusal at line 137."
+    },
+    {
+      "row": "Fault 2: corrupt/truncated HTTP rejects; wrong decoded identity and undecoded Brotli mismatch",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/brotli-snapshot-delivery.spec.ts:110",
+      "note": "Executed Chromium carrier checks real corrupt/truncated responses and identity mismatch; no loader/codec sibling mocked."
+    },
+    {
+      "row": "Fault 3: encoded Content-Length and decoded body 128 MiB bounds; retained stall bounds",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/brotli-snapshot-delivery.spec.ts:122",
+      "note": "Real HTTP oversized representations reject with exceed errors; independently rerun stall deadline at packages/workbench/src/glue/dep-snapshot.test.ts:732."
+    },
+    {
+      "row": "Fault 4: refused native WASM and HTTP 503 reject visibly, never substitute gzip",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/brotli-snapshot-delivery.spec.ts:166",
+      "note": "Executed Chromium carrier injects only native WebAssembly boundary failure; 503 checked at line 165."
+    },
+    {
+      "row": "Public API: ProduceDependencySnapshotOptions.encoding and ProducedDependencySnapshot.contentEncoding",
+      "source": "public-api",
+      "trace": "scenario + ADR-0546",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:117",
+      "note": "Root API exercised in Node/Chromium and installed-package producer; runtime invalid input at line 131. Existing gzip compression path and all pre-compression validation retained."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
