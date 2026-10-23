@@ -5,7 +5,7 @@ title: Can a baked snapshot satisfy zero-read replay without shipping the same p
 created: 2026-08-31
 why: Snapshot replay retains both source tarballs and installed bytes; the independent saving from deduplicating the selected tar.gz representation remains unmeasured, so this question stays unscheduled.
 user_story: As a browser-IDE user opening an instant template, I want a smaller download with exact offline replay, but the benefit of deduplicating the standard tar.gz beyond its container savings is not yet measured.
-sources: [PR-289, docs/adr/playground/0346-baked-dependency-snapshots-carry-replay-tarball-cache.md, docs/adr/npm-client/0371-registry-twins-carry-substituted-runtime-bytes-in-the-installed-tree.md, docs/backlog/playground/baked-snapshot-regeneration.md]
+sources: [PR-289, docs/adr/playground/0346-baked-dependency-snapshots-carry-replay-tarball-cache.md, docs/adr/npm-client/0371-registry-twins-carry-substituted-runtime-bytes-in-the-installed-tree.md, docs/backlog/playground/baked-snapshot-regeneration.md, docs/backlog/playground/reference/replay-cache-profile-refine-2026-10-23.md]
 code:
   - packages/workbench/src/glue/dep-snapshot.ts
   - apps/playground/tools/bake-dep-snapshots.ts
@@ -13,7 +13,7 @@ code:
 
 ## Question
 
-A snapshot must restore an exact tree AND let the next `npm install` replay
+A replay-capable snapshot must restore an exact tree AND let the next `npm install` replay
 with zero registry reads (ADR-0346). Today it buys the second guarantee by
 shipping the package's tarball beside the very files that tarball unpacks to,
 and the legacy JSON baseline below stores both as base64. The selected standard
@@ -34,6 +34,26 @@ before removing either representation.
 Before implementation pickup, measure deduplication against the delivered
 standard tar.gz baseline. Old JSON numbers below do not establish that future
 saving or its priority. No download-size promise is attached to this draft.
+
+## Cache-free profile proposal (2026-10-23 refine)
+
+New user input describes prepared dependencies with no offered reinstall:
+restore, build using installed esbuild, reopen saved files, reset from the same
+snapshot. It proposes an explicit profile without replay acquisitions, retaining
+ordinary snapshot integrity and replay. This changes the offered capability;
+it is not an answer to this draft's replay-preserving question. Selected
+no-replay work lives in `epics/compact-dependency-snapshots/goal.md`.
+
+Current tar encoder over committed trees: removing cache entries saves
+3,745,601 B (Vite), 3,813,015 B (Vite 8), 3,746,182 B (TypeScript) after gzip.
+These stripped artifacts are invalid under the current contract. Executed
+baseline: three missing/corrupt-cache tests reject before mutation. Commands,
+versions, limits, sources and independent premise check:
+`playground/reference/replay-cache-profile-refine-2026-10-23.md`.
+
+Round 1 selected no-COI SDK; savings on other paths are welcome, not a required
+expansion to every consumer. The editor does not invoke install; no new install
+ban is wanted. The earlier replay-preserving question remains open, unscheduled.
 
 ## Context
 
@@ -110,6 +130,9 @@ REVERSIBLE — snapshot format, bake script, and restore path each change
 independently; no public API and no ADR is contradicted by asking.
 
 ## Decisions
+
+- 2026-10-23 — re-cut: selected no-replay scope goes to `epics/compact-dependency-snapshots/goal.md`; this draft retains replay-preserving deduplication — trace: none.
+- 2026-10-23 — user: «1, но если убирается и в других местах - ок»; «Редактор не вызывает установку; отдельный запрет не нужен (рекомендую)» — no-COI SDK, no new install ban; evidence: `playground/reference/replay-cache-profile-refine-2026-10-23.md`.
 
 - 2026-09-07 — challenge response: removed assigned encoding savings from why/user_story; independent tar.gz dedup value awaits measurement after producer delivery, so this draft remains unscheduled.
 
