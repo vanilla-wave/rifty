@@ -55,3 +55,9 @@ Replay-preserving deduplication remains a separate draft.
 
 `pnpm pr:check` PASS: all 28 gates, related tests and full selected parity lane.
 `pnpm docs:check` PASS after recording this evidence/map.
+
+Independent Final+GREEN/CLOSE PASS at 5d1e38a0b88cab0b20b294ba878598cda175eaf9:
+253 extracted payload files identical; BASE tar reader rejects v5; unknown,
+missing and legacy profile markers and a compact replay namespace reject.
+Landing verdict: `distribution/reference/compact-dependency-snapshots-final-green.json`.
+All I1–I3 proven; no required residuals. Completed goal/unit removed at CLOSE.

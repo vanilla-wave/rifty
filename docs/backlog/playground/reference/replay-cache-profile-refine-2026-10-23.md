@@ -21,7 +21,7 @@ mixed-version rollout promise was selected.
 
 Match: `playground/snapshot-carries-substituted-bytes-twice.md`; its existing
 question preserves offline shadow replay. Intake was recorded there; the
-settled no-replay scope is `epics/compact-dependency-snapshots/goal.md`.
+settled no-replay scope is delivered by ADR-0547 (proof: `distribution/reference/compact-dependency-snapshots-evidence.md`).
 The earlier replay-preserving question remains independent and unscheduled.
 Scanned backlog titles/content/maps, code refs, `docs/process/traps.md` and
 `docs/adr/README.md` Declined concepts: no other matching profile or declined
