@@ -1,6 +1,7 @@
 # Compact dependency snapshots — acceptance evidence
 
-BASE f37bfc517613d0e3618519ccbeeb3ed15fd5cc39; PR #388; ADR-0547.
+Preparation BASE f37bfc517613d0e3618519ccbeeb3ed15fd5cc39; PR #388; ADR-0547.
+Delivery BASE 8874e47d65cda8c41e06c84173084e8fbf176e60 (landed Brotli).
 Node v24.16.0, Chromium 148.0.7778.96, real npm Vite 7.3.6.
 
 ## Preparation
@@ -18,7 +19,7 @@ Node v24.16.0, Chromium 148.0.7778.96, real npm Vite 7.3.6.
 ## Executed acceptance
 
 `node tests/integration/workbench-packed-consumer.mjs --keep` PASS:
-16 first-party + 178 external tarballs; packed strict TypeScript/build;
+16 first-party + 180 external tarballs; packed strict TypeScript/build;
 full Chromium journey and benchmark reference host.
 
 Same caller manifest/lock, public producer, exact extracted payload equality:
@@ -43,7 +44,7 @@ Focused unit command: `pnpm exec vitest run
 packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts
 packages/workbench/src/glue/dep-snapshot-producer.test.ts
 packages/workbench/src/glue/dep-snapshot.test.ts
-packages/workbench/src/glue/dep-snapshot-tar.test.ts` — 69 PASS. Compact performs
+packages/workbench/src/glue/dep-snapshot-tar.test.ts` — 73 PASS. Compact performs
 zero cache mkdir/write/flush; corrupt profile/cache/lock/path/identity rejects
 before FS/flush. Ordinary replay closure/SRI and legacy codec remain covered.
 
@@ -61,3 +62,10 @@ Independent Final+GREEN/CLOSE PASS at 5d1e38a0b88cab0b20b294ba878598cda175eaf9:
 missing and legacy profile markers and a compact replay namespace reject.
 Landing verdict: `distribution/reference/compact-dependency-snapshots-final-green.json`.
 All I1–I3 proven; no required residuals. Completed goal/unit removed at CLOSE.
+
+Verify-pass PASS at 8a993dd5108a73cf72d5e910d6bd9aea6083db24 after merging
+landed Brotli: 73 focused tests, all 28 `pr:check` gates and full packed
+acceptance PASS. Compact+Brotli native decompression equals compact gzip's
+decoded v5 TAR and snapshot identity. Same gzip sizes above reproduced.
+The separate worker-retirement CI finding remains undiagnosed:
+`kernel/workbench-vite-worker-retirement-ci.md`; no runtime/assertion change.

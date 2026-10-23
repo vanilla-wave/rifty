@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Final+GREEN / CLOSE PASS: I1–I3 доказаны; после cleanup и landing binding merge только на зелёном CI текущего HEAD.",
+  "merge_call": "Final+GREEN / CLOSE verify-pass PASS: compact I1–I3 и compact+Brotli доказаны. Merge только на зелёном CI текущего HEAD; worker-retirement не объявлен починенным.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "5d1e38a0b88cab0b20b294ba878598cda175eaf9",
-  "unit_goal_source": "PR #388; compact-dependency-snapshots; BASE f37bfc517613d0e3618519ccbeeb3ed15fd5cc39",
+  "reviewed_sha": "8a993dd5108a73cf72d5e910d6bd9aea6083db24",
+  "unit_goal_source": "PR #388; compact-dependency-snapshots; BASE 8874e47d65cda8c41e06c84173084e8fbf176e60; verify-pass of 5d1e38a0b88cab0b20b294ba878598cda175eaf9 after landed Brotli integration",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -13,7 +13,7 @@
       "source": "acceptance",
       "trace": "I1",
       "status": "pass",
-      "citation": "tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:66; /tmp/compact-packed-green.log; /tmp/compact-review-probe.mjs:23",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:87; /tmp/compact-merged-packed.log; /tmp/compact-review-probe.mjs:23",
       "note": ""
     },
     {
@@ -21,7 +21,7 @@
       "source": "acceptance",
       "trace": "I2",
       "status": "pass",
-      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:57; packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:58; /tmp/compact-packed-green.log",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:57; packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:58; /tmp/compact-merged-packed.log",
       "note": ""
     },
     {
@@ -29,7 +29,7 @@
       "source": "acceptance",
       "trace": "I3",
       "status": "pass",
-      "citation": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:26; packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:86; packages/workbench/src/glue/dep-snapshot-tar.ts:216; /tmp/compact-green-unit.log",
+      "citation": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:26; packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:86; packages/workbench/src/glue/dep-snapshot-tar.ts:216; /tmp/compact-merge-unit.log",
       "note": ""
     },
     {
@@ -37,7 +37,7 @@
       "source": "acceptance",
       "trace": "I3",
       "status": "pass",
-      "citation": "packages/workbench/src/glue/dep-snapshot.test.ts:362; packages/workbench/src/glue/dep-snapshot-tar.test.ts:82; /tmp/compact-green-unit.log; /tmp/compact-review-probe.mjs:23",
+      "citation": "packages/workbench/src/glue/dep-snapshot.test.ts:362; packages/workbench/src/glue/dep-snapshot-tar.test.ts:82; /tmp/compact-merge-unit.log; /tmp/compact-review-probe.mjs:23",
       "note": ""
     },
     {
@@ -45,7 +45,7 @@
       "source": "acceptance",
       "trace": "I3",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:331; tests/integration/no-coi-snapshot-browser-proof.mjs:77; /tmp/compact-pr-check.log; /tmp/compact-packed-green.log",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:331; tests/integration/no-coi-snapshot-browser-proof.mjs:77; /tmp/compact-merged-pr-check.log; /tmp/compact-merged-packed.log",
       "note": ""
     },
     {
@@ -61,7 +61,7 @@
       "source": "fault-matrix",
       "trace": "I3",
       "status": "pass",
-      "citation": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:86; packages/workbench/src/glue/dep-snapshot-tar.test.ts:82; /tmp/compact-green-unit.log; /tmp/compact-review-probe.mjs:32",
+      "citation": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:86; packages/workbench/src/glue/dep-snapshot-tar.test.ts:82; /tmp/compact-merge-unit.log; /tmp/compact-review-probe.mjs:32",
       "note": ""
     },
     {
@@ -69,7 +69,7 @@
       "source": "fault-matrix",
       "trace": "I3",
       "status": "pass",
-      "citation": "packages/workbench/src/glue/dep-snapshot.test.ts:362; packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:58; packages/workbench/src/glue/dep-snapshot-application.ts:66; /tmp/compact-green-unit.log",
+      "citation": "packages/workbench/src/glue/dep-snapshot.test.ts:362; packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:58; packages/workbench/src/glue/dep-snapshot-application.ts:66; /tmp/compact-merge-unit.log",
       "note": ""
     },
     {
@@ -77,7 +77,7 @@
       "source": "fault-matrix",
       "trace": "scenario",
       "status": "pass",
-      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:123; /tmp/compact-packed-green.log",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:123; /tmp/compact-merged-packed.log",
       "note": ""
     },
     {
@@ -85,7 +85,15 @@
       "source": "public-api",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:115; tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:36; packages/workbench/src/glue/dep-snapshot-producer.ts:132; /tmp/compact-green-unit.log",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:135; tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:37; packages/workbench/src/glue/dep-snapshot-producer.ts:138; /tmp/compact-merge-unit.log",
+      "note": ""
+    },
+    {
+      "row": "Compact profile composes with landed Brotli encoding: native-decompressed bytes and snapshotId equal compact gzip; explicit v5 and no replay cache retained",
+      "source": "public-api",
+      "trace": "I1 + I3 + ADR-0546 + ADR-0547",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:118; packages/workbench/src/glue/dep-snapshot-producer.ts:179; /tmp/compact-merge-unit.log; /tmp/compact-merged-packed.log",
       "note": ""
     }
   ],
