@@ -57,6 +57,7 @@ function fixture(
       : serializeDepSnapshotTar(payload);
   const snapshotId = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
   return {
+    contentEncoding: 'gzip',
     archive: new Uint8Array(gzipSync(bytes)),
     snapshotId,
     installArtifactIdentity: payload.installArtifactIdentity,

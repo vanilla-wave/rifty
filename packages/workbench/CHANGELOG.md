@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+- Add optional Brotli dependency snapshot production with lazy browser-compatible WASM, explicit contentEncoding, unchanged TAR identities and gzip default (ADR-0546).
+
 - Reuse predicates accept the selected runtime tier; virtual-ancestor Stats keep metadata readable while directory listings reject mount collisions.
 
 - Physical COI owner selects stock esbuild for install/snapshot/claims and Node bootstrap. No-COI retains its explicit legacy policy. Snapshot mismatch discriminators and restore failure phases remain stable across tier projection.

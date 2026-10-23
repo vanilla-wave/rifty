@@ -42,6 +42,7 @@ const EXPECTED_EXTERNAL_PACKAGES = [
   '@riftydev/shell',
   '@riftydev/ts-language-service',
   '@riftydev/vfs',
+  'brotli-compress', // ADR-0546: lazy host-side snapshot encoder.
   'semver',
 ] as const;
 

@@ -59,6 +59,14 @@ export async function openSnapshotOnlyAcceptance(
   const response = await fetch('/producer-vite-snapshot.json');
   if (!response.ok) throw new Error(`Vite producer metadata HTTP ${response.status}`);
   const snapshot = (await response.json()) as Snapshot;
+  const delivered = await fetch('/producer-vite-snapshot.tar');
+  if (
+    delivered.headers.get('Content-Encoding') !== 'br' ||
+    delivered.headers.get('Vary') !== 'Accept-Encoding'
+  )
+    throw new Error('Vite snapshot proof requires negotiated HTTP Brotli');
+  await delivered.arrayBuffer();
+
   const unavailable = await openPlaygroundWorkbench(strict);
   try {
     const missing = unavailable.playground.define({
@@ -120,7 +128,7 @@ if (import.meta.hot) import.meta.hot.accept('./message.ts', (module) => { if (mo
       snapshot: {
         snapshotId: snapshot.snapshotId,
         templateId: snapshot.templateId,
-        assetUrl: new URL('/producer-vite-snapshot.tar.gz', location.href).href,
+        assetUrl: new URL('/producer-vite-snapshot.tar', location.href).href,
       },
     },
   });
