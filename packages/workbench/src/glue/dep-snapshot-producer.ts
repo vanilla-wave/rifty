@@ -171,7 +171,7 @@ export async function produceDependencySnapshot(
     throw new Error(`Dependency snapshot exceeds ${DEFAULT_ASSET_MAX_BYTES} decoded bytes`);
   const archive =
     contentEncoding === 'br'
-      ? await (await import('brotli-compress')).compress(tar, { quality: 6 })
+      ? await (await import('brotli-compress')).compress(tar, { quality: 11 })
       : await drainByteStreamBounded(
           new Blob([tar]).stream().pipeThrough(new CompressionStream('gzip')),
           { label: 'dependency snapshot compression', maxBytes: DEFAULT_ASSET_MAX_BYTES },

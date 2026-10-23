@@ -655,7 +655,8 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
   });
   await run('node', ['produce-vite-snapshot.mjs', registry.origin], {
     cwd: consumerRoot,
-    timeoutMs: 120_000,
+    // Quality 11 spends ~40s on Vite encoding alone; leave headroom for slower CI.
+    timeoutMs: 300_000,
   });
   await provePackedNoCoiSnapshots(consumerRoot);
   await provePackedNoCoiPiAgent(consumerRoot);

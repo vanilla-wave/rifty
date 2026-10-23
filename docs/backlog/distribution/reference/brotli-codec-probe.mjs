@@ -29,7 +29,7 @@ try {
     ),
   );
   const started = performance.now();
-  const br = await compress(tar, { quality: 6 });
+  const br = await compress(tar, { quality: 11 });
   const encodeMs = Math.round(performance.now() - started);
   assert.deepEqual(brotliDecompressSync(br), Buffer.from(tar));
   console.log(

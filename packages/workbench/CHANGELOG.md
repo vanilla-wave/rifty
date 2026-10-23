@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+- Use Brotli quality 11 for smaller dependency snapshot downloads; document production CPU cost (ADR-0546).
+
 - Add optional Brotli dependency snapshot production with lazy browser-compatible WASM, explicit contentEncoding, unchanged TAR identities and gzip default (ADR-0546).
 
 - Reuse predicates accept the selected runtime tier; virtual-ancestor Stats keep metadata readable while directory listings reject mount collisions.

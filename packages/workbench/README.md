@@ -241,8 +241,10 @@ For Brotli, pass `encoding: 'br'` to the same call and save `archive` as
 `encoding` keeps gzip. Both representations decode to identical TAR and
 snapshotId. The producer works in Node and Chromium; Brotli lazily loads its
 bundled WASM encoder (about 1.36 MB JS), with no codec/asset supplied by the
-caller. Encoding consumes CPU synchronously inside the async call; use a Worker
-if production must not block a browser UI. Codec/registry failures reject.
+caller. Quality 11 encoding measured about 1.5 s/MB of TAR in Node on the Vite
+fixture (host-dependent). It consumes CPU synchronously inside the async call
+and blocks a browser UI; run browser production in a Worker. Codec/registry
+failures reject.
 
 Host Brotli as an **HTTP representation of TAR**, not an undecoded download:
 
