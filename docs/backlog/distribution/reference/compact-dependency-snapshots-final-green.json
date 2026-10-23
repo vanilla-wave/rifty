@@ -1,0 +1,134 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN / CLOSE PASS: I1–I3 доказаны; после cleanup и landing binding merge только на зелёном CI текущего HEAD.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "5d1e38a0b88cab0b20b294ba878598cda175eaf9",
+  "unit_goal_source": "PR #388; compact-dependency-snapshots; BASE f37bfc517613d0e3618519ccbeeb3ed15fd5cc39",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Acceptance 1: same-input public compact v5 preserves prepared payload, omits replay namespace and reduces gzip",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:66; /tmp/compact-packed-green.log; /tmp/compact-review-probe.mjs:23",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: compact SDK apply/read/edit/build, closed-page OPFS reopen/build and conflict/force reapply/build without acquisition or cache writes; shared entries survive",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:57; packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:58; /tmp/compact-packed-green.log",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: explicit compact JSON/tar admission preserves profile, identity, lock and path rejection before effects",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:26; packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:86; packages/workbench/src/glue/dep-snapshot-tar.ts:216; /tmp/compact-green-unit.log",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: ordinary exact replay closure/SRI and legacy container behavior retained",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot.test.ts:362; packages/workbench/src/glue/dep-snapshot-tar.test.ts:82; /tmp/compact-green-unit.log; /tmp/compact-review-probe.mjs:23",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: legacy saved projects retain behavior",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:331; tests/integration/no-coi-snapshot-browser-proof.mjs:77; /tmp/compact-pr-check.log; /tmp/compact-packed-green.log",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: unsupported readers reject compact before application",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:58; /tmp/compact-red.log; packages/workbench/src/glue/dep-snapshot-tar.ts:226 at BASE f37bfc517613d0e3618519ccbeeb3ed15fd5cc39; /tmp/compact-review-probe.mjs:24",
+      "note": ""
+    },
+    {
+      "row": "Corrupt profile/lock/payload rejects before FS/flush",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:86; packages/workbench/src/glue/dep-snapshot-tar.test.ts:82; /tmp/compact-green-unit.log; /tmp/compact-review-probe.mjs:32",
+      "note": ""
+    },
+    {
+      "row": "Poisoned ordinary cache retains exact closure/SRI rejection; compact neither imports nor flushes replay cache",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot.test.ts:362; packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:58; packages/workbench/src/glue/dep-snapshot-application.ts:66; /tmp/compact-green-unit.log",
+      "note": ""
+    },
+    {
+      "row": "Native interruption/quota retains loud failure and independently usable saved files",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:123; /tmp/compact-packed-green.log",
+      "note": ""
+    },
+    {
+      "row": "Public optional replay/compact producer profile defaults to replay and rejects unknown values before acquisition",
+      "source": "public-api",
+      "trace": "ADR-0547",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:115; tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:36; packages/workbench/src/glue/dep-snapshot-producer.ts:132; /tmp/compact-green-unit.log",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

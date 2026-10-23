@@ -2,9 +2,7 @@
 
 ## Items
 
-1. `distribution/compact-snapshot-acceptance` — public compact producer and
-   no-COI SDK acceptance; Contract+RED passed, full packed GREEN executed;
-   awaiting Final+GREEN/CLOSE. Evidence: `distribution/reference/compact-dependency-snapshots-evidence.md`.
+Empty. Final+GREEN/CLOSE PASS; all invariants proven.
 
 ## Open questions
 
