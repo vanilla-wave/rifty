@@ -1,0 +1,72 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Documentation-only Final+GREEN has no blockers, with one evidence-reproducibility concern. Keep PR #390 draft; this verdict does not authorize merging as a runtime fix or releasing v0.11.0.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "10aad2a44ae88e5010e98cdbd0537fc3f9336185",
+  "unit_goal_source": "PR #390 https://github.com/vanilla-wave/rifty/pull/390; observed baseline 132137bca4a0a706b1a082aa7e63521eaeca4602; documentation-only investigation record docs/backlog/kernel/workbench-vite-worker-retirement-ci.md:61-132, under rifty-fix step 1. Authority: user-authorized CI diagnosis/fix then v0.11 release; this review covers the factual residual record only, not runtime completion or release.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "Diagnose and fix the retained-Worker CI failure.",
+      "location": "docs/backlog/kernel/workbench-vite-worker-retirement-ci.md:129",
+      "summary": "Runtime repair remains required. The zero-Worker assertion still reproduces; distinguish native thread retention from inspector bookkeeping, then establish a discriminating regression and root repair. The proposed native token/thread instrumentation has not been prepared or executed."
+    },
+    {
+      "clause": "Complete the authorized v0.11 release after the CI repair.",
+      "location": "docs/backlog/kernel/workbench-vite-worker-retirement-ci.md:130",
+      "summary": "Release remains incomplete and uncleared. The saved docs-only pr:check 21/21 and build:libs success do not prove runtime acceptance or green release CI; required repair, acceptance proof and final-HEAD green CI remain outstanding."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/kernel/workbench-vite-worker-retirement-ci.md:88",
+          "summary": "The tuple decoder makes the saved output interpretable, but the record does not reference the removed SAB/ring instrumentation source. Preserve that probe patch with the raw evidence for reproducibility; output alone cannot independently verify the exact placement of events around native terminate(). This is advisory for the documentation unit, not a demand for a product fix or native probe now.",
+          "authority": "",
+          "evidence": "Read /tmp/rifty-workbench-sab-probe.log:184-195 and /tmp/rifty-workbench-rings-probe.log:240-251,358-369: Workers 1/7 have events 2/3, with ring state 0/0. packages/kernel/src/ipc/sab-ring.ts:8-10 confirms indices 1/2. The cited logs contain tuples; the retained /tmp/rifty-workbench-passive-probe.patch contains only passive test instrumentation, not the SAB/ring event producer."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
