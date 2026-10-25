@@ -38,6 +38,18 @@ exits 0; the file contains `[FETCH-REDIRECT] Warning: redirect-proof`.
 
 REGRESSION TRAP — `getBuiltinModule`: `net/src/sqlite/engine.ts:48` + `engine-shimmed-process.test.ts` use its ABSENCE as the "not a real Node realm" signal; adding it breaks sqlite init. MUST refactor detection (e.g. `versions.rifty` marker) + update the pin FIRST, regression test first.
 
+2026-10-25 — salvaged from PR #158 (`plain-esm-inline-source-map-fidelity`,
+not kept as its own item): Node 24.16.0 applies inline maps only with
+`--enable-source-maps`/`setSourceMapsEnabled(true)` — a generated `.mjs`/`.cjs`
+frame becomes `(<dir>/orig/src.ts:10:5)`, `sourceRoot` honoured; flag off it
+stays the generated file, as rifty does. So the residual is enabled mode, owned
+here: when it lands, scan plain JS/CJS inline maps (today only
+`transformSource` output, `loader.ts:452-455`), keep `sources`/`sourceRoot`
+(dropped: `source-maps.ts:28-31`) and swap the frame id (kept:
+`source-maps.ts:249`). Today `--enable-source-maps` throws
+`NotImplementedError` (unknown-option path, `node-startup-options.ts:43-47`);
+`process.setSourceMapsEnabled` is absent (`TypeError` on call).
+
 EXCLUDE `import.meta.resolve` — owned by `runtime-js/import-meta-resolve-node-results` (Node's absent-file URL, non-`file:` parent errors) and ADR-0449 (parent argument). `file://` import is shipped and covered in `tests/conformance/modules/resolver.test.ts`.
 
 ## Options or Next
