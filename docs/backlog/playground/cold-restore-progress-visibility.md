@@ -16,7 +16,7 @@ streamed a grey `restoring project dependencies…` line; e2e pinned it. #167
 removed the only prod wiring and flipped the assert; no CHANGELOG/backlog
 record. This item is that record.
 
-Main today: `transition()` (adapters/playground-app.tsx:629) brackets starter
+Main today: `transition()` (adapters/playground-app.tsx:630) brackets starter
 and project switches with `projectBusy` + `withProjectOpenProgress` (#323), so
 deep-link/launcher restores show the SWITCHING pill / launcher progress.
 `initialize()` reopens the persisted active plan via `runtime.openActive(plan)`
@@ -45,6 +45,9 @@ challenge: 2026-08-29 — 3 problems
 no-query `openActive` reopen. 2026-10-26: eviction trigger unreachable on the
 replica store; the reachable trigger is an interrupted first restore — a slow
 network makes it likely, which is the scenario's premise.)
+
+challenge: 2026-10-26 — 1 problem (Contract+RED reviewer, reconsidered for the changed trigger)
+1. Narrower than eviction: once per project, frequency unmeasured; value still follows from the user's path-generic decision (it names «stamp-evicted reload with surviving catalog» = this state); no cheaper route than bracketing `openActive` like `transition()`.
 
 ## User scenario
 
@@ -107,10 +110,13 @@ None — own-product UI visibility; no Node oracle.
 
 ## Decisions
 
-- refine 2026-08-29 (user): contract = visibility, not a pinned line — every path where a snapshot restore runs >250ms shows visible progress; carrier per path agent-owned; publish-after-restore stands.
+ready-verdict: 2026-10-26 — Contract+RED @ 307a2c76a
+
+- refine 2026-08-29 (user-owned, verbatim): contract = **visibility, not a pinned line** — every path where a snapshot restore actually runs >250ms shows visible progress, including the residual paths (stamp-evicted reload with surviving catalog; closed-launcher deep-link into unstamped starter). Carrier per path is agent-owned (launcher spinner where open; terminal boot line or equivalent where not). Publish-after-restore stands — no re-open of the sealed-companion decision.
 - refine 2026-08-29 (user): declined — pinning the grey terminal line; accepting the loss with a record only.
 - On restore failure the indicator yields to the existing error surface; no new fault machinery.
-- `beforeRun` → delete: reviving it would stream into terminal command output, contradicting the declined pin.
+- `beforeRun` → delete: reviving it would stream into terminal command output, contradicting the declined pin; cost: its ~10 non-gate pty-server/preview-binding tests move to a test-local gated Shell (Contract+RED concern, accepted).
+- Packaging: visibility fix, pin and dead-wiring removal ride one PR (driver's packaging per the hand-off, PR-5); removal stays a REV-7 note row.
 - Fault seam is server-side (cookie, dev-only): SW-mediated fetch; blocking the SW kills boot.
 - Contract+RED @ b953b3011 (2026-08-30, 5 attempts, pre-JSON format) certified the eviction carrier; superseded by the re-cut below.
 - re-cut: 2026-10-26 — Acceptance 2 trigger: OPFS `node_modules` eviction → interrupted first materialization (replica store makes per-file eviction unreachable; whole-origin loss → launcher); persisted-tree sentinel → replica plan+claim check (no reachable state holds user files without an install claim); paths re-anchored to main; long history moved to git/PR body; user's visibility decision unchanged — trace: none
