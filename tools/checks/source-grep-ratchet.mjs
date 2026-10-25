@@ -23,7 +23,8 @@
  * playground-testable-core); new evasion variants get added here when seen.
  *
  * Scope = the Playground + extracted Workbench test surfaces and the
- * `tests/browser-unit` lane (`*.spec.ts` — a grep there would bypass the gate).
+ * `tests/browser-unit` + `tests/e2e` lanes (`*.spec.ts` — a grep there would
+ * bypass the gate).
  * Other packages' pre-existing greps are inventoried but NOT yet ratcheted —
  * TODO(backlog: toolchain-build/source-grep-ratchet-repo-wide).
  */
@@ -39,12 +40,6 @@ import { fileURLToPath } from 'node:url';
  *  epic close every entry is gone or carries a `why` (the recorded
  *  why-behavioral-is-impossible constraint). */
 export const ALLOWLIST = [
-  {
-    file: 'tests/e2e/restore-progress-visibility.spec.ts',
-    count: 3,
-    digest: '88b90289bb0d',
-    why: 'committed pre-implementation RED for declared dead-machinery removal (backlog: playground/cold-restore-progress-visibility Acceptance 3): the obligation IS source removal — an erased interface property has no runtime surface in the real-owner lanes, and a behavioral harness would have to stub sibling workbench modules (forbidden mock); expected-RED cannot live in pr:check lanes. The implementing PR deletes this entry with the machinery.',
-  },
   {
     file: 'apps/playground/src/App.test.ts',
     count: 39,

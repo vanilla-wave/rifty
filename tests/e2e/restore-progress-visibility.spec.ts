@@ -25,8 +25,6 @@
  *   entry exists without an install claim) and reads durable state from the
  *   native replica, never live owner caches.
  */
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { type BrowserContext, type Page, type Request, expect, test } from '@playwright/test';
 import type * as NativeObserver from '../browser-unit/fixtures/native-replica-observer.ts';
 
@@ -177,6 +175,10 @@ function assertVisibleWindow(data: SamplerData, gz: { start: number; end: number
   ).toBeLessThanOrEqual(start);
   const publishAt = data.samples.find((s) => s.postPublish)?.w;
   expect(publishAt, 'project must publish after restore').toBeDefined();
+  expect(
+    publishAt as number,
+    'publication cannot precede the restore response (window covers the whole stall)',
+  ).toBeGreaterThanOrEqual(responseEnd);
   const inWindow = data.samples.filter((s) => s.w >= start && s.w < (publishAt as number));
   expect(inWindow.length, 'sampler must cover the window').toBeGreaterThan(5);
   const silent = inWindow.filter((s) => !s.visible);
@@ -202,10 +204,9 @@ test.describe('cold snapshot restore visibility', () => {
     assertVisibleWindow(data, gz.first());
   });
 
-  // RED (backlog: playground/cold-restore-progress-visibility Acceptance 2):
-  // the no-query reopen goes through `openActive` (adapters/playground-app.tsx
-  // initialize) outside the project-open progress bracket, so the whole
-  // re-restore window is silent — no pill, no launcher, no terminal yet.
+  // Acceptance 2: the no-query reopen (`openActive` in adapters/playground-app.tsx
+  // initialize) once ran outside the project-open progress bracket — the whole
+  // re-restore window was silent (no pill, no launcher, no terminal).
   test('no-query reopen after an interrupted first restore keeps an indicator through the re-restore', async ({
     page,
     context,
@@ -235,28 +236,5 @@ test.describe('cold snapshot restore visibility', () => {
     await expect
       .poll(() => persistedScratch(page), { timeout: BOOT_TIMEOUT })
       .toEqual({ active: 'scratch', starterId: 'vite8', claimed: true });
-  });
-
-  // RED (backlog: playground/cold-restore-progress-visibility Acceptance 3):
-  // the obligation IS source removal — the honest carrier is source shape.
-  // #167 left `beforeRun` as tests-only machinery in pty-server and
-  // `onSettledAfterSlow` as a tests-only seam in slow-progress; a UI-only fix
-  // that leaves them intact must fail here.
-  test('dead #167 machinery is removed', () => {
-    const source = (rel: string): string =>
-      readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url)), 'utf8');
-    expect(
-      source('packages/workbench/src/workers/pty-server.ts'),
-      'pty-server must not carry the prod-unconsumed beforeRun dep/gate',
-    ).not.toContain('beforeRun');
-    const slowProgress = source('apps/playground/src/glue/slow-progress.ts');
-    expect(
-      slowProgress,
-      'slow-progress must keep only prod-consumed options (delayMs, onSlow)',
-    ).not.toContain('onSettledAfterSlow');
-    expect(
-      slowProgress,
-      'the tests-only `now` clock seam must go with its only consumer',
-    ).not.toMatch(/\bnow\??:/);
   });
 });

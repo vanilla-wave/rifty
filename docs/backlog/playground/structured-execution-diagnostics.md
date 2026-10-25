@@ -25,21 +25,20 @@ boundary; own draft withdrawn). Measured (spikes 2026-08-29/30, chromium
 148.0.7778.96, playwright 1.60.0):
 
 - Owner package `log:` sink is `process.stdout.write`
-  (workbench-owner-runtime.ts:343) — no prod reader; the restore-success line
+  (workbench-owner-runtime.ts:327) — no prod reader; the restore-success line
   and `reportPromotion` explanatory prose (project-deps.ts:291 —
   persist-failure samples, «reload is unsafe until browser storage recovers»)
   reached zero consoles in every run.
 - The active first-materialization boot branch
-  (workbench-owner-runtime.ts:385 → `activateAndEnsure`) never reaches that
+  (workbench-owner-runtime.ts:351/372 → `activateAndEnsure`) never reaches that
   legacy `restore()` code at all; only the bare `promotion-refused` reason
   surfaces via the authority observe hook → `console.warn`
-  (owner-package-state.ts ~331-337) — the prose context is lost on every path.
-- Snapshot unavailable (dev seam `rifty-e2e-snapshot-fault=status:404`, vite8
-  cold deep-link): degrades to a real install and reaches LIVE, but the
-  terminal viewport showed neither the recorded rejection reason nor an
-  `npm install` transcript — possible ADR-0278:183 deviation («a rejected
-  'snapshot' probe prints its recorded reason and performs the same visible
-  real install»); verify scrollback before treating as a defect.
+  (owner-package-state.ts ~255) — the prose context is lost on every path.
+- Snapshot unavailable re-probed 2026-10-26 (dev seam cookie with a malformed
+  value → HTTP 400, vite8 cold deep-link): terminal 0 prints
+  `snapshot-fetch-failed: … HTTP 400`, then `$ npm install` and its package
+  transcript, then Vite — ADR-0278 rejected-probe visibility holds; no
+  deviation. The 2026-08-30 «nothing in the viewport» reading was wrong.
 
 These are concrete instances of this item's contract gap; resolve the surface
 question (console / terminal / health UI, which severities) in this item's

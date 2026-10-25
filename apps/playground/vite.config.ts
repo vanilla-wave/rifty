@@ -49,7 +49,7 @@ function e2eFixturesPlugin(): Plugin {
  * SW-mediated, so playwright route() never sees it and network throttling would
  * drag the whole module graph — the only faithful slow/fail injection point is
  * the dev server itself. Cookie `rifty-e2e-snapshot-fault` = `delay:<ms>`
- * (stall delivery) or `status:<code>` (fail the fetch). Never part of the
+ * stalls delivery; any other value is a loud 400. Never part of the
  * production build.
  */
 function snapshotFaultPlugin(): Plugin {
@@ -63,13 +63,12 @@ function snapshotFaultPlugin(): Plugin {
           req.headers.cookie ?? '',
         )?.[1];
         if (fault === undefined) return next();
-        const [kind, value] = decodeURIComponent(fault).split(':');
-        if (kind === 'delay') return void setTimeout(next, Number(value));
-        if (kind === 'status') {
-          res.statusCode = Number(value);
-          return void res.end();
+        const delayMs = /^delay:(\d+)$/.exec(decodeURIComponent(fault))?.[1];
+        if (delayMs === undefined) {
+          res.statusCode = 400;
+          return void res.end(`malformed rifty-e2e-snapshot-fault: ${fault}`);
         }
-        next();
+        setTimeout(next, Number(delayMs));
       });
     },
   };
