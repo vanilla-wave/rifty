@@ -40,12 +40,10 @@ export const ESBUILD_ALIAS_PACKAGE = JSON.stringify(
     name: 'esbuild',
     version: '0.28.0',
     main: './lib/main.cjs',
+    types: '../esbuild-wasm/lib/main.d.ts',
     module: './lib/main.cjs',
     type: 'commonjs',
     bin: { esbuild: './bin/esbuild' },
-    exports: {
-      '.': { import: './lib/main.cjs', require: './lib/main.cjs', default: './lib/main.cjs' },
-    },
   },
   null,
   2,

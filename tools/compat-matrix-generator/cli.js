@@ -4,6 +4,7 @@
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { esbuildMatrix } from './esbuild-matrix.js';
 import { fsMatrix } from './fs-matrix.js';
+import { lightningcssMatrix } from './lightningcss-matrix.js';
 import { renderReadme } from './readme.js';
 import { streamsMatrix } from './streams-inventory.js';
 
@@ -116,8 +117,7 @@ function buildSassMatrix(policyValue) {
   };
 }
 
-const sassPolicy = JSON.parse(await readFile(sassPolicyUrl, 'utf8'));
-const sassMatrix = buildSassMatrix(sassPolicy);
+const sassMatrix = buildSassMatrix(JSON.parse(await readFile(sassPolicyUrl, 'utf8')));
 
 const viteCommandMatrix = {
   file: 'vite-command.md',
@@ -792,6 +792,7 @@ const matrices = [
     ],
   },
   esbuildMatrix,
+  lightningcssMatrix,
   sassMatrix,
   viteCommandMatrix,
 ];
@@ -815,9 +816,7 @@ function table(rows) {
   ].join('\n');
 }
 
-function bulletList(items) {
-  return items.map((item) => `- ${item}`).join('\n');
-}
+const bulletList = (items) => items.map((item) => `- ${item}`).join('\n');
 
 function renderMatrix(matrix) {
   return `# ${matrix.title}
