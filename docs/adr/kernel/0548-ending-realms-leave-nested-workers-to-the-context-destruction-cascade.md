@@ -60,7 +60,9 @@ closing a Workbench over a live Vite run retained two Workers 6/10 locally.
   that self-closes; `spawnKernelWorker` rollback; Workbench shutdown over a
   live run at the owner level; the support probe Worker.
 - Kill condition: Chromium delivers a child's termination notice queued before
-  its parent's shutdown. Re-run the standalone repro on each Chromium bump.
+  its parent's shutdown. Re-run
+  `docs/backlog/kernel/reference/nested-worker-notice-drop-repro` on each
+  Chromium bump (`explicit-busy` retained → workaround still needed).
 - Proof: `tests/browser-unit/nested-worker-retirement.spec.ts` (RED 21 retained
   Workers per run; green) and the unchanged zero-Worker assertion in
   `workbench-vite-lifecycle.spec.ts`.

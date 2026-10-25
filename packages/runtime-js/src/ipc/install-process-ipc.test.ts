@@ -380,7 +380,7 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
       kind: 'control:kill-tree',
       pid: 987_654,
       signal: 'SIGTERM',
-      cascade: true,
+      cascade: false,
     });
 
     await expect(tick()).resolves.toBeUndefined();

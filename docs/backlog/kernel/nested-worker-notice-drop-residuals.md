@@ -24,11 +24,12 @@ handler, spins 50 ms and calls `process.exit(0)`. `node top.mjs` exits 0;
 script shape as `tests/browser-unit/nested-worker-retirement.spec.ts` with
 `MID` replaced by the above.
 
-Standalone (no rifty): parent `terminate()`s child, busy 5 ms, `close()` in
-the same task → 15/15 retained; a `setTimeout(0)` before `close()` → 0/15, but a
-yield before a later busy period still retained 15/15.
-No script-visible signal follows Chromium's `WorkerThreadTerminated`, so no
-yield or deadline proves the notice ran.
+Standalone (`reference/nested-worker-notice-drop-repro`, varied by hand):
+parent `terminate()`s child, busy 5 ms, `close()` in the same task → 15/15
+retained; a `setTimeout(0)` before `close()` → 0/15; terminate, yield, then
+busy 200 ms while the page terminates the parent → 15/15. No script-visible
+signal follows Chromium's `WorkerThreadTerminated`, so no yield or deadline
+proves the notice ran.
 
 Other shapes of the same drop, not measured:
 
@@ -41,6 +42,9 @@ Other shapes of the same drop, not measured:
 - `spawnKernelWorker` `rollbackFailedSpawn`, `no-coi-child-process.ts`
   cleanup `terminate()`, `support-worker.ts` child `terminate()` followed by
   `check-sandbox-support.ts` terminating the support Worker.
+- no-COI forwards `cascade` (`no-coi-child-process.ts` `remoteControl.kill`)
+  but its raw cleanup `terminate()` ignores the latch, so no carrier can
+  discriminate the bit there yet.
 
 Owner: kernel process lifecycle. Trigger: a zero-Worker poll or renderer
 thread growth after a guest-initiated exit, or a Chromium release that changes

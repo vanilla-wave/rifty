@@ -69,6 +69,10 @@ class BoundaryWorker implements WorkerLike {
     const event = new MessageEvent(type, { data });
     for (const listener of [...(this.#listeners.get(type) ?? [])]) listener(event);
   }
+
+  listenerTypes(): string[] {
+    return [...this.#listeners].filter(([, set]) => set.size > 0).map(([type]) => type);
+  }
 }
 
 interface BoundaryInit {
@@ -1582,6 +1586,7 @@ describe('ProcessManager ending-realm cascade (ADR-0548)', () => {
     expect(exits).toEqual([[null, 'SIGTERM']]);
     expect(workers[0]?.terminate).not.toHaveBeenCalled();
     expect(dispatcher.getAttachmentCount()).toBe(attached - 1);
+    expect(workers[0]?.listenerTypes()).toEqual(['error']);
 
     const pid = manager.reserveRemoteProcess('node', second.pid, '/workspace', second.pid);
     manager.commitRemoteProcess(pid, second.pid);
