@@ -561,7 +561,9 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     expect(manager.kill(pid, 'SIGTERM')).toBe(true);
     expect(manager.snapshot()).toContainEqual({ pid, ppid: owner.pid, command: 'node' });
     await vi.waitFor(() =>
-      expect(controls).toEqual([{ kind: 'control:kill-tree', pid, signal: 'SIGTERM' }]),
+      expect(controls).toEqual([
+        { kind: 'control:kill-tree', pid, signal: 'SIGTERM', cascade: false },
+      ]),
     );
 
     manager.settleRemoteProcess(pid, owner.pid, null, 'SIGTERM');
@@ -613,7 +615,12 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
 
     expect(owner.kill('SIGTERM')).toBe(true);
     await vi.waitFor(() =>
-      expect(controls).toContainEqual({ kind: 'control:kill-tree', pid, signal: 'SIGTERM' }),
+      expect(controls).toContainEqual({
+        kind: 'control:kill-tree',
+        pid,
+        signal: 'SIGTERM',
+        cascade: true,
+      }),
     );
     expect(owner.signalCode).toBeNull();
     expect(worker.terminate).not.toHaveBeenCalled();
@@ -1090,15 +1097,15 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     expect(owner.kill('SIGTERM')).toBe(false);
     await vi.waitFor(() =>
       expect(controls).toEqual([
-        { kind: 'control:kill-tree', pid: 42, signal: 'SIGTERM' },
-        { kind: 'control:kill-tree', pid: 41, signal: 'SIGTERM' },
+        { kind: 'control:kill-tree', pid: 42, signal: 'SIGTERM', cascade: true },
+        { kind: 'control:kill-tree', pid: 41, signal: 'SIGTERM', cascade: true },
       ]),
     );
     expect(manager.kill(42, 'SIGTERM')).toBe(true);
     expect(manager.kill(41, 'SIGTERM')).toBe(true);
     expect(controls).toEqual([
-      { kind: 'control:kill-tree', pid: 42, signal: 'SIGTERM' },
-      { kind: 'control:kill-tree', pid: 41, signal: 'SIGTERM' },
+      { kind: 'control:kill-tree', pid: 42, signal: 'SIGTERM', cascade: true },
+      { kind: 'control:kill-tree', pid: 41, signal: 'SIGTERM', cascade: true },
     ]);
     expect(owner.signalCode).toBeNull();
     expect(worker.terminate).not.toHaveBeenCalled();
@@ -1315,6 +1322,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
         kind: 'control:kill-tree',
         pid: childPid,
         signal: 'SIGTERM',
+        cascade: false,
       }),
     );
     expect(thread.kill()).toBe(true);
@@ -1485,5 +1493,104 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
 
     replacementHandle.kill();
     supervisor.kill();
+  });
+});
+
+// Chromium drops a nested Worker's termination notice still queued when its
+// creating realm begins shutdown; that realm then never shuts down.
+describe('ProcessManager ending-realm cascade (ADR-0548)', () => {
+  beforeEach(() => {
+    setKernelWorkerUrl('https://example.invalid/kernel-worker.js');
+  });
+
+  afterEach(() => {
+    clearWorkerFactoryForTests();
+    clearKernelWorkerUrl();
+    clearKernelDispatcher();
+    vi.restoreAllMocks();
+  });
+
+  it('marks a route hosted below the kill root as ending with it', () => {
+    const manager = new ProcessManager();
+    const supervisor = manager.spawn('nodemon', liveUntilKilled);
+    setWorkerFactoryForTests(() => new BoundaryWorker());
+    const host = manager.spawnWorker(
+      'node',
+      { ...workerSpec('host'), serve: true },
+      supervisor.pid,
+    );
+    if (host.kind !== 'worker') throw new Error('expected Worker host');
+    const pid = manager.reserveRemoteProcess('node', host.pid, '/workspace', host.pid);
+    manager.commitRemoteProcess(pid, host.pid);
+    const controlKill = vi.spyOn(host, 'controlKill');
+
+    expect(supervisor.kill('SIGTERM')).toBe(true);
+
+    expect(controlKill).toHaveBeenCalledWith(pid, 'SIGTERM', true);
+  });
+
+  it('marks a route owned by a sibling worker thread of the killed process', async () => {
+    const processWorker = new BoundaryWorker();
+    const threadWorker = new BoundaryWorker();
+    const workers = [processWorker, threadWorker];
+    setWorkerFactoryForTests(() => workers.shift() ?? new BoundaryWorker());
+    const manager = new ProcessManager();
+    const process = manager.spawnWorker('node', workerSpec('process'));
+    manager.spawnWorkerThread(workerSpec('thread'), { pid: process.pid, ppid: process.ppid });
+    installProcessFederation(manager);
+    const threadInit = initOf(threadWorker);
+    const threadControls = captureControls(threadWorker);
+    const caller = SabRing.attach(threadInit.spec.syncRing, threadInit.spec.payloadCapacity);
+    const reserved = await callProcessRpc(caller, 'process.reserve', {
+      command: 'node',
+      ppid: process.pid,
+      cwd: '/workspace',
+    });
+    const childPid = Number(reserved.value);
+    await callProcessRpc(caller, 'process.commit', { pid: childPid });
+
+    expect(process.kill('SIGTERM')).toBe(true);
+
+    await vi.waitFor(() =>
+      expect(threadControls).toContainEqual({
+        kind: 'control:kill-tree',
+        pid: childPid,
+        signal: 'SIGTERM',
+        cascade: true,
+      }),
+    );
+  });
+
+  it('releases killed Workers once an ancestor kill ends the realm, and stays ending', () => {
+    const manager = new ProcessManager();
+    const workers: BoundaryWorker[] = [];
+    setWorkerFactoryForTests(() => {
+      const worker = new BoundaryWorker();
+      workers.push(worker);
+      return worker;
+    });
+    const first = manager.spawnWorker('node', { ...workerSpec('first'), serve: true });
+    const second = manager.spawnWorker('node', { ...workerSpec('second'), serve: true });
+    if (second.kind !== 'worker') throw new Error('expected Worker host');
+    const dispatcher = getKernelDispatcher();
+    const attached = dispatcher.getAttachmentCount();
+    const exits: unknown[] = [];
+    first.on('exit', (code, signal) => exits.push([code, signal]));
+
+    expect(manager.kill(first.pid, 'SIGTERM', true)).toBe(true);
+
+    expect(exits).toEqual([[null, 'SIGTERM']]);
+    expect(workers[0]?.terminate).not.toHaveBeenCalled();
+    expect(dispatcher.getAttachmentCount()).toBe(attached - 1);
+
+    const pid = manager.reserveRemoteProcess('node', second.pid, '/workspace', second.pid);
+    manager.commitRemoteProcess(pid, second.pid);
+    const controlKill = vi.spyOn(second, 'controlKill');
+    expect(manager.kill(pid, 'SIGTERM')).toBe(true);
+    expect(controlKill).toHaveBeenCalledWith(pid, 'SIGTERM', true);
+    manager.settleRemoteProcess(pid, second.pid, null, 'SIGTERM');
+
+    expect(second.kill('SIGKILL')).toBe(true);
+    expect(workers[1]?.terminate).not.toHaveBeenCalled();
   });
 });

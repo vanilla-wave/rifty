@@ -150,8 +150,8 @@ export function spawnNoCoiChild(
           ...nodeChildSpawnOptions(plan.cwd, parent.federated),
           remoteControl: {
             context: route.context,
-            kill(pid, signal) {
-              control.port1.postMessage({ kind: 'control:kill-tree', pid, signal });
+            kill(pid, signal, cascade) {
+              control.port1.postMessage({ kind: 'control:kill-tree', pid, signal, cascade });
               return true;
             },
           },

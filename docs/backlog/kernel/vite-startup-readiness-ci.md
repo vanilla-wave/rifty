@@ -141,9 +141,9 @@ generated-runtime fast path — so dev-server `ready` and the dependency
 optimizer take longer and CI runners cross fixed waits. Not established: where
 the time goes (install, CLI spawn, esbuild service start, optimizer, port
 listen, output transport). The lifecycle row is post-close observation
-(2 of 7 owner lifecycle events recorded), sibling of
-`docs/backlog/kernel/workbench-vite-worker-retirement-ci.md`; it may share a
-cause or not — do not merge the two until timestamps say so.
+(2 of 7 owner lifecycle events recorded), sibling of the retained-Worker
+finding (2026-10-25: Chromium nested-Worker notice drop, fixed by ADR-0548);
+this 2-of-7 row was not reproduced there and stays unexplained here.
 
 Routing: `rifty-fix` unit on `main`, not inside PR #382. A repair names the
 measured delayed stage (timestamps across install, CLI spawn, esbuild service

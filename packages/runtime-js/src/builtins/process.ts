@@ -93,7 +93,7 @@ let promisePatched = false;
 let currentCwd = '/workspace';
 
 export interface NodeProcessDescendantAuthority {
-  kill(pid: number, signal: string): boolean;
+  kill(pid: number, signal: string, realmEnding: boolean): boolean;
   snapshot(): readonly { readonly pid: number }[];
 }
 
@@ -570,7 +570,7 @@ export class NodeProcess extends EventEmitter {
       } else if (frame.kind === 'control:signal') {
         this.#receiveSignal(frame.signal);
       } else if (frame.kind === 'control:kill-tree') {
-        this.#killDescendant(frame.pid, frame.signal);
+        this.#killDescendant(frame.pid, frame.signal, frame.cascade);
       } else {
         this.#rejectControlFrame();
       }
@@ -633,7 +633,7 @@ export class NodeProcess extends EventEmitter {
       } else if (frame.kind === 'control:signal') {
         this.#receiveSignal(frame.signal);
       } else if (frame.kind === 'control:kill-tree') {
-        this.#killDescendant(frame.pid, frame.signal);
+        this.#killDescendant(frame.pid, frame.signal, frame.cascade);
       } else {
         this.#rejectControlFrame();
       }
@@ -657,7 +657,7 @@ export class NodeProcess extends EventEmitter {
       } else if (frame.kind === 'control:signal') {
         this.#receiveSignal(frame.signal);
       } else if (frame.kind === 'control:kill-tree') {
-        this.#killDescendant(frame.pid, frame.signal);
+        this.#killDescendant(frame.pid, frame.signal, frame.cascade);
       } else {
         this.#rejectControlFrame();
       }
@@ -726,10 +726,11 @@ export class NodeProcess extends EventEmitter {
     this.#requestSelfExit(1);
   }
 
-  #killDescendant(pid: number, signal: string): void {
+  #killDescendant(pid: number, signal: string, realmEnding: boolean): void {
     const authority = this.#descendantAuthority ?? globalProcessManager;
+    const killed = authority.kill(pid, signal, realmEnding);
     // Absence proves a federated descendant is already physically retired.
-    if (!authority.kill(pid, signal) && authority.snapshot().some((row) => row.pid === pid)) {
+    if (!killed && authority.snapshot().some((row) => row.pid === pid)) {
       throw new Error(`process control could not kill descendant PID ${pid}`);
     }
   }
@@ -747,8 +748,8 @@ export class NodeProcess extends EventEmitter {
       throw new TypeError('process descendant authority requires kill() and snapshot()');
     }
     this.#descendantAuthority = Object.freeze({
-      kill: (pid: number, signal: string): boolean =>
-        Reflect.apply(kill, authority, [pid, signal]) as boolean,
+      kill: (pid: number, signal: string, realmEnding: boolean): boolean =>
+        Reflect.apply(kill, authority, [pid, signal, realmEnding]) as boolean,
       snapshot: (): readonly { readonly pid: number }[] =>
         Reflect.apply(snapshot, authority, []) as readonly { readonly pid: number }[],
     });

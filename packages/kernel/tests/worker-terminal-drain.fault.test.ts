@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  ProcessManager,
-  type WorkerProcessHandle,
-  decodeIpcFrame,
-} from '../src/process-manager.ts';
+import { decodeIpcFrame } from '../src/process-control-frame.ts';
+import { ProcessManager, type WorkerProcessHandle } from '../src/process-manager.ts';
 import {
   type WorkerLike,
   clearKernelDispatcher,

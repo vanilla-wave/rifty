@@ -45,6 +45,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0351 | Async pre-entry readiness gates worker entry |
 | 0366 | Binary request frames for hot fs sync-RPC |
 | 0542 | Share worker stdin between synchronous descriptors and streams |
+| 0548 | Ending realms leave nested Workers to the context-destruction cascade |
 
 ### runtime-js
 

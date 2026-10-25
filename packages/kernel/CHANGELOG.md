@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- An ancestor kill marks `control:kill-tree` with `cascade`; the ending realm releases its nested Workers (`SpawnWorkerResult.release()`) so Chromium cannot drop their termination notice and retain the realm (ADR-0548). Frame codec moved to `process-control-frame.ts`.
 - Optional pull stdin (ADR-0542): bounded physical input, existing SAB reads, readiness-only ports; EOF/teardown settle pending operations.
 - Expose common RPC dispatch and reuse process federation for host-managed no-COI Workers (ADR-0539).
 

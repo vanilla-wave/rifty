@@ -47,3 +47,13 @@ second barrier/route/output ledger, acknowledgement protocol, or timer ships.
 
 Specifies ADR-0326's ancestor/descendant terminal ordering. ADR-0332 otherwise
 stands.
+
+## Corrections
+
+- 2026-10-25: a 1000 ms `DESCENDANT_SETTLEMENT_DEADLINE_MS` ships (commit
+  75e407b00, `fix: bound the descendant settlement barrier`): on expiry the
+  physical cut proceeds with a stderr diagnostic. This overrides "no timeout
+  can prove settlement" and "no timer ships" above; the order stands.
+- 2026-10-25 (ADR-0548): `control:kill-tree` carries `cascade`; a realm
+  ending with the kill settles its children unchanged but releases instead of
+  terminating them.
