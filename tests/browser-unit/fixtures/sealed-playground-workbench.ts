@@ -22,9 +22,13 @@ export interface SealedWorkbenchBootOptions {
   readonly starter?: string;
   readonly hiddenEmptyBoot?: boolean;
   readonly persistence?: 'required' | 'preferred' | 'ephemeral';
+  readonly snapshotOnly?: boolean;
+  readonly namespace?: string;
   /** #255: host budget of owner durability-progress SILENCE; unset = shipped 60 s. */
   readonly ownerOperationSilenceTimeoutMs?: number;
   readonly plan?: PlaygroundProjectPlan;
+  /** ADR-0531 Workbench option; unset = the shipped default. */
+  readonly publicProjectRoot?: string;
 }
 
 interface HostAssets {
@@ -161,7 +165,9 @@ async function templateSpec(
   return (await import(/* @vite-ignore */ url)).VITE8_TEMPLATE;
 }
 
-async function projectPlan(options: SealedWorkbenchBootOptions): Promise<PlaygroundProjectPlan> {
+export async function projectPlan(
+  options: SealedWorkbenchBootOptions,
+): Promise<PlaygroundProjectPlan> {
   if (options.plan !== undefined) return options.plan;
   const spec = await templateSpec(options.template);
   const starterId = options.starter ?? options.workspaceId;
@@ -254,8 +260,16 @@ export async function openSealedWorkbenchFixture(
           ? {}
           : { ownerOperationSilenceTimeoutMs: options.ownerOperationSilenceTimeoutMs }),
       },
-      packageAcquisition: { registryUrl: '/npm-registry' },
-      storage: { persistence: options.persistence ?? 'ephemeral' },
+      packageAcquisition: options.snapshotOnly
+        ? { mode: 'snapshot-only' }
+        : { registryUrl: '/npm-registry' },
+      storage: {
+        persistence: options.persistence ?? 'ephemeral',
+        ...(options.namespace === undefined ? {} : { namespace: options.namespace }),
+      },
+      ...(options.publicProjectRoot === undefined
+        ? {}
+        : { publicProjectRoot: options.publicProjectRoot }),
     });
     const definition = workbench.playground.define(plan);
     await workbench.playground.catalog.createScratch({

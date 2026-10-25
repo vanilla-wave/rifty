@@ -1,0 +1,260 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS at 481b2ab3a8046701536a21929e38f70ea5f4cd1b: accepted F1/N1 repaired and independently verified; no current findings or unit residuals. Own original F1 probe, targeted41/41 and real-Agent sibling settlement probes PASS; completed full gate25/25 inspected. I13 remains required goal continuation.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/distribution/ai-agent-tool-feedback.md; BASE 5c6100731c1f13560beab59e45dfccc7d395c317; clean HEAD at verification launch 481b2ab3a8046701536a21929e38f70ea5f4cd1b. Independent verification by the original reviewer of one accepted repair batch, per checkpoint-run reception step3/REV-12; no child agents, tracked edits or critic adjudication. Prior full unit review at 0c708ffc6de2548d99fd87fc6cc543fa195433a2 remains evidence for unchanged obligations: raw I7–I11, preserved I12, ADR0424/0440/0475 and Contract+RED a56659d4cd6fdcf2288e48457e0c1ab591fb71ba (native recipe F1 distinct from final F1). PR-4: repair adds five tests and one helper import, weakens no existing assertion/gate/contract; original prompt golden, diagnostics/BOM, 600s and v2 recipe changes retain their previously verified legitimate criteria. Only three files changed since reviewed 0c708ffc6: receipt implementation, added fault carriers and evidence. Required acceptance, public API, golden and fault-matrix coverage remains 25 rows.\n\nACCEPTED DISPOSITION: F1 was accepted, not disputed or demoted; repaired at 481b2ab3a and independently VERIFIED FIXED. N1 was accepted for repair despite advisory severity and independently VERIFIED FIXED. Immutable pre-repair verdict preserved at /private/tmp/rifty-pr359-feedback-final-review-blocked-0c708ffc6.json. Original findings and executed evidence retained verbatim below; they describe 0c708ffc6, not current defects.\nF1 — metadata >4096 bytes loses applied/unknown effects on model wire, even when the original complete result fits 16KiB. Only top-level applied:no/unknown is protected; effects and applied arrays are relegated to an arbitrarily truncated JSON string. Native cancelled shell with effects={description:2500 chars, applied:\"unknown\", context:2500 chars}: BASE preserves unknown, HEAD removes it. Fix the shared metadata compaction boundary to retain bounded explicit effect provenance before trimming optional data. Fault class: lossy-aggregate (provenance-lie consequence). Missing RED: large metadata with applied/unknown in the omitted middle; current test at tool-feedback.fault.test.ts:403 asserts only status/cap/truncation/body. Sibling sweep: standard shell, corroborated consumer envelopes, apply_patch applied lists and wrapped host-error mutation/effect details share this branch. ORIGINAL AUTHORITY: Acceptance 2 → I9, ADR-0424 §6/7 (unknown/applied effects retained); Acceptance 9 (existing effect behavior remains); named BASE 5c6100731 shell model-facing effect provenance.. ORIGINAL EVIDENCE: Executed Node v24.16.0: node --import ./node_modules/tsx/dist/loader.mjs /private/tmp/rifty-pr359-review-effects.mjs > /private/tmp/rifty-pr359-review-effects.log 2>&1; exit 1 on the effect assertion. Exact BASE tools.ts/text.ts loaded from git archive 5c6100731 under /private/tmp/rifty-pr359-review-base, no tracked edits. BASE {\"bytes\":5134,\"effects\":\"unknown\",\"truncated\":false}; current real native Agent plus scripted external model transport: HEAD {\"bytes\":2102,\"unknownVisible\":false,\"detailsApplied\":\"unknown\",\"headingKeys\":[\"status\",\"worker\",\"exitCode\",\"metadataTruncated\",\"metadata\",\"callsLeft\",\"msLeft\"],\"isError\":true,\"actualNextWireEqualsReceipt\":true}. AssertionError: unknown applied effects disappeared from actual next-model wire. Same loss independently observed for a corroborated consumer envelope in /private/tmp/rifty-pr359-review-probes.log. Original committed fault suite remains GREEN24/24; full focused120/120 and real browser18/18 do not kill this defect. N1 — owned shell with error:new Error(...) fails the envelope/details equality check: producer serializes the error through hostError, but details retain Error (canonical {}). The new first heading therefore contains error:{} and stdout/stderr/command, while a second old heading containing the real error becomes body text. Error remains visible, so advisory only: normalize the compared owned metadata consistently to avoid the duplicate envelope/output. ORIGINAL AUTHORITY: advisory N1. ORIGINAL EVIDENCE: node --import ./node_modules/tsx/dist/loader.mjs /private/tmp/rifty-pr359-review-probes.mjs; exit 0; /private/tmp/rifty-pr359-review-probes.log ERROR_INSTANCE shows first heading error:{}, second heading error:{name:\"Error\",message:\"expected host failure\"}, then OUTPUT; isError:true. Real Agent, consumer host shell boundary, actual source.\n\nCURRENT VERIFICATION: Read the complete changed source and test diff. tool-feedback.ts:126 keeps fitting metadata until the 16KiB receipt/body reservation requires projection; :59-86/:140-153 protect actual settlement shape (applied/persistence/mutationOutcome; exact acknowledged-path count and bounded unmodified samples) before labelled truncated context. Fixed maximum budget widths remain at :121-123/:156-158. :46-48 uses the same hostError normalization as the existing shell producer. Checked real RuntimeEffects and ProjectMutationOutcome types; one existing formatter boundary owns this projection, no new execution/cache/epoch owner or public timing/config knob.\nOwn Node v24.16.0 command node --import ./node_modules/tsx/dist/loader.mjs /private/tmp/rifty-pr359-review-effects.mjs > /private/tmp/rifty-pr359-review-effects-verify.log 2>&1: exit0; BASE5134bytes unknown retained; HEAD5165bytes unknownVisible=true, detailsApplied=unknown, actualNextWireEqualsReceipt=true. Original RED log /private/tmp/rifty-pr359-review-effects.log remains unchanged.\npnpm exec vitest run packages/agent/src/tool-feedback.fault.test.ts packages/agent/src/session.test.ts tools/agent-bench/src/catalog-metrics.test.ts →41/41 (29 fault +6 session +6 metrics), /private/tmp/rifty-pr359-review-settlement-verify.log. Existing and added consumer grammar/Unicode/width/Stop/diagnostics/native wire/I12 carriers all pass; no isolated rerun.\nnode --import ./node_modules/tsx/dist/loader.mjs /private/tmp/rifty-pr359-review-settlement-siblings.mjs > /private/tmp/rifty-pr359-review-settlement-siblings.log 2>&1 →exit0: actual native Agent next wire verifies oversized consumer effects and equal body across callsLeft10/9/8 with one third-repeat notice; normalized shell/consumer Error emits one heading, mismatch stays unchanged plain text; actual MemoryVfs write then injected ProjectFileOperationError preserves mutationOutcome=applied and effects applied=yes/persistence=failed; actual apply_patch applies300 acknowledged files and1 applied-then-failed file, reports count300, exact first2/last samples and omitted297 plus nested host error outcomes. Worst protected projection with escaped paths at all supported levels and maximum safe-integer configured budget widths remains valid UTF-8 JSON+body at16314bytes (heading5104), retaining exact path samples and HEAD/TAIL. Fault injection is at the consumer host error boundary; VFS, patch planner, wrapper, Agent and wire formatting are real.\nInspected actual completed /private/tmp/rifty-pr359-feedback-effects-pr-check.log: pr:check25/25 PASS incl lint/types/build/test:run/parity, no isolated rerun. Producer new RED logs effects-red and effects-overflow-red independently read; added criteria discriminate the accepted defects. Previously reviewed unchanged Workbench18/18, full chat15/15 +composition1/1, actual mock-model14 task/lane pairs, COI/native budgets and sequential isolated no-COI1/1 evidence retained; no pack/build overlap in this verification. Those browser/lane proofs were not rerun in this verification.\nRoot binds reviewed_sha to the verified current commit; field intentionally omitted. I13 remains required and goal_complete=false.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I13",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md:194",
+      "summary": "After I7–I11, rerun frozen Luna config/tasks/run count and report per-task comparison/no pass regression. Outside this delivered unit; goal remains open."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: defaults 600000/100, positive overrides, actual per-send counters and admission semantics.",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:72; packages/agent/src/tool-feedback.fault.test.ts:97; packages/agent/src/tool-feedback.fault.test.ts:521; tests/browser-unit/agent-core.spec.ts:113",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: every native/synthetic final path, complete 16KiB envelope, retained effects and closed consumer grammar.",
+      "source": "acceptance",
+      "trace": "I9 + ADR-0424 §6/7",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:72; packages/agent/src/tool-feedback.fault.test.ts:121; packages/agent/src/tool-feedback.fault.test.ts:203; packages/agent/src/tool-feedback.fault.test.ts:308; packages/agent/src/tool-feedback.fault.test.ts:341; packages/agent/src/tool-feedback.fault.test.ts:404; packages/agent/src/tool-feedback.fault.test.ts:571; packages/agent/src/tool-feedback.fault.test.ts:601; packages/agent/src/tool-feedback.fault.test.ts:641; packages/agent/src/tool-feedback.fault.test.ts:672; packages/agent/src/tool-feedback.fault.test.ts:709",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: reserve maximum heading width, stable capped body, real remaining counters and reset on send.",
+      "source": "acceptance",
+      "trace": "I8 + I9",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:372; packages/agent/src/tool-feedback.fault.test.ts:521; packages/agent/src/tool-feedback.fault.test.ts:72",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: exact overlapping count/first10 lines/whitespace hint inside authoritative transform; no fuzzy write or patch regression.",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:138; tests/browser-unit/agent-core.spec.ts:123; tests/browser-unit/agent-core.spec.ts:239; tests/browser-unit/agent-core.spec.ts:307; packages/agent/src/apply-patch.test.ts:19",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: third identical canonical call/result steers and emits notice; fourth executes; changed sequence/reset clear; sends/model switches retain.",
+      "source": "acceptance",
+      "trace": "I8 + ADR-0424 §6",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:168; packages/agent/src/tool-feedback.fault.test.ts:189; packages/agent/src/tool-feedback.fault.test.ts:203; packages/agent/src/tool-feedback.fault.test.ts:535; tests/e2e/ai-mode.spec.ts:973",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: successful write/edit/patch gets host diagnostics, bounded count; unavailable/pending/rejection/deletion explicit; standalone retained.",
+      "source": "acceptance",
+      "trace": "I10",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:149; tests/browser-unit/agent-core.spec.ts:343; packages/agent/src/tool-feedback.fault.test.ts:248; packages/agent/src/tool-feedback.fault.test.ts:265; packages/agent/src/tool-feedback.fault.test.ts:443; packages/agent/src/tool-feedback.fault.test.ts:494; packages/agent/src/tool-feedback.fault.test.ts:551",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: one bounded wait across changed paths, late resolution/rejection cannot mutate receipt, admitted mutation settles before Stop.",
+      "source": "acceptance",
+      "trace": "I10 + ADR-0424",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:265; packages/agent/src/tool-feedback.fault.test.ts:463; tests/browser-unit/agent-core.spec.ts:86; tests/browser-unit/agent-core.spec.ts:219",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: shared default v2 recipe, opt-out affects only recipe, trace boolean, original paragraphs/resource ordering, actual native benchmark wire.",
+      "source": "acceptance",
+      "trace": "I11 + ADR-0440 §4",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:283; packages/agent/src/prompt.test.ts:6; tools/agent-bench/src/prompt-recipe-parity.test.ts:116; tools/agent-bench/tests/contract.spec.ts:98",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 9: public 600s default, real diagnostics/steering on next model request, image/switch/recovery/policy/effects baseline.",
+      "source": "acceptance",
+      "trace": "I4 + I7 + I8 + I9 + I10 + I11",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:240; tests/e2e/ai-mode.spec.ts:973; tests/browser-unit/agent-core.spec.ts:343; tests/browser-unit/agent-core.spec.ts:50; tests/browser-unit/agent-core.spec.ts:315; packages/agent/src/images.test.ts:1; packages/agent/src/tool-feedback.fault.test.ts:601; packages/agent/src/tool-feedback.fault.test.ts:641; packages/agent/src/tool-feedback.fault.test.ts:672; packages/agent/src/tool-feedback.fault.test.ts:709",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: actual native Agent/MemoryVfs end receipts reach history/next wire for valid/invalid/missing calls; steering preserves fourth effect.",
+      "source": "acceptance",
+      "trace": "I8 + I9",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:72; packages/agent/src/tool-feedback.fault.test.ts:168",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: real Workbench TypeScript source through standalone diagnostics and mutation receipts, error then repair.",
+      "source": "acceptance",
+      "trace": "I10",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:149; tests/browser-unit/agent-core.spec.ts:343; tests/browser-unit/fixtures/agent-core-proof.ts:588",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: common recipe reaches actual native SDK extension and Rifty wire; opt-out removes recipe.",
+      "source": "acceptance",
+      "trace": "I11",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:283; tools/agent-bench/src/prompt-recipe-parity.test.ts:116; tools/agent-bench/tests/contract.spec.ts:98",
+      "note": ""
+    },
+    {
+      "row": "Fault native settlement/provenance-lie: invalid/missing/blocked/cancelled receipts without invented execution; effects unchanged.",
+      "source": "fault-matrix",
+      "trace": "I9 + ADR-0424",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:72; packages/agent/src/tool-feedback.fault.test.ts:97; packages/agent/src/tool-feedback.fault.test.ts:341; tools/agent-bench/src/catalog-metrics.test.ts:285; packages/agent/src/tool-feedback.fault.test.ts:601; packages/agent/src/tool-feedback.fault.test.ts:641; packages/agent/src/tool-feedback.fault.test.ts:672; packages/agent/src/tool-feedback.fault.test.ts:709",
+      "note": ""
+    },
+    {
+      "row": "Fault result formatting/lossy-aggregate: Unicode/long metadata/budget widths preserve complete bounded JSON, stable body and explicit truncation.",
+      "source": "fault-matrix",
+      "trace": "I8 + I9",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:121; packages/agent/src/tool-feedback.fault.test.ts:372; packages/agent/src/tool-feedback.fault.test.ts:404; tests/browser-unit/agent-core.spec.ts:183; packages/agent/src/tool-feedback.fault.test.ts:601; packages/agent/src/tool-feedback.fault.test.ts:709",
+      "note": ""
+    },
+    {
+      "row": "Fault exact edit/concurrent-same-key: locating diagnostics use the host transform read and never fuzzy-write.",
+      "source": "fault-matrix",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:138; tests/browser-unit/agent-core.spec.ts:239; packages/agent/src/tools.ts:167",
+      "note": ""
+    },
+    {
+      "row": "Fault sequence/sibling-drift: reordered JSON args compare equal, nested budget-named result data remains significant.",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:168; packages/agent/src/tool-feedback.fault.test.ts:203",
+      "note": ""
+    },
+    {
+      "row": "Fault diagnostics/unbounded-read: delayed or stalled boundary has one deadline, pending result and no late mutation/rejection.",
+      "source": "fault-matrix",
+      "trace": "I10",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:265; packages/agent/src/tool-feedback.fault.test.ts:463",
+      "note": ""
+    },
+    {
+      "row": "Fault diagnostics/false-fallback: missing/rejected service and deleted paths explicitly unavailable, completed mutation remains successful.",
+      "source": "fault-matrix",
+      "trace": "I10",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:248; packages/agent/src/tool-feedback.fault.test.ts:443; packages/agent/src/tool-feedback.fault.test.ts:494; packages/agent/src/tool-feedback.fault.test.ts:551",
+      "note": ""
+    },
+    {
+      "row": "Preserved I12: actual event metrics, including budget-blocked proposal excluded from executed tools; frozen config/tasks/judges unchanged.",
+      "source": "acceptance",
+      "trace": "I12 + ADR-0424 §6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/catalog-metrics.test.ts:285; tools/agent-bench/tests/contract.spec.ts:252",
+      "note": ""
+    },
+    {
+      "row": "Public API createAgentSession: default 600s/100 and per-send budget receipts.",
+      "source": "public-api",
+      "trace": "I9 + ADR-0475",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:72; packages/agent/src/tool-feedback.fault.test.ts:97; packages/agent/src/tool-feedback.fault.test.ts:521",
+      "note": ""
+    },
+    {
+      "row": "Public API AgentSessionOptions.recipe: default on, false omits only workflow paragraph.",
+      "source": "public-api",
+      "trace": "I11 + ADR-0475",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:283; packages/agent/src/prompt.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Public API AgentSessionEvent.repeated-call: toolName/count3/message and native user notice in history/events/trace.",
+      "source": "public-api",
+      "trace": "I8 + ADR-0475",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:168; tests/e2e/ai-mode.spec.ts:973",
+      "note": ""
+    },
+    {
+      "row": "Public API AgentTrace.config.recipe: effective boolean.",
+      "source": "public-api",
+      "trace": "I11 + ADR-0475",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:283",
+      "note": ""
+    },
+    {
+      "row": "Public API getAgentPromptProfile/AgentPromptProfile: v2 id and shared recipe with existing paragraphs preserved.",
+      "source": "public-api",
+      "trace": "I11 + ADR-0440 §4 + ADR-0475",
+      "status": "pass",
+      "citation": "packages/agent/src/prompt.test.ts:16; tools/agent-bench/src/prompt-recipe-parity.test.ts:116; tools/agent-bench/tests/contract.spec.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Frozen default-prompt golden: only declared receipt explanation/recipe added, existing policy and tail order preserved.",
+      "source": "frozen-artifact",
+      "trace": "I11 + ADR-0440 §4 + ADR-0475",
+      "status": "pass",
+      "citation": "packages/agent/src/prompt.test.ts:6; packages/agent/src/fixtures/default-prompt.txt:13",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "481b2ab3a8046701536a21929e38f70ea5f4cd1b"
+}

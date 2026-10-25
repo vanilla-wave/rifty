@@ -1,19 +1,7 @@
 /**
- * Run-vs-serve lifecycle for a `node <file>` supervised child (ADR-0155). The
- * child spawns serve:true (kernel never reaps it), so the bootstrap OWNS the
- * decision the kernel drain hook would make for a run-to-completion child:
- *  - the entry listened (registered a port) → it is a SERVER: serve each port's
- *    cross-realm preview, post the ports to the owner, STAY ALIVE (return) and
- *    keep watching the registry (a later close()/re-listen reposts the set).
- *  - else → run-to-completion: await the event-loop drain (ADR-0152 — timers/
- *    imports + unhandledrejection→exit1), then process.exit(code).
- *
- * Real CLIs such as Vite may call listen() and then keep their top-level promise
- * pending. So the lifecycle watches for a port while the entry is still running;
- * a port wins the branch without waiting for top-level return. Event-sourced
- * from the net registry's register/unregister (no polling — backlog:
- * playground/generic-dev-server-lifecycle). Pure + dep-injected so both
- * branches unit-test without a Worker.
+ * Foreground node lifecycle (ADR-0385): preview follows registry changes while
+ * one drain waits for listeners and runtime handles after entry return.
+ * The supervised child is serve:true; this owner sends its natural exit.
  */
 import { watchServedPorts } from './port-watch.ts';
 
@@ -26,19 +14,6 @@ function exitCodeOf(err: unknown): number | null {
   return c && c.code === 'RIFTY_PROCESS_EXIT' && typeof c.exitCode === 'number' ? c.exitCode : null;
 }
 
-/**
- * Uint8-wrap a (validated) exit code to Node's 0–255 range; a non-number defaults
- * to 0 defensively. So a clean `return` after `process.exitCode = 7` exits 7
- * (ADR-0157 review D4), not the old hardcoded 0. NOTE: Node's string-coercion +
- * loud validation of an invalid exit code lives in the `process.exitCode` SETTER
- * (builtins/process.ts `coerceExitCode`); by the time a value reaches here it is
- * already a validated integer — this is only the final uint8 wrap.
- */
-export function normalizeExitCode(v: unknown): number {
-  if (typeof v !== 'number' || !Number.isFinite(v)) return 0;
-  return ((Math.trunc(v) % 256) + 256) % 256;
-}
-
 export interface NodeLifecycleDeps {
   /** Import + run the entry through the loader (runNodeEntry, bin:false). */
   readonly runEntry: () => Promise<void>;
@@ -48,16 +23,16 @@ export interface NodeLifecycleDeps {
   readonly onPortsChange: (cb: () => void) => () => void;
   /** Await event-loop drain (keepalive awaitDrain). */
   readonly awaitDrain: () => Promise<void>;
-  /** Disown a pending eval drain when a listened port wins the server branch. */
-  readonly releaseDrainOwnership: () => void;
   /** Wire `/preview/<port>/` for a listened port; returns a teardown. */
   readonly servePreview: (port: number) => () => void;
   /** Report the CURRENT listened port set to the owner (rifty:node-listening). */
   readonly postListening: (ports: number[]) => void;
-  /** Raw `process.exitCode` at natural exit (honoured per Node — ADR-0157 D4). */
-  readonly readExitCode: () => unknown;
-  /** Exit the worker with a code (process.exit). */
-  readonly exit: (code: number) => void;
+  /**
+   * The process's own `exit`, captured before user code (ADR-0446 §6), never
+   * a reassigned `process.exit`. Natural exit passes no argument: Node's `exit()` emits
+   * `'exit'` and reads `process.exitCode` itself (ADR-0445 rule 6).
+   */
+  readonly exit: (...code: [] | [number]) => void;
 }
 
 type EntryOutcome =
@@ -68,13 +43,6 @@ type DrainOutcome =
   | { readonly kind: 'pending' }
   | { readonly kind: 'resolved' }
   | { readonly kind: 'rejected'; readonly err: unknown };
-
-function servePorts(deps: NodeLifecycleDeps, ports: readonly number[]): Map<number, () => void> {
-  const served = new Map<number, () => void>();
-  for (const port of ports) served.set(port, deps.servePreview(port));
-  deps.postListening([...ports]);
-  return served;
-}
 
 export async function runNodeProgramLifecycle(deps: NodeLifecycleDeps): Promise<void> {
   // Wake-versioned event loop: any of {entry settled, drain settled, port
@@ -94,7 +62,14 @@ export async function runNodeProgramLifecycle(deps: NodeLifecycleDeps): Promise<
   // never race the subscription (the loop also re-reads listPorts each pass).
   const unsubscribePorts = deps.onPortsChange(wake);
 
-  let lateErrorsShouldSurface = false;
+  let stopPreview: (() => void) | undefined;
+  const served = new Map<number, () => void>();
+  const cleanup = (): void => {
+    unsubscribePorts();
+    stopPreview?.();
+    for (const tear of served.values()) tear();
+    served.clear();
+  };
   let entryOutcome: EntryOutcome | null = null;
   const currentEntryOutcome = (): EntryOutcome | null => entryOutcome;
   void deps.runEntry().then(
@@ -105,13 +80,6 @@ export async function runNodeProgramLifecycle(deps: NodeLifecycleDeps): Promise<
     (err) => {
       entryOutcome = { kind: 'threw', err };
       wake();
-      if (!lateErrorsShouldSurface) return;
-      const code = exitCodeOf(err);
-      if (code !== null) deps.exit(code);
-      else
-        queueMicrotask(() => {
-          throw err;
-        });
     },
   );
 
@@ -141,7 +109,7 @@ export async function runNodeProgramLifecycle(deps: NodeLifecycleDeps): Promise<
     await Promise.resolve();
     const outcome = currentEntryOutcome();
     if (outcome?.kind === 'threw') {
-      unsubscribePorts();
+      cleanup();
       const code = exitCodeOf(outcome.err);
       if (code !== null) {
         deps.exit(code);
@@ -151,36 +119,28 @@ export async function runNodeProgramLifecycle(deps: NodeLifecycleDeps): Promise<
     }
     const drained = currentDrainOutcome();
     if (drained.kind === 'rejected') {
-      unsubscribePorts();
+      cleanup();
       throw drained.err;
     }
 
     const ports = deps.listPorts();
-    if (ports.length > 0) {
-      if (drainStarted) deps.releaseDrainOwnership();
-      const served = servePorts(deps, ports);
-      lateErrorsShouldSurface = true;
-      // Keep following the registry for the realm's whole life: close() reposts
-      // `[]` (pill leaves running), a re-listen re-serves + reposts.
-      watchServedPorts({
+    if (ports.length > 0 && stopPreview === undefined) {
+      stopPreview = watchServedPorts({
         listPorts: deps.listPorts,
         subscribe: deps.onPortsChange,
         servePreview: deps.servePreview,
         post: deps.postListening,
         served,
       });
-      unsubscribePorts();
-      return; // serve:true keeps the realm alive; parent kill stops it
     }
 
     if (outcome?.kind === 'returned') {
       startDrain();
-      if (currentDrainOutcome().kind === 'resolved') {
-        unsubscribePorts();
-        // Natural exit honours process.exitCode (Node parity, D4): a clean
-        // return after `process.exitCode = N` exits N, not 0. A tail THROW still
-        // maps to exit 1 above (uncaught wins, Node-faithful).
-        deps.exit(normalizeExitCode(deps.readExitCode()));
+      if (ports.length === 0 && currentDrainOutcome().kind === 'resolved') {
+        cleanup();
+        // Natural exit = Node's `exit()`: `'exit'` once, then `exitCode ?? 0`
+        // (ADR-0445 rule 6; ADR-0157 D4). A tail THROW maps to exit 1 above.
+        deps.exit();
         return;
       }
     }

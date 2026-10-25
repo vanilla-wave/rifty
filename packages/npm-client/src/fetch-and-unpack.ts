@@ -18,7 +18,12 @@
  * cache is now keyed by.
  */
 
-import { type TarballCache, computeIntegrity, parseIntegrityAlgorithm } from './tarball-cache.ts';
+import {
+  type IntegrityAlgorithm,
+  type TarballCache,
+  computeIntegrity,
+  parseIntegrityAlgorithm,
+} from './tarball-cache.ts';
 
 export interface FetchSpec {
   readonly name: string;
@@ -76,7 +81,7 @@ export async function fetchAndUnpackToCache(
   // Match the algorithm declared by `spec.integrity` so the comparison is
   // apples-to-apples; default sha512 (what modern npm packuments produce)
   // when no expected integrity is supplied.
-  let algorithm: 'sha256' | 'sha384' | 'sha512' = 'sha512';
+  let algorithm: IntegrityAlgorithm = 'sha512';
   if (spec.integrity) {
     const parsed = parseIntegrityAlgorithm(spec.integrity);
     if (parsed === null) {

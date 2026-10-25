@@ -42,8 +42,8 @@ const LEGACY_INDEX = `${LEGACY_PREFIX}/.rifty-project-index.json`;
 const WORKBENCH_PLAYGROUND_ROOT = '/.rifty/workbench/playground';
 const WORKBENCH_CATALOG = `${WORKBENCH_PLAYGROUND_ROOT}/catalog.json`;
 const LEGACY_MIGRATION_JOURNAL = `${WORKBENCH_PLAYGROUND_ROOT}/migration-journal.json`;
-const WORKBENCH_PROJECTS_ROOT = '/.rifty/workbench/v1/projects';
-const WORKBENCH_STAGES_ROOT = '/.rifty/workbench/v1/stages';
+const WORKBENCH_PROJECTS_ROOT = '/.rifty/workbench/v2/projects';
+const WORKBENCH_STAGES_ROOT = '/.rifty/workbench/v2/stages';
 const MAX_CRASH_MUTATIONS = 128;
 const MAX_PERSIST_MUTATIONS = 256;
 const EDITED_AT = '2026-07-15T09:30:00.000Z';
@@ -1034,7 +1034,7 @@ describe('legacy workspace boot selection', () => {
           wasm: { sqlite: '/sqlite.wasm' },
           previewProbeTimeoutMs: 1_000,
         },
-        packageAcquisition: { registryUrl: 'https://registry.invalid/' },
+        packageAcquisition: { mode: 'registry', registryUrl: 'https://registry.invalid/' },
         storage: { persistence: 'required' },
         legacyWorkspacePrefix,
       },
@@ -1141,6 +1141,8 @@ describe('durable legacy catalog migration', () => {
     await h.owner.close();
   });
 
+  // Snapshot initializer drift uses real saved-trust cases in
+  // workbench-snapshot-legacy-application.contract.test.ts (ADR-0394).
   it.each([
     {
       name: 'normalized seed bytes',
@@ -1148,19 +1150,6 @@ describe('durable legacy catalog migration', () => {
     },
     { name: 'template identity', overrides: { templateId: 'vite-template-v2' } },
     { name: 'runtime port', overrides: { port: 5174 } },
-    {
-      name: 'first-materialization identity',
-      overrides: {
-        firstMaterialization: {
-          kind: 'snapshot' as const,
-          snapshot: {
-            snapshotId: `sha256:${'a'.repeat(64)}`,
-            assetUrl: '/snapshots/project-a.gz',
-            templateId: 'vite-template-v1',
-          },
-        },
-      },
-    },
   ] satisfies readonly BaselineMismatchCase[])(
     'binds an adopted ref to its exact definition and baseline: $name',
     async ({ overrides }) => {

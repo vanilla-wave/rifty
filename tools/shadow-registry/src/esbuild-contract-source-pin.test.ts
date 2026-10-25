@@ -1,13 +1,17 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const packagePath = require.resolve('esbuild-wasm/package.json');
 const packageRoot = dirname(packagePath);
+const upstreamTarballIntegrity =
+  'sha512-5TRVKExcEmeMkccIZMzUq+Az6X2RoMAJyfl6SMMO1dMVhmvt0I2mx7gAb6zYi42n4d1ETcatFXazGKzA+aW7fg==';
 
 function sha256(path: string): string {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
@@ -40,13 +44,31 @@ describe('esbuild-wasm 0.28.0 source pin', () => {
   it('pins the exact upstream browser CJS client and Go WASM bytes from ADR-0226', () => {
     const manifest = JSON.parse(readFileSync(packagePath, 'utf8')) as {
       readonly version?: unknown;
+      readonly dependencies?: unknown;
+      readonly optionalDependencies?: unknown;
+      readonly peerDependencies?: unknown;
+      readonly bundleDependencies?: unknown;
+      readonly bundledDependencies?: unknown;
     };
     expect(manifest.version).toBe('0.28.0');
+    for (const field of [
+      'dependencies',
+      'optionalDependencies',
+      'peerDependencies',
+      'bundleDependencies',
+      'bundledDependencies',
+    ] as const) {
+      expect(manifest, field).not.toHaveProperty(field);
+    }
     expect(sha256(join(packageRoot, 'lib/browser.js'))).toBe(
       'b882a5ffb3bf170c0d8f40c0832cc5dca00830400314bb9455dea5d6f58c2a10',
     );
     expect(sha256(join(packageRoot, 'esbuild.wasm'))).toBe(
       '9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b',
+    );
+    const workspaceLock = readFileSync(new URL('../../../pnpm-lock.yaml', import.meta.url), 'utf8');
+    expect(workspaceLock).toContain(
+      `esbuild-wasm@0.28.0:\n    resolution: {integrity: ${upstreamTarballIntegrity}}`,
     );
   });
 });
@@ -69,12 +91,28 @@ describe('Vite 7.3.6 consumer pin', () => {
     };
     const cli = snapshotFile(snapshot, 'vite/dist/node/cli.js');
     const config = snapshotFile(snapshot, 'vite/dist/node/chunks/config.js');
+    const upstreamCli = execFileSync(
+      'tar',
+      [
+        '-xOzf',
+        fileURLToPath(
+          new URL(
+            '../../../tests/integration/fixtures/registry/rollup-companions/packages/vite-7.3.6.tgz',
+            import.meta.url,
+          ),
+        ),
+        'package/dist/node/cli.js',
+      ],
+      { encoding: 'utf8' },
+    );
 
     expect(manifest.version).toBe('7.3.6');
     expect(manifest.dependencies?.esbuild).toBe('^0.27.0 || ^0.28.0');
-    expect(sha256Text(cli)).toBe(
+    expect(sha256Text(upstreamCli)).toBe(
       '6b9001816eb5fb0979cbe380ed2116db93e315ff22ebf7fe55a4fc60458fa067',
     );
+    // Goal honest-guest-package-adaptations I2: the installed CLI is the upstream member.
+    expect(cli).toBe(upstreamCli);
     for (const anchor of [
       'cli.command("[root]", "start dev server").alias("serve").alias("dev")',
       'const { createServer } = await import("./chunks/server.js");',
@@ -103,6 +141,30 @@ describe('Vite 7.3.6 consumer pin', () => {
     expect(cli).toContain('if (this.options.help && this.showHelpOnExit) {');
     expect(cli).toContain(
       'if (this.options.version && this.showVersionOnExit && this.matchedCommandName == null) {',
+    );
+  });
+});
+
+describe('Vite 8 consumer pin', () => {
+  it('bakes the upstream 8.0.16 dist/node/cli.js bytes', () => {
+    const snapshot = JSON.parse(
+      gunzipSync(
+        readFileSync(
+          new URL(
+            '../../../apps/playground/public/snapshots/vite8-node-modules.json.gz',
+            import.meta.url,
+          ),
+        ),
+      ).toString('utf8'),
+    ) as ViteSnapshot;
+    const manifest = JSON.parse(snapshotFile(snapshot, 'vite/package.json')) as {
+      readonly version?: unknown;
+    };
+    expect(manifest.version).toBe('8.0.16');
+    // `npm pack vite@8.0.16` (integrity sha512-h9bXPmJichP5fLmVQo3PyaGSDE2n3aPuomeAlVRm0JLmt4rY6zmPKd59HYI4LNW8oTK7tlTsuC7l/m7awx9Jcw==),
+    // `tar -xOzf vite-8.0.16.tgz package/dist/node/cli.js | shasum -a 256`, 2026-10-16.
+    expect(sha256Text(snapshotFile(snapshot, 'vite/dist/node/cli.js'))).toBe(
+      '369e1007819411176548d14afe9635e02d31d59941c91fb0a8a34f48ef0a2c41',
     );
   });
 });

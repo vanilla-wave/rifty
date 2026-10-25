@@ -1,0 +1,267 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "FIX I6-FINAL-1, commit its RED/fix and independently verify the repaired source; I6 cannot close yet.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/playground/orphan-scratch-recovery.md; BASE accepted I4 source71d5837158953c2ac1f3ac53d712162c3ea04cd7; reviewed clean source HEAD06b860a2cfbe0e680cacc47150d06dd7280feaa1. Fresh independent reviewer /root/orphan_recovery_final_review, depth1/nochildren/read-only tracked tree. Accepted I6/scenario6 and ADR0406/0407 reviewed against raw source/tests/diff. Contract+RED binding841766eabbd1751bfaa34b6e6003c448ce318df6 inspected with all four executed oracle-correction histories; acceptance and prior public criteria not weakened. Accepted goal/ratified hand-off records are authority; separate original raw user transcript unavailable, not claimed. Existing populated-cache coherence finding remains outside I6, draft, with no established Workbench action. Independent current-source run: pnpm exec vitest run [new catalog, recovery codec, transport, opfs-sync] =125PASS/1historical skip, /tmp/rifty-316-i6-final-review-unit.log. Independent native run: RIFTY_PLAYGROUND_PORT=5401 pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/opfs-preload-honesty.spec.ts tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts --reporter=list =21PASS/14.5s including all8 actual native kills and byte/read refusal/reopen paths; /tmp/rifty-316-i6-final-review-native-green.log. Initial localhost-listen EPERM is sandbox history only. Independent node /tmp/rifty-316-i6-pin-reproducer.mjs replay after reading its actual implementation/options = PASS; /tmp/rifty-316-i6-final-review-pin.log reproduces old29e68... worker pin and current0b8911fb915145165477c4083c8fde67be00cfc3a58abe89a39f33edef318004 at10022664 bytes, all40 write:false outputs equal tested dist, only6 hashed import references/44 byte positions differ, normalized compiler/client unchanged; other compiler/WASM pins unchanged. This independently approves the exact ADR0391 pin change against supplied actual packed Chromium proof, not the driver JSON verdict. Inspected actual producer full pr:check25/25 log /tmp/rifty-316-i6-pr-check-final.log; original6 timeouts in3files passed required isolated rerun, original App fixture typing corrected only by unused throws. Inspected mandatory packed actual producer Vite/build/public recovery/reopen/Node and all prior zero-egress journeys, GREEN88.92s /tmp/rifty-316-i6-packed-green.log; reviewer did not independently rerun full packed or full pr:check. PR4 reviewed two public facade keys, two old typing fixture unused throws, unchanged numeric caps/other pins, whole source closure151→152 exactly catalog-records neutral schema and downward size ratchets. No new coordinator, trust grant, hidden max-size, private Tracker or broader Node guarantee found. Current implementation nevertheless violates malformed-state handling via I6-FINAL-1; independent executed artifact below defeats completion.",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance 1 / corrupt-input fault row → I6 + ADR-0407",
+      "location": "packages/workbench/src/workers/playground-project-authority.ts:1604",
+      "summary": "Malformed migration-journal directory still permits successful orphan recovery; require presence/kind refusal regression and verified repair (I6-FINAL-1)."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I6",
+      "location": "docs/backlog/playground/orphan-scratch-recovery.md",
+      "summary": "Resolve I6-FINAL-1 and complete independent Final+GREEN of actual repaired source before closing the slice."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/service-worker/workbench-preview-prefix.md",
+      "summary": "Scoped preview/assets/HMR remains on goal map."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/distribution/workbench-operation-budgets.md",
+      "summary": "Public effective operation budgets and composed goal proof remain on goal map."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: detect only unjournaled Scratch after catalog/journal recovery; malformed state preserved/loud",
+      "source": "acceptance",
+      "trace": "I6+scenario6+ADR-0279+ADR-0407",
+      "status": "weak",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:269; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:347; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:367; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:399; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:426",
+      "note": "I6-FINAL-1: committed malformed-JSON carrier passes, but the actual implementation treats a directory at migration-journal.json as absence and successfully retains/replaces Scratch; independently executed real owner/Memory VFS probe. Direct correctness violation blocks independently of advisory weak coverage."
+    },
+    {
+      "row": "Acceptance 2: copy durability before ownership pointer; original precommit, retained postcommit; cleanup before redetection; later fresh failure preserves retained result",
+      "source": "acceptance",
+      "trace": "I6+ADR-0279+ADR-0407",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:269; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:458; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:502; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:185",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: public list/download, stable ids, live/no session/reopen; unknown/closed/read/overflow fail without consumption",
+      "source": "acceptance",
+      "trace": "I6+scenario6+ADR-0407",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:269; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:547; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:580; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:129; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:173; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:246",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: exact ordinary bytes/paths/empty dirs; only private root and actual claim namespace excluded; no trust or runnable identity; recovery ingress refused",
+      "source": "acceptance",
+      "trace": "I6+ADR-0407+ADR-0261",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:95; packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:223; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:72; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:293",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: distinct logical-root JSON/base64, six existing finite bounds, measured Vite fits, non-consuming overflow; retention independent of export cap",
+      "source": "acceptance",
+      "trace": "I6+ADR-0407",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:95; packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:279; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:580; tests/integration/fixtures/workbench-vite-consumer/src/orphan-scratch-recovery-proof.ts:180; docs/backlog/playground/reference/orphan-scratch-recovery-evidence.md:43",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: absent cache raises EIO, healthy/empty valid, destination validation and cp partial ordering, native uncached rename source custody, retry/write availability",
+      "source": "acceptance",
+      "trace": "I6+ADR-0406+ADR-0072+ADR-0090",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-honesty.spec.ts:69; tests/browser-unit/opfs-preload-honesty.spec.ts:86; tests/browser-unit/opfs-preload-honesty.spec.ts:145; tests/browser-unit/opfs-preload-honesty.spec.ts:165; packages/vfs/src/opfs-sync.test.ts:984",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: selected native namespace kill/reopen at copy/pointer/cleanup/fresh creation, exact custody/id/no duplicates and untouched outside data",
+      "source": "acceptance",
+      "trace": "I6+I4+ADR-0407+ADR-0402+ADR-0358",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:185; tests/browser-unit/fixtures/orphan-scratch-recovery-boundary.ts:10",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: mandatory packed copied-assets snapshot-only public preserve/fresh/list/export/reopen, actual dependency/build/source bytes and zero egress",
+      "source": "acceptance",
+      "trace": "I1+I2+I3+I4+I6+scenario6",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/orphan-scratch-recovery-proof.ts:64; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:134; tests/integration/workbench-packed-consumer.mjs:1300; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:129",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: actual Chromium OPFS native entries/refusal/fresh Worker oracle; actual Memory VFS supplements, unavailable is never empty",
+      "source": "acceptance",
+      "trace": "I6+ADR-0406+ADR-0407",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-honesty.spec.ts:86; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:185; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:265; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:245",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: real public producer/Node Vite dependency tree and native build for sizing; no general private package promise",
+      "source": "acceptance",
+      "trace": "I1+I6+ADR-0407",
+      "status": "pass",
+      "citation": "docs/backlog/playground/reference/orphan-scratch-recovery-evidence.md:43; tests/integration/fixtures/workbench-vite-consumer/prepare-orphan-payload.mjs:9; tests/integration/fixtures/workbench-vite-consumer/src/orphan-scratch-recovery-proof.ts:40",
+      "note": ""
+    },
+    {
+      "row": "Fault false-fallback/provenance-lie × cold preload/read/copy",
+      "source": "fault-matrix",
+      "trace": "I6+ADR-0406",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-honesty.spec.ts:86",
+      "note": ""
+    },
+    {
+      "row": "Fault sibling-drift × read/copy/cp/rename/export",
+      "source": "fault-matrix",
+      "trace": "I6+ADR-0406+ADR-0090",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-honesty.spec.ts:86; tests/browser-unit/opfs-preload-honesty.spec.ts:145; tests/browser-unit/opfs-preload-honesty.spec.ts:165; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:246",
+      "note": ""
+    },
+    {
+      "row": "Fault quota-perm-fail × retention copy/flush: original intact, no false success, retry",
+      "source": "fault-matrix",
+      "trace": "I6+ADR-0407",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:458; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:216",
+      "note": ""
+    },
+    {
+      "row": "Fault torn-state × retention pointer/cleanup/fresh creation",
+      "source": "fault-matrix",
+      "trace": "I6+ADR-0279+ADR-0407",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:185; tests/browser-unit/fixtures/orphan-scratch-recovery-boundary.ts:10",
+      "note": ""
+    },
+    {
+      "row": "Fault corrupt-input × catalog/journal/id/archive: uncertainty preserved/loud, no consumption",
+      "source": "fault-matrix",
+      "trace": "I6+ADR-0407",
+      "status": "weak",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:399; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:426; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:547; packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:223",
+      "note": "I6-FINAL-1: committed malformed-JSON carrier passes, but the actual implementation treats a directory at migration-journal.json as absence and successfully retains/replaces Scratch; independently executed real owner/Memory VFS probe. Direct correctness violation blocks independently of advisory weak coverage."
+    },
+    {
+      "row": "Fault provenance-lie × copied claims/paths: only actual private namespaces excluded, ordinary lookalikes retained, no trust minted",
+      "source": "fault-matrix",
+      "trace": "I6+ADR-0261+ADR-0407",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:95; packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:144; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:293; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:72",
+      "note": ""
+    },
+    {
+      "row": "Fault observable-order × create/list/export/reopen: existing FIFO/lifetime, retained result survives later fresh failure",
+      "source": "fault-matrix",
+      "trace": "I6+ADR-0279+ADR-0407",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:269; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:502; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:547; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:216",
+      "note": ""
+    },
+    {
+      "row": "Fault unbounded-read × recovery export: six allocation caps; overflow/read failure leaves stored bytes",
+      "source": "fault-matrix",
+      "trace": "I6+ADR-0407",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:279; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:580; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:246",
+      "note": ""
+    },
+    {
+      "row": "ADR-0407 public catalog.listRetainedScratch(): opaque readonly id records, lifetime/FIFO, no live session required",
+      "source": "public-api",
+      "trace": "I6+scenario6+ADR-0407",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:200; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:547; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:173",
+      "note": ""
+    },
+    {
+      "row": "ADR-0407 public catalog.exportRetainedScratch(id): bounded non-consuming recovery JSON after reopen",
+      "source": "public-api",
+      "trace": "I6+scenario6+ADR-0407",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:269; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:547; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:580; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:246",
+      "note": ""
+    },
+    {
+      "row": "Recovery envelope golden: distinct format/version/root, canonical Buffer base64 and complete ordinary path lists",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0407+ADR-0261",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:95; packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:197",
+      "note": ""
+    },
+    {
+      "row": "Catalog ordinary-tree golden includes every ordinary directory remaining after private claim exclusion",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0407+ADR-0261",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:107; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:145; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:166",
+      "note": ""
+    },
+    {
+      "row": "ADR-0391 exact TypeScript-worker compiler fingerprint update preserves the existing compiler/client graph and has actual browser proof",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:98; tests/integration/workbench-packed-consumer.mjs:1297",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "packages/workbench/src/workers/playground-project-authority.ts:1977; packages/workbench/src/workers/playground-project-authority.ts:1604",
+          "summary": "I6-FINAL-1: malformed legacy-journal directory is treated as no journal; createScratch reports success and replaces the original Scratch despite unresolved metadata.",
+          "authority": "Acceptance 1 → I6 + scenario6 + ADR-0407; ADR-0407 Decision 1: detect only after catalog/legacy journal validation and recovery; malformed or unresolved journals/layouts remain loud and preserved. Fault corrupt-input × catalog/journal/id/archive → I6 + ADR-0407.",
+          "evidence": "Executed pnpm exec vitest run --workspace /tmp/rifty-316-i6-final-review.workspace.ts -t \"independent malformed directory\" > /tmp/rifty-316-i6-final-review-malformed.log 2>&1 on clean source06b860a2cfbe0e680cacc47150d06dd7280feaa1, Node24.16.0/Vitest2.1.9. Probe /tmp/rifty-316-i6-final-review-malformed.test.ts reuses actual openSnapshotOnlyOwner, real MemoryFsSync/DurableOwnerFs and real public-produced ms fixture; no owner/VFS success mocked. It seeds the existing orphan plus a nonempty directory at /.rifty/workbench/playground/migration-journal.json, then opens owner and creates fresh Scratch. Raw stdout: {\"name\":\"migration-journal.json\",\"version\":\"v24.16.0\",\"admitted\":true,\"failure\":null,\"retained\":[{\"id\":\"b1327c96-8f75-46a4-90fe-440e86464069\"}],\"sourceStillPresent\":false,\"malformedStillPresent\":true}. Refusal and unchanged-state assertions fail. Directory predicate isFile at1604 ignores existing malformed metadata; new orphan branch1977 proceeds. Fault class corrupt-input/sibling-drift (existence confused with file kind). Required regression missing for metadata directory kinds; sibling sweep should cover catalog.json and migration-journal.json with/without catalog and transaction.json presence handling. Same run catalog.json variant hit a diagnostic list on a closed owner, so that variant is harness history, not a second product finding. No native version of this new probe was created/run."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

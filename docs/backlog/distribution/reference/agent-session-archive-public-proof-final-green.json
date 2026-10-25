@@ -1,0 +1,110 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: текущий unit и I1–I4 доказаны; выполнить CLOSE cleanup, binding и merge.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "10da20d3ed93803f52b9454edc8b8237535375bd",
+  "unit_goal_source": "docs/backlog/distribution/agent-session-archive-public-proof.md @ 10da20d3ed93803f52b9454edc8b8237535375bd; BASE d97031386b10a32989d80a483f25e70091f1a30a. Accepted goal: docs/backlog/epics/agent-session-archive/goal.md; original user answers: distribution/reference/agent-session-archive-refine.md; ADR-0482 + ADR-0261; PR #364 body /tmp/rifty-pr364-body.md. Reviewed actual diff and original criteria at BASE. Core archive source/tests unchanged; prior independent Contract+RED and corrected Final+GREEN reused only for unchanged I1/I3 obligations, checked against raw /tmp/rifty-archive-final-verify.log (12/12). Current raw evidence: /tmp/rifty-archive-pr-check-final.log 27/27 without rerun; /tmp/rifty-archive-browser-final.log 29/29; /tmp/rifty-archive-prod.log 1/1; /tmp/rifty-archive-packed-3.log full installed journey PASS. Native live SDK/Workbench gzip traces parsed independently and compared to exact packed log objects: done, search/read successful, unpredictable marker absent from input and present in archive_read and final answer. Project deletion raw RED/GREEN/guards/mutant logs checked: original EPERM; 33/33 GREEN; 28/28 guard/store GREEN; reverting cleanup kills both new cases (2 failed/5 passed). I1 original/reset/compaction/reload and I3 native interrupted-write/error proof remain valid; I2/I4 installed save→delete→reload→new-project search/read plus live recall and actual rename/export/import/delete cover composed source lifecycle. No required product residuals; CLOSE documentation cleanup remains driver bookkeeping.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Acceptance 1: installed SDK and Workbench automatically save originals/tools, reload, new project discovers and reads without injected transcript or filename",
+      "source": "acceptance",
+      "trace": "I2 + I4",
+      "status": "pass",
+      "citation": "tests/integration/agent-archive-browser-proof.mjs:5",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: source rename/delete and existing project export/import preserve shared archive bytes",
+      "source": "acceptance",
+      "trace": "scenario + I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/archive-proof.ts:149",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: live real model recalls an unpredictable earlier-project phrase through archive_search/archive_read after reload on both hosts",
+      "source": "acceptance",
+      "trace": "scenario + I2 + I4",
+      "status": "pass",
+      "citation": "tests/integration/agent-archive-browser-proof.mjs:48",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: original/reset/compaction and acknowledged-write guarantees stay certified; required baseline Workbench deletion repair delivered",
+      "source": "acceptance",
+      "trace": "I1 + I3 + scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-archive.spec.ts:7; packages/workbench/src/workers/workbench-project-store.test.ts:132",
+      "note": ""
+    },
+    {
+      "row": "observable-order × project deletion/stage cleanup: clear protected claims before tree removal; ordinary mutations remain refused",
+      "source": "fault-matrix",
+      "trace": "scenario + ADR-0261",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-project-store.test.ts:132",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × installed hosts: same shared archive owner and read tools through both public hosts",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/integration/agent-archive-browser-proof.mjs:10",
+      "note": ""
+    },
+    {
+      "row": "torn-state × project lifecycle: archive unchanged through rename/export/import/delete",
+      "source": "fault-matrix",
+      "trace": "scenario + I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/archive-proof.ts:190",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -1,0 +1,159 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: контракт покрыт; PR-4 matchObject сохраняет status/details criterion, обязательных остатков нет.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "a3bf193e7101393664f2579af5b10016c0b933e0",
+  "unit_goal_source": "docs/backlog/distribution/public-agent-release-readiness.md @ a3bf193e7101393664f2579af5b10016c0b933e0; BASE origin/main 8889e9d5e1f8b8c369247ddc3b7ecc62e759470e; ADR-0424/0436. Independent: targeted Vitest 7/7, agent typecheck exit 0, check:arch exit 0, sync-publish --check 16 generated packages; packed agent root-only manifest and JS/map/d.ts/README/CHANGELOG/LICENSE inspected. Committed evidence inspected: browser-unit 16/16, Playground proxy e2e 1/1, build 17 targets, packed consumer 1/1 in 166.6s, pr:check 25/25.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1 — generated public root-only agent package, compiled/docs tarball, 17-package lockstep, no registry mutation",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/agent/src/publishing.test.ts:15; docs/backlog/distribution/reference/public-agent-release-readiness-evidence.md:119",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2 — exclusive OpenAI settings or native StreamFn; custom needs no settings and receives context/tools/instructions/abort",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:74",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3 — distinct capped shell/preview metadata reaches model-facing text while details and Pi error semantics remain",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:184; tests/browser-unit/agent-core.spec.ts:206",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4 — custom trace claims only custom transport; assistant identity retained; OpenAI endpoint/model retained without key",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:85; tests/browser-unit/agent-core.spec.ts:236",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5 — agent network failure is product-neutral and Playground owns proxy guidance",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:164; tests/e2e/ai-mode.spec.ts:300",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6 — real packed Workbench/no-COI consumers, typecheck/build/tarball and full PR gate pass",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/public-agent-release-readiness-evidence.md:104",
+      "note": ""
+    },
+    {
+      "row": "Fault: corrupt-input × transport options rejects missing/mixed transport before host/model effects",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:140",
+      "note": ""
+    },
+    {
+      "row": "Fault: lossy-aggregate × shell/preview result preserves decisive metadata before capped body",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:184",
+      "note": ""
+    },
+    {
+      "row": "Fault: provenance-lie × custom trace exports custom config and assistant-owned response identity",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Fault: network × default request stays loud/product-neutral and leaks no key/config while Playground retains guidance",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:164; tests/browser-unit/agent-core.spec.ts:236; tests/e2e/ai-mode.spec.ts:300",
+      "note": ""
+    },
+    {
+      "row": "Public package entry @riftydev/agent exposes only root and exact public dependencies",
+      "source": "public-api",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/package.json:2",
+      "note": ""
+    },
+    {
+      "row": "Public AgentSettings contains transport settings only",
+      "source": "public-api",
+      "trace": "ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/types.ts:70",
+      "note": ""
+    },
+    {
+      "row": "Public AgentRunLimits exposes shared top-level run limits",
+      "source": "public-api",
+      "trace": "ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/types.ts:76",
+      "note": ""
+    },
+    {
+      "row": "Public AgentSessionCommonOptions carries host, limits, tools and instructions",
+      "source": "public-api",
+      "trace": "ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/types.ts:81",
+      "note": ""
+    },
+    {
+      "row": "Public AgentSessionOptions is an exclusive settings/fetch or StreamFn union",
+      "source": "public-api",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/types.ts:87; packages/agent/src/session.test.ts:74",
+      "note": ""
+    },
+    {
+      "row": "Public createAgentSession admits native custom transport without settings and rejects invalid selection before effects",
+      "source": "public-api",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.ts:20; packages/agent/src/session.test.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Public AgentTrace.config discriminates openai-compatible and custom provenance",
+      "source": "public-api",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/types.ts:118; packages/agent/src/session.test.ts:121",
+      "note": ""
+    }
+  ],
+  "axes": [
+    { "axis": "Completeness", "verdict": "pass", "findings": [] },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    { "axis": "Bugs", "verdict": "pass", "findings": [] },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+  ],
+  "adjudication": []
+}

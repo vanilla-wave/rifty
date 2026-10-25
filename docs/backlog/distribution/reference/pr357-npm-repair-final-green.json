@@ -1,0 +1,118 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: accepted F1 independently verified fixed; repair unit mergeable after normal pass binding. No required unit residual.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #357 observed-defect repair; BASE87c370fa71760a91621bb7f5f8d3f759aace84a6, clean reviewed HEAD1e7aa25e92f0ed1c27de4e1fc0187d1e3407112e. Fresh independent reviewer /root/pr357_final_review, read-only tracked tree, no children. This is verification by the original independent reviewer after an accepted repair, REV-12/checkpoint-run; no disputed finding or critic adjudication. User requested both inline npm bugs fixed, dataField/prototype-depth rationale and actual accessor cases investigated, compiler-byte delta explained, existing PR GREEN. Full repair diff reviewed against original BASE; historical goal I9/scenario6 and ADR0487/0488/0504/0051 read raw. Earlier accepted PR units remain baseline under REV-1; goal_complete=false means this review certifies the repair, not a new whole-goal CLOSE.\n\nORIGINAL F1, ACCEPTED AND VERIFIED FIXED: historical exact BLOCK preserved byte-for-byte in docs/backlog/distribution/reference/pr357-npm-repair-review-block.json. At7cdc15abc, registry resolution chose a native version, then admission threw before selected=pin; named optional native saved npm:null@* instead of ^0.28.0. New internal onSelection callback conveys actual identity before registry native/lifecycle/shadow admission, and before retained-lock admission; synthetic selection also reports actual identity. It feeds only the existing root optional catch. Required error policy, acquisitions and replay coverage remain unchanged; no extra resolver/state owner or error-message parsing. Read all six followup files and callback callsites. Committed real metadata cases add native and lifecycle boundaries, without changing prior expected values or assertions. Native esbuild/Biome manifests come from actual pinned dependencies; only external HTTP delivery fails. Raw shared2 RED and Chromium2 RED, revert2 RED, focused67/67 GREEN and corrected Chromium13/13 GREEN inspected in /tmp/pr357-review-admission-{red,browser-red,revert,green,browser-green}.log. Independently reran the ORIGINAL /tmp/pr357-review-native-optional.mts: Node24.16.0/npm11.17.0, both implementations exit0 and save @esbuild/darwin-arm64 ^0.28.0; /tmp/pr357-review-native-optional-fixed.log. This new code+executed evidence discharges the original finding and its unit residual; not a blanket deletion.\n\nUNCHANGED REPAIR REVIEW: source intent preserves named updates through existing incremental resolution; no-args/unrelated pins and fresh Eddy remain covered. Initial RED8/control2 shared+Chromium, revert RED10/control20, focused195 and Chromium14 inspected. PR-4: BASE/current catalog fixture compared directly; genuine packument response admits correct named metadata lookup, quota/permission primitive and mutation/failure/reload assertions untouched. Independent native exact reinstall /tmp/pr357-review-native-metadata.mts confirms two /ms lookups with version2.0.0 retained; /tmp/pr357-review-native-metadata.log. dataField rationale matches actual own-cause-gap carrier, five serializer tests and occupied DOMException cases; no third-party accessor case invented, depth8 only bounds prototype steps. Compiler artifacts independently hashed/diffed: main10022694/8e175378... versus baseline10022664/ffeebf6f..., only shared/dynamic imports/order and one side-effect import removal; compiler body unchanged.\n\nRDY-6 FINAL CAPTURE CHECK: docs/backlog/toolchain-build/parity-native-cjs-lexer-crash.md checked against raw /tmp/pr357-repair-pr-check-final.log native cjs_lexer::Parse/cjsPreparseModuleExports/Worker stack and exit134, and /tmp/pr357-repair-parity-worker-isolated.log20/20. Draft accurately leaves failing case/root cause unknown, owner parity harness, trigger recurrence/reproducer; no new scope, user choice or unsupported diagnosis. Earlier catalog failures, isolation and one transient native parity abort remain explicit history.\n\nCURRENT GREEN: /tmp/pr357-repair-pr-check-reviewed.log27/27 on exact reviewed SHA, test:run200.2s/parity127.6s, no isolated reruns. Final /tmp/pr357-repair-packed-final.log passes16 first-party+178 external tarballs, separate consumer TypeScript/build, fresh Chromium SDK/agent/reference-host both registry configurations, archive/snapshot/preview journeys, mandatory actual shared-host benchmark. Previous packed on7cdc15abc is historical and not substituted for this rerun. git status clean, exact SHA and diff --check confirmed. All remaining work is review bookkeeping/PR delivery; no required product residual found.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Named bare, explicit-range, wildcard and exact-save reinstall refresh satisfying retained root pin",
+      "source": "acceptance",
+      "trace": "I9 + ADR-0487 + ADR-0504",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/npm-install-update-cases.ts:2",
+      "note": ""
+    },
+    {
+      "row": "No-args install and unrelated addition retain prior root pin",
+      "source": "acceptance",
+      "trace": "I9 + ADR-0504",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/npm-install-update-cases.ts:16",
+      "note": ""
+    },
+    {
+      "row": "Legitimate skipped optionals continue shell execution and save native dependency/root-lock maps",
+      "source": "acceptance",
+      "trace": "I9 + ADR-0487 + ADR-0488 + ADR-0504",
+      "status": "pass",
+      "citation": "tests/integration/npm-shell-update-parity.test.ts:42",
+      "note": ""
+    },
+    {
+      "row": "Fresh Eddy install followed by selective named update preserves unrelated installed root",
+      "source": "acceptance",
+      "trace": "I9 + ADR-0504",
+      "status": "pass",
+      "citation": "tests/integration/npm-shell-eddy-glue.test.ts:741",
+      "note": ""
+    },
+    {
+      "row": "InstallOptions.updateNames carries selected root update intent through existing installer without changing no-intent replay",
+      "source": "public-api",
+      "trace": "ADR-0504",
+      "status": "pass",
+      "citation": "tests/integration/npm-shell-update-parity.test.ts:35",
+      "note": ""
+    },
+    {
+      "row": "InstallResult.skippedOptionalDependencies distinguishes selected metadata from unresolved optional requests",
+      "source": "public-api",
+      "trace": "ADR-0504",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/npm-install-update-cases.ts:23",
+      "note": ""
+    },
+    {
+      "row": "Shared no-COI Worker executes same npm differential and preserves command continuation",
+      "source": "acceptance",
+      "trace": "I9 + scenario6",
+      "status": "pass",
+      "citation": "tests/no-coi/npm-update-parity.spec.ts:13",
+      "note": ""
+    },
+    {
+      "row": "Already-selected root optional native/lifecycle admission failures preserve native saved ranges in manifest and root lock maps",
+      "source": "acceptance",
+      "trace": "I9 + ADR-0487 + ADR-0051 + ADR-0504",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/npm-install-update-cases.ts:55",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "1e7aa25e92f0ed1c27de4e1fc0187d1e3407112e"
+}

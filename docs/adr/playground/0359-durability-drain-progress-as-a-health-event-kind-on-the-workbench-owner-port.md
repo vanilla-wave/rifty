@@ -68,3 +68,7 @@ big trees, and timeouts still cannot distinguish slow from stuck. Epic
 - The epic's I1 invariant becomes provable end-to-end: monotone
   non-decreasing `persisted`, terminal `persisted === total`, wedge
   distinguishable — carried by the slice's browser acceptance.
+
+## Corrections (active)
+
+2026-09-10 — ADR-0413 supersedes only the reach/saved-open clauses named there; other decisions remain active.

@@ -9,6 +9,19 @@ const c: ParityCase = {
         "switch (0) { case 0: const Function = () => 'switch-local'; module.exports = Function(); break; }\n",
       'static-shadow.cjs':
         "class Holder { static { const Function = () => 'static-local'; module.exports = Function(); } }\n",
+      'common-loader.cjs': "module.exports = 'cjs-eval-common';\n",
+      'lazy-eval-loader.cjs': `
+        let importModule;
+        module.exports = function loadLoader(loader) {
+          if (loader.type === 'module') {
+            if (importModule === undefined) {
+              importModule = eval('(url) => import(url)');
+            }
+            return importModule(loader.path);
+          }
+          return require(loader.path);
+        };
+      `,
     },
   },
   code: `
@@ -28,9 +41,15 @@ const c: ParityCase = {
     const dyn = new Function('specifier', 'return import(specifier)');
     out.push(['dynInstance', dyn instanceof Function]);
     out.push(['dynPrototype', Object.getPrototypeOf(dyn) === Function.prototype]);
-    dyn('./dep.mjs').then(
-      (m) => {
+    const loadLoader = require('./lazy-eval-loader.cjs');
+    out.push(['lazyCommon', loadLoader({ type: 'commonjs', path: './common-loader.cjs' })]);
+    Promise.all([
+      dyn('./dep.mjs'),
+      loadLoader({ type: 'module', path: './dep.mjs' }),
+    ]).then(
+      ([m, lazy]) => {
         out.push(['value', m.value]);
+        out.push(['lazyValue', lazy.value]);
         console.log(JSON.stringify(out));
       },
       (err) => {

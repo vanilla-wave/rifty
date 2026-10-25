@@ -1,6 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 import {
   type TerminalSessionTarget,
+  openLauncher,
   openShellTerminal,
   pickStarter,
   runTerminalLine,
@@ -26,10 +27,7 @@ async function expectSessionContains(
 }
 
 async function openProjects(page: Page): Promise<void> {
-  const trigger = page.locator('[data-action="open-launcher"]');
-  await expect(trigger).toBeEnabled({ timeout: OWNER_TIMEOUT });
-  await trigger.click();
-  await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 5_000 });
+  await openLauncher(page);
   await page.getByRole('button', { name: /^Projects/ }).click();
 }
 
@@ -314,7 +312,7 @@ test.describe('workspace state persists across reload', () => {
     const modeHint = page.locator(
       `.rf-terminal-slot[data-session-id="${reopenedShell.sessionId}"] [data-testid="terminal-mode-hint"]`,
     );
-    await expect(modeHint).toContainText('Commands run in /;', { timeout: 30_000 });
+    await expect(modeHint).toContainText('running programs own stdin', { timeout: 30_000 });
     await runTerminalLine(page, 'cat ./src/main.js', reopenedShell);
     await expectSessionContains(page, reopenedShell, marker, 20_000);
   });

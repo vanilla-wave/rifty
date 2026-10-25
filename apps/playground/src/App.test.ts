@@ -58,7 +58,6 @@ describe('App semantic companion boundary', () => {
 describe('App client-only semantic bindings', () => {
   it('keeps Monaco lazy until a project session is bound', () => {
     expect(appSource).toContain('const EditorHost = lazy(() =>');
-    expect(appSource).toContain('function warmEditorStack(): void');
     expect(appSource).toContain(
       'const mirror = createPlaygroundProjectMirror(context.session.files)',
     );
@@ -152,6 +151,11 @@ describe('http compat docs', () => {
     expect(httpCompatSrc).toContain('| Request headers / `rawHeaders` | ⚠️ |');
     expect(httpCompatSrc).toContain('derived from Fetch-normalized headers');
     expect(httpCompatSrc).toContain('raw casing/order/duplicates are not claimed');
+  });
+
+  it('tells Origin-validating servers to allow-list the exact Playground page hostname', () => {
+    expect(httpCompatSrc).toContain('exact Playground page hostname');
+    expect(httpCompatSrc).toContain('does not rewrite Host or Origin');
   });
 });
 

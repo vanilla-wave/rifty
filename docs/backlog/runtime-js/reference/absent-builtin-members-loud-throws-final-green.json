@@ -1,0 +1,175 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "PASS with advisory concerns. The r1 blocker is fixed: at HEAD the published builtins/fs d.ts carries the NodeJS.ErrnoException global again. A fresh consumer tsc probe exits 0, the new published-dts carrier is RED on the pre-fix sources and kills the delete-global mutant, and pr:check --all passes 24/25; the one red, refs:check, is already red at BASE. Before landing, record the owed DEC-2 decision review.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md @ 469a22f4b52a98088fee9387b0eb8558f93e598d (branch vg/u4; ready-verdict Contract+RED @ e727857522dd2faa97c839a25ea134aa830cf6ac, record docs/backlog/runtime-js/reference/absent-builtin-members-loud-throws-contract-red.json with reviewed_sha), BASE c2ab221de27d8051bb3a14fbbb541c0fdb97c891; goal docs/backlog/epics/vitest-run-in-browser/goal.md I6 (:119); ADR-0443 (partially supersedes ADR-0348 §2); evidence docs/backlog/runtime-js/reference/absent-builtin-members-loud-throws-evidence.md (incl. G3); prior verdict /tmp/vgoal/u4/final-green-r1.json; oracle host Node v24.16.0 darwin arm64",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:17-26",
+      "summary": "Map items 5 (guard-precision) and 10 (vm-offsets) own the other I6 walls; this unit does not cover them. Item 12 owns the end-to-end proof on the claimed path."
+    },
+    {
+      "clause": "I1, I2, I3, I4, I5, I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:11-53",
+      "summary": "Map items 1, 6-9 and 11-13 still hold these open. The goal closes only with item 12's e2e and the vitest.md compat page."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: named imports statfsSync (node:fs), spawnSync (node:child_process) and memoryUsage (node:process) link; process.memoryUsage.bind(process) yields a function",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/builtin-loud-members-link.case.ts:14-33",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: each member is an own data property with Node's descriptor (function, writable, enumerable, configurable, in Object.keys); named import === namespace entry; memoryUsage.rss is an own function with the same descriptor",
+      "source": "acceptance",
+      "trace": "ADR-0443",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/builtin-loud-members-link.case.ts:20-35",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: a forked ESM child (forks-pool worker shape) links the three named imports, binds process.memoryUsage at load and exits 0 with Node's stdout",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/pool-worker-loud-members.case.ts:16-41",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: fs.statfsSync(path), child_process.spawnSync(cmd,args), process.memoryUsage() throw NotImplementedError with their feature ids (direct, .bind(process), fresh NodeProcess); memoryUsage.rss() throws with process.memoryUsage.rss; no call returns a value",
+      "source": "acceptance",
+      "trace": "I6+ADR-0443",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/loud-members.test.ts:43-70",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: compat fs.md (through the generator inventory), process.md and the modules.md node: row list the three members as ❌ named NotImplementedError members under ADR-0443; the runtime-js CHANGELOG records them",
+      "source": "acceptance",
+      "trace": "ADR-0443",
+      "status": "pass",
+      "citation": "tools/compat-matrix-generator/fs-matrix.js:81-85 (check:compat-drift green @ HEAD), docs/public/compat/process.md:28,76, docs/public/compat/modules.md:20, packages/runtime-js/CHANGELOG.md:5",
+      "note": ""
+    },
+    {
+      "row": "Parity case 1: frozen Node v24.16.0 output of modules/builtin-loud-members-link",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0443",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/builtin-loud-members-link.case.ts:1-37",
+      "note": ""
+    },
+    {
+      "row": "Parity case 2: frozen Node output of child_process/pool-worker-loud-members ({code:0, signal:null, stdout:[function x4,true], stderr:false})",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/pool-worker-loud-members.case.ts:1-45",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/runtime-js/src/builtins/loud-members.ts:1-23",
+          "evidence": "Scratch /tmp/vgoal/u4/scratch-fg-2 @ 469a22f4b (detached; removed after). `npx vitest run --project unit packages/runtime-js/tests/published-dts.test.ts packages/runtime-js/src/builtins/loud-members.test.ts` -> 'loud-members.test.ts (5 tests)' ✓, 'published-dts.test.ts (1 test) 6724ms' ✓, 'Tests 6 passed (6)'. `pnpm pr:check --all` -> lint, typecheck, build:libs, check:arch, check:compat-drift, check:file-size, check:esbuild-legacy-retirement, 'test:run (168.3s)' and 'test:parity (65.9s)' all ✓. The only ✗ is refs:check: goal.md's dangling ref docs/backlog/runtime-js/reference/vitest-run-acceptance-evidence.md. That ref is already in goal.md at BASE c2ab221de (`git show BASE:.../goal.md | grep` -> :179), and `git cat-file -e` says the file 'does not exist in c2ab221de'.",
+          "summary": "Since r1, the fix commit leaves the loud-member code and its carriers untouched. On the fixed tree the r1 coverage rows still pass: GREEN re-run, parity green.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md:67",
+          "evidence": "",
+          "summary": "Carried from r1, still open at HEAD. The Decision line still says a fresh DEC-2 decision review of ADR-0443's partial supersession of ADR-0348 §2 is owed and that the driver runs it before IMPLEMENT. Neither the diff, the ledger nor the evidence records that it ran. Run it, or amend the line. DEC-2 is not blocker-capable (REV-2).",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/epics/vitest-run-in-browser/map.md:16",
+          "evidence": "",
+          "summary": "Carried from r1. Map item 4 still says 'real or named-loud', and map.md:84 still says '--changed (git via spawnSync): loud'. The contract Decision at :69 defers both fixes to the land re-chart, so keep them on that checklist.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/runtime-js/tests/published-dts.test.ts:1-65",
+          "evidence": "Isolated run 6.7s. pr:check --all test:run 168.3s, against 173.5s at r1 without the carrier.",
+          "summary": "The new carrier is the regression test that AGENTS.md §Fidelity requires for the r1 defect. It reuses the package's own tsup config and TypeScript and adds no gate or runtime machinery, so REV-7 is not engaged.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/runtime-js/tests/published-dts.test.ts:4-5",
+          "evidence": "Scratch @ 469a22f4b, mutant M7: move the `declare global { namespace NodeJS { interface ErrnoException … } }` block from fs.ts to the end of fs-stats.ts, a non-entry module that fs.ts imports for the value `Stats`. Then `npx vitest run --project unit packages/runtime-js/tests/published-dts.test.ts` -> '✓ every published d.ts type-checks without @types/node', 'Tests 1 passed (1)'.",
+          "summary": "The rationale in the test comment and at contract :74 ('the d.ts bundle keeps a `declare global` only from an entry module') is inaccurate. The bundle keeps a non-entry module's global when that module contributes public types. fs-errors.ts was dropped because it exports only values that never reach fs's public d.ts. The carrier's pass is correct, since the published d.ts stays valid, so only the explanatory text is imprecise.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "tools/checks/esbuild-legacy-retirement.mjs:103",
+          "evidence": "pr:check --all @ 469a22f4b: '✓ build:libs (25.7s)' … '✓ check:esbuild-legacy-retirement (0.9s)' with the pin r1 accepted.",
+          "summary": "PR-4: the fix commit leaves the typescript-worker fingerprint pin unchanged, and a fresh build still matches it, so the type-only move emits no JS change. The r1 grading of the re-pin stands.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/runtime-js/src/builtins/fs.ts:1634-1645",
+          "evidence": "Scratch /tmp/vgoal/u4/scratch-fg-2 @ 469a22f4b. (1) GREEN: published-dts.test.ts ✓, 'Tests 1 passed'. (2) RED: `git checkout 5017ab6e1 -- fs.ts fs-errors.ts fs-stats.ts`, then the same test -> '× every published d.ts type-checks without @types/node', 9 rows '/builtins/fs.d.ts:197 … :331 TS2503 Cannot find namespace 'NodeJS'.' (restored). (3) Mutant M6: delete the declare global block from fs.ts -> '×', 9x TS2503 (restored). (4) Consumer probe in r1 shape: fresh `tsup --dts-only` of io and runtime-js at HEAD; tsconfig {types:[], skipLibCheck:false, strict, moduleResolution:bundler, paths @riftydev/io -> io index.d.ts, files:[rjs/builtins/fs.d.ts]}; `tsc -p` -> 'tsc exit 0'. Fresh build:libs dist/builtins/fs.d.ts:733 has 'declare global {', and it is the only dist d.ts with a global, as at BASE. fs-errors.ts matches BASE byte-for-byte (`git diff BASE..HEAD -- fs-errors.ts` is empty). fs.ts is 1645 lines against the 1648 pin (check:file-size ✓).",
+          "summary": "r1 blocker is fixed. The NodeJS.ErrnoException global is back at its BASE place in fs.ts, the published builtins/fs d.ts again type-checks standalone, and the new committed carrier discriminates the regression.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "469a22f4b52a98088fee9387b0eb8558f93e598d"
+}

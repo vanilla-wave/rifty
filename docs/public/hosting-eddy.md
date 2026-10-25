@@ -4,14 +4,20 @@
 rifty's OWN resolution server-side and returns one `EddyBundleV1` (lockfile +
 compressed tarballs); the client pre-seeds its tarball cache + writes the
 lockfile, then the existing lockfile fast path installs with zero packument
-network — structurally ~100 cold round-trips collapse to 1 POST. Measured on a
-real browser over the production `auto` transport: **1.88x** (2026-07-07 run:
-standard 5180ms → eddy 2761ms; both production origins negotiated h2;
-`perf/benchmarks.json` tracks the current figure, which drifts with the standard
-baseline's network variance). The committed artifact does not carry the full
-h2/h3 matrix, so h3 remains unquoted until
-`docs/backlog/perf/eddy-http3-cold-validation.md` closes. (The older "~6x" is a
-Node/sandbox model, not a browser number — don't quote it at launch.)
+network — structurally ~100 cold round-trips collapse to 1 POST. Last measured
+on a real browser over the production `auto` transport on 2026-07-07, on the
+previous vanilla-Vite deep-link tile: **1.88x** (standard 5180ms → eddy 2761ms;
+both production origins negotiated h2). That figure is NOT quotable for the
+current tile: since 2026-09-02 the deep link boots the React 19 issue-tracker
+starter, and `perf/benchmarks.json` re-measured on it records standard 9820ms
+with the eddy pass `unmeasured` — the deployed resolver (image of 2026-08-23)
+resolves `esbuild@0.28.0` through the pre-#289 catalog shape, which carries no
+integrity, and declines every esbuild closure with `422 integrity-missing`, so
+the client falls back to standard install, loudly
+(`docs/backlog/distribution/eddy-live-esbuild-closure-decline.md`). The
+committed artifact does not carry the full h2/h3 matrix, so h3 remains unquoted
+until `docs/backlog/perf/eddy-http3-cold-validation.md` closes. (The older
+"~6x" is a Node/sandbox model, not a browser number — don't quote it at launch.)
 It is **additive and opt-in** — standard install is untouched and is the
 always-on fallback.
 

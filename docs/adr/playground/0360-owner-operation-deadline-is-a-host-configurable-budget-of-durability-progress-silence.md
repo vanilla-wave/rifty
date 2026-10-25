@@ -78,3 +78,12 @@ the deadline previously could not do.
   reads `… timed out after Nms without owner durability progress`).
 - Re-arming touches every pending operation on each progress frame — O(pending)
   per coalesced frame, and pending operations at one owner are a handful.
+
+## Corrections (active)
+
+- 2026-09-09 — ADR-0410 replaces positive-finite-only validation with bounded
+  native delays rounded upward. S remains page-owned, but its derived shared
+  OPFS report bound now crosses owner boot. F independently configures the
+  formerly untouched PROJECT_VFS_COMMIT_TIMEOUT_MS observation and shorter ACK
+  sibling. Uniform progress-only S, fatality, recovery, admitted-mutation
+  settlement and kernel/child exclusions remain active.

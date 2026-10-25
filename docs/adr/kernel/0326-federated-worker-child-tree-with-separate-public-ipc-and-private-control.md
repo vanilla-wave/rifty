@@ -31,6 +31,9 @@ MessagePort, or SAB allocation. Invalid/duplicate IPC slots and unsupported
 descriptor forms fail synchronously and allocate nothing. Worker and
 same-realm claimed surfaces consume the same plan.
 
+> **Correction (2026-09-25, ADR-0448):** the plan's `ipc` is now
+> `'none' | 'json' | 'advanced'` (fork `serialization: 'advanced'`, node-entry v5).
+
 `rifty.node-entry/v1` becomes `rifty.node-entry/v2` atomically. V2 carries the
 exact public IPC discriminator and continues ADR-0267's launch role,
 `remoteFsRoot`, `previewScope`, terminal shape, and exact guest env. There is no
@@ -77,6 +80,11 @@ disconnect never closes private control; physical exit closes all lanes.
 Advanced IPC serialization, handles, callbacks/options, and channel
 `ref()`/`unref()` remain directed loud gaps.
 
+> **Correction (2026-09-23, ADR-0448):** a fork with `serialization:
+> 'advanced'` now rides this public lane as a native structured clone with
+> Node's view and refusal rules (node-entry v5 `ipc: 'advanced'`). Handles,
+> callbacks/options and channel `ref()`/`unref()` remain directed loud gaps.
+
 ### Finite process and terminal contract
 
 The root snapshot backs only the forcing consumer forms: `exec('ps')`,
@@ -101,6 +109,12 @@ physical termination proof is forbidden.
 > owner death bypasses an unresolved barrier. Teardown attempts every local
 > cleanup before surfacing listener/upstream failures; no route or output
 > ledger is duplicated.
+
+> **Correction (2026-10-25, ADR-0548):** `Worker.terminate()` returning never
+> proved thread release: Chromium drops a nested child's termination notice
+> queued when its realm starts shutdown. A realm an ancestor kill is ending
+> releases its nested Workers instead; that committed host termination is their
+> physical termination proof.
 
 Workbench binds private descendant events to its existing owner token, captured
 PTY admission, and `previewScope`. Kernel owns no preview route or port claim;

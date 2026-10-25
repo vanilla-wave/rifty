@@ -42,6 +42,14 @@ function bufferToString(
   start = 0,
   end: number = this.length,
 ): string {
+  // Detached backing stores collapse existing views to zero length. Their
+  // `subarray()` throws, but Node still decodes that Buffer as an empty string.
+  // Run the bounds through an attached empty view first so observable ToNumber
+  // failures (for example a Symbol bound) are preserved before that fast path.
+  if (this.length === 0) {
+    new Uint8Array(0).subarray(start, end);
+    return decode(this, encoding);
+  }
   return decode(this.subarray(start, end), encoding);
 }
 

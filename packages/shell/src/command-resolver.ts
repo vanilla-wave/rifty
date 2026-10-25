@@ -39,6 +39,10 @@ export class CommandResolver {
     if (command) return { kind: 'registered', command };
 
     if (name.includes('/')) return this.resolveDirect(name, cwd);
+    return this.resolveBin(name, cwd);
+  }
+
+  resolveBin(name: string, cwd: string): CommandResolution {
     if (name === '') return { kind: 'miss', reason: 'bare' };
 
     const fs = this.fileSystem();

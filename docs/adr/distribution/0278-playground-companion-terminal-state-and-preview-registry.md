@@ -709,3 +709,12 @@ validates its implied topology before decode or effects. Page terminal disposal
 releases only UI bindings; `ProjectSession.close()` remains the single remote
 tool/runtime/PTY teardown authority. Host terminal persistence strips legacy
 `devCommand` before exact project-rooted companion restore.
+
+## Corrections (active)
+
+- 2026-09-08 — ADR-0398 makes rejected-snapshot deferred installation conditional on registry-enabled acquisition; saved/application authority remains ADR-0394.
+
+- 2026-09-08 — ADR-0394 supersedes snapshot-driven saved-state reseed/fallback and source-identity rejection, definition-manifest matching on explicit apply, and dependency-dropping legacy adoption for that policy; other entry/catalog/legacy rules remain.
+- 2026-09-07 — ADR-0384 supersedes package-adaptation owner/carrier clauses and `.vite` archive classification where applicable; all other decisions remain active.
+
+- 2026-10-16 (ADR-0531): the terminal-state "public project cwd" and the archive root `/` mean the project root (project-relative), not the guest filesystem root, which now mounts the project at `publicProjectRoot`; a persisted cwd outside the project falls back to the project root; the Shell seeds `HOME=/home/rifty` when the restored env has none; the terminal state omits that unchanged login default, so no key is created in it.

@@ -14,15 +14,20 @@ import ts from 'typescript';
 
 export const GENERIC_RUNTIME_ADAPTER_MODULES = Object.freeze([
   'packages/npm-client/src/installer.ts',
+  'packages/npm-client/src/eddy-fast-path.ts',
+  'packages/npm-client/src/installer-bin-claims.ts',
+  'packages/npm-client/src/installer-peers.ts',
+  'packages/npm-client/src/installer-request.ts',
+  'packages/npm-client/src/installer-sources.ts',
+  'packages/npm-client/src/installer-walk.ts',
+  'packages/npm-client/src/internal/shadow/substitution.ts',
+  'packages/npm-client/src/utils/abort-signal.ts',
   'packages/npm-client/src/linker.ts',
   'packages/npm-client/src/internal/shadow/admission.ts',
   'packages/npm-client/src/internal/shadow/planner.ts',
-  'packages/npm-client/src/internal/shadow/manager.ts',
-  'packages/npm-client/src/internal/shadow/port.ts',
   'packages/workbench/src/workers/package-acquisition-authority.ts',
   'packages/workbench/src/workers/owner-package-state.ts',
   'packages/workbench/src/workers/owner-child-admission.ts',
-  'packages/workbench/src/workers/owner-shadow-assets.ts',
   'packages/workbench/src/workers/workbench-project-runtime.ts',
   'packages/workbench/src/workers/workbench-owner-controller.ts',
   'packages/workbench/src/workers/owner-child-node-executor.ts',
@@ -30,14 +35,24 @@ export const GENERIC_RUNTIME_ADAPTER_MODULES = Object.freeze([
   'packages/workbench/src/workers/owner-child-dev-server.ts',
   'packages/workbench/src/workers/node-entry-bootstrap.ts',
   'packages/workbench/src/workers/node-entry-runtime-preparation.ts',
+  'packages/workbench/src/workers/package-install-finalizer.ts',
+  'packages/workbench/src/workers/package-install-generic-finalizer.ts',
+  'packages/workbench/src/workers/preview-producer-bindings.ts',
+  'packages/workbench/src/glue/project-deps.ts',
+  'packages/workbench/src/workers/dev-server-boot.ts',
+  'packages/runtime-js/src/internal/worker-globals.ts',
 ]);
 
 export const SASS_FORBIDDEN_SURFACE = Object.freeze({
   catalogConsumers: GENERIC_RUNTIME_ADAPTER_MODULES,
   registrySourceProvenance: Object.freeze([
     'packages/npm-client/src/registry.ts',
-    'packages/npm-client/src/internal/shadow/source.ts',
     'packages/npm-client/src/installer.ts',
+    'packages/npm-client/src/eddy-fast-path.ts',
+    'packages/npm-client/src/installer-bin-claims.ts',
+    'packages/npm-client/src/installer-sources.ts',
+    'packages/npm-client/src/installer-walk.ts',
+    'packages/npm-client/src/internal/shadow/substitution.ts',
     'packages/npm-client/src/linker.ts',
     'packages/npm-client/src/internal/shadow/planner.ts',
   ]),
@@ -49,22 +64,18 @@ export const SASS_FORBIDDEN_SURFACE = Object.freeze({
   ]),
   workbench: Object.freeze(['packages/workbench/src']),
   managerStoreMessagePort: Object.freeze([
-    'packages/npm-client/src/internal/shadow/manager.ts',
-    'packages/npm-client/src/internal/shadow/port.ts',
-    'packages/workbench/src/workers/owner-shadow-assets.ts',
     'packages/workbench/src/workers/owner-storage.ts',
     'packages/workbench/src/workers/workbench-owner-storage.ts',
   ]),
   esbuildAdapter: Object.freeze([
-    'packages/workbench/src/workers/workbench-runtime-adapters.ts',
-    'packages/workbench/src/workers/esbuild-runtime-fs.ts',
-    'packages/workbench/src/workers/vite-esbuild-runtime.ts',
+    'tools/shadow-registry/src/runtime/esbuild-runtime-fs.ts',
+    'tools/shadow-registry/src/runtime/vite-esbuild-runtime.ts',
   ]),
 });
 
 const CONSUMER_NAME =
-  /(?:^|[^a-z])(?:esbuild|lightningcss(?:-wasm)?|napi-wasm|sass(?:-embedded)?|vite)(?:[^a-z]|$)/iu;
-const CONSUMER_IDENTIFIER = /(?:esbuild|lightning_?css|napi_?wasm|sass|vite)/iu;
+  /(?:^|[^a-z])(?:esbuild|lightningcss(?:-wasm)?|napi-wasm|emnapi|sass(?:-embedded)?|vite)(?:[^a-z]|$)/iu;
+const CONSUMER_IDENTIFIER = /(?:esbuild|lightning_?css|napi_?wasm|emnapi|sass|vite)/iu;
 const SASS_NAME = /(?:^|[^a-z])sass(?:-embedded)?(?:[^a-z]|$)/iu;
 const SOURCE_FILE = /\.[cm]?[jt]sx?$/u;
 const NON_PRODUCTION_SOURCE =

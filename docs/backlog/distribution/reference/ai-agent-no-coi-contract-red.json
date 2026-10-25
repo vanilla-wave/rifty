@@ -1,0 +1,206 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS; перейти к IMPLEMENT. Merge после Final+GREEN и обязательных gates; goal продолжается.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "f9593e5e8f472dba51041a70d2345ff7019b0d3c",
+  "unit_goal_source": "docs/backlog/distribution/ai-agent-no-coi-host.md @ f9593e5e8f472dba51041a70d2345ff7019b0d3c; BASE prior core Final+GREEN 523628b0cc4828e4ae802445e683f84a7f0359cc. Authority: accepted goal/map, raw ai-agent-mode-refine-evidence.md and ai-agent-mode-fit-evidence.md, ADR-0377/0418/0424/0426.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3 + I6 + I7: no-COI host delivery",
+      "location": "docs/backlog/epics/ai-agent-mode-and-bench/goal.md:74",
+      "summary": "Preparation accepted only. Implement adapter/resident exit and prove the complete source React and actual packed snapshot cycle GREEN; independent Final+GREEN remains."
+    },
+    {
+      "clause": "I5: playground hands-on agent",
+      "location": "docs/backlog/epics/ai-agent-mode-and-bench/goal.md:70",
+      "summary": "Implement linked playground/ai-mode-chat child, including visible terminal/settings/Stop/Reset/export, live endpoint and preview acceptance."
+    },
+    {
+      "clause": "I8: three-lane benchmark",
+      "location": "docs/backlog/epics/ai-agent-mode-and-bench/goal.md:80",
+      "summary": "Implement linked distribution/agent-bench child: accepted tasks/runs, all three deterministic smoke lanes, evidence/classification/report and tool-context caveat."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: project files/search/edit/shell preserve readonly, allowlist and root policy; missing capabilities are omitted and named",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: provider failure retains completed write/results; continuation executes only next command",
+      "source": "acceptance",
+      "trace": "I3 + I7",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:40",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: cooperative/forced Stop settles active and skipped calls, preserves uncertainty, permits next command",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:78",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: real headerless React edit/build/preview/exit/syntax-error/repair/render cycle with host capability changes and loud resident admission",
+      "source": "acceptance",
+      "trace": "I6 + I7",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:118",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: stopResident preserves acknowledged files, clears replay and shares restart overlap rejection; restart keeps replay until exit",
+      "source": "acceptance",
+      "trace": "I6 + ADR-0377 + ADR-0426",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-resident-exit.spec.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: packed public imports execute shared cycle on existing fixed Vite snapshot with zero runtime registry acquisition",
+      "source": "acceptance",
+      "trace": "I6 + I7",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-pi-agent-browser-proof.mjs:6",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: native command completion/output/Worker/effects and invocation cwd/env semantics survive adapter",
+      "source": "acceptance",
+      "trace": "I3 + I6 + ADR-0418",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:54",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: file policy failure retains SDK facts; ordinary transforms do not claim CAS or rollback",
+      "source": "acceptance",
+      "trace": "I6 + ADR-0418",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:61",
+      "note": ""
+    },
+    {
+      "row": "Provider torn state after write: retained write/results and explicit provider error",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/sandbox-agent-proof.ts:14",
+      "note": ""
+    },
+    {
+      "row": "Command cancellation: await cooperative settlement, skipped call error and next command",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:78",
+      "note": ""
+    },
+    {
+      "row": "Worker forced Stop peer loss: physical replacement, unknown effects, no replay",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:95",
+      "note": ""
+    },
+    {
+      "row": "File/shell corrupt policy input: denied write/command leaves protected files unchanged",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:42",
+      "note": ""
+    },
+    {
+      "row": "Host mode sibling drift: new tools/prompt; stale project operations fail at owner",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/sandbox-agent-proof.ts:223",
+      "note": ""
+    },
+    {
+      "row": "Replacement torn state/overlap: same restart owner/report, no competing generation or resident replay",
+      "source": "fault-matrix",
+      "trace": "I6 + ADR-0377",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-resident-exit.spec.ts:42",
+      "note": ""
+    },
+    {
+      "row": "createSandboxAgentHost public factory binds the existing SDK project and does not own sandbox lifetime",
+      "source": "public-api",
+      "trace": "I6 + ADR-0426",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:140",
+      "note": ""
+    },
+    {
+      "row": "SandboxAgentHostOptions accepts SDK policy plus caller-owned mode and optional preview",
+      "source": "public-api",
+      "trace": "I6 + ADR-0426",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/sandbox-agent-proof.ts:179",
+      "note": ""
+    },
+    {
+      "row": "ToolchainSandbox.stopResident exposes explicit replacement returning SandboxRestartReport",
+      "source": "public-api",
+      "trace": "I6 + ADR-0377 + ADR-0426",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-resident-exit.spec.ts:42",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

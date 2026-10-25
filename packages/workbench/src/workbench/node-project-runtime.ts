@@ -26,6 +26,13 @@ export interface NodeServerProjectRuntimeDependencies extends NodeProjectRuntime
   readonly createPreviewReadiness: () => PreviewReadiness;
 }
 
+export interface NpmDevServerProjectRuntimeDependencies {
+  readonly terminal: ProjectTerminal;
+  readonly ownerToken: string;
+  readonly createPreviewReadiness: () => PreviewReadiness;
+  readonly acquisition?: ProjectAcquisitionPlan;
+}
+
 export interface NodeCliProjectRuntimeDependencies extends NodeProjectRuntimeDependencies {
   readonly args: readonly string[];
 }
@@ -35,6 +42,27 @@ function serverPort(value: unknown): number {
     throw new RangeError('Node runtime port must be an integer from 1 to 65535');
   }
   return value as number;
+}
+
+function npmRunDevLine(
+  dependencies: Pick<NpmDevServerProjectRuntimeDependencies, 'terminal' | 'acquisition'>,
+): string {
+  const cwd = dependencies.terminal.snapshot().cwd;
+  const root = projectRelativePath('/', cwd);
+  const runtimeLine =
+    root === '.' ? 'npm run dev' : `npm --prefix ${projectRuntimeShellWord(root)} run dev`;
+  return projectRuntimeShellLine(runtimeLine, dependencies.acquisition, cwd);
+}
+
+export function createNpmDevServerProjectRuntime(
+  dependencies: NpmDevServerProjectRuntimeDependencies,
+): ProjectRuntime<PreviewHandle> {
+  return createPreviewProjectRuntime({
+    ...dependencies,
+    label: 'npm dev-server project runtime',
+    line: () => npmRunDevLine(dependencies),
+    matches: () => true,
+  });
 }
 
 export function createNodeServerProjectRuntime(
@@ -47,13 +75,7 @@ export function createNodeServerProjectRuntime(
     ownerToken: dependencies.ownerToken,
     createPreviewReadiness: dependencies.createPreviewReadiness,
     label: 'Node server project runtime',
-    line: () => {
-      const cwd = dependencies.terminal.snapshot().cwd;
-      const root = projectRelativePath('/', cwd);
-      const runtimeLine =
-        root === '.' ? 'npm run dev' : `npm --prefix ${projectRuntimeShellWord(root)} run dev`;
-      return projectRuntimeShellLine(runtimeLine, dependencies.acquisition, cwd);
-    },
+    line: () => npmRunDevLine(dependencies),
     matches: (entry) =>
       (entry.source === 'dev-server' || entry.source === 'node') && entry.port === port,
   });

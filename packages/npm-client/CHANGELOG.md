@@ -2,8 +2,57 @@
 
 ## [Unreleased]
 
+- Refused substitutions name the requested package/range, exact substituted version and admission rule; stable feature ids and admission unchanged.
+
+- Current-catalog tier changes replay the same verified registry source offline; one receipt writer also projects snapshot facades without changing acquisition pins (ADR-0543).
+
+- Explicit `runtimeTier: 'coi'` resolves esbuild ranges to unchanged upstream esbuild-wasm plus a versioned facade; offline trace replay validates specialization. Omitted/no-coi tier keeps 0.28.0 and names incompatible ranges/pins.
+- Registry and eddy resource requests use host fetch, preserving browser URLs after Node Fetch classes install (ADR-0541).
+
+- Dependency specs naming a dist-tag other than `latest` are a loud ceiling again: `NotImplementedError('npm-client.dependency-spec.dist-tag')` after the packument read, before any tarball or lock write. The alias repair had let `createRegistrySource` consult `dist-tags[spec]`, so a fresh install matched npm but the warm replay re-resolved the moved tag online and rewrote the lock where npm keeps its pin (independent Final C1, widened to all specs by the inline review of PR #375). Real-npm reference: `installer-dist-tag.parity.test.ts`; tracked in `backlog/npm-client/dist-tag-dependency-spec-replay`.
+
+- A present-but-empty (`""`/`null`) `dist.integrity` no longer disarms the declared SHA-1 `dist.shasum`: corrupted archive bytes fail with `EINTEGRITY` before package/lock publication, as pacote selects the checksum by truthiness (ADR-0527); an empty shasum declares nothing. Parity: `tests/integration/npm-alias.parity.test.ts` corrupt-input rows over absent/empty/null SRI. Found by the independent Final review of PR #375.
+
+- Preserve native same-version alias source names/cache keys on no-args replay, including alias→plain manifests; named installs use selected metadata SHA-1 shasum or exact-target pinned proofs (ADR-0527).
+
+- Install root/transitive/scoped npm aliases under alias paths; preserve target manifests, lock identities, override placement and Eddy cache acquisition (ADR-0526).
+- Verify legacy SHA-1 lockfile SRI with WebCrypto; reject corrupted archives/cache bytes before install.
+
+- Preserve named root update intent across lock reuse; expose actual skipped optional resolution facts for native saves (ADR-0504).
+
+- Match native npm root dev/optional/prod precedence in direct and Eddy installs; normalize optional duplicates in root lock dependency maps.
+
+- A deferred tarball fetch that rejects while the placement walk is still resolving no longer escapes as an unhandled rejection (owner exit 1); the install reports the failure itself (was: intermittent `Workbench owner exited unexpectedly` when a required tarball failed early).
+
+- User `overrides` values follow npm's reading (ADR-0451): a version/range (node-semver loose grammar) or `latest` is the overridden edge's spec, so `{"vite": "8.0.16"}` pins vite instead of fetching packument `8.0.16`; baked redirects, shadow recipes and the ADR-0051 native gate apply as for a declared `name@spec`; exact `''`/`*` keep the edge spec; `$name` throws `NotImplementedError('npm-client.dependency-spec.override-reference')`. `name@range` and bare replacement names unchanged.
+
+- Match npm tar root stripping for DefinitelyTyped and other named roots; preserve ordinary property-name files and traversal rejection.
+
+
+- Restore ADR-0023/npm behavior for syntactically invalid package-lock JSON: resolve on explicit install and replace the lock only after success. This overturns the old blanket parse-error throw; preserve I/O, legacy-version and strict parsed-lock failures.
+
+- Optional registry capability retains real local replay across all install overloads; required network misses fail loudly and absent-registry Eddy rejects before effects (ADR-0398).
+- Shared installer/Eddy policy retains declared companion origin across caller-lock traversal; producer permission uses the existing companion-only role record and exact installed scope (ADR-0399).
+
+- Share lock-root and attested acquisition/bundled-path validation through the internal capsule for the published Workbench snapshot producer; resolution policy unchanged.
+
+- Installed esbuild facade reads the registry-owned realm carrier; substitution/admission semantics unchanged (ADR-0384).
+
 ### Changed
 
+- Test registry tarballs normalize the RFC 1952 OS byte, so fixture integrity
+  and shadow replay traces are identical on macOS and Linux CI.
+
+- Move-only decomposition: `installer.ts` (3064 lines) split along its
+  existing seams into `installer-walk.ts`, `installer-sources.ts`,
+  `eddy-fast-path.ts`, `installer-request.ts`, `installer-bin-claims.ts`,
+  `installer-peers.ts`, `internal/shadow/substitution.ts`, and
+  `utils/abort-signal.ts`; `installer.ts` keeps only the `install` overloads,
+  orchestration, and public types (530 lines). Public API unchanged; the
+  file-size ratchet pin is deleted.
+
+- Test ledgers accept scheduler-valid completion order for independent shadow
+  cache writes while retaining exact event membership and ordered publication.
 - Lockfile root entries preserve the project's declared dependency maps and
   requested ranges; hoisted transitive packages no longer acquire false root
   authority.
@@ -45,23 +94,15 @@
   degrade into fallback or optional-dependency skip. Registry packument and
   tarball methods accept the new optional request-options argument.
 
-- **Builtin shadow-substitution runtime assets (ADR-0308).** Exact applied
-  recipe facts produce a canonical asset plan; a digest-verified manager
-  acquires each npm member once and mints a strict one-shot ready/read port for
-  admitted child entries. The exact `esbuild@0.28.0` recipe now
-  synthetic-materializes its CJS/ESM delegate and loud CLI bin without the
-  retired `@esbuild/wasi-preview1` alias. Its ready/read/cancel correlation
-  engine remains package-local under the recorded layer constraint (ADR-0321).
+- **Exact in-tree esbuild registry twin (ADR-0371).** The builtin
+  `esbuild@0.28.0` recipe acquires exact `esbuild-wasm@0.28.0` through the same
+  registry projection, tarball cache, tree materialization, and lock replay as
+  other twins, then derives one frozen `{adapterId, packagePath}` binding.
+  Runtime-asset catalog fields, CAS manager, member source, and ready/read/
+  cancel MessagePort protocol are removed.
 - Shadow recipe provenance now round-trips through lockfile markers plus a
   canonical applied trace. Synthetic replay performs zero registry reads;
   registry-backed install-only recipes retain exact acquisition provenance.
-- Shadow CAS readiness now distinguishes persisted OPFS, best-effort OPFS, and
-  memory sessions, durability-flushes mirror writes, reads back through the
-  actual persisted VFS, and refuses receipts/pointers after quota, torn-write,
-  lifecycle-abort, or port-death faults. Each CAS object is SHA-verified once
-  when loaded, then port reads copy the retained verified bytes without another
-  storage read or hash; a cold reopen still validates persisted bytes.
-
 - `serializePackageJson()` provides one canonical byte spelling for finite
   plain-data manifests shared by host plans, Workbench definitions, and snapshot
   tooling; lossy object shapes, accessors, cycles, and unsupported JSON leaves

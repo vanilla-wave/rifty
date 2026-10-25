@@ -1,0 +1,50 @@
+{
+  "bin": { "esbuild": "bin/esbuild" },
+  "bugs": { "url": "https://github.com/evanw/esbuild/issues" },
+  "dist": {
+    "shasum": "e2e60b86ed19e0f6f5a1e6c1c722f5a811d7d5f7",
+    "tarball": "https://registry.npmjs.org/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz",
+    "fileCount": 15,
+    "integrity": "sha512-5TRVKExcEmeMkccIZMzUq+Az6X2RoMAJyfl6SMMO1dMVhmvt0I2mx7gAb6zYi42n4d1ETcatFXazGKzA+aW7fg==",
+    "signatures": [
+      {
+        "sig": "MEUCIQCt6SPeMe2+Vim4Ou0Ld98/Upo/ddfUH3AnkyLSdM5YmwIgUfcSrWAqzWp1g+PwPH9uttw0wcTrTdTe++JU069kxgc=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/esbuild-wasm@0.28.0",
+      "provenance": { "predicateType": "https://slsa.dev/provenance/v1" }
+    },
+    "unpackedSize": 14471283
+  },
+  "main": "lib/main.js",
+  "name": "esbuild-wasm",
+  "types": "lib/main.d.ts",
+  "browser": "lib/browser.js",
+  "engines": { "node": ">=18" },
+  "gitHead": "6a794dff68e6a43539f6da671e3080efdf11ca70",
+  "license": "MIT",
+  "_npmUser": {
+    "name": "GitHub Actions",
+    "email": "npm-oidc-no-reply@github.com",
+    "trustedPublisher": {
+      "id": "github",
+      "oidcConfigId": "oidc:11c88b73-b78d-4384-b18c-63914c46dffb"
+    }
+  },
+  "homepage": "https://github.com/evanw/esbuild#readme",
+  "repository": { "url": "git+https://github.com/evanw/esbuild.git", "type": "git" },
+  "_npmVersion": "11.5.1",
+  "description": "The cross-platform WebAssembly binary for esbuild, a JavaScript bundler.",
+  "directories": { "bin": "bin" },
+  "maintainers": [{ "name": "esbuild", "email": "evan.exe+esbuild@gmail.com" }],
+  "_nodeVersion": "24.14.1",
+  "_hasShrinkwrap": false,
+  "_npmOperationalInternal": {
+    "tmp": "tmp/esbuild-wasm_0.28.0_1775162331792_0.7787472636014519",
+    "host": "s3://npm-registry-packages-npm-production"
+  },
+  "_id": "esbuild-wasm@0.28.0",
+  "version": "0.28.0"
+}

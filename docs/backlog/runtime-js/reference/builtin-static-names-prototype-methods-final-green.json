@@ -1,0 +1,168 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN PASS (advisory concerns only): mergeable. Before landing, the driver routes discoveries D1/D2 and the import-call receiver divergence (REV-12) and edits map item 3's wording.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md @ e8ca0c17eb2fef1f02147a62aea48efa7b73a7b8 (branch vg/u3; ready-verdict Contract+RED @ 5f355a65423d5bb3db6e1bfed48e9e18e9717b6f), BASE 325ae797c0406453aed61b3a4e5d16f9c219d5ea; goal docs/backlog/epics/vitest-run-in-browser/goal.md I6 (line 117); oracle host Node v24.16.0 darwin",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "This unit closes the process named-import wall. The other I6 walls stay with map items 2 (path subpaths), 4 (loud members), 5 (guard precision) and 10 (vm offsets). End-to-end proof is map item 12."
+    },
+    {
+      "clause": "I1, I2, I3, I4, I5, I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:11-58",
+      "summary": "Still open through map items 1, 6-9, 11 and 13. End-to-end acceptance is map item 12."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: `import { cwd } from 'node:process'` links, and the imported cwd() called unbound equals process.cwd(). RED at BASE: link SyntaxError on `cwd`",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-members.case.ts:11-33",
+      "note": "The case catches the link failure: RED at BASE (evidence R3), GREEN at HEAD. It does not catch the 'called unbound' part. Scratch mutant M5 made `cwd` depend on its receiver (`cwd = function (this) { if (this === undefined) throw …; return cwd(); }`), and esm-named-members still passed, because rifty's ESM transform calls an imported binding with a receiver (`__m0(...).cwd()`). The shipped `cwd` ignores `this` (packages/runtime-js/src/builtins/process.ts:144), and a browser probe ran a real unbound alias call (`const f = cwd; f()` → TINY|true, exit 0). Advisory only."
+    },
+    {
+      "row": "Acceptance 2: cwd/chdir/hrtime/uptime/exit/kill/nextTick are own data properties with writable, enumerable and configurable all true. exitCode is an own accessor, enumerable and non-configurable. Each name is in Object.keys(process), links with ns[name] === process[name], and hrtime.bigint stays own",
+      "source": "acceptance",
+      "trace": "ADR-0348",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-members.case.ts:17-33",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: in a forked child, detached exit(3) closes with code 3 and detached kill(pid,'SIGUSR2') closes with signal SIGUSR2, with no stderr. RED at BASE: TypeError, code 1",
+      "source": "acceptance",
+      "trace": "ADR-0348",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/unbound-exit-kill.case.ts:13-37",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: named imports of on/emit/addListener/prependListener/removeListener/removeAllListeners/listenerCount/pushStdin fail to link with a SyntaxError that names the export, and none of them is own on process",
+      "source": "acceptance",
+      "trace": "ADR-0348",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/esm-named-members-off-surface.case.ts:8-38",
+      "note": ""
+    },
+    {
+      "row": "Parity case 1: Node v24.16.0 output of process/esm-named-members (evidence O3)",
+      "source": "frozen-artifact",
+      "trace": "I6+ADR-0348",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md:44",
+      "note": ""
+    },
+    {
+      "row": "Parity case 2: Node output of process/esm-named-members-off-surface, 8x SyntaxError:true plus 8 false own flags (evidence O4)",
+      "source": "frozen-artifact",
+      "trace": "ADR-0348",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md:45",
+      "note": ""
+    },
+    {
+      "row": "Parity case 3: Node output of process/unbound-exit-kill, code 3 and signal SIGUSR2 with stderr false (evidence O5)",
+      "source": "frozen-artifact",
+      "trace": "ADR-0348",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md:46",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/process/esm-named-members.case.ts:24-33",
+          "evidence": "Scratch worktree at e8ca0c17e, process.ts:489 changed to `cwd = function (this: NodeProcess): string { if (this === undefined) throw new TypeError(\"unbound\"); return cwd(); };`, then `pnpm test:parity process/esm-named-members` → `✓ process/esm-named-members-off-surface.case.ts`, `✓ process/esm-named-members.case.ts`, `all cases match`. Browser-unit probe (Chromium, sealed workbench, node tinyexec-like.mjs containing `import { cwd } from 'node:process'; const f = cwd; f()`) → `{\"exit\":0,\"out\":\"TINY|true\\n\"}`.",
+          "summary": "No committed carrier makes a truly unbound call to an imported process member on the rifty side: the loader passes a receiver to import calls (a divergence that predates this unit). Acceptance 1's 'called unbound' holds only because the delivered cwd/chdir/hrtime/uptime ignore `this` (process.ts:144-189). An alias call (`const f = cwd; f()`) in the case would catch this; that is an advisory hardening.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md:32-33",
+          "evidence": "",
+          "summary": "Carried over from Contract+RED. Acceptance 2's descriptor exactness and Acceptance 3 trace only to ADR-0348, and its §2 states only the enumerable-keys naming rule. The carriers catch every part anyway: M1 (non-bound exit/kill → unbound-exit-kill code 1/stderr true), M2 (exitCode configurable:true), M3 (exitCode non-enumerable) and M4 (`hrtime.bind(null)` → `hrtime.bigint is not a function`) all fail. Acceptance 5 (compat row + CHANGELOG) traces to a rule id only, so it gets no coverage row; both are present (docs/public/compat/process.md:27, packages/runtime-js/CHANGELOG.md:5).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/epics/vitest-run-in-browser/map.md:16-18",
+          "evidence": "",
+          "summary": "Map item 3 still describes the rejected prototype-walk mechanism. Contract Decision line 68 gives the edit to the land step; keep it on the land checklist. RDY-8 preparation is present: the Contract+RED JSON is committed with reviewed_sha 5f355a654 and blockers.mjs exits 0. Since that SHA the contract has gained only the ready-verdict and IMPLEMENT decision lines, and the parity cases are unchanged. goal.md and ledger.md are untouched.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "tools/checks/esbuild-legacy-retirement.mjs:103",
+          "evidence": "Scratch `pnpm build:libs` at HEAD → typescript-worker.js sha256 5607aff9…, 10022694 bytes. With process.ts at 621242ddc and no process-stdio-writer.ts → 018ea49b… (= BASE pin), same size. A byte diff finds 8 ranges, all chunk import filenames (chunk-FQPFA6AQ→DFTJ66BD, CP2OLPUQ→QGYJXBY6, VAGJFYGJ→LVIFJLGN, GBCASOFU→JN27U7K4, module-loader-MN3ON23T→VKSPNEDR).",
+          "summary": "PR-4 check: the changed pin was compared against BASE and is not weakened. Only chunk names moved; no compiler byte changed. The stdio-writer move is also behavior-preserving: diffed against BASE, only `export` keywords were added and one trailing blank line removed. The move is required by the ratchet, since the reshape adds 10 lines and 1224+10 exceeds the 1226 pin.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/runtime-js/src/builtins/process.ts:484",
+          "evidence": "",
+          "summary": "`declare exitCode: number` narrows the TypeScript setter type from `unknown` to `number`. At runtime the setter still coerces numeric strings and throws on invalid values (process.ts:517-524). This is type-level only, on the internal `./builtins/process` subpath.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md:55",
+          "evidence": "Run in the worktree: `grep -rlE \"_listenersMap|over-export|self-signal|SIGUSR2.*listener|typeof this\" docs/backlog` → only this unit, its evidence file and its contract-red JSON.",
+          "summary": "Three pre-existing divergences found during this unit have no backlog item yet. D1 (a non-IPC process over-exports send/disconnect/connected/channel/_listenersMap/_warned) is at least stated in the compat row. D2 (a self SIGUSR2 with a live listener terminates the process instead of running the listener) and the import-call receiver divergence are not in the compat page. The compat row says `kill(process.pid, 'SIGUSR2')` works without noting D2. The driver must route all three before landing (REV-12, rifty-to-backlog) so they do not become a silent backlog.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "e8ca0c17eb2fef1f02147a62aea48efa7b73a7b8"
+}

@@ -16,7 +16,6 @@ import { NotImplementedError } from '@riftydev/io';
 import { getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
 import { DEFAULT_PAYLOAD_CAPACITY, type SabRing, createSabRing } from './ipc/sab-ring.ts';
 import type { SyncRpcCallerContext, SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
-import { snapshotKernelEntryCapabilityPorts } from './shared-globals.ts';
 import type {
   WorkerEntryDescriptor,
   WorkerInitMessage,
@@ -24,6 +23,8 @@ import type {
   WorkerStdioPorts,
 } from './worker-entry.ts';
 import { type WorkerLike, makeKernelWorker } from './worker-like.ts';
+import { registerWorkerInput } from './worker-stdin-rpc.ts';
+import type { WorkerInput } from './worker-stdin.ts';
 import {
   createWorkerOutputState,
   isWorkerOutputChildSealed,
@@ -44,6 +45,8 @@ export {
  * reuse a PID or share a SAB across processes.
  */
 export interface SpawnWorkerSpec {
+  /** Bounded pull input; callers otherwise retain the MessagePort push protocol. */
+  readonly stdinMode?: 'pull';
   readonly entry: WorkerEntryDescriptor;
   readonly argv: readonly string[];
   readonly env: Readonly<Record<string, string>>;
@@ -101,6 +104,7 @@ export interface SpawnWorkerIdentity {
 
 /** Outcome of the spawn. Cleanup runs on `kill` and on natural exit. */
 export interface SpawnWorkerResult {
+  readonly stdinWriter?: Pick<WorkerInput, 'write' | 'end'>;
   readonly pid: number;
   readonly ppid: number;
   readonly worker: WorkerLike;
@@ -130,44 +134,11 @@ export interface SpawnWorkerResult {
   onUncaughtError(cb: (message: string, outputSealedByChild: boolean) => void): () => void;
   /** Forcibly terminate the worker. Idempotent. */
   terminate(): void;
-}
-
-/**
- * Validate/snapshot one entry. Capability ownership passes to the spawn only
- * after the whole capability map validates, before later descriptor reads.
- */
-function normalizeWorkerEntryDescriptor(
-  entry: WorkerEntryDescriptor,
-  adoptCapabilityPorts: (ports: readonly MessagePort[]) => void,
-): WorkerEntryDescriptor {
-  const capabilityDescriptor = Object.getOwnPropertyDescriptor(entry, 'capabilityPorts');
-  if (entry.kind === 'source') {
-    if (capabilityDescriptor !== undefined) {
-      throw new TypeError(
-        "WorkerEntryDescriptor.capabilityPorts 'capabilityPorts' is valid only on URL entries",
-      );
-    }
-    return entry;
-  }
-  if (capabilityDescriptor !== undefined && !('value' in capabilityDescriptor)) {
-    throw new TypeError(
-      "WorkerEntryDescriptor.capabilityPorts 'capabilityPorts' must be a data property; accessors are forbidden",
-    );
-  }
-  if (capabilityDescriptor !== undefined && !capabilityDescriptor.enumerable) {
-    throw new TypeError(
-      "WorkerEntryDescriptor.capabilityPorts 'capabilityPorts' must be enumerable",
-    );
-  }
-  if (capabilityDescriptor === undefined || capabilityDescriptor.value === undefined) return entry;
-  const capabilityPorts = snapshotKernelEntryCapabilityPorts(capabilityDescriptor.value);
-  adoptCapabilityPorts(Object.values(capabilityPorts));
-  return Object.freeze({
-    kind: 'url',
-    url: entry.url,
-    ...(entry.bootstrap === undefined ? {} : { bootstrap: entry.bootstrap }),
-    capabilityPorts,
-  });
+  /**
+   * Retire every rifty channel but leave the thread to the ending creator
+   * realm's own termination (ADR-0548). Shares terminate()'s idempotence.
+   */
+  release(): void;
 }
 
 /**
@@ -191,13 +162,13 @@ export function spawnKernelWorker(
   const { pid, ppid } = identity;
 
   let terminated = false;
+  let inputBinding: ReturnType<typeof registerWorkerInput> | undefined;
   let ring: SabRing | null = null;
   let worker: WorkerLike | null = null;
   let dispatcher: SyncRpcDispatcher | null = null;
   let callerContext: SyncRpcCallerContext | null = null;
   let ports: WorkerStdioPorts | null = null;
   let fullSpec: WorkerSpawnSpec | null = null;
-  let capabilityPorts: readonly MessagePort[] = [];
   const acquiredFixedPorts: MessagePort[] = [];
   const exitListeners: ((code: number) => void)[] = [];
   const messageErrorListeners: ((ev: MessageEvent) => void)[] = [];
@@ -221,13 +192,18 @@ export function spawnKernelWorker(
   };
 
   /**
-   * Detach the dispatcher, terminate the worker, and remove non-error
-   * listeners. Idempotent. Subscriber arrays are cleared by callers AFTER the
-   * final dispatch so waiters still receive their event.
+   * Detach the dispatcher, terminate the worker unless `release`, and remove
+   * non-error listeners. Idempotent. Subscriber arrays are cleared by callers
+   * AFTER the final dispatch so waiters still receive their event.
    */
-  function tearDownWorker(): void {
+  function tearDownWorker(release = false): void {
     if (terminated) return;
     terminated = true;
+    try {
+      inputBinding?.dispose();
+    } catch {
+      /* a terminal write callback cannot prevent resource teardown */
+    }
     if (dispatcher !== null && ring !== null) {
       try {
         dispatcher.detach(ring);
@@ -237,7 +213,7 @@ export function spawnKernelWorker(
     }
     if (worker !== null) {
       try {
-        worker.terminate();
+        if (!release) worker.terminate();
       } catch {
         /* the realm may already be gone */
       }
@@ -376,7 +352,7 @@ export function spawnKernelWorker(
 
   const rollbackFailedSpawn = (): void => {
     tearDownWorker();
-    for (const port of [...acquiredFixedPorts, ...capabilityPorts]) {
+    for (const port of acquiredFixedPorts) {
       try {
         port.close();
       } catch {
@@ -386,11 +362,7 @@ export function spawnKernelWorker(
   };
 
   try {
-    // Descriptor normalization adopts capability endpoints before reading the
-    // remaining caller-controlled fields, so it starts this rollback transaction.
-    const entry = normalizeWorkerEntryDescriptor(spec.entry, (adoptedPorts) => {
-      capabilityPorts = adoptedPorts;
-    });
+    const entry = spec.entry;
     const payloadCapacity = spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY;
     const createdRing = createSabRing({ payloadCapacity });
     ring = createdRing.ring;
@@ -422,6 +394,7 @@ export function spawnKernelWorker(
       env: spec.env,
       cwd: spec.cwd,
       stdio: childPorts,
+      ...(spec.stdinMode === undefined ? {} : { stdinMode: spec.stdinMode }),
       outputState: createWorkerOutputState(),
       syncRing: createdRing.sab,
       payloadCapacity,
@@ -433,6 +406,11 @@ export function spawnKernelWorker(
     worker = makeKernelWorker(url);
     dispatcher = getKernelDispatcher();
     callerContext = dispatcher.attach(ring, { callerPid: pid });
+    if (spec.stdinMode === 'pull') {
+      inputBinding = registerWorkerInput(dispatcher, callerContext, () =>
+        stdinCh.port1.postMessage({ kind: 'stdin:ready' }),
+      );
+    }
 
     const init: WorkerInitMessage = { type: 'init', spec: fullSpec };
     worker.postMessage(init, [
@@ -440,7 +418,6 @@ export function spawnKernelWorker(
       childPorts.stderr,
       childPorts.stdin,
       childPorts.ipc,
-      ...capabilityPorts,
     ]);
 
     for (const [type, listener] of lifecycleListeners) {
@@ -467,6 +444,7 @@ export function spawnKernelWorker(
     worker,
     ports,
     spec: fullSpec,
+    ...(inputBinding === undefined ? {} : { stdinWriter: inputBinding.input }),
     dispatcher,
     callerContext,
     ring,
@@ -493,6 +471,10 @@ export function spawnKernelWorker(
     },
     terminate() {
       tearDownWorker();
+      clearSubscribers();
+    },
+    release() {
+      tearDownWorker(true);
       clearSubscribers();
     },
   };

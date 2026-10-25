@@ -10,7 +10,7 @@ export interface Capabilities {
 export interface CapabilityCheck {
   readonly capabilities: Capabilities;
   readonly missing: readonly (keyof Capabilities)[];
-  /** True iff everything required for M0–M2 is present. */
+  /** Passive current-realm Worker + ServiceWorker presence; does not prove startup. */
   readonly sufficient: boolean;
   /** Human-readable summary suitable for surfacing in the UI. */
   readonly summary: string;

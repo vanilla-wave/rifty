@@ -1,0 +1,276 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN PASS (no blocker): the acceptance e2e is GREEN on HEAD 9b242dcc4 (independent run, 2 passed), both row-9 carriers kill their mutants, pr:check 25/25 green in a scratch copy, the page and README index satisfy row 10. Land. Before or at the re-chart, file the teardown discovery as a backlog draft and drop item 12 plus its answered open question from map.md. The other concerns are advisory.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/runtime-js/vitest-run-acceptance.md @ 9b242dcc4acf286cb0a6c33d2a044d6b3bc8a1e8 (status ready; ready-verdict Contract+RED @ 2c490a807d0729e00d7962ba0fb5e21681b2da55, committed docs/backlog/runtime-js/reference/vitest-run-acceptance-contract-red.json with reviewed_sha, validator exit 0; 18 traced rows at HEAD = 18 at Contract+RED; tests/e2e/vitest-run.spec.ts byte-identical to the Contract+RED revision, `git diff 2c490a807..HEAD -- tests/e2e/vitest-run.spec.ts` empty); goal docs/backlog/epics/vitest-run-in-browser/goal.md as amended 2026-09-23 (unchanged in BASE..HEAD); BASE d1a44f6160e7724b6907cc6a0551b7eb0e2a0229 (goal tip, all other children landed; merged at b1efffad7). Fresh independent reviewer, read-only on vg-u12; probes and mutants ran in the detached scratch copy /tmp/vgoal/u12/scratch-fg-1 at HEAD, which has since been removed. Executed: (1) `RIFTY_PLAYGROUND_PORT=5462 pnpm exec playwright test --project=chromium-heavy tests/e2e/vitest-run.spec.ts --workers=1` -> test 1 passed (56.3s), test 2 passed (1.3m), 2 passed (2.4m), HEAVY-EXIT 0 (/tmp/vgoal/u12/fg1-e2e.log). (2) Mutant A: `Agent` dropped from the node:http module object (packages/net/src/http/index.ts), test 2 only -> 1 failed at spec:282 (browser mode). Output: `TypeError: Class extends value undefined is not a constructor or null at node_modules/agent-base/dist/index.js (playwright-core/lib/utilsBundle.js:2152:36)` (/tmp/vgoal/u12/fg1-mutA.log). (3) Mutant B2: vm.constants kept, DONT_CONTEXTIFY throw disabled -> 1 failed at spec:255 (jsdom). Output: `Caused by: TypeError: Object.defineProperty called on non-object` (/tmp/vgoal/u12/fg1-mutB2.log). (4) `pnpm pr:check` on the clean scratch copy -> 25 checks all passed, including build:libs, check:esbuild-legacy-retirement (verifies the re-pinned typescript-worker.js sha against an independent build), check:compat-drift, check:file-size, test:run (170s) and test:parity (149s) (/tmp/vgoal/u12/fg1-prcheck.log). (5) `pnpm test:parity vm/constants` and `pnpm test:parity http/agent-shape` both matched; the unit files dont-contextify-ceiling, agent, server and register-builtins passed 32/32; browser-unit vm-script-offsets.spec.ts 5/5 passed.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Acceptance 1: clean project (rm -rf node_modules package-lock.json) seeded with the oracle files: npm-spelled overrides {vite: 8.0.16}, vitest.config.ts include src/**/*.test.ts, multi-line src/sum.ts / src/sum.test.ts failing on line 9, test/decoy.test.ts",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:58",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: npm install exit 0; lightningcss-wasm@1.32.0 shadow substitution line; exactly one node_modules/vite@8.0.16, lock's only vite entry the same, vitest 4.1.11, @rolldown/binding-wasm32-wasi installed",
+      "source": "acceptance",
+      "trace": "I1 + scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:181",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: failing vitest run (default forks) exit 1 with RUN v4.1.11, module/test lines, FAIL header, AssertionError + Expected/Received diff, src/sum.test.ts:9:21 + line-9 frame, Test Files/Tests counts, no DECOY-COLLECTED",
+      "source": "acceptance",
+      "trace": "I4 + scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:192",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: npm test and vitest run --pool=forks repeat row 3 (npm test also prints > vitest run); --reporter=verbose exit 1 with per-test lines, -> message, failure block and counts",
+      "source": "acceptance",
+      "trace": "I4 + scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:163",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: --pool=threads repeats row 3 and --pool=threads --reporter=verbose repeats row 4's verbose lines: same lines, counts, exit 1 as forks",
+      "source": "acceptance",
+      "trace": "I5 + scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:168",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: fixed state, all six commands exit 0 with Test Files 1 passed (1), Tests 2 passed (2), file line (default) or both verbose lines; no FAIL/failed, no decoy",
+      "source": "acceptance",
+      "trace": "I4 + I5 + scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:199",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: no claimed run of rows 3-6 prints Startup Error, ModuleLoadError, SyntaxError or Not implemented:",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:120",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: unpinned manifest (devDependencies vitest 4.1.11 only): npm install exits 1 with Not implemented: lightningcss.version",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:221",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 9: with jsdom/happy-dom/coverage-v8/browser-playwright/playwright installed over the pinned passing scenario, each mode exits 1, never Tests 2 passed, and names its ceiling on the throw's own line (jsdom DONT_CONTEXTIFY, happy-dom esm-global-function-assignment, coverage node:inspector/promises, vmThreads/vmForks experimental-vm-modules, browser mode node:http(s).Agent)",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:244",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 10: vitest.md claims exactly vitest 4.1.11 + vite 8.0.16, manifest precondition first, check rows I1-I6 incl. vitest.config.ts/TS tests/both pools, cross rows only jsdom/happy-dom, coverage, browser mode, vmThreads/vmForks naming row-9 throws, warning rows for watch mode and other versions with the observed boundary and no ban, cites the spec, listed in compat README",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "docs/public/compat/vitest.md:8",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 11: fixed state, bare vitest (no run; non-TTY shell stdin) runs once, exit 0 with row 6's default-reporter lines and no row-7 wall, as Node vitest < /dev/null",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:209",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: failing file on Node - module/test lines, failure block + diff, 9:21, Tests 1 failed | 1 passed (2), exit 1; identical line set for --pool=threads and for TTY stdout apart from the erased summary window",
+      "source": "acceptance",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:123",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: fixed file on Node - file line printed, Tests 2 passed (2), exit 0 on forks and threads",
+      "source": "acceptance",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:148",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: --reporter=verbose on Node - per-test check/cross lines, -> message under a failure, same counts/exit",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:125",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: npm test on Node = vitest run + npm banner (> test, > vitest run); same lines/exit",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:196",
+      "note": ""
+    },
+    {
+      "row": "Parity 5: test/decoy.test.ts collected by default (config moved away: Tests 1 failed | 2 passed (3)) and not with the config",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "Parity 6: npm install with the npm-spelled override - one hoisted node_modules/vite@8.0.16, deduped under @vitest/mocker, no nested vitest/node_modules/vite",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:187",
+      "note": ""
+    },
+    {
+      "row": "Parity 7: bare vitest with non-TTY stdin on Node - RUN v4.1.11, file line, Tests 2 passed (2), exit 0, one run",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:209",
+      "note": ""
+    },
+    {
+      "row": "Public API vm.constants: Node's frozen null-prototype {USE_MAIN_CONTEXT_DEFAULT_LOADER, DONT_CONTEXTIFY} symbols, own enumerable/writable/configurable on node:vm, ESM named export",
+      "source": "public-api",
+      "trace": "ADR-0464 + Acceptance 9",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/constants.case.ts:11",
+      "note": ""
+    },
+    {
+      "row": "Public API vm.createContext(DONT_CONTEXTIFY[, options]) throws NotImplementedError('vm.createContext.DONT_CONTEXTIFY') after Node's option validation (name/origin/codeGeneration/microtaskMode)",
+      "source": "public-api",
+      "trace": "ADR-0464 + Acceptance 9",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/vm/dont-contextify-ceiling.test.ts:36",
+      "note": ""
+    },
+    {
+      "row": "Public API vm.runInNewContext / Script#runInNewContext given DONT_CONTEXTIFY throw the same ceiling after Node's argument validation (ADR-0464 §2-3)",
+      "source": "public-api",
+      "trace": "ADR-0464",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/builtins/vm/dont-contextify-ceiling.test.ts:41",
+      "note": "The ceiling is carried, but the 'after Node's argument validation' ordering is carried only for createContext (the parity case). vm/index.ts:433 runInNewContext never validates Node's context options, so runInNewContext('1', DONT_CONTEXTIFY, {contextName: 1}) throws the ceiling where Node v24.16.0 throws ERR_INVALID_ARG_TYPE. See the Bugs concern."
+    },
+    {
+      "row": "Public API http.Agent: Node's name/length/descriptor, subclassable; construction throws NotImplementedError('node:http.Agent'); the loader-local node:http carries the same Agent",
+      "source": "public-api",
+      "trace": "ADR-0464 + Acceptance 9",
+      "status": "pass",
+      "citation": "packages/net/src/http/agent.test.ts:32",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/runtime-js/0464-named-loud-members-for-charted-unclaimed-mode-ceilings.md:6",
+          "evidence": "$ grep -n 'Independent DEC-2' docs/adr/runtime-js/0464-*.md docs/adr/runtime-js/0443-*.md -> only 0443-…md:48 (ADR-0443's own review); nothing for ADR-0464.",
+          "summary": "ADR-0464 partly supersedes ADR-0443 §2 ('stay absent'). The dated correction note and the README §Corrections row are present, but no independent DEC-2 decision-subagent review of the overturn is recorded. ADR-0443 records one for its own partial supersession of ADR-0348. Record it, as the ledger does for 0443/0445/0447/0448.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/epics/vitest-run-in-browser/map.md:13",
+          "evidence": "",
+          "summary": "The map's open question ('vitest.config.ts loading … first exercised at item 12') is now answered: the GREEN e2e loads and honours the config, and no wall appeared. Drop it together with item 12 at the post-land re-chart.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/vitest-run-acceptance.md:94",
+          "evidence": "$ grep -rln 'close timed out' docs/ -> only the contract, its evidence file and docs/public/compat/vitest.md. No docs/backlog/runtime-js/* draft exists at HEAD.",
+          "summary": "The deferred teardown discovery (rifty prints vitest's 'close timed out after 10000ms' / '… prevents Vite server from exiting' after a vm-pool start ceiling; Node does not; root cause undiagnosed) is recorded only as a Decisions line saying the driver will route it via rifty-to-backlog, plus the page row. The contract is deleted on done. Under REV-12/PR-1 the draft, with its owner and trigger, should ride this branch before landing.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/vm/index.ts:433",
+          "evidence": "Node v24.16.0: `vm.runInNewContext('1', vm.constants.DONT_CONTEXTIFY, { contextName: 1 })` -> `TypeError ERR_INVALID_ARG_TYPE The \"options.contextName\" property must be of type string. Received type number (1)`. rifty (scratch vitest probe on HEAD, vm/index.ts): same call -> `NotImplementedError Not implemented: vm.createContext.DONT_CONTEXTIFY …`. Also `vm.createContext(Symbol('x'))`: Node ERR_INVALID_ARG_TYPE 'The \"object\" argument must be of type object. Received type symbol'; rifty `TypeError: Object.defineProperty called on non-object` (pre-existing for primitives; the diff widens the parameter type to `T | symbol`, and dont-contextify-ceiling.test.ts:45 asserts only 'not NotImplementedError').",
+          "summary": "ADR-0464 §2 (line 38) and modules.md:172 say the DONT_CONTEXTIFY ceiling comes 'after Node's option validation' for runInNewContext as well. rifty's runInNewContext never validates Node's context options (contextName/contextOrigin/contextCodeGeneration/microtaskMode; a pre-existing gap), so on invalid context options it throws the ceiling where Node throws ERR_INVALID_ARG_TYPE. Both are loud on an unclaimed mode. Narrow the wording to createContext, or validate those options first.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/net/src/http/agent.ts:8",
+          "evidence": "Node v24.16.0: `function Old(o){ http.Agent.call(this,o) } util.inherits(Old, http.Agent); new Old({keepAlive:true})` -> ok (Old); `http.Agent({keepAlive:true})` -> ok (Agent); `Object.getPrototypeOf(https.Agent) === http.Agent` -> true. rifty (scratch vitest probe on HEAD, http/index.ts): both constructions -> `TypeError: Class constructor Agent cannot be invoked without 'new'`; prototype check -> false.",
+          "summary": "http.Agent is an ES class. The util.inherits pattern (`http.Agent.call(this, opts)`, used by forever-agent/tunnel-agent-style subclasses) and call-without-new fail with a bare TypeError, not the named NotImplementedError('node:http.Agent'). https.Agent is also not linked to http.Agent (Node: its prototype, recorded in the unit's own evidence:349). A throwing `function Agent()` would name every path. This is advisory: the class-extends path vitest browser mode takes is named.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tests/e2e/vitest-run.spec.ts:221",
+          "evidence": "Unit evidence §GREEN: registry latest vite moved 8.3.0 -> 8.3.1 during the unit (`npm view vite dist-tags.latest` -> 8.3.1, lightningcss ^1.33.0).",
+          "summary": "Carried from Contract+RED: row 8 and the page's unpinned-manifest precondition run against the live registry's latest vite. A future vite latest whose lightningcss range the shadow recipe admits would flip the heavy-lane assertion and the public text. The page date-stamps the range (vitest.md:36).",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "9b242dcc4acf286cb0a6c33d2a044d6b3bc8a1e8"
+}

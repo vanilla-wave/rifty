@@ -1,0 +1,67 @@
+.gauge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: var(--gauge-w);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.gauge-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+}
+
+.gauge-rail-fine {
+  width: 8px;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.22) 0 1px,
+    transparent 1px 26px
+  );
+}
+
+.gauge-rail-coarse {
+  width: 16px;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.3) 0 1px,
+    transparent 1px 130px
+  );
+}
+
+.gauge-mark {
+  position: absolute;
+  right: 22px;
+  writing-mode: vertical-rl;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--t-deco-faint);
+  white-space: nowrap;
+}
+
+.gauge-vent {
+  top: auto;
+  bottom: 10px;
+  color: rgb(from var(--ac) r g b / 0.75);
+}
+
+.gauge-dot {
+  position: absolute;
+  bottom: 14px;
+  right: 11px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ac);
+  box-shadow: 0 0 8px var(--ac-dot-glow);
+}
+
+@media (max-width: 900px) {
+  .gauge {
+    display: none;
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS at cdb710ac7f8d263cea04ed74f0b51c576a6c5ad4; merge after pass-binding and green PR CI at final HEAD.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "cdb710ac7f8d263cea04ed74f0b51c576a6c5ad4",
+  "unit_goal_source": "Standalone PR #389 (https://github.com/vanilla-wave/rifty/pull/389), raw accepted handoff /tmp/handoff-brotli-quality-followup.md:9, PR body /tmp/rifty-brotli-q11-pr-body.md:1, baseline 8874e47d65cda8c41e06c84173084e8fbf176e60 and ADR-0546 at BASE/current (docs/adr/distribution/0546-produce-browser-compatible-brotli-dependency-snapshots.md:14). RDY-8: authorized tuning of landed internal quality, no new parity/stateful promise or observed broken baseline; existing accepted carriers remain authority. All seven requested actions checked. PR-4: old/new packed subprocess deadline 120000/300000 ms compared from git; behavioral assertions and outer 1420000/1500000 ms deadlines unchanged. Independent producer rerun passed 13/13. Read completed /tmp/rifty-brotli-q11-unit.log (13/13), /tmp/rifty-brotli-q11-probe.log (Node v24.16.0, TAR 27831808 B, gzip 9770964 B, q11 7635659 B, 37843 ms, native exact TAR equality), /tmp/rifty-brotli-q11-browser.log (1/1), /tmp/rifty-brotli-q11-packed.log (1/1, 371.56 s), /tmp/rifty-brotli-q11-pr-check.log (28/28, related tests 29.8 s, no retry, parity 167.5 s). General/review/inline PR observation snapshots empty at reviewed HEAD. Goal completion below means this standalone follow-up only.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Quality 11 representative Vite measurement and exact native-decoded TAR substantiate the updated size/cost evidence; quality remains internal.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0546:31 + ADR-0546:39",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/brotli-codec-probe.mjs:32; packages/workbench/src/glue/dep-snapshot-producer.ts:174; docs/backlog/distribution/reference/brotli-snapshot-production-evidence.md:61",
+      "note": ""
+    },
+    {
+      "row": "The public producer retains gzip default, actual contentEncoding, identical decoded TAR and identities, deterministic Brotli and caller-pin/integrity rejection.",
+      "source": "public-api",
+      "trace": "ADR-0546:14",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:117; packages/workbench/src/glue/dep-snapshot-producer.test.ts:131; packages/workbench/src/glue/dep-snapshot-producer.test.ts:137",
+      "note": ""
+    },
+    {
+      "row": "Browser production uses the built-in WASM encoder, yields native-decodable Brotli, preserves bounded HTTP delivery and rejects host encoder failure visibly.",
+      "source": "acceptance",
+      "trace": "ADR-0546:17 + ADR-0546:19 + ADR-0546:46",
+      "status": "pass",
+      "citation": "tests/browser-unit/brotli-snapshot-delivery.spec.ts:92; tests/browser-unit/brotli-snapshot-delivery.spec.ts:154; tests/browser-unit/brotli-snapshot-delivery.spec.ts:170",
+      "note": ""
+    },
+    {
+      "row": "The fresh installed-package Vite producer and real Chromium snapshot build/dev/HMR/saved-state journey still complete within the revised timeout hierarchy.",
+      "source": "acceptance",
+      "trace": "scenario: /tmp/handoff-brotli-quality-followup.md:22 + ADR-0546:46",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:45; tests/integration/workbench-packed-consumer.mjs:656; tests/integration/workbench-packed-consumer.mjs:963; tests/integration/workbench-packed-consumer.mjs:1047; tests/integration/workbench-packed-consumer.test.ts:21",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

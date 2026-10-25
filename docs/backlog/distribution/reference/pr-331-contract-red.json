@@ -1,0 +1,344 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted for IMPLEMENT at the revised SHA; three advisory proof concerns remain. Product GREEN, mandatory packed acceptance and independent Final+GREEN remain required.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "110c8ecf940f95cd6b0a89b9ab8d39dc4d5a9027",
+  "unit_goal_source": "docs/backlog/distribution/no-coi-project-files.md + docs/backlog/distribution/public-api-ai-agent-exec-preview.md; goal docs/backlog/epics/no-coi-agent-sdk/goal.md and map.md; BASE ca4f4786244f86a377626cef3f857ab3ae7488ef. Fresh read-only reviewer /root/contract_review; verification of the exact b14d604..110c8ec delta follows its earlier independent review. Original issue325-source.json, issue326-source.json and verbatim user answer reread against final FIT and revised ADR-0418. Relative paths/cwd anchored at root and unchanged absolute VFS paths satisfy the original shared-path requirement; no user authority required a virtual root or filesystem jail. Immutable configuration, readonly agreement, independent cwd/env and Stop/effects obligations remain. No omitted material user fork found.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1-I3",
+      "location": "docs/backlog/epics/no-coi-agent-sdk/goal.md:30",
+      "summary": "Implementation, real acceptance GREEN and independent Final+GREEN remain. Revised physical-path/permanent-adapter-identity route is cleared at this Contract+RED checkpoint."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/no-coi-agent-sdk/goal.md:33",
+      "summary": "Mandatory packed no-COI acceptance and PR #331 green CI remain."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Files Acceptance 1: structured read/write/list/stat/mkdir/rename/remove share the real Worker VFS; packed acceptance required at GREEN",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:154; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:61; packages/runtime-js/src/worker-fs-structured.test.ts:31",
+      "note": ""
+    },
+    {
+      "row": "Files Acceptance 2: raw root anchoring and project file/command root plus readonly agreement",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0131",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:61; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:95; tests/no-coi/no-coi-agent-sdk.spec.ts:154",
+      "note": ""
+    },
+    {
+      "row": "Files Acceptance 3: applied/persistence effects remain honest across failed storage and termination",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:146; packages/runtime-js/src/worker-fs-structured.test.ts:186; tests/no-coi/no-coi-agent-sdk.spec.ts:79; tests/no-coi/no-coi-dev-hmr.spec.ts:1110",
+      "note": ""
+    },
+    {
+      "row": "Files Acceptance 4: explicit console eval contract; structured files/command outcomes need no control files",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/adr/distribution/0418-no-coi-project-files-and-invocation-commands.md:43; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:61; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:95",
+      "note": ""
+    },
+    {
+      "row": "Files fault: quota/permission/torn mutation or flush cannot report durable success",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:186; packages/runtime-js/src/worker-fs-structured.test.ts:220; packages/runtime-js/src/worker-fs-structured.test.ts:236; tests/no-coi/no-coi-agent-sdk.spec.ts:79",
+      "note": ""
+    },
+    {
+      "row": "Files fault: peer death before reply preserves unknown/non-application distinction without replay",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-dev-hmr.spec.ts:1110; tests/no-coi/no-coi-agent-sdk.spec.ts:210",
+      "note": ""
+    },
+    {
+      "row": "Files fault: malformed paths/options, missing entries and readonly reject honestly",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:93; packages/runtime-js/src/worker-fs-structured.test.ts:108; packages/runtime-js/src/worker-fs-structured.test.ts:126; tests/no-coi/no-coi-agent-sdk.spec.ts:169",
+      "note": ""
+    },
+    {
+      "row": "Commands Acceptance 1: invocation completion/stop/output is structured and unambiguous",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:111; tests/no-coi/no-coi-agent-sdk.spec.ts:175; tests/no-coi/no-coi-agent-sdk.spec.ts:196",
+      "note": ""
+    },
+    {
+      "row": "Commands Acceptance 2: independent cwd/env after success/failure/Stop, within-call sequencing and persistent effects",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:111; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:152; tests/no-coi/no-coi-agent-sdk.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "Commands Acceptance 3: Stop owns real settlement or Worker replacement; next run output stays separate",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:7; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:152; tests/no-coi/no-coi-agent-sdk.spec.ts:196",
+      "note": ""
+    },
+    {
+      "row": "Commands Acceptance 4: applied effects, failed flush, unacknowledged writes and replacement stay explicit",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:7; tests/no-coi/no-coi-agent-sdk.spec.ts:79; tests/no-coi/no-coi-agent-sdk.spec.ts:210",
+      "note": ""
+    },
+    {
+      "row": "Commands Acceptance 5: existing Shell, root/host policy and ordinary Node filesystem agreement",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:95; tests/no-coi/no-coi-agent-sdk.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "Commands Acceptance 6: host can prohibit background launch; ADR-0418 offers no background admission",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:126; tests/no-coi/no-coi-agent-sdk.spec.ts:185",
+      "note": ""
+    },
+    {
+      "row": "Commands Acceptance 7: real no-COI browser covers Stop-next, failure-success, pending mutation and policy agreement",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:7; tests/no-coi/no-coi-agent-sdk.spec.ts:133",
+      "note": ""
+    },
+    {
+      "row": "Commands fault: cooperative abort awaits handler/final flush and preserves applied effects",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:7; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:152",
+      "note": ""
+    },
+    {
+      "row": "Commands fault: non-cooperative/ended Worker exposes termination and unknown effects, next owner independent",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:172; tests/no-coi/no-coi-agent-sdk.spec.ts:210; tests/no-coi/no-coi-dev-hmr.spec.ts:1214",
+      "note": ""
+    },
+    {
+      "row": "Commands fault: storage failure is not clean success or rollback/replay",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:79; packages/runtime-js/src/worker-fs-structured.test.ts:186",
+      "note": ""
+    },
+    {
+      "row": "Commands fault: overlapping calls preserve the existing explicit Worker busy result",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0376",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:162; tests/no-coi/no-coi-agent-sdk.spec.ts:196",
+      "note": ""
+    },
+    {
+      "row": "Commands fault: malformed root/policy and readonly boundary rejection",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:95; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:129; tests/no-coi/no-coi-agent-sdk.spec.ts:185",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: readFile/writeFile (retained raw API, validation/effects expand)",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:78; packages/runtime-js/src/worker-fs-structured.test.ts:108; packages/runtime-js/src/worker-fs-structured.test.ts:186",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: readdir",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:31",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: stat",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:46",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: mkdir",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:58",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: rename",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:67",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: rm",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:72",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: flush",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:236",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: ToolchainSandbox.project/project.fs",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:61; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:95",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: project.run",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:111",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: run.onOutput",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:120; tests/no-coi/no-coi-agent-sdk.spec.ts:184",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: run.completion",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:111; tests/no-coi/no-coi-agent-sdk.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: run.stop",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:163; tests/no-coi/no-coi-agent-sdk.spec.ts:196",
+      "note": ""
+    },
+    {
+      "row": "Recorded native Node directory/stat/rename/removal observation, VFS metadata rather than full Stats prototype",
+      "source": "frozen-artifact",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/pr-331-implementation-evidence.md:12; packages/runtime-js/src/worker-fs-structured.test.ts:31; tests/no-coi/no-coi-agent-sdk.spec.ts:154",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:105",
+          "summary": "Source RED exists; current packed main/build never imports these scenarios, and npm build is an echo script rather than an installed bin. GREEN must exercise the accepted installed CLI/build through project.run and wire shared scenarios into mandatory packed acceptance. This checkpoint does not claim that proof exists.",
+          "authority": "",
+          "evidence": "Independent read: packed fixture src/main.ts exports only bootToolchain/startInstalledTool/runInstalledTool; build.mjs entrypoints main.ts/worker.ts. Independent Playwright 5/5 RED: Missing public sandbox.project after real Worker boot; no implemented package behavior is certified."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/worker-fs-structured.test.ts:126",
+          "summary": "Malformed-options test is green today because unknown mkdir/rm operations already reject. Retain its checks, but do not count that individual test as proof that a supported operation validates options. The broader malformed-input row has other discriminating REDs.",
+          "authority": "",
+          "evidence": "Executed pnpm exec vitest run packages/runtime-js/src/worker-fs-structured.test.ts: 12 failed / 2 passed (14), Vitest2.1.9. The passed tests are detached-byte baseline and malformed-options rejection; worker-fs-rpc.ts currently rejects any op other than readFile/writeFile."
+        },
+        {
+          "severity": "concern",
+          "location": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:157",
+          "summary": "The cooperative Stop fixture emits all output/effects before sleep, so it gives limited evidence against late handler work after Stop. Native pending-flush test discriminates storage settlement; a command with observable delayed output/effect would strengthen handler ownership at GREEN. No surviving implementation mutant was executed.",
+          "authority": "",
+          "evidence": "Independent browser run: 5/5 fail Missing public sandbox.project. Independent native boundary probe (Node v24.16.0, Chromium148.0.7778.96): COI=false; public eval patch ok; held createWritable keeps raw write pending; injected QuotaExceededError currently resolves while VFS contains visible. No source implementation modified. Re-executed revised SHA browser suite on ports5611/5612/5613: 5/5 fail Missing public sandbox.project after real boot; /tmp/rifty-pr331-contract-browser-revised.log."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

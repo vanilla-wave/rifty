@@ -31,8 +31,23 @@ function decodeBytes(bytes: Uint8Array, encoding: ReadFileEncoding): string {
   return new TextDecoder(label).decode(bytes);
 }
 
+/** Package-internal composition helper; failures acquiring root remain distinct from preload. */
+export async function acquireOpfsRoot(): Promise<FileSystemDirectoryHandle> {
+  if (!OpfsVfs.isSupported()) {
+    throw new VfsError('EPERM', '/', 'OPFS is not available in this environment');
+  }
+  const root = await navigator.storage?.getDirectory();
+  if (!root) throw new VfsError('EPERM', '/', 'OPFS getDirectory returned undefined');
+  return root;
+}
+
 export class OpfsVfs implements Vfs {
-  private root: FileSystemDirectoryHandle | null = null;
+  private root: FileSystemDirectoryHandle | null;
+  private initialization: Promise<void> | null = null;
+
+  constructor(acquiredRoot?: FileSystemDirectoryHandle) {
+    this.root = acquiredRoot ?? null;
+  }
   /**
    * Side-table for `utimes` — OPFS exposes no mtime mutation on
    * `FileSystemFileHandle` or `FileSystemSyncAccessHandle` (ADR-0029, ADR-0041).
@@ -49,14 +64,29 @@ export class OpfsVfs implements Vfs {
     return Boolean(s && typeof s.getDirectory === 'function');
   }
 
-  async init(): Promise<void> {
-    if (this.root) return;
-    if (!OpfsVfs.isSupported()) {
-      throw new VfsError('EPERM', '/', 'OPFS is not available in this environment');
+  async init(root?: FileSystemDirectoryHandle): Promise<void> {
+    if (this.root) {
+      if (root !== undefined && root !== this.root && !(await this.root.isSameEntry(root))) {
+        throw new VfsError('EINVAL', '/', 'OPFS instance is already mounted at another root');
+      }
+      return;
     }
-    const dir = await navigator.storage?.getDirectory();
-    if (!dir) throw new VfsError('EPERM', '/', 'OPFS getDirectory returned undefined');
-    this.root = dir;
+    if (root !== undefined) {
+      this.root = root;
+      return;
+    }
+    if (!this.initialization) {
+      this.initialization = acquireOpfsRoot()
+        .then((root) => {
+          // A concurrent explicit mount may finish while origin lookup waits.
+          if (this.root === null) this.root = root;
+        })
+        .catch((error: unknown) => {
+          this.initialization = null;
+          throw error;
+        });
+    }
+    await this.initialization;
   }
 
   private async getDirectory(

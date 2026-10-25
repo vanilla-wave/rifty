@@ -1,0 +1,14 @@
+{
+  "node": "v24.16.0",
+  "results": {
+    "checkoutReport": {
+      "resolved": "/Users/vanilla-wave/.t3/worktrees/rifty/t3code-97531e7c/packages/agent/src/index.ts"
+    },
+    "freshTemp": {
+      "code": "MODULE_NOT_FOUND"
+    },
+    "live": {
+      "code": "MODULE_NOT_FOUND"
+    }
+  }
+}

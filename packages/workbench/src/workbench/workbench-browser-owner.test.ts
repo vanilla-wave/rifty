@@ -20,6 +20,7 @@ import type { PageToWorkbenchOwnerMessage } from './owner-protocol.ts';
 import {
   defineNodeCliProject,
   defineNodeServerProject,
+  defineNpmDevServerProject,
   inspectProjectDefinition,
   projects,
 } from './project-definition.ts';
@@ -42,7 +43,7 @@ const input: WorkbenchOwnerStartInput = Object.freeze({
     wasm: Object.freeze({ sqlite: '/wasm/sqlite.wasm' }),
     previewProbeTimeoutMs: 1_000,
   }),
-  packageAcquisition: Object.freeze({ registryUrl: '/npm-registry' }),
+  packageAcquisition: Object.freeze({ mode: 'registry', registryUrl: '/npm-registry' }),
   storage: Object.freeze({ persistence: 'ephemeral' as const }),
 });
 const encoder = new TextEncoder();
@@ -1404,6 +1405,53 @@ describe('browser Workbench owner transport', () => {
     expect(worker.killedWith).toBeNull();
   });
 
+  // Fault classes: observable-order × sibling-drift. Shutdown that overtook the
+  // session teardown fences its pty:close (no ACK); after project-closed the
+  // stranded terminal close is the retired transport's cancellation, never
+  // a false "owner died" that Workbench close cannot classify.
+  it('observable-order fault: a PTY close fenced before close-project settles as the transport cancellation', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await raw.ready;
+    const opening = raw.openProject(
+      inspectProjectDefinition(
+        projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
+      ),
+    );
+    const openRequest = sentOf(worker, 'workbench:open-project')[0];
+    if (openRequest === undefined) throw new Error('missing open request');
+    await acceptOpenedProject(worker, openRequest, 'owner-token-a', '/owner-born/project-a');
+    const project = await opening;
+    worker.emit('message', {
+      type: 'workbench:project-pty',
+      projectToken: 'owner-token-a',
+      frame: { type: 'pty:ready', sid: 'workbench-terminal-1' },
+    });
+
+    raw.close();
+    const closing = project.close();
+    const closeProject = sentOf(worker, 'workbench:close-project')[0];
+    if (closeProject === undefined) throw new Error('missing close-project');
+    worker.emit('message', {
+      type: 'workbench:project-closed',
+      opId: closeProject.opId,
+      projectToken: 'owner-token-a',
+    });
+
+    const failure = await closing.then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(ClosedHandleError);
+    worker.emit('exit', 0, null);
+    await raw.closed;
+    expect(worker.killedWith).toBeNull();
+  });
+
   it('observable-order fault: a late VFS frame after the close fence cannot kill the owner or strand close', async () => {
     const worker = new FakeOwnerWorker();
     let releaseRuntimeClose!: () => void;
@@ -2337,9 +2385,22 @@ describe('browser Workbench owner transport', () => {
     await raw.closed;
   });
 
-  it('dispatches finite Node definitions to their exact browser runtimes', async () => {
+  it('dispatches package-owned definitions to their exact browser runtimes', async () => {
     const files = { '/src/main.mjs': 'console.log("node");\n' };
     const cases = [
+      {
+        definition: inspectProjectDefinition(
+          defineNpmDevServerProject({
+            id: 'browser-npm-dev-server',
+            files: {
+              '/package.json': '{"scripts":{"dev":"webpack serve"}}\n',
+              '/webpack.config.js': 'module.exports = {};\n',
+            },
+          }),
+        ),
+        line: 'npm run dev',
+        ready: false,
+      },
       {
         definition: inspectProjectDefinition(
           defineNodeServerProject({
@@ -2579,4 +2640,55 @@ describe('browser Workbench owner transport', () => {
     worker.emit('exit', 0, null);
     await raw.closed;
   });
+});
+
+it('PR323 scopes drain progress to the exact pending open and excludes a retired open during the next one', async () => {
+  const worker = new FakeOwnerWorker();
+  const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+  void raw.closed.catch(() => {});
+  const health: WorkbenchOwnerHealthEvent[] = [];
+  raw.subscribeHealth?.((event) => health.push(event));
+  worker.emit('message', {
+    type: 'workbench:owner-ready',
+    storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+  });
+  await raw.ready;
+  const definition = inspectProjectDefinition(
+    projects.vite({ id: 'progress', files: { '/index.html': 'hello' } }),
+  );
+  const first = raw.openProject(definition);
+  const oldId = sentOf(worker, 'workbench:open-project').at(-1)?.opId;
+  if (!oldId) throw new Error('missing first open');
+  worker.emit('message', {
+    type: 'workbench:failure',
+    opId: oldId,
+    error: { name: 'Error', message: 'storage failed' },
+  });
+  await expect(first).rejects.toThrow('storage failed');
+  const second = raw.openProject(definition);
+  const currentId = sentOf(worker, 'workbench:open-project').at(-1)?.opId;
+  if (!currentId) throw new Error('missing next open');
+  for (const opId of [undefined, oldId, currentId]) {
+    worker.emit('message', {
+      type: 'workbench:durability-progress',
+      ...(opId === undefined ? {} : { opId }),
+      persisted: 1,
+      total: 2,
+    });
+  }
+  await settleMicrotasks();
+  expect(
+    health
+      .filter((event) => event.kind === 'durability-progress')
+      .map((event) => event.projectOpen === true),
+  ).toEqual([false, false, true]);
+  worker.emit('message', {
+    type: 'workbench:failure',
+    opId: currentId,
+    error: { name: 'Error', message: 'storage failed again' },
+  });
+  await expect(second).rejects.toThrow('storage failed again');
+  raw.close();
+  worker.emit('exit', 0, null);
+  await raw.closed;
 });

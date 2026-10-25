@@ -48,7 +48,7 @@
  * natively.
  */
 
-import { parsePreviewPath } from '@riftydev/io';
+import { DEFAULT_PREVIEW_PREFIX, normalizePreviewPrefix, parsePreviewPath } from '@riftydev/io';
 import { packSerializedResponse } from './body-transport.ts';
 import { PortAwareOwnerBinding } from './owner-binding-port-aware.ts';
 import type { PreviewOwnerResolver } from './owner-resolver.ts';
@@ -106,8 +106,11 @@ export interface PreviewBridgeOptions {
  * and host primitives live in `@riftydev/io/preview-protocol` (ADR-0036). This
  * wrapper preserves the historical `{port, path}` shape SW callers use.
  */
-export function matchPreviewUrl(pathname: string): { port: number; path: string } | null {
-  const parsed = parsePreviewPath(pathname);
+export function matchPreviewUrl(
+  pathname: string,
+  previewPrefix?: string,
+): { port: number; path: string } | null {
+  const parsed = parsePreviewPath(pathname, previewPrefix);
   if (!parsed) return null;
   return { port: parsed.port, path: parsed.rest };
 }
@@ -139,11 +142,15 @@ interface PreviewFrameContext {
   readonly copiedTopLevel: boolean;
 }
 
-function matchPreviewReferrer(request: Request, origin: string): { port: number } | null {
+function matchPreviewReferrer(
+  request: Request,
+  origin: string,
+  previewPrefix: string,
+): { port: number } | null {
   if (!request.referrer) return null;
   const referrer = new URL(request.referrer);
   if (referrer.origin !== origin) return null;
-  return matchPreviewUrl(referrer.pathname);
+  return matchPreviewUrl(referrer.pathname, previewPrefix);
 }
 
 function rememberPreviewFrameContext(
@@ -184,8 +191,10 @@ function getScopeOrigin(scope: ServiceWorkerGlobalScope, requestUrl: URL): strin
  */
 export const DEFAULT_READY_TIMEOUT_MS = 3_000;
 
-/** Internal hooks for tests — production code does not need to pass anything. */
+/** Optional deployment configuration and owner/readiness hooks. */
 export interface MessageHandlerHooks {
+  /** Static SW's captured pathname prefix. Omitted means /preview/ (ADR-0409). */
+  previewPrefix?: string;
   /** Override the ready-handshake timeout. Defaults to `DEFAULT_READY_TIMEOUT_MS`. */
   timeoutMs?: number;
   /**
@@ -222,13 +231,15 @@ export interface PreviewInterceptor {
  * `hooks.binding`), calls `subscribeReadiness(scope)` to install its
  * listener, and wires each `/preview/<port>/*` fetch through `routePreview`.
  *
- * Production callers should prefer `installPreviewInterceptor`, which calls
- * this with defaults.
+ * The static SW entry uses `installPreviewInterceptor` with its captured prefix.
  */
 export function createPreviewInterceptor(
   scope: ServiceWorkerGlobalScope,
   hooks: MessageHandlerHooks = {},
 ): PreviewInterceptor {
+  const previewPrefix = normalizePreviewPrefix(
+    hooks.previewPrefix === undefined ? DEFAULT_PREVIEW_PREFIX : hooks.previewPrefix,
+  );
   const timeoutMs = hooks.timeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
   // ADR-0160: routing frame-context (LRU-bounded) — recovers a preview iframe's
   // port for its subresources.
@@ -267,7 +278,7 @@ export function createPreviewInterceptor(
     const url = new URL(event.request.url);
     const scopeOrigin = getScopeOrigin(scope, url);
     const sameOrigin = url.origin === scopeOrigin;
-    const directMatch = sameOrigin ? matchPreviewUrl(url.pathname) : null;
+    const directMatch = sameOrigin ? matchPreviewUrl(url.pathname, previewPrefix) : null;
     const frameRequest = isPreviewFrameRequest(event.request);
     const knownPreviewContext = event.clientId
       ? previewFrameContexts.get(event.clientId)
@@ -303,7 +314,7 @@ export function createPreviewInterceptor(
       let context = frameClientId ? previewFrameContexts.get(frameClientId) : undefined;
       let port = context?.port;
       if (port === undefined) {
-        port = matchPreviewReferrer(event.request, scopeOrigin)?.port;
+        port = matchPreviewReferrer(event.request, scopeOrigin, previewPrefix)?.port;
         if (port !== undefined && frameClientId) {
           context = { port, copiedTopLevel: false };
           rememberPreviewFrameContext(
@@ -361,11 +372,15 @@ export function createPreviewInterceptor(
  * `activate`. The listener intercepts `/preview/<port>/*` requests, resolves
  * their owner through the default port-aware binding, then forwards each request
  * to a ready Worker or window owner.
+ * Pass the captured script-URL prefix also used by the control PONG (ADR-0409).
  *
  * Returns a teardown function — useful in tests.
  */
-export function installPreviewInterceptor(scope: ServiceWorkerGlobalScope): () => void {
-  const handle = createPreviewInterceptor(scope);
+export function installPreviewInterceptor(
+  scope: ServiceWorkerGlobalScope,
+  previewPrefix?: string,
+): () => void {
+  const handle = createPreviewInterceptor(scope, { previewPrefix });
   return () => handle.teardown();
 }
 

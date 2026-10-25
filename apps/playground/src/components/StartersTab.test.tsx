@@ -75,6 +75,14 @@ describe('StartersTab — the moved gallery (ADR-0079)', () => {
     expect(html).toMatch(/data-active="true"[^>]*>Server</);
   });
 
+  it('omits the hidden npm-dev-server class-proof from the gallery', () => {
+    const html = renderToString(() => StartersTab(props));
+    expect(html).toContain('data-preset="webpack-dev-server"');
+    expect(html).not.toContain('data-preset="npm-dev-server-node-ws"');
+    const searched = renderToString(() => StartersTab({ ...props, q: 'npm-dev-server-node-ws' }));
+    expect(searched).not.toContain('data-preset="npm-dev-server-node-ws"');
+  });
+
   it('concurrent-same-key fault: blocks starter admission while the owner FIFO is occupied', () => {
     const html = renderToString(() => StartersTab({ ...props, ownerBlocked: true }));
     expect(html).toMatch(/data-preset="real-vite"[^>]*disabled/);

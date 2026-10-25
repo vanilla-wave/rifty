@@ -1,3 +1,4 @@
+import { DEFAULT_PREVIEW_PREFIX } from '@riftydev/io';
 import { SW_FRAME_VERSION, SW_PING, SW_PONG, SW_ROUTING_VERSION } from '@riftydev/service-worker';
 
 export interface ServiceWorkerControlWorker {
@@ -26,6 +27,7 @@ export class ServiceWorkerControlAbortedError extends Error {
 export interface ServiceWorkerControlProofOptions {
   readonly container: ServiceWorkerControlContainer;
   readonly timeoutMs: number;
+  readonly previewPrefix?: string;
   readonly signal?: AbortSignal;
   readonly timers: ServiceWorkerControlTimers;
 }
@@ -41,6 +43,7 @@ export function proveRiftyServiceWorkerControl(
   if (options.signal?.aborted) {
     return Promise.reject(new ServiceWorkerControlAbortedError(options.signal.reason));
   }
+  const previewPrefix = options.previewPrefix ?? DEFAULT_PREVIEW_PREFIX;
   return new Promise((resolve, reject) => {
     let settled = false;
     let activeAttempt:
@@ -106,7 +109,7 @@ export function proveRiftyServiceWorkerControl(
           finish(toError(error));
           return;
         }
-        if (currentController !== controller || !isMatchingPong(event.data)) return;
+        if (currentController !== controller || !isMatchingPong(event.data, previewPrefix)) return;
         finish();
       };
       activeAttempt = { controller, port: channel.port1, onMessage };
@@ -149,14 +152,16 @@ export function proveRiftyServiceWorkerControl(
   });
 }
 
-function isMatchingPong(value: unknown): boolean {
+function isMatchingPong(value: unknown, previewPrefix: string): boolean {
   if (value === null || typeof value !== 'object') return false;
   const frame = value as Readonly<Record<string, unknown>>;
   return (
     frame.type === SW_PONG &&
     frame.from === 'service-worker' &&
     frame.frameVersion === SW_FRAME_VERSION &&
-    frame.routingVersion === SW_ROUTING_VERSION
+    frame.routingVersion === SW_ROUTING_VERSION &&
+    (frame.previewPrefix === undefined ? DEFAULT_PREVIEW_PREFIX : frame.previewPrefix) ===
+      previewPrefix
   );
 }
 

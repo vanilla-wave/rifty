@@ -33,10 +33,29 @@ let nextTimerId = 1;
 // whose id collides). One-shot timeouts deregister on fire; intervals on clear.
 const handlesById = new Map<number, KeepaliveTimerHandle>();
 
+/** Invocation boundary in the existing timer registry; capture before running guest code. */
+export function captureTimerBoundary(): number {
+  return nextTimerId;
+}
+
+/** A drained invocation has exited: its remaining unref timers cannot run afterward. */
+export function clearTimersSince(boundary: number): void {
+  for (const [id, handle] of handlesById) {
+    handle.disposeScopesSince(boundary);
+    if (id >= boundary) handle.clear();
+  }
+}
+
+/** @internal — a watcher can add a new listener to a pre-invocation timer. */
+export function onTimerScopeDispose(handle: unknown, dispose: () => void): () => void {
+  return resolveHandle(handle)?.onScopeDispose(dispose) ?? (() => {});
+}
+
 class KeepaliveTimerHandle {
   private active = true;
   private refed = true;
   private readonly primitiveId = nextTimerId++;
+  private scopeDisposers: { readonly id: number; readonly dispose: () => void }[] = [];
 
   constructor(
     private readonly raw: HostTimer,
@@ -50,6 +69,7 @@ class KeepaliveTimerHandle {
     if (!this.active) return false;
     this.active = false;
     handlesById.delete(this.primitiveId);
+    this.scopeDisposers = [];
     if (this.refed) keepaliveUnref();
     return true;
   }
@@ -64,7 +84,24 @@ class KeepaliveTimerHandle {
       if (this.refed) keepaliveUnref();
     }
     handlesById.delete(this.primitiveId);
+    this.scopeDisposers = [];
     this.clearRaw(this.raw);
+  }
+
+  onScopeDispose(dispose: () => void): () => void {
+    if (!this.active) return () => {};
+    const entry = { id: nextTimerId++, dispose };
+    this.scopeDisposers.push(entry);
+    return () => {
+      const index = this.scopeDisposers.indexOf(entry);
+      if (index !== -1) this.scopeDisposers.splice(index, 1);
+    };
+  }
+
+  disposeScopesSince(boundary: number): void {
+    const retiring = this.scopeDisposers.filter((entry) => entry.id >= boundary);
+    this.scopeDisposers = this.scopeDisposers.filter((entry) => entry.id < boundary);
+    for (const entry of retiring) entry.dispose();
   }
 
   ref(): this {
@@ -180,6 +217,14 @@ let nextImmediateId = 1;
 
 const channel: MessageChannel | null =
   typeof MessageChannel === 'function' ? new MessageChannel() : null;
+// Native Node test/embedding hosts auto-ref onmessage. Chromium lifetime is
+// already owned by keepaliveRef; never invoke the guest MessagePort ref shim.
+const nativeImmediatePort =
+  typeof WorkerGlobalScope === 'undefined'
+    ? (channel?.port1 as HostTimerRefHooks | undefined)
+    : undefined;
+const refImmediateHost = nativeImmediatePort?.ref?.bind(nativeImmediatePort);
+const unrefImmediateHost = nativeImmediatePort?.unref?.bind(nativeImmediatePort);
 
 if (channel) {
   channel.port1.onmessage = () => {
@@ -194,8 +239,10 @@ if (channel) {
     if (item === undefined) return; // cleared between message post and dispatch
     immediates.delete(id);
     keepaliveUnref();
+    if (immediates.size === 0) unrefImmediateHost?.();
     item.fn(...item.args);
   };
+  unrefImmediateHost?.();
 }
 
 export function setImmediate(
@@ -204,6 +251,7 @@ export function setImmediate(
 ): ImmediateHandle {
   const id = nextImmediateId++;
   immediates.set(id, { fn, args });
+  if (immediates.size === 1) refImmediateHost?.();
   keepaliveRef();
   if (channel) channel.port2.postMessage(null);
   else
@@ -220,6 +268,7 @@ export function setImmediate(
 export function clearImmediate(handle: ImmediateHandle | undefined): void {
   if (!handle) return;
   if (immediates.delete(handle.id)) keepaliveUnref();
+  if (immediates.size === 0) unrefImmediateHost?.();
 }
 
 export const timers = {
@@ -274,6 +323,8 @@ function setTimeoutPromise<T = void>(
         reject(abortError(signal));
       };
       signal.addEventListener('abort', onAbort, { once: true });
+      const abortListener = onAbort;
+      onTimerScopeDispose(handle, () => signal.removeEventListener('abort', abortListener));
     }
   });
 }

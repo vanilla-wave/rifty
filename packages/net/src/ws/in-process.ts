@@ -10,7 +10,7 @@
  * WebSocket semantics without playground-only registries.
  */
 
-import { EventEmitter } from '@riftydev/io';
+import { EventEmitter, openHostBroadcastChannel } from '@riftydev/io';
 import { channelNameFor, portChannelNameFor } from './channel.ts';
 import { CloseEventCtor } from './close-event.ts';
 
@@ -182,7 +182,7 @@ export class WebSocketServer extends EventEmitter {
       const url = bridgeUrlFor(this.host, this.port, this.path);
       const portChannelName = portChannelNameFor(url);
       for (const channelName of new Set([channelNameFor(url), portChannelName])) {
-        const channel = new BroadcastChannel(channelName);
+        const channel = openHostBroadcastChannel(channelName);
         channel.addEventListener('message', this.onBridgeMessage);
         this.bridgeChannels.push(channel);
         if (channelName === portChannelName) this.bridgePortChannels.add(channel);
@@ -490,7 +490,7 @@ export class WebSocket extends EventTarget {
     }
     this.bridgeCid = nextCid();
     for (const channelName of new Set([channelNameFor(url), portChannelNameFor(url)])) {
-      const channel = new BroadcastChannel(channelName);
+      const channel = openHostBroadcastChannel(channelName);
       channel.addEventListener('message', this.onBridgeMessage);
       this.bridgeChannels.push(channel);
     }

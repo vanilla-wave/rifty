@@ -10,12 +10,12 @@
  * invariant). Stream/kill/exit use the shared foreground-child driver directly.
  */
 
+import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
 import {
-  type KernelEntryCapabilityPorts,
-  type SpawnWorkerSpec,
-  globalProcessManager,
-} from '@riftydev/kernel';
-import { buildNodeEntryWorkerEntry } from '@riftydev/runtime-js/builtins/node-entry-url';
+  type NodeEntryRuntimeBinding,
+  buildNodeEntryWorkerEntry,
+} from '@riftydev/runtime-js/builtins/node-entry-url';
+import { preparePackageBinSpawnRequest } from '@riftydev/shadow-registry/runtime/common';
 import type { BinExecutor } from '@riftydev/shell';
 import type { BinExecutorDeps, BinSpawnRequest, BinWorkerHandle } from '../glue/bin-executor.ts';
 import { childTerminalBootstrap } from '../glue/child-terminal.ts';
@@ -23,33 +23,31 @@ import { runForegroundChild } from '../glue/run-foreground-child.ts';
 import { isBinShimPath } from './bin-entry-path.ts';
 import {
   type ReserveOwnerChildAdmission,
-  abortOwnerChildAdmissionAfterSpawn,
-  abortOwnerChildAdmissionBeforeSpawn,
-  attachOwnerChildCapabilities,
-  commitOwnerChildAdmission,
   observeOwnerChildExit,
+  projectOwnerChildRuntimeBindings,
 } from './owner-child-admission.ts';
-import { prepareViteBinSpawnRequest } from './vite-cli-prep.ts';
 
 /** Pure: build the spawn spec for a resolved bin request (unit-tested). */
 export function buildChildSpawnSpec(
   req: BinSpawnRequest,
   nodeEntryUrl: string,
   nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
-  capabilityPorts?: KernelEntryCapabilityPorts,
+  runtimeBindings: readonly NodeEntryRuntimeBinding[] = [],
 ): SpawnWorkerSpec {
+  const projectedBindings = projectOwnerChildRuntimeBindings(runtimeBindings, req.guestRoots);
   const entry = buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
     kind: 'program',
     bin: isBinShimPath(req.shimPath),
     remoteFs: true,
-    ...(req.remoteFsRoot === undefined ? {} : { remoteFsRoot: req.remoteFsRoot }),
+    ...(req.guestRoots ?? {}),
     nodeServe: true,
     ...(req.previewScope === undefined ? {} : { previewScope: req.previewScope }),
     terminal: childTerminalBootstrap(req),
+    ...(projectedBindings.length === 0 ? {} : { runtimeBindings: projectedBindings }),
   });
   return {
-    entry:
-      capabilityPorts === undefined ? entry : attachOwnerChildCapabilities(entry, capabilityPorts),
+    stdinMode: 'pull',
+    entry,
     argv: ['rifty', req.shimPath, ...req.args],
     env: { ...req.env },
     cwd: req.cwd,
@@ -64,7 +62,7 @@ export function prepareOwnerChildBinSpawnRequest(
   request: BinSpawnRequest,
   enrichRequest?: OwnerChildBinRequestEnricher,
 ): BinSpawnRequest {
-  const prepared = prepareViteBinSpawnRequest(request);
+  const prepared = preparePackageBinSpawnRequest(request);
   return enrichRequest?.(prepared) ?? prepared;
 }
 
@@ -84,6 +82,7 @@ export function createOwnerChildBinExecutor(
         env: ctx.env,
         cwd: ctx.cwd,
         isTTY: ctx.isTTY === true,
+        ...(ctx.stdoutIsFile === undefined ? {} : { stdoutIsFile: ctx.stdoutIsFile }),
         cols: ctx.cols,
         rows: ctx.rows,
       },
@@ -99,7 +98,7 @@ export function createOwnerChildBinExecutor(
           req,
           nodeEntryUrl,
           nodeWorkerRuntimeEnv,
-          reservation.snapshot.capabilityPorts,
+          reservation.snapshot.runtimeBindings,
         ),
         1,
       );
@@ -108,7 +107,7 @@ export function createOwnerChildBinExecutor(
       }
       handle = spawned;
     } catch (error) {
-      abortOwnerChildAdmissionBeforeSpawn(reservation, error);
+      reservation.abortBeforeSpawn(error);
       throw error;
     }
     const physicalExit = observeOwnerChildExit(handle);
@@ -122,14 +121,14 @@ export function createOwnerChildBinExecutor(
           : undefined,
         onExit: hooks.onExit ? () => hooks.onExit?.(req, ctx) : undefined,
       });
-      commitOwnerChildAdmission(reservation, physicalExit);
+      reservation.commit();
     } catch (error) {
       try {
         handle.kill('SIGTERM');
       } catch {
         // Exact physical exit observation below remains authoritative.
       }
-      await abortOwnerChildAdmissionAfterSpawn(reservation, error, physicalExit);
+      await reservation.abortAfterChildSettlement(error, physicalExit);
       throw error;
     }
     return running;

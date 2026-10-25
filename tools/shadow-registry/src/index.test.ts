@@ -4,11 +4,11 @@ import { builtinShadowSubstitutionCatalog } from './internal/index.ts';
 
 describe('shadow-registry', () => {
   it('bakedOverrides contains the bcrypt → bcryptjs entry', () => {
-    expect(bakedOverrides.bcrypt).toBe('bcryptjs');
+    expect(bakedOverrides.bcrypt).toBe('bcryptjs@3.0.3');
   });
 
-  it('has no legacy esbuild redirect or alias overlay', () => {
-    expect(bakedOverrides.esbuild).toBeUndefined();
+  it('derives the exact esbuild registry twin without the legacy internal shim', () => {
+    expect(bakedOverrides.esbuild).toBe('esbuild-wasm@0.28.0');
     expect(internalsShims['@esbuild/wasi-preview1']).toBeUndefined();
   });
 
@@ -20,10 +20,10 @@ describe('shadow-registry', () => {
     expect(bakedOverrides['sass-embedded']).toBe('sass@1.100.0');
   });
 
-  it('derives every registry-backed builtin redirect from the owner-decoded catalog', () => {
+  it('derives default-tier registry redirects from the owner-decoded catalog', () => {
     const registryRedirects = Object.fromEntries(
       builtinShadowSubstitutionCatalog.recipes.flatMap((recipe) =>
-        recipe.acquisition.kind === 'registry'
+        recipe.acquisition.kind === 'registry' && recipe.runtimeTier !== 'coi'
           ? [
               [
                 recipe.trigger.name,
@@ -34,7 +34,7 @@ describe('shadow-registry', () => {
       ),
     );
 
-    expect(bakedOverrides).toEqual({ bcrypt: 'bcryptjs', ...registryRedirects });
+    expect(bakedOverrides).toEqual({ bcrypt: 'bcryptjs@3.0.3', ...registryRedirects });
   });
 
   it('internalsShims are keyed by installed trigger with package-relative file paths', () => {

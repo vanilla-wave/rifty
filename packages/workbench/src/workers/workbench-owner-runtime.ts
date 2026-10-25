@@ -1,3 +1,7 @@
+import {
+  createPlaygroundNpmObserver,
+  playgroundInitialInstallFinalizer,
+} from './playground-package-mutations.ts';
 /// <reference lib="webworker" />
 
 import { makeGit, vfsToGitFs } from '@riftydev/git';
@@ -25,15 +29,16 @@ import {
   inspectWorkbenchOwnerToPageMessage,
 } from '../workbench/owner-protocol.ts';
 import type { PlaygroundCatalogSnapshot } from '../workbench/playground.ts';
+import { projectStorageSegment } from '../workbench/project-definition.ts';
 import {
   type ProjectMaterializer,
   createProjectMaterializer,
 } from '../workbench/project-materialization.ts';
+import { DEFAULT_PUBLIC_PROJECT_ROOT, createGuestLayout } from './guest-layout.ts';
 import { installNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import { createOwnerExecSyncRunner } from './owner-child-node-executor.ts';
 import { resolveOwnerGitCommitIdentity } from './owner-git-commit-identity.ts';
 import { createOwnerPackageState } from './owner-package-state.ts';
-import { createOwnerShadowAssetAuthority } from './owner-shadow-assets.ts';
 import {
   type OwnerVfsAuthority,
   type OwnerVfsAuthorityComposition,
@@ -59,7 +64,10 @@ import {
 } from './workbench-package-config.ts';
 import { createWorkbenchProjectComposition } from './workbench-project-composition.ts';
 import { createWorkbenchProjectRuntime } from './workbench-project-runtime.ts';
-import { createWorkbenchProjectStore } from './workbench-project-store.ts';
+import {
+  createWorkbenchProjectStore,
+  hasStoredWorkbenchProject,
+} from './workbench-project-store.ts';
 import { createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
 import type { KernelIpc } from './worker-runtime-globals.ts';
 
@@ -124,6 +132,7 @@ const DURABILITY_PROGRESS_MIN_INTERVAL_MS = 200;
  */
 function createDurabilityProgressForwarder(
   send: (message: WorkbenchOwnerToPageMessage) => void,
+  opId?: string,
 ): (snapshot: { readonly persisted: number; readonly total: number }) => void {
   let lastForwardedAt = 0;
   let lastPersisted = -1;
@@ -141,6 +150,7 @@ function createDurabilityProgressForwarder(
     try {
       send({
         type: 'workbench:durability-progress',
+        ...(opId === undefined ? {} : { opId }),
         persisted: snapshot.persisted,
         total: snapshot.total,
       });
@@ -161,7 +171,6 @@ function playgroundTypeScriptWorkerUrl(config: WorkbenchOwnerBootConfig): string
 function withOwnerClose(
   materializer: ProjectMaterializer,
   packageQuiesce: () => Promise<void>,
-  closeShadowAssets: () => Promise<void>,
   authority: OwnerVfsAuthority,
 ): ProjectMaterializer {
   let closePromise: Promise<void> | null = null;
@@ -179,11 +188,6 @@ function withOwnerClose(
         }
         try {
           await packageQuiesce();
-        } catch (error) {
-          failures.push(error);
-        }
-        try {
-          await closeShadowAssets();
         } catch (error) {
           failures.push(error);
         }
@@ -206,7 +210,6 @@ function createCompanionOwnerClose(
   authority: PlaygroundProjectAuthority,
   unsubscribeCatalog: () => void,
   packageQuiesce: () => Promise<void>,
-  closeShadowAssets: () => Promise<void>,
   vfsAuthority: OwnerVfsAuthority,
 ): () => Promise<void> {
   let closePromise: Promise<void> | null = null;
@@ -226,11 +229,6 @@ function createCompanionOwnerClose(
       }
       try {
         await packageQuiesce();
-      } catch (error) {
-        failures.push(error);
-      }
-      try {
-        await closeShadowAssets();
       } catch (error) {
         failures.push(error);
       }
@@ -282,7 +280,11 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
   const config = firstMessage(await inbox.take(), ipc);
   if (config === null) return;
 
-  const storageAuthority = await installWorkbenchOwnerStorageAuthority(config.storage.persistence);
+  const storageAuthority = await installWorkbenchOwnerStorageAuthority(config.storage.persistence, {
+    namespace: config.storage.namespace,
+    proofTimeoutMs: config.deployment.ownerStartupTimeoutMs,
+    ioReportTimeoutMs: config.deployment.ioReportTimeoutMs,
+  });
   const storage = storageAuthority.snapshot;
   const ownerComposition: OwnerVfsAuthorityComposition = createOwnerVfsAuthorityComposition(
     syncMirror(),
@@ -298,7 +300,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
   });
   installSqliteWasmSyncProvider(config.deployment.wasm.sqlite);
 
-  const eddy = config.packageAcquisition.eddy;
+  const acquisition = config.packageAcquisition;
   const ownerVfs = new SyncMirrorVfs();
   const starterInitialOids = new Map<string, string>();
   const amendGeneratedBaseline = createStarterBaselineFinalizer(
@@ -306,53 +308,42 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
     starterInitialOids,
     async () => assertCleanDurability(await authority.flush()),
   );
-  const registry = createProxiedRegistryClient({
-    proxyPrefix: config.packageAcquisition.registryUrl,
-  });
-  const shadowAssets = (
-    await createOwnerShadowAssetAuthority({
-      ownerStorage: storage,
-      vfs: ownerVfs,
-      registry,
-      ...(storageAuthority.opfs === undefined
-        ? {}
-        : {
-            durability: {
-              persistedVfs: storageAuthority.opfs.persistedVfs,
-              flush: async () => {
-                const report = await authority.flush();
-                if (report === undefined) {
-                  throw new Error('OPFS shadow asset flush returned no durability report');
-                }
-                return report;
-              },
-            },
-          }),
-    })
-  ).manager;
+  let projectOpenOperation: string | undefined;
   const packageState = createOwnerPackageState({
     vfs: ownerVfs,
     fsSync: authority,
     installStampClaims,
     flush: () =>
       authority.flush({
-        onProgress: createDurabilityProgressForwarder((message) => sendOwnerMessage(ipc, message)),
+        onProgress: createDurabilityProgressForwarder(
+          (message) => sendOwnerMessage(ipc, message),
+          projectOpenOperation,
+        ),
       }),
-    amendGeneratedBaseline,
+    ...(config.playgroundUrlContext === undefined
+      ? {}
+      : { finalizeFirstInstall: playgroundInitialInstallFinalizer(amendGeneratedBaseline) }),
     nodeWorkerRuntimeEnv,
     log: (line) => globalThis.process.stdout.write(line),
-    registry,
-    shadowAssets,
-    resolverUrl: () => eddy?.resolverUrl,
-    resolverBundleBaseUrl: () => eddy?.bundleBaseUrl,
-    resolverPin: (templateId) => eddy?.presetPins[templateId],
+    ...(acquisition.mode === 'snapshot-only'
+      ? {}
+      : {
+          registry: createProxiedRegistryClient({ proxyPrefix: acquisition.registryUrl }),
+          ...(acquisition.eddy === undefined
+            ? {}
+            : {
+                resolverUrl: () => acquisition.eddy?.resolverUrl,
+                resolverBundleBaseUrl: () => acquisition.eddy?.bundleBaseUrl,
+                resolverPin: (templateId: string) => acquisition.eddy?.presetPins[templateId],
+              }),
+        }),
   });
   let materializer: ProjectMaterializer | undefined;
   let playgroundAuthority: PlaygroundProjectAuthority | undefined;
   let initialPlaygroundCatalog: PlaygroundCatalogSnapshot | undefined;
   let closeAuthority: (() => Promise<void>) | undefined;
   if (config.playgroundUrlContext === undefined) {
-    const projectStore = createWorkbenchProjectStore(authority);
+    const projectStore = createWorkbenchProjectStore(authority, installStampClaims);
     const coreMaterializer = createProjectMaterializer({
       owner: projectStore,
       acquisition: {
@@ -364,12 +355,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
           ),
       },
     });
-    materializer = withOwnerClose(
-      coreMaterializer,
-      () => packageState.quiesce(),
-      () => shadowAssets.close(),
-      authority,
-    );
+    materializer = withOwnerClose(coreMaterializer, () => packageState.quiesce(), authority);
     closeAuthority = () => (materializer as ProjectMaterializer).close();
   } else {
     playgroundAuthority = await createPlaygroundProjectAuthority({
@@ -384,9 +370,8 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
       acquisition: {
         ensure: (request) =>
           packageState.activateAndEnsure(
-            workbenchFirstMaterializationPackageConfig(request.definition, request.projectRoot, {
-              packageJsonBytes: authority.readFileBytesSync(`${request.projectRoot}/package.json`),
-            }),
+            workbenchFirstMaterializationPackageConfig(request, authority),
+            request.snapshotAdmission,
           ),
       },
       projectSave: packageState,
@@ -416,7 +401,6 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
       playgroundAuthority,
       unsubscribeCatalog,
       () => packageState.quiesce(),
-      () => shadowAssets.close(),
       authority,
     );
   }
@@ -426,6 +410,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
   let rejectOwnerLifetime = (error: Error): void => {
     throw error;
   };
+  const publicRoot = config.publicProjectRoot ?? DEFAULT_PUBLIC_PROJECT_ROOT;
   const requireActiveProjectRoot = (): string => {
     if (activeProjectRoot === null) {
       throw new Error('Workbench owner execSync requires an active project');
@@ -442,11 +427,15 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
           : { root: activeProjectRoot, vfs: activeProjectVfs },
     }),
     {
-      getVfs: () => new ProjectTerminalFsSync(authority, requireActiveProjectRoot()),
+      getVfs: () =>
+        new ProjectTerminalFsSync(
+          authority,
+          createGuestLayout(publicRoot, requireActiveProjectRoot()),
+        ),
       runWorker: createOwnerExecSyncRunner(
         config.deployment.workers.node,
         nodeWorkerRuntimeEnv,
-        requireActiveProjectRoot,
+        () => ({ remoteFsRoot: requireActiveProjectRoot(), publicRoot }),
         (root) => packageState.reserveChildAdmission(root),
       ),
     },
@@ -465,6 +454,9 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
         });
 
   const controller = createWorkbenchOwnerController({
+    setProjectOpenOperation: (opId) => {
+      projectOpenOperation = opId;
+    },
     ...(materializer === undefined ? {} : { materializer }),
     closeAuthority,
     ...(companionController === undefined ? {} : { playground: companionController }),
@@ -495,19 +487,30 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
           createRuntime: (vfs) =>
             createWorkbenchProjectRuntime({
               projectRoot,
+              publicRoot,
               packageConfig: workbenchPackageConfig(input.definition, projectRoot, {
-                packageJsonBytes: authority.readFileBytesSync(`${projectRoot}/package.json`),
+                packageJsonBytes:
+                  (input.materialized.acquisition as { kind?: string } | undefined)?.kind ===
+                  'saved'
+                    ? (input.definition.files['/package.json'] as Uint8Array)
+                    : authority.readFileBytesSync(`${projectRoot}/package.json`),
               }),
               authority,
               packageState,
               nodeEntryWorkerUrl: config.deployment.workers.node,
               devServerWorkerUrl: config.deployment.workers.devServer,
+              previewPrefix: config.deployment.previewPrefix,
               nodeWorkerRuntimeEnv,
               mutationGuard: vfs.mutationGuard,
               publicationBarrier: vfs.publicationBarrier,
               ...(input.recordMutation === undefined
                 ? {}
-                : { recordMutation: input.recordMutation }),
+                : {
+                    observeNpmOperation: createPlaygroundNpmObserver(
+                      authority,
+                      input.recordMutation,
+                    ),
+                  }),
               send(frame) {
                 const output: WorkbenchOwnerProjectRuntimeOutput =
                   frame.type === 'pty:preview'
@@ -626,6 +629,18 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
       void controller.handle(message).catch(reject);
     };
   });
+  const currentKeys =
+    initialPlaygroundCatalog === undefined
+      ? undefined
+      : [
+          ...(initialPlaygroundCatalog.scratch === null ? [] : ['scratch']),
+          ...initialPlaygroundCatalog.projects.map((project) => projectStorageSegment(project.id)),
+        ];
+  const storageLayout =
+    storageAuthority.layoutSummary !== undefined &&
+    !(await hasStoredWorkbenchProject(authority, currentKeys))
+      ? storageAuthority.layoutSummary
+      : undefined;
   const queued = inbox.drain();
   let shutdownQueued = false;
   for (const message of queued) {
@@ -646,7 +661,11 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
         catalog: initialPlaygroundCatalog,
       });
     }
-    sendOwnerMessage(ipc, { type: 'workbench:owner-ready', storage });
+    sendOwnerMessage(ipc, {
+      type: 'workbench:owner-ready',
+      storage,
+      ...(storageLayout === undefined ? {} : { storageLayout }),
+    });
   }
 
   try {

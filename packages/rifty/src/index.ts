@@ -26,11 +26,34 @@
  * }
  * ```
  */
+export { sandboxErrorKind, type SandboxErrorKind } from './sandbox-errors.ts';
 export { COI_REQUIRED_MESSAGE, createSandbox } from './sandbox.ts';
 export type {
+  SandboxProject,
+  SandboxProjectOptions,
+  SandboxCommandOptions,
+  SandboxCommandOutput,
+  SandboxCommandOutcome,
+  SandboxCommandRun,
+} from './sandbox-project.ts';
+export type {
   CreateSandboxOptions,
+  GenericCreateSandboxOptions,
   Sandbox,
+  SandboxOpening,
+  SandboxCapabilityFeature,
+  SandboxCapabilityReport,
   SandboxDeps,
+  SandboxPreviewTarget,
+  SandboxResidentBin,
+  SandboxRestartOptions,
+  SandboxRestartReport,
+  SandboxStartBinInput,
+  SandboxToolchain,
+  SandboxSnapshotSource,
+  SandboxApplySnapshotInput,
+  ToolchainCreateSandboxOptions,
+  ToolchainSandbox,
   VfsBackend,
   VfsBootInfo,
 } from './sandbox.ts';
@@ -43,7 +66,12 @@ export type {
   EvalResult,
   RuntimeController,
   RuntimeEvent,
+  RuntimeProgressEvent,
+  SnapshotProgress,
   RuntimeFs,
+  RuntimeEffects,
+  RuntimeFsDirent,
+  RuntimeFsStat,
   // Payload of the `diagnostic` RuntimeEvent — SDK consumers type it without a deep import.
   TelemetryEntry,
   TelemetryKind,

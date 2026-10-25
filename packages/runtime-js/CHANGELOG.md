@@ -1,8 +1,143 @@
 # Changelog
 
+- Forward `control:kill-tree` `cascade` to the descendant authority; a missing or non-boolean bit is a loud self-exit (ADR-0548).
+
+- Preserve Buffer chunks on process.stdin after merging shared descriptor reads with no-COI children.
+
+- Preserve immediate fork disconnect and send ordering; match Node24 parent-disconnect terminal events.
+
+- Transport complete numeric Stats fields from VFS; upstream no-COI esbuild can resolve build files.
+
 ## [Unreleased]
 
+- Guest Fetch instances and `markAsUncloneable` graphs throw Node's `DataCloneError` (code 25) on `structuredClone`, realm/`MessagePort`/`Worker`/`parentPort`/`BroadcastChannel` `postMessage` (kernel and same-realm workers): tags on ordinary objects and real Errors throw as Node, intrinsics ignore theirs; nested data properties, spoofed prototypes, Map/Set entries and Error `cause` included. One side-effect-free admission walk (`internal/clone-marks.ts`, realm-global marks shared across bundles) runs ahead of the native clone, which always gets the original graph; wrapped clone surfaces touch only captured primordials and forward a read transfer list as a primordial-only iterable. Declared gaps: a tag behind a getter is not seen (compat ❌); a tag on a host object is honoured where Node ignores it, and a getter deleting a later tagged sibling still throws (compat ⚠️) (ADR-0541).
+
+- Child stdin retains only dispatched transport writes; corked buffers no longer keep an unreferenced parent alive, including a corked successor after an active write.
+
+- Async explicit process exits retain their drain status without leaking an internal exit signal as a browser error (ADR-0445).
+
+- CJS with a standalone first-line strict directive preserves source positions without a stack hook, including frozen guest hooks; stock esbuild validation points at original source. Other CJS shapes retain the recorded +2-line gap.
+
+- File stdout initializes lazily through the current fs.writeSync; inherited child output uses captured descriptors (ADR-0544).
+
+- fs consumes real stdio descriptors; kernel stdin supports synchronous reads, async reads share process.stdin consumption. hrtime and crypto retain platform sources when guests replace the globals (stock esbuild-wasm 0.21).
+
+- Stock Node guest prerequisites: stdio write callbacks/encoding; ChildProcess and pipe references; synchronous named workerData/execFileSync refusals; complete VFS-backed numeric Stats (ADR-0540).
+- Early Fetch preload no longer caches the fallback `node:process`: child IPC, stdio and Worker construction observe the seeded child process. JS Fetch classes serialize own enumerable properties through advanced IPC as Node (ADR-0541).
+
+- Pre-aborted Fetch preserves abort priority and unstarted body cancellation; collected Responses leave retained errored bodies undisturbed. Locked bodies with custom cancel reject `fetch.abortBodyState`; active upload abort retains Node's continued-read behavior (ADR-0541).
+
+- `process.emitWarning` supports string/Error overloads, nextTick events, default stderr and deprecation controls; lowercase `Request` method `patch` now warns once instead of crashing. Warning-file redirection remains a named unsupported feature (ADR-0541).
+
+- Guest `fetch()`/`new Request()` reject relative URLs as Node (`TypeError` "Failed to parse URL …"), no browser-base-URL exception. Rifty infrastructure resource I/O (wasm, lib.d.ts, npm/eddy, owner assets) goes through `@riftydev/io` `fetchHost`; `node:http` egress through `fetchNodeNetwork` (ADR-0541).
+
+- Native Node embedding no longer stays alive after importing the immediate scheduler: its MessagePort references follow pending immediates; cold QuickJS preload exits normally.
+
+- Node guest `Request`/`Response`/`Headers`/`FormData` now use undici 7.25.0 (Node 24.16.0): Hono header retention, multipart/File bodies, clone/tee, locking/bodyUsed and detached reads match live Node. One network stream/ref replaces native Body wrappers; unsupported browser wire headers/dispatchers/opaque responses reject explicitly. VM headers preserve semantic Proxy identity. ADR-0541.
+- Wait for child bootstrap readiness before transferring init ports; dynamic host wrappers retain startup messages.
+
+- No-COI Node children use isolated Workers and live owner FS via SW; support child ref/unref, transported stdin Buffers, spec stdio write callbacks and async fs.read(0) (ADR-0539).
+
+- `os.homedir()` keeps an explicitly empty `HOME` (`''`), as Node; `os.tmpdir()` still falls through empty `TMPDIR`/`TMP`/`TEMP`.
+
+- `os.userInfo().homedir` is the account home `/home/rifty` regardless of `$HOME`, as Node (ADR-0531); stale exit-signal rejections recorded before a reused process's reset are dropped too.
+
+- An exit signal from an earlier invocation of a reused process (no-COI) no longer ends the current one when its late `unhandledrejection` arrives: after a failed `vite build`, the next build runs (ADR-0530 correction).
+
+- Guest location (ADR-0531): `process.cwd()`, module paths and diagnostics use the public project root (default `/home/project`); `os.tmpdir()`/`os.homedir()` follow `TMPDIR`/`HOME` as Node (default `/tmp`, `/home/rifty`), both existing and writable; a cross-mount rename fails `EXDEV`.
+
+- **Breaking:** `trackKeepalivePromise` is no longer exported (ADR-0530): its only consumer was the removed Vite CAC hook; detached work keeps the loop through its own counted handles.
+
+- `installHostAsyncKeepalive()` (ADR-0529): a pending Blob/File body read, `fs.openAsBlob` result read, `WebAssembly.compile`/`instantiate`, `SubtleCrypto` call or in-guest `Response`/`Request` Body consumer (clones and `Response.json()` included) holds the child realm until it settles, a global `WebSocket` until its `close`, a `BroadcastChannel` until `close()` (Node's `ref()`/`unref()` added) — such programs no longer exit silently before printing Node's result. Guest-stream bodies and unread `blob.stream()` hold nothing; constructor identity and method names stay Node's. Declared gaps: native-internal body stream reads, `navigator.locks`.
+
+- Carry the sandbox registry connection on command requests (toolchain protocol v6). Error cause projection avoids guest accessors, bounds prototype inspection and retains native DOMException details; failed serialization no longer strands runBin on a cause getter.
+
+- Forward native startup/snapshot progress with existing peer/request guards; distinguish observed OPFS contention under the host deadline and retain native causes (ADR-0486).
+
+- Advanced IPC captures optional Float16Array behind an explicit availability guard, preserving its value table on capable hosts and ES2022 startup without it (ADR-0481).
+
+- Advanced IPC refuses own/inherited view constructor accessors before dispatch instead of sending stale bytes; data constructors and Buffer branding remain (ADR-0480).
+- Rejected Worker construction leaves owner stdio listeners untouched: snapshot env before piping; keep workerData after stdio/id allocation, undo pipes when its getter or stdio setup fails. `env: null` inherits the parent environment, as in Node.
+- `fork` spreads `execArgv` before compiling startup options, preserving Node's TypeError for non-iterables.
+
+- `awaitDrain` settles with the active process's first exit terminal (`exit()`, a fatal rejection, a throwing `uncaughtException` listener), not only a recorded rejection (ADR-0445 note 2026-09-25): an in-process host without a control port (no-COI command, runBin) now sees exit 7 / an in-handler `exit(n)` instead of draining on to a natural exit 0, and no later task of that process runs. `activeRefs` is on `./internal`.
+- A runtime fatal exit (no-listener unhandled rejection, throwing `uncaughtException` listener) keeps the error it ended the process for as the exit signal's `cause` (ADR-0445), so an in-process host still names a declared gap behind it.
+- `vm.constants` is Node's frozen null-prototype pair of symbols (`USE_MAIN_CONTEXT_DEFAULT_LOADER`, `DONT_CONTEXTIFY`), also a named ESM export; `createContext` / `runInNewContext` / `Script#runInNewContext` with `DONT_CONTEXTIFY` throw `NotImplementedError('vm.createContext.DONT_CONTEXTIFY')` after Node's option validation, so jsdom under vitest `environment: 'jsdom'` fails named instead of a bare `TypeError` (ADR-0464).
+- The inherited-stdin hook key is registered (`Symbol.for('rifty.runtime-js.process-stdin-inherit.v1')`): in a production realm the process and `child_process` are separate runtime-js copies, so a default-stdio `fork` fell back to a `'data'` listener on the parent's stdin and held the parent forever after the child exited.
+- `fork` and `worker_threads.Worker` start children with Node's `-r`/`--require`, `-C`/`--conditions` and `--experimental-import-meta-resolve` (separate and `=` spellings; vitest 4.1.11's pool `execArgv`), ADR-0449: one compiler (`internal/node-startup-options.ts`) names every other token in `NotImplementedError('worker_threads.Worker.execArgv' | 'child_process.fork.execArgv')` before a thread id, hold or spawn (a Worker's operand errors are Node's `ERR_WORKER_INVALID_EXEC_ARGV`, a truthy non-array `ERR_INVALID_ARG_TYPE`; same-realm non-empty options throw `….same-realm`). Node entry bootstrap moves to v6: program and worker-thread launches carry the exact tokens (`process.execArgv`), the pre-entry hook installs one realm record, the resolver adds the user conditions to every resolution, `runNodeEntry` runs preloads from the cwd before the entry, and `import.meta.resolve(spec, parent)` honours `parent` under the flag. Worker inherits its parent thread's launch options; fork defaults to the public `process.execArgv` minus the eval pair (`builtins/process-public.ts` is the one `node:process` selection). `Worker#stdout`/`stderr` are Node's Readables (`builtins/worker_threads-stdio.ts`), auto-piped into the parent's process streams unless `stdout`/`stderr: true`, ended right before `'exit'`; `stdin` is `null`, `stdin: true` throws `worker_threads.Worker.stdin`; the non-Node `'stdout'`/`'stderr'` Worker events are removed. v5 envelopes are rejected.
+- A live `worker_threads.Worker` holds its parent (ADR-0446, `internal/worker-reference.ts`): own `Symbol(kHandle)` / `Symbol(kPublicPort)` reference objects (`ref`/`unref`/`hasRef`, one keepalive ref each), `Worker#ref()`/`unref()` through both and returning `undefined` (was the Worker), the public port referenced by `'message'` listeners and released by `removeAllListeners`, both released and `null` before `'exit'`; napi-rs's `ref` neutering keeps rolldown's pool from holding its parent. In a kernel worker realm, `parentPort` is referenced by its `'message'` listeners / `onmessage` and `ref()`, released by their removal, `unref()` or `close()`. A failed start or peer error emits `'error'`, then `'exit'` 1 a microtask later, releasing both holds even when the `'error'` has no listener (it is the parent's uncaught exception first, also for a peer error, which the kernel's teardown used to rethrow after `'exit'`, and a same-realm load failure that used to reject; no `'exit'` if it ended the parent; Node's `'exit'` placement here varies with loop timing, rifty takes an unloaded Node run's order). `execSync` honours `encoding` (any but `'buffer'` returns a string, as Node's `spawnSync`).
+- A Worker child inheriting stdin (fork's default stdio) reads the parent's input through the stdin reader instead of a `'data'` listener, so the parent's `process.stdin` stays unread and no longer holds the parent after the child closes (Node's shared fd 0; `builtins/process-stdin-inherit.ts`).
+- `fork(…, { serialization: 'advanced' })` works (vitest 4.1.11 forks pool): each message is the sending realm's structured clone over the existing IPC lane, with Node's v8-serializer rules where the browser differs (views copied to exactly their bytes, `Buffer` brand kept, SharedArrayBuffer and refused values throw Node's plain `Error`); platform objects, detached buffers and an own accessor beside a view throw `NotImplementedError('child_process.serialization.advanced.<kind>')` (ADR-0448, `internal/node-ipc-advanced.ts`). `serialization` is validated as Node's `ERR_INVALID_ARG_VALUE` in `spawn`/`fork`; top-level `send()` refusals in both serializations carry Node's `Received …` text; an advanced fork child is held by its `'message'` listener like JSON. Node entry bootstrap moves to v5 (`launch.ipc: 'advanced'`); v4 and older are rejected.
+- Node process lifecycle (ADR-0445, `builtins/process-lifecycle-events.ts`): uncaught errors (timers, `setImmediate`, fs/zlib/`util.callbackify` callbacks, `nextTick`, the entry) and unhandled rejections reach `uncaughtExceptionMonitor`/`uncaughtException`/`unhandledRejection` listeners before any terminal path, with Node's origins and `UnhandledPromiseRejection` wrap; no listener → `'exit'` 1 then the existing loud path, a rejection's stderr + exit request (`exitCode ?? 1`) at the trap, so an `exit()` in a task that runs after it never overrides it (a callback queued before Chromium's `unhandledrejection` task still runs first); a throwing listener → stderr + status 7. `exit()` follows Node: `'exit'` once, no argument = `exitCode`, status read after the listeners, one kernel exit request. `NodeProcess.exitCode` is `number | undefined` (unset reads `undefined`); new `resetNodeProcessExit(process)` on `./builtins/process`. `awaitDrain` settles one host task after the first zero-ref sample, so a late Chromium `unhandledrejection` never lets the drain settle as a clean exit 0.
+
+- `fs.statfsSync`, `child_process.spawnSync` and `process.memoryUsage` (+ `memoryUsage.rss`) exist with Node's descriptor, so vitest 4.1.11 / tinyexec named imports link and `process.memoryUsage.bind(process)` works; every call throws `NotImplementedError('<module>.<member>')` (ADR-0443, `builtins/loud-members.ts`). The internal `StatOptions` type moved from `fs.ts` to `fs-stats.ts`; `tests/published-dts.test.ts` builds the package d.ts and type-checks it without `@types/node`.
+
+- Register `node:path/posix` / bare `path/posix` as `require('node:path').posix` itself; `node:path/win32` stays an unregistered builtin miss.
+
+- `process` owns `cwd`/`chdir`/`hrtime`/`uptime`/`exit`/`kill` (writable, enumerable, configurable) and an enumerable non-configurable `exitCode` accessor, as Node: `import { cwd } from 'node:process'` links, detached `exit`/`kill` act on their process; the `stdout`/`stderr` writer moved to `builtins/process-stdio-writer.ts`.
+- CJS/ESM Function guards admit global writes/defines/deletes with non-folding computed keys (vitest 4.1.11, undici); the key is checked at Node's coercion and only `'Function'` throws the existing ceiling, at the write (ADR-0444). `delete` operands that are not references, and `delete globalThis?.Function`, no longer bypass the guard.
+- Node child realms give `MessagePort` Node's `ref`/`unref`/`hasRef`: a referenced port is a counted keepalive handle until unref or either pair end closes (emnapi napi async work, rolldown wasm32-wasi). Global and `worker_threads` `MessageChannel` are one recording Proxy; moving a referenced pair or referencing a split pair throws by name (ADR-0447).
+- `vm.runInThisContext` / `vm.Script` honour int32 `lineOffset` / `columnOffset` in stacks and guest `Error.prepareStackTrace` CallSites via one owned stack-hook accessor; offsets validate as Node on every `vm` entry point; sandbox offsets stay named gaps (ADR-0450).
+
+- `vm.runInThisContext` / `vm.Script` name a script by its own `sourceURL` comment as Node does (offsets dropped from line/column, kept on enclosing getters); `Script` sandbox runs check the context before the offset gap; a frozen `Error` is a named gap (ADR-0450).
+
+- A vm script evaluated while V8 formats another stack (inside a stack hook or a formatter's getter) gets the same own-`sourceURL` / filename naming: V8 skips the probe's hook there, so the name comes from V8's own rendering of the probe frame (ADR-0450).
+- Sort copied recovery/toolchain snapshots with ES2022 builtins; preserve input order and deterministic output.
+
+- Reject failed toolchain storage boot through structured terminal errors; preserve native cause without misreporting a Worker crash (ADR-0476).
+- Preserve native WebAssembly identity in no-COI guests; remove lexical Memory guards and reject unsupported toolchain Worker construction synchronously (ADR-0470).
+
+- Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
+
+- Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).
+
+- Retire invocation watcher and promise-timer abort callbacks with their existing timer owner (ADR-0422).
+
+- Add structured FS RPC with checked persistence receipts (console eval keeps reporting evaluation only), console-only eval result typing and command protocol v5; preserve recovery mutations and clear completed Node invocation timers.
+- Carry fatal toolchain cause on its terminal frame; allow the serialized owner to take a reported rejection without clearing handles (ADR-0423).
+
+- Carry validated snapshot requests and optional-registry saved opening through existing toolchain operation/recovery ownership.
+
+- Carry preboot storage options through native Worker metadata; configured handshake timeout terminates pending workers/calls and ignores late readiness (ADR-0419).
+
+- Migrate Node entry bootstrap to v4 for optional host SQLite configuration; reject prior versions atomically (ADR-0416).
+
+- Reject unreadable acquired OPFS preload through Worker-error settlement, including pending eval/fs calls; unavailable-root memory fallback stays intact.
+
+- Toolchain protocol v3 adds validated open activation and composes the guarded Worker filesystem before module loading.
+
+- Remove esbuild-specific realm API/key; exact CJS identity now belongs to registry (ADR-0384).
+- Drain accepts a caller-owned live-handle query; listening ports prevent early completion/eval flush while terminal failures still win (ADR-0385).
+
+- Resolve VM overrides from native Worker construction metadata before boot;
+  rewrite skips QuickJS preload. No-COI toolchain realm defaults to rewrite,
+  generic remains quickjs; existing env/global precedence retained (ADR-0383).
+
+- Load the real TypeScript eval classifier only after Acorn rejects the source;
+  JavaScript-only workers no longer eagerly download it with ESM splitting.
+  Compiler chunk load failures throw with their original cause (ADR-0380).
+- Keep `autoDiscoverTsconfigPaths` behind explicit `await preloadTsconfigPaths()`;
+  unprepared opt-in throws `TSCONFIG_NOT_READY`, explicit maps remain immediate.
+  ADR-0382 overturns ADR-0380 D1 after finding the existing example consumer.
+- Generate a pinned, lexically browser-scoped real compiler so late loading
+  cannot mistake installed Node globals for a native host (ADR-0381).
+
+### Fixed
+
+- Successful no-COI restore labels recovery with its current backend, preserving acknowledged bytes through repeated OPFS/memory transitions.
+
+- No-COI writes reuse untouched recovery bytes; same-OPFS restore omits file payloads while preserving detached snapshots and backend-flip recovery.
+
 ### Added
+
+- Toolchain protocol v2 supports exact resident-bin start plus a host-held
+  binding/file activation snapshot restored into a replacement Worker
+  (ADR-0377); v1 peers fail during handshake.
+
+- Runtime Worker protocol carries the ADR-0375 toolchain handshake and
+  install/run-bin results through its existing correlation owner, including
+  exact protocol/backend decoding and Worker crash/disposal/clean-close
+  settlement.
 
 - **Measured child-FS sync-RPC hot path.** The completed one-hop/binary-request
   goal carries baseline, post-I1, and post-I2 two-lane Chromium artifacts while
@@ -17,6 +152,9 @@
   response. Empty and small `readFileSync` calls use one sync-RPC round-trip;
   larger reads continue from the first unread offset, with no cache or bypass.
 
+- **QuickJS host asset bootstrap API (ADR-0352).**
+  `@riftydev/runtime-js/install-process` exports `QUICKJS_WASM_URL_ENV` so a
+  browser host can publish its bundler-owned WASM URL before Node pre-entry.
 - **Node 24 synchronous `require(ESM)` (ADR-0348).** Plain-JS graphs now share
   one import/require job with Node namespace, `"module.exports"`, TLA, cycle,
   race, resolver, and statically detected CJS re-export semantics;
@@ -59,7 +197,57 @@
   runtime owns identity across Vite imports without cloning esbuild's API
   object (ADR-0226).
 
+### Changed
+
+- The repo-only loader composition seam accepts exact builtin overrides for one
+  installed-bin generation (ADR-0378); normal public loader behavior is
+  unchanged.
+- Contextual loaders bind `node:module.createRequire` to their own generation
+  instead of replacing the realm-global ordinary-loader fallback (ADR-0379).
+
+- The repo-only `./internal` composition seam now ships in packed JS and
+  declarations for the SDK + Workbench no-COI Worker; the public root still
+  exposes no toolchain controller or protocol.
+
+- Sandbox toolchain controller/protocol stays on the repo-only internal seam;
+  the published runtime root exposes no admission-bypassing control plane.
+
+- **Entry-scoped runtime bindings (ADR-0371).** Node-entry v3 validates and
+  freezes exact `{adapterId, packagePath}` rows in its existing clone metadata;
+  recursive launches inherit them without a new channel or process-visible
+  environment field.
+
 ### Fixed
+
+- Toolchain request snapshots copy own data descriptors instead of invoking
+  inherited iterators or Proxy getters; acknowledged root-relative writes use
+  the same root-normalized path as the Worker VFS.
+
+- Sandbox toolchain `WebAssembly.Memory` preserves native descriptor getter
+  order/cardinality and consumes stateful `shared` once before its named gap.
+
+- The toolchain realm applies WebIDL ToBoolean to `WebAssembly.Memory`'s
+  `shared` descriptor through its lexical guard, so truthy numbers/strings join
+  literal true without replacing the Worker-global constructor.
+
+- Toolchain peer clean-close, dispose and crash settle pending eval, fs and
+  toolchain calls through one owner. CJS, ESM, REPL and installed bins reject
+  own/inherited/accessor shared WebAssembly memory before native construction
+  while non-shared native identity remains unchanged.
+
+- Selected toolchain Worker realms warn once for same-realm
+  `child_process.spawn`; `os.cpus()` and `availableParallelism()` report one.
+  Generic explicit no-COI sandboxes retain their prior hardware report and no
+  new spawn warning. Multiline async REPL expressions settle before
+  `runtime.eval()` resolves; toolchain boot captures native timers before the
+  dynamic runtime entry installs tracked timer globals.
+
+- Same-realm spawned children now bind one private Node-compatible console to
+  their stdout/stderr pipes; global console and both module aliases share it.
+
+- Worker-realm TextDecoder compatibility now keeps its unconditional patch in
+  non-isolated browser realms while safely passing private inputs when the
+  `SharedArrayBuffer` global is absent.
 
 - Owner-backed `fs.*` calls now rehydrate the `VfsError` prototype erased by
   SyncRpc's JSON error frame before reaching `node:fs`, preserving exact Node
@@ -70,6 +258,40 @@
   physical kill, preventing emnapi pthreads from running after their creator
   has torn down shared N-API state during a failed Vite build.
 
+- Runtime-global QuickJS and live Express/SQLite smokes now run in bounded
+  physical children, keeping guest process globals and `MessagePort` handles
+  out of Vitest's task-update IPC realm.
+- Detached fetch keepalive now makes Chromium's
+  `WebAssembly.compileStreaming` / `instantiateStreaming` an unconditional
+  whole-realm, Promise-rejected `NotImplementedError` gap. Arbitrary
+  Response/PromiseLike internal-slot consumption can no longer bypass
+  keepalive tracking or silently hang a finite child (ADR-0158 correction).
+- `node:stream` core constructors are callable like Node: legacy inherited
+  receivers receive their non-default options and usable stream state, while
+  no-`new`, modern subclassing, prototype, and static identity stay intact
+  (ADR-0353). This restores memfs-backed webpack asset reads.
+- Browser QuickJS preload now threads the host-published URL and owner-fetched
+  tracked bytes through upstream `wasmLocation` / `wasmBinary`, cancelling HTTP
+  fault bodies before exact failure. It shares one promise/module across
+  duplicate same-realm bundles, drops a rejected promise so boot can retry, and
+  keeps native package artifact resolution and explicit location-only overrides
+  after guest Worker globals replace `process` (ADR-0352).
+- `installNodeRuntime` returns QuickJS readiness only for Node workers selecting
+  that engine; WASI and rewrite workers remain synchronous (ADR-0351).
+- Static direct `eval('(specifier) => import(specifier)')` importers now stay on
+  the constructing CJS/ESM module's VFS resolver, including importers created
+  inside the routed `Function` constructor. Indirect, aliased, global, and
+  dynamic-scope eval forms retain their directed ceilings.
+- Routed `Function` analysis no longer mistakes ordinary opaque calls in
+  generated Tapable hook bodies for derived Function-constructor execution;
+  statically known import-bearing constructor arguments remain loud.
+- **Webpack `vm.createContext` policy parity.** Context names are accepted as
+  metadata, and the QuickJS realm now enforces Node's
+  `codeGeneration.strings` / `codeGeneration.wasm` controls without changing
+  guarded intrinsic descriptors, statics, prototypes, or native-source shape.
+  First contextification owns the policy; option access order and validation
+  codes match Node. The rewrite opt-in stays loud when either disabled policy
+  cannot be enforced.
 - Public `spawnRuntime` Worker crashes now stay owned by the runtime controller
   after it rejects pending calls and publishes stderr/exit, instead of also
   rethrowing the same error into the creator global.

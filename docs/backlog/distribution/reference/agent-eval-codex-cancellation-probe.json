@@ -1,0 +1,42 @@
+{
+  "version": "codex-cli 0.159.3",
+  "config": {
+    "model": "gpt-6.1-sol",
+    "reasoning": "low",
+    "ephemeral": true,
+    "ignoreUserConfig": true,
+    "ignoreRules": true,
+    "projectDocMaxBytes": 0
+  },
+  "events": [
+    {
+      "type": "thread.started",
+      "thread_id": "01a10bac-be1b-7cc1-8ac1-f8d0816eeafd"
+    },
+    {
+      "type": "turn.started"
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "item_0",
+        "type": "agent_message",
+        "text": "\u0417\u0430\u043f\u0443\u0441\u043a\u0430\u044e \u0443\u043a\u0430\u0437\u0430\u043d\u043d\u0443\u044e \u043a\u043e\u043c\u0430\u043d\u0434\u0443."
+      }
+    },
+    {
+      "type": "item.started",
+      "item": {
+        "id": "item_1",
+        "type": "command_execution",
+        "command": "/bin/zsh -lc 'node -e \"setTimeout(()=>console.log(123),120000)\"'",
+        "aggregated_output": "",
+        "exit_code": null,
+        "status": "in_progress"
+      }
+    }
+  ],
+  "exitCode": 0,
+  "cancel": "SIGTERM process group after command_execution item.started; no turn.completed success",
+  "captureLimitation": "Captured prefix before signal; stdout after signal not drained. No claim about the full final stream. Full EOF SIGINT+physical settlement probe supersedes cancellation preparation."
+}

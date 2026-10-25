@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { installNodeFetch } from './fetch/install.ts';
 import { loadBuiltin, refreshRuntimeJsProcessBuiltin } from './index.ts';
 import {
   readActiveNodeProcessBootstrap,
@@ -31,6 +32,15 @@ afterEach(() => {
 });
 
 describe('installProcessGlobals', () => {
+  it('Fetch preload leaves the later child process as the node:process export', () => {
+    setActiveNodeProcessBootstrap(null);
+    refreshRuntimeJsProcessBuiltin();
+    installNodeFetch({ fetch: globalThis.fetch.bind(globalThis) });
+    const child = new NodeProcess();
+    setActiveNodeProcessBootstrap(child, true);
+    expect(loadBuiltin('node:process')).toBe(child);
+  });
+
   it('installs the Node global alias for browser worker realms', () => {
     Reflect.deleteProperty(globalThis as GlobalWithNodeAlias, 'global');
 

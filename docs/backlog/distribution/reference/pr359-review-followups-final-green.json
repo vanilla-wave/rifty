@@ -1,0 +1,315 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS @e3736aa6: no blockers, unit/goal residuals empty. Review 1-2 findings are repaired, and the three concerns from this review's first pass @8af75c53 are repaired and pinned (their mutants now die). Only report-only nits remain. The driver finishes latest-head CI and pass-binding; no merge executed or requested.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "e3736aa61536ae4cec53f7074bca484399998e21",
+  "unit_goal_source": "PR359 review follow-ups, BASE 8754d776d8559978bec0f90069b239e8a52f7894 (full PR base f112e5f35d09fb4434d718814644da55b9cfa780), reviews 1-2 findings repaired; scope git diff 8754d776d...HEAD, 35 commits, units U1 secrets seam, U2 repeat signature, U3 playground UX, U4 gzip summaries, U5 vfs changelog. Authorities: ADR-0479, the ADR-0471/0427/0475 corrections, ADR-0478 frozen artifacts. Same fresh independent reviewer. First pass @8af75c5383ce26d1c39e52ff89525b2e71d67fc2: diff read, 74/74 unit tests (/tmp/pr359-fg4-unit.log), 21 mutants/probes in /tmp/pr359-fg4-mut. Verify pass @e3736aa6 on delta 8af75c538..HEAD (4 commits: length floor, compaction catch pin, longest-first pin): 13/13 (/tmp/pr359-fg5-tests.log), 8 mutants in a fresh git-archive copy /tmp/pr359-fg5-mut, RED 29b5f5a5f re-proved. pr:check 25/25 exit=0 read from /tmp/pr359-followups-pr-check-4.log (started after the e3736aa6 commit) and earlier -3 (@a3a7e3448). e2e ai-mode 20/20 and browser-unit 22/22 read from the -3 logs (@a3a7e3448; the delta touches no e2e/browser-unit file, and the catalog e2e secret exceeds 8 chars). The e2e/browser-unit -4 logs were absent at review end, so the reviewer has not verified them at e3736aa6. Reviewer did not rerun playwright or pr:check.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "U1 provider error text scrubbed once at ingress (final attempt, retry, thrown Error in place, late built-in keys, JSON-escaped form); content raw; export redaction removed",
+      "source": "acceptance",
+      "trace": "ADR-0479",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.ts:137; packages/agent/src/continuation.ts:164; packages/agent/src/secrets.fault.test.ts:126; packages/agent/src/secrets.fault.test.ts:159; packages/agent/src/secrets.fault.test.ts:176; packages/agent/src/secrets.fault.test.ts:244; tests/browser-unit/agent-core.spec.ts:258; /tmp/pr359-fg4-unit.log; /tmp/pr359-followups-browser-unit-3.log",
+      "note": "Mutants killed @8af75c53: ingress-result, thrown, no-escaped, builtin-keys, declared (/tmp/pr359-fg4-mut-*.log). The delta adds tests only in this file."
+    },
+    {
+      "row": "U1 compaction summary response scrubbed (completeSimple wrapper)",
+      "source": "acceptance",
+      "trace": "ADR-0479",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.ts:228; packages/agent/src/secrets.fault.test.ts:324; /tmp/pr359-fg5-mut-summary-scrub.log",
+      "note": "Identity in place of scrub( around target.completeSimple fails the retried-summary test; re-proved @e3736aa6."
+    },
+    {
+      "row": "U1 compaction failure strings from a thrown summary request scrubbed",
+      "source": "acceptance",
+      "trace": "ADR-0479",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.ts:297; packages/agent/src/secrets.fault.test.ts:287; /tmp/pr359-fg5-mut-compaction-catch.log",
+      "note": "Weak @8af75c53 (the mutant survived), repaired by 8dad36329. Removing scrubbed() at :297 now fails 'a thrown compaction summary exception naming a key is scrubbed'. The test asserts the exact compaction-end errorMessage and no leak in the retry/compaction/status events, detail or trace."
+    },
+    {
+      "row": "U1 overlapping declared secrets masked longest first, leaving no suffix of the longer secret",
+      "source": "acceptance",
+      "trace": "ADR-0479",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.ts:66; packages/agent/src/secrets.fault.test.ts:231; /tmp/pr359-fg5-mut-no-sort.log",
+      "note": "Nit @8af75c53, pinned by e3736aa61: dropping .sort now fails (the '-extended' remainder appears)."
+    },
+    {
+      "row": "U1 Playground declares credential-named catalog header values (raw + bare Bearer) as session secrets; ordinary headers stay visible",
+      "source": "acceptance",
+      "trace": "ADR-0479 + ADR-0427",
+      "status": "pass",
+      "citation": "apps/playground/src/ai/settings.ts:196; apps/playground/src/ai/settings.test.ts:13; apps/playground/src/ai/settings.test.ts:56; tests/e2e/ai-mode.spec.ts:795; /tmp/pr359-fg4-settings.log; /tmp/pr359-followups-e2e-ai-mode-3.log",
+      "note": "Mutants killed @8af75c53: old-narrow, no-cookie, no-bearer-strip, all-headers (/tmp/pr359-fg4-mut-pg-*.log). The catalog e2e secret CATALOG_HEADER_SECRET is at least 8 chars, so the delta does not change it."
+    },
+    {
+      "row": "U1 session-named headers declared as secrets",
+      "source": "acceptance",
+      "trace": "ADR-0479 + ADR-0427",
+      "status": "pass",
+      "citation": "apps/playground/src/ai/settings.ts:196; apps/playground/src/ai/settings.test.ts:23; /tmp/pr359-fg5-mut-pg-no-session.log",
+      "note": "Weak @8af75c53, repaired by 29b5f5a5f: the X-Session-Id fixture makes the regex without |session fail."
+    },
+    {
+      "row": "U1 Playground header values shorter than 8 chars (raw or bare Bearer) are not declared, so a short value cannot corrupt error text or retry classification",
+      "source": "acceptance",
+      "trace": "ADR-0479",
+      "status": "pass",
+      "citation": "apps/playground/src/ai/settings.ts:197; apps/playground/src/ai/settings.test.ts:44; docs/adr/distribution/0479-scrub-declared-secrets-at-the-provider-ingress.md:28; apps/playground/src/ai/CatalogSettings.tsx:123; /tmp/pr359-fg5-mut-pg-no-length-guard.log; /tmp/pr359-fg5-red-29b5f5a5f.log",
+      "note": "Repair of this review's Bugs concern @8af75c53 (/tmp/pr359-fg4-probe-short-secret.log). Dropping the guard fails, and so does raising it to >=9. RED 29b5f5a5f fails against the pre-fix settings.ts. The ADR, the UI hint and the CHANGELOG each state that values under 8 chars are not masked, which discloses the trade-off for a genuine 6-7 char credential."
+    },
+    {
+      "row": "U2 repeated-call signature excludes mutation host diagnostics; model still sees them",
+      "source": "acceptance",
+      "trace": "ADR-0475",
+      "status": "pass",
+      "citation": "packages/agent/src/tools.ts:24; packages/agent/src/tool-feedback.ts:163; packages/agent/src/tool-feedback.fault.test.ts:189; /tmp/pr359-fg4-mut-u2.log",
+      "note": "A mutant returning body (diagnostics included) fails 'third write same -> 1 notices'. Unchanged by the delta."
+    },
+    {
+      "row": "U3 catalog JSON textarea keeps typed text; other sources re-serialize",
+      "source": "acceptance",
+      "trace": "PR359 follow-up U3",
+      "status": "pass",
+      "citation": "apps/playground/src/ai/CatalogSettings.tsx:16; tests/e2e/ai-mode.spec.ts:1055; /tmp/pr359-followups-e2e-ai-mode-3.log",
+      "note": "Reviewer did not rerun e2e (playwright barred). The log shows exit=0 and its line numbers match the spec, which is unchanged by the delta."
+    },
+    {
+      "row": "U3 Settings-created models get their own provider, so per-model API keys",
+      "source": "acceptance",
+      "trace": "PR359 follow-up U3",
+      "status": "pass",
+      "citation": "apps/playground/src/ai/settings.ts:28; apps/playground/src/ai/CatalogSettings.tsx:51; tests/e2e/ai-mode.spec.ts:1089; /tmp/pr359-followups-e2e-ai-mode-3.log",
+      "note": "Real servers see Bearer KEY_A / KEY_B; keys absent from storage."
+    },
+    {
+      "row": "U3 Continue with model: edited draft sent as-is; auto-restored prompt dropped; attachment alone, else continue",
+      "source": "acceptance",
+      "trace": "PR359 follow-up U3",
+      "status": "pass",
+      "citation": "apps/playground/src/ai/AiChatPanel.tsx:378; apps/playground/src/ai/AiChatPanel.tsx:618; tests/e2e/ai-mode.spec.ts:816; tests/e2e/ai-mode.spec.ts:1123; tests/e2e/ai-mode.spec.ts:1168; /tmp/pr359-followups-e2e-ai-mode-3.log",
+      "note": "User turns received by the provider are asserted exactly. Image refusal throws synchronously from send (session.ts:491), so restoredDraft stays unset (/tmp/pr359-fg4-probe-image-refusal.log)."
+    },
+    {
+      "row": "U4 committed summary JSON gzip-only; decompressed bytes equal BASE JSON; report-written gz OS byte 0x03/mtime 0; reader/writer follow directory format",
+      "source": "frozen-artifact",
+      "trace": "ADR-0478 + PR359 follow-up U4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/report.ts:85; tools/agent-bench/src/report.ts:102; tools/agent-bench/src/summaries-policy.test.ts:24; tools/agent-bench/src/comparison.test.ts:262; tools/agent-bench/src/comparison.test.ts:299; /tmp/pr359-fg4-unit.log; /tmp/pr359-fg4-mut-report-osbyte.log",
+      "note": "Reviewer checked all 13 deleted BASE .json files: each equals the gunzipped HEAD .json.gz (SHA256), with os=03 and mtime=0. The 60s timeouts are test-only. Unchanged by the delta."
+    },
+    {
+      "row": "U4 frozen source-artifacts bundles keep manifest-recorded bytes; manifest sizes/SHA256 test-checked",
+      "source": "frozen-artifact",
+      "trace": "ADR-0478 + PR359 follow-up U4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/summaries-policy.test.ts:47; tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/README.md:35; /tmp/pr359-fg4-mut-bundle-osbyte.log; /tmp/pr359-fg4-mut-screen.log",
+      "note": "Bundles are byte-equal to BASE and their shasum equals the manifest's for all 3 runs. All 378 bundle entries reproduce via JSON.stringify(v,null,2). Entries with committed:null are skipped honestly."
+    },
+    {
+      "row": "U5 vfs CHANGELOG drops line for test-only OPFS accounting change",
+      "source": "acceptance",
+      "trace": "PR359 follow-up U5",
+      "status": "pass",
+      "citation": "packages/vfs/CHANGELOG.md:5",
+      "note": "git diff f112e5f35 HEAD -- packages/vfs is empty."
+    },
+    {
+      "row": "Review 1: Bearer stripping dropped",
+      "source": "acceptance",
+      "trace": "PR359 review 1 finding + ADR-0479",
+      "status": "pass",
+      "citation": "apps/playground/src/ai/settings.ts:197; apps/playground/src/ai/settings.test.ts:13; /tmp/pr359-fg4-mut-pg-no-bearer-strip.log",
+      "note": "Mutant killed; the bare token is now subject to the 8-char floor (settings.test.ts:44)."
+    },
+    {
+      "row": "Review 1: all catalog headers declared as secrets",
+      "source": "acceptance",
+      "trace": "PR359 review 1 finding + ADR-0479",
+      "status": "pass",
+      "citation": "apps/playground/src/ai/settings.test.ts:56; packages/agent/src/secrets.fault.test.ts:206; tests/e2e/ai-mode.spec.ts:795; /tmp/pr359-fg4-mut-pg-all-headers.log",
+      "note": "catalog-title stays visible."
+    },
+    {
+      "row": "Review 1: low-entropy keys corrupting model content",
+      "source": "acceptance",
+      "trace": "PR359 review 1 finding + ADR-0479",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.ts:71; packages/agent/src/secrets.fault.test.ts:159; /tmp/pr359-fg5-tests.log",
+      "note": "Only errorMessage is rewritten; content is asserted raw."
+    },
+    {
+      "row": "Review 1: thrown provider exceptions unscrubbed",
+      "source": "acceptance",
+      "trace": "PR359 review 1 finding + ADR-0479",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.ts:164; packages/agent/src/secrets.fault.test.ts:176; /tmp/pr359-fg4-mut-thrown.log",
+      "note": "Mutant killed."
+    },
+    {
+      "row": "Review 1: gzip OS header byte platform-specific",
+      "source": "frozen-artifact",
+      "trace": "PR359 review 1 finding + ADR-0478",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/report.ts:102; tools/agent-bench/src/summaries-policy.test.ts:24; /tmp/pr359-fg4-mut-report-osbyte.log",
+      "note": "Scoped to report-written JSON; frozen bundles are exempt by name."
+    },
+    {
+      "row": "Review 1: empty e2e secret assertion",
+      "source": "acceptance",
+      "trace": "PR359 review 1 finding + ADR-0479",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:795; tests/e2e/ai-mode.spec.ts:796; /tmp/pr359-followups-e2e-ai-mode-3.log",
+      "note": "The provider echoes both secrets; the UI asserts masked text and their absence."
+    },
+    {
+      "row": "Review 1: Continue with resends the auto-restored prompt",
+      "source": "acceptance",
+      "trace": "PR359 review 1 finding + PR359 follow-up U3",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:816; /tmp/pr359-followups-e2e-ai-mode-3.log",
+      "note": "The second model receives exactly [prompt, continue]."
+    },
+    {
+      "row": "Review 2 BLOCKER: rewritten frozen bundles left manifest/README SHA256 stale",
+      "source": "frozen-artifact",
+      "trace": "PR359 review 2 finding + ADR-0478",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/summaries-policy.test.ts:47; tools/agent-bench/reports/summaries/2026-09-28-gpt-6-luna-rerun/README.md:35; /tmp/pr359-fg4-mut-bundle-osbyte.log",
+      "note": "Bundles are byte-equal to BASE; flipping the OS byte of a bundle fails the guard."
+    },
+    {
+      "row": "Review 2: compaction-summary scrub not pinned",
+      "source": "acceptance",
+      "trace": "PR359 review 2 finding + ADR-0479",
+      "status": "pass",
+      "citation": "packages/agent/src/secrets.fault.test.ts:324; /tmp/pr359-fg5-mut-summary-scrub.log",
+      "note": "The mutant dies @e3736aa6."
+    },
+    {
+      "row": "Review 2: Continue with a pending attachment resends the restored prompt",
+      "source": "acceptance",
+      "trace": "PR359 review 2 finding + PR359 follow-up U3",
+      "status": "pass",
+      "citation": "apps/playground/src/ai/AiChatPanel.tsx:618; tests/e2e/ai-mode.spec.ts:1168; /tmp/pr359-followups-e2e-ai-mode-3.log",
+      "note": "RED 6d82b46ac precedes fix f052d37d3."
+    },
+    {
+      "row": "Review 2: header-name heuristic too narrow",
+      "source": "acceptance",
+      "trace": "PR359 review 2 finding + ADR-0479",
+      "status": "pass",
+      "citation": "apps/playground/src/ai/settings.ts:196; apps/playground/src/ai/settings.test.ts:13; /tmp/pr359-fg4-red-354f71ece.log",
+      "note": "The HEAD test fails against the pre-fix settings.ts from 354f71ece."
+    },
+    {
+      "row": "Review 2: overstated byte-identical across OS wording",
+      "source": "acceptance",
+      "trace": "PR359 review 2 finding + ADR-0478",
+      "status": "pass",
+      "citation": "tools/agent-bench/README.md:20; tools/agent-bench/CHANGELOG.md:5",
+      "note": "Now reads 'identical per zlib build, not proven across OS'."
+    },
+    {
+      "row": "Review 2: ADR-0427 correction wording",
+      "source": "acceptance",
+      "trace": "PR359 review 2 finding + ADR-0427",
+      "status": "pass",
+      "citation": "docs/adr/playground/0427-lazy-chat-over-the-public-pi-agent-session.md:62",
+      "note": "Names the credential-named policy and the bare Bearer token. The 8-char floor lives in ADR-0479:28 (nit under Completeness)."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "apps/playground/src/ai/settings.test.ts:44",
+          "summary": "The exact 8-char floor is not pinned at its lower edge: no 7-char fixture exists.",
+          "authority": "",
+          "evidence": "A >=7 mutant passes 13/13 (/tmp/pr359-fg5-mut-pg-guard-7.log); >=9 and no-guard both fail (/tmp/pr359-fg5-mut-pg-guard-9.log, /tmp/pr359-fg5-mut-pg-no-length-guard.log)."
+        },
+        {
+          "severity": "nit",
+          "location": "packages/agent/src/continuation.ts:264",
+          "summary": "The scrubbed(result.error.message) wrapper is unpinned. It is redundant after the completeSimple scrub at :228.",
+          "authority": "",
+          "evidence": "Removing it passes 13/13 (/tmp/pr359-fg5-mut-compaction-fail-msg.log)."
+        },
+        {
+          "severity": "nit",
+          "location": "docs/adr/playground/0427-lazy-chat-over-the-public-pi-agent-session.md:62",
+          "summary": "The ADR-0427 correction note describes the Playground header policy without the 8-char floor. ADR-0479:28, the hint and the CHANGELOG state it.",
+          "authority": "",
+          "evidence": "Text diff 8af75c538..HEAD touches ADR-0479 only."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "apps/playground/src/ai/AiChatPanel.tsx:378",
+          "summary": "restoredDraft is set for every status error, including pre-admission refusals (unsupported chat command). Continue then drops the refused command text and sends continue or the attachment alone.",
+          "authority": "",
+          "evidence": "session.ts:408 throws inside run (status error, no user message_start, so attachments are not cleared at AiChatPanel.tsx:161). The command would be refused again. Image refusal is unaffected (/tmp/pr359-fg4-probe-image-refusal.log)."
+        },
+        {
+          "severity": "nit",
+          "location": "packages/agent/src/continuation.ts:59",
+          "summary": "Sibling of the repaired short-value case: a built-in apiKey has no length floor, so a key like '5' would still mask classifier text.",
+          "authority": "",
+          "evidence": "builtInApiKeys feeds secrets() unfiltered. ADR-0479 Consequences accepts classification on scrubbed text for declared credentials, and an apiKey is always a real credential."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/agent/src/session.ts:586",
+          "summary": "Export no longer masks keys found in user text, tool results or content. This is deliberate and recorded (ADR-0479 superseding ADR-0471 decision 4, plus the ADR-0427 correction). Tests were rewritten to the new contract, not to make code pass.",
+          "authority": "",
+          "evidence": "catalog.test.ts:220, redaction.test.ts:66 and agent-core-proof.ts:452 assert the ADR-0479 contract. agent-bench keeps its artifact masking (runner.ts:115)."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

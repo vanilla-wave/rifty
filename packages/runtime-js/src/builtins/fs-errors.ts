@@ -16,6 +16,8 @@ import { type PathLike, pathToString } from './fs-path.ts';
 // VfsError crosses the boundary without errno/description.
 export const FS_ERRNO: Record<string, { errno: number; description: string }> = {
   EACCES: { errno: -13, description: 'permission denied' },
+  EROFS: { errno: -30, description: 'read-only file system' },
+  ESPIPE: { errno: -29, description: 'invalid seek' },
   EBADF: { errno: -9, description: 'bad file descriptor' },
   EDQUOT: { errno: -122, description: 'disk quota exceeded' },
   EEXIST: { errno: -17, description: 'file already exists' },
@@ -26,6 +28,7 @@ export const FS_ERRNO: Record<string, { errno: number; description: string }> = 
   ENOTDIR: { errno: -20, description: 'not a directory' },
   ENOTEMPTY: { errno: -39, description: 'directory not empty' },
   EPERM: { errno: -1, description: 'operation not permitted' },
+  EXDEV: { errno: -18, description: 'cross-device link not permitted' },
 };
 
 // Syscalls Node renders WITHOUT a path (fd-level ops + opendir). Enforced

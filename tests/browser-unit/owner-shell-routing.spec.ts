@@ -79,12 +79,12 @@ test('a direct workspace module runs in the real owner child with argv and exit 
     ].join('\n'),
   );
 
-  const direct = await execLine(page, '/scripts/tool.mjs first second');
+  const direct = await execLine(page, '/home/project/scripts/tool.mjs first second');
 
   // A normal .mjs file is not a .bin launcher. These observations therefore
   // require the supervised node-entry worker to classify this launch bin:false.
   expect(direct.exit, direct.out).toBe(0);
-  expect(direct.out).toContain('DIRECT_ENTRY:/scripts/tool.mjs');
+  expect(direct.out).toContain('DIRECT_ENTRY:/home/project/scripts/tool.mjs');
   expect(direct.out).toContain('DIRECT_ARGS:first,second');
 });
 
@@ -98,7 +98,7 @@ test('an explicitly addressed installed .bin launcher runs in the owner child', 
     persistence: 'ephemeral',
   });
 
-  const directBin = await execLine(page, '/node_modules/.bin/vite --version');
+  const directBin = await execLine(page, '/home/project/node_modules/.bin/vite --version');
 
   // The installed snapshot publishes package-tree readiness, so this crosses
   // the same supervised child/admission path as a bare installed command.
@@ -165,7 +165,7 @@ test('terminal nested npm install gives child exact package-tree ancestry', asyn
   );
   expect((await readOwnerFile(page, '/scratch/node_modules/esbuild/package.json')).ok).toBe(false);
 
-  const fromRoot = await execLine(page, 'cd / && node root-resolution.cjs');
+  const fromRoot = await execLine(page, 'cd /home/project && node root-resolution.cjs');
   expect(fromRoot.exit, fromRoot.out).toBe(0);
   expect(fromRoot.out).toContain('ROOT_ESBUILD_RESOLUTION:MODULE_NOT_FOUND');
   expect(fromRoot.out).not.toContain('/sub/node_modules/esbuild/');
@@ -173,7 +173,7 @@ test('terminal nested npm install gives child exact package-tree ancestry', asyn
   const fromSubdirectory = await execLine(page, 'cd sub/deep && node sub-transform.cjs');
   expect(fromSubdirectory.exit, fromSubdirectory.out).toBe(0);
   expect(fromSubdirectory.out).toContain(
-    'SUB_ESBUILD_RESOLUTION:/sub/node_modules/esbuild/lib/main.cjs',
+    'SUB_ESBUILD_RESOLUTION:/home/project/sub/node_modules/esbuild/lib/main.cjs',
   );
   expect(fromSubdirectory.out).toContain(
     'SUB_ESBUILD_TRANSFORM:{"version":"0.28.0","code":"const answer = 42;\\nexport {\\n  answer\\n};\\n"}',
@@ -273,7 +273,7 @@ test('direct TypeScript Vite boot reasserts a deleted template seed before child
     '/scratch/.rifty-vite-seed-probe.mjs',
     [
       "import { readFileSync } from 'node:fs';",
-      "const seed = readFileSync('/node_modules/@rifty/example-types/index.d.ts', 'utf8');",
+      "const seed = readFileSync('/home/project/node_modules/@rifty/example-types/index.d.ts', 'utf8');",
       "console.log('seed-visible-before-spawn=' + seed.includes('LibraryShape'));",
       "console.log('vite-argv=' + process.argv.slice(2).join(','));",
       '',
@@ -282,7 +282,7 @@ test('direct TypeScript Vite boot reasserts a deleted template seed before child
   await writeOwnerFile(
     page,
     '/scratch/node_modules/.bin/vite',
-    "#!/usr/bin/env node\nimport('/.rifty-vite-seed-probe.mjs');\n",
+    "#!/usr/bin/env node\nimport('/home/project/.rifty-vite-seed-probe.mjs');\n",
   );
 
   const removed = await execLine(page, 'rm node_modules/@rifty/example-types/index.d.ts');

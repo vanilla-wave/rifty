@@ -45,10 +45,12 @@ function envelope(
     readonly terminal?: unknown;
     readonly previewScope?: unknown;
     readonly remoteFsRoot?: unknown;
+    readonly publicRoot?: unknown;
+    readonly runtimeBindings?: unknown;
   } = {},
 ): unknown {
   return {
-    protocol: 'rifty.dev-server/v1',
+    protocol: 'rifty.dev-server/v2',
     payload: {
       nodeWorkerRuntime: input.nodeWorkerRuntime ?? NODE_WORKER_RUNTIME,
       cfg: input.cfg ?? CFG,
@@ -59,6 +61,12 @@ function envelope(
       ...(Object.prototype.hasOwnProperty.call(input, 'remoteFsRoot')
         ? { remoteFsRoot: input.remoteFsRoot }
         : {}),
+      ...(Object.prototype.hasOwnProperty.call(input, 'publicRoot')
+        ? { publicRoot: input.publicRoot }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(input, 'runtimeBindings')
+        ? { runtimeBindings: input.runtimeBindings }
+        : {}),
     },
   };
 }
@@ -67,7 +75,7 @@ afterEach(() => publishKernelEntryBootstrap(null));
 
 describe('dev-server entry bootstrap', () => {
   it('accepts guest root only with a typed private remote-root binding', () => {
-    const remoteFsRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    const remoteFsRoot = '/.rifty/workbench/v2/projects/project-a/tree';
     const cfg = {
       ...CFG,
       root: '/',
@@ -75,10 +83,19 @@ describe('dev-server entry bootstrap', () => {
       seedFiles: { '/server.mjs': 'export {}' },
     };
 
-    expect(resolveDevServerChildConfig(envelope({ cfg, remoteFsRoot }))).toMatchObject({
-      cfg,
-      remoteFsRoot,
-    });
+    expect(
+      resolveDevServerChildConfig(envelope({ cfg, remoteFsRoot, publicRoot: '/' })),
+    ).toMatchObject({ cfg, remoteFsRoot, publicRoot: '/' });
+    expect(() => resolveDevServerChildConfig(envelope({ cfg, remoteFsRoot }))).toThrow(
+      /publicRoot must accompany remoteFsRoot/,
+    );
+  });
+
+  it('preserves omitted SQLite in the dev-server host snapshot', () => {
+    const { sqliteWasmUrl: _sqlite, ...nodeWorkerRuntime } = NODE_WORKER_RUNTIME;
+    expect(resolveDevServerChildConfig(envelope({ nodeWorkerRuntime })).nodeWorkerRuntime).toEqual(
+      nodeWorkerRuntime,
+    );
   });
 
   it('boots from the complete entry-scoped runtime config without an app template registry', () => {
@@ -90,6 +107,53 @@ describe('dev-server entry bootstrap', () => {
       terminal: TERMINAL,
       previewScope: 'consumer-preview',
     });
+  });
+
+  it('snapshots exact runtime bindings through the existing dev-server payload', () => {
+    const runtimeBindings = [
+      {
+        adapterId: 'rifty.runtime-adapter.esbuild.v1',
+        packagePath: '/node_modules/esbuild-wasm',
+      },
+    ];
+    const resolved = resolveDevServerChildConfig(envelope({ runtimeBindings }));
+    runtimeBindings[0]!.packagePath = '/mutated';
+
+    expect(resolved).toMatchObject({
+      runtimeBindings: [
+        {
+          adapterId: 'rifty.runtime-adapter.esbuild.v1',
+          packagePath: '/node_modules/esbuild-wasm',
+        },
+      ],
+    });
+    expect(Object.isFrozen((resolved as { runtimeBindings?: unknown }).runtimeBindings)).toBe(true);
+    expect(
+      Object.isFrozen((resolved as { runtimeBindings?: readonly unknown[] }).runtimeBindings?.[0]),
+    ).toBe(true);
+  });
+
+  it.each([
+    ['non-array', {}, /runtimeBindings.*array/i],
+    ['sparse', new Array(1), /runtimeBindings.*dense|element/i],
+    ['unknown field', [{ adapterId: 'a', packagePath: '/pkg', extra: true }], /unexpected field/i],
+    ['relative path', [{ adapterId: 'a', packagePath: 'node_modules/pkg' }], /packagePath/i],
+    ['root path', [{ adapterId: 'a', packagePath: '/' }], /packagePath/i],
+    [
+      'non-normal absolute path',
+      [{ adapterId: 'a', packagePath: '/workspace/../forged' }],
+      /packagePath/i,
+    ],
+    [
+      'duplicate adapter id',
+      [
+        { adapterId: 'a', packagePath: '/node_modules/one' },
+        { adapterId: 'a', packagePath: '/node_modules/two' },
+      ],
+      /duplicate.*adapter/i,
+    ],
+  ] as const)('rejects corrupt runtime bindings: %s', (_label, runtimeBindings, error) => {
+    expect(() => resolveDevServerChildConfig(envelope({ runtimeBindings }))).toThrow(error);
   });
 
   it('binds URL and detached config atomically and reads it through the kernel global', () => {
@@ -121,7 +185,7 @@ describe('dev-server entry bootstrap', () => {
     expect(entry).toMatchObject({
       kind: 'url',
       url: 'https://consumer.test/dev-server.js',
-      bootstrap: { protocol: 'rifty.dev-server/v1' },
+      bootstrap: { protocol: 'rifty.dev-server/v2' },
     });
     if (entry.bootstrap === undefined) throw new Error('dev-server entry lost its bootstrap');
     publishKernelEntryBootstrap(entry.bootstrap);
@@ -185,6 +249,11 @@ describe('dev-server entry bootstrap', () => {
 
   it.each([
     ['missing envelope', null, /bootstrap/i],
+    [
+      'previous mandatory-SQLite protocol',
+      { ...(envelope() as object), protocol: 'rifty.dev-server/v1' },
+      /protocol/i,
+    ],
     ['wrong protocol', { protocol: 'rifty.dev-server/v0', payload: {} }, /protocol/i],
     [
       'extra envelope field',
@@ -193,13 +262,13 @@ describe('dev-server entry bootstrap', () => {
     ],
     [
       'missing payload field',
-      { protocol: 'rifty.dev-server/v1', payload: { cfg: CFG, terminal: TERMINAL } },
+      { protocol: 'rifty.dev-server/v2', payload: { cfg: CFG, terminal: TERMINAL } },
       /missing or unexpected fields/i,
     ],
     [
       'extra payload field',
       {
-        protocol: 'rifty.dev-server/v1',
+        protocol: 'rifty.dev-server/v2',
         payload: {
           nodeWorkerRuntime: NODE_WORKER_RUNTIME,
           cfg: CFG,

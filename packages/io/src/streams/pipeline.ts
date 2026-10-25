@@ -110,7 +110,9 @@ export function pipeline(...streams: unknown[]): Promise<void> {
       const src = chain[i];
       const dst = chain[i + 1] as Writable;
       if (src && 'pipe' in src && typeof (src as Readable).pipe === 'function') {
-        (src as Readable).pipe(dst);
+        // Node's pipeline pipes `{end: false}` and ends each stage itself — stdio included.
+        (src as Readable).pipe(dst, { end: false });
+        src.once('end', () => dst.end());
       }
     }
     // Settle on the last stage's `finish`/`end`.

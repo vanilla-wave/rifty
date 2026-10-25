@@ -1,0 +1,103 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS \u0434\u043b\u044f slice I10: 27/27 pr:check GREEN; \u043c\u043e\u0436\u043d\u043e \u043f\u0440\u0438\u043d\u044f\u0442\u044c slice. PR #357 \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f draft \u0434\u043e \u043e\u0441\u0442\u0430\u043b\u044c\u043d\u044b\u0445 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u0441\u0442\u0432 goal.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "e999915ff190248c29fe48a58f540c6597ab8c07",
+  "unit_goal_source": "docs/backlog/distribution/agent-shell-tool-output-order.md:40 (Acceptance 1 \u2192 I10); docs/backlog/epics/no-coi-agent-host-kit/goal.md:189; ADR-0436 D4; BASE e6eb4f97c, reviewed e999915ff190248c29fe48a58f540c6597ab8c07",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:130",
+      "summary": "\u041e\u0442\u043a\u0440\u044b\u0442\u043e: typed occupied outcome \u0438 \u043d\u0430\u0431\u043b\u044e\u0434\u0430\u0435\u043c\u0430\u044f \u0444\u0430\u0437\u0430 \u043e\u0436\u0438\u0434\u0430\u043d\u0438\u044f storage writer."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:138",
+      "summary": "\u041e\u0442\u043a\u0440\u044b\u0442\u043e: exported SDK discriminators \u0438 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0435 \u0443\u0441\u043b\u043e\u0432\u0438\u044f retry."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:143",
+      "summary": "\u041e\u0442\u043a\u0440\u044b\u0442\u043e: boot phases \u0438 \u0440\u0435\u0430\u043b\u044c\u043d\u044b\u0435 snapshot progress counts \u0447\u0435\u0440\u0435\u0437 runtime events."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:148",
+      "summary": "\u041e\u0442\u043a\u0440\u044b\u0442\u043e: \u0440\u0430\u0437\u0434\u0435\u043b\u044c\u043d\u044b\u0435 file/shell policy values \u0432 \u043e\u0434\u043d\u043e\u043c sandbox agent host."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:158",
+      "summary": "\u041e\u0442\u043a\u0440\u044b\u0442\u043e: per-entry text-only content flag \u0438 \u043e\u0442\u043a\u0430\u0437 images \u0434\u043e \u0437\u0430\u043f\u0440\u043e\u0441\u0430."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:164",
+      "summary": "\u041e\u0442\u043a\u0440\u044b\u0442\u043e: framework-free transcript reducer \u0441\u043e \u0432\u0441\u0435\u043c\u0438 \u0443\u043a\u0430\u0437\u0430\u043d\u043d\u044b\u043c\u0438 \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u044f\u043c\u0438."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:170",
+      "summary": "\u041e\u0442\u043a\u0440\u044b\u0442\u043e: packed connections-only reference host, \u043e\u0431\u0449\u0438\u0439 composition \u0441 benchmark \u0438 end-to-end proof."
+    },
+    {
+      "clause": "I9",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:180",
+      "summary": "\u041e\u0442\u043a\u0440\u044b\u0442\u043e: agent npm install \u0447\u0435\u0440\u0435\u0437 \u043e\u0431\u0449\u0438\u0439 installer, registry/no-registry outcomes \u0438 truthful instructions."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: successful/nonzero shell commands preserve terminal order after the unchanged status heading; structured per-stream outcomes remain.",
+      "source": "acceptance",
+      "trace": "I10",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:10,68-80; packages/agent/src/session.test.ts:184-234; packages/agent/src/tools.ts:337-357",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

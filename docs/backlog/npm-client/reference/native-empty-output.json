@@ -1,0 +1,49 @@
+{
+  "node": "v24.16.0",
+  "npm": "11.17.0",
+  "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
+  "cases": [
+    {
+      "args": ["ms"],
+      "executed": {
+        "ok": true
+      },
+      "pkg": {
+        "dependencies": {
+          "ms": "^2.1.3"
+        }
+      },
+      "lock": {
+        "name": "case-6owC4N",
+        "lockfileVersion": 3,
+        "requires": true,
+        "packages": {
+          "": {
+            "dependencies": {
+              "ms": "^2.1.3"
+            }
+          },
+          "node_modules/ms": {
+            "version": "2.1.3",
+            "resolved": "http://127.0.0.1:57562/ms/-/ms-2.1.3.tgz",
+            "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
+            "license": "MIT"
+          }
+        }
+      }
+    },
+    {
+      "args": [],
+      "executed": {
+        "ok": true
+      },
+      "pkg": null,
+      "lock": {
+        "name": "case-UPREyL",
+        "lockfileVersion": 3,
+        "requires": true,
+        "packages": {}
+      }
+    }
+  ]
+}

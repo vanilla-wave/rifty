@@ -63,7 +63,8 @@ afterEach(() => {
 
 describe('node-server boot', () => {
   it('runs the entry, routes console, waits for listen, and serves preview', async () => {
-    const root = '/bu-devboot/server';
+    // The child receives guest-projected paths (ADR-0531 `publicNodeServerConfig`).
+    const root = '/home/project';
     const cfg = nodeServerConfig(root, 4471, NODE_SERVER_ENTRY);
     const sinks = makeSinks();
 
@@ -74,10 +75,10 @@ describe('node-server boot', () => {
     });
     try {
       const logText = sinks.logs.join('');
+      // The guest path, as `pwd` and Node diagnostics print it.
       expect(logText).toContain(
-        `[real-vite/worker] starting server /src/server.js on port ${String(cfg.port)}`,
+        `[workbench/worker] starting server /home/project/src/server.js on port ${String(cfg.port)}`,
       );
-      expect(logText).not.toContain(root);
       expect(logText).toContain('bu-entry-console-routed');
       expect(logText).toContain(`server is listening on internal port ${cfg.port}`);
       expect(logText).toContain('preview bridge ready');
@@ -118,7 +119,7 @@ describe('node-server boot', () => {
     });
     try {
       expect(sinks.logs.join('')).toContain(
-        '[real-vite/worker] starting server /__bu-public-root/server.js on port 4473',
+        '[workbench/worker] starting server /__bu-public-root/server.js on port 4473',
       );
     } finally {
       await handle.stop();

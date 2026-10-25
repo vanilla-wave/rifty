@@ -2,9 +2,30 @@
  * Conformance for `node:os` against the contracts in ADR-0026
  * (`os.platform()` / `os.arch()` mirror `process.platform` / `process.arch`).
  */
-import { describe, expect, it } from 'vitest';
-import { constants, arch, devNull, machine, platform, release, type, version } from './os.ts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  constants,
+  arch,
+  availableParallelism,
+  cpus,
+  devNull,
+  homedir,
+  machine,
+  platform,
+  release,
+  tmpdir,
+  type,
+  userInfo,
+  version,
+} from './os.ts';
 import { riftyProcess } from './process.ts';
+
+const TOOLCHAIN_REALM = Symbol.for('rifty.runtime-js.sandbox-toolchain.v1');
+
+afterEach(() => {
+  Reflect.deleteProperty(globalThis, TOOLCHAIN_REALM);
+  vi.unstubAllGlobals();
+});
 
 describe('node:os ABI (ADR-0026)', () => {
   it('platform() returns the public ABI value', () => {
@@ -45,5 +66,34 @@ describe('node:os ABI (ADR-0026)', () => {
       EEXIST: 17,
       EINVAL: 22,
     });
+  });
+
+  it('reports one CPU only in the selected toolchain Worker realm', () => {
+    vi.stubGlobal('navigator', { hardwareConcurrency: 8 });
+    vi.stubGlobal('crossOriginIsolated', false);
+
+    expect(cpus()).toHaveLength(8);
+    expect(availableParallelism()).toBe(8);
+
+    Object.defineProperty(globalThis, TOOLCHAIN_REALM, { value: true, configurable: true });
+    expect(cpus()).toHaveLength(1);
+    expect(availableParallelism()).toBe(1);
+  });
+});
+
+// Node v24.16.0: `HOME=/tmp node -e "…homedir(), userInfo().homedir"` → `/tmp`
+// and the account's passwd home — `$HOME` moves homedir() only.
+describe('homedir and the account home (ADR-0531)', () => {
+  it('HOME moves homedir() but not userInfo().homedir', () => {
+    vi.stubGlobal('process', { env: { HOME: '/tmp' } });
+    expect(homedir()).toBe('/tmp');
+    expect(userInfo().homedir).toBe('/home/rifty');
+  });
+
+  // Node v24.16.0: `HOME= node -e "…homedir()"` → "" ; `TMPDIR= …tmpdir()` → "/tmp".
+  it('an empty HOME is kept, an empty TMPDIR falls through', () => {
+    vi.stubGlobal('process', { env: { HOME: '', TMPDIR: '' } });
+    expect(homedir()).toBe('');
+    expect(tmpdir()).toBe('/tmp');
   });
 });

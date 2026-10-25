@@ -2,7 +2,7 @@ import { MemoryVfs, type Vfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import * as npmClientRoot from './index.ts';
 import {
-  type ShadowAssetPlan,
+  type ShadowSubstitutionPlan,
   attestBuiltinShadowSubstitution,
   planTrustedAppliedShadowSubstitutions,
 } from './internal/shadow/planner.ts';
@@ -31,22 +31,26 @@ interface InstallPathContractApi {
     rootName: string,
     rootVersion: string,
     packages: readonly PreparedInstallPackage[],
-    plan: ShadowAssetPlan,
+    plan: ShadowSubstitutionPlan,
   ): Lockfile;
 }
 
 const contractApi = linker as unknown as Partial<InstallPathContractApi>;
 const emptyShadowPlan = Object.freeze({
-  requiredSetDigest: '0'.repeat(64),
   substitutions: Object.freeze([]),
-  assets: Object.freeze([]),
   bindings: Object.freeze([]),
-}) satisfies ShadowAssetPlan;
+}) satisfies ShadowSubstitutionPlan;
 const nonEmptyShadowPlan = planTrustedAppliedShadowSubstitutions([
   attestBuiltinShadowSubstitution({
     trigger: { name: 'esbuild', requestedRange: '^0.28.0', version: '0.28.0' },
     installPath: 'node_modules/esbuild',
-    acquisition: { kind: 'synthetic' },
+    acquisition: {
+      kind: 'registry',
+      name: 'esbuild-wasm',
+      version: '0.28.0',
+      resolved: 'https://registry.test/esbuild-wasm.tgz',
+      integrity: `sha512-${btoa(String.fromCharCode(...new Uint8Array(64)))}`,
+    },
   }),
 ]);
 

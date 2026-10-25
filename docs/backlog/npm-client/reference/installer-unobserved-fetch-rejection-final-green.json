@@ -1,0 +1,54 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: PR #366 можно сливать после обязательных CI; RED подтверждён, GREEN 74/74, дефектов не найдено.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "3f5ebbd4c7fd6247a752c08b09cc2242628c1dfe",
+  "unit_goal_source": "PR #366, no-doc repair; BASE 25266b71af68972c283b4577b0c240edb8c55348 (origin/main). Источники: описание PR, git diff BASE..HEAD, packages/npm-client/CHANGELOG.md:5; docs/process/rules/fault-classes.md (observable-order, Owned in-process boundary), AGENTS.md §Fidelity. Сообщённый baseline: tests/browser-unit/sass-vite-contract.spec.ts:642–653, abort sass tarball → Workbench owner exited unexpectedly (code 1), run 36750228485; RED независимо воспроизводит причину.\nВыполнено (Node v24.16.0, Vitest 2.1.9): pnpm exec vitest run packages/npm-client/src/installer-concurrency.test.ts packages/npm-client/src/installer-pipeline.test.ts packages/npm-client/src/installer-peer-optional.test.ts packages/npm-client/src/installer-lockfile.test.ts → 4 passed, 74 passed, exit 0. pnpm --filter @riftydev/npm-client typecheck → exit 0. git diff --check BASE..HEAD → exit 0.\nRED: в /tmp/rifty-review-366-red-t9uw3cyz, архиве HEAD, удалена только строка void pending.catch(() => {}); команда node node_modules/vitest/vitest.mjs run packages/npm-client/src/installer-concurrency.test.ts -t 'a required fetch rejecting mid-walk' → exit 1, test:467 получил [\"simulated fetch failure for main@1.0.0\"] вместо []; required-error assertion:465 прошёл. После восстановления строки → 1 passed, 11 skipped, exit 0. Артефакты: /tmp/rifty-review-366-red-t9uw3cyz/red.log и restored-green.log.\nЧтение: installer-walk.ts:373 сохраняет исходный promise; :614–627 сохраняют required throw и optional warn-and-skip, проверенные concurrency.test.ts:365–467. Traced contract rows, изменённых public API и golden нет: coverage пуст. Tracked tree чистый. Browser и полный pr:check здесь не запускались; CI выполнялся. Более широкий Sass goal не оценивался: goal_complete=false.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

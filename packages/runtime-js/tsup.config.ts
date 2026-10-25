@@ -6,6 +6,7 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
+    internal: 'src/internal/index.ts',
     worker: 'src/worker-entry.ts',
     'install-process': 'src/ipc/install-process.ts',
     'ipc/exec-sync-handler': 'src/ipc/exec-sync-handler.ts',

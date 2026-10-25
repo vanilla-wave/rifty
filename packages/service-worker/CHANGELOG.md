@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Relay no-COI child sync-FS requests through explicit Window/sandbox routes and private reply ports, without SW-owned filesystem state (ADR-0539).
+
+- Static SW captures `__rifty_preview_prefix` from its script URL for routing and PONG;
+  public URL helpers preserve opaque host query bytes. Omission keeps `/preview/`;
+  routing version 7, frame version 1 (ADR-0409).
+
 ### Changed
 
 - **`SW_ROUTING_VERSION` 5 → 6:** the upstream URL the SW forwards for `/preview/<port>/*`

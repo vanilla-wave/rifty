@@ -10,11 +10,11 @@ export interface WebSocketBridgeFrame {
   reason?: string;
   from?: 'client' | 'server';
   url?: string;
+  origin?: string;
   key?: string;
   protocols?: readonly string[];
   protocol?: string;
 }
-
 export interface WebSocketUpgradeSocketOptions {
   readonly cid: string;
   readonly url: string;
@@ -57,9 +57,7 @@ export class WebSocketUpgradeSocket extends EventEmitter {
   readable = true;
   destroyed = false;
   _readableState = { endEmitted: false };
-  // `length` mirrors the client socket: real ws `bufferedAmount` reads
-  // `_socket._writableState.length` — without it the getter returns NaN. The
-  // bridge keeps no send queue, so an honest 0 is correct.
+  // Real ws reads `_socket._writableState.length`; the bridge has no queued bytes.
   _writableState = { finished: false, errorEmitted: false, length: 0 };
 
   private readonly cid: string;
@@ -650,6 +648,7 @@ export class WebSocketClientSocket extends EventEmitter {
 
 export function createWebSocketUpgradeHeaders(opts: {
   readonly host: string;
+  readonly origin?: string;
   readonly key: string;
   readonly protocols: readonly string[];
 }): Record<string, string> {
@@ -660,6 +659,7 @@ export function createWebSocketUpgradeHeaders(opts: {
     'sec-websocket-version': '13',
     'sec-websocket-key': opts.key,
   };
+  if (opts.origin !== undefined) headers.origin = opts.origin;
   if (opts.protocols.length > 0) headers['sec-websocket-protocol'] = opts.protocols.join(', ');
   return headers;
 }

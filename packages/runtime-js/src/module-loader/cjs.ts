@@ -3,8 +3,20 @@ import { basename, dirname, joinPath } from '@riftydev/vfs';
 import type { ImportExpression, Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import { compileCjsFactory } from './cjs-factory.ts';
+import { type Edit, applyEdits, uniqueHelperName } from './cjs-source-rewrite.ts';
+import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
+import {
+  createGlobalWriteKeyCheck,
+  globalWriteKeyMayBeFunction,
+  isComputedMember,
+  literalString,
+  staticPropertyKeyName,
+  staticPropertyName,
+  unwrapChain,
+} from './global-write-key.ts';
 import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
@@ -108,12 +120,6 @@ function snippetForSource(source: string, stack: string): string {
   return `\nNear line ${srcLine}:\n${numbered}`;
 }
 
-interface Edit {
-  readonly start: number;
-  readonly end: number;
-  readonly text: string;
-}
-
 interface AnyNodeShape {
   readonly type: string;
   readonly start: number;
@@ -133,6 +139,8 @@ interface FunctionRewriteCtx {
   readonly edits: Edit[];
   readonly scopes: Scope[];
   readonly functionHelperName: string;
+  readonly dynamicImportHelperName: string;
+  readonly globalKeyHelperName: string;
   hasGlobalFunctionWrite: boolean;
   hasDynamicFunctionScope: boolean;
   hasWithDynamicFunctionScope: boolean;
@@ -145,20 +153,6 @@ interface FunctionRewriteCtx {
 // finite guard for known Function/eval import escapes, not proof-complete JS alias analysis.
 const functionRoutingAnalysisToken =
   /\bFunction\b|\bconstructor\b|\bglobalThis\b|\bglobal\b|\bObject\b|\bReflect\b|__define(?:Getter|Setter)__|\beval\b|\bwith\b/;
-
-function uniqueHelperName(
-  source: string,
-  base: string,
-  reserved: ReadonlySet<string> = new Set(),
-): string {
-  let candidate = base;
-  let suffix = 0;
-  while (reserved.has(candidate) || source.includes(candidate)) {
-    suffix++;
-    candidate = `${base}${suffix}`;
-  }
-  return candidate;
-}
 
 function rewriteDynamicImports(source: string, id: string, helperName: string): string {
   if (!/\bimport\b/.test(source)) return source;
@@ -221,6 +215,8 @@ function rewriteCjsFunctionConstructorReferences(
   source: string,
   id: string,
   functionHelperName: string,
+  dynamicImportHelperName: string,
+  globalKeyHelperName: string,
 ): string {
   if (!functionRoutingAnalysisToken.test(source)) return source;
   let program: Program;
@@ -250,6 +246,8 @@ function rewriteCjsFunctionConstructorReferences(
     edits: [],
     scopes: [rootScope],
     functionHelperName,
+    dynamicImportHelperName,
+    globalKeyHelperName,
     hasGlobalFunctionWrite: false,
     hasDynamicFunctionScope: false,
     hasWithDynamicFunctionScope: false,
@@ -281,18 +279,6 @@ function rewriteCjsFunctionConstructorReferences(
   }
   if (ctx.edits.length === 0) return source;
   return applyEdits(source, ctx.edits);
-}
-
-function applyEdits(source: string, edits: readonly Edit[]): string {
-  let out = '';
-  let pos = 0;
-  for (const edit of [...edits].sort((a, b) => a.start - b.start || a.end - b.end)) {
-    out += source.slice(pos, edit.start);
-    out += edit.text;
-    pos = edit.end;
-  }
-  out += source.slice(pos);
-  return out;
 }
 
 function createScope(): Scope {
@@ -714,21 +700,17 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
       if (calleeMayBeDerivedHostFunction(callee, ctx) && constructorArgsMayImport(args)) {
         ctx.hasDerivedHostFunctionConstructor = true;
       }
-      if (calleeMayBeEval(callee, ctx)) {
+      const directEvalImportEdit = rewriteDirectEvalImportCallArgument(
+        n,
+        ctx.dynamicImportHelperName,
+        isShadowed(ctx, 'eval'),
+      );
+      if (directEvalImportEdit !== null) ctx.edits.push(directEvalImportEdit);
+      if (expressionMayBeGlobalEval(callee, ctx)) {
         ctx.hasDynamicFunctionScope = true;
-        ctx.hasFunctionEvalText = ctx.hasFunctionEvalText || evalArgumentMayTouchFunction(args[0]);
-      }
-      if (
-        callee?.type === 'Identifier' &&
-        (callee as unknown as { name?: string }).name === 'eval' &&
-        !isShadowed(ctx, 'eval')
-      ) {
-        ctx.hasDynamicFunctionScope = true;
-        ctx.hasFunctionEvalText = ctx.hasFunctionEvalText || evalArgumentMayTouchFunction(args[0]);
-      }
-      if (callee?.type === 'MemberExpression' && isGlobalEvalCallMember(callee, ctx)) {
-        ctx.hasDynamicFunctionScope = true;
-        ctx.hasFunctionEvalText = ctx.hasFunctionEvalText || evalArgumentMayTouchFunction(args[0]);
+        ctx.hasFunctionEvalText =
+          ctx.hasFunctionEvalText ||
+          (directEvalImportEdit === null && evalArgumentMayTouchFunction(args[0]));
       }
       walkFunctionReferences(callee, ctx);
       for (const arg of args) walkFunctionReferences(arg, ctx);
@@ -755,7 +737,7 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
 
     case 'UnaryExpression':
       if ((n as unknown as { operator?: string }).operator === 'delete') {
-        walkAssignmentTarget(n.argument, ctx);
+        walkDeleteOperand(n.argument, ctx);
         return;
       }
       walkDefaultForFunctionReferences(n, ctx);
@@ -913,6 +895,16 @@ function walkAssignmentTarget(target: unknown, ctx: FunctionRewriteCtx): void {
     return;
   }
   walkAssignmentPatternTarget(t, ctx);
+}
+
+// `delete` deletes only a reference (optionally chained); any other operand is
+// an ordinary expression that still runs.
+function walkDeleteOperand(operand: unknown, ctx: FunctionRewriteCtx): void {
+  const o = operand as AnyNodeShape | undefined;
+  const target = o?.type === 'ChainExpression' ? (o.expression as AnyNodeShape) : o;
+  if (target?.type === 'Identifier' || target?.type === 'MemberExpression') {
+    walkAssignmentTarget(target, ctx);
+  } else walkFunctionReferences(operand, ctx);
 }
 
 function walkAssignmentPatternTarget(pattern: unknown, ctx: FunctionRewriteCtx): void {
@@ -1462,8 +1454,8 @@ function isGlobalFunctionReadMember(node: AnyNodeShape, ctx: FunctionRewriteCtx)
 
 function isGlobalFunctionWriteMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
   if (!isGlobalObjectExpression(node.object, ctx)) return false;
-  const propertyName = staticPropertyName(node);
-  return propertyName === 'Function' || (propertyName === undefined && isComputedMember(node));
+  if (!isComputedMember(node)) return staticPropertyName(node) === 'Function';
+  return globalWriteKeyMayBeFunction(node.property, ctx.globalKeyHelperName, ctx.edits);
 }
 
 function expressionMayBeHostFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
@@ -1612,13 +1604,12 @@ function expressionMayBeGlobalEval(node: unknown, ctx: FunctionRewriteCtx): bool
   const n = unwrapChain(node) as AnyNodeShape;
   if (n.type === 'Identifier') {
     const name = (n as unknown as { name?: string }).name;
-    return name === 'eval' || (typeof name === 'string' && isMaybeEvalAlias(ctx, name));
+    return (
+      (name === 'eval' && !isShadowed(ctx, name)) ||
+      (typeof name === 'string' && isMaybeEvalAlias(ctx, name))
+    );
   }
   return n.type === 'MemberExpression' && isGlobalEvalCallMember(n, ctx);
-}
-
-function calleeMayBeEval(node: unknown, ctx: FunctionRewriteCtx): boolean {
-  return expressionMayBeGlobalEval(node, ctx);
 }
 
 function isGlobalFunctionUnknownReadMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
@@ -1677,14 +1668,14 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
     if (propertyName === 'defineProperties') {
       return objectMayContainFunctionKey(args[1]);
     }
-    return propertyMayBeFunction(args[1]);
+    return globalWriteKeyMayBeFunction(args[1], ctx.globalKeyHelperName, ctx.edits);
   }
 
   if (
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
-    return propertyMayBeFunction(args[0]);
+    return globalWriteKeyMayBeFunction(args[0], ctx.globalKeyHelperName, ctx.edits);
   }
 
   return false;
@@ -1710,68 +1701,6 @@ function objectMayContainFunctionKey(node: unknown): boolean {
     const key = staticPropertyKeyName(property);
     return key === 'Function' || key === undefined;
   });
-}
-
-function staticPropertyName(node: AnyNodeShape): string | undefined {
-  const n = unwrapChain(node) as AnyNodeShape;
-  const member = n as unknown as { computed?: boolean; property?: AnyNodeShape };
-  const property = member.property;
-  if (!property) return undefined;
-  if (!member.computed && property.type === 'Identifier') {
-    return (property as unknown as { name?: string }).name;
-  }
-  return member.computed ? literalString(property) : undefined;
-}
-
-function isComputedMember(node: AnyNodeShape): boolean {
-  return Boolean((unwrapChain(node) as unknown as { computed?: boolean }).computed);
-}
-
-function staticPropertyKeyName(node: AnyNodeShape): string | undefined {
-  const property = node as unknown as { computed?: boolean; key?: AnyNodeShape };
-  const key = property.key;
-  if (!key) return undefined;
-  if (!property.computed && key.type === 'Identifier') {
-    return (key as unknown as { name?: string }).name;
-  }
-  return literalString(key);
-}
-
-function literalString(node: unknown): string | undefined {
-  if (!node || typeof node !== 'object') return undefined;
-  const n = unwrapChain(node) as AnyNodeShape;
-  if (n.type === 'Literal') {
-    const value = (n as unknown as { value?: unknown }).value;
-    return typeof value === 'string' ? value : undefined;
-  }
-  if (n.type === 'BinaryExpression' && (n as unknown as { operator?: string }).operator === '+') {
-    const left = literalString(n.left);
-    const right = literalString(n.right);
-    return left !== undefined && right !== undefined ? left + right : undefined;
-  }
-  if (n.type === 'TemplateLiteral') {
-    const expressions = (n as unknown as { expressions?: unknown[] }).expressions ?? [];
-    if (expressions.length > 0) return undefined;
-    const quasis = (n as unknown as { quasis?: AnyNodeShape[] }).quasis ?? [];
-    return quasis
-      .map((quasi) => {
-        const value = quasi.value as { cooked?: unknown } | undefined;
-        return typeof value?.cooked === 'string' ? value.cooked : '';
-      })
-      .join('');
-  }
-  return undefined;
-}
-
-function unwrapChain(node: unknown): unknown {
-  if (!node || typeof node !== 'object') return node;
-  const n = node as AnyNodeShape;
-  if (n.type === 'ChainExpression') return unwrapChain(n.expression);
-  if (n.type === 'SequenceExpression') {
-    const expressions = (n as unknown as { expressions?: unknown[] }).expressions ?? [];
-    return unwrapChain(expressions[expressions.length - 1]);
-  }
-  return node;
 }
 
 function walkDefaultForFunctionReferences(n: AnyNodeShape, ctx: FunctionRewriteCtx): void {
@@ -1814,6 +1743,7 @@ function compileCjsSource(
     __dirname: string,
     __riftyDynamicImport: (specifier: unknown) => Promise<Record<string, unknown>>,
     __riftyFunction: FunctionConstructor,
+    __riftyGlobalKey: (key: unknown) => unknown,
   ) => void;
 
   const routedConstructors = createFunctionImportRouting(dynamicImport, filename);
@@ -1823,22 +1753,33 @@ function compileCjsSource(
     '__riftyFunction',
     new Set([dynamicImportHelperName]),
   );
+  const globalKeyHelperName = uniqueHelperName(
+    sourceText,
+    '__riftyGlobalKey',
+    new Set([dynamicImportHelperName, functionHelperName]),
+  );
   const source = rewriteCjsFunctionConstructorReferences(
     rewriteDynamicImports(sourceText, filename, dynamicImportHelperName),
     filename,
     functionHelperName,
+    dynamicImportHelperName,
+    globalKeyHelperName,
   );
   let fn: CjsFactory;
   try {
-    fn = new Function(
-      'module',
-      'exports',
-      'require',
-      '__filename',
-      '__dirname',
-      dynamicImportHelperName,
-      functionHelperName,
-      `${source}\n//# sourceURL=${filename}`,
+    fn = compileCjsFactory(
+      [
+        'module',
+        'exports',
+        'require',
+        '__filename',
+        '__dirname',
+        dynamicImportHelperName,
+        functionHelperName,
+        globalKeyHelperName,
+      ],
+      source,
+      filename,
     ) as CjsFactory;
   } catch (error) {
     // `new Function` SyntaxError has no file context — surface a directed
@@ -1861,6 +1802,10 @@ function compileCjsSource(
     dirname(filename),
     dynamicImport,
     routedConstructors.Function,
+    createGlobalWriteKeyCheck(
+      'module-loader.cjs-global-function-assignment',
+      `CJS module ${filename} writes the global Function property through a runtime key; rifty cannot emulate that without mutating the host constructor`,
+    ),
   );
 }
 

@@ -16,4 +16,7 @@ pmOnFail: warn
 # legacy `onlyBuiltDependencies` list is ignored in pnpm 11.
 allowBuilds:
   '@biomejs/biome': true
+  # Pi's unused provider dependencies; the OpenAI transport needs no install hook.
+  '@google/genai': false
   esbuild: true
+  protobufjs: false

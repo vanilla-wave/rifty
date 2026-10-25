@@ -2,7 +2,35 @@
 
 ## [Unreleased]
 
+- Writable constructor write/writev/final options install the native replaceable _write/_writev/_final hooks; transport wrappers observe active writes instead of buffered admissions.
+
+- Writable uses Node tick callbacks (success = null) and a cursor over the existing reentrant buffer; completed slots release payloads.
+- `fetchHost` / `HOST_FETCH` separate browser resource I/O from guest Node Fetch semantics (ADR-0541): relative asset URLs remain host URLs.
+- `fetchNodeNetwork` retains native-compatible HTTP egress inputs while the runtime owns response-body keepalive (ADR-0541).
+
+- `openHostBroadcastChannel(name)` / `HOST_BROADCAST_CHANNEL`: rifty's own channels open the realm's native `BroadcastChannel`, never the guest global that holds the event loop (ADR-0529).
+
+- `Readable.pipe` follows Node's end rule: `dest.end()` is skipped only for a literal `{end: false}` or the realm's
+  `process.stdout|stderr` (`require('node:process')`), and such a pipe unpipes at source end; `pipeline` pipes
+  `{end: false}` and ends each stage itself. Fixes vitest's `child.stdout.pipe(process.stdout)` crash. The process
+  is read via the registry factory uncached (`readBuiltinUncached`, io-internal, ADR-0458), so a same-realm
+  child's pipe never pins its process as the parent's `node:process`.
+
+- Retire completed command listener scopes without guest meta-events; preserve surviving host listeners (ADR-0422).
+
+- Canonical configurable preview paths: `normalizePreviewPrefix`, `previewPrefixPattern`,
+  `buildPreviewPath`, optional parser prefix; `/preview/` remains the default (ADR-0409).
+
+- Constructor initialization follows used exports; minified Buffer/EventEmitter/Stream retain Node names.
+
 ### Changed
+
+- `Buffer.from(ArrayBuffer | SharedArrayBuffer, byteOffset?, length?)` now aliases
+  the supplied backing store like Node (ADR-0350). Writes through raw,
+  cross-realm, and WebAssembly-memory stores remain visible; offset/length,
+  detachment, and grow behavior are parity-pinned. Omitted `length` tracks a
+  resizable/growable store; explicit `length` stays fixed. Typed-array input
+  still copies.
 
 - `EventEmitter` is one callable listener-state owner for `new`, subclassing,
   `.call(target)`, and `util.inherits` (ADR-0324).
@@ -105,6 +133,14 @@
   mode); exported from `streams/index.ts`.
 
 ### Fixed
+
+- Packed strict declarations keep Node's real `Duplex.toWeb` pair without a
+  static-side suppression or widening `Readable.toWeb`.
+- **Callable Node stream constructors (ADR-0353).** `Readable`, `Writable`,
+  `Duplex`, `Transform`, and `PassThrough` now initialize legacy
+  `util.inherits` receivers through `.call(this, options)` while preserving
+  no-`new`, ES-subclass, prototype, static, name, and arity parity. Real memfs
+  read streams can serve webpack assets without a package-specific fallback.
 
 - **Node stream source protocol converges on one owner (ADR-0237–0239).**
   `Readable` now dispatches late-bound `_read`, keeps demand latched until

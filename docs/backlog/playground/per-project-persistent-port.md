@@ -22,3 +22,5 @@ code: [apps/playground/src/templates/project-spec.ts, apps/playground/src/glue/r
 ## Reversibility
 
 REVERSIBLE — port allocation strategy recorded here; index gains a port field (additive). No public API change. Coordinate with `preset-switch-port-flip-window`.
+
+2026-10-25 — retirement candidate (code reading, PR #158 salvage): one active session at a time — a switch closes the old session before opening the next (`playground-app-runtime.ts:173`/`:208` `closeActive` → `openDefinition`), so same-Starter projects reuse the template port sequentially, never concurrently; the cited `apps/playground/src/glue/realVite.ts` owner-respawn path is gone. Not deleted here: ADR-0165 cites this path, so deletion needs a `tools/refs/check.mjs` tombstone (non-docs change) — retire in the next code-touching PR.

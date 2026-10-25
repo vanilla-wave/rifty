@@ -1,3 +1,5 @@
+import { readPrepareStackTrace, writePrepareStackTrace } from '../builtins/vm/script-offsets.ts';
+
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 const BASE64_VALUES = new Map([...BASE64].map((char, index) => [char, index] as const));
 const INLINE_SOURCE_MAP_RE =
@@ -33,9 +35,6 @@ interface StackFrameLike {
 }
 
 type PrepareStackTrace = (err: Error, stackTraces: readonly StackFrameLike[]) => unknown;
-type ErrorWithPrepareStackTrace = ErrorConstructor & {
-  prepareStackTrace?: PrepareStackTrace;
-};
 
 export class SourceMapRegistry {
   readonly #entries = new Map<string, SourceMapEntry>();
@@ -75,12 +74,13 @@ interface ActiveSourceMap {
 }
 
 const activeSourceMaps: ActiveSourceMap[] = [];
-let previousPrepareStackTrace: PrepareStackTrace | undefined;
+let previousPrepareStackTrace: unknown;
 
 const dispatcherPrepareStackTrace: PrepareStackTrace = (err, stackTraces) => {
-  const rendered = previousPrepareStackTrace
-    ? String(previousPrepareStackTrace(err, stackTraces))
-    : renderDefaultStack(err, stackTraces);
+  const rendered =
+    typeof previousPrepareStackTrace === 'function'
+      ? String((previousPrepareStackTrace as PrepareStackTrace)(err, stackTraces))
+      : renderDefaultStack(err, stackTraces);
   return remapActiveStack(rendered);
 };
 
@@ -124,19 +124,18 @@ export async function withStackRemapping<T>(
   }
 }
 
+// The slot goes through the vm offset owner (ADR-0450) once installed: reads
+// see the assigned hook, restoring `undefined` clears it without removing the owner.
 function installStackDispatcher(): void {
   if (activeSourceMaps.length > 0) return;
-  const errorCtor = Error as ErrorWithPrepareStackTrace;
-  previousPrepareStackTrace = errorCtor.prepareStackTrace;
-  errorCtor.prepareStackTrace = dispatcherPrepareStackTrace;
+  previousPrepareStackTrace = readPrepareStackTrace();
+  writePrepareStackTrace(dispatcherPrepareStackTrace);
 }
 
 function restoreStackDispatcherIfIdle(): void {
   if (activeSourceMaps.length > 0) return;
-  const errorCtor = Error as ErrorWithPrepareStackTrace;
-  if (errorCtor.prepareStackTrace === dispatcherPrepareStackTrace) {
-    if (previousPrepareStackTrace) errorCtor.prepareStackTrace = previousPrepareStackTrace;
-    else Reflect.deleteProperty(errorCtor, 'prepareStackTrace');
+  if (readPrepareStackTrace() === dispatcherPrepareStackTrace) {
+    writePrepareStackTrace(previousPrepareStackTrace);
   }
   previousPrepareStackTrace = undefined;
 }

@@ -1,3 +1,4 @@
+import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@riftydev/net';
 import {
   type RuntimeController,
   type RuntimeFs,
@@ -5,9 +6,33 @@ import {
   spawnRuntime,
 } from '@riftydev/runtime-js';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
-import { registerServiceWorker } from '@riftydev/service-worker';
-import { initBackend } from '@riftydev/vfs';
+import {
+  type ToolchainApplySnapshotRequest,
+  type ToolchainInstallRequest,
+  type ToolchainOpenRequest,
+  type ToolchainRunBinRequest,
+  type ToolchainRuntimeController,
+  type ToolchainRuntimeOptions,
+  type ToolchainSnapshotSource,
+  captureRuntimeStartupOptions,
+  spawnToolchainRuntime,
+} from '@riftydev/runtime-js/internal';
+import {
+  type SerializedRequest,
+  type SerializedResponse,
+  type SyncFsBridge,
+  connectSyncFsBridge,
+  registerServiceWorker,
+  setupPreviewBridge,
+} from '@riftydev/service-worker';
 import type { CapabilityCheck } from './capabilities.ts';
+import { createSandboxEvents } from './sandbox-events.ts';
+import { delegateSandboxFs } from './sandbox-fs.ts';
+import {
+  type SandboxProject,
+  type SandboxProjectOptions,
+  createSandboxProject,
+} from './sandbox-project.ts';
 
 /** Which VFS backend booted. */
 export type VfsBackend = 'opfs' | 'memory';
@@ -18,15 +43,7 @@ export interface VfsBootInfo {
   readonly reason?: string;
 }
 
-export interface CreateSandboxOptions {
-  /**
-   * URL of the `@riftydev/runtime-js` worker entry, resolved by YOUR bundler — the
-   * one host-specific bit the façade cannot hide (EPIC E owns the template that
-   * produces it). With Vite, list `@riftydev/runtime-js` as a direct dependency,
-   * import `@riftydev/runtime-js/worker?worker&url`, and configure
-   * `worker: { format: 'es' }`; pass the imported URL here.
-   */
-  readonly workerUrl: string | URL;
+interface CreateSandboxCommonOptions {
   /**
    * Service-worker script URL used for preview/HMR routing. Default `/sw.js`.
    * Must be same-origin and registrable at a scope covering the preview routes.
@@ -34,14 +51,96 @@ export interface CreateSandboxOptions {
   readonly serviceWorkerUrl?: string;
   /** Skip service-worker registration (eval-only / headless use). Default false. */
   readonly skipServiceWorker?: boolean;
-  /**
-   * Throw when the realm is not cross-origin isolated (no SAB/Atomics, so no
-   * sync IPC). Default true — the runtime cannot function without it (ADR-0002,
-   * D-001). Set false to boot anyway (e.g. to inspect {@link Sandbox.capabilities}).
-   */
-  readonly requireCrossOriginIsolation?: boolean;
-  /** Sink for the non-fatal fallback warnings. Default `console`. */
+  /** Sink for fallback and startup storage diagnostics. Default `console`. */
   readonly logger?: Pick<Console, 'warn' | 'error'>;
+}
+
+export interface GenericCreateSandboxOptions extends CreateSandboxCommonOptions {
+  /** Require COI by default; explicit false admits the generic no-COI baseline. */
+  readonly requireCrossOriginIsolation?: boolean;
+  /** Bundler-resolved generic `@riftydev/runtime-js/worker` URL. */
+  readonly workerUrl: string | URL;
+  readonly toolchain?: undefined;
+}
+
+export interface ToolchainCreateSandboxOptions extends CreateSandboxCommonOptions {
+  /** no-COI vm defaults to rewrite; quickjs opts into the preloaded real realm (ADR-0383). */
+  readonly vmEngine?: RuntimeOptions['vmEngine'];
+  /** Selected native OPFS root and persistence policy; default preferred/origin root. */
+  readonly storage?: ToolchainRuntimeOptions['storage'];
+  /** Worker import/preload/handshake budget, initial and restart; default 10000ms. */
+  readonly startupTimeoutMs?: number;
+  /** Explicit admission for the shared-memory-free tier. */
+  readonly requireCrossOriginIsolation: false;
+  /** Bundler-resolved `@riftydev/workbench/no-coi-toolchain-worker` URL. */
+  readonly toolchain: { readonly workerUrl: string | URL; readonly registryUrl?: string };
+}
+
+export type SandboxOpening<T extends Sandbox> = Promise<T> & {
+  readonly runtime: Pick<RuntimeController, 'on'>;
+};
+
+export type CreateSandboxOptions = GenericCreateSandboxOptions | ToolchainCreateSandboxOptions;
+
+export type SandboxCapabilityFeature =
+  | { readonly feature: string; readonly status: 'working' }
+  | {
+      readonly feature: string;
+      readonly status: 'degraded';
+      readonly warning: string;
+      readonly value?: number;
+    }
+  | {
+      readonly feature: string;
+      readonly status: 'throwing';
+      readonly error: { readonly name: 'NotImplementedError'; readonly feature: string };
+    };
+
+export interface SandboxCapabilityReport {
+  readonly schemaVersion: 1;
+  readonly tier: 'shared-memory-free';
+  readonly features: readonly SandboxCapabilityFeature[];
+}
+
+export interface SandboxResidentBin {
+  readonly port: number;
+  readonly previewUrl: string;
+}
+
+export interface SandboxStartBinInput {
+  readonly cwd: string;
+  readonly binPath: string;
+  readonly args: readonly string[];
+  readonly port: number;
+}
+
+export type SandboxSnapshotSource = ToolchainSnapshotSource;
+export type SandboxApplySnapshotInput = ToolchainApplySnapshotRequest;
+
+export interface SandboxToolchain {
+  /** Configured endpoint, not network reachability; per-call install overrides do not connect it. */
+  readonly registryConnected: boolean;
+  install(input: ToolchainInstallRequest): Promise<void>;
+  /** Open saved files without installation admission or acquisition. */
+  open(input: ToolchainOpenRequest): Promise<void>;
+  /** Explicitly validate/apply the published producer archive; default conflicts reject. */
+  applySnapshot(input: SandboxApplySnapshotInput): Promise<void>;
+  runBin(input: ToolchainRunBinRequest): Promise<{ readonly exitCode: number }>;
+  startBin(input: SandboxStartBinInput): Promise<SandboxResidentBin>;
+}
+
+export interface SandboxPreviewTarget {
+  src: string;
+}
+
+export interface SandboxRestartOptions {
+  readonly preview: SandboxPreviewTarget;
+  readonly beforeStart?: (fs: RuntimeFs) => void | Promise<void>;
+}
+
+export interface SandboxRestartReport {
+  readonly unflushedWrites: boolean;
+  readonly resident: SandboxResidentBin | null;
 }
 
 export interface Sandbox {
@@ -53,10 +152,9 @@ export interface Sandbox {
    */
   readonly fs: RuntimeFs;
   /**
-   * Which VFS backend booted, and why if it fell back to memory. Gotcha: this
-   * is the PAGE-realm probe; the runtime Worker initialises its own backend
-   * and can independently fall back to memory ({@link Sandbox.fs} still works,
-   * just without OPFS durability there).
+   * Which VFS backend booted. Generic mode reports the page-realm probe; toolchain
+   * mode reports its one authoritative runtime Worker backend, keeping the last
+   * booted report until a restart replacement is ready.
    */
   readonly vfs: VfsBootInfo;
   /** Capability probe taken at boot. */
@@ -71,6 +169,15 @@ export interface Sandbox {
   dispose(): void;
 }
 
+export interface ToolchainSandbox extends Sandbox {
+  project(options: SandboxProjectOptions): SandboxProject;
+  readonly toolchain: SandboxToolchain;
+  readonly capabilityReport: SandboxCapabilityReport;
+  restart(options: SandboxRestartOptions): Promise<SandboxRestartReport>;
+  /** Replace the Worker without relaunching its resident; host owns the preview element. */
+  stopResident(): Promise<SandboxRestartReport>;
+}
+
 /**
  * Test injection seam — mirrors the playground `boot.ts` pattern so the boot
  * pipeline is unit-testable without a DOM, Worker, or OPFS. Every field defaults
@@ -83,6 +190,43 @@ export interface SandboxDeps {
   readonly spawn?: (opts: RuntimeOptions) => RuntimeController;
   readonly logger?: Pick<Console, 'warn' | 'error'>;
 }
+
+const TOOLCHAIN_CAPABILITY_REPORT = freezeDeep({
+  schemaVersion: 1,
+  tier: 'shared-memory-free',
+  features: [
+    { feature: 'fs', status: 'working' },
+    { feature: 'npm.install', status: 'working' },
+    { feature: 'node_modules.bin', status: 'working' },
+    { feature: 'child_process.spawn.stdio', status: 'working' },
+    {
+      feature: 'child_process.spawn',
+      status: 'working',
+    },
+    {
+      feature: 'worker_threads.Worker',
+      status: 'throwing',
+      error: { name: 'NotImplementedError', feature: 'worker_threads.Worker' },
+    },
+    {
+      feature: 'os.parallelism',
+      status: 'degraded',
+      warning: 'reports one CPU; host parallelism is not exposed',
+      value: 1,
+    },
+    {
+      feature: 'child_process.execSync',
+      status: 'throwing',
+      error: { name: 'NotImplementedError', feature: 'child_process.execSync' },
+    },
+    {
+      feature: 'toolchain.threaded-wasm',
+      status: 'throwing',
+      error: { name: 'NotImplementedError', feature: 'worker_threads.Worker' },
+    },
+    { feature: 'toolchain.dev-hmr', status: 'working' },
+  ],
+} satisfies SandboxCapabilityReport);
 
 export const COI_REQUIRED_MESSAGE =
   'rifty: cross-origin isolation is not active — SharedArrayBuffer and Atomics ' +
@@ -103,48 +247,115 @@ export const COI_REQUIRED_MESSAGE =
  * Degradations are non-fatal and surfaced on the result — VFS init failure
  * falls back to memory (`vfs.reason`), SW registration failure sets `swError`.
  *
- * **Realm-scoped (v0.1).** The VFS backend and the service worker are
- * realm-global singletons (ADR-0070 D4), so call this **once per page / worker
- * realm**. A second `createSandbox()` in the same realm spawns a fresh runtime
- * worker but shares the same filesystem and SW registration — the two `Sandbox`
- * objects are not isolated at the VFS layer, and {@link Sandbox.dispose} tears
- * down only the runtime worker (the VFS and SW persist). Register your
- * `sandbox.runtime.on(...)` handler immediately after this resolves so you don't
- * miss early `ready` / `stdout` events (the controller does not replay them).
+ * **Realm-scoped (v0.1).** Generic mode's page VFS and the service worker are
+ * realm-global singletons (ADR-0070 D4). Toolchain mode owns VFS/runtime inside
+ * its selected Worker. {@link Sandbox.dispose} tears down only that Worker; the
+ * service-worker registration persists. Register your
+ * `opening.runtime.on(...)` handler before awaiting to observe boot; events are
+ * not replayed. The subscription remains active on the resolved sandbox.
  *
- * @param options - sandbox configuration; `workerUrl` is required.
+ * @param options - generic or explicit toolchain Worker configuration.
  * @param deps - test-only injection seam; leave empty in production.
  */
-export async function createSandbox(
+export function createSandbox(
+  options: ToolchainCreateSandboxOptions,
+  deps?: SandboxDeps,
+): SandboxOpening<ToolchainSandbox>;
+export function createSandbox(
+  options: GenericCreateSandboxOptions,
+  deps?: SandboxDeps,
+): SandboxOpening<Sandbox>;
+export function createSandbox(
+  options: CreateSandboxOptions,
+  deps?: SandboxDeps,
+): SandboxOpening<Sandbox | ToolchainSandbox>;
+export function createSandbox(
   options: CreateSandboxOptions,
   deps: SandboxDeps = {},
-): Promise<Sandbox> {
+): SandboxOpening<Sandbox | ToolchainSandbox> {
+  const events = createSandboxEvents();
+  const opening = bootSandbox(options, deps, events).catch((error) => {
+    events.clear();
+    throw error;
+  });
+  return Object.defineProperty(opening, 'runtime', {
+    value: Object.freeze({ on: events.on }),
+    enumerable: true,
+  }) as SandboxOpening<Sandbox | ToolchainSandbox>;
+}
+
+async function bootSandbox(
+  options: CreateSandboxOptions,
+  deps: SandboxDeps,
+  events: ReturnType<typeof createSandboxEvents>,
+): Promise<Sandbox | ToolchainSandbox> {
+  const requireCrossOriginIsolation: unknown = options.requireCrossOriginIsolation;
+  if (
+    (requireCrossOriginIsolation !== undefined ||
+      Object.hasOwn(options, 'requireCrossOriginIsolation')) &&
+    typeof requireCrossOriginIsolation !== 'boolean'
+  ) {
+    throw new TypeError(
+      'sandbox requireCrossOriginIsolation must be a boolean; use literal false to disable isolation',
+    );
+  }
   const logger = deps.logger ?? options.logger ?? console;
   const detect = deps.detect ?? detectCapabilities;
   const capabilities = detect();
 
-  if (
-    (options.requireCrossOriginIsolation ?? true) &&
-    !capabilities.capabilities.crossOriginIsolated
-  ) {
+  if (options.toolchain !== undefined && requireCrossOriginIsolation !== false) {
+    throw new TypeError('sandbox toolchain mode requires requireCrossOriginIsolation: false');
+  }
+  if ((requireCrossOriginIsolation ?? true) && !capabilities.capabilities.crossOriginIsolated) {
     throw new Error(COI_REQUIRED_MESSAGE);
   }
 
-  const vfs = await bootVfs(deps.initVfs ?? initBackend, logger);
-
-  let swError: string | undefined;
-  if (!options.skipServiceWorker) {
-    const registerSw = deps.registerSw ?? ((url: string) => registerServiceWorker(url));
-    try {
-      await registerSw(options.serviceWorkerUrl ?? '/sw.js');
-    } catch (err) {
-      swError = reasonOf(err);
-      logger.warn(`[rifty] service worker registration failed: ${swError}`);
-    }
+  if (options.toolchain !== undefined) {
+    const startup = captureRuntimeStartupOptions({
+      vmEngine: options.vmEngine ?? 'rewrite',
+      storage: options.storage,
+      startupTimeoutMs: options.startupTimeoutMs,
+    });
+    const workerUrl = String(options.toolchain.workerUrl);
+    const registryUrl = options.toolchain.registryUrl;
+    if (
+      registryUrl !== undefined &&
+      (typeof registryUrl !== 'string' ||
+        registryUrl.trim().length === 0 ||
+        registryUrl.includes('\0'))
+    )
+      throw new TypeError('toolchain.registryUrl must be a non-empty string without NUL');
+    const { swError } = await bootServiceWorker(options, deps, logger);
+    return bootToolchainSandbox(
+      {
+        ...startup,
+        workerUrl,
+        ...(registryUrl === undefined ? {} : { registryUrl }),
+        vmEngine: startup.vmEngine ?? 'rewrite',
+        capabilities,
+        childProcesses: !options.skipServiceWorker && swError === undefined,
+        ...(swError === undefined ? {} : { swError }),
+      },
+      logger,
+      events,
+    );
   }
 
+  const vfs = await bootVfs(
+    deps.initVfs ?? (async () => (await import('./default-vfs.ts')).initBackend()),
+    logger,
+  );
+  const { swError } = await bootServiceWorker(options, deps, logger);
+
   const spawn = deps.spawn ?? spawnRuntime;
-  const runtime = spawn({ workerUrl: String(options.workerUrl) });
+  const native = spawn({ workerUrl: String(options.workerUrl) });
+  const detach = native.on(events.emit);
+  const dispose = () => {
+    detach();
+    events.clear();
+    native.dispose();
+  };
+  const runtime = { ...native, on: events.on, dispose };
 
   return {
     runtime,
@@ -156,6 +367,401 @@ export async function createSandbox(
       runtime.dispose();
     },
   };
+}
+
+function previewUrl(port: number): string {
+  return `/preview/${port}/`;
+}
+
+function mountToolchainPreview(port: number, ownerToken: string): () => void {
+  const bridge = bridgeCrossRealmPreview(port);
+  registerPort(port, bridge);
+  const tearSw = setupPreviewBridge(
+    async (request: SerializedRequest): Promise<SerializedResponse> => {
+      const response = await bridge.dispatchStruct({
+        url: request.url,
+        method: request.method,
+        headers: request.headers,
+        body: request.body ?? null,
+      });
+      return {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers),
+        body: response.body,
+      };
+    },
+    { ownerToken, ports: [port] },
+  );
+  return (): void => {
+    tearSw();
+    unregisterPort(port);
+    bridge.dispose();
+  };
+}
+
+function logToolchainStartup(
+  runtime: ToolchainRuntimeController,
+  logger: Pick<Console, 'warn' | 'error'>,
+): () => void {
+  return runtime.on((event) => {
+    if (event.type === 'stderr') logger.warn(event.chunk);
+  });
+}
+
+async function bootToolchainSandbox(
+  options: ToolchainRuntimeOptions & {
+    readonly workerUrl: string;
+    readonly registryUrl?: string;
+    readonly vmEngine: NonNullable<RuntimeOptions['vmEngine']>;
+    readonly capabilities: CapabilityCheck;
+    readonly swError?: string;
+    readonly childProcesses: boolean;
+  },
+  logger: Pick<Console, 'warn' | 'error'>,
+  events: ReturnType<typeof createSandboxEvents>,
+): Promise<ToolchainSandbox> {
+  let current: ToolchainRuntimeController = spawnToolchainRuntime(options);
+  let childBridge: SyncFsBridge | null = null;
+  let childPort: MessagePort | null = null;
+  const closeChildBridge = (): void => {
+    childBridge?.dispose();
+    childBridge = null;
+    childPort?.close();
+    childPort = null;
+  };
+  const connectChildren = async (): Promise<void> => {
+    closeChildBridge();
+    if (!options.childProcesses || typeof navigator === 'undefined' || !navigator.serviceWorker)
+      return;
+    const channel = new MessageChannel();
+    try {
+      childBridge = await connectSyncFsBridge((bytes, reply, caller) =>
+        channel.port1.postMessage({ bytes, caller }, [reply]),
+      );
+      childPort = channel.port1;
+      current.connectChildProcesses(childBridge.endpoint, channel.port2);
+    } catch (error) {
+      channel.port1.close();
+      channel.port2.close();
+      closeChildBridge();
+      logger.warn(`[rifty] no-COI children unavailable: ${String(error)}`);
+    }
+  };
+  let vfs: VfsBootInfo;
+  const detachStartup = logToolchainStartup(current, logger);
+  const detachOpening = current.on(events.emit);
+  try {
+    await current.toolchainReady;
+    if (options.childProcesses) await connectChildren();
+    vfs = current.toolchainVfs;
+  } catch (error) {
+    current.dispose();
+    throw error;
+  } finally {
+    detachStartup();
+    detachOpening();
+  }
+
+  const ownerToken = `sdk-${crypto.randomUUID()}`;
+  let detachCurrent: () => void = () => {};
+  let tearPreview: (() => void) | null = null;
+  let pendingWrites = 0;
+  let unflushedMarker = false;
+  let restarting = false;
+  let disposed = false;
+  let generation = 0;
+  let activation: ReturnType<ToolchainRuntimeController['snapshotToolchainState']> = null;
+  let residentRequest = current.snapshotResidentRequest();
+
+  const emit = events.emit;
+
+  const attachCurrent = (): void => {
+    detachCurrent();
+    detachCurrent = current.on((event) => {
+      if (event.type === 'exit' && event.reason === 'error') {
+        if (pendingWrites > 0) unflushedMarker = true;
+        tearPreview?.();
+        tearPreview = null;
+      }
+      emit(event);
+    });
+  };
+  attachCurrent();
+
+  function assertLive(): void {
+    if (disposed) throw new Error('Sandbox is disposed');
+  }
+
+  function restartBusyError(): Error {
+    const error = new Error('sandbox restart is already active');
+    error.name = 'SandboxRestartBusyError';
+    return error;
+  }
+
+  function assertOperable(): void {
+    assertLive();
+    if (restarting) throw restartBusyError();
+  }
+
+  async function trackedMutation<T>(operation: () => Promise<T>): Promise<T> {
+    pendingWrites += 1;
+    try {
+      return await operation();
+    } catch (error) {
+      const effects = (error as { effects?: { applied?: string } } | null)?.effects;
+      if (effects !== undefined && effects.applied !== 'no') unflushedMarker = true;
+      throw error;
+    } finally {
+      pendingWrites -= 1;
+    }
+  }
+
+  function callbackFs(target: ToolchainRuntimeController): RuntimeFs {
+    return delegateSandboxFs(() => target.fs, trackedMutation);
+  }
+
+  const fs: RuntimeFs = delegateSandboxFs(() => {
+    assertOperable();
+    return current.fs;
+  }, trackedMutation);
+
+  const runtime: RuntimeController = {
+    async eval(code, evalOptions) {
+      assertOperable();
+      return await current.eval(code, evalOptions);
+    },
+    fs,
+    writeStdin(data) {
+      assertOperable();
+      current.writeStdin(data);
+    },
+    async reset() {
+      assertOperable();
+      return await current.reset();
+    },
+    dispose() {
+      disposeSandbox();
+    },
+    on: events.on,
+    writeFile(path, content) {
+      assertOperable();
+      current.writeFile(path, content);
+    },
+    isReady: () => !disposed && !restarting && current.isReady(),
+  };
+
+  const mountResidentPreview = (port: number): SandboxResidentBin => {
+    tearPreview?.();
+    tearPreview = mountToolchainPreview(port, ownerToken);
+    return { port, previewUrl: previewUrl(port) };
+  };
+
+  const toolchain: SandboxToolchain = {
+    get registryConnected() {
+      return options.registryUrl !== undefined;
+    },
+    async applySnapshot(input) {
+      assertOperable();
+      await current.toolchain.applySnapshot(input);
+    },
+    async open(input) {
+      assertOperable();
+      await current.toolchain.open(input);
+    },
+    async install(input) {
+      assertOperable();
+      await current.toolchain.install(input);
+    },
+    async runBin(input) {
+      assertOperable();
+      return await current.toolchain.runBin(input);
+    },
+    async startBin(input) {
+      assertOperable();
+      const resident = await current.toolchain.startBin(input);
+      residentRequest = current.snapshotResidentRequest();
+      return mountResidentPreview(resident.port);
+    },
+  };
+  Object.defineProperty(runtime, 'toolchain', {
+    value: toolchain,
+    configurable: false,
+    enumerable: true,
+    writable: false,
+  });
+
+  function disposeSandbox(): void {
+    if (disposed) return;
+    disposed = true;
+    closeChildBridge();
+    tearPreview?.();
+    tearPreview = null;
+    detachCurrent();
+    current.dispose();
+    events.clear();
+  }
+
+  async function restart(restartOptions: SandboxRestartOptions): Promise<SandboxRestartReport> {
+    return replaceWorker({ restart: restartOptions });
+  }
+
+  async function replaceWorker(
+    operation: { readonly restart: SandboxRestartOptions } | { readonly stop: true },
+  ): Promise<SandboxRestartReport> {
+    assertLive();
+    if (restarting) {
+      throw restartBusyError();
+    }
+    restarting = true;
+    try {
+      let relaunch: SandboxRestartOptions | null = null;
+      if ('restart' in operation) {
+        const restartOptions = operation.restart;
+        if (restartOptions === null || typeof restartOptions !== 'object') {
+          throw new TypeError('sandbox restart options must be an object');
+        }
+        const preview = restartOptions.preview;
+        const beforeStart = restartOptions.beforeStart;
+        if (preview === null || typeof preview !== 'object' || typeof preview.src !== 'string') {
+          throw new TypeError('sandbox restart preview must expose a string src');
+        }
+        if (beforeStart !== undefined && typeof beforeStart !== 'function') {
+          throw new TypeError('sandbox restart beforeStart must be a function');
+        }
+        relaunch = { preview, beforeStart };
+      } else {
+        residentRequest = null;
+      }
+
+      const currentActivation = current.snapshotToolchainState();
+      if (currentActivation !== null) activation = currentActivation;
+      if (pendingWrites > 0) unflushedMarker = true;
+      tearPreview?.();
+      tearPreview = null;
+      detachCurrent();
+      emit({ type: 'exit', reason: 'reset' });
+      if (pendingWrites > 0) unflushedMarker = true;
+      if (disposed) throw new Error('Sandbox was disposed during restart');
+      current.dispose();
+      closeChildBridge();
+
+      current = spawnToolchainRuntime(options);
+      attachCurrent();
+      const detachStartup = logToolchainStartup(current, logger);
+      try {
+        await current.toolchainReady;
+        if (options.childProcesses) await connectChildren();
+        vfs = current.toolchainVfs;
+      } finally {
+        detachStartup();
+      }
+      if (activation !== null) await current.restoreToolchainState(activation);
+      // The restored controller owns recovery now, including writes from a failing callback.
+      activation = null;
+      await relaunch?.beforeStart?.(callbackFs(current));
+
+      let resident: SandboxResidentBin | null = null;
+      if (relaunch !== null && residentRequest !== null) {
+        const started = await current.toolchain.startBin(residentRequest);
+        residentRequest = current.snapshotResidentRequest();
+        resident = mountResidentPreview(started.port);
+        generation += 1;
+        relaunch.preview.src = `${resident.previewUrl}?riftyRestart=${generation}`;
+      }
+      const unflushedWrites = unflushedMarker;
+      unflushedMarker = false;
+      return { unflushedWrites, resident };
+    } finally {
+      restarting = false;
+    }
+  }
+
+  return {
+    runtime,
+    fs,
+    project(projectOptions) {
+      assertOperable();
+      return createSandboxProject(projectOptions, {
+        registryUrl: options.registryUrl,
+        current() {
+          assertOperable();
+          return current;
+        },
+        mutate: trackedMutation,
+        recordEffects(effects) {
+          if (
+            effects.applied !== 'no' &&
+            (effects.persistence === 'failed' || effects.persistence === 'unknown')
+          )
+            unflushedMarker = true;
+        },
+        async replace(target) {
+          if (disposed || restarting) {
+            target.dispose();
+            return 'terminated';
+          }
+          if (target !== current) return 'replaced';
+          unflushedMarker = true;
+          await restart({ preview: { src: '' } });
+          return 'replaced';
+        },
+      });
+    },
+    get vfs() {
+      return vfs;
+    },
+    capabilities: options.capabilities,
+    toolchain,
+    capabilityReport: freezeDeep({
+      ...TOOLCHAIN_CAPABILITY_REPORT,
+      features: [
+        ...TOOLCHAIN_CAPABILITY_REPORT.features.map((feature) =>
+          feature.feature.startsWith('child_process.spawn') && childBridge === null
+            ? {
+                feature: feature.feature,
+                status: 'throwing' as const,
+                error: {
+                  name: 'NotImplementedError' as const,
+                  feature: 'child_process.spawn.service-worker',
+                },
+              }
+            : feature,
+        ),
+        options.vmEngine === 'quickjs'
+          ? { feature: 'node:vm', status: 'working' as const }
+          : {
+              feature: 'node:vm',
+              status: 'degraded' as const,
+              warning:
+                "rewrite engine: direct eval can reach the host, host globals are visible, and cross-realm instanceof differs; select vmEngine: 'quickjs' for a real realm",
+            },
+      ],
+    }),
+    ...(options.swError === undefined ? {} : { swError: options.swError }),
+    restart,
+    stopResident() {
+      return replaceWorker({ stop: true });
+    },
+    dispose: disposeSandbox,
+  };
+}
+
+async function bootServiceWorker(
+  options: CreateSandboxOptions,
+  deps: SandboxDeps,
+  logger: Pick<Console, 'warn'>,
+): Promise<{ readonly swError?: string }> {
+  if (options.skipServiceWorker) return {};
+  const registerSw = deps.registerSw ?? ((url: string) => registerServiceWorker(url));
+  try {
+    await registerSw(options.serviceWorkerUrl ?? '/sw.js');
+    return {};
+  } catch (err) {
+    const swError = reasonOf(err);
+    logger.warn(`[rifty] service worker registration failed: ${swError}`);
+    return { swError };
+  }
 }
 
 /** Resolve the VFS backend, catching init failure and degrading to memory. Never throws. */
@@ -174,4 +780,14 @@ async function bootVfs(
 
 function reasonOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function freezeDeep<T>(value: T): T {
+  if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
+    for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(value))) {
+      if ('value' in descriptor) freezeDeep(descriptor.value);
+    }
+    Object.freeze(value);
+  }
+  return value;
 }

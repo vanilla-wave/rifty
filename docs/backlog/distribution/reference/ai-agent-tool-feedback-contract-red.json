@@ -1,0 +1,212 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS: F1 принят и исправлен; можно IMPLEMENT. Новый native RED независимо воспроизведён на HEAD и убивает headless-only mutant; metrics 6/6 и agent-bench typecheck PASS. PR-4: проверки только усилены, production неизменён. I13 остаётся; GREEN реализации ещё не проверен.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "a56659d4cd6fdcf2288e48457e0c1ab591fb71ba",
+  "unit_goal_source": "docs/backlog/distribution/ai-agent-tool-feedback.md; BASE 5c6100731c1f13560beab59e45dfccc7d395c317; HEAD a56659d4cd6fdcf2288e48457e0c1ab591fb71ba. Raw goal I7–I11, ADR-0424/0440/0475 и native APIs; I1–I6/I12 приняты ранее. F1 на 869496f0d принят и исправлен, не отклонён: история /private/tmp/rifty-pr359-feedback-review-f1-before.json, mutant /private/tmp/rifty-pr359-feedback-review-headless-only.patch. Независимая проверка точного committed теста: scratch /private/tmp/rifty-pr359-feedback-verify-l1qk2blo; node node_modules/vitest/vitest.mjs run tools/agent-bench/src/prompt-recipe-parity.test.ts tools/agent-bench/src/catalog-metrics.test.ts → native RED на отсутствующем recipe после проверки actual request/artifact и прежних абзацев, metrics 6/6 PASS; /private/tmp/rifty-pr359-feedback-verify-red-metrics.log. В исходном headless-only mutant scratch: node node_modules/vitest/vitest.mjs run tools/agent-bench/src/prompt-recipe-parity.test.ts packages/agent/src/tool-feedback.fault.test.ts -t recipe → headless PASS, native RED на actual.toContain(recipe); /private/tmp/rifty-pr359-feedback-verify-mutant.log. node node_modules/typescript/bin/tsc -p tools/agent-bench/tsconfig.json --noEmit → exit 0; /private/tmp/rifty-pr359-feedback-verify-types.log. Прежние неизменённые доказательства: /private/tmp/rifty-pr359-feedback-review-unit.log (14 fail/1 pass), /private/tmp/rifty-pr359-feedback-review-browser.log (реальный TS2322, затем ожидаемый RED feedback), /private/tmp/rifty-pr359-feedback-review-seam.out (Pi 0.85.1 native settlement/steering).",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I13",
+      "location": "docs/backlog/epics/agent-weak-models/goal.md:194",
+      "summary": "После I7–I11 повторить frozen config/tasks/run count; сравнить по задачам, без снижения pass."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: defaults 600000/100, receipts и admission semantics.",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:71; packages/agent/src/tool-feedback.fault.test.ts:98",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: success/error/invalid/missing/cancelled receipts, cap, provenance, consumer text.",
+      "source": "acceptance",
+      "trace": "I9 + ADR-0424 §6/7",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:71; packages/agent/src/tool-feedback.fault.test.ts:120; packages/agent/src/tool-feedback.fault.test.ts:202; packages/agent/src/tool-feedback.fault.test.ts:307; packages/agent/src/tool-feedback.fault.test.ts:340; packages/agent/src/session.test.ts:230",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: резерв heading, стабильный capped body и оставшийся бюджет.",
+      "source": "acceptance",
+      "trace": "I8 + I9",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:371; packages/agent/src/tool-feedback.fault.test.ts:86",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: точные overlapping counts/lines/hint без записи.",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:138",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: третье повторение, canonical args, native steering, четвёртый вызов, reset.",
+      "source": "acceptance",
+      "trace": "I8 + ADR-0424 §6",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:167; packages/agent/src/tool-feedback.fault.test.ts:188; packages/agent/src/tool-feedback.fault.test.ts:202",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: mutation diagnostics, unavailable/pending, успешная запись сохранена.",
+      "source": "acceptance",
+      "trace": "I10",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:337; packages/agent/src/tool-feedback.fault.test.ts:247; packages/agent/src/tool-feedback.fault.test.ts:264",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: bounded diagnostics wait и settlement.",
+      "source": "acceptance",
+      "trace": "I10 + ADR-0424",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:264; packages/agent/src/tool-feedback.fault.test.ts:340",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: default v2 recipe, opt-out, trace и общий native текст.",
+      "source": "acceptance",
+      "trace": "I11 + ADR-0440 §4",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:282; tools/agent-bench/src/prompt-recipe-parity.test.ts:116",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 9: feedback достигает actual model request, сохранены host/continuation semantics.",
+      "source": "acceptance",
+      "trace": "I4 + I7–I11",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:337; packages/agent/src/tool-feedback.fault.test.ts:71; packages/agent/src/tool-feedback.fault.test.ts:167",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: native Agent/MemoryVfs receipts на wire, steering не подавляет четвёртый вызов.",
+      "source": "acceptance",
+      "trace": "I8 + I9",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:71; packages/agent/src/tool-feedback.fault.test.ts:167",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: реальный Workbench TypeScript error/repair через mutation receipts.",
+      "source": "acceptance",
+      "trace": "I10",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:337; tests/browser-unit/fixtures/agent-core-proof.ts:588",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: одинаковый recipe в Rifty и actual native CLI benchmark; opt-out.",
+      "source": "acceptance",
+      "trace": "I11",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:282; tools/agent-bench/src/prompt-recipe-parity.test.ts:116",
+      "note": ""
+    },
+    {
+      "row": "Fault: native settlement/provenance-lie — invalid, missing, blocked, cancelled.",
+      "source": "fault-matrix",
+      "trace": "I9 + ADR-0424",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:71; packages/agent/src/tool-feedback.fault.test.ts:98; packages/agent/src/tool-feedback.fault.test.ts:340",
+      "note": ""
+    },
+    {
+      "row": "Fault: formatting/lossy-aggregate — Unicode cap и изменение budget widths.",
+      "source": "fault-matrix",
+      "trace": "I8 + I9",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:120; packages/agent/src/tool-feedback.fault.test.ts:371",
+      "note": ""
+    },
+    {
+      "row": "Fault: exact edit/concurrent-same-key — counts/hints текущего transform без fuzzy write.",
+      "source": "fault-matrix",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:138; packages/agent/src/tool-feedback.fault.test.ts:36",
+      "note": ""
+    },
+    {
+      "row": "Fault: tool sequence/sibling-drift — reordered args и nested budget names.",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:167; packages/agent/src/tool-feedback.fault.test.ts:202",
+      "note": ""
+    },
+    {
+      "row": "Fault: diagnostics/unbounded-read — stalled boundary, pending, запись сохранена.",
+      "source": "fault-matrix",
+      "trace": "I10",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:264",
+      "note": ""
+    },
+    {
+      "row": "Fault: diagnostics/false-fallback — недоступный сервис обозначен, mutation успешна.",
+      "source": "fault-matrix",
+      "trace": "I10",
+      "status": "pass",
+      "citation": "packages/agent/src/tool-feedback.fault.test.ts:247",
+      "note": ""
+    },
+    {
+      "row": "I12 baseline: budget-blocked proposal не считается выполненным tool; admitted write сохранён.",
+      "source": "acceptance",
+      "trace": "I12 + ADR-0424 §6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/catalog-metrics.test.ts:285",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

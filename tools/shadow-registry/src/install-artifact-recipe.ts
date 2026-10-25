@@ -21,6 +21,10 @@ export function identityForRecipe(recipe: unknown): string {
   return `sha256:${createHash('sha256').update(canonicalJson(recipe)).digest('hex')}`;
 }
 
+export function coiIdentityForRecipeIdentity(identity: string): string {
+  return `sha256:${createHash('sha256').update(`${identity}\0coi`).digest('hex')}`;
+}
+
 /**
  * Behavior-bearing esbuild-runtime-policy fields. Compat prose
  * (`state`/`currentSurfaces`/`gaps`/`patchDescriptions`/`validationSource`/

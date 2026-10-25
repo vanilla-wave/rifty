@@ -18,7 +18,6 @@ import {
   workerOutputAttestation,
 } from '../src/worker-stdio-drain.ts';
 
-const KERNEL_ENTRY_CAPABILITY_PORTS_KEY = '__riftyKernelEntryCapabilityPorts__';
 const KERNEL_SYNC_BINARY_CALL_KEY = '__riftyKernelSyncBinaryCall';
 const ORIGINAL_DEFINE_PROPERTY = Object.defineProperty;
 
@@ -61,16 +60,13 @@ function makeSpec(invalidRing = false): {
   readonly spec: WorkerSpawnSpec;
   readonly ports: readonly ReturnType<typeof fakePort>[];
 } {
-  const capability = fakePort();
-  Object.setPrototypeOf(capability, MessagePort.prototype);
-  const ports = [fakePort(), fakePort(), fakePort(), fakePort(), capability] as const;
+  const ports = [fakePort(), fakePort(), fakePort(), fakePort()] as const;
   const { sab } = createSabRing({ payloadCapacity: 32 });
   return {
     spec: {
       entry: {
         kind: 'url',
         url: 'https://example.invalid/entry.js',
-        capabilityPorts: { test: ports[4] },
       },
       argv: [],
       env: {},
@@ -135,7 +131,6 @@ describe('worker-entry setup transaction', () => {
       KERNEL_SYNC_BINARY_CALL_KEY,
       KERNEL_PROCESS_SPEC_KEY,
       KERNEL_ENTRY_BOOTSTRAP_KEY,
-      KERNEL_ENTRY_CAPABILITY_PORTS_KEY,
     ]) {
       Reflect.deleteProperty(globalThis, key);
     }
@@ -149,6 +144,25 @@ describe('worker-entry setup transaction', () => {
     await target.init(spec);
 
     expectReaped(target, ports, spec.outputState);
+  });
+
+  it('reports and reaps a serve worker when asynchronous pre-entry readiness rejects', async () => {
+    const target = new DispatchableWorkerTarget();
+    const fixture = makeSpec();
+    const spec: WorkerSpawnSpec = {
+      ...fixture.spec,
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/entry.js' },
+      serve: true,
+    };
+    const fault = new Error('async pre-entry readiness failed');
+    setKernelPreEntryHook(() => Promise.reject(fault));
+    installWorkerEntry(target as unknown as DedicatedWorkerGlobalScope);
+
+    await target.init(spec);
+
+    expectReaped(target, fixture.ports.slice(0, 4), spec.outputState);
+    const stderr = fixture.ports[1]?.postMessage.mock.calls[0]?.[0] as Uint8Array;
+    expect(new TextDecoder().decode(stderr)).toContain(fault.message);
   });
 
   it('publishes only the exact public process spec before guest entry', async () => {
@@ -253,7 +267,6 @@ describe('worker-entry setup transaction', () => {
     KERNEL_SYNC_BINARY_CALL_KEY,
     KERNEL_PROCESS_SPEC_KEY,
     KERNEL_ENTRY_BOOTSTRAP_KEY,
-    KERNEL_ENTRY_CAPABILITY_PORTS_KEY,
   ])(
     'finalizes every transferred port and the realm when %s publication fails',
     async (faultKey) => {

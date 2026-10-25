@@ -1,0 +1,183 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "I12 PASS: 42 измерения сохранены, все подтверждённые privacy/provenance FIX проверены; pr:check 25/25, независимые unit 53/53. Goal остаётся открыт.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "2a145487f311710b337b2419b4aefca4b68202ad",
+  "unit_goal_source": "docs/backlog/distribution/ai-agent-weak-model-baseline-lane.md; agent-weak-models I12, I1 и ADR-0434/0472; BASE c288a9cc99d8981a2f87d11a6805d9bbce96382b. Измерение: clean 0fab1a861b1f9bf7112d908b439ef1d1654825f3. Принятые FIX и RED/GREEN: docs/backlog/distribution/reference/ai-agent-weak-model-baseline-evidence.md:53, :87, :124.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I9",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:15",
+      "summary": "Default 600s и оставшийся бюджет в tool results: ai-agent-budget-visibility."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:17",
+      "summary": "Pi-parity retry и видимые попытки: ai-agent-transient-request-retry."
+    },
+    {
+      "clause": "I5 + оставшаяся часть I4",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:20",
+      "summary": "Compaction, полная usage, context-exceeded и соответствующий playground UI: ai-agent-context-compaction."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:25",
+      "summary": "Подробности точного edit match failure: ai-agent-edit-failure-diagnostics."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:28",
+      "summary": "Видимое предупреждение повторных вызовов: ai-agent-repeated-call-guard."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:31",
+      "summary": "Workbench diagnostics в mutation results: ai-agent-verification-feed."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:34",
+      "summary": "Workflow paragraph и recipe:false: ai-agent-prompt-recipe."
+    },
+    {
+      "clause": "I13",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:36",
+      "summary": "Повтор тех же config/tasks/count после механизмов; сравнение без per-task регрессии: ai-agent-weak-model-rerun."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: native catalog entry, явные лимиты, одинаковые параметры трёх lanes и private effective header",
+      "source": "acceptance",
+      "trace": "I12 + I1",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/catalog-metrics.test.ts:34; tools/agent-bench/tests/contract.spec.ts:92; tools/agent-bench/tests/contract.spec.ts:661",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: наблюдаемые tokens/retries/compactions/repeated calls/edit failures/malformed calls; summary usage; distinct context outcome и честный status",
+      "source": "acceptance",
+      "trace": "I12",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/catalog-metrics.test.ts:105; tools/agent-bench/src/catalog-metrics.test.ts:181; tools/agent-bench/src/catalog-metrics.test.ts:271; tools/agent-bench/src/metrics-privacy.test.ts:51; tools/agent-bench/tests/contract.spec.ts:546",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: исходные пять задач, 3 cold runs на supported lane, 42 Luna measurements до I5–I11; артефакты и ручные классы",
+      "source": "acceptance",
+      "trace": "I12",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/README.md:3; tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/report.json:1; tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/failure-evidence.json:1",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: сохранены smoke/common judges/tasks/prompts; native default compaction и disabled retry",
+      "source": "acceptance",
+      "trace": "I12 + ADR-0434",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:92; tools/agent-bench/src/lanes/local-reference.ts:104; tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/README.md:17",
+      "note": ""
+    },
+    {
+      "row": "missing catalog limit × config: loud validation, без угаданного window",
+      "source": "fault-matrix",
+      "trace": "I12 + I1",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/catalog-metrics.test.ts:34",
+      "note": ""
+    },
+    {
+      "row": "edit/argument failure × metrics: реальные counters без изменения действий",
+      "source": "fault-matrix",
+      "trace": "I12",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/catalog-metrics.test.ts:105; tools/agent-bench/src/metrics-privacy.test.ts:51; tools/agent-bench/tests/contract.spec.ts:546",
+      "note": ""
+    },
+    {
+      "row": "provider context error × report: context-exceeded с исходным error status",
+      "source": "fault-matrix",
+      "trace": "I12",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/catalog-metrics.test.ts:123; tools/agent-bench/tests/contract.spec.ts:470; tools/agent-bench/tests/contract.spec.ts:546",
+      "note": ""
+    },
+    {
+      "row": "provider failure × run: сохранены исходные artifacts и ручная классификация",
+      "source": "fault-matrix",
+      "trace": "I12 + ADR-0434",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:286; tools/agent-bench/tests/contract.spec.ts:661",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input/provenance-lie × credential serialization: JSON/numbers/tags/provenance доступны; payload values/keys private; counters до masking. Принятые FIX закрыты: numeric/syntax headers, trace tags, tool/validation/context/abort counters, artifact paths/profile/revision, FileTree keys и ordinary metadata",
+      "source": "fault-matrix",
+      "trace": "I1 + I12 + ADR-0472",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/redaction.test.ts:12; tools/agent-bench/src/redaction.test.ts:82; tools/agent-bench/src/redaction.test.ts:153; tools/agent-bench/src/metrics-privacy.test.ts:51; tools/agent-bench/tests/contract.spec.ts:506; tools/agent-bench/tests/contract.spec.ts:607; docs/backlog/distribution/reference/ai-agent-weak-model-baseline-evidence.md:124",
+      "note": ""
+    },
+    {
+      "row": "exportTrace: public protocol identity сохраняется при credential collision; consumer payload private, обычные metadata сохранены",
+      "source": "public-api",
+      "trace": "I1 + I12 + ADR-0472",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/redaction.test.ts:12; tools/agent-bench/src/redaction.test.ts:104; packages/agent/src/trace.ts:67",
+      "note": ""
+    },
+    {
+      "row": "Frozen baseline: 42 trace/before/after records, original measurements, manifest hashes, manual failure evidence и replay observer binding",
+      "source": "frozen-artifact",
+      "trace": "I12 + ADR-0434",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/manifest.json:1; tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/measurement-replay.json:1; docs/backlog/distribution/reference/ai-agent-weak-model-baseline-evidence.md:126",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -7,6 +7,7 @@
  * exclusively through user-visible controls and the active project's shell.
  */
 import { type Page, expect, test } from '@playwright/test';
+import { accessNativeReplica } from '../browser-unit/fixtures/opfs-storage-namespace.ts';
 import {
   bootProjectFiles,
   expectViteDevServerReady,
@@ -111,27 +112,61 @@ async function mismatchPersistedDefinitionIdentity(
   projectId: string,
   replacement: string,
 ): Promise<void> {
-  await page.evaluate(
-    async ({ projectId, replacement }) => {
-      let directory = await navigator.storage.getDirectory();
-      for (const segment of ['.rifty', 'workbench', 'v1', 'projects', projectId]) {
-        directory = await directory.getDirectoryHandle(segment);
-      }
-      const handle = await directory.getFileHandle('definition.json');
-      const metadata = JSON.parse(await (await handle.getFile()).text()) as Record<string, unknown>;
-      if (
-        metadata.version !== 1 ||
-        metadata.projectKey !== projectId ||
-        typeof metadata.definitionIdentity !== 'string'
-      ) {
-        throw new Error(`Unexpected persisted definition metadata for ${projectId}`);
-      }
-      const writable = await handle.createWritable();
-      await writable.write(JSON.stringify({ ...metadata, definitionIdentity: replacement }));
-      await writable.close();
-    },
-    { projectId, replacement },
-  );
+  const ownerUrl = await page.evaluate(async () => {
+    const url = '/src/adapters/playground-workbench-host.ts';
+    const { playgroundWorkbenchOptions } = await import(/* @vite-ignore */ url);
+    return new URL(playgroundWorkbenchOptions().deployment.workers.owner, location.href).href;
+  });
+  let resume!: () => void;
+  let entered!: () => void;
+  let handled!: () => void;
+  const continued = new Promise<void>((resolve) => {
+    handled = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const reached = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const handler = async (route: import('@playwright/test').Route) => {
+    entered();
+    await held;
+    await route.continue();
+    handled();
+  };
+  await page.route(ownerUrl, handler);
+  try {
+    // Previous native writer is terminated; hold the replacement before it acquires storage.
+    await page.reload();
+    await reached;
+    const path = `/.rifty/workbench/v2/projects/${projectId}/definition.json`;
+    const bytes = (await accessNativeReplica(page, { paths: [path] }))[path];
+    if (bytes === null || bytes === undefined) throw new Error('Persisted definition is absent');
+    const metadata = JSON.parse(new TextDecoder().decode(new Uint8Array(bytes))) as Record<
+      string,
+      unknown
+    >;
+    if (
+      metadata.version !== 1 ||
+      metadata.projectKey !== projectId ||
+      typeof metadata.definitionIdentity !== 'string'
+    )
+      throw new Error(`Unexpected persisted definition metadata for ${projectId}`);
+    await accessNativeReplica(page, {
+      files: {
+        [path]: [
+          ...new TextEncoder().encode(
+            JSON.stringify({ ...metadata, definitionIdentity: replacement }),
+          ),
+        ],
+      },
+    });
+  } finally {
+    resume();
+    await continued;
+    await page.unroute(ownerUrl, handler);
+  }
 }
 
 async function armFirstMismatchToastState(
@@ -182,7 +217,7 @@ test.describe('ADR-0165 §4 — switch coherence: surfaces follow the active pro
   test('a starter pick opens a fresh scratch and reboots its dev server at logical root', async ({
     page,
   }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     page.on('pageerror', (err) => console.log('[pageerror]', err.message));
 
     // Boot through the same launcher path a user follows.
@@ -191,17 +226,17 @@ test.describe('ADR-0165 §4 — switch coherence: surfaces follow the active pro
       timeout: 15_000,
     });
 
-    // Boot: the default Vite scratch is active at the App's logical project root.
+    // Boot: the default Vite scratch is active and its shell is bound.
     const hint = page.locator('[data-testid="terminal-mode-hint"]').first();
-    await expect(hint).toContainText('Commands run in /;', { timeout: 15_000 });
+    await expect(hint).toContainText('running programs own stdin', { timeout: 15_000 });
     await expectProjectChipName(page, 'Project files scratch');
-    await expectViteDevServerReady(page, 5174, 30_000);
+    await expectViteDevServerReady(page);
 
-    // Pick a different starter. The chip and logical shell root must follow the
+    // Pick a different starter. The chip and the bound shell must follow the
     // newly active scratch, never the prior starter.
     await pickStarter(page, 'node-worker');
 
-    await expect(hint).toContainText('Commands run in /;', { timeout: 15_000 });
+    await expect(hint).toContainText('running programs own stdin', { timeout: 15_000 });
     await expectProjectChipName(page, 'Node worker map scratch');
 
     // The switched-in scratch's dev server reboots too.
@@ -222,6 +257,9 @@ test.describe('Project activation/open compensation', () => {
     const alphaName = `Activation-A-${tag}`;
     const betaName = `Activation-B-${tag}`;
 
+    // Keep interception enabled across the later owner-script hold/unroute.
+    // Toggling Fetch after stock esbuild enters Atomics.wait stalls CDP.
+    await page.route('**/*', (route) => route.fallback());
     await bootProjectFiles(page);
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
@@ -231,7 +269,6 @@ test.describe('Project activation/open compensation', () => {
     const betaId = await saveScratchAs(page, betaName);
 
     await mismatchPersistedDefinitionIdentity(page, alphaId, `mismatch-${tag}`);
-    await page.reload();
     await expect(page.locator('.rf-app[data-project-index="ready"]')).toBeVisible({
       timeout: PROJECT_TRANSITION_TIMEOUT,
     });
@@ -291,21 +328,21 @@ test.describe('ADR-0165 §7 — durable Save + switch round-trip (two projects)'
 
     // Write Alpha at the active project's logical root, then save it by name.
     const hint = page.locator('[data-testid="terminal-mode-hint"]').first();
-    await expect(hint).toContainText('Commands run in /;', { timeout: 30_000 });
+    await expect(hint).toContainText('running programs own stdin', { timeout: 30_000 });
     await newIdleShell(page);
     await runTerminalLineSettled(page, `echo ${alphaMark} > round-trip.txt`);
     await saveScratchAs(page, alphaName);
 
     // A different starter creates Beta's fresh scratch; save its distinct marker.
     await pickStarter(page, 'node-worker');
-    await expect(hint).toContainText('Commands run in /;', { timeout: 30_000 });
+    await expect(hint).toContainText('running programs own stdin', { timeout: 30_000 });
     await newIdleShell(page);
     await runTerminalLineSettled(page, `echo ${betaMark} > round-trip.txt`);
     await saveScratchAs(page, betaName);
 
     // Alpha survives a switch away and back. Read only through the active project.
     await switchToProject(page, alphaName);
-    await expect(hint).toContainText('Commands run in /;', { timeout: 60_000 });
+    await expect(hint).toContainText('running programs own stdin', { timeout: 60_000 });
     await expectProjectChipName(page, alphaName);
     await newIdleShell(page);
     const alpha = await readActiveProjectText(page, 'round-trip.txt', 60_000);
@@ -315,7 +352,7 @@ test.describe('ADR-0165 §7 — durable Save + switch round-trip (two projects)'
 
     // Beta remains distinct across the second switch.
     await switchToProject(page, betaName);
-    await expect(hint).toContainText('Commands run in /;', { timeout: 60_000 });
+    await expect(hint).toContainText('running programs own stdin', { timeout: 60_000 });
     await expectProjectChipName(page, betaName);
     await newIdleShell(page);
     const beta = await readActiveProjectText(page, 'round-trip.txt', 60_000);

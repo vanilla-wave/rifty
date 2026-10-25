@@ -1,6 +1,17 @@
-/* rifty design tokens — single source of truth. Accent hardcoded to lime + rift.
-   Accent stays one var (--ac / --ac-ink) so re-theming is trivial. Relative-color
-   rgb(from var(--ac) r g b / a) is used throughout (Chromium-first). */
+/* rifty design tokens — "Poster / Dark" (docs/landing/handoff). One lime accent,
+   2px rule grid, zero radii. Relative-color rgb(from …) is Chromium-first. */
+@font-face {
+  font-family: "Archivo Black";
+  src: url("../assets/fonts/archivo-black-latin-v23.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+
 @font-face {
   font-family: "Inter";
   src: url("../assets/fonts/inter-latin-v20.woff2") format("woff2");
@@ -26,83 +37,63 @@
 }
 
 :root {
-  /* accent (lime) */
+  /* accent */
   --ac: #c7f05a;
+  --ac-hover: #d6f57a;
   --ac-ink: #15170b;
-
-  /* compat semantics */
-  --warn: #f5b544;
-  --no: #ff6b6b;
+  --ac-glow: rgb(from var(--ac) r g b / 0.35);
+  --ac-glow-strong: rgb(from var(--ac) r g b / 0.9);
+  --ac-dot-glow: rgb(from var(--ac) r g b / 0.8);
 
   /* surfaces */
   --bg: #15171d;
-  --bg-alt: #121319;
-  --bg-alt2: #101218;
-  --panel: #1a1d24;
   --deep: #0e1014;
-  --deep2: #0b0d11;
-  --titlebar: #14161b;
+  --chrome: #12151b;
 
-  /* glass */
-  --nav-bg: rgba(21, 23, 29, 0.82);
-  --dock-bg: rgba(13, 15, 19, 0.92);
-  --inspector-bg: rgba(18, 20, 25, 0.95);
-
-  /* text (white alphas) */
+  /* text (white alphas). Small/interactive text never goes below --t-meta:
+     0.4/0.35 fail WCAG AA on --bg, so those stay decorative (aria-hidden). */
   --t1: #fff;
-  --t2: rgba(255, 255, 255, 0.6);
-  --t3: rgba(255, 255, 255, 0.56);
-  --t4: rgba(255, 255, 255, 0.52);
-  --t5: rgba(255, 255, 255, 0.48);
-  --t6: rgba(255, 255, 255, 0.46);
+  --t-primary: #f2f4f8;
+  --t-lead: rgba(255, 255, 255, 0.62);
+  --t-nav: rgba(255, 255, 255, 0.6);
+  --t-body: rgba(255, 255, 255, 0.55);
+  --t-meta: rgba(255, 255, 255, 0.5);
+  --t-deco: rgba(255, 255, 255, 0.4);
+  --t-deco-faint: rgba(255, 255, 255, 0.35);
 
-  /* hairlines / borders */
-  --bd: rgba(255, 255, 255, 0.08);
-  --bd2: rgba(255, 255, 255, 0.1);
-  --bd3: rgba(255, 255, 255, 0.12);
-  --bd4: rgba(255, 255, 255, 0.16);
+  /* rules */
+  --rule: rgba(255, 255, 255, 0.16);
+  --rule-w: 2px;
+  --hair: rgba(255, 255, 255, 0.12);
+  --outline: rgba(255, 255, 255, 0.25);
 
-  /* realm colors */
-  --realm-page: #7aa2ff;
-  --realm-worker: #3bd6c6;
-  --realm-sw: #b58bff;
-  --realm-iframe: #f2b95c;
-  --realm-ext: #8a93a6;
+  /* semantics */
+  --warn: #e0a45c;
+  --no: #ff6b6b;
+  --ok: #8fd98f;
 
   /* code syntax */
   --syn-kw: #c79bf0;
-  --syn-fn: #7cc5f5;
   --syn-str: #9dd98f;
-  --syn-num: #f2b95c;
-  --syn-punc: rgba(255, 255, 255, 0.55);
-  --syn-com: rgba(255, 255, 255, 0.48);
-
-  /* warning callout */
-  --callout: #e0a45c;
+  --syn-fn: #f2f4f8;
+  --syn-punc: rgba(255, 255, 255, 0.82);
+  --t-code: rgba(255, 255, 255, 0.82);
 
   /* type */
+  --font-display: "Archivo Black", "Arial Black", Impact, sans-serif;
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Roboto Mono", ui-monospace, "SF Mono", "Menlo", monospace;
 
-  /* radii */
-  --r-pill: 14px;
-  --r-card: 12px;
-  --r-sm: 10px;
-  --r-chip: 8px;
-  --r-btn: 6px;
-  --r-code: 4px;
-
-  /* shadows (sparse — borders do the work) */
-  --sh-window: 0 24px 60px rgba(0, 0, 0, 0.5);
-  --sh-dock: 0 16px 48px rgba(0, 0, 0, 0.6);
-
   /* layout */
-  --maxw: 1200px;
-  --gutter: 32px;
+  --maxw: 1080px;
+  --gutter: 40px;
+  /* every content box sits on the gutter line and insets its content by --box-pad */
+  --box-pad: 20px;
+  --gauge-w: 60px;
 }
 
 @media (max-width: 600px) {
   :root {
-    --gutter: 16px;
+    --gutter: 20px;
   }
 }

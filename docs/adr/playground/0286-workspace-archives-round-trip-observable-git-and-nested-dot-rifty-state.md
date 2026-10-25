@@ -62,3 +62,7 @@ archive.
 
 Corrects ADR-0278's archive exclusion clause only; every other companion and
 archive decision there remains active.
+
+## Corrections (active)
+
+- 2026-09-07 — ADR-0384 supersedes package-adaptation owner/carrier clauses and `.vite` archive classification where applicable; all other decisions remain active.

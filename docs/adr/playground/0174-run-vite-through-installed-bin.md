@@ -67,3 +67,8 @@ has that lifecycle (ADR-0155).
 > selected only by canonical direct-entry script bytes. Installed nodemon uses
 > the generic server-capable `.bin` path and remains the sole watcher/restart
 > owner. Vite's installed-bin ownership is unchanged.
+
+> **Correction 2026-10-19 (`AGENTS.md` §Fidelity, "Similar but different must
+> work"):** runtime preparation and the exact Vite/esbuild version gate make
+> the Vite claim a declared ceiling, not support: compat rows that run Vite
+> read ⚠️ at exact 7.3.6 / 8.0.16. The decision itself stands.

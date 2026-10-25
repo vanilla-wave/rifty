@@ -25,7 +25,7 @@ import {
 import { closureHashOf } from './closure-hash.ts';
 import { EDDY_BUNDLE_FORMAT, packEddyBundle } from './eddy-bundle.ts';
 import { type InstallOptions, type InstallResult, install } from './installer.ts';
-import { shadowAssetPlanForInstallResult } from './internal/shadow/install-result.ts';
+import { shadowSubstitutionPlanForInstallResult } from './internal/shadow/install-result.ts';
 import type { Lockfile } from './linker.ts';
 import { computeIntegrity } from './tarball-cache.ts';
 
@@ -42,7 +42,7 @@ const EXPECTED_REQUIRED_VERSIONS = Object.freeze({
   chokidar: '5.0.0',
   immutable: '5.1.9',
   readdirp: '5.1.1',
-  'source-map-js': '1.2.1',
+  'source-map-js': '1.2.2',
 });
 
 type Scope = 'root' | 'nested';
@@ -649,8 +649,7 @@ async function expectExactMaterialization(
     .soft(await vfs.readFileText(`${ROOT}/${fixture.binPath}`), 'user-visible Sass launcher')
     .toBe(`#!/usr/bin/env node\nimport('../${SASS_TRIGGER}/${SASS_BIN}');\n`);
 
-  const plan = shadowAssetPlanForInstallResult(result);
-  expect.soft(plan.assets).toEqual([]);
+  const plan = shadowSubstitutionPlanForInstallResult(result);
   expect.soft(plan.bindings).toEqual([]);
   const fileFacts = recipe.materialization.files.map(({ path, bytes, sha256: digest }) => ({
     path,
@@ -917,10 +916,10 @@ describe('sass-embedded official installer fixture authority', () => {
       'chokidar@5.0.0',
       'readdirp@5.1.1',
       'immutable@5.1.9',
-      'source-map-js@1.2.1',
+      'source-map-js@1.2.2',
     ]);
     expect(entries.map(({ tarball }) => tarball.byteLength)).toEqual([
-      927_111, 23_399, 9_058, 148_909, 35_340,
+      927_111, 23_399, 9_058, 148_909, 36_349,
     ]);
     for (const entry of entries) {
       expect(await computeIntegrity(entry.tarball)).toBe(entry.manifest.dist.integrity);
@@ -1227,7 +1226,7 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
       expect(result.packages.map(({ name }) => name)).toEqual(['opt-host']);
       // The npm-visible skip observable, pinned verbatim including the reason.
       expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
-        `optional dependency ${SASS_TRIGGER}@^1.70.0 of opt-host could not be installed: Not implemented: ${SASS_VERSION_FEATURE} (shadow recipe does not admit ^1.70.0)`,
+        `optional dependency ${SASS_TRIGGER}@^1.70.0 of opt-host could not be installed: Not implemented: ${SASS_VERSION_FEATURE} (sass-embedded@^1.70.0 refused: substitutes sass-embedded@1.100.0; admission rule exact-only)`,
       );
       // Writer records the declared edge; the never-pinned target has no entry.
       expect(result.lockfile.packages['node_modules/opt-host']?.optionalDependencies).toEqual({
@@ -1273,7 +1272,7 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
       const replay = await installFixture(fixture, replayVfs, registry, replayCache, []);
       expect(replay.packages.map(({ name }) => name)).toEqual(['opt-host']);
       expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
-        `optional dependency ${SASS_TRIGGER}@^1.70.0 of opt-host could not be installed: Not implemented: ${SASS_VERSION_FEATURE} (shadow recipe does not admit ^1.70.0)`,
+        `optional dependency ${SASS_TRIGGER}@^1.70.0 of opt-host could not be installed: Not implemented: ${SASS_VERSION_FEATURE} (sass-embedded@^1.70.0 refused: substitutes sass-embedded@1.100.0; admission rule exact-only)`,
       );
       expect(registry.reads).toEqual([]);
       expect(await replayVfs.exists(`${ROOT}/node_modules/${SASS_TRIGGER}`)).toBe(false);

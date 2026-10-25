@@ -1,0 +1,187 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED допускает IMPLEMENT; блокеров нет. Независимый повтор: native 12 RED / 2 baseline GREEN; layout RED. Два advisory. PR299 и goal ещё не завершены.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "de8777d746f357a648ab0522101cbbada37cbf92",
+  "unit_goal_source": "docs/backlog/vfs/segmented-opfs-replica.md; docs/backlog/epics/fast-project-open-reopen/goal.md; BASE 93c05f463cc266eb47f36b4fd8cf528c9ad1d0b3. Проверены исходные ADR, supersessions ADR-0425, прежние A/B drafts и raw RED logs. Независимо выполнены RIFTY_PLAYGROUND_PORT=5397 pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/replica-persistence.spec.ts --output /tmp/rifty-replica-independent-results и pnpm exec vitest run packages/workbench/src/workers/workbench-project-store-layout.contract.test.ts. Native assertions прочитаны из trace.zip. Performance/no-COI подтверждены предоставленными logs, повторно не запускались.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md:123",
+      "summary": "Реализация replica и public openProject → executable Node command с durable-flush tail ≤2 s; storage-only RED не закрывает композицию."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md:126",
+      "summary": "Public fresh-process offline reopen с исполняемой сессией и storage restore ≤2 s остаётся обязательным."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md:130",
+      "summary": "Реализовать v2 trigger; затем linked legacy unit доказывает именованный health notice, materialization из definition и честный пустой Playground catalog."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md:138",
+      "summary": "Единый substrate и public offline reopen ≤2 s после настоящего post-init npm install с ≥5000 изменёнными путями; synthetic storage fixture закрывает только storage boundary."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Workbench/configured no-COI используют replica-backed OpfsFsSync под captured root; standalone per-file доступен; eager readiness.",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/no-coi/replica-storage.spec.ts:5; tests/browser-unit/fixtures/replica-persistence-worker.ts:58; tests/browser-unit/fixtures/replica-persistence-worker.ts:131; tests/browser-unit/replica-storage-budget.spec.ts:19",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: точные binary bytes, shape, copy/rename/delete и timestamps после replay; здоровые native reads и отказ при native corruption.",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:88; tests/browser-unit/replica-persistence.spec.ts:68; tests/browser-unit/fixtures/replica-persistence-worker.ts:342",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: T manifest, per-path content discriminator, три samples, flush ≤2 s и fresh offline restore ≤2 s до/после 5000 изменений; проверка всех bytes вне таймера.",
+      "source": "acceptance",
+      "trace": "I1+I2+I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-storage-budget.spec.ts:10; tests/browser-unit/fixtures/replica-persistence-worker.ts:199; tests/browser-unit/fixtures/replica-persistence-worker.ts:214; tests/browser-unit/fixtures/replica-persistence-worker.ts:228",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: v2 не принимает valid v1 project/definition; новые definition bytes материализуются, старые native bytes сохраняются.",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-project-store-layout.contract.test.ts:6; tests/browser-unit/replica-persistence.spec.ts:63; tests/browser-unit/fixtures/replica-persistence-worker.ts:131",
+      "note": ""
+    },
+    {
+      "row": "Parity: прежний FsSync baseline, native roundtrip binary/structural/utimes; существующие sync/owner suites сохраняются.",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:88; packages/vfs/src/opfs-sync.test.ts:505; packages/workbench/src/workers/workbench-owner-storage.test.ts:21",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input: повреждённые HEAD/segment/truncation дают diagnosed cold restoration без прежнего файла/claim и без удаления повреждённых native bytes.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:12; tests/browser-unit/replica-persistence.spec.ts:79; tests/browser-unit/fixtures/replica-persistence-worker.ts:247",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie: intact cache не маскирует corrupt native bytes; paired read отвергает повреждение, healthy read возвращает bytes.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0392+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:68; tests/browser-unit/replica-persistence.spec.ts:112; tests/browser-unit/fixtures/replica-persistence-worker.ts:279",
+      "note": ""
+    },
+    {
+      "row": "native read failure: NotReadableError остаётся OpfsPreloadError с причиной, без cold-restore/memory success.",
+      "source": "fault-matrix",
+      "trace": "ADR-0393+ADR-0411",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:71; tests/browser-unit/fixtures/replica-persistence-worker.ts:288",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail + lossy-aggregate: full logical footprint из 230 writes, sample ограничен 20; один repair лечит только свой путь.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0358+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:116; tests/browser-unit/fixtures/replica-persistence-worker.ts:357",
+      "note": ""
+    },
+    {
+      "row": "quota during compaction: dirty report, прежнее committed tree доступно после reopen; reachable old segments сохраняются.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:75; tests/browser-unit/fixtures/replica-persistence-worker.ts:322",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key: timeout/close не освобождает writer до physical settle; fence остаётся pending; late success heals и разрешает reacquire.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0358+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:150; tests/browser-unit/fixtures/replica-persistence-worker.ts:373",
+      "note": ""
+    },
+    {
+      "row": "Worker death / torn-state: kill before/after native close при append/compaction сохраняет полное old/new tree без mixed batch.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:199; tests/browser-unit/fixtures/replica-persistence-worker.ts:397",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/fixtures/replica-persistence-worker.ts:161",
+          "evidence": "",
+          "summary": "Configured carrier вызывает initBackend, остальные — installOpfsFs напрямую. Настоящий installWorkbenchOwnerStorageAuthority и preferred contention этим не различаются. Полезен отдельный native owner carrier: replica selection, captured root, acquired-read failure и writer contention под preferred. По REV-5 это advisory: surviving mutant не исполнялся; публичная композиция явно остаётся goal work.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/fixtures/replica-persistence-worker.ts:349",
+          "evidence": "",
+          "summary": "utimes сейчас идёт в том же drain, что copy/write. Carrier ловит текущую потерю mtime, но отдельно не проверяет metadata-only utimes после уже завершённого flush. Полезен flush → utimes → flush → reopen: иначе поздний snapshot при соседнем write может скрыть отсутствие собственного persist operation у utimes. По REV-5 это advisory без выполненного mutant artifact.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

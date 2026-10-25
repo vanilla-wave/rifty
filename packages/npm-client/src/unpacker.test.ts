@@ -31,6 +31,15 @@ describe('extractTarGz — typeflag handling', () => {
     });
   });
 
+  it.each(['../forged.txt', 'other/../forged.txt'])(
+    'never drops traversal into an admitted path: %s',
+    async (name) => {
+      const body = enc.encode('forged');
+      const bytes = await gzip(concat(buildHeader(name, body.length), padToBlock(body), trailer));
+      await expect(extractTarGz(bytes)).rejects.toMatchObject({ code: 'EINVALIDPACKAGETAR' });
+    },
+  );
+
   it("throws NotImplementedError('npm-client.tar.symlink') for symlink entries (typeflag '2')", async () => {
     const data = enc.encode(''); // symlinks carry the target in linkname, not body
     const header = buildHeader('package/link', 0, '2', { linkname: 'real.js' });

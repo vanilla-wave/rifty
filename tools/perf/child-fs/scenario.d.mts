@@ -1,5 +1,5 @@
 export interface ChildFsScenario {
-  readonly id: 'child-fs-hot-path-v1';
+  readonly id: 'child-fs-hot-path-v2';
   readonly root: '/bench';
   readonly dependencies: Readonly<Record<string, string>>;
   readonly files: Readonly<Record<string, string>>;

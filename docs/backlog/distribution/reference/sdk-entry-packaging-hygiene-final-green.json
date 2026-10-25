@@ -1,0 +1,209 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "I3 PASS: independent packed/source/browser proof passed; raw pr:check 25/25 and production 7/7 verified. Continue I4/I5 before whole-goal closure.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "7a431a09a5b1c69b09a11b87ed827b30b4771ea8",
+  "unit_goal_source": "docs/backlog/distribution/sdk-entry-packaging-hygiene.md; BASE f87f8994e9ffc0a4c818e94be73050d947021c0b; current unit I3 only; prior I1/I2 accepted.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/no-coi-client-bundle/goal.md:63",
+      "summary": "First-use install/activation loading, fetch-failure behavior and install/build/HMR/restore/restart proof remain."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/no-coi-client-bundle/goal.md:66",
+      "summary": "CI-only complete eager graph budgets and historical leak calibration remain."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Published main/sw retain at most 5120 bytes from io/dist/index.js across complete eager graphs",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:31; tests/integration/fixtures/no-coi-packed-toolchain-consumer/measure-bundles.mjs:69",
+      "note": ""
+    },
+    {
+      "row": "Minified constructors retain initialization, eight public names/identities and the native operation result",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:8; tests/integration/sdk-packaging-proof.mjs:57",
+      "note": ""
+    },
+    {
+      "row": "Only generic creation fetches the page backend; explicit deps and toolchain behavior remain",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:78; packages/rifty/src/sandbox.test.ts:145; packages/rifty/src/sandbox.test.ts:492",
+      "note": ""
+    },
+    {
+      "row": "Source worker exports are side-effectful beside dist; real bare-import wrapper boots and executes Buffer",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/tests/package-surface.contract.test.ts:58; tests/integration/sdk-packaging-proof.mjs:148",
+      "note": ""
+    },
+    {
+      "row": "Buffer encoding/backing-store alias, callable EventEmitter/Stream, prototype identities and stream flow preserve Node behavior",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:8; tests/integration/sdk-packaging-proof.mjs:57; packages/io/src/event-emitter-construction.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Existing io/buffer/events/stream conformance and parity remain unchanged",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/io/src/buffer.test.ts:5; packages/io/src/event-emitter-construction.test.ts:5; packages/io/src/streams/readable.pipe.test.ts:1; /tmp/rifty-sdk-pr-check-pass.log:27",
+      "note": ""
+    },
+    {
+      "row": "Source vs dist worker wrapper cannot disappear and real source entry boots",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:148; tests/integration/workbench-source-entry.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Minified live constructor retains prototype/statics and Node name; differential covers eight constructors",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:8; tests/integration/sdk-packaging-proof.mjs:57",
+      "note": ""
+    },
+    {
+      "row": "Unavailable page-backend chunk preserves visible memory fallback/reason and usable Worker fs; toolchain makes no backend request",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:83; tests/integration/sdk-packaging-proof.mjs:134",
+      "note": ""
+    },
+    {
+      "row": "Buffer: initialization survives minification with public name and constructor identity",
+      "source": "public-api",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:8; tests/integration/sdk-packaging-proof.mjs:57",
+      "note": ""
+    },
+    {
+      "row": "EventEmitter: initialization survives minification with public name and constructor identity",
+      "source": "public-api",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:8; tests/integration/sdk-packaging-proof.mjs:57",
+      "note": ""
+    },
+    {
+      "row": "Stream: initialization survives minification with public name and constructor identity",
+      "source": "public-api",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:8; tests/integration/sdk-packaging-proof.mjs:57",
+      "note": ""
+    },
+    {
+      "row": "Readable: initialization survives minification with public name and constructor identity",
+      "source": "public-api",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:8; tests/integration/sdk-packaging-proof.mjs:57",
+      "note": ""
+    },
+    {
+      "row": "Writable: initialization survives minification with public name and constructor identity",
+      "source": "public-api",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:8; tests/integration/sdk-packaging-proof.mjs:57",
+      "note": ""
+    },
+    {
+      "row": "Duplex: initialization survives minification with public name and constructor identity",
+      "source": "public-api",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:8; tests/integration/sdk-packaging-proof.mjs:57",
+      "note": ""
+    },
+    {
+      "row": "Transform: initialization survives minification with public name and constructor identity",
+      "source": "public-api",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:8; tests/integration/sdk-packaging-proof.mjs:57",
+      "note": ""
+    },
+    {
+      "row": "PassThrough: initialization survives minification with public name and constructor identity",
+      "source": "public-api",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:8; tests/integration/sdk-packaging-proof.mjs:57",
+      "note": ""
+    },
+    {
+      "row": "createSandbox: generic-only backend import retains existing fallback and injected dependency behavior",
+      "source": "public-api",
+      "trace": "I3 + scenario",
+      "status": "pass",
+      "citation": "tests/integration/sdk-packaging-proof.mjs:78; packages/rifty/src/sandbox.test.ts:799",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

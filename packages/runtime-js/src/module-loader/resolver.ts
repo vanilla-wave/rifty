@@ -11,18 +11,13 @@ import { ModuleLoadError } from './errors.ts';
 import {
   type FileDirResolutionOrder,
   IMPORT_RESOLUTION,
-  type ResolutionCondition,
   TSCONFIG_RESOLUTION,
   activeConditions,
   detectJavaScriptKind,
   resolutionOrder,
 } from './resolver-profile.ts';
-import {
-  type TsconfigPathResolution,
-  findNearestTsconfig,
-  loadTsconfigPathResolution,
-  shouldPrependTsconfigBaseUrl,
-} from './tsconfig-paths.ts';
+import type { TsconfigPathResolution } from './tsconfig-paths.ts';
+import { requireTsconfigPaths } from './tsconfig-preload.ts';
 
 const safeReflectApply = Reflect.apply.bind(Reflect);
 const stringEndsWithPrimordial = String.prototype.endsWith;
@@ -75,7 +70,8 @@ export interface ResolverOptions {
   /**
    * If true, locate the nearest `tsconfig.json` for the importing file and derive
    * path aliases from `compilerOptions.paths` with the real TypeScript parser.
-   * Explicit {@link paths} win when both are supplied.
+   * Requires `await preloadTsconfigPaths()` before construction (ADR-0382).
+   * Explicit {@link paths} win when both are supplied; no preload required there.
    */
   readonly autoDiscoverTsconfigPaths?: boolean;
 }
@@ -111,6 +107,8 @@ type PkgCache = Map<string, PackageJson>;
 export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}): Resolver {
   const explicitPaths = resolverOpts.paths;
   const autoDiscoverTsconfigPaths = resolverOpts.autoDiscoverTsconfigPaths === true;
+  const tsconfig =
+    autoDiscoverTsconfigPaths && explicitPaths === undefined ? requireTsconfigPaths() : undefined;
   // package.json parse cache (perf #5). N sibling imports from one package
   // re-decoded+re-parsed its package.json N times; cache by absolute path.
   // Cleared whole in `loader.invalidate()` (both arms) — `load-fixture` reload
@@ -196,7 +194,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
           if (
             aliased.status === 'no-match' &&
             tsconfigResolution.baseUrl !== undefined &&
-            shouldPrependTsconfigBaseUrl(specifier)
+            tsconfig?.shouldPrependTsconfigBaseUrl(specifier)
           ) {
             const baseUrlResolved = resolveAsFileOrDir(
               vfs,
@@ -230,16 +228,16 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
 
   function resolutionFor(fromDir: string): TsconfigPathResolution | undefined {
     if (explicitPaths !== undefined) return { paths: explicitPaths };
-    if (!autoDiscoverTsconfigPaths) return undefined;
+    if (tsconfig === undefined) return undefined;
     let configPath = nearestTsconfigCache.get(fromDir);
     if (configPath === undefined) {
-      configPath = findNearestTsconfig(vfs, fromDir);
+      configPath = tsconfig.findNearestTsconfig(vfs, fromDir);
       nearestTsconfigCache.set(fromDir, configPath);
     }
     if (configPath === null) return undefined;
     let resolution = tsconfigResolutionCache.get(configPath);
     if (resolution === undefined) {
-      resolution = loadTsconfigPathResolution(vfs, configPath);
+      resolution = tsconfig.loadTsconfigPathResolution(vfs, configPath);
       tsconfigResolutionCache.set(configPath, resolution);
     }
     return resolution ?? undefined;
@@ -736,7 +734,7 @@ function resolveConditionTree(node: ExportsField, esm: boolean): string | null {
   // membership set, not a priority list: an earlier `default` intentionally
   // shadows a later `module-sync`, and import/require use this same chokepoint.
   for (const cond of Object.keys(conditional)) {
-    if (!conditions.includes(cond as ResolutionCondition)) continue;
+    if (!conditions.includes(cond)) continue;
     const sub = conditional[cond];
     if (sub === null) return null;
     if (sub !== undefined) {

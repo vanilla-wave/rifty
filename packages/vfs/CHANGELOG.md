@@ -1,8 +1,53 @@
 # Changelog
 
+- Supply session-local inode/clock/link metadata through memory and OPFS stats for stock Node guests.
+
 ## [Unreleased]
 
+- Entry-owned session inode and creation/change clocks in FsStat; Memory/OPFS sync preserve identity on overwrite/rename and expose link count/atime (ADR-0540).
+
+- `VfsErrorCode` gains `EXDEV` (rename across mounts, ADR-0531).
+
+- Observe native replica admission before hydration; retain actual contention cause on occupied guard expiry without changing wait/fallback semantics (ADR-0486).
+
+- Require createWritable before paired OPFS admission; identify native root acquisition failures with preserved cause (ADR-0476).
+
+- Treat a first HEAD created but never closed as uncommitted storage; fresh replay stays empty without a false corruption diagnosis.
+
+- Preserve layout diagnosis for internal boot composition while keeping the public backend-string result (ADR-0432).
+
+- Preserve settled subtree failure scope across later entry reports; provisional timeouts still heal on real success (ADR-0429).
+- Retain native readers through compaction/close and keep detected corruption repair pending across unrelated appends (ADR-0429).
+
+- Wait for actual native guard release during busy-Worker replacement, bounded by the captured I/O budget; close late grants (ADR-0428).
+- Persist configured Workbench/SDK storage as validated OPFS segments with one physical writer, batched drains and crash-safe compaction (ADR-0425).
+
+- Expose EROFS for host-configured readonly project files; runtime Node errors retain errno -30.
+- Accept optional native-root/persistence boot configuration; share literal namespace validation with Workbench (ADR-0419).
+
+- Preserve selected roots and operation budgets through strict single-pass preload; acquired-tree failures remain distinct from unavailable roots (ADR-0411).
+
+### Added
+
+- OPFS paired installation accepts a captured per-instance IO report timeout; omission keeps30s, timeout retains native lanes/path fences and late completion heals without resend (ADR-0410).
+
+- OPFS initialization accepts a captured native root; paired installation uses the same handle for both surfaces. Conflicting async re-init rejects; omission preserves origin storage (ADR-0402).
+
 ### Fixed
+
+- Refuse sync read/copy of indexed OPFS files without acquired content; genuine empty files remain valid. Native read failure cannot silently persist an empty replacement (ADR-0406).
+- Expose scheduler/ledger-backed persistence eligibility for installer-only equality checks; pending and failed ancestors remain ineligible.
+
+- OPFS boot uses one native traversal and shared root; concurrent initialization
+  shares one retryable acquisition. Unreadable preload rejects; uncached sync
+  read/copy throws EIO instead of fabricating empty bytes (ADR-0393).
+
+- **Dedicated Workers select OPFS from sync-access-handle capability, not
+  COI (ADR-0372).** `detectVfsBackend()` now uses
+  `OpfsFsSync.isSupported()` as the paired-backend authority. Capable
+  headerless Chromium Workers therefore persist exact bytes across reload;
+  Node, main-window and missing-sync-handle realms stay memory, while OPFS
+  permission/init failures remain loud.
 
 - **Chromium `.crswap` atomic-swap temps no longer leak through the OPFS
   read surface (torn-state × Storage; born as the opfs-parallel-drain-kill

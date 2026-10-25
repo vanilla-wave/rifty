@@ -9,6 +9,7 @@ import {
 /** One SW-global handler; each transferred reply port identifies one host attempt. */
 export function createControlPingHandler(
   warn: (message: string) => void = (message) => console.warn(message),
+  previewPrefix?: string,
 ): (event: ExtendableMessageEvent) => void {
   const mismatchWarned = new Set<string>();
   return (event): void => {
@@ -44,6 +45,7 @@ export function createControlPingHandler(
       frameVersion: SW_FRAME_VERSION,
       routingVersion: SW_ROUTING_VERSION,
       from: 'service-worker',
+      ...(previewPrefix === undefined ? {} : { previewPrefix }),
     };
     const replyPort = event.ports[0];
     if (replyPort === undefined) {

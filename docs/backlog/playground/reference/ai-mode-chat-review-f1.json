@@ -1,0 +1,271 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK UI-среза: исправить F1 и независимо проверить результат. I8 benchmark остаётся обязательным продолжением; goal_complete=false.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "cd1c7979c3f4f5ab3dd4d12da233a60d42d04b8d",
+  "unit_goal_source": "docs/backlog/playground/ai-mode-chat.md @ cd1c7979c3f4f5ab3dd4d12da233a60d42d04b8d; BASE previous accepted no-COI slice 1989bdfca0dbb50ee9078a7a94c16b3553c61851; fresh independent /root/ui_final_review. Raw authorities/diff/RED/live export/native oracle/PR-4 criterion changes inspected. Independent 8 UI e2e + 4 browser-unit + 233 unit/integration PASS. Evidence /tmp/pr333-ai-ui-final-review-evidence.md.",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance 1 → I5: labeled visible Agent terminal",
+      "location": "apps/playground/src/adapters/playground-app.tsx:1739",
+      "summary": "F1: shell launched from Problems leaves its output hidden; repair and add discriminating committed regression."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I5: visible Agent terminal",
+      "location": "docs/backlog/playground/ai-mode-chat.md:59",
+      "summary": "Current slice F1 remains until independent verification of the repair."
+    },
+    {
+      "clause": "I8: three-lane benchmark, accepted tasks/runs, identical smoke judges, evidence/delta/human classification and tool/context caveat",
+      "location": "docs/backlog/epics/ai-agent-mode-and-bench/goal.md:80",
+      "summary": "Linked distribution/agent-bench remains. Its existing baseline measurement also retains React TS7016/7026 installed-declarations versus native-resolution investigation from the live trace; no parity classification inferred."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: React write/build/preview; streamed replies, visible args/results/editor/SCM and Agent terminal",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "weak",
+      "citation": "tests/e2e/ai-mode.spec.ts:60",
+      "note": "Committed happy-path carrier passes, but current implementation leaves the Agent terminal hidden when Problems was selected. Executed current-code defect F1; no claim that an advisory proof gap itself blocks."
+    },
+    {
+      "row": "Acceptance 2: endpoint/model-only persistence; key/limits/conversation reset; corrupt/refused settings usable; key-free export",
+      "source": "acceptance",
+      "trace": "I2 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:174; tests/e2e/ai-mode.spec.ts:300",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: Stop reaches real command, retained write/history, continuation, distinct budget; actual transcript/output/timing/usage/diff export",
+      "source": "acceptance",
+      "trace": "I3 + I4 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:231; tests/e2e/ai-mode.spec.ts:133; tests/e2e/ai-mode.spec.ts:300",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: Reset/close/reopen/project switch/settings bind fresh conversations; files retained and running controls excluded",
+      "source": "acceptance",
+      "trace": "I5 + ADR-0427",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:174; tests/e2e/ai-mode.spec.ts:231; tests/e2e/ai-mode.spec.ts:92",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: cold page fetches no agent/Pi; desktop editor/preview/chat geometry and keyboard send",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/e2e-prod/ai-mode-lazy.spec.ts:7; tests/e2e/ai-mode.spec.ts:89; tests/e2e/ai-mode.spec.ts:150",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: visible unreachable-endpoint remedy; real no-auth React edit/build/preview workflow and exported trace",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:317; docs/backlog/playground/reference/ai-mode-chat-live-proof.json:1; docs/backlog/playground/reference/ai-mode-chat-evidence.md:122",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: only agentBench=1 exposes public-file seed/export and actual session metadata; prompt enters real chat",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:337; tests/e2e/ai-mode.spec.ts:149",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: ordinary terminal settlement/output, physical Stop, next command and settled UI owner",
+      "source": "acceptance",
+      "trace": "I3 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:231; tests/e2e/ai-mode.spec.ts:384; tests/browser-unit/agent-ui-terminal.spec.ts:4",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: native Pi completion/error/tool result meanings survive render/export; no payload-derived success",
+      "source": "acceptance",
+      "trace": "I2 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:94; tests/e2e/ai-mode.spec.ts:408; apps/playground/src/ai/AiChatPanel.tsx:187",
+      "note": ""
+    },
+    {
+      "row": "provider / torn-state after write: visible failure, committed write/history retained",
+      "source": "fault-matrix",
+      "trace": "I3 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:235",
+      "note": ""
+    },
+    {
+      "row": "command / cancellation: physical Stop, retained partial outcome, next command",
+      "source": "fault-matrix",
+      "trace": "I3 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:257; tests/browser-unit/agent-ui-terminal.spec.ts:4",
+      "note": ""
+    },
+    {
+      "row": "provider / unbounded-read: distinct time budget, usable next request",
+      "source": "fault-matrix",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:304",
+      "note": ""
+    },
+    {
+      "row": "settings / corrupt-input or storage refusal: usable defaults/memory settings, visible persistence failure",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:189; tests/e2e/ai-mode.spec.ts:307",
+      "note": ""
+    },
+    {
+      "row": "project/panel lifetime / sibling-drift: stopped old session, fresh selected project conversation",
+      "source": "fault-matrix",
+      "trace": "I5 + ADR-0427",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:271; apps/playground/src/ai/AiChatPanel.tsx:276; apps/playground/src/ai/AiChatPanel.tsx:385",
+      "note": ""
+    },
+    {
+      "row": "endpoint / unreachable: visible error names dev-proxy remedy",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:317",
+      "note": ""
+    },
+    {
+      "row": "RiftyTerminal.executeLine: existing Enter/input lifetime; exact owner result/error, busy/disposed refusal and incomplete input",
+      "source": "public-api",
+      "trace": "ADR-0431",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-ui-terminal.spec.ts:39; packages/terminal/src/terminal.test.ts:1187; packages/terminal/src/terminal.ts:1419",
+      "note": ""
+    },
+    {
+      "row": "Clean editor models adopt exact public-owner captures without echo writes; unopened files refresh",
+      "source": "acceptance",
+      "trace": "I5 + ADR-0430",
+      "status": "pass",
+      "citation": "tests/browser-unit/editor-owner-refresh.spec.ts:14; tests/e2e/ai-mode.spec.ts:115",
+      "note": ""
+    },
+    {
+      "row": "Unpublished editor buffers retain old immutable CAS base and conflict with external winner",
+      "source": "acceptance",
+      "trace": "ADR-0430",
+      "status": "pass",
+      "citation": "tests/browser-unit/editor-owner-refresh.spec.ts:31",
+      "note": ""
+    },
+    {
+      "row": "Vite root slice preserves ordinary module identity for source/dependency/virtual ids, ordinary roots unchanged; malformed preparation refuses",
+      "source": "acceptance",
+      "trace": "I5 + ADR-0433",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/vite-root-url.test.ts:46; tests/integration/vite-cli-prep.test.ts:272; tests/e2e/ai-mode.spec.ts:434",
+      "note": ""
+    },
+    {
+      "row": "Frozen native React HMR oracle: same leaf edits before/after build keep document and single Refresh runtime",
+      "source": "frozen-artifact",
+      "trace": "I5 + ADR-0433",
+      "status": "pass",
+      "citation": "docs/backlog/playground/reference/ai-mode-react-hmr-native.json:1; docs/backlog/playground/reference/ai-mode-react-hmr-oracle.mjs:33; tests/e2e/ai-mode.spec.ts:434",
+      "note": ""
+    },
+    {
+      "row": "Frozen live trace/proof/screenshot: no-auth edit/build/actual preview and restored URL filters; exported bytes bound by SHA256",
+      "source": "frozen-artifact",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "docs/backlog/playground/reference/ai-mode-chat-live-proof.json:1; docs/backlog/playground/reference/ai-mode-chat-live-trace.json.gz; docs/backlog/playground/reference/ai-mode-chat-live.png",
+      "note": ""
+    },
+    {
+      "row": "Refreshed TypeScript/Vite/Vite8 dependency snapshots carry acquisition recipe and root-URL preparation",
+      "source": "frozen-artifact",
+      "trace": "ADR-0433",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts:102; apps/playground/src/generated/baked-snapshot-identities.json:1",
+      "note": ""
+    },
+    {
+      "row": "Original Rollup 4.63.2 metadata/tarball retain producer lock URL/version/SHA512",
+      "source": "frozen-artifact",
+      "trace": "ADR-0433",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/provenance.json:166; tests/integration/fixtures/registry/rollup-companions/packages/rollup-4.63.2.json:1",
+      "note": ""
+    },
+    {
+      "row": "Original @rollup/wasm-node 4.63.2 metadata/tarball retain producer lock URL/version/SHA512",
+      "source": "frozen-artifact",
+      "trace": "ADR-0433",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/provenance.json:175; tests/integration/fixtures/registry/rollup-companions/packages/rollup-wasm-node-4.63.2.json:1",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "apps/playground/src/adapters/playground-app.tsx:1739",
+          "summary": "F1: Agent shell remains hidden when Problems was selected. showTerminal expands the console but does not switch its view; the command executes and produces output while Problems stays selected.",
+          "authority": "I5: labeled visible agent terminal; Acceptance 1 → I5: npm build in a labeled visible Agent terminal; ADR-0427 Decision 3",
+          "evidence": "Executed detached scratch @ cd1c7979c: RIFTY_PLAYGROUND_PORT=5287 node node_modules/@playwright/test/cli.js test --project=chromium-heavy --workers=1 tests/e2e/ai-mode.spec.ts --grep \"review probe\". /tmp/pr333-ui-review-problems.log: terminalVisible=false, terminalPaneActive=false, agentTabSelected=false, real stdout REVIEW_AGENT_VISIBLE; toBeVisible fails with Received:hidden. Screenshot /tmp/pr333-ui-review-problems.png. Probe /tmp/pr333-ui-review-probe/tests/e2e/ai-mode.spec.ts:509. Fault class sibling-drift at terminal selection/presentation boundary; missing RED for Problems→Agent visibility. Sweep existing BottomPanel view owner/terminalFocusEpoch (BottomPanel.tsx:59-68), active id (playground-terminal-ui.ts select), collapsed console and tab switching; reuse existing reveal owner."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

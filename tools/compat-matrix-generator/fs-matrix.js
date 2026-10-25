@@ -1,0 +1,123 @@
+// `docs/public/compat/fs.md` static inventory (split from `cli.js`, file-size ratchet).
+export const fsMatrix = {
+  file: 'fs.md',
+  title: 'Compatibility matrix — `node:fs`',
+  intro:
+    'Public claim surface for the runtime-local `node:fs` subset over rifty VFS. Rows cite existing conformance and node-parity coverage.',
+  rows: [
+    [
+      '`readFileSync` / `writeFileSync`',
+      '✅',
+      'utf8 strings and binary `Uint8Array`/Buffer-like reads',
+    ],
+    ['`mkdirSync({ recursive })`', '✅', 'Creates parent directories'],
+    [
+      '`readdirSync` / `Dirent[]`',
+      '✅',
+      'Sorted names; `withFileTypes`; `{ recursive: true }` BFS walk + `Dirent.parentPath` (no removed-in-v24 `path` alias)',
+    ],
+    [
+      '`existsSync` / `statSync`',
+      '⚠️',
+      'Numeric `Stats` shape/entry identity and `throwIfNoEntry: false` parity; rename ctime transitions remain incomplete (`runtime-js/fs-stats-node-fields`), atime-value fidelity separately tracked.',
+    ],
+    ['`rmSync({ recursive })`', '✅', 'Tree removal'],
+    [
+      '`copyFileSync` / `renameSync` / `cpSync`',
+      '✅',
+      '`COPYFILE_EXCL`, recursive copy, mtime-preserving rename; `cp` `{ filter, force, errorOnExist, preserveTimestamps }`; `dereference` loud-throws (no-symlink, ADR-0050)',
+    ],
+    [
+      '`openAsBlob(path[, { type }])`',
+      '✅',
+      'Reads VFS bytes into a resolved Blob (default type `""`)',
+    ],
+    [
+      '`lutimesSync` / `futimesSync` / `futimes`',
+      '✅',
+      'lutimes ≡ utimes (no-symlink); futimes resolves fd→path, `EBADF` (syscall `futime`) on a bad fd',
+    ],
+    ['Encoding reads', '✅', 'utf8, utf16le, latin1/ascii, hex parity cases'],
+    ['Path resolution with `process.cwd()`', '✅', 'Relative fs paths anchor at runtime cwd'],
+    ['Callback `readFile` / `writeFile`', '✅', 'Node-style error-first callbacks'],
+    [
+      '`fs.promises` file ops',
+      '✅',
+      '`readFile`, `writeFile`, `appendFile`, `readdir`, `copyFile`, `rename`, `rm`, `access`',
+    ],
+    [
+      'fd table',
+      '✅',
+      '`open`/`close`/`read`/`write`/`fstat`/`ftruncate`; sequential and positional IO',
+    ],
+    [
+      '`fs` on stdio descriptors 0–2',
+      '⚠️',
+      'COI: `read`/`readSync`/`readFileSync(0)`, `fstatSync(0)` (FIFO/character mode), `closeSync(0)` and `write`/`writeSync(1\\|2)` use raw descriptors; writes bypass replaced `process.stdout.write`. Pipe positions throw `ESPIPE`. Kernel pull stdin (ADR-0542); `tests/browser-unit/fs-stdio-fds.spec.ts`, `tests/browser-unit/file-stdout.spec.ts`.',
+    ],
+    [
+      'No-COI synchronous stdin',
+      '❌',
+      "`readSync`/`readFileSync(0)` throw `NotImplementedError('fs.readSync.stdin')`: no-COI children receive push-MessagePort stdin, without a pull pipe. Async `fs.read(0)` and `process.stdin` work.",
+    ],
+    ['`truncate` / zero fill', '✅', 'Sync and promises paths'],
+    ['`mkdtemp` / `opendir`', '✅', 'Sync and promises; async directory iteration'],
+    [
+      '`createReadStream` / `createWriteStream`',
+      '⚠️',
+      "Async `Vfs.openReadable` first, cwd-resolved paths, chunked reads, write flags (`w`/`a`/`x`/`r+` subset), read-stream abort `signal` (Node event order incl. pre-abort), TypedArray/DataView chunks, string-options overload (`createReadStream(p, 'utf8')` emits strings; `createWriteStream(p, 'base64')` decodes string writes, per-write encoding overrides), destroy() on Node's write-dispatch boundary (in-flight bytes land + 'error'; pre-dispatch discards silently), pipe and `end` parity tests. Gap: `ReadStream.pipe` ignores options and always calls `dest.end()` (`{ end: false }` still ends; `pipe(process.stdout)` throws `dest.end is not a function`) — backlog `runtime-js/fs-readstream-pipe-node-options`",
+    ],
+    [
+      'Stream unsupported options',
+      '❌',
+      '`fd`, custom `fs`, write-stream `start`, write-stream `signal`, `autoClose:false`, and non-`r` read-stream flags throw `NotImplementedError` — no silent accept-and-ignore; invalid options/encoding args are Node-shaped `ERR_INVALID_ARG_TYPE`/`ERR_INVALID_ARG_VALUE`',
+    ],
+    [
+      '`fs.watch`',
+      '⚠️',
+      'Conformance covered as cooperative VFS watch subset, not OS-native watcher semantics; `null` options accepted, invalid encoding value rejected before target existence (Node order)',
+    ],
+    [
+      '`fs.watchFile` / `fs.unwatchFile`',
+      '✅',
+      'Poll-based; listener receives the same `Stats` class `statSync` returns (missing target = one zeroed call, Node ENOENT contract); uint32 `interval` validation (`ERR_OUT_OF_RANGE`, 0 valid)',
+    ],
+    [
+      '`fs.watch` buffer/exotic filename encodings',
+      '❌',
+      "`encoding:'buffer'` and non-UTF-8 filename encodings throw `NotImplementedError` only where Node would succeed (missing target stays `ENOENT`); UTF-8 string filenames are the claimed subset",
+    ],
+    [
+      '`{ bigint: true }` stats (`statSync`/`lstatSync`/`fstatSync`/promises/`watchFile`)',
+      '❌',
+      "Throws `NotImplementedError('fs.<surface>.bigint')` AFTER Node-visible errors (missing target stays `ENOENT`, bad fd stays `EBADF`); number-shaped `Stats` are never returned for a BigIntStats request",
+    ],
+    [
+      '`statfsSync`',
+      '❌',
+      "Present, every call throws: own enumerable member with Node's descriptor, so `import { statfsSync } from 'node:fs'` links (vitest 4.1.11 `cli-api`). A call throws `NotImplementedError('fs.statfsSync')` — no browser source for host filesystem statistics, never a fabricated value; `typeof` feature detection sees a function (ADR-0443). `statfs` / `promises.statfs` stay link-time misses. Parity: `modules/builtin-loud-members-link`",
+    ],
+    [
+      'Durable `fsync` / inode-like open-unlink semantics',
+      '❌',
+      'Tracked as VFS fd durability residual',
+    ],
+    [
+      'Full `FileHandle` object API',
+      '❌',
+      'Tracked separately; high-frequency fd wall covered first',
+    ],
+  ],
+  tests: [
+    '`tests/conformance/builtins/fs.test.ts`',
+    '`tests/conformance/builtins/fs-realpath-readdir.test.ts`',
+    '`tests/conformance/builtins/fs-streams.test.ts`',
+    '`tests/conformance/builtins/shared-vfs.test.ts`',
+    '`tests/conformance/builtins/fs-watch.test.ts`',
+    '`tools/node-parity-runner/cases/fs/*.case.ts`',
+  ],
+  limitations: [
+    '`O_SYNC`, `O_DSYNC`, reflink constants and unsupported numeric flag bits are intentionally absent or rejected.',
+    'VFS-level durability beyond OPFS write-through remains a separate lower-layer design.',
+  ],
+};

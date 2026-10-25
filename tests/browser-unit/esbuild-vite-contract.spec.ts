@@ -1,5 +1,5 @@
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { type Page, expect, test } from '@playwright/test';
@@ -9,10 +9,10 @@ import {
   ESBUILD_GUEST_POLICY_EXPECTATIONS,
   ESBUILD_GUEST_POLICY_ROW_IDS,
   type EsbuildContractTranscript,
-  type EsbuildGuestPolicyExpectation,
   type EsbuildGuestPolicyTranscript,
   type ModuleRow,
 } from '../../tools/shadow-registry/src/esbuild-contract-probe.ts';
+
 import {
   bootOwner,
   closeOwner,
@@ -23,6 +23,10 @@ import {
   sealedWorkbenchFixtureUrl,
   writeOwnerFile,
 } from './fixtures.ts';
+import {
+  type StockNodeOracle,
+  captureStockNodeOracle,
+} from './fixtures/esbuild-stock-node-oracle.ts';
 
 interface HostEsbuild {
   readonly version: string;
@@ -153,7 +157,9 @@ interface ContractPaths {
 }
 
 const VITE_BIN = '/scratch/node_modules/.bin/vite';
-const PUBLIC_VITE_BIN = '/node_modules/.bin/vite';
+// Guest mount of the project (ADR-0531 default `publicProjectRoot`).
+const PUBLIC_PROJECT_ROOT = '/home/project';
+const PUBLIC_VITE_BIN = `${PUBLIC_PROJECT_ROOT}/node_modules/.bin/vite`;
 const PROVEN_VITE8_WASI_RUNTIME_OVERRIDE = {
   '@napi-rs/wasm-runtime': 'npm:@napi-rs/wasm-runtime@1.1.6',
 } as const;
@@ -169,34 +175,32 @@ const DIRECT_ERROR_OPTIONS = Object.freeze({
   loader: 'ts',
   sourcefile: 'direct-error.ts',
 });
-const expectedContract = JSON.parse(
-  readFileSync(
-    fileURLToPath(
-      new URL(
-        '../../tools/shadow-registry/src/fixtures/esbuild-0.28.0-contract.json',
-        import.meta.url,
-      ),
-    ),
-    'utf8',
+const expectedRecipe = JSON.parse(
+  execFileSync(
+    process.execPath,
+    [
+      '--import',
+      'tsx',
+      '--input-type=module',
+      '-e',
+      `
+import { builtinShadowSubstitutionCatalog as catalog, builtinRecipeById } from './tools/shadow-registry/src/internal/index.ts';
+console.log(JSON.stringify({ catalog: { id: catalog.id, digest: catalog.digest }, recipe: builtinRecipeById('rifty.shadow-substitution.esbuild.wasm-node.v1', '0.28.0') }));
+`,
+    ],
+    { encoding: 'utf8' },
   ),
-) as EsbuildContractTranscript;
-const expectedPolicy = JSON.parse(
-  readFileSync(
-    fileURLToPath(
-      new URL(
-        '../../tools/shadow-registry/src/fixtures/esbuild-0.28.0-guest-policy-prerequisites.json',
-        import.meta.url,
-      ),
-    ),
-    'utf8',
-  ),
-) as EsbuildGuestPolicyTranscript;
+) as { catalog: { id: string; digest: string }; recipe: { digest: string } };
+
 const shadowRequire = createRequire(
   new URL('../../tools/shadow-registry/package.json', import.meta.url),
 );
-const hostEsbuild = shadowRequire('esbuild') as HostEsbuild;
+const hostEsbuild = shadowRequire('esbuild-wasm') as HostEsbuild;
 
-function pathsFor(token: string, fixtureRoot: '/scratch' | ''): ContractPaths {
+function pathsFor(
+  token: string,
+  fixtureRoot: '/scratch' | typeof PUBLIC_PROJECT_ROOT,
+): ContractPaths {
   const dir = `${fixtureRoot}/.rifty-esbuild-contract-${token}`;
   return {
     dir,
@@ -279,7 +283,7 @@ function devRunner(bundle: string, token: string, paths: ContractPaths): string 
   const policyRoot = `${paths.dir}/dev-policy-workspace`;
   const completion = `RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:dev\n`;
   return `${bundle}
-const runtimeRealmBeforeImport = globalThis.__rifty;
+const runtimeRealmBeforeImport = globalThis.__riftyShadowRegistry;
 const runtimeSlotPresentBeforeImport =
   runtimeRealmBeforeImport !== undefined && Reflect.has(runtimeRealmBeforeImport, 'esbuild');
 const runtimeBeforeImport = runtimeRealmBeforeImport?.esbuild;
@@ -305,6 +309,7 @@ module.exports.__promise = (async () => {
     modules,
     makeContractWorkspace(${JSON.stringify(policyRoot)}),
   );
+  await cjs.stop();
   fs.writeFileSync(
     ${JSON.stringify(paths.devResult)},
     JSON.stringify({
@@ -342,7 +347,7 @@ function moduleRunner(
   const completion = `RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:${mode}\n`;
   return `import { createRequire } from 'node:module';
 ${bundle}
-const runtimeRealmBeforeImport = globalThis.__rifty;
+const runtimeRealmBeforeImport = globalThis.__riftyShadowRegistry;
 const runtimeSlotPresentBeforeImport =
   runtimeRealmBeforeImport !== undefined && Reflect.has(runtimeRealmBeforeImport, 'esbuild');
 const runtimeBeforeImport = runtimeRealmBeforeImport?.esbuild;
@@ -363,6 +368,7 @@ const moduleRow = await RiftyEsbuildContractProbe.probeEsbuildModuleContract(
   },
   makeContractWorkspace(${JSON.stringify(root)}),
 );
+await cjs.stop();
 fs.writeFileSync(
   ${JSON.stringify(resultPath)},
   JSON.stringify({
@@ -389,7 +395,7 @@ globalThis.process.stdout.write(${JSON.stringify(completion)});
 function infoRunner(token: string, paths: ContractPaths): string {
   const completion = `RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:info\n`;
   return `const fs = require('node:fs');
-const runtimeRealm = globalThis.__rifty;
+const runtimeRealm = globalThis.__riftyShadowRegistry;
 const runtimeNotPublished =
   runtimeRealm === undefined || !Reflect.has(runtimeRealm, 'esbuild');
 const legacyBridgeAbsent = !Reflect.has(globalThis, '__riftyEsbuildTransform');
@@ -448,7 +454,7 @@ module.exports.__promise = (async () => {
       namespaceVersion: esm.version,
       defaultSame: esm.default === cjs,
       moduleExportsSame: esm['module.exports'] === cjs,
-      runtimeSame: globalThis.__rifty?.esbuild === cjs,
+      runtimeSame: globalThis.__riftyShadowRegistry?.esbuild === cjs,
       namespaceKeys,
       namespaceRelations,
       code: transformed.code,
@@ -497,7 +503,7 @@ fs.writeFileSync(
     namespaceVersion: esm.version,
     defaultSame: esm.default === cjs,
     moduleExportsSame: esm['module.exports'] === cjs,
-    runtimeSame: globalThis.__rifty?.esbuild === cjs,
+    runtimeSame: globalThis.__riftyShadowRegistry?.esbuild === cjs,
     namespaceKeys,
     namespaceRelations,
     code: transformed.code,
@@ -527,7 +533,7 @@ fs.writeFileSync(${JSON.stringify(resultPath)}, JSON.stringify(evidence));
 }
 
 function nativeMissingEsbuildEvidence(): ModuleNotFoundEvidence {
-  const missingRequire = createRequire('file:///missing.cjs');
+  const missingRequire = createRequire(`file://${PUBLIC_PROJECT_ROOT}/missing.cjs`);
   try {
     missingRequire.resolve('esbuild', { paths: [] });
   } catch (error) {
@@ -539,7 +545,9 @@ function nativeMissingEsbuildEvidence(): ModuleNotFoundEvidence {
       requireStack: record.requireStack,
     };
   }
-  throw new Error('native missing-module oracle unexpectedly resolved esbuild from /missing.cjs');
+  throw new Error(
+    `native missing-module oracle unexpectedly resolved esbuild from ${PUBLIC_PROJECT_ROOT}/missing.cjs`,
+  );
 }
 
 function transformErrorEvidence(error: unknown): TransformErrorEvidence {
@@ -605,12 +613,38 @@ function registryPackageRequests(urls: readonly string[], packageName: string): 
   });
 }
 
-function hostEsbuildWasmRequests(urls: readonly string[]): readonly string[] {
+function registryRequests(urls: readonly string[]): readonly string[] {
   return urls.filter((url) => {
     try {
-      return new URL(url).pathname.endsWith('/esbuild.wasm');
+      return new URL(url).pathname.includes('/npm-registry');
     } catch {
       return false;
+    }
+  });
+}
+
+const NON_QUICKJS_HOST_WASM_BOOT_LEDGER = ['platform:sql.js/dist/sql-wasm.wasm'] as const;
+
+function nonQuickjsHostWasmLedger(urls: readonly string[]): readonly string[] {
+  return urls.flatMap((url) => {
+    try {
+      const path = new URL(url).pathname;
+      if (path.includes('/npm-registry') || !path.endsWith('.wasm')) return [];
+      // Every Node Worker realm loads the host-owned VM engine independently.
+      // ADR-0352 owns that asset; this ledger guards esbuild WASM activation.
+      if (
+        path.endsWith(
+          '/node_modules/@jitl/quickjs-wasmfile-release-sync/dist/emscripten-module.wasm',
+        )
+      ) {
+        return [];
+      }
+      if (path.endsWith('/node_modules/sql.js/dist/sql-wasm.wasm')) {
+        return ['platform:sql.js/dist/sql-wasm.wasm'];
+      }
+      return [path];
+    } catch {
+      return [];
     }
   });
 }
@@ -628,6 +662,7 @@ function parseResult<T>(
 }
 
 async function runContractHarness(page: Page): Promise<{
+  readonly oracle: StockNodeOracle;
   readonly dev: FullEnvelope;
   readonly build: ModuleEnvelope;
   readonly preview: ModuleEnvelope;
@@ -636,8 +671,9 @@ async function runContractHarness(page: Page): Promise<{
 }> {
   const token = randomUUID();
   const fixturePaths = pathsFor(token, '/scratch');
-  const paths = pathsFor(token, '');
+  const paths = pathsFor(token, PUBLIC_PROJECT_ROOT);
   const bundle = await bundleProbe();
+  const oracle = captureStockNodeOracle(bundle, workspaceFactory());
   const original = await readOwnerFile(page, VITE_BIN);
   expect(original.ok, original.error).toBe(true);
 
@@ -754,7 +790,7 @@ async function runContractHarness(page: Page): Promise<{
       'slotEqualsCjsOuter',
       'legacyBridgeAbsent',
     ]);
-    expect(Object.keys(envelope.module)).toEqual(Object.keys(expectedContract.rows.module));
+    expect(Object.keys(envelope.module)).toEqual(Object.keys(oracle.contract.rows.module));
   }
   expect(infoEnvelope.health).toEqual({
     token,
@@ -768,6 +804,7 @@ async function runContractHarness(page: Page): Promise<{
   });
 
   return {
+    oracle,
     dev: devEnvelope,
     build: buildEnvelope,
     preview: previewEnvelope,
@@ -776,27 +813,22 @@ async function runContractHarness(page: Page): Promise<{
   };
 }
 
-function comparePolicySoft(actual: EsbuildGuestPolicyTranscript): void {
+function comparePolicySoft(
+  actual: EsbuildGuestPolicyTranscript,
+  expected: EsbuildGuestPolicyTranscript,
+): void {
   for (const rowId of ESBUILD_GUEST_POLICY_ROW_IDS) {
-    const expectations = ESBUILD_GUEST_POLICY_EXPECTATIONS[rowId] as Readonly<
-      Record<string, EsbuildGuestPolicyExpectation>
-    >;
-    for (const caseId of Object.keys(expectations)) {
-      const expectation = expectations[caseId];
+    for (const caseId of Object.keys(expected.rows[rowId])) {
       const actualCase = actual.rows[rowId][caseId];
-      expect.soft(actualCase, `${rowId}/${caseId} exists`).toBeDefined();
-      if (!expectation || !actualCase) continue;
-      if (expectation.mode === 'native-prerequisite') {
-        expect
-          .soft(actualCase, `${rowId}/${caseId} native`)
-          .toEqual(expectedPolicy.rows[rowId][caseId]);
+      if (rowId === 'gap-sync-family') {
+        expect.soft(actualCase?.outcome, `${rowId}/${caseId} named capability gap`).toMatchObject({
+          phase: 'sync-throw',
+          error: { name: 'NotImplementedError' },
+        });
       } else {
-        expect.soft(actualCase.outcome, `${rowId}/${caseId} gap`).toEqual(expectation.outcome);
-        if ('evidence' in expectation) {
-          expect
-            .soft(actualCase.evidence, `${rowId}/${caseId} evidence`)
-            .toEqual(expectation.evidence);
-        }
+        expect
+          .soft(actualCase, `${rowId}/${caseId} stock Node`)
+          .toEqual(expected.rows[rowId][caseId]);
       }
     }
   }
@@ -982,7 +1014,15 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
   test.setTimeout(240_000);
   const requests: string[] = [];
   context.on('request', (request) => requests.push(request.url()));
+  const blockedRegistryRequests: string[] = [];
+  let blockRegistry = false;
+  await context.route(/\/npm-registry(?:\/|$)/u, async (route) => {
+    if (!blockRegistry) return route.continue();
+    blockedRegistryRequests.push(route.request().url());
+    await route.abort();
+  });
   await gotoHarness(page);
+  requests.length = 0;
   const bootOptions = {
     workspaceId: 'bu-esbuild-vite-contract',
     template: 'vite' as const,
@@ -1015,14 +1055,14 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
       .toBe('rifty.shadow-substitutions/v2');
     expect
       .soft(esbuildRecipe?.substitutionId, 'real Chromium esbuild recipe identity')
-      .toBe('rifty.shadow-substitution.esbuild.v2');
+      .toBe('rifty.shadow-substitution.esbuild.wasm-node.v1');
     expect.soft(esbuildRecipe?.catalog, 'real Chromium esbuild catalog identity').toEqual({
-      id: 'rifty.shadow-substitutions.builtin.v2',
-      digest: '16169d78ba50a3ded324cee63fe9296dcb4884007e25730dfee78114730395f6',
+      id: expectedRecipe.catalog.id,
+      digest: expectedRecipe.catalog.digest,
     });
     expect
       .soft(esbuildRecipe?.recipeDigest, 'real Chromium esbuild recipe digest')
-      .toBe('b17f55f3d5905344b927c47c4b6fc9faacb122829150d603cb73a006bcbcfc28');
+      .toBe(expectedRecipe.recipe.digest);
     expect
       .soft(esbuildRecipe?.materialization, 'real Chromium esbuild materialization identity')
       .toMatchObject({
@@ -1038,7 +1078,7 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
       .toMatchObject({
         version: '0.28.0',
         bin: { esbuild: 'bin/esbuild' },
-        riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
+        riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.wasm-node.v1',
       });
 
     const contract = await runContractHarness(page);
@@ -1084,18 +1124,18 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
     for (const rowId of ESBUILD_CONTRACT_ROW_IDS) {
       expect
         .soft(contract.dev.parity.rows[rowId], `guest parity ${rowId}`)
-        .toEqual(expectedContract.rows[rowId]);
+        .toEqual(contract.oracle.contract.rows[rowId]);
     }
-    comparePolicySoft(contract.dev.policy);
+    comparePolicySoft(contract.dev.policy, contract.oracle.policy);
     for (const [mode, publication] of [
       ['dev', contract.dev.publication],
       ['build', contract.build.publication],
       ['preview', contract.preview.publication],
       ['optimize', contract.optimize.publication],
     ] as const) {
-      expect.soft(publication, `${mode} runtime published before first import`).toEqual({
-        slotPresentBeforeImport: true,
-        slotEqualsCjsOuter: true,
+      expect.soft(publication, `${mode} has no generated runtime publication`).toEqual({
+        slotPresentBeforeImport: false,
+        slotEqualsCjsOuter: false,
         legacyBridgeAbsent: true,
       });
     }
@@ -1106,7 +1146,7 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
     ] as const) {
       expect
         .soft(envelope.module, `${mode} import-first module`)
-        .toEqual(expectedContract.rows.module);
+        .toEqual(contract.oracle.contract.rows.module);
     }
 
     const optimize = await execLine(page, 'vite optimize --force');
@@ -1173,31 +1213,53 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
       distExecutionError: '',
     });
     expect(aliasRequests(requests), 'retired @esbuild/wasi-preview1 alias request').toEqual([]);
-    expect(hostEsbuildWasmRequests(requests), 'retired host esbuild.wasm asset request').toEqual(
-      [],
+    expect(nonQuickjsHostWasmLedger(requests), 'exact non-QuickJS host wasm boot ledger').toEqual(
+      NON_QUICKJS_HOST_WASM_BOOT_LEDGER,
     );
     expect(
-      registryPackageRequests(requests, 'esbuild-wasm').length > 0,
-      'Vite 7 must acquire the registry recipe asset, not host bytes',
-    ).toBe(true);
+      registryRequests(requests),
+      'instant Vite 7 must make no registry request for its restored tree',
+    ).toEqual([]);
+    const twinManifest = await readOwnerFile(
+      page,
+      '/scratch/node_modules/esbuild-wasm/package.json',
+    );
+    expect(JSON.parse(twinManifest.text)).toMatchObject({
+      name: 'esbuild-wasm',
+      version: '0.28.0',
+    });
 
     await closeOwner(page);
     ownerOpen = false;
-    const blockedRegistryRequests: string[] = [];
-    await context.route(/\/npm-registry(?:\/|$)/u, async (route) => {
-      blockedRegistryRequests.push(route.request().url());
-      await route.abort();
+    requests.length = 0;
+    // Contract RED: remove the retired out-of-tree CAS. The restored project
+    // must remain self-contained; old Pattern-2 fails the offline reopen here.
+    await page.evaluate(async () => {
+      const root = await navigator.storage.getDirectory();
+      try {
+        const rifty = await root.getDirectoryHandle('.rifty');
+        await rifty.removeEntry('shadow-assets', { recursive: true });
+      } catch (error) {
+        if (!(error instanceof DOMException) || error.name !== 'NotFoundError') throw error;
+      }
     });
+    blockRegistry = true;
+    blockedRegistryRequests.length = 0;
     await bootOwner(page, bootOptions);
     ownerOpen = true;
     const offlineBuild = await execLine(page, 'vite build');
     expect(offlineBuild.exit, offlineBuild.out).toBe(0);
+    expect(offlineBuild.out).not.toContain('npm: installing');
     const offlineDev = await execLineUntil(page, 'vite --host 127.0.0.1 --port 5174', 'Local');
     expect(offlineDev.out).toContain('Local');
+    expect(offlineDev.out).not.toContain('npm: installing');
     expect(
       blockedRegistryRequests,
-      'cold-filled Vite tree and registry asset must reopen without acquisition',
+      'restored registry twin must reopen after the retired CAS is absent',
     ).toEqual([]);
+    expect(registryRequests(requests)).toEqual([]);
+    expect(nonQuickjsHostWasmLedger(requests)).toEqual([]);
+    expect(aliasRequests(requests)).toEqual([]);
   } finally {
     if (ownerOpen) await closeOwner(page);
   }
@@ -1210,7 +1272,15 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
   test.setTimeout(240_000);
   const requests: string[] = [];
   context.on('request', (request) => requests.push(request.url()));
+  const blockedRegistryRequests: string[] = [];
+  let blockRegistry = false;
+  await context.route(/\/npm-registry(?:\/|$)/u, async (route) => {
+    if (!blockRegistry) return route.continue();
+    blockedRegistryRequests.push(route.request().url());
+    await route.abort();
+  });
   await gotoHarness(page);
+  requests.length = 0;
   const cjsResultPath = '/direct-cjs-result.json';
   const esmResultPath = '/direct-esm-result.json';
   const bootOptions = {
@@ -1223,8 +1293,8 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
       templateId: 'browser-unit:direct-esbuild',
       files: {
         '/package.json': '{"name":"direct-esbuild","private":true,"type":"module"}\n',
-        '/direct.cjs': directCjsRunner(cjsResultPath),
-        '/direct.mjs': directEsmRunner(esmResultPath),
+        '/direct.cjs': directCjsRunner(`${PUBLIC_PROJECT_ROOT}${cjsResultPath}`),
+        '/direct.mjs': directEsmRunner(`${PUBLIC_PROJECT_ROOT}${esmResultPath}`),
       },
       dependencies: { esbuild: '0.28.0' },
       firstMaterialization: { kind: 'install' },
@@ -1246,7 +1316,7 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
     const esmFile = await readOwnerFile(page, `/scratch${esmResultPath}`);
     const native = await hostEsbuild.transform(DIRECT_SOURCE, DIRECT_TRANSFORM_OPTIONS);
     const nativeNamespace = (await import(
-      pathToFileURL(shadowRequire.resolve('esbuild')).href
+      pathToFileURL(shadowRequire.resolve('esbuild-wasm')).href
     )) as Readonly<Record<string, unknown>>;
     const nativeCjs = hostEsbuild as unknown as Readonly<Record<string, unknown>>;
 
@@ -1255,15 +1325,15 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
     expect(config.ok).toBe(false);
     expect(cjsRun.exit, cjsRun.out).toBe(0);
     expect(esmRun.exit, esmRun.out).toBe(0);
-    expect(cli.exit, cli.out).toBe(1);
-    expect(cli.out).toContain('esbuild.cli');
+    expect(cli.exit, cli.out).toBe(0);
+    expect(cli.out).toContain('0.28.0');
 
     const expected: DirectEnvelope = {
       version: '0.28.0',
       namespaceVersion: '0.28.0',
       defaultSame: true,
       moduleExportsSame: true,
-      runtimeSame: true,
+      runtimeSame: false,
       namespaceKeys: Object.keys(nativeNamespace).sort(),
       namespaceRelations: namespaceRelations(nativeNamespace, nativeCjs),
       code: native.code,
@@ -1273,21 +1343,21 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
     expect(parseResult<DirectEnvelope>(cjsFile, 'direct CJS')).toEqual(expected);
     expect(parseResult<DirectEnvelope>(esmFile, 'direct ESM')).toEqual(expected);
     expect(aliasRequests(requests), 'retired @esbuild/wasi-preview1 alias request').toEqual([]);
-    expect(hostEsbuildWasmRequests(requests), 'retired host esbuild.wasm asset request').toEqual(
-      [],
+    expect(nonQuickjsHostWasmLedger(requests), 'exact non-QuickJS host wasm boot ledger').toEqual(
+      NON_QUICKJS_HOST_WASM_BOOT_LEDGER,
     );
     expect(
-      registryPackageRequests(requests, 'esbuild-wasm').length > 0,
-      'direct esbuild must acquire the registry recipe asset',
-    ).toBe(true);
+      registryRequests(requests).map((request) => new URL(request).pathname),
+      'direct esbuild cold install must make only the exact ordinary twin requests once',
+    ).toEqual([
+      '/npm-registry/esbuild-wasm',
+      '/npm-registry/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz',
+    ]);
 
     await closeOwner(page);
     ownerOpen = false;
-    const blockedRegistryRequests: string[] = [];
-    await context.route(/\/npm-registry(?:\/|$)/u, async (route) => {
-      blockedRegistryRequests.push(route.request().url());
-      await route.abort();
-    });
+    blockRegistry = true;
+    blockedRegistryRequests.length = 0;
     await bootOwner(page, bootOptions);
     ownerOpen = true;
     const offlineCjs = await execLine(page, 'node direct.cjs');
@@ -1302,7 +1372,7 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
   }
 });
 
-test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves the tree unchanged', async ({
+test('missing esbuild keeps Node MODULE_NOT_FOUND and unresolvable install leaves the tree unchanged', async ({
   context,
   page,
 }) => {
@@ -1310,6 +1380,7 @@ test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves
   const requests: string[] = [];
   context.on('request', (request) => requests.push(request.url()));
   await gotoHarness(page);
+  requests.length = 0;
   const resultPath = '/missing-esbuild-result.json';
   await bootOwner(page, {
     workspaceId: 'bu-esbuild-missing-and-unsupported',
@@ -1321,7 +1392,7 @@ test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves
       templateId: 'browser-unit:missing-esbuild',
       files: {
         '/package.json': '{"name":"missing-esbuild","private":true,"type":"commonjs"}\n',
-        '/missing.cjs': missingEsbuildRunner(resultPath),
+        '/missing.cjs': missingEsbuildRunner(`${PUBLIC_PROJECT_ROOT}${resultPath}`),
       },
       firstMaterialization: { kind: 'install' },
       entryPath: '/missing.cjs',
@@ -1340,7 +1411,7 @@ test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves
       nativeMissingEsbuildEvidence(),
     );
 
-    const unsupported = await execLine(page, 'npm install esbuild@^0.27');
+    const unsupported = await execLine(page, 'npm install esbuild@999.0.0');
     const packageJsonAfter = await readOwnerFile(page, '/scratch/package.json');
     const lockfileAfter = await readOwnerFile(page, '/scratch/package-lock.json');
     const modulesAfter = await execLine(page, 'ls node_modules');
@@ -1349,7 +1420,7 @@ test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves
     const secondEvidence = await readOwnerFile(page, `/scratch${resultPath}`);
 
     expect(unsupported.exit, unsupported.out).toBe(1);
-    expect(unsupported.out).toContain('esbuild.version');
+    expect(unsupported.out).toContain('999.0.0');
     expect(packageJsonAfter).toEqual(packageJsonBefore);
     expect(lockfileAfter).toEqual(lockfileBefore);
     expect(modulesAfter).toEqual(modulesBefore);
@@ -1359,9 +1430,11 @@ test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves
       parseResult<ModuleNotFoundEvidence>(secondEvidence, 'missing after rejected install'),
     ).toEqual(nativeMissingEsbuildEvidence());
     expect(
-      registryPackageRequests(requests, 'esbuild-wasm').length > 0,
-      'unsupported recipe must not acquire runtime assets',
-    ).toBe(false);
+      registryPackageRequests(requests, 'esbuild-wasm').filter((url) =>
+        new URL(url).pathname.endsWith('.tgz'),
+      ),
+      'unresolvable request may read metadata but must not acquire a tarball',
+    ).toEqual([]);
   } finally {
     await closeOwner(page);
   }
@@ -1462,117 +1535,135 @@ test('real Rifty install honors the npm-standard Vite 8 WASI runtime alias', asy
   }
 });
 
-test('Vite 8.0.16 base "./" build/preview stay green with no esbuild fetch or activation', async ({
-  context,
-  page,
-}) => {
-  test.setTimeout(240_000);
-  const requests: string[] = [];
-  context.on('request', (request) => requests.push(request.url()));
-  await gotoHarness(page);
-  await bootOwner(page, {
-    workspaceId: 'bu-vite8-empty-esbuild-plan',
-    persistence: 'ephemeral',
-    plan: {
-      kind: 'vite',
-      id: 'scratch',
-      starterId: 'vite8-empty-esbuild-plan',
-      templateId: 'browser-unit:vite8-empty-esbuild-plan',
-      files: {
-        '/index.html': '<div id="app"></div><script type="module" src="/src/main.js"></script>',
-        '/src/main.js': "document.getElementById('app').textContent = 'vite8';\n",
-        '/vite.config.js': DEFAULT_VITE8_CONFIG_JS.replace(
-          'export default {',
-          "export default {\n  base: './',",
-        ),
+for (const ordinary of [false, true]) {
+  test(`Vite 8.0.16 base "./" build/preview without esbuild — ${ordinary ? 'ordinary npm project' : 'optional Vite helper'}`, async ({
+    context,
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const requests: string[] = [];
+    context.on('request', (request) => requests.push(request.url()));
+    await gotoHarness(page);
+    requests.length = 0;
+    await bootOwner(page, {
+      workspaceId: 'bu-vite8-empty-esbuild-plan',
+      persistence: 'ephemeral',
+      plan: {
+        ...(ordinary
+          ? { kind: 'npm-dev-server' as const }
+          : { kind: 'vite' as const, viteVersion: '8.0.16', port: 5174 }),
+        id: 'scratch',
+        starterId: 'vite8-empty-esbuild-plan',
+        templateId: 'browser-unit:vite8-empty-esbuild-plan',
+        files: {
+          ...(ordinary
+            ? {
+                '/package.json': JSON.stringify({
+                  private: true,
+                  type: 'module',
+                  devDependencies: { vite: '8.0.16' },
+                  scripts: { dev: 'vite --host 127.0.0.1 --port 5174' },
+                  overrides: PROVEN_VITE8_WASI_RUNTIME_OVERRIDE,
+                }),
+              }
+            : {}),
+          '/index.html': '<div id="app"></div><script type="module" src="/src/main.js"></script>',
+          '/src/main.js': "document.getElementById('app').textContent = 'vite8';\n",
+          '/vite.config.js': DEFAULT_VITE8_CONFIG_JS.replace(
+            'export default {',
+            "export default {\n  base: './',",
+          ),
+        },
+        firstMaterialization: { kind: 'install' },
       },
-      viteVersion: '8.0.16',
-      firstMaterialization: { kind: 'install' },
-      port: 5174,
-    },
-  });
+    });
 
-  try {
-    const install = await execLine(page, 'npm install');
-    expect(install.exit, install.out).toBe(0);
-    expect(await installedPackageVersion(page, '@napi-rs/wasm-runtime')).toBe('1.1.6');
-    expect(await installedPackageVersion(page, '@rolldown/binding-wasm32-wasi')).toBe('1.0.3');
-    expect(await installedPackageVersion(page, '@emnapi/core')).toBe('1.10.0');
-    expect(await installedPackageVersion(page, '@emnapi/runtime')).toBe('1.10.0');
+    try {
+      const install = await execLine(page, 'npm install');
+      expect(install.exit, install.out).toBe(0);
+      expect(await installedPackageVersion(page, '@napi-rs/wasm-runtime')).toBe('1.1.6');
+      expect(await installedPackageVersion(page, '@rolldown/binding-wasm32-wasi')).toBe('1.0.3');
+      expect(await installedPackageVersion(page, '@emnapi/core')).toBe('1.10.0');
+      expect(await installedPackageVersion(page, '@emnapi/runtime')).toBe('1.10.0');
 
-    const version = await execLine(page, 'vite --version');
-    expect(version.exit, version.out).toBe(0);
-    expect(version.out).toContain('vite/8.0.16');
+      const version = await execLine(page, 'vite --version');
+      expect(version.exit, version.out).toBe(0);
+      expect(version.out).toContain('vite/8.0.16');
 
-    const build = await execLine(page, 'vite build');
-    expect(build.exit, build.out).toBe(0);
-    const distIndex = await readOwnerFile(page, '/scratch/dist/index.html');
-    expect(distIndex.ok, distIndex.error).toBe(true);
-    expect(distIndex.text).toContain('<div id="app"></div>');
-    expect(distIndex.text).not.toContain('/src/main.js');
-    expect(distIndex.text).not.toMatch(/(?:src|href)=["']\.assets\//);
-    const distJsName = /src=["']\.\/assets\/([^"']+\.js)["']/.exec(distIndex.text)?.[1];
-    expect(distJsName, distIndex.text).toBeDefined();
-    if (!distJsName) throw new Error('Vite 8 build emitted no hashed JavaScript asset');
-    const distJs = await readOwnerFile(page, `/scratch/dist/assets/${distJsName}`);
-    expect(distJs.ok, distJs.error).toBe(true);
-    expect(await executeBuiltBrowserModule(page, distJs.text)).toBe('vite8');
+      const build = await execLine(page, 'vite build');
+      expect(build.exit, build.out).toBe(0);
+      const distIndex = await readOwnerFile(page, '/scratch/dist/index.html');
+      expect(distIndex.ok, distIndex.error).toBe(true);
+      expect(distIndex.text).toContain('<div id="app"></div>');
+      expect(distIndex.text).not.toContain('/src/main.js');
+      expect(distIndex.text).not.toMatch(/(?:src|href)=["']\.assets\//);
+      const distJsName = /src=["']\.\/assets\/([^"']+\.js)["']/.exec(distIndex.text)?.[1];
+      expect(distJsName, distIndex.text).toBeDefined();
+      if (!distJsName) throw new Error('Vite 8 build emitted no hashed JavaScript asset');
+      const distJs = await readOwnerFile(page, `/scratch/dist/assets/${distJsName}`);
+      expect(distJs.ok, distJs.error).toBe(true);
+      expect(await executeBuiltBrowserModule(page, distJs.text)).toBe('vite8');
 
-    const servers = await runViteServerRenders(page);
-    expect(servers.dev.out).toContain('Local');
-    expect(servers.dev.status).toBe(200);
-    expect(servers.dev.body).toContain('<div id="app"></div>');
-    expect(servers.dev.source).toBe('node');
-    expect(servers.preview.out).toContain('Local');
-    expect(servers.preview.status).toBe(200);
-    expect(servers.preview.body).toContain('<div id="app"></div>');
-    expect(servers.preview.body).toContain(`./assets/${distJsName}`);
-    expect(servers.preview.source).toBe('preview');
-    expect(servers.preview.renderedText).toBe('vite8');
+      const servers = await runViteServerRenders(page);
+      expect(servers.dev.out).toContain('Local');
+      expect(servers.dev.status).toBe(200);
+      expect(servers.dev.body).toContain('<div id="app"></div>');
+      expect(servers.dev.source).toBe('node');
+      expect(servers.preview.out).toContain('Local');
+      expect(servers.preview.status).toBe(200);
+      expect(servers.preview.body).toContain('<div id="app"></div>');
+      expect(servers.preview.body).toContain(`./assets/${distJsName}`);
+      expect(servers.preview.source).toBe('preview');
+      expect(servers.preview.renderedText).toBe('vite8');
 
-    const original = await readOwnerFile(page, VITE_BIN);
-    expect(original.ok, original.error).toBe(true);
-    await writeOwnerFile(
-      page,
-      '/scratch/.vite8-no-esbuild.cjs',
-      `const fs = require('node:fs');
-const runtime = globalThis.__rifty;
-fs.writeFileSync('/vite8-no-esbuild.json', JSON.stringify({
+      const original = await readOwnerFile(page, VITE_BIN);
+      expect(original.ok, original.error).toBe(true);
+      await writeOwnerFile(
+        page,
+        '/scratch/.vite8-no-esbuild.cjs',
+        `const fs = require('node:fs');
+const runtime = globalThis.__riftyShadowRegistry;
+fs.writeFileSync('/home/project/vite8-no-esbuild.json', JSON.stringify({
   runtimePresent: runtime !== undefined && Reflect.has(runtime, 'esbuild'),
   legacyBridgePresent: Reflect.has(globalThis, '__riftyEsbuildTransform'),
 }));
 globalThis.process.stdout.write('RIFTY_VITE8_NO_ESBUILD\\n');
 `,
-    );
-    try {
-      await writeOwnerFile(page, VITE_BIN, launcher('/.vite8-no-esbuild.cjs'));
-      const probe = await execLine(page, 'vite build');
-      expect(probe.exit, probe.out).toBe(0);
-      expect(probe.out).toContain('RIFTY_VITE8_NO_ESBUILD');
-    } finally {
-      await writeOwnerFile(page, VITE_BIN, original.text);
-    }
+      );
+      try {
+        await writeOwnerFile(
+          page,
+          VITE_BIN,
+          launcher(`${PUBLIC_PROJECT_ROOT}/.vite8-no-esbuild.cjs`),
+        );
+        const probe = await execLine(page, 'vite build');
+        expect(probe.exit, probe.out).toBe(0);
+        expect(probe.out).toContain('RIFTY_VITE8_NO_ESBUILD');
+      } finally {
+        await writeOwnerFile(page, VITE_BIN, original.text);
+      }
 
-    const probeFile = await readOwnerFile(page, '/scratch/vite8-no-esbuild.json');
-    expect(
-      parseResult<{ runtimePresent: boolean; legacyBridgePresent: boolean }>(
-        probeFile,
-        'Vite 8 empty adapter plan',
-      ),
-    ).toEqual({
-      runtimePresent: false,
-      legacyBridgePresent: false,
-    });
-    expect((await readOwnerFile(page, '/scratch/node_modules/esbuild/package.json')).ok).toBe(
-      false,
-    );
-    expect(
-      registryPackageRequests(requests, 'esbuild'),
-      'Vite 8 cold install must not fetch any esbuild package or asset',
-    ).toEqual([]);
-    expect(aliasRequests(requests)).toEqual([]);
-    expect(hostEsbuildWasmRequests(requests)).toEqual([]);
-  } finally {
-    await closeOwner(page);
-  }
-});
+      const probeFile = await readOwnerFile(page, '/scratch/vite8-no-esbuild.json');
+      expect(
+        parseResult<{ runtimePresent: boolean; legacyBridgePresent: boolean }>(
+          probeFile,
+          'Vite 8 empty adapter plan',
+        ),
+      ).toEqual({
+        runtimePresent: false,
+        legacyBridgePresent: false,
+      });
+      expect((await readOwnerFile(page, '/scratch/node_modules/esbuild/package.json')).ok).toBe(
+        false,
+      );
+      expect(
+        registryPackageRequests(requests, 'esbuild'),
+        'Vite 8 cold install must not fetch any esbuild package or asset',
+      ).toEqual([]);
+      expect(aliasRequests(requests)).toEqual([]);
+      expect(nonQuickjsHostWasmLedger(requests)).toEqual(NON_QUICKJS_HOST_WASM_BOOT_LEDGER);
+    } finally {
+      await closeOwner(page);
+    }
+  });
+}

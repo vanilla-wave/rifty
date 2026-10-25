@@ -10,7 +10,7 @@ import type {
   ProjectVfsAppliedMutation,
 } from './project-vfs-protocol.ts';
 
-const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
 const OWNER = 'owner-a';
 const encoder = new TextEncoder();
 
@@ -226,7 +226,7 @@ describe('ProjectContentTransport', () => {
     const content = await h.transport.ready;
     const initial = content.files.snapshot();
     expect(initial).toMatchObject({
-      excludedDirectoryNames: ['node_modules', '.git', '.vite', 'dist'],
+      excludedDirectoryNames: ['node_modules', '.git', 'dist'],
       entries: [
         { path: '/src', kind: 'dir', size: 0 },
         { path: '/src/main.ts', kind: 'file', size: 7 },

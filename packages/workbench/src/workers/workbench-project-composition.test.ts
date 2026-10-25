@@ -10,7 +10,7 @@ import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import { createWorkbenchProjectComposition } from './workbench-project-composition.ts';
 import { createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
 
-const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
 
 function realProjectVfs() {
   const { authority, appliedMutations } = createOwnerVfsAuthorityComposition(new MemoryFsSync(), {

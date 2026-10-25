@@ -1,0 +1,82 @@
+{
+  "bugs": { "url": "https://github.com/SuperchupuDev/tinyglobby/issues" },
+  "dist": {
+    "shasum": "562a9a6c9eb2b3b123d39719f9af5bb44fcd7631",
+    "tarball": "https://registry.npmjs.org/tinyglobby/-/tinyglobby-0.2.17.tgz",
+    "fileCount": 7,
+    "integrity": "sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==",
+    "signatures": [
+      {
+        "sig": "MEQCIBb1NW/DoA5iHpC4dnAW9CHCT0c0lMzS25CHkJqC1tWbAiB00yQG3ibgdu0HOIG+aspYfvxV64FhOyM5JgsbphDGhg==",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/tinyglobby@0.2.17",
+      "provenance": { "predicateType": "https://slsa.dev/provenance/v1" }
+    },
+    "unpackedSize": 39288
+  },
+  "main": "./dist/index.cjs",
+  "name": "tinyglobby",
+  "type": "module",
+  "types": "./dist/index.d.cts",
+  "author": "Superchupu",
+  "module": "./dist/index.mjs",
+  "engines": { "node": ">=12.0.0" },
+  "exports": {
+    ".": { "import": "./dist/index.mjs", "require": "./dist/index.cjs" },
+    "./package.json": "./package.json"
+  },
+  "funding": { "url": "https://github.com/sponsors/SuperchupuDev" },
+  "license": "MIT",
+  "scripts": {
+    "lint": "biome lint",
+    "test": "node --test \"test/**/*.ts\"",
+    "bench": "node benchmark/bench.ts",
+    "build": "tsdown",
+    "check": "biome check",
+    "format": "biome format --write",
+    "check:fix": "biome check --write --unsafe",
+    "test:only": "node --test --test-only \"test/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "bench:setup": "node benchmark/setup.ts",
+    "test:coverage": "node --test --experimental-test-coverage \"test/**/*.ts\""
+  },
+  "_npmUser": {
+    "name": "GitHub Actions",
+    "email": "npm-oidc-no-reply@github.com",
+    "approver": { "name": "superchupu", "email": "madeline@superchupu.dev" },
+    "trustedPublisher": {
+      "id": "github",
+      "oidcConfigId": "oidc:70503e67-7378-4044-bee1-f2c589ce7484"
+    }
+  },
+  "homepage": "https://superchupu.dev/tinyglobby",
+  "keywords": ["glob", "patterns", "tiny", "fast"],
+  "repository": { "url": "git+https://github.com/SuperchupuDev/tinyglobby.git", "type": "git" },
+  "description": "A fast and minimal alternative to globby and fast-glob",
+  "directories": {},
+  "maintainers": [{ "name": "superchupu", "email": "madeline@superchupu.dev" }],
+  "sideEffects": false,
+  "_nodeVersion": "26.2.0",
+  "dependencies": { "fdir": "^6.5.0", "picomatch": "^4.0.4" },
+  "_hasShrinkwrap": false,
+  "devDependencies": {
+    "glob": "^13.0.6",
+    "tsdown": "^0.22.1",
+    "fast-glob": "^3.3.3",
+    "tinybench": "^6.0.2",
+    "fs-fixture": "^2.14.0",
+    "typescript": "^6.0.3",
+    "@types/node": "^25.9.1",
+    "@biomejs/biome": "^2.4.16",
+    "@types/picomatch": "^4.0.3"
+  },
+  "_npmOperationalInternal": {
+    "tmp": "tmp/tinyglobby_0.2.17_1780171041629_0.768168646864007",
+    "host": "s3://npm-registry-packages-npm-production"
+  },
+  "_id": "tinyglobby@0.2.17",
+  "version": "0.2.17"
+}

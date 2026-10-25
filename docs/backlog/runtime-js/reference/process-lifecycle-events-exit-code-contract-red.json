@@ -1,0 +1,370 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED PASS (advisory concerns only): oracle facts re-probed on host Node v24.16.0; every RED fails at HEAD for the stated reason (unit x3, no-COI x1, parity child 12/12 + eval 9/9, browser-unit 36/36); no implementation in the diff. Run the owed DEC-2 pass before IMPLEMENT; merge needs GREEN + independent Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md @ 6fdaaedf149044f3921eeb845a37541f87879aa3 (branch vg/u7), BASE 92215e3b4f94bd20801f5d57b5e109e83f809d48; goal docs/backlog/epics/vitest-run-in-browser/goal.md I3 (line 106); ADR-0445; evidence docs/backlog/runtime-js/reference/process-lifecycle-events-exit-code-evidence.md; oracle host Node v24.16.0 darwin arm64",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:102",
+      "summary": "worker_threads.Worker counted handle; map item 8, not landed."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:106",
+      "summary": "process lifecycle handlers / 'exit' / exit() honours exitCode; this unit (map item 7), GREEN + Final+GREEN pending; no-COI handler dispatch left ⚠️ unclaimed."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:110",
+      "summary": "vitest run end-to-end; map items 9-12."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "--pool=threads parity; map items 8, 10-12."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:119",
+      "summary": "vm columnOffset wall; map item 10."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:124",
+      "summary": "vitest.md compat page; map item 12."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: real Chromium supervised children match live Node L| rows + status (+ fatal marker) for every case of Parity 1-12 on node <file>, node -e, .bin, fork, worker thread, execSync",
+      "source": "acceptance",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:15-59; tests/browser-unit/fixtures/process-lifecycle-cases.ts:44-306 (RED @ HEAD: LIFECYCLE-MISMATCHES 36/36)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: forked program children in parity runner match Node rows, status, loud flag for exitCode/exit()/exit/nextTick rows (Parity 1, 6-8, 10)",
+      "source": "acceptance",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/exit-lifecycle-child.case.ts:13-81 (RED @ HEAD: 12/12 files differ)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: physical node -e/-p children match Node stdout/stderr/frames/status for Parity 1 (nextTick), 6, 7, 8 incl. -p print before natural exit",
+      "source": "acceptance",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/eval-exit-lifecycle.case.ts:15-34 (RED @ HEAD: all 9 invocations differ, print-before-exit stdout timer\\n42\\n)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: exit() after first terminal re-emits nothing, one control:self-exit with first code; exit(2) inside exit listener runs listeners once, requests only 2",
+      "source": "acceptance",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:51-78 (RED: expected [] to deeply equal [3]; toThrow(exitSignal(2)) got process.exit(1))",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: rejection recorded one host task after first zero-ref sample rejects the drain, never settles clean first",
+      "source": "acceptance",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/event-loop-keepalive-late-rejection.fault.test.ts:15-36 (RED: expected 'resolved' to be 'rejected:late-rejection')",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: no-COI worker, two rounds natural-exit.cjs / exit-no-arg.cjs match Node O3 rows and status",
+      "source": "acceptance",
+      "trace": "ADR-0445",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-command.test.ts:203-219 (RED: stdout L|body number, no L|exit row)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: compat process.md rows (handler dispatch, exit event, exit()/exitCode, late-rejection drain replacing the ⚠️ row; ❌/⚠️ per Out-of-scope gap) + runtime-js/workbench CHANGELOG lines",
+      "source": "acceptance",
+      "trace": "ADR-0445",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md:65 (docs deliverable, verified at Final+GREEN; current ⚠️ row docs/public/compat/process.md:19)",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: throw from timer, setImmediate, fs callback, nextTick, CJS entry reaches uncaughtException (err, uncaughtException); continues, exit 0, exit event 0",
+      "source": "acceptance",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:46-73,118-124,225-228; exit-lifecycle-child.case.ts:39; eval-exit-lifecycle.case.ts:30",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: ESM entry throw reaches uncaughtException with origin 'unhandledRejection', not an installed unhandledRejection listener",
+      "source": "acceptance",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:125-131",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: uncaughtExceptionMonitor before uncaughtException with same (err, origin)",
+      "source": "acceptance",
+      "trace": "ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:91-96",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: unhandledRejection listeners get (reason, promise) with identity; continues, also when rejection is last pending work",
+      "source": "acceptance",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:98-110,229-232",
+      "note": ""
+    },
+    {
+      "row": "Parity 5: no unhandledRejection listener -> uncaughtException (reason, unhandledRejection); UnhandledPromiseRejection wrapping + V8 rendering for 13 reason kinds; own-stack object and thrown string raw",
+      "source": "acceptance",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:74-90,111-117",
+      "note": ""
+    },
+    {
+      "row": "Parity 6: exitCode reads undefined until assigned (also in natural exit listener); '3' -> number 3; null/undefined reset",
+      "source": "acceptance",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:135-156; exit-lifecycle-child.case.ts:14-24",
+      "note": ""
+    },
+    {
+      "row": "Parity 7: exit() without argument uses exitCode (3; cac startup-error -> 1); exit(undefined) after exitCode=3 -> 0; exit(5) with exitCode=9 -> exit 5, status 5",
+      "source": "acceptance",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:157-165,233-236,243-256",
+      "note": ""
+    },
+    {
+      "row": "Parity 8: 'exit' once with exitCode ?? 0 at natural exit after timers (and after -p print); listener exitCode=5 sets status; exit(2) in listener no re-emit, skips later, status 2; timer in exit never runs",
+      "source": "acceptance",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:135-144,166-185; eval-exit-lifecycle.case.ts:29",
+      "note": ""
+    },
+    {
+      "row": "Parity 9: process.exit() inside unhandledRejection/uncaughtException listener exits with that code after one exit event",
+      "source": "acceptance",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:186-199",
+      "note": ""
+    },
+    {
+      "row": "Parity 10: no listener: throw (timer, nextTick, entry) or rejection -> error on stderr, 'exit' 1 with exitCode 1, status 1",
+      "source": "acceptance",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:202-215,237-241; exit-lifecycle-child.case.ts:43",
+      "note": ""
+    },
+    {
+      "row": "Parity 11: throw from uncaughtException listener -> stderr, status 7, no 'exit'",
+      "source": "acceptance",
+      "trace": "ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:216-222",
+      "note": ""
+    },
+    {
+      "row": "Parity 12: launch owners .bin, fork child rows + close code, worker thread handler rows + exit code, execSync child rows through parent match Node",
+      "source": "acceptance",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:242-305",
+      "note": ""
+    },
+    {
+      "row": "Fault: zero-ref drain vs later Chromium unhandledrejection task -> listener runs, exit 0; no listener stderr + exit 1; never silent exit 0",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/event-loop-keepalive-late-rejection.fault.test.ts:15; tests/browser-unit/fixtures/process-lifecycle-cases.ts:105-110,205-207,229-232",
+      "note": ""
+    },
+    {
+      "row": "Fault: exit() again after the kernel exit request -> no second 'exit', no second request, first status",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:51-62; tests/browser-unit/fixtures/process-lifecycle-cases.ts:178-185; exit-lifecycle-child.case.ts:34; eval-exit-lifecycle.case.ts:26-28",
+      "note": ""
+    },
+    {
+      "row": "Fault: exit() re-entered inside 'exit' listener -> not re-emitted, later listeners skipped, status = re-entrant code",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:64-78; tests/browser-unit/fixtures/process-lifecycle-cases.ts:171-177",
+      "note": ""
+    },
+    {
+      "row": "Fault: listener-handled error vs Worker default error report -> handled canceled, continues, 0; unhandled report unchanged, stderr + 1",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:46-52,202-204,258-293",
+      "note": ""
+    },
+    {
+      "row": "Fault: throwing uncaughtException listener -> status 7 + stderr, no 'exit', never re-dispatched",
+      "source": "fault-matrix",
+      "trace": "ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:216-222",
+      "note": ""
+    },
+    {
+      "row": "Fault: RIFTY_PROCESS_EXIT thrown out of an error listener -> never dispatched as error; status = that exit() code, one 'exit'",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:186-199",
+      "note": ""
+    },
+    {
+      "row": "Fault: sibling-drift across launch owners (program, eval, .bin, fork, worker thread, execSync, no-COI) -> same rows",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:15-59; exit-lifecycle-child.case.ts; eval-exit-lifecycle.case.ts; no-coi-project-command.test.ts:203",
+      "note": ""
+    },
+    {
+      "row": "Fault: torn-state no-COI per-invocation exit state -> each invocation starts unset/not exiting; one 'exit' per invocation",
+      "source": "fault-matrix",
+      "trace": "ADR-0445",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-command.test.ts:203-219",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md:59; tests/browser-unit/fixtures/process-lifecycle-cases.ts:237-241; tests/browser-unit/owner-node-process-lifecycle.spec.ts:51",
+          "evidence": "RIFTY_PLAYGROUND_PORT=5457 npx playwright test --config playwright.browser-unit.config.ts tests/browser-unit/owner-node-process-lifecycle.spec.ts @ 6fdaaedf1 -> rifty out for eval-fatal-timer: \"[eval]:1\\nprocess.on('exit',c=>console.log('L|exit',c,process.exitCode));setTimeout(()=>{throw new Error('FATAL-EVAL')},0)\\n   ^\\n\\nError: FATAL-EVAL\" (log /tmp/vgoal/u7/cr1-bu.log:1084-1090)",
+          "summary": "eval-fatal-timer's fatal marker is satisfied by the eval source-frame echo alone ([eval]:1 line contains 'FATAL-EVAL'), so 'shows its marker' does not by itself prove the error message line for eval; program fatal cases print no source frame today. Advisory: the clause as declared (marker present) is met; consider a marker absent from the source (e.g. message built at runtime).",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md:29-35; evidence §O2",
+          "evidence": "",
+          "summary": "ADR-0445 rule 1 names the eval lifecycle's entry catch as a dispatch caller, and evidence §O2 records Node for an eval entry throw with a handler (caught ev uncaughtException, after, exit 0), but no carrier exercises an eval entry throw (eval-handler throws from a timer). Not one of the unit's declared parity rows; add an eval entry-throw case or state it Out of scope.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md:52-62",
+          "evidence": "node v24.16.0: node -p \"process.on('exit',c=>console.log('EXIT',c));setTimeout(()=>process.exit(3),5);42\" -> \"EXIT 3\\n42\" [exit 3]; lib/internal/process/execution.js runScriptInContext: process.on('exit', printResult); process.once('beforeExit', () => { printResult(); process.off('exit', printResult); })",
+          "summary": "node -p with an explicit exit(): Node prints the -p result as an 'exit' listener AFTER user 'exit' listeners (natural exit prints at beforeExit). ADR-0445 rule 5 adds 'exit' emission to this path, but the contract neither claims nor lists it Out of scope.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md:118",
+          "evidence": "",
+          "summary": "ADR-0445 partially supersedes ADR-0152 §1/§3 and extends ADR-0157 §1; the contract records the DEC-2 decision-subagent pass as owed (worker at depth 1 of 1). Run and record it before IMPLEMENT (DEC-2 is not a REV-2 blocker rule).",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md:111; docs/backlog/epics/vitest-run-in-browser/goal.md:106-109",
+          "evidence": "",
+          "summary": "Goal I3 is phrased launch-independent; the unit leaves handler dispatch on no-COI in-process project commands unclaimed (compat ⚠️). Fine for this unit, but goal closure (item 12) must state whether no-COI is on the goal's claim surface so I3's end-to-end proof is not over-read.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md:19-20",
+          "evidence": "grep -n exit packages/runtime-js/src/builtins/process.ts @ 6fdaaedf1 -> 665: exit = (code: unknown = 0): never; npm pack vitest@4.1.11 -> cac.uFydS1Z4.js:2347: if (process.exitCode == null) process.exitCode = 1;",
+          "summary": "Context cites process.ts:750 exit(code = 0) and process.ts:122 from main 51440931a; at BASE these are process.ts:665 and :123. Goal I3 comment still says cac.js:2348 (actual 2347, unit frontmatter corrected).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:294-300",
+          "evidence": "",
+          "summary": "exec-sync-child oracle: the parent spawns process.execPath but its execSync('node exec-child.cjs') resolves node from PATH, so a host whose PATH node differs from execPath mixes versions in one oracle row.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md:122; packages/runtime-js/package.json:32,89-92",
+          "evidence": "",
+          "summary": "IMPLEMENT changes NodeProcess.exitCode from number to number|undefined on the published ./builtins/process subpath and migrates existing keepalive tests that expect first-sample settle; both land under PR-4 review at Final+GREEN — name the d.ts change in the runtime-js CHANGELOG (Acceptance 7) and keep the migrated assertions' intent (settle happens, one sample later).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:47-53; tests/browser-unit/fixtures/process-lifecycle-cases.ts:309-315",
+          "evidence": "npx tsx rows.mts (lifecycleRows('Uncaught Error: boom (/timer-handler.cjs:5)\\nL|caught boom uncaughtException\\n...') vs same without the diagnostic line) -> true",
+          "summary": "Handled-error cases compare only L| rows + status; Node prints nothing on a handled error, but a dispatch that also emits an 'Uncaught Error' diagnostic passes (lifecycleRows drops it). Hardening beyond the declared clauses (Parity 1/4 state rows + status).",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "6fdaaedf149044f3921eeb845a37541f87879aa3"
+}

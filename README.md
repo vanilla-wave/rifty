@@ -2,7 +2,7 @@
 
 Browser-based, Node-compatible runtime + WASI runner — a WebContainers-like system built from scratch. Run `Express`, `npm install`, a dev server, even WASI binaries, **inside a browser tab**. Pet project; goal is deep understanding of how these systems work, plus a practical "Express + npm install in the browser".
 
-> **Status:** active milestone M11 (Consumer Ready). APIs are `0.x` and may move. See [`docs/ROADMAP.md`](./docs/ROADMAP.md), [`docs/adr/`](./docs/adr/), [`docs/public/compat/`](./docs/public/compat/).
+> **Status:** active milestone M11 (Consumer Ready). APIs are `0.x` and may move. See [`docs/ROADMAP.md`](./docs/ROADMAP.md), [`docs/adr/`](./docs/adr/), [`docs/public/compat/`](./docs/public/compat/) (browser support matrix: [`browsers.md`](./docs/public/compat/browsers.md)).
 
 > **Position:** open, self-hostable, browser-local runtime infrastructure. See [`docs/public/open-runtime-position.md`](./docs/public/open-runtime-position.md) and the [`trust model`](./docs/public/trust-model.md); compatibility claims live in [`docs/public/compat/`](./docs/public/compat/).
 
@@ -10,7 +10,7 @@ Live site: [`rifty.dev`](https://rifty.dev). Public sandbox: [`play.rifty.dev`](
 
 ## Packages
 
-**`npm i @riftydev/sdk`** is the umbrella front door ([`packages/rifty`](./packages/rifty)): framework-free `createSandbox()` plus every layer below on a subpath (`@riftydev/sdk/vfs`, `@riftydev/sdk/runtime`, `@riftydev/sdk/net`, …). Each layer is also its own package. All are ESM, ship `.d.ts`, released in lockstep under the `@riftydev` scope.
+**`npm i @riftydev/sdk`** is the umbrella front door ([`packages/rifty`](./packages/rifty)): framework-free `createSandbox()` plus twelve runtime layers on subpaths (`@riftydev/sdk/vfs`, `@riftydev/sdk/runtime`, `@riftydev/sdk/net`, …). Each layer is also its own package; `agent`, `workbench`, `shadow-registry` and `eddy` ship standalone. Seventeen names, all ESM, ship `.d.ts`, released in lockstep under the `@riftydev` scope ([publishing](./docs/public/publishing.md)).
 
 | Package | What it is | Runs in |
 |---|---|---|
@@ -25,7 +25,12 @@ Live site: [`rifty.dev`](https://rifty.dev). Public sandbox: [`play.rifty.dev`](
 | [`@riftydev/shell`](./packages/shell) | Tiny bash-flavoured shell over `@riftydev/vfs` | anywhere |
 | [`@riftydev/terminal`](./packages/terminal) | xterm.js terminal wrapper | browser |
 | [`@riftydev/service-worker`](./packages/service-worker) | Service Worker preview/HMR routing bridge | browser |
+| [`@riftydev/git`](./packages/git) | git over the VFS (isomorphic-git); smart-HTTP via a CORS proxy | anywhere |
+| [`@riftydev/ts-language-service`](./packages/ts-language-service) | In-browser `ts.LanguageService` over the VFS | anywhere |
+| [`@riftydev/agent`](./packages/agent) | Headless Pi coding-agent loop over public project hosts | browser |
+| [`@riftydev/workbench`](./packages/workbench) | Framework-free project / session / run / preview API (owner Worker) | browser + Worker |
 | [`@riftydev/shadow-registry`](./tools/shadow-registry) | Data tables of in-browser npm substitutions | anywhere |
+| [`@riftydev/eddy`](./services/eddy) | Opt-in fast-install resolver service (ADR-0182) | Node service |
 
 ```bash
 npm install @riftydev/sdk                 # everything + createSandbox() (the front door)
@@ -56,7 +61,7 @@ More runnable examples in [`examples/standalone-usage`](./examples/standalone-us
 
 ## Consuming rifty in your own app — read this first
 
-The leaf packages (`@riftydev/io`, `@riftydev/vfs`, `@riftydev/npm-client`, `@riftydev/shell`, `@riftydev/shadow-registry`) are plain isomorphic JS and need nothing special. The **runtime** (`runtime-js`, `runtime-wasi`, `kernel`, `service-worker`) has hard browser prerequisites — without them it will not boot:
+The leaf packages (`@riftydev/io`, `@riftydev/vfs`, `@riftydev/npm-client`, `@riftydev/shell`, `@riftydev/shadow-registry`) are plain isomorphic JS and need nothing special. The **runtime** (`runtime-js`, `runtime-wasi`, `kernel`, `service-worker`) has hard browser prerequisites (versions per mode: [browser support matrix](./docs/public/compat/browsers.md)) — without them it will not boot:
 
 1. **Cross-origin isolation is mandatory** (for `SharedArrayBuffer` + `Atomics.wait`, used by synchronous IPC and sync fs). Serve with:
 
@@ -66,7 +71,7 @@ The leaf packages (`@riftydev/io`, `@riftydev/vfs`, `@riftydev/npm-client`, `@ri
    Cross-Origin-Resource-Policy: cross-origin
    ```
 
-   Then `globalThis.crossOriginIsolated === true`. Header-less static hosts (e.g. **GitHub Pages) do not work**; Netlify / Cloudflare Pages / Vercel can work when configured with equivalent headers. Copy-paste configs: [`netlify.toml`](./netlify.toml), [`apps/playground/public/_headers`](./apps/playground/public/_headers), and the dev-server `headers` in [`apps/playground/vite.config.ts`](./apps/playground/vite.config.ts). If you embed rifty in an iframe or app browser, the parent page must also be cross-origin isolated and the iframe must include `allow="cross-origin-isolated"`; otherwise open rifty as a top-level page.
+   Then `globalThis.crossOriginIsolated === true`. Header-less static hosts (e.g. **GitHub Pages) do not serve this tier**; Netlify / Cloudflare Pages / Vercel can work when configured with equivalent headers. The only thing that boots without isolation is the explicit shared-memory-free tier, `createSandbox({ requireCrossOriginIsolation: false })`: eval and files work, `execSync` throws a named `NotImplementedError`, child processes run same-realm (the no-COI install/build toolchain, ADR-0375, is on `main` and unreleased). Copy-paste configs: [`netlify.toml`](./netlify.toml), [`apps/playground/public/_headers`](./apps/playground/public/_headers), and the dev-server `headers` in [`apps/playground/vite.config.ts`](./apps/playground/vite.config.ts). If you embed rifty in an iframe or app browser, the parent page must also be cross-origin isolated and the iframe must include `allow="cross-origin-isolated"`; otherwise open rifty as a top-level page.
 
 2. **A bundler that emits module Worker entries.** With Vite, import each entry
    with `?worker&url`, pass the returned URL to rifty, and set
@@ -95,10 +100,9 @@ import runtimeWorkerUrl from '@riftydev/runtime-js/worker?worker&url';
 import { checkCapabilities, createSandbox } from '@riftydev/sdk';
 
 async function main(): Promise<void> {
+  // Passive presence only; createSandbox still reports actual startup failures.
   const caps = checkCapabilities();
-  if (!caps.sufficient || !caps.capabilities.crossOriginIsolated) {
-    throw new Error(caps.summary);
-  }
+  if (!caps.sufficient) throw new Error(caps.summary);
 
   const sandbox = await createSandbox({
     workerUrl: runtimeWorkerUrl,
@@ -114,7 +118,11 @@ async function main(): Promise<void> {
 void main();
 ```
 
-Target `es2022`; **Chrome-first** (cross-browser e2e infra exists, see [`docs/public/compat/`](./docs/public/compat/)).
+For active checks before COI Workbench or non-COI toolchain opening, use
+[`checkSandboxSupport`](./docs/public/sandbox-support.md) from `@riftydev/workbench`.
+It probes real browser operations and reports each composition separately.
+
+**Browser support** (ADR-0469): target `es2022`; Chromium supported (gating CI); Firefox verified and WebKit capability-verified, both record-only (manual dispatch, non-gating). Versions, modes, persistence and traffic share: [`docs/public/compat/browsers.md`](./docs/public/compat/browsers.md).
 
 ## Develop (monorepo)
 

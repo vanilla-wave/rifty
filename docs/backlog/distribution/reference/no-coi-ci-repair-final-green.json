@@ -1,0 +1,174 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: reproduced CI regressions and retained invocation rejection repaired at reviewed SHA; full no-COI, packed consumer and pr:check GREEN. No residual product obligations; push/CI delivery remains with driver.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "39f9fc0091b654c83d5e0f42b1ff73e29aa81715",
+  "unit_goal_source": "PR #332 observed CI repair against BASE 0f8283931149d030339eeb8091de050990546ccf; docs/backlog/distribution/reference/no-coi-ci-repair-evidence.md. Prior accepted whole-goal authority and two ready contracts at 4e25f5a9384150ebace4f30953fe89a0aea6e715, now closed. Prior unchanged coverage carried from no-coi-self-hosted-project-final-green.json; its missed baseline violations are independently re-reviewed here under ADR-0375/0376/0377, ADR-0417/0420/0423. Raw CI /tmp/rifty-332-ci-no-coi-failure.log and isolated /tmp/rifty-332-ci-regressions-red.log both contain the three actual failures: missing exit, identity-based Vite decoy refusal, prepared-anchor drift. /tmp/rifty-332-packed-generic-entry.log fails the next build after invalid-lock failure and reapply, at proof line 114; /tmp/rifty-332-invocation-error-red.log is the focused missing take-rejection API RED. GREEN logs read: /tmp/rifty-332-ci-regressions-green.log (3), /tmp/rifty-332-ci-repair-unit-green.log (65), /tmp/rifty-332-terminal-cause-green.log (7), /tmp/rifty-332-full-no-coi-repair.log (83), /tmp/rifty-332-packed-recovery-green.log (complete producer/SDK/copied Worker Vite journey plus unchanged Workbench/SQLite/scoped preview), /tmp/rifty-332-ci-repair-pr-check.log (25/25). No duplicated heavy suites. PR-4 baseline comparison: Vite8 fixture changes only its exact capture anchor to actual prepared source; retains real version/provenance, no-dist and named threaded-WASM assertions. Other native regression criteria unchanged; terminal-cause and rejection-ownership tests add discrimination. Compiler bytes independently measured 10022694 and sha256 1019cc168ee1faff57b533dd3dc89ddb597dd5f2f2e57b2f1e9ae9417e0f5e6a; size and all negative payload constraints retained. Runtime implementation uses source-selected existing CLI hook, generic adapter-only preparation, existing first-rejection/refcount owner and existing terminal frame. No second error ledger, name dispatch or timing heuristic.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Generic run/start follows installed bytes, no Vite name/version dispatch",
+      "source": "acceptance",
+      "trace": "ADR-0375+ADR-0423",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:1747; tests/no-coi/no-coi-dev-hmr.spec.ts:368",
+      "note": ""
+    },
+    {
+      "row": "Real prepared Vite CLI promises remain tracked; no false successful build",
+      "source": "acceptance",
+      "trace": "I3+I4+ADR-0420+ADR-0423",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:63; tests/integration/no-coi-snapshot-browser-proof.mjs:93",
+      "note": ""
+    },
+    {
+      "row": "Recorded invocation failure reported once; same Worker can explicitly reapply and build",
+      "source": "acceptance",
+      "trace": "I4+I6+ADR-0423",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:93; packages/runtime-js/src/internal/event-loop-keepalive.test.ts:25",
+      "note": ""
+    },
+    {
+      "row": "Taking first rejection retains live references and future errors",
+      "source": "fault-matrix",
+      "trace": "ADR-0423",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/event-loop-keepalive.test.ts:25",
+      "note": ""
+    },
+    {
+      "row": "Fatal resident start settles cause and exit atomically before caller resumes",
+      "source": "fault-matrix",
+      "trace": "ADR-0377+ADR-0423",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/host-startup.fault.test.ts:87; tests/no-coi/no-coi-dev-hmr.spec.ts:368",
+      "note": ""
+    },
+    {
+      "row": "Busy resident rejection remains nonfatal, terminal duplicates cannot revive peer",
+      "source": "fault-matrix",
+      "trace": "ADR-0376+ADR-0377+ADR-0423",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-dev-hmr.spec.ts:866; packages/runtime-js/src/host-startup.fault.test.ts:87",
+      "note": ""
+    },
+    {
+      "row": "Vite 8 executes actual bytes and fails at named shared-memory boundary; no fake identity refusal",
+      "source": "acceptance",
+      "trace": "ADR-0375+ADR-0423",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2420",
+      "note": ""
+    },
+    {
+      "row": "SDK startBin preserves concrete failure code/message and one exit event",
+      "source": "public-api",
+      "trace": "ADR-0377+ADR-0423",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/host-startup.fault.test.ts:87; tests/no-coi/no-coi-dev-hmr.spec.ts:368",
+      "note": ""
+    },
+    {
+      "row": "Compiler output retains exact admitted bytes/hash and unchanged retired-payload rejection",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:96; tools/checks/esbuild-legacy-retirement.test.ts:51",
+      "note": ""
+    },
+    {
+      "row": "I1 unchanged obligation carried from prior whole-goal review, refreshed by full native/packed GREEN",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:5; tests/no-coi/no-coi-configured-startup.spec.ts:39",
+      "note": ""
+    },
+    {
+      "row": "I2 unchanged obligation carried from prior whole-goal review, refreshed by full native/packed GREEN",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:136; packages/runtime-js/src/host-startup.fault.test.ts:125",
+      "note": ""
+    },
+    {
+      "row": "I3 unchanged obligation carried from prior whole-goal review, refreshed by full native/packed GREEN",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:7",
+      "note": ""
+    },
+    {
+      "row": "I4 unchanged obligation carried from prior whole-goal review, refreshed by full native/packed GREEN",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-saved-access.spec.ts:4; tests/integration/no-coi-snapshot-browser-proof.mjs:93",
+      "note": ""
+    },
+    {
+      "row": "I5 unchanged obligation carried from prior whole-goal review, refreshed by full native/packed GREEN",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:149; tests/integration/no-coi-snapshot-browser-proof.mjs:82",
+      "note": ""
+    },
+    {
+      "row": "I6 unchanged obligation carried from prior whole-goal review, refreshed by full native/packed GREEN",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:285; tests/no-coi/no-coi-snapshot-application.spec.ts:307; tests/integration/no-coi-snapshot-browser-proof.mjs:117",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

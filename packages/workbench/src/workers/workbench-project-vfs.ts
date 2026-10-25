@@ -1,12 +1,9 @@
 import {
   type VfsMutationGuard,
   type VfsMutationIntent,
-  basename,
-  dirname,
   isAbsolute,
   normalizePath,
 } from '@riftydev/vfs';
-import { isInsideInstallTree } from '../glue/install-stamp.ts';
 import {
   handleOwnerVfsCommitRequest,
   handleOwnerVfsDurabilityRequest,
@@ -15,15 +12,12 @@ import type {
   HostCommitAck,
   HostCommitRequest,
   OwnerVfsDurabilityReceipt,
-  OwnerVfsSnapshot,
-  OwnerVfsSnapshotEntry,
 } from '../glue/owner-vfs-protocol.ts';
 import { VfsCommitAppliedError, VfsCommitProtocolError } from '../glue/owner-vfs-protocol.ts';
 import {
   type PackageMutationExecutor,
   applyPackageAwareHostCommit,
   hostCommitMutationIntent,
-  vfsMutationIntentPaths,
 } from '../glue/package-mutation-executor.ts';
 import { collectSnapshot } from '../glue/vfs-snapshot-port.ts';
 import { ClosedHandleError } from '../workbench/errors.ts';
@@ -31,7 +25,6 @@ import type {
   OwnerProjectVfsFrame,
   PageProjectVfsFrame,
   ProjectVfsAppliedMutation,
-  ProjectVfsDirectoryEntry,
 } from '../workbench/project-vfs-protocol.ts';
 import type {
   OwnerVfsAppliedMutation,
@@ -39,6 +32,7 @@ import type {
   OwnerVfsAppliedRevision,
 } from './owner-vfs-applied-journal.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
+import { atomicDirectory, atomicFile } from './workbench-project-vfs-reads.ts';
 
 export interface WorkbenchProjectVfsOptions {
   readonly projectRoot: string;
@@ -48,7 +42,11 @@ export interface WorkbenchProjectVfsOptions {
   readonly durability: OwnerVfsDurabilityReceipt['durability'];
   readonly emit: (frame: OwnerProjectVfsFrame) => void;
   /** Companion metadata reflection, awaited before the originating mutation settles. */
-  readonly recordMutation?: (kind: 'guest' | 'file', treeRevision: number) => Promise<void>;
+  readonly recordMutation?: (
+    kind: 'guest' | 'file',
+    treeRevision: number,
+    intents: readonly VfsMutationIntent[],
+  ) => Promise<void>;
   /** Delivery failure must end the owner lifetime; stale project state cannot continue. */
   readonly fatal: (error: Error) => void;
 }
@@ -202,41 +200,6 @@ function projectMutations(
     }
   }
   return Object.freeze(mutations);
-}
-
-type AtomicFileEntry = Extract<OwnerVfsSnapshotEntry, { readonly kind: 'file' }>;
-
-function atomicFile(snapshot: OwnerVfsSnapshot, path: string): AtomicFileEntry {
-  const entry = snapshot.entries.find((candidate) => candidate.path === path);
-  if (entry?.kind !== 'file') throw new Error(`No file exists at ${path}`);
-  return {
-    ...entry,
-    content: entry.content.slice(),
-  };
-}
-
-function atomicDirectory(
-  snapshot: OwnerVfsSnapshot,
-  path: string,
-): readonly ProjectVfsDirectoryEntry[] {
-  const directory = snapshot.entries.find((candidate) => candidate.path === path);
-  if (directory?.kind !== 'dir') throw new Error(`No directory exists at ${path}`);
-  return snapshot.entries
-    .filter((entry) => entry.path !== path && dirname(entry.path) === path)
-    .sort((left, right) => {
-      if (left.kind !== right.kind) return left.kind === 'dir' ? -1 : 1;
-      const leftName = basename(left.path).toLowerCase();
-      const rightName = basename(right.path).toLowerCase();
-      return leftName < rightName ? -1 : leftName > rightName ? 1 : 0;
-    })
-    .map((entry) =>
-      Object.freeze({
-        path: entry.path,
-        kind: entry.kind,
-        size: entry.size,
-        version: entry.version,
-      }),
-    );
 }
 
 /** Active-project namespace gate over the lifetime owner VFS authorities. */
@@ -508,27 +471,22 @@ export function createWorkbenchProjectVfs(
       // recovery. No tentative/recovered revision crosses to the page.
       cursor.acknowledge(options.authority.treeRevision);
     } else {
-      if (mutationKind !== null && !extraneousTreeMutation(intents)) {
-        await recordAppliedMutation(mutationKind, priorTreeRevision);
+      if (mutationKind !== null) {
+        await recordAppliedMutation(mutationKind, priorTreeRevision, intents);
       }
       await publishThroughCurrent(true);
     }
     return scoped;
   };
 
-  // ADR-0307: a batch touching only paths strictly inside node_modules is an
-  // extraneous tree write — it never marks Scratch dirty.
-  const extraneousTreeMutation = (intents: readonly VfsMutationIntent[]): boolean =>
-    intents.length > 0 &&
-    intents.every((intent) => vfsMutationIntentPaths(intent).every(isInsideInstallTree));
-
   const recordAppliedMutation = async (
     kind: 'guest' | 'file',
     priorTreeRevision: number,
+    intents: readonly VfsMutationIntent[],
   ): Promise<void> => {
     const treeRevision = options.authority.treeRevision;
     if (treeRevision <= priorTreeRevision) return;
-    await options.recordMutation?.(kind, treeRevision);
+    await options.recordMutation?.(kind, treeRevision, intents);
   };
 
   const admitMutation = <T>(
@@ -693,9 +651,9 @@ export function createWorkbenchProjectVfs(
                   projectRoot,
                   candidate,
                 );
-                if (!extraneousTreeMutation([hostCommitMutationIntent(candidate)])) {
-                  await recordAppliedMutation('file', priorTreeRevision);
-                }
+                await recordAppliedMutation('file', priorTreeRevision, [
+                  hostCommitMutationIntent(candidate),
+                ]);
                 return applied;
               } catch (error) {
                 if (applied !== null) {
@@ -748,14 +706,13 @@ export function createWorkbenchProjectVfs(
     assertProjectPath(projectRoot, frame.path, true);
     let result: OwnerProjectVfsFrame;
     try {
-      const snapshot = options.authority.snapshot();
       result = {
         type: 'workbench:project-vfs-read-file-result',
         requestId: frame.requestId,
         ok: true,
-        ownerEpoch: snapshot.ownerEpoch,
-        treeRevision: snapshot.treeRevision,
-        entry: atomicFile(snapshot, frame.path),
+        ownerEpoch: options.authority.ownerEpoch,
+        treeRevision: options.authority.treeRevision,
+        entry: atomicFile(options.authority, frame.path),
       };
     } catch (error) {
       result = {
@@ -774,14 +731,13 @@ export function createWorkbenchProjectVfs(
     assertProjectPath(projectRoot, frame.path, true);
     let result: OwnerProjectVfsFrame;
     try {
-      const snapshot = options.authority.snapshot();
       result = {
         type: 'workbench:project-vfs-read-directory-result',
         requestId: frame.requestId,
         ok: true,
-        ownerEpoch: snapshot.ownerEpoch,
-        treeRevision: snapshot.treeRevision,
-        entries: Object.freeze(atomicDirectory(snapshot, frame.path)),
+        ownerEpoch: options.authority.ownerEpoch,
+        treeRevision: options.authority.treeRevision,
+        entries: Object.freeze(atomicDirectory(options.authority, frame.path)),
       };
     } catch (error) {
       result = {

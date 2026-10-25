@@ -236,25 +236,57 @@ function initialiseOwnListenerState(target: EventEmitter): void {
   if (!Object.hasOwn(state, '_warned')) state._warned = new Set();
 }
 
-const CallableEventEmitter = function EventEmitter(this: EventEmitter): void {
-  // Listener state stays lazy so this also supports prototype mixins whose
-  // constructors never call EventEmitter, matching Node's EventEmitter.init.
-  // What init does NOT tolerate is a receiver that merely INHERITS a store:
-  // `Foo.prototype = new EventEmitter()` would otherwise share one listener
-  // map across every instance. Claim an own, empty one instead.
-  initialiseOwnListenerState(this);
-};
+export const EventEmitter = /* @__PURE__ */ (() => {
+  const CallableEventEmitter = function EventEmitter(this: EventEmitter): void {
+    // Listener state stays lazy so this also supports prototype mixins whose
+    // constructors never call EventEmitter, matching Node's EventEmitter.init.
+    // What init does NOT tolerate is a receiver that merely INHERITS a store:
+    // `Foo.prototype = new EventEmitter()` would otherwise share one listener
+    // map across every instance. Claim an own, empty one instead.
+    initialiseOwnListenerState(this);
+  };
 
-CallableEventEmitter.prototype = EventEmitterPrototype.prototype;
-Object.defineProperty(CallableEventEmitter.prototype, 'constructor', {
-  configurable: true,
-  value: CallableEventEmitter,
-  writable: true,
-});
+  CallableEventEmitter.prototype = EventEmitterPrototype.prototype;
+  Object.defineProperty(CallableEventEmitter.prototype, 'constructor', {
+    configurable: true,
+    value: CallableEventEmitter,
+    writable: true,
+  });
 
-export const EventEmitter = CallableEventEmitter as EventEmitterConstructor;
-EventEmitter.defaultMaxListeners = DEFAULT_MAX_LISTENERS;
-EventEmitter.captureRejectionSymbol = captureRejectionSymbol;
+  Object.defineProperty(CallableEventEmitter, 'name', {
+    configurable: true,
+    value: 'EventEmitter',
+  });
+  const constructor = CallableEventEmitter as EventEmitterConstructor;
+  constructor.defaultMaxListeners = DEFAULT_MAX_LISTENERS;
+  constructor.captureRejectionSymbol = captureRejectionSymbol;
+  return constructor;
+})();
+
+/** Retire a drained invocation's listeners without invoking guest meta-events.
+ * Pre-existing listeners survive only while still registered; fired once handlers
+ * and explicit removals are never resurrected. Listener storage stays with its owner. */
+export function captureEventEmitterListenerScope(emitter: EventEmitter): () => void {
+  const state = emitter as unknown as { _listenersMap?: Map<string | symbol, Listener[]> };
+  const original = new Map<string | symbol, Listener[]>(
+    Array.from(state._listenersMap ?? [], ([event, listeners]) => [event, listeners.slice()]),
+  );
+  return () => {
+    const current = state._listenersMap;
+    if (current === undefined) return;
+    for (const [event, listeners] of current) {
+      const remaining = original.get(event)?.slice() ?? [];
+      const survivors = listeners.filter((listener) => {
+        const index = remaining.indexOf(listener);
+        if (index === -1) return false;
+        remaining.splice(index, 1);
+        return true;
+      });
+      if (survivors.length === 0) current.delete(event);
+      else current.set(event, survivors);
+    }
+  };
+}
 
 export function once(emitter: EventEmitter, event: string | symbol): Promise<unknown[]> {
   return new Promise((resolve, reject) => {

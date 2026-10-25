@@ -23,8 +23,13 @@
  */
 
 import { Buffer } from '../buffer.ts';
+import { readBuiltinUncached } from '../builtin-registry.ts';
 import { EventEmitter } from '../event-emitter.ts';
-import { getDefaultHighWaterMark } from './default-highwatermark.ts';
+import {
+  type CallableStreamConstructor,
+  initializeReadable,
+  makeCallableStreamConstructor,
+} from './callable-constructor.ts';
 import { acquireReadableFromWeb } from './from-web-validation.ts';
 import { methodNotImplementedError } from './method-not-implemented.ts';
 
@@ -276,7 +281,7 @@ function prematureCloseError(): Error {
   return abortError(cause);
 }
 
-export class Readable extends EventEmitter implements AsyncIterable<unknown> {
+class ReadableImplementation extends EventEmitter implements AsyncIterable<unknown> {
   static toWeb(stream: Readable, options: ReadableToWebOptions = {}): ReadableStream {
     if (!(stream instanceof Readable)) {
       throw new TypeError('Readable.toWeb() expects a Readable stream');
@@ -374,12 +379,12 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     );
   }
 
-  readonly _readableState: ReadableState;
-  private readMoreScheduled = false;
-  private readableScheduled = false;
-  private endScheduled = false;
+  readonly _readableState!: ReadableState;
+  private readMoreScheduled!: boolean;
+  private readableScheduled!: boolean;
+  private endScheduled!: boolean;
   /** Set by `setEncoding(enc)`; `null` means emit raw bytes (the default). */
-  private encodingState: EncodingState | null = null;
+  private encodingState!: EncodingState | null;
   /**
    * Per-dest pipe cleanup. The key is the destination; the value tears down
    * every listener `pipe(dest)` attached on both ends. A `Map` (not array)
@@ -387,41 +392,11 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
    * when `pipe(dest)` was called multiple times — subsequent calls overwrite
    * the previous entry after running its cleanup.
    */
-  private pipeCleanups: Map<PipeableWritable, () => void> = new Map();
+  private pipeCleanups!: Map<PipeableWritable, () => void>;
 
   constructor(opts: ReadableOptions = {}) {
     super();
-    const objectMode = opts.objectMode ?? false;
-    this._readableState = {
-      buffer: [],
-      length: 0,
-      highWaterMark: opts.highWaterMark ?? getDefaultHighWaterMark(objectMode),
-      objectMode,
-      flowing: null,
-      ended: false,
-      endEmitted: false,
-      reading: false,
-      destroyed: false,
-      errored: null,
-      disturbed: false,
-      flowScheduled: false,
-    };
-    if (opts.read !== undefined) this._read = opts.read;
-    // Node applies the `encoding` option as if `setEncoding` ran in the ctor.
-    if (opts.encoding) this.setEncoding(opts.encoding);
-    this.on('newListener', (event) => {
-      if (event === 'data' && this._readableState.flowing === null) {
-        this._readableState.flowing = true;
-        this.scheduleFlow();
-      } else if (event === 'readable' && !this._readableState.endEmitted) {
-        queueMicrotask(() => {
-          const state = this._readableState;
-          if (state.destroyed || state.endEmitted) return;
-          if (state.buffer.length > 0 || state.ended) this.scheduleReadable();
-          if (!state.ended) this.maybeRead();
-        });
-      }
-    });
+    initializeReadable(this as unknown as Readable, opts);
   }
 
   _read(_size: number): void {
@@ -746,7 +721,8 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
    * Symmetric wiring (improves on the pre-fix shape that left dangling
    * listeners on either side after an error):
    *   - source `'data'` → `dest.write()` (pause on backpressure);
-   *   - source `'end'`  → `dest.end()` (unless `opts.end === false`);
+   *   - source `'end'`  → `dest.end()`; unpipe instead when `opts.end === false` or
+   *     dest is the realm's `process.stdout|stderr` (Node's `doEnd`);
    *   - source `'error'`→ propagate to dest then cleanup the wiring;
    *   - dest   `'drain'`→ resume source;
    *   - dest   `'error'`→ cleanup the wiring on both ends;
@@ -767,7 +743,10 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     const existing = this.pipeCleanups.get(dest);
     if (existing) existing();
 
-    const endOnFinish = opts.end ?? true;
+    // Node compares its bootstrap process: ours = `require('node:process')`, not `globalThis.process`.
+    // Uncached: a same-realm child's pipe must not pin its process in the registry (ADR-0458).
+    const proc = readBuiltinUncached('process');
+    const endOnFinish = opts.end !== false && dest !== proc?.stdout && dest !== proc?.stderr;
     const onData = (chunk: unknown): void => {
       const writeResult = dest.write(chunk);
       if (writeResult === false) {
@@ -792,6 +771,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     };
     const onEnd = (): void => {
       if (endOnFinish) dest.end();
+      else cleanup();
     };
     const onSourceError = (err: unknown): void => {
       dest.emit('error', err);
@@ -1358,6 +1338,23 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     return r;
   }
 }
+
+export interface Readable extends ReadableImplementation {}
+
+export type ReadableConstructor = CallableStreamConstructor<
+  typeof ReadableImplementation,
+  Readable,
+  ReadableOptions
+>;
+
+export const Readable: ReadableConstructor = /* @__PURE__ */ makeCallableStreamConstructor(
+  'Readable',
+  ReadableImplementation,
+  (receiver, options) => {
+    EventEmitter.call(receiver);
+    initializeReadable(receiver, options);
+  },
+);
 
 export interface ReadableFromWebOptions {
   highWaterMark?: number;

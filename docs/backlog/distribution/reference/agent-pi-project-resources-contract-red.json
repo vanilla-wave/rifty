@@ -1,0 +1,226 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS Contract+RED; proceed to implementation. Three advisory proof gaps remain for Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "81d4664705266f360ba2a45b3aefcbf288bf5690",
+  "unit_goal_source": "docs/backlog/distribution/ai-agent-project-context-files.md; goal docs/backlog/epics/agent-pi-project-resources/goal.md; BASE 7f8f4708e0d1ec6ee56de0b7ccdca339d94422ac; independent reviewer /root/contract_review. RDY-6 PASS: original request and five verbatim answers checked against final goal/map/unit; no omitted material scope choice or weakened user obligation. Oracle 0.85.1/core 0.85.1 Node v24.16.0: formatter equality true (/tmp/pi-contract-independent-oracle.log). Chromium RED independently reaches missing pirate context at ai-mode.spec.ts:591 (/tmp/pi-contract-independent-e2e-red.log); subsequent changes only affect Node tests/evidence. B1 history: at 0991666bb, six parity tests failed with TypeError '__vite_ssr_import_meta__.resolve is not a function' at test.ts:82/:221 (pnpm exec vitest run tools/agent-bench/src/project-resources.test.ts; /tmp/pi-contract-independent-red.log:28-42,170-180), violating RDY-8/REV-5 class 3. Driver accepted and fixed in fb3e79032; reviewer independently verified 10 assertion REDs. Final 81d466470 verification repeats 10 assertion failures and zero import errors (/tmp/pi-contract-independent-red-final.log), resolving B1 and all associated residuals. Native casing independently probed: readdir AGENTS.MD, pi chooses path AGENTS.md on this volume; final carrier always checks VFS spelling with pi formatter and retains native discovery identity on genuinely case-sensitive volumes. No scenario test is skipped. Initial BLOCK JSON retained at /tmp/pi-project-contract-review-initial-block.json.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1–I7",
+      "location": "docs/backlog/epics/agent-pi-project-resources/goal.md:64",
+      "summary": "Implementation, both host acceptance, full GREEN and independent Final+GREEN remain; this is preparation only."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: context selection, global-first blocks and prompt order",
+      "source": "acceptance",
+      "trace": "I1 + I3 + I5",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:105",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: CLI skill set, metadata, collisions, supplied skills and read_file",
+      "source": "acceptance",
+      "trace": "I2 + I5",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:245",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: startup report, cached instructions and session/chat reload",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:138",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: default-on, opt-outs and no-file notice",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:174",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: unsupported report and visible resources",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:138",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: five context candidates, BOM and global order",
+      "source": "acceptance",
+      "trace": "I1 + I5",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:105",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: full CLI pi/agents discovery and formatter bytes",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:245",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: profile, append order, cwd last, omitted empty blocks",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:107",
+      "note": ""
+    },
+    {
+      "row": "Poisoned cache: edits remain unapplied until reload",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:138",
+      "note": ""
+    },
+    {
+      "row": "Corrupt metadata: CLI diagnostics and skip",
+      "source": "fault-matrix",
+      "trace": "I2 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:258",
+      "note": ""
+    },
+    {
+      "row": "Missing file capability: unread resources notice",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:185",
+      "note": ""
+    },
+    {
+      "row": "contextFiles option",
+      "source": "public-api",
+      "trace": "ADR-0440 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:178",
+      "note": ""
+    },
+    {
+      "row": "skills option",
+      "source": "public-api",
+      "trace": "ADR-0440 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:286",
+      "note": ""
+    },
+    {
+      "row": "userContextFiles option",
+      "source": "public-api",
+      "trace": "ADR-0440 + I5",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:117",
+      "note": ""
+    },
+    {
+      "row": "userSkills option",
+      "source": "public-api",
+      "trace": "ADR-0440 + I5",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:272",
+      "note": ""
+    },
+    {
+      "row": "session.reload returns resource report",
+      "source": "public-api",
+      "trace": "ADR-0440 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:157",
+      "note": ""
+    },
+    {
+      "row": "resources event and report",
+      "source": "public-api",
+      "trace": "ADR-0440 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:124",
+      "note": ""
+    },
+    {
+      "row": "Pinned CLI/core discovery and formatter observation",
+      "source": "frozen-artifact",
+      "trace": "ADR-0440 + I2",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-pi-project-resources-oracle.mjs:58",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/src/project-resources.test.ts:174",
+          "summary": "Independent opt-outs lack cross-checks: contextFiles:false should retain skills, and skills:false should retain context. Current fixture switches both off together or supplies skills alone. Advisory reading; no executed surviving mutant.",
+          "authority": "",
+          "evidence": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/src/project-resources.test.ts:157",
+          "summary": "Report timing and admission are underasserted: no startup-before-first-send check, reload event equality, idle/disposed admission, or no-file→file reload transition. ADR-0440 declares these semantics. Advisory reading; no executed surviving mutant.",
+          "authority": "",
+          "evidence": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tests/e2e/ai-mode.spec.ts:596",
+          "summary": "Final proof should include visible diagnostics and all six README compat entries, plus combined context/skills order and empty-resource cwd tail. Current assertions cover only portions of these declared clauses. Advisory reading; no executed surviving mutant.",
+          "authority": "",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

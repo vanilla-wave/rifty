@@ -1,0 +1,35 @@
+{
+  "run": "floor-chromium-2026-09-27T22:58:40.261Z",
+  "revision": "850eeee2640aae0793c5c629994acd20821cbf95",
+  "platform": "darwin/arm64",
+  "runner": "1.28.1",
+  "engine": "chromium",
+  "requestedBuild": "^108\\.",
+  "result": "fail",
+  "steps": [],
+  "pageErrors": [
+    {
+      "message": "WebAssembly.Compile is disallowed on the main thread, if the buffer size is larger than 4KB. Use WebAssembly.compile, or compile on a worker thread.",
+      "stack": "RangeError: WebAssembly.Compile is disallowed on the main thread, if the buffer size is larger than 4KB. Use WebAssembly.compile, or compile on a worker thread.\n    at initSync (http://127.0.0.1:5611/node_modules/.vite-no-coi-5611/deps/chunk-BSIOWZYR.js?v=e60486a2:163:14)\n    at http://127.0.0.1:5611/@fs/Users/vanilla-wave/.t3/worktrees/rifty/t3code-e9f09560/packages/runtime-js/src/module-loader/cjs-static-exports.ts:17:1"
+    }
+  ],
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/108.0.5359.29 Safari/537.36",
+  "build": "108.0.5359.29",
+  "report": {
+    "date": "2026-09-27T22:59:20.652Z",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/108.0.5359.29 Safari/537.36",
+    "result": "fail",
+    "steps": [
+      {
+        "step": "sdk-import",
+        "status": "fail",
+        "error": {
+          "name": "RangeError",
+          "message": "Uncaught RangeError: WebAssembly.Compile is disallowed on the main thread, if the buffer size is larger than 4KB. Use WebAssembly.compile, or compile on a worker thread."
+        }
+      }
+    ]
+  },
+  "failingStep": "sdk-import",
+  "reason": "harness-navigation: Error: SDK module failed before boot; see report and pageErrors"
+}

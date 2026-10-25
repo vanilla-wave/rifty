@@ -1,0 +1,158 @@
+{
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "UNIT docs/backlog/distribution/workbench-sandbox-support-consumer-fit.md; standalone, no parent goal. BASE 3ee25558ff745602e88c382be9b5c229e05b2630; reviewed clean HEAD 36cbd0aea9d43db775ea12588d2729aba1b25798. Fresh independent reviewer /root/consumer_final_review, depth 1, no children, read-only tracked tree. Read raw contract, consumer evidence/challenge, ADR-0437/0438/0007, implementation, inherited F1-F5 and complete diff; earlier accepted behavior excluded except changed dependencies/checking criteria (REV-1, PR-4). Checked the old omission/text criteria from BASE: superseded by Acceptance 1/2 and ADR-0438; native fault scenarios retained. RED commit 80a816441cf1da4fb585f6b9fe980d8f10a4e1cc precedes implementation; /tmp/pr340-consumer-red.log has four behavioral failures. Read reverse-check logs /tmp/pr340-consumer-revert-{guard,unmet,limitations}.log: guard/message and ID-resolution assertions fail. Independently executed RIFTY_PLAYGROUND_PORT=5392 pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/sandbox-support.spec.ts --reporter=list: exit 0, 29/29 PASS, 19.1 s, Chromium 148.0.7778.96; raw /tmp/pr340-consumer-independent-green.log. Read driver full current pnpm pr:check log /tmp/pr340-consumer-pr-check.log: all 25 checks PASS, including typecheck, build, test:run and test:parity. Independent git diff --check and post-run clean HEAD check passed. No frozen oracle/golden artifact changed; inherited F1-F5 retained and exercised, no added resource coordination.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Acceptance 1: omitted probeBaseUrl rejects with TypeError naming the option before probes; omission-report path and documentation removed",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:141; packages/workbench/src/support/check-sandbox-support.ts:21; docs/public/sandbox-support.md:40; packages/workbench/src/support/types.ts:39",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: both modes expose readonly unmet/limitations IDs; every listed ID resolves to exactly one check; host summary uses conclusion and rows without text parsing",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:79; tests/browser-unit/sandbox-support.spec.ts:103; tests/browser-unit/sandbox-support.spec.ts:227; tests/browser-unit/sandbox-support.spec.ts:241; docs/public/sandbox-support.md:93; packages/workbench/src/support/types.ts:33",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: guide explains host Web Locks, selected WASM workloads, inconclusive retry/inspection, and SW filtering for skipServiceWorker hosts",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/public/sandbox-support.md:53; docs/public/sandbox-support.md:72; docs/public/sandbox-support.md:84; docs/public/sandbox-support.md:89",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: committed RED for omission and identity precedes implementation; retained native suite remains green",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:141; tests/browser-unit/sandbox-support.spec.ts:79; docs/backlog/distribution/reference/workbench-sandbox-support-consumer-implementation.md:34",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: new short ADR cites ADR-0437, overturns omission behavior, and dated correction preserves remaining report sections and decisions",
+      "source": "acceptance",
+      "trace": "ADR-0437",
+      "status": "pass",
+      "citation": "docs/adr/distribution/0438-require-sandbox-probe-configuration-and-addressable-checks.md:15; docs/adr/distribution/0437-bounded-workbench-browser-prerequisite-probes.md:61",
+      "note": ""
+    },
+    {
+      "row": "Public checkSandboxSupport(options): required configuration and early named TypeError",
+      "source": "public-api",
+      "trace": "Acceptance 1 + ADR-0438",
+      "status": "pass",
+      "citation": "packages/workbench/src/support/check-sandbox-support.ts:18; tests/browser-unit/sandbox-support.spec.ts:141; packages/workbench/src/index.ts:1",
+      "note": ""
+    },
+    {
+      "row": "Public SandboxSupportOptions.probeBaseUrl: required string or URL",
+      "source": "public-api",
+      "trace": "Acceptance 1 + ADR-0438",
+      "status": "pass",
+      "citation": "packages/workbench/src/support/types.ts:37; tests/browser-unit/sandbox-support.spec.ts:161; packages/workbench/src/workbench/public.ts:8",
+      "note": ""
+    },
+    {
+      "row": "Public SandboxSupportMode.unmet and limitations: readonly SandboxSupportCheckId arrays; reasons replaced",
+      "source": "public-api",
+      "trace": "Acceptance 2 + ADR-0438",
+      "status": "pass",
+      "citation": "packages/workbench/src/support/types.ts:29; packages/workbench/src/support/report.ts:92; tests/browser-unit/sandbox-support.spec.ts:79; tests/browser-unit/sandbox-support.spec.ts:227",
+      "note": ""
+    },
+    {
+      "row": "Inherited F1: Worker CSP/nested/import denial and dead/stalled Worker give bounded observed failure/incomplete, honest cause and owned teardown",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:201; tests/browser-unit/sandbox-support.spec.ts:250",
+      "note": ""
+    },
+    {
+      "row": "Inherited F2: permission/quota required/preferred/ephemeral consequences retained; cleanup failure explicit",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:231; tests/browser-unit/sandbox-support.spec.ts:340",
+      "note": ""
+    },
+    {
+      "row": "Inherited F3: concurrent/same-other-tab calls preserve entries, registrations, controller and active sessions; contention is not incompatibility; repeated denial fresh",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:264; tests/browser-unit/sandbox-support.spec.ts:333; tests/browser-unit/sandbox-support.spec.ts:400; tests/browser-unit/sandbox-support.spec.ts:452; tests/browser-unit/sandbox-support.spec.ts:563",
+      "note": ""
+    },
+    {
+      "row": "Inherited F4: late native registration/storage and cleanup stall/rejection preserve bounded honest reporting and late cleanup",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:366; tests/browser-unit/sandbox-support.spec.ts:389; tests/browser-unit/sandbox-support.spec.ts:492; tests/browser-unit/sandbox-support.spec.ts:340",
+      "note": ""
+    },
+    {
+      "row": "Inherited F5: unproved required memory/locks/SW/selected WASM cannot support; optional failures remain ID-addressable limitations",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:201; tests/browser-unit/sandbox-support.spec.ts:218; tests/browser-unit/sandbox-support.spec.ts:428; tests/browser-unit/sandbox-support.spec.ts:522; tests/browser-unit/sandbox-support.spec.ts:536",
+      "note": ""
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "overall_verdict": "pass",
+  "merge_call": "PASS: consumer-fit unit complete; no blocker, concern or required residual. Standalone unit, no parent-goal completion claim.",
+  "reviewed_sha": "36cbd0aea9d43db775ea12588d2729aba1b25798"
+}

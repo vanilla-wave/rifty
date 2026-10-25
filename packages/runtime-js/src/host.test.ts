@@ -1,15 +1,48 @@
+import { NotImplementedError } from '@riftydev/io';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { spawnRuntime } from './host.ts';
-import type { HostMessage, WorkerMessage } from './protocol.ts';
+import { spawnRuntime, spawnToolchainRuntime } from './host.ts';
+import * as runtimeJs from './index.ts';
+import {
+  SANDBOX_TOOLCHAIN_PROTOCOL,
+  type ToolchainHostMessage,
+  type ToolchainWorkerMessage,
+} from './protocol.ts';
+// @ts-expect-error raw sandbox toolchain controller is package-internal
+type RawToolchainRuntimeController = import('./index.ts').ToolchainRuntimeController;
+// @ts-expect-error raw sandbox toolchain interface is package-internal
+type RawRuntimeToolchain = import('./index.ts').RuntimeToolchain;
+// @ts-expect-error raw sandbox toolchain install input is package-internal
+type RawToolchainInstallRequest = import('./index.ts').ToolchainInstallRequest;
+// @ts-expect-error raw sandbox toolchain requests are package-internal
+type RawToolchainRequest = import('./index.ts').ToolchainRequest;
+// @ts-expect-error raw sandbox toolchain results are package-internal
+type RawToolchainResult = import('./index.ts').ToolchainResult;
+// @ts-expect-error raw sandbox toolchain run-bin input is package-internal
+type RawToolchainRunBinRequest = import('./index.ts').ToolchainRunBinRequest;
+// @ts-expect-error bounded gap projection stays off the runtime root
+type RootDeclaredGapCause = typeof import('./index.ts')['declaredGapCause'];
+
+const forbiddenRootTypeProof:
+  | readonly [
+      RawToolchainRuntimeController,
+      RawRuntimeToolchain,
+      RawToolchainInstallRequest,
+      RawToolchainRequest,
+      RawToolchainResult,
+      RawToolchainRunBinRequest,
+      RootDeclaredGapCause,
+    ]
+  | null = null;
+void forbiddenRootTypeProof;
 
 type Listener<T> = (event: MessageEvent<T>) => void;
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
 
-  readonly sent: HostMessage[] = [];
+  readonly sent: ToolchainHostMessage[] = [];
   readonly listeners = {
-    message: new Set<Listener<WorkerMessage>>(),
+    message: new Set<Listener<ToolchainWorkerMessage>>(),
     error: new Set<(event: ErrorEvent) => void>(),
   };
   terminated = false;
@@ -21,18 +54,18 @@ class FakeWorker {
     FakeWorker.instances.push(this);
   }
 
-  postMessage(message: HostMessage): void {
+  postMessage(message: ToolchainHostMessage): void {
     this.sent.push(message);
   }
 
-  addEventListener(type: 'message', listener: Listener<WorkerMessage>): void;
+  addEventListener(type: 'message', listener: Listener<ToolchainWorkerMessage>): void;
   addEventListener(type: 'error', listener: (event: ErrorEvent) => void): void;
   addEventListener(
     type: 'message' | 'error',
-    listener: Listener<WorkerMessage> | ((event: ErrorEvent) => void),
+    listener: Listener<ToolchainWorkerMessage> | ((event: ErrorEvent) => void),
   ): void {
     if (type === 'message') {
-      this.listeners.message.add(listener as Listener<WorkerMessage>);
+      this.listeners.message.add(listener as Listener<ToolchainWorkerMessage>);
     } else {
       this.listeners.error.add(listener as (event: ErrorEvent) => void);
     }
@@ -42,8 +75,13 @@ class FakeWorker {
     this.terminated = true;
   }
 
-  emit(message: WorkerMessage): void {
-    const event = { data: message } as MessageEvent<WorkerMessage>;
+  emit(message: ToolchainWorkerMessage): void {
+    const event = { data: message } as MessageEvent<ToolchainWorkerMessage>;
+    for (const listener of this.listeners.message) listener(event);
+  }
+
+  emitUnknown(message: unknown): void {
+    const event = { data: message } as MessageEvent<ToolchainWorkerMessage>;
     for (const listener of this.listeners.message) listener(event);
   }
 
@@ -68,6 +106,21 @@ function fakeWorker(index: number): FakeWorker {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe('runtime-js root surface', () => {
+  it('does not publish the keepalive initialization bootstrap detail', () => {
+    expect('initializeEventLoopKeepalive' in runtimeJs).toBe(false);
+    expect(typeof runtimeJs.installEventLoopKeepalive).toBe('function');
+  });
+
+  it('does not publish the sandbox toolchain control plane', () => {
+    expect(
+      ['spawnToolchainRuntime', 'SANDBOX_TOOLCHAIN_PROTOCOL', 'declaredGapCause'].filter(
+        (name) => name in runtimeJs,
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe('spawnRuntime fs controller', () => {
@@ -157,14 +210,15 @@ describe('spawnRuntime fs controller', () => {
   });
 });
 
-// T15 — vm-config host option + diagnostic surfacing.
-describe('spawnRuntime vm-config + diagnostic', () => {
-  it('sends vm-config on ready when vmEngine is set', () => {
+// ADR-0383 VM bootstrap + diagnostic surfacing.
+describe('spawnRuntime VM bootstrap + diagnostic', () => {
+  it('supplies the engine at Worker construction before ready', () => {
     installFakeWorker();
     spawnRuntime({ workerUrl: '/worker.js', vmEngine: 'quickjs' });
     const worker = fakeWorker(0);
+    expect(worker.options).toEqual({ type: 'module', name: 'rifty-vm-engine=quickjs' });
     worker.emit({ type: 'ready' });
-    expect(worker.sent).toContainEqual({ type: 'vm-config', engine: 'quickjs' });
+    expect(worker.sent.some((message) => message.type === 'vm-config')).toBe(false);
   });
 
   it('does NOT send vm-config when vmEngine is absent', () => {
@@ -187,5 +241,779 @@ describe('spawnRuntime vm-config + diagnostic', () => {
     ] as const;
     fakeWorker(0).emit({ type: 'diagnostic', payload });
     expect(events).toEqual([payload]);
+  });
+});
+
+function admitToolchain(runtime: ReturnType<typeof spawnToolchainRuntime>): FakeWorker {
+  void runtime;
+  const worker = fakeWorker(0);
+  worker.emit({ type: 'ready' });
+  worker.emit({
+    type: 'toolchain-ready',
+    protocol: SANDBOX_TOOLCHAIN_PROTOCOL,
+    vfsBackend: 'memory',
+  });
+  return worker;
+}
+
+describe('spawnToolchainRuntime trust boundary', () => {
+  it('rejects and tears down a handshake with a valid protocol but bogus backend', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const worker = fakeWorker(0);
+    worker.emit({ type: 'ready' });
+    worker.emitUnknown({
+      type: 'toolchain-ready',
+      protocol: SANDBOX_TOOLCHAIN_PROTOCOL,
+      vfsBackend: 'indexeddb',
+    });
+
+    const error = await runtime.toolchainReady.catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(NotImplementedError);
+    expect(error).toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'sandbox.toolchain.worker',
+    });
+    expect(worker.terminated).toBe(true);
+  });
+
+  it('rejects and tears down a handshake with a valid backend but mismatched protocol', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const worker = fakeWorker(0);
+    worker.emit({ type: 'ready' });
+    worker.emitUnknown({
+      type: 'toolchain-ready',
+      protocol: 'rifty.sandbox-toolchain/v1',
+      vfsBackend: 'memory',
+    });
+
+    const error = await runtime.toolchainReady.catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(NotImplementedError);
+    expect(error).toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'sandbox.toolchain.worker',
+    });
+    expect(worker.terminated).toBe(true);
+  });
+
+  it('rejects clone-preserved arbitrary protocol shapes and settles pending work', async () => {
+    const invalidFrames: ReadonlyArray<readonly [string, () => unknown]> = [
+      [
+        'prior version',
+        () => ({
+          type: 'toolchain-ready',
+          protocol: 'rifty.sandbox-toolchain/v1',
+          vfsBackend: 'memory',
+        }),
+      ],
+      [
+        'later version',
+        () => ({
+          type: 'toolchain-ready',
+          protocol: 'rifty.sandbox-toolchain/v10',
+          vfsBackend: 'memory',
+        }),
+      ],
+      [
+        'retired project-less version',
+        () => ({
+          type: 'toolchain-ready',
+          protocol: 'rifty.sandbox-toolchain/v4',
+          vfsBackend: 'memory',
+        }),
+      ],
+      ['numeric protocol', () => ({ type: 'toolchain-ready', protocol: 1, vfsBackend: 'memory' })],
+      ['null protocol', () => ({ type: 'toolchain-ready', protocol: null, vfsBackend: 'memory' })],
+      ['object protocol', () => ({ type: 'toolchain-ready', protocol: {}, vfsBackend: 'memory' })],
+      ['missing protocol', () => ({ type: 'toolchain-ready', vfsBackend: 'memory' })],
+      [
+        'extra field',
+        () => ({
+          type: 'toolchain-ready',
+          protocol: SANDBOX_TOOLCHAIN_PROTOCOL,
+          vfsBackend: 'memory',
+          extra: true,
+        }),
+      ],
+      [
+        'boolean protocol',
+        () => ({ type: 'toolchain-ready', protocol: false, vfsBackend: 'memory' }),
+      ],
+    ];
+    const outcomes: Array<Record<string, unknown>> = [];
+
+    for (const [label, frame] of invalidFrames) {
+      installFakeWorker();
+      const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+      const events: unknown[] = [];
+      runtime.on((event) => events.push(event));
+      const worker = fakeWorker(0);
+      worker.emit({ type: 'ready' });
+      const pendingEval = runtime.eval('41 + 1').then(
+        () => ({ name: 'resolved' }),
+        (error: Error & { feature?: string }) => ({
+          name: error.name,
+          feature: error.feature,
+          canonical: error instanceof NotImplementedError,
+        }),
+      );
+      const handshake = runtime.toolchainReady.then(
+        () => ({ name: 'resolved' }),
+        (error: Error & { feature?: string }) => ({
+          name: error.name,
+          feature: error.feature,
+          canonical: error instanceof NotImplementedError,
+        }),
+      );
+      worker.emitUnknown(frame());
+      const rejectedHandshake = await handshake;
+      const rejectedEval = await pendingEval;
+      outcomes.push({
+        label,
+        handshake: rejectedHandshake,
+        pendingEval: rejectedEval,
+        terminated: worker.terminated,
+        readyAtTermination: runtime.isReady(),
+        eventsAtTermination: events.length,
+      });
+      runtime.dispose();
+    }
+
+    expect(outcomes).toEqual(
+      invalidFrames.map(([label]) => ({
+        label,
+        handshake: {
+          name: 'NotImplementedError',
+          feature: 'sandbox.toolchain.worker',
+          canonical: true,
+        },
+        pendingEval: {
+          name: 'NotImplementedError',
+          feature: 'sandbox.toolchain.worker',
+          canonical: true,
+        },
+        terminated: true,
+        readyAtTermination: false,
+        eventsAtTermination: 1,
+      })),
+    );
+  });
+
+  it('admits only the exact protocol/backend frame', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    admitToolchain(runtime);
+    await expect(runtime.toolchainReady).resolves.toBe('memory');
+  });
+
+  it.each(['opfs', 'memory'] as const)(
+    'waits for runtime readiness when exact %s toolchain readiness arrives first',
+    async (backend) => {
+      installFakeWorker();
+      const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+      const worker = fakeWorker(0);
+      let outcome: unknown = { status: 'pending' };
+      void runtime.toolchainReady.then(
+        (value) => {
+          outcome = { status: 'resolved', backend: value };
+        },
+        (error: Error) => {
+          outcome = { status: 'rejected', name: error.name };
+        },
+      );
+
+      worker.emit({
+        type: 'toolchain-ready',
+        protocol: SANDBOX_TOOLCHAIN_PROTOCOL,
+        vfsBackend: backend,
+      });
+      await Promise.resolve();
+      expect(outcome).toEqual({ status: 'pending' });
+      expect(runtime.isReady()).toBe(false);
+
+      worker.emit({ type: 'ready' });
+      await Promise.resolve();
+      expect(outcome).toEqual({ status: 'resolved', backend });
+      expect(runtime.isReady()).toBe(true);
+      runtime.dispose();
+    },
+  );
+
+  it.each(['opfs', 'memory'] as const)(
+    'rejects mismatched %s toolchain readiness before runtime readiness',
+    async (backend) => {
+      installFakeWorker();
+      const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+      const events: unknown[] = [];
+      runtime.on((event) => events.push(event));
+      const worker = fakeWorker(0);
+      let outcome: unknown = { status: 'pending' };
+      void runtime.toolchainReady.then(
+        (value) => {
+          outcome = { status: 'resolved', backend: value };
+        },
+        (error: Error & { feature?: string }) => {
+          outcome = {
+            status: 'rejected',
+            name: error.name,
+            feature: error.feature,
+            canonical: error instanceof NotImplementedError,
+          };
+        },
+      );
+
+      worker.emitUnknown({
+        type: 'toolchain-ready',
+        protocol: 'rifty.sandbox-toolchain/v10',
+        vfsBackend: backend,
+      });
+
+      await Promise.resolve();
+      expect(outcome).toEqual({
+        status: 'rejected',
+        name: 'NotImplementedError',
+        feature: 'sandbox.toolchain.worker',
+        canonical: true,
+      });
+      expect(worker.terminated).toBe(true);
+      expect(runtime.isReady()).toBe(false);
+      expect(events).toEqual([]);
+
+      worker.emit({ type: 'ready' });
+      await Promise.resolve();
+      expect(outcome).toEqual({
+        status: 'rejected',
+        name: 'NotImplementedError',
+        feature: 'sandbox.toolchain.worker',
+        canonical: true,
+      });
+    },
+  );
+
+  it.each(
+    (['install', 'run-bin'] as const).flatMap((operation) =>
+      (['dispose', 'crash', 'clean-close'] as const).map((ending) => [operation, ending] as const),
+    ),
+  )(
+    'rejects one admitted %s request exactly once when its peer ends by %s',
+    async (operation, ending) => {
+      installFakeWorker();
+      const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+      const worker = admitToolchain(runtime);
+      await runtime.toolchainReady;
+      const pending =
+        operation === 'install'
+          ? runtime.toolchain.install({ cwd: '/project', registryUrl: '/registry' })
+          : runtime.toolchain.runBin({
+              cwd: '/project',
+              binPath: '/project/node_modules/.bin/tool',
+              args: [],
+            });
+      let settlements = 0;
+      const observed = pending.then(
+        () => {
+          settlements++;
+          return { status: 'resolved' } as const;
+        },
+        (error: Error & { code?: string }) => {
+          settlements++;
+          return {
+            status: 'rejected',
+            name: error.name,
+            ...(error.code === undefined ? {} : { code: error.code }),
+          } as const;
+        },
+      );
+      await Promise.resolve();
+      expect(worker.sent).toHaveLength(1);
+      expect(worker.sent[0]).toMatchObject({
+        type: 'toolchain',
+        request: { id: 1, op: operation },
+      });
+
+      if (ending === 'dispose') runtime.dispose();
+      if (ending === 'crash') worker.crash('toolchain boom');
+      if (ending === 'clean-close') {
+        worker.emitUnknown({ type: 'toolchain-terminal', reason: 'closed' });
+      }
+
+      expect(await observed).toMatchObject(
+        ending === 'crash'
+          ? { status: 'rejected', code: 'WORKER_CRASHED' }
+          : { status: 'rejected', name: 'WorkerTerminated' },
+      );
+      if (ending === 'dispose') runtime.dispose();
+      if (ending === 'crash') worker.crash('duplicate terminal signal');
+      if (ending === 'clean-close') {
+        worker.emitUnknown({ type: 'toolchain-terminal', reason: 'closed' });
+      }
+      await Promise.resolve();
+      expect(settlements).toBe(1);
+    },
+  );
+
+  it('snapshots validated install and run-bin inputs before readiness awaits', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const installInput = { cwd: '/install', registryUrl: '/registry-before' };
+    const args = ['before'];
+    const runInput = {
+      cwd: '/run',
+      binPath: '/run/node_modules/.bin/tool-before',
+      args,
+    };
+
+    const install = runtime.toolchain.install(installInput);
+    const run = runtime.toolchain.runBin(runInput);
+    installInput.cwd = '/changed-install';
+    installInput.registryUrl = '/registry-after';
+    runInput.cwd = '/changed-run';
+    runInput.binPath = '/changed-run/node_modules/.bin/tool-after';
+    args[0] = 'after';
+    args.push('extra');
+
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
+    await Promise.resolve();
+    expect(worker.sent).toEqual([
+      {
+        type: 'toolchain',
+        request: {
+          id: 1,
+          op: 'install',
+          input: { cwd: '/install', registryUrl: '/registry-before' },
+        },
+      },
+      {
+        type: 'toolchain',
+        request: {
+          id: 2,
+          op: 'run-bin',
+          input: {
+            cwd: '/run',
+            binPath: '/run/node_modules/.bin/tool-before',
+            args: ['before'],
+          },
+        },
+      },
+    ]);
+    worker.emit({
+      type: 'toolchain-result',
+      result: {
+        id: 1,
+        ok: true,
+        value: {
+          activationState: {
+            cwd: '/install',
+            bindings: [],
+            vfsBackend: 'memory',
+            files: [{ path: '/install/package.json', data: new Uint8Array([1]) }],
+          },
+        },
+      },
+    });
+    worker.emit({
+      type: 'toolchain-result',
+      result: { id: 2, ok: true, value: { exitCode: 0 } },
+    });
+    await expect(install).resolves.toBeUndefined();
+    await expect(run).resolves.toEqual({ exitCode: 0 });
+    expect(runtime.snapshotToolchainState()).toEqual({
+      cwd: '/install',
+      bindings: [],
+      vfsBackend: 'memory',
+      files: [{ path: '/install/package.json', data: new Uint8Array([1]) }],
+    });
+  });
+
+  it('opens through its own wire operation and retains the returned activation for restart', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
+    const request = { cwd: '/saved', registryUrl: '/registry' };
+    const opening = runtime.toolchain.open(request);
+    request.cwd = '/changed';
+    await Promise.resolve();
+    expect(worker.sent).toEqual([
+      {
+        type: 'toolchain',
+        request: {
+          id: 1,
+          op: 'open',
+          input: { cwd: '/saved', registryUrl: '/registry' },
+        },
+      },
+    ]);
+    const state = {
+      cwd: '/saved',
+      bindings: [],
+      vfsBackend: 'opfs' as const,
+      files: [{ path: '/saved/package.json', data: new Uint8Array([1]) }],
+    };
+    worker.emit({
+      type: 'toolchain-result',
+      result: { id: 1, ok: true, value: { activationState: state } },
+    });
+    await opening;
+    expect(runtime.snapshotToolchainState()).toEqual(state);
+    state.files[0]?.data.fill(2);
+    expect(runtime.snapshotToolchainState()?.files[0]?.data).toEqual(new Uint8Array([1]));
+  });
+
+  it('validates, snapshots and restores activation state without an install request', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
+    const binding = {
+      adapterId: 'rifty.runtime-adapter.esbuild.v1',
+      packagePath: '/dev/node_modules/esbuild-wasm',
+    };
+    const state = {
+      cwd: '/dev',
+      bindings: [binding],
+      vfsBackend: 'memory' as const,
+      files: [{ path: '/dev/package.json', data: new Uint8Array([1, 2]) }],
+    };
+
+    const restoring = runtime.restoreToolchainState(state);
+    state.cwd = '/changed';
+    binding.packagePath = '/changed/node_modules/esbuild-wasm';
+    state.bindings.push({ adapterId: 'extra', packagePath: '/extra' });
+    await Promise.resolve();
+    expect(worker.sent).toEqual([
+      {
+        type: 'toolchain',
+        request: {
+          id: 1,
+          op: 'restore',
+          input: {
+            cwd: '/dev',
+            bindings: [
+              {
+                adapterId: 'rifty.runtime-adapter.esbuild.v1',
+                packagePath: '/dev/node_modules/esbuild-wasm',
+              },
+            ],
+            vfsBackend: 'memory',
+            files: [{ path: '/dev/package.json', data: new Uint8Array([1, 2]) }],
+          },
+        },
+      },
+    ]);
+    worker.emit({ type: 'toolchain-result', result: { id: 1, ok: true } } as never);
+    await expect(restoring).resolves.toBeUndefined();
+    expect(runtime.snapshotToolchainState()).toEqual({
+      cwd: '/dev',
+      bindings: [
+        {
+          adapterId: 'rifty.runtime-adapter.esbuild.v1',
+          packagePath: '/dev/node_modules/esbuild-wasm',
+        },
+      ],
+      vfsBackend: 'memory',
+      files: [{ path: '/dev/package.json', data: new Uint8Array([1, 2]) }],
+    });
+
+    await expect(
+      runtime.restoreToolchainState({
+        cwd: '/dev',
+        bindings: [{ adapterId: '', packagePath: '/dev/node_modules/esbuild-wasm' }],
+        vfsBackend: 'memory',
+        files: [],
+      }),
+    ).rejects.toMatchObject({ name: 'TypeError' });
+    expect(worker.sent).toHaveLength(1);
+  });
+
+  it('snapshots and exact-validates resident-bin input before readiness awaits — designed RED', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const toolchain = runtime.toolchain as typeof runtime.toolchain & {
+      startBin(input: {
+        cwd: string;
+        binPath: string;
+        args: readonly string[];
+        port: number;
+      }): Promise<{ readonly port: number }>;
+    };
+    const args = ['--port', '5174'];
+    Object.setPrototypeOf(
+      args,
+      Object.create(Array.prototype, {
+        [Symbol.iterator]: {
+          value: function* inheritedIterator() {
+            yield '--port';
+            yield '9999';
+          },
+        },
+      }),
+    );
+    const input = {
+      cwd: '/dev',
+      binPath: '/dev/node_modules/.bin/tool',
+      args,
+      port: 5174,
+    };
+
+    let settled = false;
+    const started = toolchain.startBin(input).finally(() => {
+      settled = true;
+    });
+    input.cwd = '/changed';
+    input.binPath = '/changed/node_modules/.bin/other';
+    input.port = 6000;
+    args[1] = '6000';
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(worker.sent).toEqual([
+      {
+        type: 'toolchain',
+        request: {
+          id: 1,
+          op: 'start-bin',
+          input: {
+            cwd: '/dev',
+            binPath: '/dev/node_modules/.bin/tool',
+            args: ['--port', '5174'],
+            port: 5174,
+          },
+        },
+      },
+    ]);
+    worker.emit({
+      type: 'toolchain-result',
+      result: { id: 1, ok: true, value: { port: 5174 } },
+    } as never);
+    await expect(started).resolves.toEqual({ port: 5174 });
+
+    const proxyTarget = {
+      cwd: '/proxy',
+      binPath: '/proxy/node_modules/.bin/tool',
+      args: ['good'],
+      port: 5175,
+    };
+    const proxiedInput = new Proxy(proxyTarget, {
+      get(target, property, receiver) {
+        if (property === 'cwd') return '/evil';
+        if (property === 'binPath') return '/evil/node_modules/.bin/tool';
+        if (property === 'args') return ['evil'];
+        if (property === 'port') return 6000;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const proxied = toolchain.startBin(proxiedInput);
+    await Promise.resolve();
+    expect(worker.sent.at(-1)).toEqual({
+      type: 'toolchain',
+      request: {
+        id: 2,
+        op: 'start-bin',
+        input: {
+          cwd: '/proxy',
+          binPath: '/proxy/node_modules/.bin/tool',
+          args: ['good'],
+          port: 5175,
+        },
+      },
+    });
+    worker.emit({
+      type: 'toolchain-result',
+      result: { id: 2, ok: true, value: { port: 5175 } },
+    } as never);
+    await expect(proxied).resolves.toEqual({ port: 5175 });
+
+    const symbol = Symbol('extra');
+    const invalid = [
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 0 },
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 65_536 },
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 5174.5 },
+      { cwd: '/dev', binPath: '/other/node_modules/.bin/tool', args: [], port: 5174 },
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: new Array(1), port: 5174 },
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 5174, extra: true },
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 5174, [symbol]: true },
+      Object.defineProperty(
+        { binPath: '/dev/node_modules/.bin/tool', args: [], port: 5174 },
+        'cwd',
+        { enumerable: true, get: () => '/dev' },
+      ),
+    ];
+    for (const value of invalid) {
+      await expect(
+        toolchain.startBin(
+          value as { cwd: string; binPath: string; args: readonly string[]; port: number },
+        ),
+      ).rejects.toMatchObject({ name: 'TypeError' });
+    }
+    expect(worker.sent).toHaveLength(2);
+  });
+
+  it('records acknowledged root-relative aliases at the exact worker path', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
+    const restoring = runtime.restoreToolchainState({
+      cwd: '/dev',
+      bindings: [],
+      vfsBackend: 'memory',
+      files: [],
+    });
+    await Promise.resolve();
+    worker.emit({ type: 'toolchain-result', result: { id: 1, ok: true } } as never);
+    await restoring;
+
+    for (const [id, path, data] of [
+      [2, '../escape.txt', 'escape'],
+      [3, './dot.txt', 'dot'],
+      [4, 'nested/../alias.txt', 'alias'],
+    ] as const) {
+      const writing = runtime.fs.writeFile(path, data);
+      worker.emit({ type: 'fs-result', result: { id, ok: true } });
+      await writing;
+    }
+
+    expect(runtime.snapshotToolchainState()?.files).toEqual([
+      { path: '/alias.txt', data: new TextEncoder().encode('alias') },
+      { path: '/dot.txt', data: new TextEncoder().encode('dot') },
+      { path: '/escape.txt', data: new TextEncoder().encode('escape') },
+    ]);
+  });
+
+  it.each([
+    ['dispose', { status: 'rejected', name: 'WorkerTerminated', message: 'Worker was disposed' }],
+    [
+      'crash',
+      {
+        status: 'rejected',
+        name: 'Error',
+        code: 'WORKER_CRASHED',
+        message: 'Worker crashed: toolchain boom',
+      },
+    ],
+    [
+      'clean-close',
+      { status: 'rejected', name: 'WorkerTerminated', message: 'Toolchain Worker closed' },
+    ],
+  ] as const)(
+    'settles a pending eval exactly when the toolchain peer ends by %s',
+    async (ending, expected) => {
+      installFakeWorker();
+      const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+      const worker = admitToolchain(runtime);
+      await runtime.toolchainReady;
+      const pending = runtime.eval('await new Promise(() => {})');
+      let outcome: unknown = { status: 'pending' };
+      void pending.then(
+        () => {
+          outcome = { status: 'resolved' };
+        },
+        (error: Error & { code?: string }) => {
+          outcome = {
+            status: 'rejected',
+            name: error.name,
+            ...(error.code === undefined ? {} : { code: error.code }),
+            message: error.message,
+          };
+        },
+      );
+
+      if (ending === 'dispose') runtime.dispose();
+      if (ending === 'crash') worker.crash('toolchain boom');
+      if (ending === 'clean-close') {
+        worker.emitUnknown({ type: 'toolchain-terminal', reason: 'closed' });
+      }
+      await Promise.resolve();
+
+      expect(outcome).toEqual(expected);
+    },
+  );
+
+  it('validates exact install/run-bin input before posting any mutation', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
+    const symbol = Symbol('extra');
+    const accessor = Object.defineProperty({ registryUrl: '/registry' }, 'cwd', {
+      enumerable: true,
+      get: () => '/project',
+    });
+    const symbolInput = { cwd: '/project', registryUrl: '/registry', [symbol]: true };
+    const sparseArgs = new Array<string>(1);
+    const missingInstallField = { cwd: '/project' };
+    const extraInstallField = { cwd: '/project', registryUrl: '/registry', extra: 'ordinary' };
+    const missingRunBinField = {
+      cwd: '/project',
+      binPath: '/project/node_modules/.bin/vite',
+    };
+    const extraRunBinField = {
+      cwd: '/project',
+      binPath: '/project/node_modules/.bin/vite',
+      args: ['build'],
+      extra: 'ordinary',
+    };
+
+    const calls = [
+      () =>
+        runtime.toolchain.open({ registryUrl: '/registry' } as {
+          cwd: string;
+          registryUrl: string;
+        }),
+      () => runtime.toolchain.open(extraInstallField),
+      () => runtime.toolchain.open({ cwd: 'relative', registryUrl: '/registry' }),
+      () => runtime.toolchain.open(accessor as { cwd: string; registryUrl: string }),
+      () => runtime.toolchain.open(symbolInput),
+      () => runtime.toolchain.install(missingInstallField as { cwd: string; registryUrl: string }),
+      () => runtime.toolchain.install(extraInstallField),
+      () => runtime.toolchain.install({ cwd: 'relative', registryUrl: '/registry' }),
+      () => runtime.toolchain.install(accessor as { cwd: string; registryUrl: string }),
+      () => runtime.toolchain.install(symbolInput),
+      () =>
+        runtime.toolchain.runBin(
+          missingRunBinField as { cwd: string; binPath: string; args: readonly string[] },
+        ),
+      () => runtime.toolchain.runBin(extraRunBinField),
+      () =>
+        runtime.toolchain.runBin({
+          cwd: '/project',
+          binPath: '/other/node_modules/.bin/vite',
+          args: ['build'],
+        }),
+      () =>
+        runtime.toolchain.runBin({
+          cwd: '/project',
+          binPath: '/project/node_modules/.bin/vite',
+          args: sparseArgs,
+        }),
+      () =>
+        runtime.toolchain.runBin({
+          cwd: '/project',
+          binPath: '/project/node_modules/.bin/vite',
+          args: Object.defineProperty(['build'], '0', { get: () => 'build' }),
+        }),
+    ];
+
+    for (const call of calls) {
+      const pending = call();
+      const assertion = expect(pending).rejects.toMatchObject({ name: 'TypeError' });
+      await Promise.resolve();
+      const posted = worker.sent.at(-1);
+      if (posted?.type === 'toolchain') {
+        worker.emit({
+          type: 'toolchain-result',
+          result:
+            posted.request.op === 'install'
+              ? { id: posted.request.id, ok: true }
+              : { id: posted.request.id, ok: true, value: { exitCode: 0 } },
+        });
+      }
+      await assertion;
+    }
+    expect(worker.sent).toEqual([]);
   });
 });

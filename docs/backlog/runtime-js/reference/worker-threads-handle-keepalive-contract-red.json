@@ -1,0 +1,310 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted: no REV-5 blocker, all REDs fail now for the declared reason and every oracle fact reproduces on Node v24.16.0; 5 advisory NOTEs. Proceed to IMPLEMENT per ADR-0446. Not a merge approval: independent Final+GREEN still required.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/worker-threads-handle-keepalive.md (status: ready) at HEAD 09f929faa197f35ead4f1474aff91e35b304bd2b (branch vg/u8), BASE 8c899364986d6cde48b71bd4147cf29d8bd0faae; goal docs/backlog/epics/vitest-run-in-browser/goal.md I2/I3/I4 (goal.md, map.md, ledger.md unchanged BASE..HEAD); ADR-0446 (new), ADR-0152, ADR-0445. Fresh independent reviewer, read-only on vg-u8; probes in detached scratch /tmp/vgoal/u8/scratch-cr-1 @ HEAD and /tmp/vgoal/u8/review-probes. Executed: (1) pnpm test:parity worker_threads/handle- | worker_threads/worker- | natural-exit-patched (log /tmp/vgoal/u8/cr1-parity.log) -> 8/8 RED fail on stdout/status: handle-keepalive '- message late - exit 0'; handle-listener-reference missing both message rows; handle-napi-rs-unref '+ neutered false false false false'; handle-reference-api '+ symbols undefined undefined' ...; worker-natural-exit/-port-reference/-port-held rifty stdout empty; natural-exit-patched-process-exit '+ stderr Error: patched process.exit called ... node-entry-bootstrap.ts:189:29', '+ code 1'. (2) npx vitest run --project unit packages/runtime-js/src/builtins/worker_threads-keepalive.fault.test.ts -> 3/3 fail on the hold only (heldWhileAlive false x2, heldAfterConstruct false; events ['error','exit:1'], releasedAtExit, afterThrows 0, ERR_WORKER_PATH/ERR_INVALID_ARG_VALUE throws already match). (3) RIFTY_PLAYGROUND_PORT=5458 playwright browser-unit tests/browser-unit/worker-handle-keepalive.spec.ts -> 1 failed (log /tmp/vgoal/u8/cr1-bu.log): 10/11 programs differ as expected (i2-oracle keeps only WT|EXIT 0; patched-exit-program exit 1 no exit-event; patched-exit-exec-sync 'WT|exec-failed '), unref-process-exit matches (preservation guard), no timeouts. (4) CI= RIFTY_PLAYGROUND_PORT=5458 playwright prod chromium tests/e2e-prod/worker-threads-keepalive.spec.ts -> 1 failed (log /tmp/vgoal/u8/cr1-prod.log): rows ['KA|EXIT 0'] vs Node's 5 rows. (5) Live Node v24.16.0 oracle: Parity 1-7 case code run 5x each as node main.js -> byte-equal to each case's expected, 1 distinct output; node -e Parity 8 x3 -> 'tick\\nexit-event 0\\n' rc 0 / 'exit-event 4\\n' rc 4, empty stderr; browser-unit programs 1-11 via main.cjs x3 -> WT| rows/code 0/stderr '' exactly as contract Parity 9-12 and evidence; prod keepalive.cjs/listener.cjs x3 -> KA rows as Acceptance 3, rc 0. Node internals: internal/worker:353 setupPortReferencing, :444-446 kDispose, :498-502 ref(); internal/worker/io:211 setupPortReferencing; kHandle proto members, kPublicPort instanceof MessagePort true, own symbols list, listenerCount('message') 0 inside 'exit', terminate-before-start 'exit 0 / terminate 0' x3, unref'd-port p20 vs p22 timing split x3 -> all as evidence states. (6) Real consumers in the scenario tree (rolldown 1.0.3, @rolldown/binding-wasm32-wasi 1.0.3, @emnapi/wasi-threads 1.2.1, @emnapi/core 1.10.0, vitest 4.1.11, vite 8.0.16): rolldown-binding.wasi.cjs:62-91, wasi-threads.cjs.js:166-170/183/287-297, init-threads.6kl1khcL.js:9-11, base.B6Opl8PE.js:108-110, cli-api.CnMVyzaz.js:3241, init-forks.H5ZuobOQ.js:31 verbatim as cited; NAPI_RS_FORCE_WASI=1 node --require count.cjs rolldown-detached.mjs -> 2 pool Workers, both kHandle/kPublicPort ref own-overridden, hasRef false,false, exit 0 (Acceptance 4 discriminates an over-holding Worker). (7) tsc runtime-js / node-parity-runner / scoped tsconfig over the 3 new tests/ files exit 0; biome clean on 17 new files; docs:check OK; check:contract-drift OK. PR-4: diff adds only new test/case files, the ready contract, ADR-0446, evidence and two ADR README rows; no existing test, gate or oracle changed; no product source in the diff.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:102",
+      "summary": "Worker keepalive and worker natural exit: this unit (map item 8), not landed."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:110",
+      "summary": "vitest run end-to-end on the forks pool (config.ts, .ts tests, reporter, exit 1/0): items 11, 12."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "--pool=threads matches forks: items 11, 12."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:119",
+      "summary": "Claimed-path module walls are closed by landed slices; end-to-end load proof is at item 12."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:124",
+      "summary": "vitest.md compat page: item 12."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: parity runner worker-env (physical kernel Worker, production node-entry bootstrap) matches live Node stdout for Parity 1-7; node-cli-eval matches stdout/stderr/status for Parity 8",
+      "source": "acceptance",
+      "trace": "I2+I3+ADR-0446",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/{handle-keepalive,handle-reference-api,handle-listener-reference,handle-napi-rs-unref,worker-natural-exit,worker-port-reference,worker-port-held}.case.ts; tools/node-parity-runner/cases/process/natural-exit-patched-process-exit.case.ts:10-40 (8/8 RED fail at HEAD; adapter change is IMPLEMENT scope, graded at Final+GREEN under PR-4)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: real Chromium child realm runs Parity 1-7 verbatim plus 9-12, same WT| rows and exit code as live Node, no timeout",
+      "source": "acceptance",
+      "trace": "I2+I3+ADR-0446",
+      "status": "pass",
+      "citation": "tests/browser-unit/worker-handle-keepalive.spec.ts:29-61; tests/browser-unit/fixtures/worker-handle-keepalive-cases.ts:45-107 (RED: 10/11 programs differ at HEAD)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: production build, node keepalive.cjs prints KA|got hi true / KA|wexit 0 / KA|EXIT 0 and node listener.cjs KA|echo ping / KA|echo-exit 1, both exit 0",
+      "source": "acceptance",
+      "trace": "I2+ADR-0446",
+      "status": "pass",
+      "citation": "tests/e2e-prod/worker-threads-keepalive.spec.ts:45-113 (RED: only KA|EXIT 0 at HEAD)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: rolldown wasm32-wasi pool never holds its parent; existing detached-rolldown real-package spec keeps rows and exit 0",
+      "source": "acceptance",
+      "trace": "I2+I4+ADR-0446",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-ref-keepalive.spec.ts:69-106 (preservation guard, passes at BASE by design; discriminates an over-holding Worker: Node probe shows 2 neutered pool Workers) + Parity 4 RED handle-napi-rs-unref.case.ts:20-69",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: docs/public/compat/process.md rows (ok: keepalive/ref-unref/listener/parentPort referencing + worker natural exit replacing the warning row; warning: reference-object shape, public-port-only exit delivery, same-realm lifetime; fail: kernel-path 'error')",
+      "source": "acceptance",
+      "trace": "ADR-0446",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/worker-threads-handle-keepalive.md:60 (docs deliverable, no RED form; current warning row docs/public/compat/process.md:42; graded by reading at Final+GREEN)",
+      "note": ""
+    },
+    {
+      "row": "Parity 1 handle-keepalive: Worker posting after 300 ms is the only pending work; start / message late / exit 0",
+      "source": "acceptance",
+      "trace": "I2+ADR-0446",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/handle-keepalive.case.ts:14-24",
+      "note": ""
+    },
+    {
+      "row": "Parity 2 handle-reference-api: Node's reference shape and transitions (14 rows), ending unreferenced",
+      "source": "acceptance",
+      "trace": "I2+ADR-0446",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/handle-reference-api.case.ts:17-78",
+      "note": ""
+    },
+    {
+      "row": "Parity 3 handle-listener-reference: after unref() a first 'message' listener holds until the message; once holds only until it fires; late2 never prints",
+      "source": "acceptance",
+      "trace": "I2+ADR-0446",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/handle-listener-reference.case.ts:20-33",
+      "note": ""
+    },
+    {
+      "row": "Parity 4 handle-napi-rs-unref: rolldown onCreateWorker neutering verbatim + emnapi once/unref/ref/on; nothing holds; neutered false false true true",
+      "source": "acceptance",
+      "trace": "I2+ADR-0446",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/handle-napi-rs-unref.case.ts:20-69",
+      "note": ""
+    },
+    {
+      "row": "Parity 5 worker-natural-exit: messages before 'exit', exitCode ?? 0 / exit(5), worker 'exit' listener runs, reassigned process.exit ignored, both references null after exit",
+      "source": "acceptance",
+      "trace": "I2+ADR-0446",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/worker-natural-exit.case.ts:31-70",
+      "note": ""
+    },
+    {
+      "row": "Parity 6 worker-port-reference: parentPort reference API and drain cases (once, off, unref with listener)",
+      "source": "acceptance",
+      "trace": "I2+ADR-0446",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/worker-port-reference.case.ts:50-80",
+      "note": ""
+    },
+    {
+      "row": "Parity 7 worker-port-held: referenced parentPort (on, onmessage, bare ref, removeAllListeners('message')) keeps the worker alive until terminate(); exit:1 terminate:1",
+      "source": "acceptance",
+      "trace": "I2+ADR-0446",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/worker-port-held.case.ts:24-59",
+      "note": ""
+    },
+    {
+      "row": "Parity 8 natural-exit-patched-process-exit (node -e): natural exit ignores a reassigned process.exit; exit-event 0 rc 0 / exit-event 4 rc 4, empty stderr",
+      "source": "acceptance",
+      "trace": "I3+ADR-0446",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/natural-exit-patched-process-exit.case.ts:10-40",
+      "note": ""
+    },
+    {
+      "row": "Parity 9 i2-oracle: goal t3.cjs; WT|got hi true / WT|wexit 0 / WT|EXIT 0, code 0",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-handle-keepalive-cases.ts:53-64",
+      "note": ""
+    },
+    {
+      "row": "Parity 10 unref-process-exit: unref()'d Worker; WT|start / WT|EXIT 0, code 0, no worker row",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-handle-keepalive-cases.ts:65-77 (negative clause of I2, already true at BASE: preservation guard against an implementation that ignores unref)",
+      "note": ""
+    },
+    {
+      "row": "Parity 11 patched-exit-program (node <file>): WT|tick / WT|exit-event 0, code 0",
+      "source": "acceptance",
+      "trace": "I3+ADR-0446",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-handle-keepalive-cases.ts:81-88",
+      "note": ""
+    },
+    {
+      "row": "Parity 12 patched-exit-exec-sync (execSync child natural exit): WT|child tick / WT|child exit-event 0 / WT|exec-ok, code 0",
+      "source": "acceptance",
+      "trace": "I3+ADR-0446",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-handle-keepalive-cases.ts:89-106",
+      "note": ""
+    },
+    {
+      "row": "Fault torn-state x repeated ref/unref, listener add/remove, calls after exit: one hold per reference object, own release only; after 'exit' both null, ref/unref no-op, nothing held",
+      "source": "fault-matrix",
+      "trace": "I2+ADR-0446",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/handle-reference-api.case.ts:38-59 + worker-natural-exit.case.ts:46-56",
+      "note": ""
+    },
+    {
+      "row": "Fault torn-state x Worker constructor that throws (invalid path, eval with URL): no hold; a valid Worker holds from construction",
+      "source": "fault-matrix",
+      "trace": "ADR-0446",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/worker_threads-keepalive.fault.test.ts:136-162",
+      "note": ""
+    },
+    {
+      "row": "Fault observable-order x worker messages (incl. one posted from the worker's own 'exit' listener) vs parent's 'exit': every message before 'exit'; hold released only at the Worker's end",
+      "source": "fault-matrix",
+      "trace": "I2+ADR-0446",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/worker-natural-exit.case.ts:13-29,64-68",
+      "note": ""
+    },
+    {
+      "row": "Fault peer death x kernel peer closing or DOM Worker boundary refusing spawn: 'error' then 'exit' 1, every hold released, parent never hangs",
+      "source": "fault-matrix",
+      "trace": "I2+ADR-0446",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/worker_threads-keepalive.fault.test.ts:85-134",
+      "note": ""
+    },
+    {
+      "row": "Fault unbounded-read x worker whose parentPort stays referenced: worker and referencing parent alive until terminate()/Ctrl-C; worker drain uncapped; parent drain policy unchanged",
+      "source": "fault-matrix",
+      "trace": "I2+ADR-0152",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/worker-port-held.case.ts:24-59 (see Completeness concern: 400 ms terminate does not discriminate the uncapped half)",
+      "note": ""
+    },
+    {
+      "row": "Fault provenance-lie x napi-rs replacing ref on the reference objects: no later ref()/listener holds; rolldown pool never pins its parent",
+      "source": "fault-matrix",
+      "trace": "I2+ADR-0446",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/worker_threads/handle-napi-rs-unref.case.ts:20-69; tests/browser-unit/message-port-ref-keepalive.spec.ts:69-106",
+      "note": ""
+    },
+    {
+      "row": "Fault sibling-drift x natural-exit owners (worker thread, node <file>, node -e, execSync child; parity worker-env adapter): one 'exit' with exitCode ?? 0, never via reassigned process.exit",
+      "source": "fault-matrix",
+      "trace": "I2+I3+ADR-0446",
+      "status": "pass",
+      "citation": "worker-natural-exit.case.ts:24-28; natural-exit-patched-process-exit.case.ts:10-40; tests/browser-unit/fixtures/worker-handle-keepalive-cases.ts:81-106",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/worker-threads-handle-keepalive.md:89",
+          "evidence": "tools/node-parity-runner/cases/worker_threads/worker-port-held.case.ts:36 setTimeout(... terminate ..., 400); no carrier holds a worker longer than 30 s",
+          "summary": "Fault row unbounded-read: its only carrier, Parity 7, terminates at +400 ms, so it cannot tell an uncapped worker-thread drain (ADR-0446 §5) from a capped one (e.g. ADR-0152 §4's 30 s cap, which ADR-0446 §Rejected says kills listening pool workers). The 'worker drain is uncapped' half has no discriminating carrier. At Final+GREEN, check the bootstrap's worker-thread awaitDrain cap by reading.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/worker_threads/*.case.ts; tests/browser-unit/fixtures/worker-handle-keepalive-cases.ts",
+          "evidence": "grep: all 7 worker_threads cases' setup files are *.cjs; ESM worker parentPort exists at BASE only in env-semantics.case.ts (worker-env-child.mjs)",
+          "summary": "Every new carrier uses a CommonJS parent and CommonJS worker scripts (require('node:worker_threads')). vitest 4.1.11 pool workers are ESM (`import { parentPort }`, init-threads.6kl1khcL.js:9-11). ESM-realm parentPort referencing and ESM worker natural exit are first exercised at item 12. Optional hardening: add an .mjs worker to Parity 6/7.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/worker-threads-handle-keepalive.md:4,108; docs/adr/runtime-js/0446-count-live-worker-threads-workers-in-child-realm-keepalive.md:72-76; docs/adr/README.md:514",
+          "evidence": "",
+          "summary": "The unit also changes natural exit for node <file>, node -e, and the fork, .bin and execSync owners (ADR-0446 §6, Parity 8/11/12). The title names only the worker-thread clause. It is a justified sibling sweep of the map open question, traced to I3. §6 also refines ADR-0445 rule 6 ('calls exit()') for the non-worker owners, but the README correction row's seam column names only '0445 rule 6 worker-thread clause'. RDY-4/DEC-2 advisory: state it in the title and the seam column.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/reference/worker-threads-handle-keepalive-evidence.md:162-173",
+          "evidence": "node term.cjs x3 (Node v24.16.0) -> 'P|exit 0' / 'P|terminate 0' each run; ls docs/backlog/runtime-js | grep -E 'terminate|no-coi' -> none",
+          "summary": "Two discoveries exist only as evidence and Out-of-scope prose, 'to be routed by the land step': (1) terminate() before the worker starts gives Node exit 0 / resolve 0 but rifty 1, a pre-existing same-boundary divergence; (2) the no-COI project command's natural exit goes through the reassignable exit(). File both as backlog drafts at land (REV-12). Otherwise they become silent backlog.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/worker-threads-handle-keepalive.md:89",
+          "evidence": "packages/workbench/src/workers/owner-child-bin-executor.ts:43 nodeServe: true; packages/runtime-js/src/builtins/child_process-worker.ts:349 nodeServe: true; packages/workbench/src/workers/node-entry-bootstrap.ts:66 nodeServe = eval || program.nodeServe, :171-188 awaitDrain({ capMs: Number.POSITIVE_INFINITY ... }); packages/runtime-js/src/ipc/recursive-runner.ts:119 nodeServe: false -> node-entry-bootstrap.ts:196-201 else-branch awaitDrain() with the default cap",
+          "summary": "The honest-outcome text of the unbounded-read row misdescribes BASE. It says '.bin/execSync keep ADR-0152 §4's loud 30 s cap', but .bin and spawn/fork children launch with nodeServe: true and take the uncapped lifecycle drain. Only the execSync recursive runner (nodeServe: false) reaches the capped else-branch. The bootstrap comment at node-entry-bootstrap.ts:169 ('else-branch (.bin/execSync)') is stale too. The promise 'the parent's own drain policy is unchanged' is unaffected. Correct the parenthetical.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "09f929faa197f35ead4f1474aff91e35b304bd2b"
+}

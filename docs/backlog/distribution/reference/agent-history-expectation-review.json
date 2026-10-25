@@ -1,0 +1,21 @@
+{
+  "reviewer": "/root/contract_review",
+  "judgment": "Approve reference correction only: newly prompted user content is native text-block array; persisted seed content remains unchanged.",
+  "locations": ["packages/agent/src/history.test.ts:121", "packages/agent/src/history.test.ts:188"],
+  "reference": "Node v24.16.0; @earendil-works/pi-agent-core 0.85.1",
+  "executed_probe": "Agent({streamFn:(_m,c)=>{console.log(JSON.stringify(c.messages));throw new Error('probe end')}}).prompt('fresh')",
+  "observed_output": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "fresh"
+        }
+      ],
+      "timestamp": 1790289562204
+    }
+  ],
+  "authorized_correction": "Replace expected content: 'fresh' with content: [{ type: 'text', text: 'fresh' }] in the two fresh-prompt assertions. Preserve all seed/reset/isolation assertions.",
+  "cause": "Original Contract+RED stopped at earlier restoration assertion and did not execute the later fresh-prompt expectation; that expectation incorrectly assumed native Pi prompt shape."
+}

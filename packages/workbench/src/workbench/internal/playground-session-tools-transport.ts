@@ -9,6 +9,7 @@ import { isAbsolute, normalizePath } from '@riftydev/vfs';
 import {
   ClosedHandleError,
   type SerializedWorkbenchOwnerError,
+  inspectSerializedWorkbenchOwnerError as cloneError,
   deserializeWorkbenchOwnerError,
 } from '../errors.ts';
 import type {
@@ -588,15 +589,6 @@ function cloneRevision(value: unknown): ProjectDocumentsRevision {
       field(record, 'treeRevision', 'session tools tree revision'),
       'session tools tree revision',
     ),
-  });
-}
-
-function cloneError(value: unknown): SerializedWorkbenchOwnerError {
-  const record = plainRecord(value, 'session tools error');
-  exact(record, ['name', 'message'], 'session tools error');
-  return Object.freeze({
-    name: nonEmptyString(record, 'name', 'session tools error name'),
-    message: stringField(record, 'message', 'session tools error message'),
   });
 }
 

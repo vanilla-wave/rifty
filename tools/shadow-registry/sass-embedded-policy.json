@@ -151,7 +151,7 @@
     "tools/shadow-registry/src/internal/catalog.contract.test.ts",
     "tools/shadow-registry/src/sass-capsule.contract.test.ts",
     "packages/npm-client/src/installer-sass-embedded-substitution.contract.test.ts",
-    "packages/workbench/src/workers/owner-package-shadow-assets.contract.test.ts",
+    "packages/workbench/src/workers/owner-package-runtime-bindings.contract.test.ts",
     "tests/browser-unit/sass-vite-contract.spec.ts",
     "tests/browser-unit/sass-network-measurement.spec.ts"
   ],

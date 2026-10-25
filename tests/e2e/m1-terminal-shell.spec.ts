@@ -76,7 +76,7 @@ test.describe('M1 - terminal shell', () => {
     await expect(terminalTab(page, primary)).toBeVisible();
     await expect(page.locator('[data-testid="problems-tab"]')).toBeVisible();
     await expect(page.locator('[data-testid="terminal-mode-hint"]')).toContainText(
-      'Commands run in /;',
+      'running programs own stdin',
     );
     await expect(page.locator('[data-testid="terminal-mode-hint"]')).toContainText(
       'Use + to open another shell while a program is running.',
@@ -240,6 +240,8 @@ test.describe('M1 - terminal shell', () => {
   test('npm run vite resolves the seeded script through the installed Vite CLI', async ({
     page,
   }) => {
+    // Two cold CLI starts; preserve the first boot's budget and the shared readiness budget.
+    test.setTimeout(180_000);
     await bootProjectFiles(page);
     // ADR-0148: the chosen project-files starter boots its dev server in the owner — wait up.
     // Readiness = the LIVE pill (derived from the listening-port set), never a
@@ -252,7 +254,7 @@ test.describe('M1 - terminal shell', () => {
     // The owner npm resolves the seeded `vite` script through the shell/bin path,
     // so this proves package scripts do not fall back to the old co-resident
     // special-case or a missing-script stub.
-    await expectViteDevServerReady(page, 5173, 30_000);
+    await expectViteDevServerReady(page, 5173);
     const buf = await terminalBuffer(page);
     expect(buf).not.toContain("unknown subcommand 'run'");
     expect(buf).not.toContain('missing script');

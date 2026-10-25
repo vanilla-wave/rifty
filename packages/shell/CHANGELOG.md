@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Carry file-redirection endpoint metadata into the command context (ADR-0544).
+
+- Execute local `npx` bins through the existing resolver/Node executor; unsupported acquisition and options fail explicitly (ADR-0545).
+- Unquoted word-initial `~` and `~/…` expand to `$HOME` as bash; `mv` across mounts copies then removes the source, as GNU `mv` (ADR-0531).
+
+- Honor git status --short through the existing -s formatter; do not silently print the long summary.
+
+
+- Add per-dispatch command policy and explicit background prohibition; preserve default Shell behavior.
+
 ### Fixed
 
 - `git` command probes no longer re-collapse facade-surfaced storage failures

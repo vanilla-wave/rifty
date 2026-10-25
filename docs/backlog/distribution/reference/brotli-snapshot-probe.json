@@ -1,0 +1,52 @@
+{
+  "node": "v24.16.0",
+  "nodeCompressionStream": {
+    "gzip": "accepted",
+    "br": "TypeError: Failed to construct 'CompressionStream': 1st argument value 'br' is not a valid enum value of type CompressionFormat.",
+    "brotli": "accepted"
+  },
+  "source": "committed Vite snapshot converted with current TAR serializer; not a fresh producer run",
+  "tarBytes": 27831808,
+  "gzipBytes": 9770964,
+  "brotli6Bytes": 8287151,
+  "encodeMs": 313,
+  "snapshotId": "sha256:7d7363d5cd875f641694016ab9cc973c76d326bd0917652ecbbe4e78e0c6aea2",
+  "chromium": "148.0.7778.96",
+  "chromiumCompressionStream": {
+    "gzip": "accepted",
+    "br": "TypeError: Failed to construct 'CompressionStream': Unsupported compression format: 'br'",
+    "brotli": "TypeError: Failed to construct 'CompressionStream': Unsupported compression format: 'brotli'"
+  },
+  "results": [
+    {
+      "path": "/br",
+      "status": "matched",
+      "templateId": "vite",
+      "packages": 12
+    },
+    {
+      "path": "/gzip",
+      "status": "matched",
+      "templateId": "vite",
+      "packages": 12
+    },
+    {
+      "path": "/raw-br",
+      "status": "mismatch"
+    }
+  ],
+  "requests": [
+    {
+      "path": "/br",
+      "acceptEncoding": "gzip, deflate, br, zstd"
+    },
+    {
+      "path": "/gzip",
+      "acceptEncoding": "gzip, deflate, br, zstd"
+    },
+    {
+      "path": "/raw-br",
+      "acceptEncoding": "gzip, deflate, br, zstd"
+    }
+  ]
+}

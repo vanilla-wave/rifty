@@ -3,6 +3,7 @@ import type {
   PlaygroundCatalogSnapshot,
   PlaygroundProjectCatalog,
   PlaygroundProjectRef,
+  PlaygroundRetainedScratch,
 } from '../playground.ts';
 
 function exactRecord(
@@ -86,6 +87,26 @@ function nonEmpty(value: unknown, label: string): string {
   return value;
 }
 
+export function inspectPlaygroundRetainedScratchId(value: unknown): string {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9-]+$/.test(value)) {
+    throw new TypeError('Retained Scratch id must be an alphanumeric token');
+  }
+  return value;
+}
+
+export function inspectPlaygroundRetainedScratchRecords(
+  value: unknown,
+): readonly PlaygroundRetainedScratch[] {
+  const records = densePlainArray(value, 'retained Scratch records').map((entry) => {
+    const record = exactRecord(entry, ['id'], 'retained Scratch record');
+    return Object.freeze({ id: inspectPlaygroundRetainedScratchId(record.id) });
+  });
+  if (new Set(records.map((record) => record.id)).size !== records.length) {
+    throw new TypeError('Retained Scratch records contain a duplicate id');
+  }
+  return Object.freeze(records);
+}
+
 function activeRef(value: unknown): PlaygroundProjectRef | null {
   if (value === null) return null;
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -157,6 +178,8 @@ export function createPlaygroundProjectCatalog(
     snapshot: () => authority.catalogSnapshot(),
     subscribe: (listener: Parameters<PlaygroundProjectCatalog['subscribe']>[0]) =>
       authority.subscribeCatalog(listener),
+    listRetainedScratch: () => authority.listRetainedScratch(),
+    exportRetainedScratch: (id: string) => authority.exportRetainedScratch(id),
     createScratch: (input: Parameters<PlaygroundProjectCatalog['createScratch']>[0]) =>
       authority.createScratch(input),
     saveScratch: (input: Parameters<PlaygroundProjectCatalog['saveScratch']>[0]) =>

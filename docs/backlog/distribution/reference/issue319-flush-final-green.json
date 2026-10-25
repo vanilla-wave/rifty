@@ -1,0 +1,80 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "I3 slice PASS; goal remains incomplete. Independent browser tests 4/4 PASS. pr:check PASS: test:run 1526.3s, 9 files passed isolated rerun after 15 failures including 12 timeouts; parity 65.8s PASS. Evidence: /tmp/rifty-321-pr-check-2.log.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "f822d4e2281bd66c28aeafbf63056309e23452a9",
+  "unit_goal_source": "docs/backlog/distribution/no-coi-toolchain-persist-failures.md; BASE 6288fe1f188ed4e8f055a7b8d50d3d7ba267ed39; repair 3e68f6f6fae0d71b80f757553e18ee8b2e3e4dd9. Subsequent units reviewed as preparation, not delivered implementation. b8014372c4f02a6ba953647c20fe40d0f6cdbbd2 changes only subsequent-unit documentation; reviewed source unchanged.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/no-coi-persisted-warm-open/goal.md:70",
+      "summary": "Required continuation: public warm-open, compatible authority, fresh-worker activation without replay/network/mutation."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/no-coi-persisted-warm-open/goal.md:75",
+      "summary": "Required continuation: preserved edits/deletions, cached explicit repair, Vite build after full recreation."
+    },
+    {
+      "clause": "I3 unreadable preload",
+      "location": "docs/backlog/epics/no-coi-persisted-warm-open/goal.md:79",
+      "summary": "Required continuation: vfs/no-coi-opfs-preload-handles consumes existing opfs-preload-failure-empty-bytes; unreadable content cannot become fabricated empty bytes."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/no-coi-persisted-warm-open/goal.md:82",
+      "summary": "Required continuation: install-only durable equality and directory dedup preserving dirty/unknown/heal/failure behavior."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/no-coi-persisted-warm-open/goal.md:87",
+      "summary": "Required continuation: single-pass preload/root initialization, native-call reduction, fresh reads and native semantics."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: install/build reject reported persistence failures; clean and memory settlement preserved.",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-persistence.fault.spec.ts:5; tests/no-coi/no-coi-dev-hmr.spec.ts:913; tests/no-coi/no-coi-sandbox-build-loop.spec.ts:1835",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail × install/build flush: reject and include native failure.",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-persistence.fault.spec.ts:31; tests/no-coi/no-coi-persistence.fault.spec.ts:65",
+      "note": ""
+    },
+    {
+      "row": "toolchain.install settlement propagates reported OPFS failure.",
+      "source": "public-api",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-persistence.fault.spec.ts:41; packages/workbench/src/workers/no-coi-toolchain-worker.ts:77",
+      "note": ""
+    },
+    {
+      "row": "toolchain.runBin settlement propagates reported OPFS failure.",
+      "source": "public-api",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-persistence.fault.spec.ts:44; packages/workbench/src/workers/no-coi-toolchain-worker.ts:128",
+      "note": ""
+    }
+  ],
+  "axes": [
+    { "axis": "Completeness", "verdict": "pass", "findings": [] },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    { "axis": "Bugs", "verdict": "pass", "findings": [] },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+  ]
+}

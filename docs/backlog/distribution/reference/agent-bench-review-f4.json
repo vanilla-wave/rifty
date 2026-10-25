@@ -1,0 +1,349 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "Historical BLOCK: form navigation settlement F4 and URL interaction settlement F5 require fixes, carrier proof, and final clean-tree review.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "Final+GREEN verification followup for docs/backlog/distribution/agent-bench.md; same BASE0bcf3340b, parent25391197516ee5ce9bc5c9b7afdc0b5a997f8ad3 plus in-flight F1–F3 repairs. /root/bench_final_review read-only. Historical findings observed before settlement repairs, so no clean reviewed_sha/PASS binding is asserted. Full original unit review /tmp/pr333-bench-final-review-before-fixes.json; raw followup source/probes in /tmp/pr333-bench-final-review-evidence.md.",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance1 + Parity1 → I8 + scenario4",
+      "location": "tools/agent-bench/tasks/url-filters/judge.ts:5",
+      "summary": "F4/F5 historical settlement findings require committed carriers and final verification."
+    },
+    {
+      "clause": "Acceptance7 → I8 + scenario4",
+      "location": "docs/backlog/distribution/agent-bench.md:111",
+      "summary": "Final classified42 artifacts and committed diagnostic interpretation awaited."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I8 / scenario4",
+      "location": "docs/backlog/epics/ai-agent-mode-and-bench/map.md:3",
+      "summary": "Benchmark fixes/final evidence and final goal rechart/closure remain; prior accepted I1–I7 proof reused inside REV1."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: five shared tasks, cold supported lanes, current templates and actual DOM/API judges incl. required-title error",
+      "source": "acceptance",
+      "trace": "I8 + scenario4",
+      "status": "weak",
+      "citation": "tools/agent-bench/src/tasks.ts:24; tools/agent-bench/tests/native-judge-controls.ts:12",
+      "note": "F4/F5: immediate post-action DOM reads can reject functioning routed form/URL programs; executed native artifacts retained."
+    },
+    {
+      "row": "Acceptance2: real +chat entry and packed public no-COI project/preview hosts; explicit node exclusion",
+      "source": "acceptance",
+      "trace": "I8 + I5 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/lanes/rifty.ts:97; tools/agent-bench/src/services.ts:18; tools/agent-bench/src/no-coi-page.ts:29",
+      "note": ""
+    },
+    {
+      "row": "Acceptance3: native pinned Pi with optional auth/budgets, common profile/context caveat; unchanged core default",
+      "source": "acceptance",
+      "trace": "I8 + I2 + ADR-0434",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/lanes/local-reference.ts:18; packages/agent/src/prompt.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Acceptance4: real all-three smoke and identical common judge evidence; fabricated report/skipped judge cannot pass",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:77",
+      "note": ""
+    },
+    {
+      "row": "Acceptance5: per-run admission/deadline, distinct budget outcome, errors and retained effects/records",
+      "source": "acceptance",
+      "trace": "I8 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:208; docs/backlog/distribution/reference/agent-bench-native-cli-result.json:1",
+      "note": ""
+    },
+    {
+      "row": "Acceptance6: JSON/Markdown config/metrics/delta/evidence, human annotations retained, key excluded",
+      "source": "acceptance",
+      "trace": "I8 + I2 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/report.ts:49; tools/agent-bench/src/runner.ts:22; tools/agent-bench/tests/contract.spec.ts:192",
+      "note": ""
+    },
+    {
+      "row": "Acceptance7: complete 42-run real diagnostic matrix and classified committed summary remain explicit post-implementation measurement targets",
+      "source": "acceptance",
+      "trace": "I8 + scenario4",
+      "status": "missing",
+      "citation": "docs/backlog/distribution/agent-bench.md:111",
+      "note": "Full raw42 finished; final committed diagnostic classification awaited, with four original failures preserved."
+    },
+    {
+      "row": "Acceptance8: tsc/vitest/no-COI shell/React declaration baseline values remain explicit post-implementation measurement targets",
+      "source": "acceptance",
+      "trace": "I8 + ADR-0434",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-bench-baseline-results.md:1",
+      "note": ""
+    },
+    {
+      "row": "Parity1: common judges on actual lane programs; identical mock evidence; native positive controls target all requested outcomes",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/native-judge-controls.ts:12; tools/agent-bench/tests/contract.spec.ts:77",
+      "note": "F4/F5: immediate post-action DOM reads can reject functioning routed form/URL programs; executed native artifacts retained."
+    },
+    {
+      "row": "Parity2: shared profile paragraphs checked against actual requests/native assembled context, honest differences",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:99",
+      "note": ""
+    },
+    {
+      "row": "Fault run/budget: native pre-effect admission/abort and explicit exhaustion",
+      "source": "fault-matrix",
+      "trace": "I8 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:208; tools/agent-bench/tests/contract.spec.ts:354",
+      "note": ""
+    },
+    {
+      "row": "Fault provider/tool after effects: error retained in trace/diff without invented completion",
+      "source": "fault-matrix",
+      "trace": "I8 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:254",
+      "note": ""
+    },
+    {
+      "row": "Fault install/judge failure: retain failure stage/evidence and previously completed records",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/runner.ts:137; docs/backlog/distribution/reference/agent-bench-baseline-no-coi-vitest-owner.json.gz",
+      "note": ""
+    },
+    {
+      "row": "Fault profile/task/lane sibling drift: shared inputs/common judges/real hosts and visible differences",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:77",
+      "note": ""
+    },
+    {
+      "row": "Fault config/export: explicit invalid config and memory-only/redacted key",
+      "source": "fault-matrix",
+      "trace": "I8 + I2",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:299; tools/agent-bench/tests/contract.spec.ts:343",
+      "note": ""
+    },
+    {
+      "row": "Public pnpm agent-bench run/report CLI exposes diagnostic entry",
+      "source": "public-api",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/cli.ts:1",
+      "note": ""
+    },
+    {
+      "row": "Public getAgentPromptProfile and AgentPromptProfile expose generic shared coding policy",
+      "source": "public-api",
+      "trace": "I8 + ADR-0434",
+      "status": "pass",
+      "citation": "packages/agent/src/prompt.test.ts:16",
+      "note": ""
+    },
+    {
+      "row": "Frozen accepted fix-date-sort user prompt is byte-identical to origin/ai-mode-mvp",
+      "source": "frozen-artifact",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tasks/fix-date-sort/prompt.md:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen accepted add-search user prompt is byte-identical to origin/ai-mode-mvp",
+      "source": "frozen-artifact",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tasks/add-search/prompt.md:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen accepted url-filters user prompt is byte-identical to origin/ai-mode-mvp",
+      "source": "frozen-artifact",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tasks/url-filters/prompt.md:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen accepted new-issue-form user prompt is byte-identical to origin/ai-mode-mvp",
+      "source": "frozen-artifact",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tasks/new-issue-form/prompt.md:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen accepted node-endpoint user prompt is byte-identical to origin/ai-mode-mvp",
+      "source": "frozen-artifact",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tasks/node-endpoint/prompt.md:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen delivered default prompt: exact formatter bytes except current date",
+      "source": "frozen-artifact",
+      "trace": "I8 + ADR-0434",
+      "status": "pass",
+      "citation": "packages/agent/src/prompt.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Frozen native CLI oracle: no-auth transport, blocked extra write, explicit deadline and stopped PID",
+      "source": "frozen-artifact",
+      "trace": "I8 + I4 + ADR-0434",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-bench-native-cli-oracle.mjs:8",
+      "note": ""
+    },
+    {
+      "row": "Frozen Playwright privacy oracle: snapshots=false can retain provider-error key; keyed raw traces omitted",
+      "source": "frozen-artifact",
+      "trace": "I8 + I2 + ADR-0434",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-bench-trace-privacy.json:1",
+      "note": ""
+    },
+    {
+      "row": "Original npm @types/react19.3.0 archive file paths/bytes match real npm11.17 extraction",
+      "source": "frozen-artifact",
+      "trace": "I8 + I5 + ADR-0435",
+      "status": "pass",
+      "citation": "packages/npm-client/src/unpacker-npm-root.test.ts:14",
+      "note": ""
+    },
+    {
+      "row": "Native named/dot/multi-root, flat/property-name and NUL tar member corpus",
+      "source": "frozen-artifact",
+      "trace": "I8 + ADR-0435",
+      "status": "pass",
+      "citation": "packages/npm-client/src/unpacker-npm-root.test.ts:38",
+      "note": ""
+    },
+    {
+      "row": "npm strip-one extraction rejects raw/inner traversal and preserves ordinary property names",
+      "source": "public-api",
+      "trace": "I8 + ADR-0435",
+      "status": "pass",
+      "citation": "packages/npm-client/src/unpacker.ts:140; packages/npm-client/src/unpacker.test.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Old materialized install identity loses authority after tar layout repair",
+      "source": "frozen-artifact",
+      "trace": "I8 + ADR-0435",
+      "status": "pass",
+      "citation": "tests/integration/npm-tar-install-identity.test.ts:3",
+      "note": ""
+    },
+    {
+      "row": "git status --short matches native short formatter baseline",
+      "source": "public-api",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "packages/shell/tests/git-cli.test.ts:55; docs/backlog/distribution/reference/agent-bench-git-short-native.json:1",
+      "note": ""
+    },
+    {
+      "row": "Rebaked TypeScript dependency snapshot uses current acquisition identity",
+      "source": "frozen-artifact",
+      "trace": "I8 + ADR-0435",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts:102",
+      "note": ""
+    },
+    {
+      "row": "Rebaked Vite dependency snapshot uses current acquisition identity",
+      "source": "frozen-artifact",
+      "trace": "I8 + ADR-0435",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts:102",
+      "note": ""
+    },
+    {
+      "row": "Rebaked Vite8 dependency snapshot uses current acquisition identity",
+      "source": "frozen-artifact",
+      "trace": "I8 + ADR-0435",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts:102",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/tasks/new-issue-form/judge.ts:15",
+          "summary": "F4: immediately counting title after navigation rejects working routed forms before React commits the form.",
+          "authority": "Acceptance1 + Parity1 → I8 + scenario4: actual requested New issue workflow, with no zero-frame routing requirement.",
+          "evidence": "After button/link selector correction, unchanged exact live native2/3 programs produce judge title field exists=false. Independent fresh-context actual link→form→empty required→list25→valid→list26 succeeds. Raw /tmp/pr333-bench-review-fixed-forms-exact-url-final.log; /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/pr333-review-native-judges-dy7Zws/result.json. Fault class ordering/frozen-assumption at async DOM judge boundary; original inline opener control missed navigation. Same boundary sweep includes post-submit list/new-card visibility and URL F5. Later corrected waits independently pass all five form cases in /tmp/pr333-bench-review-fixed-forms-settled.log; final committed tree still awaited."
+        },
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/tasks/url-filters/judge.ts:5",
+          "summary": "F5: consecutive filter changes before rendered-state settlement lose status in ordinary native React and falsely label the user workflow failed.",
+          "authority": "Acceptance1 + Parity1 → I8 + scenario4: shared URL restores selected filters; accepted scenario has no same-frame queueing contract.",
+          "evidence": "Exact retained COI source on native React/react-dom19.3.0, scheduler0.28.0, router7.18.3, Vite7.3.6; same /issues initial page + native Chromium CPU×6. Unmodified judge gives all/Mara and IDs[1,6,10,16,21]. Original functional-clone positive control fails identically. In SAME /issues/CPU×6 conditions, waiting for rendered filtered list before next input restores closed/Mara/#6 and ?status=closed&assignee=Mara. /tmp/pr333-review-url-exact-scheduling.mts; raw /tmp/pr333-bench-review-url-exact-scheduling-final.log; /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/pr333-review-native-judges-tq5W4l/result.json + screenshots. Bounded11+11 trials stop at first forced failure; no model calls. Fault class ordering/frozen-assumption at asynchronous React navigation boundary; sibling form F4. Pinned primary docs https://reactrouter.com/7.18.3/api/hooks/useSearchParams explicitly document nonqueueing same-tick setters. No rifty-only runtime attribution."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

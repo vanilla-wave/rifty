@@ -25,10 +25,8 @@ CJS + ESM on one resolver, live bindings, cycles, CJS↔ESM interop. ADR-0004, A
 
 ## M4 — FileSystem
 
-**PARTIAL.**
+**DONE.**
 Sync + async + promises fs over a unified VFS; OPFS + Memory backends. ADR-0014, ADR-0029, ADR-0037, ADR-0041, ADR-0072.
-open:
-- `docs/backlog/vfs/opfs-persistence-browser-roundtrip` — write→reload round-trip in a real browser.
 
 ## M5 — Streams & IO
 
@@ -113,11 +111,22 @@ exploration (an aborted spike, never shipped) as the in-browser-agent direction 
 opencode's tool layer needs native process spawn (a browser
 ceiling) plus permanent vendoring; the agent is built instead on the embeddable **Pi**
 harness (`@earendil-works/pi-agent-core`, verified browser-clean), registering rifty-native
-tools as plain pluggable functions. **AI lives outside rifty** — a consumer of `@riftydev/*`;
-rifty grows only AI-agnostic capabilities (TS language service, git over VFS). Positioning:
+tools as plain pluggable functions. The agent loop ships as `@riftydev/agent` (ADR-0424,
+published under ADR-0436); endpoint, keys and UI stay with the consumer, and rifty's
+AI-agnostic capabilities (TS language service, git over VFS) serve it. Positioning:
 `docs/research/open-webcontainers-alternative-2026-06.md`.
+Delivered foundation: headless Pi agent over public Workbench/no-COI hosts,
+lazy playground "+chat", three-lane42-run diagnostic. Consumer guide:
+`packages/agent/README.md`; proof: `docs/backlog/distribution/reference/ai-agent-mode-closure-evidence.md`.
+Delivered no-COI host kit: copyable SDK + agent composition shared by packed CI
+and the benchmark; typed lifecycle/progress, policies, transcript, text transport
+and registry install. Proof: `docs/backlog/distribution/reference/no-coi-agent-host-kit-close.md`.
+Delivered coding comparison: four real origins, retained own-environment results/
+uncertainty; eval-v18 result and classification. Runbook:
+`tools/agent-bench/README.md`; result:
+`tools/agent-bench/reports/summaries/2026-10-15-eval-v18-corrected/README.md`
+(text core only, ADR-0532).
 open:
-- `docs/backlog/distribution/ai-ide-pi-agent-harness` — embed Pi + the `pi-ai` openai subpath + rifty-tool bindings; records the Pi-over-opencode + AI-outside-rifty direction.
 - `docs/backlog/distribution/ai-agent-subagent-orchestration` — `task`/subagent orchestration over the embeddable loop.
 - `docs/backlog/distribution/ai-ide-product-ui` — chat + streamed tool-call/diff/approve UI over the IDE-kit.
 - `docs/backlog/toolchain-build/ts-language-service` — in-browser TS diagnostics/hover/defs over VFS (agent `typecheck` + editor squiggles).

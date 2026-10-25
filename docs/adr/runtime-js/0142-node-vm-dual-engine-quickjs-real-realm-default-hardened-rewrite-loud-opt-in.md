@@ -152,6 +152,14 @@ Links M11.
 - Disposal discipline is load-bearing: a leaked guest handle aborts the runtime — guarded
   by FinalizationRegistry + refcount and a disposal/lifetime stress suite.
 
+## Corrections (active)
+
+2026-09-07: ADR-0383 supersedes D1's default for the no-COI toolchain tier only:
+rewrite by default, quickjs explicit opt-in. D2–8's engine implementations and
+limits remain; default-isolation claims in D3/D5/Consequences apply to generic
+or quickjs-selected runtimes, not the tier exception. Capability/compat surfaces
+disclose the accepted rewrite divergences.
+
 ## References
 
 - `docs/public/compat/modules.md` — engines + the canonical ES2023≠V8 divergence list.

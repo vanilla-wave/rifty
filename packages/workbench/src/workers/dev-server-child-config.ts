@@ -1,5 +1,9 @@
 import { type WorkerEntryDescriptor, readKernelEntryBootstrap } from '@riftydev/kernel';
-import type { NodeEntryTerminalBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
+import {
+  type NodeEntryRuntimeBinding,
+  type NodeEntryTerminalBootstrap,
+  snapshotNodeEntryRuntimeBindings,
+} from '@riftydev/runtime-js/builtins/node-entry-url';
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
 import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
 import {
@@ -7,14 +11,17 @@ import {
   snapshotNodeWorkerRuntimeConfig,
 } from './node-worker-runtime-config.ts';
 
-export const DEV_SERVER_CHILD_BOOTSTRAP_PROTOCOL = 'rifty.dev-server/v1' as const;
+export const DEV_SERVER_CHILD_BOOTSTRAP_PROTOCOL = 'rifty.dev-server/v2' as const;
 
 export interface DevServerChildConfig {
   readonly nodeWorkerRuntime: NodeWorkerRuntimeConfig;
   readonly cfg: NodeServerPackageConfig;
   readonly terminal: NodeEntryTerminalBootstrap;
   readonly remoteFsRoot?: string;
+  /** Guest mount point of the project (ADR-0531); present exactly with `remoteFsRoot`. */
+  readonly publicRoot?: string;
   readonly previewScope?: string;
+  readonly runtimeBindings?: readonly NodeEntryRuntimeBinding[];
 }
 
 function record(value: unknown, owner: string): Record<string, unknown> {
@@ -160,12 +167,20 @@ function snapshotTerminal(value: unknown): NodeEntryTerminalBootstrap {
   exact(
     terminal,
     ['stdinIsTTY', 'stdoutIsTTY', 'stderrIsTTY', 'cols', 'rows'],
-    [],
+    ['stdoutIsFile'],
     'dev-server bootstrap terminal',
   );
   return Object.freeze({
     stdinIsTTY: booleanField(terminal.stdinIsTTY, 'dev-server bootstrap terminal.stdinIsTTY'),
     stdoutIsTTY: booleanField(terminal.stdoutIsTTY, 'dev-server bootstrap terminal.stdoutIsTTY'),
+    ...(terminal.stdoutIsFile === undefined
+      ? {}
+      : {
+          stdoutIsFile: booleanField(
+            terminal.stdoutIsFile,
+            'dev-server bootstrap terminal.stdoutIsFile',
+          ),
+        }),
     stderrIsTTY: booleanField(terminal.stderrIsTTY, 'dev-server bootstrap terminal.stderrIsTTY'),
     cols: positiveInteger(terminal.cols, 'dev-server bootstrap terminal.cols'),
     rows: positiveInteger(terminal.rows, 'dev-server bootstrap terminal.rows'),
@@ -230,7 +245,7 @@ function inspectBootstrap(value: unknown): DevServerChildConfig {
   exact(
     payload,
     ['nodeWorkerRuntime', 'cfg', 'terminal'],
-    ['previewScope', 'remoteFsRoot'],
+    ['previewScope', 'remoteFsRoot', 'publicRoot', 'runtimeBindings'],
     'dev-server bootstrap payload',
   );
   const cfg = snapshotPackageConfig(payload.cfg);
@@ -241,6 +256,19 @@ function inspectBootstrap(value: unknown): DevServerChildConfig {
   );
   const remoteFsRootValue = optionalOwnField(payload, 'remoteFsRoot');
   const remoteFsRoot = remoteFsRootValue === undefined ? undefined : projectRoot(remoteFsRootValue);
+  const publicRootValue = optionalOwnField(payload, 'publicRoot');
+  if ((publicRootValue === undefined) !== (remoteFsRoot === undefined)) {
+    throw new TypeError('dev-server bootstrap payload.publicRoot must accompany remoteFsRoot');
+  }
+  const publicRoot = publicRootValue === undefined ? undefined : projectRoot(publicRootValue);
+  const runtimeBindingsValue = optionalOwnField(payload, 'runtimeBindings');
+  const runtimeBindings =
+    runtimeBindingsValue === undefined
+      ? undefined
+      : snapshotNodeEntryRuntimeBindings(
+          runtimeBindingsValue,
+          'dev-server bootstrap runtimeBindings',
+        );
   return Object.freeze({
     nodeWorkerRuntime: snapshotNodeWorkerRuntimeConfig(
       payload.nodeWorkerRuntime,
@@ -249,7 +277,9 @@ function inspectBootstrap(value: unknown): DevServerChildConfig {
     cfg,
     terminal,
     ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
+    ...(publicRoot === undefined ? {} : { publicRoot }),
     ...(previewScope === undefined ? {} : { previewScope }),
+    ...(runtimeBindings === undefined ? {} : { runtimeBindings }),
   });
 }
 
@@ -261,7 +291,9 @@ export function buildDevServerChildEntry(
     readonly cfg: NodeServerPackageConfig;
     readonly terminal: NodeEntryTerminalBootstrap;
     readonly remoteFsRoot?: string;
+    readonly publicRoot?: string;
     readonly previewScope?: string;
+    readonly runtimeBindings?: readonly NodeEntryRuntimeBinding[];
   },
 ): Extract<WorkerEntryDescriptor, { readonly kind: 'url' }> {
   if (typeof url !== 'string' || url.length === 0) {
@@ -281,7 +313,11 @@ export function buildDevServerChildEntry(
         cfg: inspected.cfg,
         terminal: inspected.terminal,
         ...(inspected.remoteFsRoot === undefined ? {} : { remoteFsRoot: inspected.remoteFsRoot }),
+        ...(inspected.publicRoot === undefined ? {} : { publicRoot: inspected.publicRoot }),
         ...(inspected.previewScope === undefined ? {} : { previewScope: inspected.previewScope }),
+        ...(inspected.runtimeBindings === undefined
+          ? {}
+          : { runtimeBindings: inspected.runtimeBindings }),
       }),
     }),
   });

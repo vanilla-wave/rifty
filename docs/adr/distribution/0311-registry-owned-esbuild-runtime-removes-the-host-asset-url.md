@@ -46,3 +46,11 @@ decision rather than an incidental type deletion.
 - Runtime readiness now depends on the registry's honest storage class and
   acquisition path; cold offline use fails visibly until a verified fill
   exists.
+
+## Correction 2026-08-31 (ADR-0371)
+
+The no-host-source and single-runtime-authority clauses stand. The registry
+manager/CAS/capability source is replaced by exact `esbuild-wasm@0.28.0` in the
+installed tree; the child verifies its size/hash locally before activation.
+Cold offline instant restore succeeds from that tree instead of requiring a
+separate verified fill.

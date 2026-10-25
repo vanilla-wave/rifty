@@ -5,6 +5,10 @@ Date: 2026-05
 
 > TL;DR: `Buffer extends Uint8Array` as a real subclass with `Symbol.species` returning `Buffer`; methods on the prototype, `isBuffer` collapses to `instanceof`
 
+> Correction 2026-08-11 (ADR-0350): raw `ArrayBuffer` and
+> `SharedArrayBuffer` inputs alias their backing storage like Node. This
+> replaces the copy/deferred clauses below; typed-array input still copies.
+
 ## Context
 
 The prior `@riftydev/io` Buffer (ADR-0012, promoted from `runtime-js`) used a factory: `Buffer.from()` returned a `Uint8Array` stamped per-instance with helpers via `Object.defineProperty` plus a `Symbol.for('nodejs.Buffer')` brand; `Buffer.isBuffer` checked the brand. This silently failed where real packages rely on Node's typed-array protocol:

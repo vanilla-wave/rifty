@@ -13,7 +13,7 @@ why: the lowest-effort distribution tier (StackBlitz-embed-style) — a tutorial
 Hard platform constraint to design around: full stack needs `crossOriginIsolated`, and a cross-origin iframe can only get it when the TOP-LEVEL host page itself ships COOP/COEP **and** delegates `allow="cross-origin-isolated"` — identical to StackBlitz WebContainers embeds. So "drop into any page untouched" is impossible for the full runtime; honest shapes to refine later:
 
 - (a) require the two host headers + allow attribute — still 100× cheaper than SDK hosting; doc-first.
-- (b) no-COI degraded mode — against fidelity as a silent degrade; if ever, must be a loud capability gate (which features throw), not a quiet subset. Capability side: epic `epics/no-coi-sandbox-tier` (fitted 2026-08-28).
+- (b) no-COI degraded mode — against fidelity as a silent degrade; if ever, must be a loud capability gate (which features throw), not a quiet subset. Capability side: `distribution/reference/no-coi-sandbox-tier-closure-evidence.md`.
 - Also depends on: hosted embed route on rifty.dev, multi-instance/multi-tab story, postMessage API surface (files in, events out, preview sizing).
 
 Refine when a real embedder (docs site / course platform) pulls it.

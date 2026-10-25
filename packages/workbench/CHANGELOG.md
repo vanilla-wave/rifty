@@ -1,14 +1,195 @@
 # Changelog
 
+- Supply owner-stable Stats metadata for virtual namespace directories, retaining guest-only error paths.
+
+- No-COI install/open/snapshot no longer activate the generated esbuild client; builds use SW children.
+
 ## [Unreleased]
 
+- Use Brotli quality 11 for smaller dependency snapshot downloads; document production CPU cost (ADR-0546).
+
+- Add optional Brotli dependency snapshot production with lazy browser-compatible WASM, explicit contentEncoding, unchanged TAR identities and gzip default (ADR-0546).
+
+- Reuse predicates accept the selected runtime tier; virtual-ancestor Stats keep metadata readable while directory listings reject mount collisions.
+
+- Refresh snapshot receipts and install identities for facade declarations; replay bake retains all dependency pins and acquisition cache bytes.
+
+- Print Eddy fallback reasons and learned-pin write failures in npm terminal stderr, including automatic project-open installs.
+
+- Physical COI owner selects stock esbuild for install/snapshot/claims and Node bootstrap. No-COI retains its explicit legacy policy. Snapshot mismatch discriminators and restore failure phases remain stable across tier projection.
+
+- Explicit snapshot runtime tier shares restore/application preflight; only generated facade/receipt changes, while COI install claims carry a distinct policy identity (ADR-0543).
+
+- Propagate file stdout through Node/bin child bootstrap; preserve pipe/TTY selection (ADR-0544).
+
+- Refresh install identity and baked snapshots for the tier-aware catalog; retain every committed dependency version.
+
+- Node children select pull stdin; virtual guest ancestors carry VFS entry metadata for complete Node Stats (ADR-0540/0542).
+- Asset/registry/owner resource fetches keep host semantics when Node guest Fetch classes are installed (ADR-0541).
+- Keep ancestor Stats available across nested mount collisions; listing/child access still refuses loudly.
+- Remove the unused no-COI adapter wrapper after upstream cutover; shared COI client retained.
+
+- Compose separate no-COI child realms from the toolchain entry; retire invocation children at process completion (ADR-0539).
+
+- A repeated `pty:open` of a live session keeps that session's login-`HOME` provenance; it is dropped when the session's close settles.
+
+- The terminal state's login-`HOME` provenance is fixed at the session's open, so an `npm run` lifecycle shell no longer adds `HOME` to the snapshot (ADR-0531 §6).
+
+- Owner VFS snapshot bridge channels open the native `BroadcastChannel` (ADR-0529).
+
+- The install finalizer no longer prepares Vite (ADR-0533); installed Vite 7.3.6/8.0.16 chunks stay upstream bytes and a `/`-rooted project takes upstream Vite's own code paths there.
+
+- `publicProjectRoot` Workbench option (ADR-0531, default `/home/project`): the guest sees the project there, `/` is a synthetic root of the mount ancestors, and `/tmp` + `/home/rifty` are project-owned private mounts (`<container>/guest/{tmp,home}`) persisted with the project, carried by Save and excluded from the tree, snapshots and archives; `/` remains selectable; a `/`-rooted project carrying its own `tmp`/`home` fails `EEXIST` instead of being shadowed.
+
+- Node entry preparation and the no-COI toolchain worker no longer publish `__riftyTrackCliPromise`; installed Vite `cli.js` runs upstream bytes (ADR-0530). Baked snapshots re-baked: only `vite/dist/node/cli.js` and the install-artifact identity change.
+
+- Kernel and no-COI toolchain workers install the host-async keepalive (ADR-0529) beside the fetch keepalive.
+
+- Named npm installs refresh selected roots while retaining unrelated pins; skipped optional dependencies no longer fail save or shell continuation (ADR-0504).
+
+- Missing-registry diagnostics follow the final executed command; recovered npm failures no longer relabel later errors or cancellation.
+
+- Preserve optional declarations during npm save-dev; match native section inference, wildcard reuse and intersecting optional save ranges in shared shell installs.
+
+- Preserve native npm bounded/partial/union save ranges using semver subset rules (ADR-0488).
+
+- Run no-COI shell npm install through the existing installer/claim owner with Stop and readonly policy. Shared npm save logic matches resolved ranges/sections and preserves concurrent manifest edits; successful acquisition tests use real tarballs/Eddy (ADR-0487).
+
+- No-COI snapshot apply reports fetched bytes, changed entries and native flush counts; discriminate snapshot mismatches and persistence failures (ADR-0486).
+- Core project deletion/stage cleanup clears owned install claims through the existing managed-tree boundary; installed projects no longer fail deletion with EPERM.
+
+- No-COI runBin ends its process like a project command (ADR-0445): after any terminal, natural exit included, none of the invocation's timers (an `'exit'` listener's, an unref'd one) runs and its process/stdio listeners are retired (was: an extra `L|timer-in-exit`, an unref'd interval kept ticking, and the next runBin ran the prior one's `'exit'`/`uncaughtException` listeners — status 5 for Node's 1). Both hosts share `openNoCoiInvocationScope`.
+- No-COI project commands and runBin report Node's status when the process ends mid-loop (ADR-0445 note 2026-09-25): a throwing `uncaughtException` listener is 7 (was 0), an `exit(n)` in a handler or a timer ends the loop at once (was: later timers ran, a live interval hung until the 600 s cap), a no-listener rejection is `exited` 1 with the realm retained (was `failed`, Worker replaced); its timers are cleared, and a command whose terminal leaves another live handle (listening port, pending import/fetch) still replaces the realm. runBin ends with Node's natural `exit()` (`'exit'` once, a listener's `exitCode`/`exit(n)` sets the status; was `exitCode` read with no `'exit'`).
+- Workbench close over an open companion session no longer depends on when its late `close-project` reaches the shutting-down owner: the owner answers its last closed token with that close's outcome (was `token is not active` → SIGTERM); a retired project transport cancels stranded PTY work with `ClosedHandleError` like its content/tools legs (was plain `owner died`).
+- No-COI toolchain run-bin and project commands again throw/report a declared gap behind a fatal unhandled rejection by name (Vite 8 Rolldown's `toolchain.threaded-wasm`), not exit 1 / `process.exit(1)`; a guest-owned `exit()` keeps its status.
+- The node-entry bootstrap reads node-entry v6 launches (ADR-0449): a `fork`/`Worker` child's `execArgv` preloads, conditions and `import.meta.resolve` parent apply through runtime-js before the entry; deploy matching Worker assets together (a v5 bundle rejects a v6 launch).
+- A worker thread drains without a cap and then exits the Node way (ADR-0446 §5); every node-entry natural exit (worker thread, `node <file>`, eval, execSync child) calls the `process.exit` captured before user code, never a reassigned one (vitest's pool workers patch it).
+- Node natural exit is `process.exit()` with no argument (ADR-0445): `'exit'` fires and `exitCode` sets the status on `node <file>`/`.bin`/spawn/fork/eval, and execSync children drain then exit the same way. `NodeLifecycleDeps.readExitCode` and `normalizeExitCode` are removed. No-COI project commands, toolchain run-bin and resident bins reset the reused process per invocation (unset `exitCode`, not exiting); no-COI project commands (and, since the entry above, run-bin) end with a natural `exit()` (one `'exit'`), while a resident bin runs until stopped and emits no natural `'exit'`.
+- Feature-check `Atomics.waitAsync` inside both support probes; retain TypeError failure reporting when unavailable.
+
+- Keep no-COI filesystem descriptor sorting compatible with Chrome 108 (ES2022).
+
+- Remove `checkSandboxSupport` scratch storage even when the probe deadline expires while the Worker still holds its OPFS sync access handle; the lock is waited out inside the cleanup deadline, and a lock that outlives it reports `cleanup: incomplete` naming the native error instead of a failure the caller cannot act on (ADR-0439).
+- Report an observed cleanup rejection ahead of deadline expiry, with each native name and message retained in the aggregate reason.
+- Keep an observed `module-worker: passed` when the probe Worker fails later; the observations still pending in it report that failure as `incomplete`.
+
+- Add checkSandboxSupport: bounded native COI/non-COI prerequisites, required probeBaseUrl, per-mode unmet/limitations check IDs, inert probe assets and explicit cleanup (ADR-0437, ADR-0438).
+
+- Retire materialized dependency claims produced by the old npm tar-root layout; fresh installation restores declaration-file paths.
+
+
+- Stabilize resident ownership fault fixtures against delayed host admission; retain native foreign-loader checks.
+
+
+- Refresh dependency artifact identity for Vite root-URL preparation; root projects retain live React component updates (ADR-0433).
+- Reject malformed persisted storage diagnoses under preferred too; pin all legacy-loss categories and document same-origin SDK namespace exclusion.
+
+- Report excluded legacy/corrupt storage through persistent, non-retryable health; retain corruption diagnosis across first-proof crashes (ADR-0432).
+
+- Use segmented OPFS storage and the v2 project namespace; per-file v1 projects are excluded and their native bytes retained (ADR-0425).
+
+- Read project files/directories through targeted owner access; avoid full-tree byte copies on editor reads.
+
+- Saved-toolchain and Node-entry adapter preparation carry the live cwd and event-loop refs (ADR-0421).
+
+- Remove completed Node command process/stdio listeners before admitting the next command (ADR-0422).
+
+- Compose no-COI project file/command policy on the permanent Worker VFS; reuse Shell and Node entry execution, retain handlers through Stop/drain/flush and reject background jobs.
+- Keep no-COI launch byte-driven; use existing CLI promise tracking, consume reported invocation errors and atomically settle fatal resident starts (ADR-0423).
+
+- Reuse program-entry adapter/CLI preparation in no-COI bin launches; explicit registry installs use the producer preparation recipe, preventing false successful Vite runs after missing adapter facts.
+
+- Apply no-COI producer archives through shared validation/overlay/flush; saved opening derives real adapter facts and defers adapter failures to use without install proof.
+
+- No-COI worker reports authoritative storage fallback; reuse VFS namespace validation (ADR-0419).
+
+- Make deployment.wasm/sqlite optional; preserve absence through recursive workers, reject malformed supplied values, and skip the SQLite provider without a URL (ADR-0416).
+
+- Prove npm fails when Scratch catalog dirty persistence hits quota or permission errors, retaining the prior catalog across reload; the regression kills swallowed reflection errors.
+
+- Open saved projects and Node commands independently of install claims; retain snapshot transactions and bind runtime adapters only from usable existing provenance. Keep Scratch dirty classification in the companion (ADR-0414/0415).
+
+- Expose real project-opening persistence operations through Workbench health and Playground preparing UI; scope counts to the existing open operation and clear them on settlement (ADR-0413).
+
+- Publish prepared dependency snapshots; reject unprepared apply sources before effects while preserving legacy initial restore and literal saved-file conflicts. Preserve acquired-tree preload failures under preferred storage.
+
+- Configure effective owner startup/storage-proof, project-file observation/durability and Playground request budgets through public deployment options; preserve omitted defaults, uniform catalog silence and applied/unknown settlement (ADR-0410).
+- Reject invalid or overflowing deployment wait budgets before effects; bound at2,147,483,647ms and round positive fractions upward, including existing preview/silence settings.
+
+- Add deployment.previewPrefix for scoped copied-SW HTTP/iframe/HMR routing, with immutable configuration proof and preserved default routes (ADR-0409).
+
+- Retain unjournaled orphan Scratch bytes through the existing catalog transaction, open fresh Scratch, and expose non-consuming public list/export across persistent reopen (ADR-0407).
+- Refuse directories at catalog/journal paths before recovery or cleanup; malformed storage cannot authorize fresh Scratch.
+
+- Add optional literal `storage.namespace` to both entrypoints; paired OPFS preload/writes stay inside the selected directory, preserving default storage and the origin-wide lease (ADR-0402).
+
+- Add snapshot-only acquisition without a registry URL/client or Eddy; required snapshots fail with public reasons, saved state keeps priority, and explicit npm calls retain local replay (ADR-0398).
+- Produce ordinary npm Vite/Rollup locks through declared companion acquisition while preserving caller ordinary/companion source identities (ADR-0399).
+
+- Preserve saved snapshot projects by default; explicit error/overwrite application runs on every request, retains untargeted files, and reports public conflict paths. Catalog transactions cover first admission, rollback and recovery (ADR-0394).
+
+- Publish a complete `dist/assets` Worker/SW/WASM closure; hosts copy it and supply ordinary URLs without worker compilation, aliases or a QuickJS wrapper (ADR-0390).
+
+- Public `produceDependencySnapshot` bakes caller-pinned npm v3 locks into tar.gz and returns snapshot/runtime identities; packed Node/Chromium restore proof covers real package execution (ADR-0387).
+
+- Dependency snapshots support deterministic standard tar/gzip envelopes with disjoint payload/control paths, long UTF-8 names and empty directories; legacy v3 JSON/gzip remains readable (ADR-0386).
+- Recovery snapshots borrow owner bytes until structured clone; protected guest reads still copy, avoiding an extra full-tree snapshot copy.
+- No-COI read streams use the same guarded mirror as synchronous fs, so pending persistence cannot expose stale native bytes.
+
+- Explicit no-COI install skips only fresh, nonempty, durable-equal package bytes and verified recursive directories; dirty paths retain healing.
+
+- No-COI open activates saved adapters from stamp/lock authority; explicit install publishes durable claims through shared reserved-path guards.
+
+- Reject no-COI install/build when OPFS reports unhealed persistence failures.
+
+- Package preparation delegates to registry; ordinary `.vite` files survive snapshots/archives and generic diagnostics use Workbench provenance (ADR-0384).
+- Foreground node file/eval commands keep one drain through listen/close; last close exits naturally after referenced work, preserving previews (ADR-0385).
+
+- No-COI worker loads install/activation code on first install or restore; failed chunk fetch rejects that request while eval/fs remain usable.
+
+- Preserve every source worker entry in bare-import consumer wrappers, beside published dist entries.
+
+### Fixed
+
+- Explicit snapshot application handles absent, malformed or directory `package.json` through ordinary file conflicts; stamp demotion retains only valid prior provenance.
+
+- No-COI install snapshots reuse mirror bytes until outgoing structured clone instead of pre-copying the full tree.
+
+### Added
+
+- The generic no-COI Worker can start one caller-selected resident installed
+  bin and serve its existing cross-realm HTTP/WebSocket preview bridge
+  (ADR-0377).
+
 ### Changed
+
+- The no-COI Worker installs exact manifests and runs admitted installed bins
+  without Vite identity/version/path/lifecycle policy. Generic installed-tree
+  finalization is isolated from the existing Vite project finalizer.
+
+- Owner child launchers call `reservation.commit` /
+  `abortBeforeSpawn` / `abortAfterChildSettlement` directly. The three
+  `owner-child-admission` wrappers degenerated into pass-throughs once ADR-0371
+  removed the capability-port lifecycle they owned; behavior is unchanged.
+
+- **Activate esbuild from the admitted installed tree (ADR-0371).** Package
+  admission projects the exact registry-twin path into existing Node/dev-server
+  bootstrap metadata; each child verifies the 13,918,738-byte SHA-pinned member
+  through its `FsSync` before compile. The owner CAS, asset server/client, and
+  kernel capability-port wiring are deleted.
 
 - **Supervised FS relays consume SyncRpc v5 binary requests (ADR-0366).** Node
   entries, dev-server children, and recursive relay peers receive the complete
   JSON + binary kernel sync API with no legacy fallback.
 
 ### Fixed
+
+- Resident readiness now requires ADR-0378 loader-generation ownership of the
+  requested port. Harmless unref cleanup no longer blocks build→dev, while
+  stale timer, AbortSignal, MessageChannel, BroadcastChannel and Promise
+  continuations cannot supply false readiness. ADR-0379 concentrates entry,
+  ownership and live bind settlement behind one internal module; bind→close
+  before settlement rejects.
 
 - npm shell `EBROKENLOCK` stderr line surfaces the installer's message (which
   entries, which reason) instead of a `(unknown package)` placeholder; the
@@ -28,6 +209,11 @@
 
 ### Added
 
+- **No-COI SDK toolchain Worker (ADR-0375).** One Worker owns runtime/VFS, real
+  npm-client + installed registry-twin esbuild admission, installed `.bin`
+  execution, loud overlap/death/clean-close settlement, and the generic
+  shared-WASM boundary.
+
 - **Owner-authoritative command completion and direct VFS entries (ADR-0362).**
   `ProjectTerminal.complete()` uses a bounded, correlated PTY request against
   the owning Shell's live cwd/VFS. Owner errors, close, timeout, and death
@@ -43,6 +229,11 @@
   needed — the default handles the 42 s first open unconfigured.
 
 ### Fixed
+
+- No-COI installed-bin failure projection never reads a forbidden ninth
+  `cause` getter. A throwing getter within the eight-link walk is read once and
+  absorbed, preserving the honest outer error.
+
 - `@emnapi/core@1.10.0` installs receive the exact upstream child-thread
   orphaned-reference cleanup backport before stamp promotion. A Vite 8
   unresolved import now returns Vite's normal non-zero build error instead of
@@ -103,12 +294,24 @@
   guarantee lives in the `@riftydev/git` facade (ADR-0357), so the local
   Starter read-latch and preflight object reads are gone.
 
+- Preview readiness starts its bounded service-worker and routed-HTTP proof
+  only after the exact project run advertises a candidate, so cold dependency
+  acquisition cannot falsely fail while its live dev server is still starting.
+- Kernel Worker hosts install the sealed entry in their initial static module
+  graph, so its listener admits the one-shot `init` before QuickJS preload; the
+  workspace source entry is explicitly retained through tree-shaking (ADR-0352).
+- Kernel workers register runtime-js's pre-entry hook directly, preserving its
+  selected readiness while installing the init listener synchronously (ADR-0351).
 - Dependency snapshot v3 now carries the exact integrity-pinned cache closure
   required by registry-backed shadow replay, verifies it before mutation, and
   merges it before publishing the restored lockfile. The first explicit install
   after instant Vite 8 restore no longer fails `EBROKENLOCK` (ADR-0346).
 
 ### Added
+
+- Playground definitions now admit exact `npm-dev-server` projects whose
+  manifest-owned `dev` script runs through the generic installed-bin and
+  PTY-correlated preview path, without a declared entry path or port (ADR-0349).
 
 - The terminal `node` command now admits Node 24-compatible CommonJS
   `-e`/`--eval`, `-p`/`--print`, and explicit `--input-type=commonjs`
@@ -125,12 +328,10 @@
   deployment entries (ADR-0263, ADR-0282).
 
 - Dispatch admitted runtime bindings by recipe `adapterId` before guest entry.
-  Direct CJS/ESM esbuild and Vite 7 consume the same registry-attested bytes;
+  Direct CJS/ESM esbuild and Vite 7 consume the same installed registry twin;
   Vite 8 keeps an empty plan, and the `esbuild` bin fails loudly as
-  `NotImplementedError('esbuild.cli')` (ADR-0308/0311). Capability endpoints
-  ride the kernel's one-shot URL-entry descriptor and are consumed before guest
-  import; generic runtime-js entries and process-visible IPC stay unchanged
-  (ADR-0313).
+  `NotImplementedError('esbuild.cli')` (ADR-0308/0311/0371). Runtime binding
+  rows ride existing entry bootstrap metadata; process-visible IPC is unchanged.
 
 ### Changed
 

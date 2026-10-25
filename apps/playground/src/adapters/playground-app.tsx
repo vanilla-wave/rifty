@@ -5,9 +5,8 @@ import {
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
-import type { ProjectTerminalSnapshot } from '@riftydev/workbench';
+import { DEFAULT_PUBLIC_PROJECT_ROOT, type ProjectTerminalSnapshot } from '@riftydev/workbench';
 import type {
-  PlaygroundCatalogSnapshot,
   PlaygroundPreview,
   PlaygroundProjectPlan,
   PlaygroundScmSnapshot,
@@ -23,7 +22,7 @@ import { CommandPalette, type PaletteItem } from '../components/CommandPalette.t
 import { DegradedBanner } from '../components/DegradedBanner.tsx';
 import { FileExplorer, type FileExplorerMutations } from '../components/FileExplorer.tsx';
 import { Launcher } from '../components/Launcher.tsx';
-import { PreviewPanel } from '../components/PreviewPanel.tsx';
+import { PreviewPanel, type PreviewPanelTarget } from '../components/PreviewPanel.tsx';
 import { ProjectDialogs } from '../components/ProjectDialogs.tsx';
 import { ProjectSwitcherChip } from '../components/ProjectSwitcherChip.tsx';
 import type { RowAction } from '../components/ProjectsTab.tsx';
@@ -43,6 +42,7 @@ import {
   storageModeFromBoot,
   workspaceSaveMessage,
 } from '../glue/degraded-storage.ts';
+import { downloadBlob, projectFileName } from '../glue/download.ts';
 import { looksBinary } from '../glue/fs-ops.ts';
 import { initialEditorFilesForPreset } from '../glue/initial-editor-files.ts';
 import { initialLauncherTab, loadLauncherTab, saveLauncherTab } from '../glue/launcher-prefs.ts';
@@ -55,9 +55,9 @@ import {
   shouldOpenInstantProjectChoice,
 } from '../glue/project-boot-policy.ts';
 import { scratchDisplayName } from '../glue/project-display-name.ts';
-import type { ActiveId, ProjectIndex } from '../glue/project-index.ts';
+import type { ActiveId } from '../glue/project-index.ts';
+import { withProjectOpenProgress } from '../glue/project-open-progress.ts';
 import type { ScmResourceRow } from '../glue/scm-status.ts';
-import { withSlowProgress } from '../glue/slow-progress.ts';
 import type { StarterGroup } from '../glue/starter.ts';
 import { starterById } from '../glue/starter.ts';
 import { pathFromTerminalFileLink } from '../glue/terminal-links.ts';
@@ -80,7 +80,10 @@ import {
 } from './playground-app-runtime.ts';
 import { rebindAfterPlaygroundTransitionFailure } from './playground-app-transition-recovery.ts';
 import { createPlaygroundAppWorkbenchOwnership } from './playground-app-workbench-ownership.ts';
+import { catalogIndex } from './playground-catalog-view.ts';
 import { createDelayedCatalogDelete } from './playground-delete-policy.ts';
+import { bindPlaygroundEditorOwner } from './playground-editor-owner.ts';
+import { warmEditorStack } from './playground-editor-warmup.ts';
 import { PlaygroundHealthBanner, createPlaygroundHealthUi } from './playground-health-ui.tsx';
 import { toPlaygroundProjectPlan } from './playground-project-plan.ts';
 import {
@@ -110,42 +113,12 @@ import { useMode } from './useMode.ts';
 const EditorHost = lazy(() =>
   import('../components/EditorHost.tsx').then((module) => ({ default: module.EditorHost })),
 );
-
-let editorStackWarm: Promise<unknown> | undefined;
-function warmEditorStack(): void {
-  if (editorStackWarm !== undefined) return;
-  editorStackWarm = Promise.all([
-    import('../components/EditorHost.tsx'),
-    import('../glue/ts-ls-monaco-providers.ts'),
-  ]).catch((error: unknown) => {
-    editorStackWarm = undefined;
-    console.warn('[editor] lazy stack warm failed', error);
-  });
-}
+const AiChatPanel = lazy(() =>
+  import('../ai/AiChatPanel.tsx').then((module) => ({ default: module.AiChatPanel })),
+);
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-function catalogIndex(snapshot: PlaygroundCatalogSnapshot, hiddenProjectId?: string): ProjectIndex {
-  return {
-    activeId: snapshot.active?.kind === 'project' ? snapshot.active.id : ('scratch' as const),
-    scratch:
-      snapshot.scratch === null
-        ? null
-        : {
-            starter: snapshot.scratch.starterId,
-            dirty: snapshot.scratch.dirty,
-            editedAt: snapshot.scratch.editedAt,
-          },
-    projects: snapshot.projects
-      .filter((project) => project.id !== hiddenProjectId)
-      .map((project) => ({
-        id: project.id,
-        name: project.name,
-        starter: project.starterId,
-        editedAt: project.editedAt,
-      })),
-  };
 }
 
 function presetForId(id: string): Preset {
@@ -161,10 +134,6 @@ function planFor(projectId: string, starterId: string): PlaygroundProjectPlan {
   });
 }
 
-function projectFileName(path: string): string {
-  return path.slice(path.lastIndexOf('/') + 1) || 'project';
-}
-
 function decodeText(label: string, bytes: Uint8Array): string {
   if (looksBinary(bytes)) throw new Error(`${label} is binary; text diff is unavailable`);
   try {
@@ -172,15 +141,6 @@ function decodeText(label: string, bytes: Uint8Array): string {
   } catch {
     throw new Error(`${label} is not valid UTF-8; text diff is unavailable`);
   }
-}
-
-function downloadBlob(name: string, blob: Blob): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = name;
-  anchor.click();
-  queueMicrotask(() => URL.revokeObjectURL(url));
 }
 
 interface BoundProject {
@@ -220,8 +180,14 @@ export function App(props: AppProps) {
   const [paletteData, setPaletteData] = createSignal<readonly PaletteItem[]>([]);
   const [projectBusy, setProjectBusy] = createSignal(false);
   const [instantPrepareLabel, setInstantPrepareLabel] = createSignal<string>();
+  const [instantPersistence, setInstantPersistence] = createSignal<{
+    readonly persisted: number;
+    readonly total: number;
+  }>();
   const [workbenchReady, setWorkbenchReady] = createSignal(false);
   const [bound, setBound] = createSignal<BoundProject>();
+  const [chatOpen, setChatOpen] = createSignal(false);
+  const [agentPreview, setAgentPreview] = createSignal<PreviewPanelTarget>();
   const [sessions, setSessions] = createSignal<readonly TerminalSessionSnapshot[]>([]);
   const [activeSessionId, setActiveSessionId] = createSignal('');
   const [terminalFocusEpoch, setTerminalFocusEpoch] = createSignal(0);
@@ -478,7 +444,15 @@ export function App(props: AppProps) {
       return run;
     };
     diagnosticSync = sync;
-    editorDocumentUnsubscribe = api.onDocument(sync.handleDocument);
+    editorDocumentUnsubscribe = bindPlaygroundEditorOwner({
+      api,
+      files: project.context.session.files,
+      mirror: project.mirror,
+      documents: project.documents,
+      isCurrent,
+      onDocument: sync.handleDocument,
+      onError: flashError,
+    });
     editorOpQueue.flush(api, project.editorContextKey);
     void Promise.all([
       import('../glue/ts-ls-monaco-providers.ts'),
@@ -511,7 +485,11 @@ export function App(props: AppProps) {
     const project = bound();
     if (project === undefined) return;
     try {
-      project.mirror.admitFile(await project.documents.open(path));
+      project.mirror.admitFile(
+        await project.documents.open(path, {
+          fresh: !editorApi?.openPathsUnder(path).includes(path),
+        }),
+      );
       withProjectEditor(project, (api) => api.openFile(path, options));
     } catch (error) {
       if (bound() === project) flashError(`Open failed: ${errorMessage(error)}`);
@@ -558,9 +536,7 @@ export function App(props: AppProps) {
     const mirror = createPlaygroundProjectMirror(context.session.files);
     const documents = createPlaygroundDocumentWriter(context.session.documents);
     try {
-      // The editor bytes and the first-write CAS base are the same Document
-      // capture. Eager source-file loading already happened here; use that read
-      // to establish provenance instead of sampling a handle on first write.
+      // Bind first-write CAS to the same Document capture as the editor bytes.
       await Promise.all(
         mirror.filePaths().map(async (path) => mirror.admitFile(await documents.open(path))),
       );
@@ -619,7 +595,6 @@ export function App(props: AppProps) {
         (error: unknown) => {
           releaseTypeScriptBoot();
           if (bound() !== project) return;
-          setRunState('stopped');
           flashError(`Project start failed: ${errorMessage(error)}`);
         },
       );
@@ -676,13 +651,13 @@ export function App(props: AppProps) {
       return context;
     })();
     try {
-      if (instantPreset?.setup !== 'instant') return await work;
-      return await withSlowProgress(work, {
-        delayMs: 250,
-        onSlow: () => setInstantPrepareLabel(instantPreset.label),
+      return await withProjectOpenProgress(work, {
+        health: props.workbench.health,
+        label: instantPreset?.setup === 'instant' ? instantPreset.label : undefined,
+        setLabel: setInstantPrepareLabel,
+        setPersistence: setInstantPersistence,
       });
     } finally {
-      setInstantPrepareLabel(undefined);
       setProjectBusy(false);
     }
   }
@@ -845,9 +820,7 @@ export function App(props: AppProps) {
 
   function onPickStarter(starterId: string): void {
     const current = bound()?.context.plan;
-    // Same-starter re-pick preserves the dirty scratch (createScratch guard +
-    // owner preserveDirtySameStarter), so a discard prompt would lie — only a
-    // pick that really replaces the draft asks.
+    // Same-starter re-pick preserves dirty Scratch; prompt only for replacement.
     if (store.dirty() && current?.id === 'scratch' && current.starterId !== starterId) {
       store.openDialog({ kind: 'switch', pendingStarter: starterId });
       return;
@@ -1225,7 +1198,7 @@ export function App(props: AppProps) {
   }
 
   function openTerminalLink(uri: string): void {
-    const path = pathFromTerminalFileLink(uri, '/');
+    const path = pathFromTerminalFileLink(uri, DEFAULT_PUBLIC_PROJECT_ROOT);
     if (path !== null) void openEditorFile(path);
   }
 
@@ -1265,7 +1238,7 @@ export function App(props: AppProps) {
   }
 
   function paletteItems(): readonly PaletteItem[] {
-    const items: PaletteItem[] = PRESETS.map((preset) => ({
+    const items: PaletteItem[] = PRESETS.filter((preset) => !preset.hidden).map((preset) => ({
       id: `preset:${preset.id}`,
       section: 'Starters',
       label: preset.label,
@@ -1327,13 +1300,13 @@ export function App(props: AppProps) {
     setPaletteOpen(true);
   }
 
-  const terminalModeHint = (): TerminalModeHint => {
-    const cwd = sessions().find((session) => session.id === activeSessionId())?.cwd ?? '/';
-    return {
-      label: 'Shell',
-      detail: `Commands run in ${cwd}; running programs own stdin. Use + to open another shell while a program is running.`,
-    };
-  };
+  // No cwd here: the session snapshot is project-relative and cannot name a live
+  // cwd outside the project mount (ADR-0531 §8); `pwd` prints it.
+  const terminalModeHint = (): TerminalModeHint => ({
+    label: 'Shell',
+    detail:
+      'Type shell commands; running programs own stdin. Use + to open another shell while a program is running.',
+  });
 
   const livePillLabel = (): string => {
     if (projectBusy()) return 'SWITCHING';
@@ -1525,6 +1498,15 @@ export function App(props: AppProps) {
         >
           <Icon name="github" size={16} />
         </a>
+        <button
+          type="button"
+          class="rf-btn"
+          disabled={!bound()}
+          aria-pressed={chatOpen()}
+          onClick={() => setChatOpen((open) => !open)}
+        >
+          {chatOpen() ? 'Close chat' : '+chat'}
+        </button>
         <button type="button" class="rf-share" data-action="share" onClick={() => void share()}>
           <Icon name="users" size={13} /> Share
         </button>
@@ -1533,6 +1515,7 @@ export function App(props: AppProps) {
       <Show when={capabilities.sufficient} fallback={<CapabilitiesPanel check={capabilities} />}>
         <div
           class="rf-shell"
+          data-chat={chatOpen() && bound() ? 'open' : 'closed'}
           data-sidebar={layout.sidebarCollapsed() ? 'collapsed' : 'open'}
           style={{
             '--rf-sidebar-w': `${layout.sidebarW()}px`,
@@ -1691,6 +1674,7 @@ export function App(props: AppProps) {
                   onOpenTab={openPreviewTab}
                   onNotify={flashToast}
                   ports={previewPorts}
+                  onPreviewChange={setAgentPreview}
                 />
               </Show>
             </div>
@@ -1739,12 +1723,27 @@ export function App(props: AppProps) {
               onRawInput={(id, data) => void bound()?.terminal.write(id, data)}
               onResize={(id, dims) => void bound()?.terminal.resize(id, dims.cols, dims.rows)}
               onLine={runTerminalLine}
+              bindPresenter={(id, run) => bound()?.terminal.bindPresenter(id, run) ?? (() => {})}
               diagnostics={diagnostics()}
               onOpenProblem={(path, line, column) =>
                 void openEditorFile(path, { reveal: { line, column } })
               }
             />
           </main>
+          <Show when={chatOpen() && bound()} keyed>
+            {(project) => (
+              <AiChatPanel
+                context={project.context}
+                terminalUi={project.terminal}
+                preview={() => (bound() === project ? agentPreview() : undefined)}
+                showTerminal={() => {
+                  if (layout.consoleCollapsed()) layout.toggleConsole();
+                  setTerminalFocusEpoch((epoch) => epoch + 1);
+                }}
+                onClose={() => setChatOpen(false)}
+              />
+            )}
+          </Show>
         </div>
 
         <Show
@@ -1796,6 +1795,7 @@ export function App(props: AppProps) {
         activeId={store.activeId()}
         ownerBlocked={projectAdmissionBlocked()}
         instantPrepareLabel={instantPrepareLabel()}
+        persistenceProgress={instantPersistence()}
         storage={store.storage()}
         menuFor={store.menuFor()}
         q={store.q()}

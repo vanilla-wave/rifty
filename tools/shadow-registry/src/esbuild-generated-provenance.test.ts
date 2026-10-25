@@ -7,7 +7,7 @@ const MANIFEST_PATH = fileURLToPath(
   new URL('../generated/esbuild-runtime-manifest.json', import.meta.url),
 );
 const OUTPUT_PATH = fileURLToPath(
-  new URL('../../../packages/workbench/src/workers/generated/esbuild-runtime.js', import.meta.url),
+  new URL('./runtime/generated/esbuild-runtime.js', import.meta.url),
 );
 
 const policy = readJson(fileURLToPath(new URL('../esbuild-runtime-policy.json', import.meta.url)));
@@ -31,7 +31,7 @@ const EXPECTED_METADATA = {
     sha256: '41abefec8704d24e069532fb38a418905d16f8fee4da88e54ecd65adc71f5507',
   },
   output: {
-    path: 'packages/workbench/src/workers/generated/esbuild-runtime.js',
+    path: 'tools/shadow-registry/src/runtime/generated/esbuild-runtime.js',
     format: 'esm',
   },
 } as const;
@@ -184,8 +184,8 @@ describe('generated esbuild runtime provenance', () => {
     expect(contents.match(/module\.exports = __toCommonJS\(browser_exports\);/g)).toHaveLength(1);
     expect(contents).toContain('const esbuild = module.exports;');
     expect(contents).toContain('export default esbuild;');
-    expect(contents).toContain('export { startEsbuildRuntime };');
-    expect(contents).toContain('startEsbuildRuntime = ({ wasm, fs, cwd }) => {');
+    expect(contents).toContain('export { startEsbuildRuntime, setEsbuildRuntimeCwd };');
+    expect(contents).toContain('startEsbuildRuntime = ({ wasm, fs, cwd, refs }) => {');
     expect(contents.match(/startRunningService\("", wasm, false\)/g)).toHaveLength(1);
     expect(contents).toContain(
       'import { createEsbuildCallbackFs } from "../esbuild-runtime-fs.ts";',

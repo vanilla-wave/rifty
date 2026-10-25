@@ -157,6 +157,11 @@ function previewInvocation(
   };
 }
 
+/** A logical fixture path as the guest shell names it (ADR-0531 `/home/project` mount). */
+function guestPath(logical: string): string {
+  return `/home/project${logical}`;
+}
+
 function shellWord(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
@@ -169,7 +174,7 @@ function hostNodeOracleEnv(): NodeJS.ProcessEnv {
 }
 
 function workbenchLine(invocation: PhysicalNodeInvocation): string {
-  return `cd ${shellWord(invocation.cwd)} && node ${invocation.nodeArgv.map(shellWord).join(' ')}`;
+  return `cd ${shellWord(guestPath(invocation.cwd))} && node ${invocation.nodeArgv.map(shellWord).join(' ')}`;
 }
 
 function commandOutputAfterEcho(buffer: string, line: string): string | null {
@@ -207,12 +212,12 @@ async function materializeWorkbenchFixtures(page: Page): Promise<void> {
     Object.keys(FIXTURE_FILES).map((relativePath) => `/${dirname(relativePath)}`),
   );
   for (const directory of directories) {
-    await runTerminalLineSettled(page, `mkdir -p ${shellWord(directory)}`);
+    await runTerminalLineSettled(page, `mkdir -p ${shellWord(guestPath(directory))}`);
   }
   for (const [relativePath, source] of Object.entries(FIXTURE_FILES)) {
     await runTerminalLineSettled(
       page,
-      `printf '%s' ${shellWord(source.trimEnd())} > ${shellWord(`/${relativePath}`)}`,
+      `printf '%s' ${shellWord(source.trimEnd())} > ${shellWord(guestPath(`/${relativePath}`))}`,
     );
   }
 }

@@ -1,0 +1,71 @@
+{
+  "node": "v24.16.0",
+  "npm": "11.17.0",
+  "pacote": "21.5.1",
+  "entries": {
+    "LICENSE": {
+      "size": 1141,
+      "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+    },
+    "README.md": {
+      "size": 1750,
+      "sha256": "eeb7da821c1f0672a1aea1594fcec4c66222cfe25cbd14caddc266c02d1708a2"
+    },
+    "canary.d.ts": {
+      "size": 1143,
+      "sha256": "865a2612f5ec073dd48d454307ccabb04c48f8b96fda9940c5ebfe6b4b451f51"
+    },
+    "compiler-runtime.d.ts": {
+      "size": 116,
+      "sha256": "20fa37b636fdcc1746ea0738f733d0aed17890d1cd7cb1b2f37010222c23f13e"
+    },
+    "experimental.d.ts": {
+      "size": 7255,
+      "sha256": "2e07abf27aa06353d46f4448c0bbac73431f6065eef7113128a5cd804d0c384d"
+    },
+    "global.d.ts": {
+      "size": 7520,
+      "sha256": "7e29f41b158de217f94cb9676bf9cbd0cd9b5a46e1985141ed36e075c52bf6ad"
+    },
+    "index.d.ts": {
+      "size": 182820,
+      "sha256": "045c1b395851aa71ef76393398466330fe1eeebc113c8085eefc6d84abea3a88"
+    },
+    "jsx-dev-runtime.d.ts": {
+      "size": 740,
+      "sha256": "c30436b130b6218b7714314dc41d3f459590db4bdf099eecd51cb1bda32109a8"
+    },
+    "jsx-runtime.d.ts": {
+      "size": 532,
+      "sha256": "b838d4c72740eb0afd284bf7575b74c624b105eff2e8c7b4aeead57e7ac320ff"
+    },
+    "package.json": {
+      "size": 6108,
+      "sha256": "505c0df4cd73d6a02c946bd9b81451584bd9c83ea72d75cff9b826efceaa19c2"
+    },
+    "ts5.0/canary.d.ts": {
+      "size": 1143,
+      "sha256": "865a2612f5ec073dd48d454307ccabb04c48f8b96fda9940c5ebfe6b4b451f51"
+    },
+    "ts5.0/experimental.d.ts": {
+      "size": 7255,
+      "sha256": "2e07abf27aa06353d46f4448c0bbac73431f6065eef7113128a5cd804d0c384d"
+    },
+    "ts5.0/global.d.ts": {
+      "size": 7520,
+      "sha256": "7e29f41b158de217f94cb9676bf9cbd0cd9b5a46e1985141ed36e075c52bf6ad"
+    },
+    "ts5.0/index.d.ts": {
+      "size": 181793,
+      "sha256": "3219302a5e14b9ff32b1f2a5ac872741df7847e66726f88f80aa3b11d77ec090"
+    },
+    "ts5.0/jsx-dev-runtime.d.ts": {
+      "size": 740,
+      "sha256": "c30436b130b6218b7714314dc41d3f459590db4bdf099eecd51cb1bda32109a8"
+    },
+    "ts5.0/jsx-runtime.d.ts": {
+      "size": 532,
+      "sha256": "b838d4c72740eb0afd284bf7575b74c624b105eff2e8c7b4aeead57e7ac320ff"
+    }
+  }
+}

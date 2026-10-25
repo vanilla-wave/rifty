@@ -97,7 +97,7 @@ describe('npm shell prefix parity', () => {
       expect(await vfs.readFileText(`${root}/package.json`)).toBe(outerPackageJson);
       expect(JSON.parse(await vfs.readFileText(`${member}/package.json`))).toMatchObject({
         name: 'rifty-project',
-        dependencies: { kleur: '4.1.5' },
+        dependencies: { kleur: '^4.1.5' },
       });
       await expect(vfs.exists(`${member}/node_modules/kleur/package.json`)).resolves.toBe(true);
       await expect(vfs.exists(`${root}/node_modules/kleur/package.json`)).resolves.toBe(false);
@@ -182,7 +182,7 @@ describe('npm shell prefix parity', () => {
       expect(await vfs.readFileText(`${root}/package.json`)).toBe(rootPackageJson);
       expect(JSON.parse(await vfs.readFileText(`${member}/package.json`))).toMatchObject({
         name: 'app',
-        dependencies: { kleur: '4.1.5' },
+        dependencies: { kleur: '^4.1.5' },
       });
       await expect(vfs.exists(`${root}/node_modules/kleur/package.json`)).resolves.toBe(false);
       await expect(vfs.exists(`${member}/node_modules/kleur/package.json`)).resolves.toBe(true);
@@ -326,7 +326,7 @@ describe('npm shell prefix parity', () => {
       });
       expect(JSON.parse(await vfs.readFileText(`${root}/package.json`))).toMatchObject({
         name: 'outer',
-        dependencies: { kleur: '4.1.5' },
+        dependencies: { kleur: '^4.1.5' },
       });
       await expect(vfs.exists(`${root}/node_modules/kleur/package.json`)).resolves.toBe(true);
     } finally {

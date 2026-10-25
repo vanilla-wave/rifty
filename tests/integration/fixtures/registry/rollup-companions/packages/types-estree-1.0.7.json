@@ -1,0 +1,45 @@
+{
+  "dist": {
+    "shasum": "4158d3105276773d5b7695cd4834b1722e4f37a8",
+    "tarball": "https://registry.npmjs.org/@types/estree/-/estree-1.0.7.tgz",
+    "fileCount": 6,
+    "integrity": "sha512-w28IoSUCJpidD/TGviZwwMJckNESJZXFu7NBZ5YJ4mEUnNraUn9Pm8HSZm/jDF1pDWYKspWE7oVphigUPRakIQ==",
+    "signatures": [
+      {
+        "sig": "MEYCIQD3xhoGBX2cJb2Zi+1J8azqscXEQYFxetPjwbpIQMvT4QIhANrwk5fcgqXTjmcB8tb+8X3sLZbVrkGdVxBQEutLxzmQ",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "unpackedSize": 26147
+  },
+  "main": "",
+  "name": "@types/estree",
+  "types": "index.d.ts",
+  "nonNpm": true,
+  "license": "MIT",
+  "scripts": {},
+  "_npmUser": { "name": "types", "email": "ts-npm-types@microsoft.com" },
+  "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/estree",
+  "repository": {
+    "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+    "type": "git",
+    "directory": "types/estree"
+  },
+  "description": "TypeScript definitions for estree",
+  "directories": {},
+  "maintainers": [{ "name": "types", "email": "ts-npm-types@microsoft.com" }],
+  "contributors": [
+    { "url": "https://github.com/RReverser", "name": "RReverser", "githubUsername": "RReverser" }
+  ],
+  "dependencies": {},
+  "_hasShrinkwrap": false,
+  "peerDependencies": {},
+  "typeScriptVersion": "5.0",
+  "_npmOperationalInternal": {
+    "tmp": "tmp/estree_1.0.7_1742801651201_0.7252383563334608",
+    "host": "s3://npm-registry-packages-npm-production"
+  },
+  "typesPublisherContentHash": "1ab11f4e78319f80655b4ca20a073da0dc035be5f3290fb0bfa1e08a055d0c7d",
+  "_id": "@types/estree@1.0.7",
+  "version": "1.0.7"
+}

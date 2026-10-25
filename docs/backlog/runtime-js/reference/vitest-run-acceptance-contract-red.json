@@ -1,0 +1,263 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED PASS (no blocker): every probed oracle fact holds on host Node v24.16.0/npm 11.17.0 (26 Node transcripts satisfy the spec's own predicates, bare `vitest < /dev/null` = one run exit 0), the amended scenario 5/I7 is covered by rows 8-11 + parity 7, and the RED fails now at goal I1 and, with I1 landed, at the I6 statfsSync wall — proceed to IMPLEMENT; concerns are advisory.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/vitest-run-acceptance.md @ 2c490a807d0729e00d7962ba0fb5e21681b2da55 (branch vg/u12; status ready after goal amend); goal docs/backlog/epics/vitest-run-in-browser/goal.md as amended 2026-09-23 (amend line goal.md:179, commit f65a941e4 = ancestor of BASE; `git diff BASE..HEAD -- docs/backlog/epics` empty); BASE 52e469720edb166888e6765b16abaa033ff35fcb. Fresh independent reviewer, read-only, detached scratch worktrees (removed). Oracle: host Node v24.16.0 / npm 11.17.0 Darwin arm64, env stripped to PATH/HOME/TERM/LANG (no CLAUDECODE/AI_AGENT/CODEX_*/NO_COLOR/CI), files generated from HEAD spec lines 14-83 verbatim (/tmp/vgoal/u12/review-cr2/seed.mts, diff vs spec: IDENTICAL); /tmp/vgoal/u12/review-cr2/oracle.log: `npm install --prefer-online` added 44 packages [exit 0]; `npm ls vite` -> vite@8.0.16 overridden + deduped under @vitest/mocker; TREE_PROBE VITE-DIRS/LOCK-VITE [\"node_modules/vite@8.0.16\"], VITEST=4.1.11; 6 failing commands x (pipe stdout | pty stdout + /dev/null stdin = rifty child shape) all [exit 1], 6 fixed x 2 all [exit 0]; bare `npx vitest` with /dev/null stdin (pipe and pty stdout) -> ` RUN  v4.1.11`, ` ✓ src/sum.test.ts (2 tests)`, `Tests  2 passed (2)` [exit 0]; pty stdin -> ` DEV  v4.1.11 … PASS  Waiting for file changes...` [STILL RUNNING after 12s]; `vitest --watch` /dev/null stdin -> Waiting for file changes [STILL RUNNING after 12s]. `node check.cjs oracle.log` (the spec's own expectFailingRun/expectPassingRun + exit codes applied to every Node transcript) -> `checked 26 oracle segments with the spec's own predicates; failures: 0`; mutant check (expectPassingRun on failing segments) -> 48 failures (checker discriminates). Line-set diffs: bare vitest vs vitest run (fixed) = +[] -[] in both stdout modes; forks vs threads (failing) = +[] -[]; npm test adds only `> test`, `> vitest run`. Registry (--prefer-online): vite dist-tags latest 8.3.0; lightningcss 8.0.0/8.0.15/8.0.16/8.1.0/8.1.5 ^1.32.0, 8.2.0/8.2.1/8.2.2/8.3.0 ^1.33.0; vitest@4.1.11 vite edge ^6.0.0 || ^7.0.0 || ^8.0.0; shadow recipe `tools/shadow-registry/src/internal/catalog-source.ts:490-495` trigger lightningcss 1.32.0, semver-admits, unsupportedFeature lightningcss.version. RED: RED @ HEAD 2c490a807 (scratch detached worktree, removed): `RIFTY_PLAYGROUND_PORT=5462 pnpm exec playwright test --project=chromium-heavy tests/e2e/vitest-run.spec.ts --workers=1` -> `2 failed`: test 1 `npm: install failed: Failed to fetch packument 8.0.16: 404` Expected 0 Received 1 at spec:115 via :181; test 2 unpinned step passed (row 8), pinned ceiling install same 404 at spec:115 via :242 (/tmp/vgoal/u12/review-cr2/red-e2e.log). Scenario-partially-implemented probe: HEAD spec on goal-branch tip 321a14f20 (overrides-bare-version-spec + symbol-key guard landed), --project=chromium-light, port 5462 -> `2 failed`: test 1 passes install + lightningcss line + tree probe, then `vitest run` prints `Startup Error / SyntaxError: The requested module 'node:fs' does not provide an export named 'statfsSync'` and exits 0 (Expected 1 Received 0, spec:194); test 2 passes unpinned + ceiling install, then `vitest run --environment=jsdom` same Startup Error exit 0 (spec:246 via :255) (/tmp/vgoal/u12/review-cr2/red-goal-tip.log) -> goal I6 (map item 4) + I3/I4 exit path, the scenario's own walls. tsc -p (spec only, allowImportingTsExtensions) exit 0; biome check spec + playwright.config.ts clean; backlog:check OK; tools/review/contract.mjs tracedRowCount 18 / userTracedRowCount 18. Prior round (pre-amendment contract) /tmp/vgoal/u12/contract-red-r1.json read as evidence only: its scenario-5/I7 blocker is resolved by the amendment (row 10 ⚠️ rows + row 11 + parity 7); its trace-on-continuation-line and jsdom/vm same-line-binding concerns are fixed (18 traced rows; spec:257,269 single-line regexes).",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2, I3, I4, I5, I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:17",
+      "summary": "Children 4 (absent-builtin-members-loud-throws — the statfsSync wall observed on the goal tip), 6, 7, 8, 9, 10, 11, 13 not landed on t3code/vitest-run-browser @ 321a14f20; the spec cannot pass before them."
+    },
+    {
+      "clause": "I7 (row 9 ceilings, row 10 README listing)",
+      "location": "docs/backlog/runtime-js/vitest-run-acceptance.md:85",
+      "summary": "This unit's IMPLEMENT: loud vm.constants/DONT_CONTEXTIFY and node:http.Agent, compat README listing via generator; then tests/e2e/vitest-run.spec.ts GREEN and independent Final+GREEN."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: clean project (rm -rf node_modules package-lock.json) seeded with the oracle files: npm-spelled overrides {vite: 8.0.16} manifest, vitest.config.ts include src/**/*.test.ts, multi-line src/sum.ts / src/sum.test.ts failing on line 9, test/decoy.test.ts",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:58",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: npm install exit 0; lightningcss-wasm@1.32.0 shadow substitution line; exactly one node_modules/vite@8.0.16, lock's only vite entry the same, vitest 4.1.11, @rolldown/binding-wasm32-wasi installed",
+      "source": "acceptance",
+      "trace": "I1 + scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:181",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: failing vitest run (default forks) exit 1 with RUN v4.1.11, module/test lines, FAIL header, AssertionError + Expected/Received diff, src/sum.test.ts:9:21 + line-9 frame, Test Files/Tests counts, no DECOY-COLLECTED",
+      "source": "acceptance",
+      "trace": "I4 + scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:192",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: npm test and vitest run --pool=forks repeat row 3 (npm test also prints > vitest run); --reporter=verbose exit 1 with per-test lines, -> message, failure block and counts",
+      "source": "acceptance",
+      "trace": "I4 + scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:163",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: --pool=threads repeats row 3 and --pool=threads --reporter=verbose repeats row 4's verbose lines: same lines, counts, exit 1 as forks",
+      "source": "acceptance",
+      "trace": "I5 + scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:168",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: fixed state, all six commands exit 0 with Test Files 1 passed (1), Tests 2 passed (2), file line (default) or both verbose lines; no FAIL/failed, no decoy",
+      "source": "acceptance",
+      "trace": "I4 + I5 + scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:199",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: no claimed run of rows 3-6 prints Startup Error, ModuleLoadError, SyntaxError or Not implemented:",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:120",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: unpinned manifest (devDependencies vitest 4.1.11 only): npm install exits 1 with Not implemented: lightningcss.version",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:221",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 9: with jsdom/happy-dom/coverage-v8/browser-playwright/playwright installed over the pinned passing scenario, each mode exits 1, never Tests 2 passed, and names its ceiling on the throw's own line (jsdom DONT_CONTEXTIFY, happy-dom esm-global-function-assignment, coverage node:inspector/promises, vmThreads/vmForks experimental-vm-modules, browser mode node:http(s).Agent)",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:244",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 10: vitest.md claims exactly vitest 4.1.11 + vite 8.0.16, manifest precondition first, check rows I1-I6 incl. vitest.config.ts/TS tests/both pools, cross rows only jsdom/happy-dom, coverage, browser mode, vmThreads/vmForks naming row-9 throws, warning unclaimed rows for watch mode and other versions with the observed boundary and no ban, cites the spec, listed in compat README",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "docs/public/compat/vitest.md:18",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 11: fixed state, bare vitest (no run; non-TTY shell stdin) runs once, exit 0 with row 6's default-reporter lines and no row-7 wall, as Node vitest < /dev/null",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:207",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: failing file on Node - module/test lines, failure block + diff, 9:21, Tests 1 failed | 1 passed (2), exit 1; identical line set for --pool=threads and for TTY stdout apart from the erased summary window",
+      "source": "acceptance",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:123",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: fixed file on Node - file line printed, Tests 2 passed (2), exit 0 on forks and threads (omission = agent-env artifact)",
+      "source": "acceptance",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:148",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: --reporter=verbose on Node - per-test check/cross lines, -> message under a failure, same counts/exit",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:125",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: npm test on Node = vitest run + npm banner (> test, > vitest run); same lines/exit",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:196",
+      "note": ""
+    },
+    {
+      "row": "Parity 5: test/decoy.test.ts collected by default (config moved away: Tests 1 failed | 2 passed (3)) and not with the config",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "Parity 6: npm install with the npm-spelled override - one hoisted node_modules/vite@8.0.16, deduped under @vitest/mocker, no nested vitest/node_modules/vite",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:184",
+      "note": ""
+    },
+    {
+      "row": "Parity 7: bare vitest with non-TTY stdin on Node - RUN v4.1.11, file line, Tests 2 passed (2), exit 0, one run; TTY stdin or --watch stays in Waiting for file changes...",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-run.spec.ts:209",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/public/compat/vitest.md:35, tests/e2e/vitest-run.spec.ts:207-211",
+          "evidence": "Node oracle (/tmp/vgoal/u12/review-cr2/oracle.log): bare `npx vitest < /dev/null` exercised only in the fixed state [exit 0]; the spec's bare-`vitest` step runs only after the fix.",
+          "summary": "The watch ⚠️ row says bare `vitest` runs once \"with `vitest run`'s lines and exit code\", but row 11 / spec:209 carry only the fixed state (exit 0); a failing-state bare run (exit 1) is stated on the page without a carrier. Either narrow the page wording to what row 11 observes or add the failing-state bare run.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/vitest-run-acceptance.md:51, docs/backlog/runtime-js/vitest-run-acceptance.md:84",
+          "evidence": "$ grep -n vitest docs/public/compat/README.md -> no match @ HEAD; tools/compat-matrix-generator/cli.js 1268 lines vs file-size pin 1269 (tools/checks/file-size.mjs:69).",
+          "summary": "Row 10's `listed in docs/public/compat/README.md` is an IMPLEMENT target (generator-owned index, renderReadme move per Decisions); its only mechanical carrier will be check:compat-drift after that move — verify at Final+GREEN.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/public/compat/vitest.md:20-29",
+          "evidence": "RED @ HEAD: 2 failed (install 404); on goal tip 321a14f20: `vitest run` Startup Error `statfsSync` exit 0 (/tmp/vgoal/u12/review-cr2/red-e2e.log, red-goal-tip.log).",
+          "summary": "The public page already carries ✅ 'implemented and tested' rows for I1-I6 while its only cited spec is RED (carried from r1); the Decisions line calls them pending. Keep the page off main (goal PR draft) until GREEN, or mark the rows pending meanwhile.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "playwright.config.ts:31-32",
+          "evidence": "goal tip 321a14f20 adds `'**/npm-override-bare-version.spec.ts'` at the same HEAVY_SPECS tail (git diff of the two configs).",
+          "summary": "HEAVY_SPECS entry will textually conflict with the goal branch's npm-override-bare-version.spec.ts line on rebase; keep both entries.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/e2e/vitest-run.spec.ts:167-169, docs/public/compat/vitest.md:26-27",
+          "evidence": "Node oracle line-set diff `vitest run` vs `--pool=threads` (failing state) = only-first [] / only-second [] (/tmp/vgoal/u12/review-cr2/oracle.log).",
+          "summary": "Reporter output is identical across pools, so rows 4-6 cannot tell whether `--pool=threads` really ran in a worker_threads.Worker (or forks in a forked child); I5 as declared (same results and exit code) is met either way, but the page rows state the mechanism. Advisory: a pool-identity probe in the test file (e.g. a console line of `isMainThread`) would bind it — it changes the oracle files, so re-run the oracle if adopted.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/e2e/vitest-run.spec.ts:221-227, docs/public/compat/vitest.md:10-12,36",
+          "evidence": "$ npm view vite dist-tags --prefer-online -> latest 8.3.0; vite@8.2.0..8.3.0 dependencies.lightningcss ^1.33.0, 8.0.x/8.1.x ^1.32.0.",
+          "summary": "Row 8 and the page's unpinned-manifest precondition / '8.2.0 through 8.3.0, the latest at writing' hold only while registry latest vite declares lightningcss outside the recipe's 1.32.0; a new vite latest or recipe bump flips the assertion and the public text (carried from r1).",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/vitest-run-acceptance.md:75, docs/public/compat/vitest.md:24",
+          "evidence": "Node oracle `npm test` adds `> test` + `> vitest run`; $ grep -rln banner docs/backlog -> no npm-client/shell item.",
+          "summary": "npm's `> test` script banner divergence is recorded only as out of scope + a page note; still no backlog owner (REV-12 route: rifty-to-backlog).",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "2c490a807d0729e00d7962ba0fb5e21681b2da55"
+}

@@ -1,0 +1,53 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Docs-only capture можно принимать. Проба повторена: owner clean → pageDirty:true; браузерный Reset остаётся явно непроверенным. pr:check: 20/20 по предоставленному логу.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "dcd3473c9ed22aede6bb8cb8c9ee8f6b623184b4",
+  "unit_goal_source": "RDY-6 final written-result check; reviewer /root/final_capture_review, fresh read-only context. Original request: «Вот такие находки есть, посмотри и скажи, что думаешь /tmp/wrap-up-fs-dirty-stamp-2026-08-30.md»; original source read; no further user answers or implementation request. Final draft docs/backlog/playground/scratch-reset-keeps-page-dirty.md and its reference/scratch-reset-keeps-page-dirty-evidence.md; baseline e5122ed5f39ecf4eb411419b03c390306d381ebc. ADR-0165 and cited page/catalog code checked. Capture records current store behavior without selecting a repair or claiming full-browser acceptance.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

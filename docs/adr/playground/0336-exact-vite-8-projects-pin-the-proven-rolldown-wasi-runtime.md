@@ -70,3 +70,7 @@ an honest shared carrier for this repair.
   Vite 8 and lockfile compatibility do not widen.
 - (-) A future upstream closure change requires explicit revalidation and,
   when needed, another recorded manifest-policy change.
+
+## Corrections (active)
+
+- 2026-09-07 — ADR-0384 supersedes package-adaptation owner/carrier clauses and `.vite` archive classification where applicable; all other decisions remain active.

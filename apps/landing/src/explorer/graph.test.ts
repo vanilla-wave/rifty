@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EDGES, NODES, REALMS, SCN } from './data';
+import { EDGES, NODES, SCN, ZONES } from './data';
 import type { EdgeDef, NodeId, ScenarioId } from './data';
 import { type Adjacency, bfsPath, buildAdjacency } from './graph';
 
@@ -29,11 +29,11 @@ describe('buildAdjacency', () => {
     }
   });
 
-  it('places every topology node in exactly one runtime realm', () => {
-    const realmNodes = REALMS.flatMap((realm) => realm.nodes);
-    expect(realmNodes.toSorted()).toEqual(Object.keys(NODES).toSorted());
-    expect(new Set(realmNodes).size).toBe(realmNodes.length);
-    expect(REALMS.find((realm) => realm.id === 'ext')?.nodes).toEqual(['registry']);
+  it('places every topology node in a drawn runtime realm', () => {
+    const realms = new Set(ZONES.map((zone) => zone.id));
+    for (const node of Object.values(NODES)) expect(realms.has(node.realm)).toBe(true);
+    const external = (Object.keys(NODES) as NodeId[]).filter((id) => NODES[id].realm === 'ext');
+    expect(external).toEqual(['registry']);
   });
 
   it('contains exactly the nodes referenced by edges', () => {

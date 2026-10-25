@@ -17,8 +17,8 @@ import { createOwnerPlaygroundSessionTools } from './playground-session-tools-ow
 import { DurableOwnerFs } from './test-fixtures/durable-owner-fs.ts';
 import { createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
 
-const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
-const ARCHIVE_TRANSACTION_ROOT = '/.rifty/workbench/v1/projects/project-a/.playground-archive-v1';
+const PROJECT_ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
+const ARCHIVE_TRANSACTION_ROOT = '/.rifty/workbench/v2/projects/project-a/.playground-archive-v1';
 const ARCHIVE_TRANSACTION_STAGE = `${ARCHIVE_TRANSACTION_ROOT}/stage`;
 const ARCHIVE_TRANSACTION_PHASE = `${ARCHIVE_TRANSACTION_ROOT}/phase`;
 const SOURCE = `${PROJECT_ROOT}/src/main.ts`;
@@ -595,7 +595,7 @@ describe('owner-resident Playground session tools', () => {
         },
         {
           op: 'write',
-          path: '/.rifty/workbench/v1/catalog.json',
+          path: '/.rifty/workbench/v2/catalog.json',
           message: 'catalog permission denied',
         },
       ],
@@ -639,7 +639,7 @@ describe('owner-resident Playground session tools', () => {
     );
     expect(durabilityFailure.response.error.message).not.toContain(PROJECT_ROOT);
     expect(durabilityFailure.response.error.message).not.toContain(
-      '/.rifty/workbench/v1/catalog.json',
+      '/.rifty/workbench/v2/catalog.json',
     );
     expect(durabilityFailure.response.error.name).toBe('PlaygroundPersistenceError');
     flush.mockRestore();

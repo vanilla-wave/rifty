@@ -55,3 +55,9 @@ the module-local active binding rather than cross-bundle `instanceof`.
 
 Specifies ADR-0157's single seeded process across self-contained bundles and
 ADR-0326's nested physical-manager ownership. Both otherwise stand.
+
+## Corrections
+
+- 2026-10-25 (ADR-0548): the bound descendant authority's `kill(pid, signal,
+  realmEnding)` carries `control:kill-tree` `cascade`; that manager latches as
+  ending and releases its Workers.

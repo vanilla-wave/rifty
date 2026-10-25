@@ -18,8 +18,8 @@ right after the child wrote to stdout may deliver fewer bytes than real Node.
 Window is one in-flight admission plus queued-but-unprojected messages.
 
 Intake 2026-08-20: dedup found no match (`binary-stdio-messageport-backpressure`
-is framing/flow-control; `sab-ring-protocol-violation-flake` is the sync-RPC
-ring). The Node oracle claim ("pre-SIGKILL pipe data is delivered before
+is framing/flow-control; the completed SAB ring protocol-violation repair is
+the sync-RPC ring). The Node oracle claim ("pre-SIGKILL pipe data is delivered before
 'close'") carries no captured parity artifact — open fork, capture via
 parity-runner at pickup before any design. A candidate honest middle: deliver
 already-projectable chunks (bytes + witness both received) and abandon only the

@@ -21,7 +21,9 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./internal": "./src/internal/index.ts"
+    "./internal": "./src/internal/index.ts",
+    "./runtime": "./src/runtime/index.ts",
+    "./runtime/common": "./src/runtime/common.ts"
   },
   "files": ["dist", "CHANGELOG.md"],
   "publishConfig": {
@@ -37,6 +39,14 @@
       "./internal": {
         "types": "./dist/internal.d.ts",
         "import": "./dist/internal.js"
+      },
+      "./runtime": {
+        "types": "./dist/runtime.d.ts",
+        "import": "./dist/runtime.js"
+      },
+      "./runtime/common": {
+        "types": "./dist/runtime/common.d.ts",
+        "import": "./dist/runtime/common.js"
       }
     }
   },
@@ -48,8 +58,11 @@
     "sass-vite-oracle:generate": "tsx tools/generate-sass-vite-node-oracle.ts --write",
     "sass-vite-oracle:check": "tsx tools/generate-sass-vite-node-oracle.ts --check"
   },
+  "dependencies": {
+    "@riftydev/io": "workspace:*",
+    "@riftydev/vfs": "workspace:*"
+  },
   "devDependencies": {
-    "@riftydev/vfs": "workspace:*",
     "esbuild": "0.28.0",
     "esbuild-wasm": "0.28.0"
   }

@@ -14,11 +14,12 @@
  * Skipped when SAB is unavailable (Node missing `Atomics.waitAsync`).
  */
 import { fileURLToPath } from 'node:url';
-import { Worker } from 'node:worker_threads';
+import type { Worker } from 'node:worker_threads';
 import { describe, expect, it } from 'vitest';
 import { createSabRing } from '../../../packages/kernel/src/ipc/sab-ring.ts';
 import { SyncRpcDispatcher } from '../../../packages/kernel/src/ipc/sync-dispatch.ts';
 import { SYNC_RPC_PROTOCOL_VERSION } from '../../../packages/kernel/src/ipc/sync-rpc.ts';
+import { REAL_WORKER_TEST_TIMEOUT_MS, runRealWorkerLifecycle } from './real-worker-lifecycle.ts';
 
 const hasSab =
   typeof SharedArrayBuffer === 'function' &&
@@ -35,163 +36,179 @@ interface WorkerReply {
   readonly message?: string;
 }
 
+function observeWorkerReply(worker: Worker): Promise<WorkerReply> {
+  return new Promise<WorkerReply>((resolve, reject) => {
+    let settled = false;
+    worker.once('message', (message: WorkerReply) => {
+      settled = true;
+      resolve(message);
+    });
+    worker.once('error', (error) => {
+      settled = true;
+      reject(error);
+    });
+    worker.once('exit', (code) => {
+      if (!settled) reject(new Error(`sync-rpc fixture exited with code ${code} before reply`));
+    });
+  });
+}
+
 describe.skipIf(!hasSab)('SyncRpc — real Worker round-trip (ADR-0011 phase 3)', () => {
-  it('client completes two claimed JSON exchanges on one ring', async () => {
-    const payloadCapacity = 1024;
-    const { sab, ring } = createSabRing({ payloadCapacity });
+  it(
+    'client completes two claimed JSON exchanges on one ring',
+    async () => {
+      const payloadCapacity = 1024;
+      const { sab, ring } = createSabRing({ payloadCapacity });
 
-    const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 1 });
-    dispatcher.register('echo', (p) => p);
-    dispatcher.attach(ring);
-
-    const worker = new Worker(fileURLToPath(fixtureUrl), {
-      workerData: {
-        sab,
-        payloadCapacity,
-        requests: [
-          { method: 'echo', payload: { hello: 'world', n: 42 } },
-          { method: 'echo', payload: { hello: 'again', n: 43 } },
-        ],
-        timeoutMs: 2000,
-        protocolVersion: SYNC_RPC_PROTOCOL_VERSION,
-      },
-    });
-
-    const msg = await new Promise<WorkerReply>((resolve, reject) => {
-      worker.once('message', resolve);
-      worker.once('error', reject);
-    });
-
-    dispatcher.detachAll();
-    await worker.terminate();
-
-    expect(msg.type).toBe('reply');
-    expect(msg.reply?.ok).toBe(true);
-    expect(msg.reply?.value).toEqual({ hello: 'world', n: 42 });
-    expect(msg.replies).toEqual([
-      { ok: true, value: { hello: 'world', n: 42 } },
-      { ok: true, value: { hello: 'again', n: 43 } },
-    ]);
-  });
-
-  it('hand-written and production clients each complete JSON→binary→JSON on one ring', async () => {
-    const payloadCapacity = 1024;
-    const { sab, ring } = createSabRing({ payloadCapacity });
-    const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 1 });
-    const register = dispatcher.register as unknown as (
-      method: string,
-      handler: (payload: unknown) => unknown,
-      options: { decodeBinaryRequest: (payload: Uint8Array) => unknown },
-    ) => void;
-    register.call(dispatcher, 'binary-echo', (payload) => payload, {
-      decodeBinaryRequest: (payload) => ({ bytes: [...payload] }),
-    });
-    register.call(
-      dispatcher,
-      'binary-failure',
-      () => {
-        throw Object.assign(new Error('injected production binary failure'), {
-          code: 'EBINARYFAIL',
+      const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 1 });
+      try {
+        await runRealWorkerLifecycle(async (scope) => {
+          dispatcher.register('echo', (p) => p);
+          dispatcher.attach(ring);
+          const worker = scope.spawn(fileURLToPath(fixtureUrl), {
+            workerData: {
+              sab,
+              payloadCapacity,
+              requests: [
+                { method: 'echo', payload: { hello: 'world', n: 42 } },
+                { method: 'echo', payload: { hello: 'again', n: 43 } },
+              ],
+              protocolVersion: SYNC_RPC_PROTOCOL_VERSION,
+            },
+          });
+          const msg = await observeWorkerReply(worker);
+          expect(msg.type).toBe('reply');
+          expect(msg.reply?.ok).toBe(true);
+          expect(msg.reply?.value).toEqual({ hello: 'world', n: 42 });
+          expect(msg.replies).toEqual([
+            { ok: true, value: { hello: 'world', n: 42 } },
+            { ok: true, value: { hello: 'again', n: 43 } },
+          ]);
         });
-      },
-      { decodeBinaryRequest: (payload) => payload },
-    );
-    dispatcher.register('echo', (payload) => payload);
-    dispatcher.attach(ring);
-    const worker = new Worker(fileURLToPath(fixtureUrl), {
-      workerData: {
-        sab,
-        payloadCapacity,
-        requests: [
-          { method: 'echo', payload: { sequence: 1 } },
-          { method: 'binary-echo', binaryPayload: [0xff, 0x00, 0x7f] },
-          { method: 'binary-failure', binaryPayload: [1] },
-          { method: 'echo', payload: { sequence: 3 } },
-        ],
-        timeoutMs: 2000,
-        protocolVersion: SYNC_RPC_PROTOCOL_VERSION,
-      },
-    });
-    const msg = await new Promise<WorkerReply>((resolve, reject) => {
-      worker.once('message', resolve);
-      worker.once('error', reject);
-    });
-    dispatcher.detachAll();
-    await worker.terminate();
-    expect(msg.replies).toEqual([
-      { ok: true, value: { sequence: 1 } },
-      { ok: true, value: { bytes: [0xff, 0x00, 0x7f] } },
-      {
-        ok: false,
-        error: {
-          name: 'Error',
-          message: 'injected production binary failure',
-          code: 'EBINARYFAIL',
-        },
-      },
-      { ok: true, value: { sequence: 3 } },
-    ]);
+      } finally {
+        dispatcher.detachAll();
+      }
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
 
-    const production = createSabRing({ payloadCapacity });
-    dispatcher.attach(production.ring);
-    const productionWorker = new Worker(fileURLToPath(productionClientUrl), {
-      workerData: { sab: production.sab, payloadCapacity },
-      // Production sources use parameter properties; Node's strip-only loader
-      // rejects those, so exercise them through the workspace's real TS loader.
-      execArgv: ['--import', 'tsx'],
-    });
-    const productionMessage = await new Promise<WorkerReply>((resolve, reject) => {
-      productionWorker.once('message', resolve);
-      productionWorker.once('error', reject);
-    });
-    dispatcher.detachAll();
-    await productionWorker.terminate();
-    expect(productionMessage).toEqual({
-      type: 'reply',
-      replies: [
-        { sequence: 1 },
-        { bytes: [0xff, 0x00, 0x7f] },
-        {
-          name: 'Error',
-          message: 'injected production binary failure',
-          code: 'EBINARYFAIL',
-        },
-        { sequence: 3 },
-      ],
-    });
-  });
+  it(
+    'dispatcher reports unknown method as ok=false with ERPCNOHANDLER',
+    async () => {
+      const payloadCapacity = 256;
+      const { sab, ring } = createSabRing({ payloadCapacity });
 
-  it('dispatcher reports unknown method as ok=false with ERPCNOHANDLER', async () => {
-    const payloadCapacity = 256;
-    const { sab, ring } = createSabRing({ payloadCapacity });
+      const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 1 });
+      try {
+        await runRealWorkerLifecycle(async (scope) => {
+          dispatcher.attach(ring);
+          const worker = scope.spawn(fileURLToPath(fixtureUrl), {
+            workerData: {
+              sab,
+              payloadCapacity,
+              method: 'doesNotExist',
+              payload: null,
+              protocolVersion: SYNC_RPC_PROTOCOL_VERSION,
+            },
+          });
+          const msg = await observeWorkerReply(worker);
+          expect(msg.type).toBe('reply');
+          expect(msg.reply?.ok).toBe(false);
+          const errorShape = (
+            msg.reply as { error?: { code?: string; message?: string } } | undefined
+          )?.error;
+          expect(errorShape?.code).toBe('ERPCNOHANDLER');
+          expect(errorShape?.message ?? '').toContain('doesNotExist');
+        });
+      } finally {
+        dispatcher.detachAll();
+      }
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
 
-    const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 1 });
-    dispatcher.attach(ring);
+  it(
+    'hand-written and production clients each complete JSON→binary→JSON on one ring',
+    async () => {
+      const payloadCapacity = 1024;
+      const { sab, ring } = createSabRing({ payloadCapacity });
+      const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 1 });
+      const register = dispatcher.register as unknown as (
+        method: string,
+        handler: (payload: unknown) => unknown,
+        options: { decodeBinaryRequest: (payload: Uint8Array) => unknown },
+      ) => void;
+      try {
+        await runRealWorkerLifecycle(async (scope) => {
+          register.call(dispatcher, 'binary-echo', (payload) => payload, {
+            decodeBinaryRequest: (payload) => ({ bytes: [...payload] }),
+          });
+          register.call(
+            dispatcher,
+            'binary-failure',
+            () => {
+              throw Object.assign(new Error('injected production binary failure'), {
+                code: 'EBINARYFAIL',
+              });
+            },
+            { decodeBinaryRequest: (payload) => payload },
+          );
+          dispatcher.register('echo', (payload) => payload);
+          dispatcher.attach(ring);
+          const worker = scope.spawn(fileURLToPath(fixtureUrl), {
+            workerData: {
+              sab,
+              payloadCapacity,
+              requests: [
+                { method: 'echo', payload: { sequence: 1 } },
+                { method: 'binary-echo', binaryPayload: [0xff, 0x00, 0x7f] },
+                { method: 'binary-failure', binaryPayload: [1] },
+                { method: 'echo', payload: { sequence: 3 } },
+              ],
+              timeoutMs: 2000,
+              protocolVersion: SYNC_RPC_PROTOCOL_VERSION,
+            },
+          });
+          const msg = await observeWorkerReply(worker);
+          expect(msg.replies).toEqual([
+            { ok: true, value: { sequence: 1 } },
+            { ok: true, value: { bytes: [0xff, 0x00, 0x7f] } },
+            {
+              ok: false,
+              error: {
+                name: 'Error',
+                message: 'injected production binary failure',
+                code: 'EBINARYFAIL',
+              },
+            },
+            { ok: true, value: { sequence: 3 } },
+          ]);
 
-    const worker = new Worker(fileURLToPath(fixtureUrl), {
-      workerData: {
-        sab,
-        payloadCapacity,
-        method: 'doesNotExist',
-        payload: null,
-        timeoutMs: 2000,
-        protocolVersion: SYNC_RPC_PROTOCOL_VERSION,
-      },
-    });
-
-    const msg = await new Promise<WorkerReply>((resolve, reject) => {
-      worker.once('message', resolve);
-      worker.once('error', reject);
-    });
-
-    dispatcher.detachAll();
-    await worker.terminate();
-
-    expect(msg.type).toBe('reply');
-    expect(msg.reply?.ok).toBe(false);
-    const errorShape = (msg.reply as { error?: { code?: string; message?: string } } | undefined)
-      ?.error;
-    expect(errorShape?.code).toBe('ERPCNOHANDLER');
-    expect(errorShape?.message ?? '').toContain('doesNotExist');
-  });
+          const production = createSabRing({ payloadCapacity });
+          dispatcher.attach(production.ring);
+          const productionWorker = scope.spawn(fileURLToPath(productionClientUrl), {
+            workerData: { sab: production.sab, payloadCapacity },
+            execArgv: ['--import', 'tsx'],
+          });
+          const productionMessage = await observeWorkerReply(productionWorker);
+          expect(productionMessage).toEqual({
+            type: 'reply',
+            replies: [
+              { sequence: 1 },
+              { bytes: [0xff, 0x00, 0x7f] },
+              {
+                name: 'Error',
+                message: 'injected production binary failure',
+                code: 'EBINARYFAIL',
+              },
+              { sequence: 3 },
+            ],
+          });
+        });
+      } finally {
+        dispatcher.detachAll();
+      }
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
 });

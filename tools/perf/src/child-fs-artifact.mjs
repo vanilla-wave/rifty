@@ -3,6 +3,8 @@ import { childFsScenarioIdentity } from '../child-fs/scenario.mjs';
 const ESC = String.fromCharCode(27);
 const ANSI_CSI = new RegExp(`${ESC}\\[[0-?]*[ -/]*[@-~]`, 'gu');
 const TERMINAL_LINE_RESTART = new RegExp(`${ESC}\\[(?:1)?G`, 'gu');
+// Retained v1 artifacts keep their original identity; new artifacts use the current scenario.
+const LEGACY_SCENARIO_DIGEST = '559e5e226348c484d542f197b442d3826e11d9e19c206d028c978d96a4595d4c';
 const LANES = ['product-coi', 'in-realm'];
 const TOPOLOGY = Object.freeze({
   'product-coi': 'owner-sync-rpc-kernel-child',
@@ -284,7 +286,8 @@ export function validateChildFsArtifact(value) {
   if (artifact.schemaVersion !== 1) throw new TypeError('artifact.schemaVersion must be 1');
   const identity = childFsScenarioIdentity();
   if (
-    artifact.scenarioDigest !== identity.scenarioDigest ||
+    (artifact.scenarioDigest !== identity.scenarioDigest &&
+      artifact.scenarioDigest !== LEGACY_SCENARIO_DIGEST) ||
     artifact.dependencyDigest !== identity.dependencyDigest
   ) {
     throw new TypeError('artifact scenario/dependency digest does not match canonical scenario');
@@ -295,8 +298,8 @@ export function validateChildFsArtifact(value) {
     generatedAt: validateGeneratedAt(artifact.generatedAt),
     gitSha: validateGitSha(artifact.gitSha),
     browserVersion: string(artifact.browserVersion, 'artifact.browserVersion'),
-    scenarioDigest: identity.scenarioDigest,
-    dependencyDigest: identity.dependencyDigest,
+    scenarioDigest: artifact.scenarioDigest,
+    dependencyDigest: artifact.dependencyDigest,
     runs,
     samples: validateSampleSet(artifact.samples, runs, 'artifact.samples', parseArtifactSample),
   };

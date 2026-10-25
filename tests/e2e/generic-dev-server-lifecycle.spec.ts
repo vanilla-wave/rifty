@@ -67,12 +67,12 @@ test.describe('generic dev-server lifecycle — non-vite fork', () => {
     await expect(pill).not.toHaveAttribute('data-state', 'running', { timeout: 60_000 });
 
     // Fork: a bare node:http dev server + a package.json whose dev script runs
-    // it. `/close` makes the server close() itself — a port drop WITHOUT a
-    // process exit (the decisive half of the generic-lifecycle contract).
+    // it. A referenced interval keeps the process alive after `/close`, separating
+    // a port drop from process exit (ADR-0385).
     await openShellTerminal(page);
     await runLineConfirmed(
       page,
-      'echo \'import http from "node:http"; const s = http.createServer((req, res) => { if (req.url === "/close") { res.end("CLOSING"); s.close(); } else { res.end("FORK-OK host=" + req.headers.host); } }); s.listen(4100);\' > server.mjs',
+      'echo \'import http from "node:http"; let closed = false; setInterval(() => { if (closed) console.log("AFTER_CLOSE"); }, 50); const s = http.createServer((req, res) => { if (req.url === "/close") { res.end("CLOSING"); s.close(() => { closed = true; }); } else { res.end("FORK-OK host=" + req.headers.host); } }); s.listen(4100);\' > server.mjs',
     );
     await runLineConfirmed(
       page,
@@ -126,9 +126,9 @@ test.describe('generic dev-server lifecycle — non-vite fork', () => {
       )
       .not.toBe('running');
 
-    // The dev script's session is STILL foreground (close ≠ exit): Ctrl-C frees
-    // it and a fresh command runs — proving the pill drop came from the port
-    // event, not a child death.
+    // The referenced interval proves the child survived the port removal.
+    await expectTerminalContains(page, 'AFTER_CLOSE', 15_000);
+    // Ctrl-C then frees the still-foreground session for another command.
     await page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal"]').click();
     await page.keyboard.press('Control+c');
     await runLineConfirmed(page, 'echo freed');

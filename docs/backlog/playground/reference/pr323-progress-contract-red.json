@@ -1,0 +1,126 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED принят с advisory-замечаниями; реализацию продолжать. Это не Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "685fa16c3e1a24a0fc9d3fdf5b8271e6f1ef99f9",
+  "unit_goal_source": "docs/backlog/playground/project-open-persistence-progress.md; BASE b4058f421; независимый reviewer /root/progress_contract_red. Проверены исходные ответы в fs-dirty-stamp-findings-disposition.md и project-open-ide-boundaries-refine.md, ADR-0359/0413. Saved-access и dirty — следующие units, вне этого checkpoint.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: публичный Workbench и Playground показывают реальные persistence operation counts до первой сессии; исходники сохраняются.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/public-project-open-progress.spec.ts:48; tests/browser-unit/first-open-progress.spec.ts:134",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: неизвестные фазы остаются preparing; completed drain не завершает open; success/failure/close очищают progress.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/open-workbench.contract.test.ts:1379",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: background/previous progress исключён; stdout/stderr, snapshot commit и recovery сохраняют baseline.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/open-workbench.contract.test.ts:1395; packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:306; packages/workbench/src/workbench/workbench-browser-owner.test.ts:2480",
+      "note": ""
+    },
+    {
+      "row": "observable-order × first open: реальные pre-session counts, затем settled result.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/public-project-open-progress.spec.ts:77; tests/browser-unit/first-open-progress.spec.ts:134",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key × old/background drain: progress не относится к другому open.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/open-workbench.contract.test.ts:1395; packages/workbench/src/workbench/open-workbench.contract.test.ts:1427",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail / peer death × open: исходное rejection, очистка progress, без успешного открытия.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/open-workbench.contract.test.ts:1409; packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:306; packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:165",
+      "note": ""
+    },
+    {
+      "row": "Запланированный WorkbenchHealthSnapshot.projectOpen: projectId и optional persistence counts, доступные до ProjectSession.",
+      "source": "public-api",
+      "trace": "ADR-0413",
+      "status": "pass",
+      "citation": "tests/browser-unit/public-project-open-progress.spec.ts:48; packages/workbench/src/workbench/open-workbench.contract.test.ts:1398",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/public-project-open-progress.spec.ts:27",
+          "summary": "Browser carrier проверяет публичный SDK через unit-harness; видимое отображение Launcher и его preparing-фаза остаются отдельной задачей проверки реализации. Исполненного surviving mutant нет: по REV-4/5 это advisory, coverage не понижен.",
+          "authority": "",
+          "evidence": "Node v24.16.0, pnpm 11.5.2, Playwright 1.60.0. Выполнено elevated: RIFTY_PLAYGROUND_PORT=56324 pnpm exec playwright test --config playwright.browser-unit.config.ts public-project-open-progress.spec.ts first-open-progress.spec.ts --workers=1. Новый public carrier: RED строго на events.length, Received 0; предшествующий assert file === 'file 99' прошёл. Existing first-open carrier: GREEN; FIRSTOPEN256 progressCount=2, counts 1/4→4/4, обе записи перед project-opened; fileCount=2002, persistedProjectFiles=2004. Итого 1 passed, 1 failed. Первичная sandbox-попытка не запустила сервер из-за listen EPERM; повтор с разрешённым elevated исполнением достиг продуктового assertion. Чтение carrier подтверждает gotoHarness и вызов SDK; Playground App не монтируется."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workbench/open-workbench.contract.test.ts:1395",
+          "summary": "Lifecycle carrier различает scoped/unscoped events и позднее событие после settlement. Он не проводит второй open с отложенным opId первого и не подаёт progress между owner-death и rejection pending open. При реализации проверить эти переходы на реальном owner transport. Это чтение без исполненного surviving mutant, поэтому advisory по REV-4/5.",
+          "authority": "",
+          "evidence": "Выполнено: pnpm exec vitest run packages/workbench/src/workbench/open-workbench.contract.test.ts -t 'PR323 public'. Vitest 2.1.9: 4 failed, 39 skipped; все четыре outcome падают на строке 1398: expected undefined to deeply equal {projectId:'progress',persistence:{persisted:2,total:8}}. Импорт и исполнение успешны, RED соответствует отсутствующей проекции. Чтение строк 1402–1428: общий terminal 8/8 перед всеми исходами; owner-death затем gate.reject; позднее событие подаётся уже после rejection. opId в тесте не передаётся, второго open нет."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

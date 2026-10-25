@@ -24,18 +24,16 @@ function fakePort(): MessagePort & {
 
 function makeSpec(serve: boolean | undefined): {
   spec: WorkerSpawnSpec;
-  ports: Record<keyof WorkerStdioPorts | 'capability', ReturnType<typeof vi.fn>>;
+  ports: Record<keyof WorkerStdioPorts, ReturnType<typeof vi.fn>>;
 } {
   const stdout = fakePort();
   const stderr = fakePort();
   const stdin = fakePort();
   const ipc = fakePort();
-  const capability = fakePort();
   const spec = {
     entry: {
       kind: 'url',
       url: 'https://example.invalid/entry.js',
-      capabilityPorts: { 'rifty.shadow-assets.ready/v1': capability },
     },
     argv: [],
     env: {},
@@ -54,7 +52,6 @@ function makeSpec(serve: boolean | undefined): {
       stderr: stderr.close,
       stdin: stdin.close,
       ipc: ipc.close,
-      capability: capability.close,
     },
   };
 }
@@ -96,7 +93,6 @@ describe('finalizeWorkerEntry (ADR-0144 kernel server-process model)', () => {
     expect(target.close).not.toHaveBeenCalled();
     expect(ports.stdout).not.toHaveBeenCalled();
     expect(ports.ipc).not.toHaveBeenCalled();
-    expect(ports.capability).not.toHaveBeenCalled();
   });
 
   it('reaps a run-to-completion worker (no serve): exit message + close ports + self.close', () => {
@@ -119,7 +115,6 @@ describe('finalizeWorkerEntry (ADR-0144 kernel server-process model)', () => {
     expect(ports.stderr).toHaveBeenCalledTimes(1);
     expect(ports.stdin).toHaveBeenCalledTimes(1);
     expect(ports.ipc).toHaveBeenCalledTimes(1);
-    expect(ports.capability).toHaveBeenCalledTimes(1);
   });
 
   it('reaps a serve worker that THREW during setup (a crash must not linger)', () => {
@@ -138,7 +133,6 @@ describe('finalizeWorkerEntry (ADR-0144 kernel server-process model)', () => {
     });
     expect(spec.stdio.ipc.postMessage).not.toHaveBeenCalled();
     expect(target.close).toHaveBeenCalledTimes(1);
-    expect(ports.capability).toHaveBeenCalledTimes(1);
   });
 
   it('reaps an explicit serve:false worker', () => {
@@ -176,7 +170,6 @@ describe('finalizeWorkerEntry (ADR-0144 kernel server-process model)', () => {
     expect(ports.stderr).toHaveBeenCalledTimes(1);
     expect(ports.stdin).toHaveBeenCalledTimes(1);
     expect(ports.ipc).toHaveBeenCalledTimes(1);
-    expect(ports.capability).toHaveBeenCalledTimes(1);
     expect(target.close).toHaveBeenCalledTimes(1);
   });
 });

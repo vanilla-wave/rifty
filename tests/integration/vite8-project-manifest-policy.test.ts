@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { serializePackageJson } from '@riftydev/npm-client';
+import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { toPlaygroundProjectPlan } from '../../apps/playground/src/adapters/playground-project-plan.ts';
 import { starterFromPreset } from '../../apps/playground/src/glue/starter.ts';
@@ -61,10 +62,13 @@ describe('Vite snapshot final-manifest policy', () => {
     const packageJsonBytes = inspected.files['/package.json'];
     if (packageJsonBytes === undefined) throw new Error(`${spec.id}: package.json missing`);
     const workbenchPackageJson = decoder.decode(packageJsonBytes);
+    const projectRoot = `/owner/projects/${spec.id}`;
+    const { fsSync } = createMemoryFs();
+    fsSync.mkdirSync(projectRoot, { recursive: true });
+    fsSync.writeFileSync(`${projectRoot}/package.json`, packageJsonBytes);
     const ownerConfig = workbenchFirstMaterializationPackageConfig(
-      inspected,
-      `/owner/projects/${spec.id}`,
-      { packageJsonBytes },
+      { definition: inspected, projectRoot, projectKey: inspected.storageSegment },
+      fsSync,
     );
     const snapshot = JSON.parse(
       gunzipSync(readFileSync(artifactPath(spec.bakedNodeModulesUrl))).toString('utf8'),

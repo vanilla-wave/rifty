@@ -232,6 +232,17 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
         intervals: [250, 500, 1_000],
       })
       .toBe(false);
+    // HTTP absence does not settle the foreground process or its admitted output.
+    await expect(
+      page.locator('.rf-terminal-tab').filter({
+        has: page.getByRole('tab', { name: 'Express + SQLite scratch', exact: true }),
+      }),
+    ).toHaveAttribute('data-running', 'false', { timeout: 45_000 });
+    const stopOutputMarker = `NODEMON_STOP_OUTPUT_${Date.now()}`;
+    await runTerminalLineSettled(page, `echo ${stopOutputMarker}`);
+    await expect
+      .poll(() => terminalBuffer(page, 0), { timeout: 30_000 })
+      .toMatch(new RegExp(`^${stopOutputMarker}\\r?$`, 'mu'));
     const startsAfterStop = (await terminalBuffer(page, 0)).split('[nodemon] starting').length;
     await page.waitForTimeout(2_000);
     expect((await fetchTodos()).ok).toBe(false);

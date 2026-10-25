@@ -1,0 +1,56 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS; proceed to implementation, not merge. Independent Chromium RED: /private/tmp/rifty-pr357-remove-deploy-independent-red.log, missing snapshot storage at first prepare; Final+GREEN and retained PR residuals remain.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "PR #357 removal unit; BASE 45bc326ab4e3221c6e2beea61d35ab0b221771f7; reviewed preparation b824ebed09b501c327e90e41beaa249e05254612; user amendment 2026-10-01 «давай явно выпилим ее из этого ПРа» (identity → force → reconciliation); docs/adr/distribution/0490-keep-reference-host-snapshot-preparation-explicit.md:9-23 supersedes ADR-0489 D1-D2 only.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "PR357 retained npm semantics: optional-to-dev dependency save",
+      "location": "docs/backlog/distribution/reference/no-coi-agent-host-kit-close.md:13",
+      "summary": "Previously reported PR residual retained; not repaired or re-certified by this removal checkpoint."
+    },
+    {
+      "clause": "PR357 retained npm semantics: overlapping production/development selection",
+      "location": "docs/backlog/distribution/reference/no-coi-agent-host-kit-close.md:13",
+      "summary": "Previously reported PR residual retained; not repaired or re-certified by this removal checkpoint."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Explicit initial snapshot preparation works without an applied-identity store.",
+      "source": "acceptance",
+      "trace": "ADR-0490 decision 1 + user-amended scenario 4",
+      "status": "pass",
+      "citation": "tests/no-coi/reference-host-open.spec.ts:61",
+      "note": ""
+    },
+    {
+      "row": "Explicit saved open preserves edited source, manifest, lock and executable dependency without refetching the initial snapshot.",
+      "source": "acceptance",
+      "trace": "ADR-0490 decision 2 + user-amended scenario 4",
+      "status": "pass",
+      "citation": "tests/no-coi/reference-host-open.spec.ts:68",
+      "note": ""
+    },
+    {
+      "row": "An explicitly supplied conflicting snapshot fails under SDK default conflict behavior before replacing saved files; no automatic force.",
+      "source": "acceptance",
+      "trace": "ADR-0490 decision 1 + user-amended scenario 4",
+      "status": "pass",
+      "citation": "tests/no-coi/reference-host-open.spec.ts:79",
+      "note": ""
+    }
+  ],
+  "axes": [
+    { "axis": "Completeness", "verdict": "pass", "findings": [] },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    { "axis": "Bugs", "verdict": "pass", "findings": [] },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+  ]
+}

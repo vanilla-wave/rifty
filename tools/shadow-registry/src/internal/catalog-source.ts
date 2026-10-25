@@ -1,7 +1,9 @@
 import { shadowSha256 } from './canonical.ts';
 import type { ShadowCatalogDefinition, ShadowMaterializationFile } from './model.ts';
 
-export const ESBUILD_ALIAS_MAIN = `const esbuild = globalThis.__rifty?.esbuild;
+export const ESBUILD_ALIAS_MAIN = `const esbuild = globalThis[Symbol.for('rifty.runtime-js.sandbox-toolchain.v1')] === true
+  ? require('esbuild-wasm')
+  : globalThis.__riftyShadowRegistry?.esbuild;
 if (esbuild == null) {
   throw new Error('rifty invariant: esbuild runtime slot is not initialized');
 }
@@ -38,12 +40,10 @@ export const ESBUILD_ALIAS_PACKAGE = JSON.stringify(
     name: 'esbuild',
     version: '0.28.0',
     main: './lib/main.cjs',
+    types: '../esbuild-wasm/lib/main.d.ts',
     module: './lib/main.cjs',
     type: 'commonjs',
     bin: { esbuild: './bin/esbuild' },
-    exports: {
-      '.': { import: './lib/main.cjs', require: './lib/main.cjs', default: './lib/main.cjs' },
-    },
   },
   null,
   2,
@@ -456,12 +456,25 @@ export const builtinShadowCatalogSource: ShadowCatalogDefinition = {
     {
       schema: 2,
       id: 'rifty.shadow-substitution.esbuild.v2',
+      runtimeTier: 'no-coi',
       trigger: { name: 'esbuild', version: '0.28.0' },
       admission: {
         kind: 'semver-admits',
         unsupportedFeature: 'esbuild.version',
       },
-      acquisition: { kind: 'synthetic' },
+      acquisition: {
+        kind: 'registry',
+        name: 'esbuild-wasm',
+        version: '0.28.0',
+        dependencyProjection: {
+          dependencies: {},
+          optionalDependencies: {},
+          omittedOptionalDependencies: {},
+          peerDependencies: {},
+          bundledDependencies: [],
+          unsupportedFeature: 'esbuild.acquisition',
+        },
+      },
       materialization: {
         name: 'esbuild',
         version: '0.28.0',
@@ -472,9 +485,42 @@ export const builtinShadowCatalogSource: ShadowCatalogDefinition = {
           file('package.json', ESBUILD_ALIAS_PACKAGE),
         ],
       },
-      binding: {
-        adapterId: 'rifty.runtime-adapter.esbuild.v1',
-        assets: ['esbuild-wasm@0.28.0/package/esbuild.wasm'],
+      binding: { adapterId: 'rifty.runtime-adapter.esbuild.v1' },
+    },
+    {
+      schema: 2,
+      id: 'rifty.shadow-substitution.esbuild.wasm-node.v1',
+      runtimeTier: 'coi',
+      trigger: { name: 'esbuild', version: '$version' },
+      admission: { kind: 'requested-range', unsupportedFeature: 'esbuild.version' },
+      acquisition: {
+        kind: 'registry',
+        name: 'esbuild-wasm',
+        version: '$version',
+        dependencyProjection: null,
+      },
+      materialization: {
+        name: 'esbuild',
+        version: '$version',
+        bin: { esbuild: 'bin/esbuild' },
+        files: [
+          file('bin/esbuild', "#!/usr/bin/env node\nrequire('esbuild-wasm/bin/esbuild');\n"),
+          file('lib/main.cjs', "module.exports = require('esbuild-wasm');\n"),
+          file(
+            'package.json',
+            `${JSON.stringify(
+              {
+                name: 'esbuild',
+                version: '$version',
+                main: './lib/main.cjs',
+                types: '../esbuild-wasm/lib/main.d.ts',
+                bin: { esbuild: './bin/esbuild' },
+              },
+              null,
+              2,
+            )}\n`,
+          ),
+        ],
       },
     },
     {
@@ -545,22 +591,6 @@ export const builtinShadowCatalogSource: ShadowCatalogDefinition = {
           file('package.json', SASS_EMBEDDED_FACADE_PACKAGE),
         ],
       },
-    },
-  ],
-  assets: [
-    {
-      id: 'esbuild-wasm@0.28.0/package/esbuild.wasm',
-      source: {
-        name: 'esbuild-wasm',
-        version: '0.28.0',
-        integrity:
-          'sha512-5TRVKExcEmeMkccIZMzUq+Az6X2RoMAJyfl6SMMO1dMVhmvt0I2mx7gAb6zYi42n4d1ETcatFXazGKzA+aW7fg==',
-      },
-      member: 'package/esbuild.wasm',
-      memberSha256: '9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b',
-      memberSize: 13_918_738,
-      maxTarballBytes: 3_845_798,
-      maxUnpackedBytes: 14_483_968,
     },
   ],
 };

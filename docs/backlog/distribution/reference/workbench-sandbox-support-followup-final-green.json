@@ -1,0 +1,126 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS для LANDING: оба NOTE закрыты, merge рекомендован. Browser 34/34, оба мутанта RED, typecheck/lint/check:arch GREEN, PR-4 сохранён. Полный pr:check в этой сессии не запускался.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "09384630c98d1e0a39efdc2c60d3403e17795896",
+  "unit_goal_source": "PR #343, t3code/sandbox-support-followup, плюс observed baseline merged PR #340; BASE 69bd0dd6cfd301b0d4657e502adc83d883638b48. Authorities: ADR-0437, ADR-0438, ADR-0439, docs/public/sandbox-support.md. RED/root causes/history: docs/backlog/distribution/reference/workbench-sandbox-support-followup-evidence.md. Фактический diff проверен; tracked-файлы не менялись. HEAD: RIFTY_PLAYGROUND_PORT=5539 pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/sandbox-support.spec.ts --workers=1 --reporter=line → 34 passed (21.1s), /tmp/rifty-343-landing-browser.log. Scratch /private/tmp/rifty-343-mutants-tlffew20: побайтово идентичные HEAD-тесты; RIFTY_PLAYGROUND_PORT=5541 node node_modules/@playwright/test/cli.js test --config playwright.browser-unit.config.ts tests/browser-unit/sandbox-support.spec.ts --workers=1 --reporter=line --grep 'cleanup rejection' → 2 passed. Мутант cleaned && cleanupErrors.length > 0, --grep 'an observed cleanup rejection outranks a stalled disposer' → 1 failed: expected failed, received incomplete, spec.ts:394; /private/tmp/rifty-343-mutant-precedence.log. Мутант только агрегатора cleanupErrors.map(describe) → cleanupErrors.map((error) => error instanceof Error ? error.name : String(error)) → 2 failed на spec.ts:377,395: received 'cleanup: AggregateError: Cleanup failed: NotAllowedError'; /private/tmp/rifty-343-mutant-aggregate-message.log. PR-4: критерии прочитаны из BASE; четыре support assets старой и новой сборки побайтно совпадают. HEAD CI parity SUCCESS, run 35135184359/job104925821356. Static/build и test:run CI SUCCESS на aded87e6e3; после него изменены только browser-тесты и evidence. Общее завершение HEAD CI не подтверждено.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "После terminate временный OPFS lock снимается, scratch удаляется.",
+      "source": "acceptance",
+      "trace": "ADR-0439 decision 1 + ADR-0437 decision 5",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:451",
+      "note": ""
+    },
+    {
+      "row": "Наблюдённый lock без удаления даёт incomplete с native name/message при задержке rejection 0 и 40 ms.",
+      "source": "acceptance",
+      "trace": "ADR-0439 decision 2",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:400",
+      "note": ""
+    },
+    {
+      "row": "Ошибки кроме NoModificationAllowedError завершают removal без повторов.",
+      "source": "acceptance",
+      "trace": "ADR-0439 decision 1",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:370",
+      "note": ""
+    },
+    {
+      "row": "Cleanup aggregate сохраняет native exception name и message.",
+      "source": "acceptance",
+      "trace": "ADR-0437 decision 1",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:377; tests/browser-unit/sandbox-support.spec.ts:395",
+      "note": ""
+    },
+    {
+      "row": "Наблюдённый cleanup rejection имеет приоритет над deadline expiry при зависшем другом disposer.",
+      "source": "acceptance",
+      "trace": "ADR-0439 decision 3",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:382",
+      "note": ""
+    },
+    {
+      "row": "Cleanup ограничен deadline; поздние uncancelable effects сохраняют disposal.",
+      "source": "acceptance",
+      "trace": "ADR-0437 decision 5 + ADR-0439 decision 3",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:428; tests/browser-unit/sandbox-support.spec.ts:473; tests/browser-unit/sandbox-support.spec.ts:576",
+      "note": ""
+    },
+    {
+      "row": "checkSandboxSupport сохраняет module-worker: passed после поздней ошибки; pending OPFS остаётся incomplete с причиной.",
+      "source": "public-api",
+      "trace": "ADR-0437 decision 1 + ADR-0438 decision 3",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:462",
+      "note": ""
+    },
+    {
+      "row": "Публикуемые probe assets выполняют реальные browser operations; publishing сохраняет четыре документированных файла.",
+      "source": "acceptance",
+      "trace": "ADR-0437 decision 2",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:214; tools/publishing/build-workbench-assets.mjs:107",
+      "note": ""
+    },
+    {
+      "row": "Cleanup сохраняет чужие файлы, регистрации и действующий Workbench.",
+      "source": "acceptance",
+      "trace": "ADR-0437 decision 4",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:294; tests/browser-unit/sandbox-support.spec.ts:484; tests/browser-unit/sandbox-support.spec.ts:536",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -1,0 +1,158 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: I8 implementation and whole-goal end-to-end proof accepted on 2534d1e97ef838c07c0c4caa6c464877347dc7a4; proceed with CLOSE documentation and push to PR357. No merge performed or claimed.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/distribution/no-coi-agent-reference-host.md @ 2534d1e97ef838c07c0c4caa6c464877347dc7a4; BASE becdaddfb1b35484a4c183a18556d7abe5a8d47f (accepted I9); unchanged docs/backlog/epics/no-coi-agent-host-kit/goal.md scenario1–9, I1–I10 and Decisions; ADR-0417/0420/0489. Fresh independent reviewer /root/reference_final inspected raw authorities, PR357 body, complete unit diff, old checking criteria at BASE, preparation JSON and executed artifacts. New private host recipe had independent behavioral Contract+RED at2287ff4f0: real installed dependency disappears from manifest/lock after force, while execution remains a control. Final code routes identical postconditions through host.prepare; source Chromium2/2 includes matching-ID reopen/no-refetch and actual EISDIR after successful apply followed by matching-ID reconciliation retry. PR4: original packed SDK/agent/preview/HMR/sqlite gates retained; registry fixture extraction preserves original bytes/integrity assertions; a separate new deploy excludes ms; DOM assertion uses actual JSON serialization; held HTTP response is consumed according to existing body lifetime. Benchmark preview regression carries real CLI RED→GREEN, repaired by registering the existing SW at preview outside commands-only host. Actual GREEN CLI report at /tmp/rifty-pr357-bench-preview-green/report.json records this exact clean SHA, agent done, no stage/error, executed judge and screenshot; quality outcome fail is expected from the scripted read-only model, not infrastructure failure. Inspected screenshot. Whole-goal CLOSE review: reused unchanged accepted library proofs from ledger and six Final+GREEN/evidence records under docs/backlog/distribution/reference (I10 output order, I6 text-only/images, I4 distinct policies, I7 native reducer/real Playground, I1–I3 lifecycle including both occupied deadlines and real count controls, I9 real Node/npm differential and repaired SDK cause). Their earlier unit residuals are empty; prior advisory I7 repeated-ID continuation coverage remains advisory in its original record. I5 belongs to merged PR359, with actual setModel/history exercised again here. Current fresh packed scenario composes support→boot→snapshot→health edit→model switch→ms install or honest missing-registry→Vite build/ordered model receipt/busy retry→saved reopen→new-ID force/reconciliation→second-tab occupied/retry on the same real project in BOTH configurations. /tmp/rifty-pr357-reference-packed-final.log:16 first-party+178 external tarballs, fresh Chromium, existing baselines plus mandatory actual packed benchmark smoke PASS. Same-module benchmark executes default unrestricted operations, optional file/shell denials, native string transport and actual Vite iframe preview; config/comparison18/18 and explicit policy identity verified. Same-tree /tmp/rifty-pr357-reference-pr-check.log:27/27 GREEN, test:run201.8s, parity121.9s, no isolated reruns; confirmed driver completion and read final log. Final git status clean and HEAD exact. I8 closes the only remaining linked implementation child; no required goal residual remains. Routine rechart/delete-on-done documents and PR push follow this verdict, not additional product work.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Acceptance1: installed-tarball reference host on non-COI page; real support, boot and snapshot events; existing library behavioral ownership",
+      "source": "acceptance",
+      "trace": "I8 + scenario1–3 + scenario9",
+      "status": "pass",
+      "citation": "tests/integration/reference-host-browser-proof.mjs:140; tests/integration/reference-host-browser-proof.mjs:170; tests/integration/reference-host-browser-proof.mjs:341; tests/integration/fixtures/workbench-vite-consumer/src/host.ts:57; tests/integration/workbench-packed-consumer.mjs:1209",
+      "note": ""
+    },
+    {
+      "row": "Acceptance2: apply before sources; app-owned applied ID; same-ID saved open; changed-ID force followed by actual desired-manifest restoration/install; preserved dependency metadata and execution",
+      "source": "acceptance",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/host.ts:131; tests/integration/reference-host-browser-proof.mjs:306; tests/no-coi/reference-host-deploy.spec.ts:111; tests/no-coi/reference-host-deploy.spec.ts:172; tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:104",
+      "note": ""
+    },
+    {
+      "row": "Acceptance3: real agent health edit; catalog model switch retains history; strict-string HTTP preserves exact assistant call metadata and matching receipts; shared transcript rendered",
+      "source": "acceptance",
+      "trace": "I8 + scenario5",
+      "status": "pass",
+      "citation": "tests/integration/reference-host-browser-proof.mjs:93; tests/integration/reference-host-browser-proof.mjs:188; tests/integration/reference-host-browser-proof.mjs:199; tests/integration/reference-host-browser-proof.mjs:206; tests/integration/reference-host-browser-proof.mjs:284; tests/integration/fixtures/workbench-vite-consumer/src/host.ts:108",
+      "note": ""
+    },
+    {
+      "row": "Acceptance4: same real journey with connected and missing registry; actual ms install/use and manifest/lock changes or honest error; unrestricted defaults",
+      "source": "acceptance",
+      "trace": "I8 + scenario6",
+      "status": "pass",
+      "citation": "tests/integration/reference-host-browser-proof.mjs:45; tests/integration/reference-host-browser-proof.mjs:207; tests/integration/reference-host-browser-proof.mjs:223; tests/integration/reference-host-browser-proof.mjs:239; tests/integration/reference-host-browser-proof.mjs:345",
+      "note": ""
+    },
+    {
+      "row": "Acceptance5: real agent npm/Vite build; terminal-order stdout/stderr reaches next model request; overlapping host mutation busy, then successful retry and dist read",
+      "source": "acceptance",
+      "trace": "I8 + scenario7",
+      "status": "pass",
+      "citation": "tests/integration/reference-host-browser-proof.mjs:254; tests/integration/reference-host-browser-proof.mjs:262; tests/integration/reference-host-browser-proof.mjs:268; tests/integration/reference-host-browser-proof.mjs:274",
+      "note": ""
+    },
+    {
+      "row": "Acceptance6: another actual page waits and gets occupied; holder closes; new opening succeeds on same saved project; unchanged both-deadline native proof retained",
+      "source": "acceptance",
+      "trace": "I8 + scenario8",
+      "status": "pass",
+      "citation": "tests/integration/reference-host-browser-proof.mjs:329; tests/no-coi/sdk-lifecycle.spec.ts:50; docs/backlog/distribution/reference/sdk-sandbox-lifecycle-final-green.json:1; docs/backlog/distribution/reference/agent-npm-install-final-green.json:1",
+      "note": ""
+    },
+    {
+      "row": "Acceptance7: actual packed benchmark imports same composition;100-call/600s defaults; explicit policies/text-only toggles; preview-after-turn baseline retained; differing policy report comparisons rejected",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/no-coi-page.ts:3; tools/agent-bench/src/services.ts:97; tools/agent-bench/tests/reference-host.spec.ts:13; tools/agent-bench/tests/reference-host.spec.ts:123; tools/agent-bench/tests/reference-host.spec.ts:142; tools/agent-bench/src/host-config.test.ts:8; tools/agent-bench/src/comparison.test.ts:170; tests/integration/workbench-packed-consumer.mjs:1214",
+      "note": ""
+    },
+    {
+      "row": "Acceptance8: copyable host/SDK recipe; quality-relevant behavior stays in libraries; only accepted applied-ID/source recipe and three authorized helpers",
+      "source": "acceptance",
+      "trace": "I8 + scenario9",
+      "status": "pass",
+      "citation": "packages/rifty/README.md:56; tests/integration/fixtures/workbench-vite-consumer/README.md:28; tests/integration/fixtures/workbench-vite-consumer/src/host.ts:57; tests/integration/fixtures/workbench-vite-consumer/src/host.ts:114; tests/integration/fixtures/workbench-vite-consumer/src/host.ts:153; tests/integration/reference-host-browser-proof.mjs:296; tools/agent-bench/src/reference-host-boundary.test.ts:4",
+      "note": ""
+    },
+    {
+      "row": "Fault nonempty payload × direct apply: typed conflict and retained bytes",
+      "source": "fault-matrix",
+      "trace": "scenario4",
+      "status": "pass",
+      "citation": "tests/integration/reference-host-browser-proof.mjs:187; tests/no-coi/no-coi-snapshot-application.spec.ts:156; tests/no-coi/sdk-snapshot-progress.spec.ts:142",
+      "note": ""
+    },
+    {
+      "row": "Fault missing registry × agent install: loud missing-registry receipt, no invented success or registry acquisition",
+      "source": "fault-matrix",
+      "trace": "scenario6",
+      "status": "pass",
+      "citation": "tests/integration/reference-host-browser-proof.mjs:239; tests/integration/reference-host-browser-proof.mjs:345; tests/no-coi/agent-npm-install.spec.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Fault same-Worker overlap × build: actual in-flight command rejects host mutation busy; explicit retry succeeds after settlement",
+      "source": "fault-matrix",
+      "trace": "scenario7",
+      "status": "pass",
+      "citation": "tests/integration/reference-host-browser-proof.mjs:167; tests/integration/reference-host-browser-proof.mjs:254; tests/integration/reference-host-browser-proof.mjs:262; tests/integration/reference-host-browser-proof.mjs:268",
+      "note": ""
+    },
+    {
+      "row": "Fault native writer contention × second opener: real waiting/occupied, then same-state retry after holder closes",
+      "source": "fault-matrix",
+      "trace": "scenario8",
+      "status": "pass",
+      "citation": "tests/integration/reference-host-browser-proof.mjs:329; tests/no-coi/sdk-lifecycle.spec.ts:50",
+      "note": ""
+    },
+    {
+      "row": "Fault force deploy × previous user dependency: restore actual post-agent desired manifest/lock and executable dependency; reconcile after a real post-apply write failure with already-matching marker",
+      "source": "fault-matrix",
+      "trace": "scenario4",
+      "status": "pass",
+      "citation": "tests/integration/reference-host-browser-proof.mjs:306; tests/integration/reference-host-browser-proof.mjs:320; tests/no-coi/reference-host-deploy.spec.ts:129; tests/no-coi/reference-host-deploy.spec.ts:172; docs/backlog/distribution/reference/agent-reference-host-evidence.md:19",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "2534d1e97ef838c07c0c4caa6c464877347dc7a4"
+}

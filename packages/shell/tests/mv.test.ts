@@ -1,4 +1,5 @@
 import { NotImplementedError } from '@riftydev/io';
+import { VfsError } from '@riftydev/vfs';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { mv } from '../src/commands/mv.ts';
@@ -187,4 +188,66 @@ it('-f (and -i/-u/-b) throws NotImplementedError', async () => {
   await expect(mv(['-i', '/a', '/b'], ctx)).rejects.toBeInstanceOf(NotImplementedError);
   await expect(mv(['-u', '/a', '/b'], ctx)).rejects.toBeInstanceOf(NotImplementedError);
   await expect(mv(['-b', '/a', '/b'], ctx)).rejects.toBeInstanceOf(NotImplementedError);
+});
+
+/** Two mounts (`/tmp` and the rest), as the ADR-0531 guest namespace: rename across → EXDEV. */
+class TwoMountFs extends MemoryFsSync {
+  override renameSync(src: string, dst: string): void {
+    const tmp = (path: string): boolean => path === '/tmp' || path.startsWith('/tmp/');
+    if (tmp(src) !== tmp(dst)) throw new VfsError('EXDEV', src);
+    super.renameSync(src, dst);
+  }
+}
+
+function seedTwoMounts(files: Record<string, string>): void {
+  fs = new TwoMountFs();
+  fs.mkdirSync('/tmp', { recursive: true });
+  for (const [path, content] of Object.entries(files)) {
+    const dir = path.slice(0, path.lastIndexOf('/')) || '/';
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path, enc.encode(content));
+  }
+  setSyncMirror(fs);
+}
+
+it('mv across mounts keeps file and directory-tree mtimes (GNU copies attributes)', async () => {
+  seedTwoMounts({ '/tmp/f': 'file', '/tmp/d/a': 'alpha', '/tmp/d/sub/b': 'beta' });
+  fs.utimes('/tmp/f', 111_000, 111_000);
+  fs.utimes('/tmp/d/a', 222_000, 222_000);
+  fs.utimes('/tmp/d/sub/b', 333_000, 333_000);
+  fs.utimes('/tmp/d/sub', 444_000, 444_000);
+  fs.utimes('/tmp/d', 555_000, 555_000);
+  const { ctx, err } = makeCtx();
+  expect(await mv(['/tmp/f', '/proj-f'], ctx)).toBe(0);
+  expect(await mv(['/tmp/d', '/proj-d'], ctx)).toBe(0);
+  expect(err()).toBe('');
+  expect(fs.existsSync('/tmp/f') || fs.existsSync('/tmp/d')).toBe(false);
+  expect(dec.decode(fs.readFileBytesSync('/proj-d/sub/b'))).toBe('beta');
+  expect(
+    ['/proj-f', '/proj-d/a', '/proj-d/sub/b', '/proj-d/sub', '/proj-d'].map(
+      (path) => fs.statSync(path).mtime,
+    ),
+  ).toEqual([111_000, 222_000, 333_000, 444_000, 555_000]);
+});
+
+it('mv of a directory across mounts onto a non-empty directory fails and keeps both', async () => {
+  seedTwoMounts({ '/tmp/d/a': 'new', '/proj/d/old': 'old' });
+  const { ctx, err } = makeCtx();
+  expect(await mv(['/tmp/d', '/proj'], ctx)).toBe(1);
+  expect(err()).toBe(
+    "mv: inter-device move failed: '/tmp/d' to '/proj/d'; unable to remove target: Directory not empty\n",
+  );
+  expect(dec.decode(fs.readFileBytesSync('/tmp/d/a'))).toBe('new');
+  expect(fs.existsSync('/proj/d/a')).toBe(false);
+  expect(dec.decode(fs.readFileBytesSync('/proj/d/old'))).toBe('old');
+});
+
+it('mv of a directory across mounts replaces an empty directory, as rename does', async () => {
+  seedTwoMounts({ '/tmp/d/a': 'new' });
+  fs.mkdirSync('/proj/d', { recursive: true });
+  const { ctx, err } = makeCtx();
+  expect(await mv(['/tmp/d', '/proj'], ctx)).toBe(0);
+  expect(err()).toBe('');
+  expect(dec.decode(fs.readFileBytesSync('/proj/d/a'))).toBe('new');
+  expect(fs.existsSync('/tmp/d')).toBe(false);
 });

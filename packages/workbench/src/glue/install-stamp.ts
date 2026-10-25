@@ -1,8 +1,7 @@
 /**
  * Install stamp (ADR-0135): `<root>/node_modules/.rifty-install-stamp.json`
- * marks "this node_modules was installed for project SLUG". The worker bootstrap
- * skips its `install()` when the stamp's slug matches the project being booted —
- * that skip is what makes a re-opened project fast.
+ * marks "this node_modules was installed for project SLUG". It certifies seed
+ * reuse; ordinary saved opening needs no install certification (ADR-0415).
  *
  * Reuse key = the project SLUG (preset id), NOT the dep set: two projects can
  * share dependencies (e.g. `project-files` and `real-vite` both run `vite`) yet
@@ -15,7 +14,8 @@
  * Every transition is owned by `install-stamp-authority.ts`; pending stamps
  * never satisfy reuse and are promoted only after a clean durability proof.
  */
-// TODO(backlog: playground/install-stamp-invalidation)
+
+import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
 import {
   type PersistFailureReport,
   type Vfs,
@@ -23,7 +23,7 @@ import {
   joinPath,
   normalizePath,
 } from '@riftydev/vfs';
-import { installArtifactIdentity } from './install-artifact-identity.ts';
+import { installArtifactIdentityForTier } from './install-artifact-identity.ts';
 
 export interface InstallStamp {
   readonly version: 4;
@@ -36,8 +36,8 @@ export interface InstallStamp {
   /** Exact installer/shim/generated-runtime policy that produced the tree. */
   readonly installArtifactIdentity: string;
   /** ADR-0307: sha256 hex over the exact `package-lock.json` bytes at trust
-   * time; absent iff no lockfile existed then. Compared at open — drift is a
-   * miss that runs real arrival. */
+   * time; absent iff no lockfile existed then. Compared for certified reuse;
+   * ordinary saved opening does not require this proof (ADR-0415). */
   readonly lockfileSha256?: string;
   /** package.json effective request: dependencies ∪ devDependencies ∪
    *  optionalDependencies (secondary freshness guard alongside the slug). */
@@ -67,7 +67,7 @@ export function lockfilePath(root: string): string {
 
 const LOCKFILE_SHA256_RE = /^[0-9a-f]{64}$/;
 
-/** ADR-0307 at-open compare: absent hash requires absent lockfile; a recorded
+/** ADR-0307 certified-reuse compare: absent hash requires absent lockfile; a recorded
  * hash requires the exact current bytes. Sync so every realm (owner boot gate,
  * sync check, async predicates) applies the SAME compare — webcrypto would
  * fork the sync realms onto a weaker existence-only check. */
@@ -173,10 +173,7 @@ export function isInstallStampPath(path: string): boolean {
   return normalized === suffix || normalized.endsWith(suffix) || normalized.includes(`${suffix}/`);
 }
 
-/** ADR-0307: true iff `path` is STRICTLY below a `node_modules` segment at any
- * depth — an extraneous-write location that never affects claims or Scratch
- * dirty. The tree directory itself (last segment `node_modules`) is not
- * "inside": destroying/moving it stays a tree mutation. */
+/** Strictly below a node_modules segment; the tree directory itself is excluded. */
 export function isInsideInstallTree(path: string): boolean {
   const segments = normalizePath(path).split('/').filter(Boolean);
   const index = segments.indexOf('node_modules');
@@ -270,11 +267,45 @@ export function depsEqual(
 }
 
 export interface InstallStampPayload {
+  readonly runtimeTier?: ShadowRuntimeTier;
   readonly slug: string;
   readonly packages: number;
   readonly lockfileSha256?: string;
   readonly durability?: 'pending';
   readonly epoch?: string;
+}
+
+export function pendingInstallStamp(
+  identity: Pick<InstallStamp, 'root' | 'slug' | 'packageJsonText'>,
+  epoch: string,
+  packages = 0,
+  runtimeTier?: ShadowRuntimeTier,
+): InstallStamp {
+  const stamp = createInstallStamp(identity.root, identity.packageJsonText, {
+    slug: identity.slug,
+    packages,
+    durability: 'pending',
+    epoch,
+    runtimeTier,
+  });
+  if (!stamp) throw new Error('install stamp identity is not valid package.json');
+  return stamp;
+}
+
+export function trustedInstallStamp(
+  identity: Pick<InstallStamp, 'root' | 'slug' | 'packageJsonText'>,
+  packages: number,
+  lockfileSha256?: string,
+  runtimeTier?: ShadowRuntimeTier,
+): InstallStamp {
+  const stamp = createInstallStamp(identity.root, identity.packageJsonText, {
+    slug: identity.slug,
+    packages,
+    runtimeTier,
+    ...(lockfileSha256 === undefined ? {} : { lockfileSha256 }),
+  });
+  if (!stamp) throw new Error('install stamp identity is not valid package.json');
+  return stamp;
 }
 
 /** One constructor for every async/sync stamp writer. */
@@ -296,7 +327,7 @@ export function createInstallStamp(
     root: canonicalRoot,
     slug: payload.slug,
     packageJsonText,
-    installArtifactIdentity,
+    installArtifactIdentity: installArtifactIdentityForTier(payload.runtimeTier),
     ...(payload.lockfileSha256 === undefined ? {} : { lockfileSha256: payload.lockfileSha256 }),
     deps,
     packages: payload.packages,
@@ -393,9 +424,10 @@ export async function readInstallStamp(vfs: Vfs, root: string): Promise<InstallS
   return parseInstallStamp(parsed, root);
 }
 
-export function stampTrusted(stamp: InstallStamp): boolean {
+export function stampTrusted(stamp: InstallStamp, runtimeTier?: ShadowRuntimeTier): boolean {
   return (
-    stamp.durability !== 'pending' && stamp.installArtifactIdentity === installArtifactIdentity
+    stamp.durability !== 'pending' &&
+    stamp.installArtifactIdentity === installArtifactIdentityForTier(runtimeTier)
   );
 }
 
@@ -408,10 +440,11 @@ export async function installStampSatisfied(
   vfs: Vfs,
   root: string,
   slug = '',
+  runtimeTier?: ShadowRuntimeTier,
 ): Promise<InstallStamp | null> {
   const stamp = await readInstallStamp(vfs, root);
   if (!stamp) return null;
-  if (!stampTrusted(stamp)) return null;
+  if (!stampTrusted(stamp, runtimeTier)) return null;
   if (stamp.slug !== slug) return null;
   if (!(await vfs.exists(joinPath(root, 'node_modules')))) return null;
   const packageJsonText = await readPackageJsonText(vfs, root);
@@ -441,6 +474,7 @@ export async function installStampSatisfiedForPackageJson(
   root: string,
   slug: string,
   packageJsonText: string,
+  runtimeTier?: ShadowRuntimeTier,
 ): Promise<InstallStamp | null> {
   if (!isAbsolute(root)) return null;
   const expectedDeps = effectiveDepsFromPackageJsonText(packageJsonText);
@@ -451,7 +485,7 @@ export async function installStampSatisfiedForPackageJson(
   if (!currentDeps || !depsInclude(currentDeps, expectedDeps)) return null;
   const stamp = await readInstallStamp(vfs, root);
   if (!stamp) return null;
-  if (!stampTrusted(stamp)) return null;
+  if (!stampTrusted(stamp, runtimeTier)) return null;
   if (stamp.slug !== slug) return null;
   if (!(await vfs.exists(joinPath(root, 'node_modules')))) return null;
   if (stamp.packageJsonText !== currentText) return null;
@@ -479,6 +513,7 @@ export function installStampSatisfiedForPackageJsonSync(
   root: string,
   slug: string,
   packageJsonText: string,
+  runtimeTier?: ShadowRuntimeTier,
 ): InstallStamp | null {
   if (!isAbsolute(root)) return null;
   const expectedDeps = effectiveDepsFromPackageJsonText(packageJsonText);
@@ -489,7 +524,7 @@ export function installStampSatisfiedForPackageJsonSync(
   if (!currentDeps || !depsInclude(currentDeps, expectedDeps)) return null;
   const stamp = readInstallStampSync(fs, root);
   if (!stamp) return null;
-  if (!stampTrusted(stamp)) return null;
+  if (!stampTrusted(stamp, runtimeTier)) return null;
   if (stamp.slug !== slug) return null;
   if (!fs.existsSync(joinPath(root, 'node_modules'))) return null;
   if (stamp.packageJsonText !== currentText) return null;

@@ -11,6 +11,7 @@ function gate(overrides: Record<string, string>): string[] {
     unit: 'success',
     e2e: 'success',
     browserUnit: 'success',
+    noCoi: 'success',
     ...overrides,
   });
 }
@@ -22,7 +23,13 @@ describe('CI gate reducer', () => {
 
   it('passes a docs-only PR with heavy jobs skipped', () => {
     expect(
-      gate({ code: 'false', unit: 'skipped', e2e: 'skipped', browserUnit: 'skipped' }),
+      gate({
+        code: 'false',
+        unit: 'skipped',
+        e2e: 'skipped',
+        browserUnit: 'skipped',
+        noCoi: 'skipped',
+      }),
     ).toEqual([]);
   });
 
@@ -43,6 +50,7 @@ describe('CI gate reducer', () => {
         unit: 'skipped',
         e2e: 'skipped',
         browserUnit: 'skipped',
+        noCoi: 'skipped',
       }),
     ).not.toEqual([]);
   });
@@ -64,8 +72,9 @@ describe('CI gate reducer', () => {
       unit: 'skipped',
       e2e: 'skipped',
       browserUnit: 'skipped',
+      noCoi: 'skipped',
     });
-    expect(errors.filter((e: string) => e.includes("expected 'success'"))).toHaveLength(3);
+    expect(errors.filter((e: string) => e.includes("expected 'success'"))).toHaveLength(4);
   });
 
   it('rejects garbage classifier output from a successful job', () => {

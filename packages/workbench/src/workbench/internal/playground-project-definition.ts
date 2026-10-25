@@ -1,6 +1,7 @@
 import type {
   NodeCliPlaygroundPlan,
   NodeServerPlaygroundPlan,
+  NpmDevServerPlaygroundPlan,
   PlaygroundFirstMaterialization,
   PlaygroundProjectPlan,
   VitePlaygroundPlan,
@@ -12,11 +13,26 @@ import {
   type ProjectDefinitionWire,
   defineNodeCliProject,
   defineNodeServerProject,
+  defineNpmDevServerProject,
   inspectProjectDefinition,
   inspectProjectDefinitionWire,
   projectDefinitionWire,
   projects,
 } from '../project-definition.ts';
+import {
+  type ProjectSnapshotApplication,
+  normalizeProjectSnapshotApplication,
+} from '../project-materialization.ts';
+
+type OwnedPlaygroundFirstMaterialization =
+  | { readonly kind: 'install' }
+  | (Extract<PlaygroundFirstMaterialization, { readonly kind: 'snapshot' }> & {
+      readonly application: ProjectSnapshotApplication;
+    });
+
+type OwnedPlaygroundProjectPlan = PlaygroundProjectPlan & {
+  readonly firstMaterialization: OwnedPlaygroundFirstMaterialization;
+};
 
 export interface CapturedPlaygroundUrlContext {
   readonly apiBaseUrl: string;
@@ -29,7 +45,7 @@ type PlaygroundDefinitionMetadata = {
   readonly templateId: string;
   readonly baselineFingerprint: string;
   readonly identity: string;
-  readonly firstMaterialization: PlaygroundFirstMaterialization;
+  readonly firstMaterialization: OwnedPlaygroundFirstMaterialization;
   readonly plan: PlaygroundProjectPlan;
   readonly port?: number;
 };
@@ -45,7 +61,7 @@ export type InspectedPlaygroundProjectDefinition<TReady = unknown> =
     readonly starterId: string;
     readonly templateId: string;
     readonly baselineFingerprint: string;
-    readonly firstMaterialization: PlaygroundFirstMaterialization;
+    readonly firstMaterialization: OwnedPlaygroundFirstMaterialization;
     readonly port?: number;
   };
 
@@ -256,7 +272,7 @@ function capturedContext(value: CapturedPlaygroundUrlContext): {
 function ownedMaterialization(
   value: unknown,
   urlContext: CapturedPlaygroundUrlContext,
-): PlaygroundFirstMaterialization {
+): OwnedPlaygroundFirstMaterialization {
   if (!isPlainObject(value)) fail('plan.firstMaterialization', 'must be a plain object');
   const kindDescriptor = Object.getOwnPropertyDescriptor(value, 'kind');
   if (
@@ -274,7 +290,12 @@ function ownedMaterialization(
   if (kindDescriptor.value !== 'snapshot') {
     fail('plan.firstMaterialization.kind', 'must be install or snapshot');
   }
-  const materialization = dataProperties(value, 'plan.firstMaterialization', ['kind', 'snapshot']);
+  const materialization = dataProperties(
+    value,
+    'plan.firstMaterialization',
+    optionalKeys(value, ['kind', 'snapshot'], ['application']),
+  );
+  const application = normalizeProjectSnapshotApplication(materialization.application);
   const snapshot = dataProperties(materialization.snapshot, 'plan.firstMaterialization.snapshot', [
     'snapshotId',
     'assetUrl',
@@ -320,6 +341,7 @@ function ownedMaterialization(
   }
   return Object.freeze({
     kind: 'snapshot' as const,
+    application,
     snapshot: Object.freeze({ snapshotId, assetUrl: assetUrl.href, templateId }),
   });
 }
@@ -337,7 +359,7 @@ const BASE_OPTIONAL_KEYS = ['dependencies', 'devDependencies'] as const;
 export function ownPlaygroundProjectPlan(
   value: PlaygroundProjectPlan,
   urlContext: CapturedPlaygroundUrlContext,
-): PlaygroundProjectPlan {
+): OwnedPlaygroundProjectPlan {
   capturedContext(urlContext);
   if (!isPlainObject(value)) fail('plan', 'must be a plain object');
   const kindDescriptor = Object.getOwnPropertyDescriptor(value, 'kind');
@@ -357,7 +379,9 @@ export function ownPlaygroundProjectPlan(
         ? (['entryPath', 'port'] as const)
         : kind === 'node-cli'
           ? (['entryPath'] as const)
-          : fail('plan.kind', 'must be vite, node-server, or node-cli');
+          : kind === 'npm-dev-server'
+            ? ([] as const)
+            : fail('plan.kind', 'must be vite, node-server, node-cli, or npm-dev-server');
   const runtimeOptional =
     kind === 'vite' ? (['viteVersion'] as const) : kind === 'node-cli' ? (['args'] as const) : [];
   const keys = optionalKeys(
@@ -399,6 +423,12 @@ export function ownPlaygroundProjectPlan(
       entryPath: projectPath(properties.entryPath, 'plan.entryPath'),
       port: portValue(properties.port, 'plan.port'),
     }) satisfies NodeServerPlaygroundPlan;
+  }
+  if (kind === 'npm-dev-server') {
+    return Object.freeze({
+      ...common,
+      kind: 'npm-dev-server',
+    }) satisfies NpmDevServerPlaygroundPlan;
   }
   const args = ownedStringArray(properties.args, 'plan.args');
   return Object.freeze({
@@ -452,7 +482,7 @@ function identityFields(
     );
   } else if (plan.kind === 'node-server') {
     fields.push(`entry:${plan.entryPath}`, `port:${String(plan.port)}`);
-  } else {
+  } else if (plan.kind === 'node-cli') {
     fields.push(`entry:${plan.entryPath}`, `args-count:${String(plan.args?.length ?? 0)}`);
     for (const argument of plan.args ?? []) fields.push(`arg:${argument}`);
   }
@@ -475,8 +505,88 @@ function exactIdentity(prefix: string, fields: readonly string[]): string {
   return `${prefix}:${fields.map(field).join('')}`;
 }
 
+function runtimeAssociation(identity: string): readonly string[] | null {
+  const prefix = 'playground-definition:v1:';
+  if (!identity.startsWith(prefix)) return null;
+  const fields: string[] = [];
+  let offset = prefix.length;
+  while (offset < identity.length) {
+    const separator = identity.indexOf(':', offset);
+    if (separator < 0) return null;
+    const encodedLength = identity.slice(offset, separator);
+    if (!/^(?:0|[1-9][0-9]*)$/.test(encodedLength)) return null;
+    const length = Number(encodedLength);
+    const end = separator + 1 + length;
+    if (!Number.isSafeInteger(length) || end > identity.length) return null;
+    fields.push(identity.slice(separator + 1, end));
+    offset = end;
+  }
+  let cursor = 0;
+  const association: string[] = [];
+  const take = (name: string, retain = false): string => {
+    const value = fields[cursor++];
+    if (value === undefined || !value.startsWith(`${name}:`))
+      throw new TypeError('Invalid identity');
+    if (retain) association.push(value);
+    return value.slice(name.length + 1);
+  };
+  try {
+    const kind = take('kind', true);
+    take('id', true);
+    take('starter');
+    take('template', true);
+    for (const name of ['dependencies', 'devDependencies']) {
+      const presence = take(name);
+      if (presence !== 'absent' && presence !== 'present') return null;
+      if (presence === 'present') {
+        while (fields[cursor]?.startsWith(`${name}-key:`)) {
+          take(`${name}-key`);
+          take(`${name}-value`);
+        }
+      }
+    }
+    if (kind === 'vite') {
+      take('port', true);
+      take('vite-version');
+    } else if (kind === 'node-server') {
+      take('entry', true);
+      take('port', true);
+    } else if (kind === 'node-cli') {
+      take('entry', true);
+      const count = take('args-count', true);
+      if (!/^(?:0|[1-9][0-9]*)$/.test(count)) return null;
+      const args = Number(count);
+      if (!Number.isSafeInteger(args) || args > fields.length - cursor) return null;
+      for (let index = 0; index < args; index++) take('arg', true);
+    } else if (kind !== 'npm-dev-server') return null;
+    const materialization = take('materialization');
+    if (materialization === 'snapshot') {
+      take('snapshot-id');
+      take('snapshot-template');
+    } else if (materialization !== 'install') return null;
+    while (cursor < fields.length) {
+      take('path');
+      take('bytes');
+    }
+    return association;
+  } catch {
+    return null;
+  }
+}
+
+/** ADR-0394: old v1 initializer provenance is separate from the saved runtime association. */
+export function playgroundRuntimeAssociationMatches(
+  storedIdentity: string,
+  definition: InspectedPlaygroundProjectDefinition,
+): boolean {
+  const stored = runtimeAssociation(storedIdentity);
+  const current = runtimeAssociation(definition.identity);
+  return stored !== null && current !== null && JSON.stringify(stored) === JSON.stringify(current);
+}
+
 function createRootDefinition(plan: VitePlaygroundPlan): ProjectDefinition<PreviewHandle>;
 function createRootDefinition(plan: NodeServerPlaygroundPlan): ProjectDefinition<PreviewHandle>;
+function createRootDefinition(plan: NpmDevServerPlaygroundPlan): ProjectDefinition<PreviewHandle>;
 function createRootDefinition(plan: NodeCliPlaygroundPlan): ProjectDefinition<void>;
 function createRootDefinition(plan: PlaygroundProjectPlan): ProjectDefinition<unknown>;
 function createRootDefinition(plan: PlaygroundProjectPlan): ProjectDefinition<unknown> {
@@ -490,6 +600,7 @@ function createRootDefinition(plan: PlaygroundProjectPlan): ProjectDefinition<un
   if (plan.kind === 'node-server') {
     return defineNodeServerProject({ ...common, entryPath: plan.entryPath, port: plan.port });
   }
+  if (plan.kind === 'npm-dev-server') return defineNpmDevServerProject(common);
   return defineNodeCliProject({ ...common, entryPath: plan.entryPath, args: plan.args });
 }
 
@@ -499,6 +610,10 @@ export function definePlaygroundProject(
 ): ProjectDefinition<PreviewHandle>;
 export function definePlaygroundProject(
   plan: NodeServerPlaygroundPlan,
+  urlContext: CapturedPlaygroundUrlContext,
+): ProjectDefinition<PreviewHandle>;
+export function definePlaygroundProject(
+  plan: NpmDevServerPlaygroundPlan,
   urlContext: CapturedPlaygroundUrlContext,
 ): ProjectDefinition<PreviewHandle>;
 export function definePlaygroundProject(

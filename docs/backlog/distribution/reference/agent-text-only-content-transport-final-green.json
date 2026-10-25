@@ -1,0 +1,157 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Unit accepted with one advisory: full pnpm pr:check 27/27 GREEN (test:run 247.3s, test:parity 133.8s), targeted suites 18/18. PR357 remains draft until remaining goal obligations and end-to-end proof close.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "34198608833979f1ef390fa8179f9a55e7e4b244",
+  "unit_goal_source": "docs/backlog/distribution/agent-text-only-content-transport.md @ 34198608833979f1ef390fa8179f9a55e7e4b244; BASE e999915ff190248c29fe48a58f540c6597ab8c07; docs/backlog/epics/no-coi-agent-host-kit/goal.md I6 + User scenario 5; ADR-0483 + ADR-0471 + active ADR-0436. Earlier accepted I10 is outside this slice.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1 + I2",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/map.md:16",
+      "summary": "Typed sandbox outcomes remain."
+    },
+    {
+      "clause": "I1 + I3",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/map.md:20",
+      "summary": "Boot and snapshot progress remain."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/map.md:22",
+      "summary": "Transcript reducer remains."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/map.md:26",
+      "summary": "Per-capability policy remains."
+    },
+    {
+      "clause": "I8 + User scenario 1–9",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/map.md:37",
+      "summary": "Packed connections-only reference host, text-only scenario integration, shared benchmark composition and whole-goal end-to-end proof remain."
+    },
+    {
+      "clause": "I9",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/map.md:44",
+      "summary": "Agent npm install with connected/no-registry outcomes remains."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: real standard-file-tool turn, string wire content and tool/history preservation across model switches",
+      "source": "acceptance",
+      "trace": "I6 + scenario",
+      "status": "weak",
+      "citation": "packages/agent/src/text-content.test.ts:87; packages/agent/src/text-content.test.ts:94; packages/agent/src/text-content.test.ts:97; packages/agent/src/text-content.test.ts:104; packages/agent/src/text-content.test.ts:108",
+      "note": "The carrier asserts string content and file-result retention, but not outgoing tool_calls/tool_call_id. A shaper dropping that metadata leaves its asserted fields unchanged; advisory under REV-4. Reading-based discrimination assessment, not an executed mutant."
+    },
+    {
+      "row": "Acceptance 2: unset/false retains native content, invalid flags fail explicitly, consumers need no custom streamFn or Pi import",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/agent/src/text-content.test.ts:4; packages/agent/src/text-content.test.ts:114; packages/agent/src/text-content.test.ts:208; packages/agent/src/catalog.test.ts:187; packages/agent/src/images.test.ts:1",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: direct and restored image input fails before network",
+      "source": "acceptance",
+      "trace": "I6 + AGENTS.md",
+      "status": "pass",
+      "citation": "packages/agent/src/text-content.test.ts:126; packages/agent/src/text-content.test.ts:140",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: both native streaming paths use selected-entry policy including retry/compaction; preserve non-content fields",
+      "source": "acceptance",
+      "trace": "I6 + ADR-0471",
+      "status": "weak",
+      "citation": "packages/agent/src/text-content.test.ts:159; packages/agent/src/text-content.test.ts:228; packages/agent/src/continuation.fault.test.ts:190; packages/agent/src/continuation.fault.test.ts:467; packages/agent/src/continuation.ts:128; packages/agent/src/continuation.ts:229",
+      "note": "The carrier asserts string content and file-result retention, but not outgoing tool_calls/tool_call_id. A shaper dropping that metadata leaves its asserted fields unchanged; advisory under REV-4. Reading-based discrimination assessment, not an executed mutant. Native entry paths are executed directly; unchanged retry/summary selection has existing carriers."
+    },
+    {
+      "row": "corrupt-input × nontext content on flagged entry: refuse before network",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/agent/src/text-content.test.ts:126; packages/agent/src/text-content.test.ts:140",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × ordinary/flagged model switching: selected entry only shapes wire",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/agent/src/text-content.test.ts:97; packages/agent/src/text-content.test.ts:101; packages/agent/src/text-content.test.ts:104",
+      "note": ""
+    },
+    {
+      "row": "lossy-aggregate × message parts: exact text concatenation and preserved tool_calls/results",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "packages/agent/src/text-content.test.ts:94; packages/agent/src/text-content.test.ts:108; packages/agent/src/text-content.test.ts:201; packages/agent/src/text-content.test.ts:275",
+      "note": "The carrier asserts string content and file-result retention, but not outgoing tool_calls/tool_call_id. A shaper dropping that metadata leaves its asserted fields unchanged; advisory under REV-4. Reading-based discrimination assessment, not an executed mutant."
+    },
+    {
+      "row": "OpenAIModel.textOnlyContent optional boolean, captured/validated by createOpenAIProvider; flagged input is text-only",
+      "source": "public-api",
+      "trace": "I6 + ADR-0483",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.ts:11; packages/agent/src/catalog.ts:34; packages/agent/src/text-content.test.ts:126; packages/agent/src/text-content.test.ts:208",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/agent/src/text-content.test.ts:94",
+          "summary": "Wire tool_calls/tool_call_id are not asserted. The scripted endpoint checks only content type, so the file-tool scenario does not discriminate removal of call metadata. Current catalog.ts preserves it; evidence weakness only, no product defect or required residual.",
+          "authority": "",
+          "evidence": "Reading: text-content.test.ts:38–48,94–108 and agent-scripted-provider.ts:27–78. A shaper deleting call metadata would leave the asserted fields unchanged; no such mutant executed. Existing caller-order advisory is resolved by text-content.test.ts:228 and /tmp/rifty-pr357-text-content-order-mutant.log (1 expected failure)."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

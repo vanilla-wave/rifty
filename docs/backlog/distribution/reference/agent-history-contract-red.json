@@ -1,0 +1,142 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED permits implementation after accepted carrier repair. RDY-6 final written-result check and Challenge clear; no unresolved material user fork. Documentation acceptance is checked at Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "b9dbd490888cc3f5fb3d3dc8a0a27dd0c384aee2",
+  "unit_goal_source": "docs/backlog/distribution/agent-history.md; ADR-0466; original issue #355; BASE 2c9bbd30109692647c0174f8930f713007150f67",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Public readonly native history continues through both transports and changed model; no replay",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/agent/src/history.test.ts:91; tests/browser-unit/agent-core.spec.ts:303",
+      "note": ""
+    },
+    {
+      "row": "reset, fresh-session default and independent owned histories",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/agent/src/history.test.ts:115; packages/agent/src/history.test.ts:126",
+      "note": ""
+    },
+    {
+      "row": "restored prefix provenance; session-only events/timings/usage; reset",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/agent/src/history.test.ts:99",
+      "note": ""
+    },
+    {
+      "row": "New per-run tool/time budgets independent of seed",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/agent/src/history.test.ts:145",
+      "note": ""
+    },
+    {
+      "row": "README explains restore and host-owned storage",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/adr/distribution/0466-restore-native-agent-conversation-history.md:21",
+      "note": ""
+    },
+    {
+      "row": "Incomplete calls reject before host/model work",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/agent/src/history.test.ts:160",
+      "note": ""
+    },
+    {
+      "row": "Orphan/duplicate/mismatched results or malformed envelope reject",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/agent/src/history.test.ts:163",
+      "note": ""
+    },
+    {
+      "row": "Paired isError result keeps native meaning, never replays",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/agent/src/history.test.ts:176",
+      "note": ""
+    },
+    {
+      "row": "AgentSessionCommonOptions.initialMessages public input",
+      "source": "public-api",
+      "trace": "ADR-0466",
+      "status": "pass",
+      "citation": "packages/agent/src/history.test.ts:48; tests/browser-unit/fixtures/agent-history-proof.ts:33",
+      "note": ""
+    },
+    {
+      "row": "AgentTrace.restoredMessageCount public output",
+      "source": "public-api",
+      "trace": "ADR-0466",
+      "status": "pass",
+      "citation": "packages/agent/src/history.test.ts:100",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/agent/src/history.test.ts:176",
+          "summary": "The omitted-history case actually supplies initialMessages: []; exercise absent property separately.",
+          "authority": "",
+          "evidence": "Read setup: initialMessages defaults to [] and is always placed in options."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "node": "v24.16.0",
+  "versions": {
+    "vite": "7.3.6",
+    "@vitejs/plugin-react": "5.2.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "beforeAndAfterBuild": true,
+  "sameDocument": true,
+  "rootSlash": "/@id//@react-refresh",
+  "rootOrdinary": "/@react-refresh",
+  "refreshUrls": ["http://127.0.0.1:10534/@react-refresh"]
+}

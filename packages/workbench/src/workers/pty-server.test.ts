@@ -17,8 +17,7 @@ import { createPtyServer } from './pty-server.ts';
 const reserveEmptyAdmission: ReserveOwnerChildAdmission = async () =>
   Object.freeze({
     snapshot: Object.freeze({
-      capabilityPorts: Object.freeze({}),
-      dispose() {},
+      runtimeBindings: Object.freeze([]),
     }),
     commit() {},
     abortBeforeSpawn() {},

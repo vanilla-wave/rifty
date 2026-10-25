@@ -1,0 +1,158 @@
+{
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "f87f8994e9ffc0a4c818e94be73050d947021c0b",
+  "unit_goal_source": "docs/backlog/distribution/no-coi-vm-engine-default-rewrite.md; goal docs/backlog/epics/no-coi-client-bundle/goal.md I2; BASE d3114140ac63d933b5107f2c53411ab4b376b5a0 (accepted I1 excluded)",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Toolchain default/rewrite: zero WASM at boot/restart; quickjs: one per fresh worker, usable first eval",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-vm-browser-proof.mjs:93",
+      "note": ""
+    },
+    {
+      "row": "Public toolchain vmEngine selection retained on restart; HTTP/Blob URLs unchanged",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-vm-browser-proof.mjs:63; packages/rifty/src/sandbox.ts:543",
+      "note": ""
+    },
+    {
+      "row": "Capability node:vm names selected degradation; tier-specific compat documentation",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-vm-browser-proof.mjs:111; packages/rifty/src/sandbox.ts:575; docs/public/compat/modules.md:112",
+      "note": ""
+    },
+    {
+      "row": "Generic default quickjs, rewrite preload skipped; native reserved names before boot, arbitrary names preserve fallback",
+      "source": "acceptance",
+      "trace": "ADR-0383",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-vm-browser-proof.mjs:122; tests/integration/no-coi-vm-browser-proof.mjs:231; packages/runtime-js/src/internal/worker-vm-engine.ts:14",
+      "note": ""
+    },
+    {
+      "row": "Existing VM conformance remains; real Node differential and accepted rewrite divergence",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-vm-browser-proof.mjs:17",
+      "note": ""
+    },
+    {
+      "row": "Worker order: selected engine governs first eval and restart",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-vm-browser-proof.mjs:188; packages/runtime-js/src/worker-entry.ts:143; packages/runtime-js/src/host.ts:178",
+      "note": ""
+    },
+    {
+      "row": "Selected QuickJS fetch failure stays loud and eval cannot succeed unready",
+      "source": "fault-matrix",
+      "trace": "ADR-0383",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-vm-browser-proof.mjs:166; packages/runtime-js/src/worker-entry.ts:144",
+      "note": ""
+    },
+    {
+      "row": "Native Worker.name HTTP/Blob before/after import; URL preservation baseline",
+      "source": "frozen-artifact",
+      "trace": "ADR-0383",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/vm-worker-name-probe.mjs:26",
+      "note": ""
+    },
+    {
+      "row": "Packed pre-I2 default/quickjs/rewrite baseline: WASM twice and absent capability",
+      "source": "frozen-artifact",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/vm-preboot-baseline.json:2",
+      "note": ""
+    },
+    {
+      "row": "ToolchainCreateSandboxOptions.vmEngine optional public selector",
+      "source": "public-api",
+      "trace": "ADR-0383",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox.ts:56; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/main.ts:12; tests/integration/no-coi-vm-browser-proof.mjs:54",
+      "note": ""
+    },
+    {
+      "row": "RuntimeOptions.vmEngine reaches native Worker construction before readiness and preserves omitted selection",
+      "source": "public-api",
+      "trace": "ADR-0383",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/host.ts:28; tests/integration/no-coi-vm-browser-proof.mjs:134; packages/runtime-js/src/host.test.ts:215",
+      "note": ""
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/no-coi-client-bundle/map.md:4",
+      "summary": "Published SDK packaging hygiene remains next unit."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/no-coi-client-bundle/map.md:5",
+      "summary": "Lazy install/activation remains next unit."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/no-coi-client-bundle/map.md:6",
+      "summary": "CI budgets remain next unit."
+    }
+  ],
+  "goal_complete": false,
+  "overall_verdict": "pass",
+  "merge_call": "I2 Final+GREEN PASS; accept this slice and continue I3-I5, not whole-goal merge/closure. Independent real packed Chromium proof passed (Node v24.16.0; /tmp/rifty-vm-independent-proof.log): HTTP/Blob default/quickjs/rewrite and restart, exact WASM totals, unchanged URLs, actual VM semantics vs native Node, selected-WASM readiness join, generic/toolchain arbitrary names, loud WASM-fetch failure. Inspected full pr:check 25/25, no-COI build/HMR/capability 3/3, production owner/Buffer 2/2 logs. Contract+RED preparation preserved; changed host expectation and capability row implement ADR-0383, existing VM semantic goldens unchanged."
+}

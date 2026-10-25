@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Preload tsconfig discovery before allocating dev-server resources (ADR-0382);
+  existing aliases, baseUrl fallback and HMR behavior preserved.
+
 ### Changed
 
 - Transform execution is now an explicit `transformModule` capability. Plain

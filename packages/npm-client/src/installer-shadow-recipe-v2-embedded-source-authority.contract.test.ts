@@ -8,6 +8,7 @@ import {
   LedgerRegistry,
   LedgerVfs,
   REAL_FILES,
+  type RegistryEntry,
   SOURCE,
   SOURCE_INTEGRITY,
   SOURCE_URL,
@@ -19,6 +20,8 @@ import {
   parentOnlyCache,
   parentOnlyLockfile,
   registryEntry,
+  scopeDependencies,
+  scopeEntries,
   scopePaths,
   snapshotTree,
   writeProject,
@@ -194,11 +197,85 @@ function lockError(error: unknown): Readonly<{ code?: unknown; reason?: unknown 
   };
 }
 
+function exactMultiset(
+  actual: readonly string[],
+  expected: readonly string[],
+  label: string,
+): void {
+  expect.soft([...actual].sort(), label).toEqual([...expected].sort());
+  expect.soft(actual, `${label}: duplicate count`).toHaveLength(expected.length);
+}
+
+class DelayedFirstNestedTarballRegistry extends LedgerRegistry {
+  constructor(
+    entries: readonly RegistryEntry[],
+    private readonly nestedHostCached: Promise<void>,
+  ) {
+    super(entries);
+  }
+
+  override async getTarball(url: string): Promise<Uint8Array> {
+    const bytes = await super.getTarball(url);
+    if (url === `https://registry.test/${SOURCE}-1.32.1.tgz`) {
+      await this.nestedHostCached;
+    }
+    return bytes;
+  }
+}
+
+class SignalingNestedCache extends LedgerCache {
+  constructor(private readonly onNestedHostCached: () => void) {
+    super();
+  }
+
+  override async put(
+    name: string,
+    version: string,
+    integrity: string,
+    bytes: Uint8Array,
+  ): Promise<string> {
+    const path = await super.put(name, version, integrity, bytes);
+    if (name === 'nested-host' && version === '1.0.0') this.onNestedHostCached();
+    return path;
+  }
+}
+
+async function nestedHostFirstFreshScope() {
+  let releaseNestedSource = (): void => {};
+  const nestedHostCached = new Promise<void>((resolve) => {
+    releaseNestedSource = resolve;
+  });
+  const entries = await scopeEntries('nested');
+  const dependencies = scopeDependencies('nested');
+  const registry = new DelayedFirstNestedTarballRegistry(entries, nestedHostCached);
+  const cache = new SignalingNestedCache(releaseNestedSource);
+  const reports: string[] = [];
+  const vfs = new LedgerVfs();
+  await writeProject(vfs, dependencies);
+  vfs.clearLedger();
+  const result = await installFixture(vfs, registry, dependencies, cache, reports);
+  return { cache, registry, reports, result, vfs };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe('shadow recipe v2 embedded-source authority', () => {
+  it('[fault: frozen-assumption] permits nested-host-first cache completion', async () => {
+    const fresh = await nestedHostFirstFreshScope();
+    const expected = expectedSources('nested');
+
+    await expectEmbeddedAuthority(fresh.vfs, fresh.result, 'nested');
+    expect.soft(fresh.registry.packumentReads).toEqual(expected.packuments);
+    expect.soft(fresh.registry.tarballReads).toEqual(expected.tarballs);
+    expect.soft(fresh.cache.gets).toEqual(expected.cache);
+    expect.soft(fresh.vfs.mutations).toEqual(expectedVfsMutations('nested', true));
+    expect.soft(fresh.reports).toContain(MATERIALIZATION_LINE);
+    expect(fresh.cache.puts[0]).toBe('nested-host@1.0.0');
+    exactMultiset(fresh.cache.puts, expected.cache, 'nested: exact cache writes');
+  });
+
   it.each(['root', 'nested'] as const)(
     '[fault: observable-order/provenance-lie] fresh %s consumes the official embedded source without standalone acquisition',
     async (scope) => {
@@ -209,7 +286,7 @@ describe('shadow recipe v2 embedded-source authority', () => {
       expect.soft(fresh.registry.packumentReads).toEqual(expected.packuments);
       expect.soft(fresh.registry.tarballReads).toEqual(expected.tarballs);
       expect.soft(fresh.cache.gets).toEqual(expected.cache);
-      expect.soft(fresh.cache.puts).toEqual(expected.cache);
+      exactMultiset(fresh.cache.puts, expected.cache, `${scope}: exact cache writes`);
       expect.soft(fresh.vfs.mutations).toEqual(expectedVfsMutations(scope, true));
       expect.soft(fresh.reports).toContain(MATERIALIZATION_LINE);
     },

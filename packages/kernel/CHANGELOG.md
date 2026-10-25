@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- An ancestor kill marks `control:kill-tree` with `cascade`; the ending realm releases its nested Workers (`SpawnWorkerResult.release()`) so Chromium cannot drop their termination notice and retain the realm (ADR-0548). Frame codec moved to `process-control-frame.ts`.
+- Optional pull stdin (ADR-0542): bounded physical input, existing SAB reads, readiness-only ports; EOF/teardown settle pending operations.
+- Expose common RPC dispatch and reuse process federation for host-managed no-COI Workers (ADR-0539).
+
+- Check native `Atomics.waitAsync` at the ring wrapper; preserve TypeError when unavailable and bind the ES2022 guard to the actual call.
+
 ### Added
 
 - **SyncRpc v5 binary requests (ADR-0366).** One claimed ring now carries
@@ -18,17 +24,29 @@
   fork JSON IPC, worker-thread messages, and private lifecycle control stay
   separate while subtree and peer-death teardown settle once.
 
-- **One-shot opaque URL-entry capabilities (ADR-0313).** A spawned URL entry
-  can carry a validated frozen map of named `MessagePort`s in its existing init
-  transaction. The worker publishes them before pre-entry, privileged
-  bootstrap consumes them once before guest import, and every init/exit failure
-  closes adopted endpoints. Source entries and process identity stay unchanged.
+### Removed
+
+- **Retire URL-entry capability ports (ADR-0371).** Remove the public
+  `WorkerEntryDescriptor.capabilityPorts`, `KernelEntryCapabilityPorts`, and
+  `consumeKernelEntryCapabilityPorts()` surface with its N=1 esbuild consumer;
+  clone-safe bootstrap metadata remains the sole higher-runtime entry carrier.
 
 ### Fixed
+
+- Packed kernel declarations carry their Worker-entry target shape without
+  requiring a host consumer to add the WebWorker ambient library.
 
 - `SIGKILL` now physically terminates a Worker before abandoning stranded
   output, so forced thread teardown cannot wait on a dead peer's stdio seal.
 
+- SabRing treats a host wait wake only as a prompt to re-check reply readiness.
+  Sync and async callers retain one monotonic timeout budget, so an early
+  browser wake cannot abandon the responder's later reply and wedge Watchpack.
+- Real-Worker SabRing and SyncRpc conformance observes exact admission and
+  publication phases before consuming. Host scheduling is bounded only by the
+  owning lifecycle, so a correct race cannot masquerade as a protocol timeout.
+- Pre-entry hooks may return readiness which the worker lifecycle awaits before
+  guest code; rejection stays loud and reaps even a serve worker (ADR-0351).
 - **Manager PID kill is idempotent during settlement (ADR-0347).** Public
   `ProcessManager.kill(pid)` now acknowledges an existing local or forwarded
   target already terminating without sending control twice. Missing and
@@ -80,12 +98,10 @@
   `console.error` naming the method instead of a silent `catch {}`. No wire or
   behavior change — messages and one log line only.
 
-- **Failed Worker init no longer leaks its half-built process.** If an entry
-  descriptor getter, SAB/Worker setup, bootstrap `postMessage`, or listener
-  install throws after capability adoption, spawn now closes every adopted
-  endpoint and rolls back all resources acquired so far before rethrowing the
-  same error. Worker-side SAB attach and shared-global publication now share
-  entry finalization, so setup failure closes the transferred ports and realm.
+- **Failed Worker init no longer leaks its half-built process.** If SAB/Worker
+  setup, bootstrap `postMessage`, or listener install throws, spawn closes all
+  fixed process ports and rolls back the Worker/ring before rethrowing. Worker-
+  side SAB attach and shared-global publication share entry finalization.
 - **Dispatcher backstop is uncounted infra (ADR-0158, keepalive gap-e).** `SyncRpcDispatcher` now captures the HOST `setInterval`/`clearInterval` at module load and arms its backstop timer on them, instead of the realm's global `setInterval` (which a worker realm replaces with runtime-js's keepalive-counted wrapper). The infra timer therefore never enters the event-loop keepalive count, by construction (ADR-0152 §5 precedent) — removing the prior depth-1 count-then-`.unref()` coupling and any risk of pinning a nested child's (depth-2) drain. Guard: `sync-dispatch.test.ts` asserts the backstop arms the host timer, not the wrapped global.
 
 - **A kernel worker crash is no longer swallowed.** `spawnKernelWorker`'s

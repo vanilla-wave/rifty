@@ -1,0 +1,1245 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { type Page, expect, test } from '@playwright/test';
+import { MAIN_TSX } from '../../apps/playground/src/templates/react-vite/app.ts';
+import { FILTER_BAR_TSX } from '../../apps/playground/src/templates/react-vite/components.ts';
+import type { AgentTrace } from '../../packages/agent/src/index.ts';
+import { agentModelServer } from './fixtures/agent-model-server.ts';
+import {
+  openActiveProjectFromLauncher,
+  openShellTerminal,
+  pickStarter,
+  runTerminalLineSettled,
+  terminalBuffer,
+  waitForProjectIndex,
+} from './helpers/playground.ts';
+
+async function openChat(page: Page) {
+  const toggle = page.getByRole('button', { name: '+chat', exact: true });
+  await expect(toggle).toBeVisible({ timeout: 1500 });
+  await toggle.click();
+  await expect(page.getByTestId('ai-panel')).toBeVisible();
+}
+
+async function settings(
+  page: Page,
+  baseUrl: string,
+  options: { key?: string; calls?: number; seconds?: number; model?: string } = {},
+) {
+  const panel = page.getByTestId('ai-panel');
+  await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+  await panel.getByLabel('Base URL', { exact: true }).fill(baseUrl);
+  await panel.getByLabel('Model', { exact: true }).fill(options.model ?? 'scripted');
+  await panel.getByLabel('API key (optional)', { exact: true }).fill(options.key ?? '');
+  await panel.getByLabel('Tool limit', { exact: true }).fill(String(options.calls ?? 100));
+  await panel
+    .getByLabel('Time limit (seconds)', { exact: true })
+    .fill(String(options.seconds ?? 180));
+  await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
+}
+
+async function send(page: Page, text: string, enter = false) {
+  const panel = page.getByTestId('ai-panel');
+  await panel.getByLabel('Message', { exact: true }).fill(text);
+  if (enter) await panel.getByLabel('Message', { exact: true }).press('Enter');
+  else await panel.getByRole('button', { name: 'Send', exact: true }).click();
+}
+
+async function exported(page: Page): Promise<AgentTrace> {
+  const downloaded = page.waitForEvent('download');
+  await page
+    .getByTestId('ai-panel')
+    .getByRole('button', { name: 'Export session', exact: true })
+    .click();
+  const path = await (await downloaded).path();
+  if (!path) throw new Error('Trace download has no local artifact');
+  return JSON.parse(await readFile(path, 'utf8')) as AgentTrace;
+}
+
+const toolResults = (trace: AgentTrace) =>
+  trace.transcript.filter((entry) => entry.role === 'toolResult');
+// User turns as the provider received them (string or text parts).
+const userTexts = (messages: readonly Record<string, unknown>[] = []) =>
+  messages
+    .filter((message) => message.role === 'user')
+    .map(({ content }) =>
+      typeof content === 'string'
+        ? content
+        : (content as { text?: string }[]).map((part) => part.text ?? '').join(''),
+    );
+
+test('lazy +chat streams real React edits/build/preview into editor, SCM, Agent terminal and export', async ({
+  page,
+}) => {
+  test.setTimeout(420_000);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const requests: string[] = [];
+  page.on('request', (request) => requests.push(request.url()));
+  const source = `document.body.insertAdjacentHTML('beforeend', '<output id="agent-proof" style="position:fixed;top:0;right:0;z-index:999;background:white;color:black">Agent changed this preview</output>');\n${MAIN_TSX}`;
+  const model = await agentModelServer([
+    [{ name: 'write_file', args: { path: 'src/main.tsx', content: source } }],
+    [{ name: 'shell', args: { command: 'npm run build && echo AGENT_UI_TERMINAL' } }],
+    [{ name: 'preview_fetch', args: { path: '/src/main.tsx' } }],
+    [{ name: 'preview_query', args: { selector: '#agent-proof' } }],
+    'Preview checked.',
+  ]);
+  model.holdFinal('Preview checked.');
+  try {
+    await page.goto('/');
+    await pickStarter(page, 'real-vite');
+    expect(
+      requests.filter((url) =>
+        /\/ai\/|\/packages\/agent\/|pi-agent-core|pi-ai|openai-completions/.test(url),
+      ),
+    ).toEqual([]);
+    await openChat(page);
+    await expect(
+      page.frameLocator('[data-testid="preview"] iframe').locator('#root'),
+    ).toContainText('Trackline', { timeout: 180_000 });
+    await settings(page, model.baseUrl);
+    await send(page, 'Add a visible status note to the React preview, build and inspect it.', true);
+    const panel = page.getByTestId('ai-panel');
+    await expect(panel).toContainText('Preview checked.', { timeout: 180_000 });
+    await expect(panel).toHaveAttribute('data-status', 'running');
+    await expect(panel.getByRole('button', { name: 'Reset', exact: true })).toBeDisabled();
+    const previewTool = panel.locator('[data-tool-name="preview_query"]');
+    await previewTool.locator('summary').click();
+    await expect(previewTool.getByTestId('ai-tool-result')).toContainText(
+      'Agent changed this preview',
+    );
+    model.releaseFinal();
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await expect(previewTool.locator('details')).toHaveAttribute('open', '');
+    await expect(previewTool.getByTestId('ai-tool-result')).toBeVisible();
+    await expect(panel.locator('[data-tool-name="write_file"]')).toContainText('src/main.tsx');
+    await expect(panel.locator('[data-tool-name="shell"]')).toContainText('npm run build');
+    await expect(page.getByRole('tab', { name: 'Agent', exact: true })).toBeVisible();
+    await expect.poll(() => terminalBuffer(page)).toMatch(/(?:^|\n)AGENT_UI_TERMINAL(?:\r?\n|$)/);
+    await expect(
+      page.frameLocator('[data-testid="preview"] iframe').locator('#agent-proof'),
+    ).toHaveText('Agent changed this preview');
+    await expect(
+      page.frameLocator('[data-testid="preview"] iframe').locator('#agent-proof'),
+    ).toBeInViewport();
+    const src = page.getByRole('treeitem', { name: 'src', exact: true });
+    if ((await src.getAttribute('aria-expanded')) === 'false') await src.click();
+    await page.getByRole('treeitem', { name: /^main\.tsx/ }).click();
+    await page
+      .waitForFunction(
+        () =>
+          [...document.querySelectorAll('[role="tab"][aria-selected="true"]')].some((tab) =>
+            tab.textContent?.includes('main.tsx'),
+          ) || document.querySelector('.rf-toast[data-tone="error"]'),
+        undefined,
+        { timeout: 5000 },
+      )
+      .catch(() => {});
+    const openFailure = await page.locator('.rf-toast[data-tone="error"]').allTextContents();
+    if (openFailure.length) throw new Error(`Editor open failed: ${openFailure.join('; ')}`);
+    await expect(page.locator('[data-testid="editor"] .view-lines').first()).toContainText(
+      'agent-proof',
+    );
+    await page.getByRole('tab', { name: 'GIT', exact: true }).click();
+    await expect(page.locator('.rf-sidebar')).toContainText('main.tsx');
+    const trace = await exported(page);
+    expect(trace.status).toBe('done');
+    expect(toolResults(trace).every((entry) => !entry.isError)).toBe(true);
+    expect(toolResults(trace).find((entry) => entry.toolName === 'preview_fetch')?.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'text', text: expect.stringContaining('agent-proof') }),
+      ]),
+    );
+    expect(trace.timings).toHaveLength(1);
+    expect(trace.usage.totalTokens).toBeGreaterThan(0);
+    expect(JSON.stringify(trace.finalDiff)).toContain('agent-proof');
+    expect(
+      trace.events.some(
+        ({ event }) => event.type === 'output' && event.chunk === 'AGENT_UI_TERMINAL\n',
+      ),
+    ).toBe(true);
+    expect(await page.evaluate(() => Reflect.has(globalThis, '__riftyAgentBench'))).toBe(false);
+    const geometry = await page.evaluate(() => {
+      const bounds = (selector: string) => {
+        const box = document.querySelector(selector)?.getBoundingClientRect();
+        if (!box) throw new Error(`Missing layout surface: ${selector}`);
+        return { x: box.x, right: box.right, width: box.width, height: box.height };
+      };
+      return {
+        chat: bounds('[data-testid="ai-panel"]'),
+        editor: bounds('[data-testid="editor"]'),
+        preview: bounds('[data-testid="preview"]'),
+        viewport: innerWidth,
+      };
+    });
+    expect(geometry.chat.width).toBeGreaterThanOrEqual(280);
+    expect(geometry.editor.width).toBeGreaterThan(100);
+    expect(geometry.preview.width).toBeGreaterThan(200);
+    expect(geometry.chat.x).toBeGreaterThanOrEqual(geometry.preview.right);
+    expect(geometry.chat.right).toBeLessThanOrEqual(geometry.viewport);
+    await page.screenshot({ path: '/tmp/pr333-ai-chat-desktop.png', fullPage: true });
+  } finally {
+    await model.close();
+  }
+});
+
+test('settings keep the catalog; Reset retains files and reload clears key/conversation/limits', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const key = 'PR333_SYNTHETIC_UI_KEY';
+  const model = await agentModelServer([
+    [{ name: 'write_file', args: { path: 'agent-saved.txt', content: 'kept after reset' } }],
+    'Saved.',
+    [{ name: 'read_file', args: { path: 'agent-saved.txt' } }],
+    'Still here.',
+    'Settings applied.',
+  ]);
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await page.evaluate(() => localStorage.setItem('rf.ai.v2', '{broken'));
+    await openChat(page);
+    await settings(page, ` ${model.baseUrl} `, { key, calls: 2, seconds: 7, model: ' scripted ' });
+    const storedSettings = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('rf.ai.v2') ?? 'null'),
+    );
+    expect(Object.keys(storedSettings).sort()).toEqual(['model', 'models']);
+    expect(storedSettings).toMatchObject({
+      model: 'scripted',
+      models: [
+        {
+          id: 'scripted',
+          baseUrl: model.baseUrl,
+          contextWindow: 128000,
+          maxTokens: 8192,
+          thinking: 'off',
+        },
+      ],
+    });
+    expect(JSON.stringify(storedSettings)).not.toContain(key);
+    await send(page, 'Save a file.');
+    const panel = page.getByTestId('ai-panel');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    expect(model.requests[0]?.authorization).toBe(`Bearer ${key}`);
+    expect(JSON.stringify(await exported(page))).not.toContain(key);
+    await panel.getByRole('button', { name: 'Reset', exact: true }).click();
+    await expect(panel.getByTestId('ai-messages')).not.toContainText('Save a file.');
+    await send(page, 'Read the saved file.');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    expect(JSON.stringify(toolResults(await exported(page)))).toContain('kept after reset');
+    expect(model.requests[2]?.body.messages.filter((entry) => entry.role === 'user')).toHaveLength(
+      1,
+    );
+    await settings(page, model.baseUrl, { calls: 3 });
+    await expect(panel.getByTestId('ai-messages')).not.toContainText('Read the saved file.');
+    await send(page, 'After applying settings.');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    expect(
+      model.requests.at(-1)?.body.messages.filter((entry) => entry.role === 'user'),
+    ).toHaveLength(1);
+    expect((await exported(page)).config.maxToolCalls).toBe(3);
+    await page.reload();
+    await waitForProjectIndex(page);
+    if (await page.getByTestId('launcher').isVisible()) await openActiveProjectFromLauncher(page);
+    await openChat(page);
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(panel.getByLabel('Base URL', { exact: true })).toHaveValue(model.baseUrl);
+    await expect(panel.getByLabel('Model', { exact: true })).toHaveValue('scripted');
+    await expect(panel.getByLabel('API key (optional)', { exact: true })).toHaveValue('');
+    await expect(panel.getByLabel('Tool limit', { exact: true })).toHaveValue('100');
+    await expect(panel.getByLabel('Time limit (seconds)', { exact: true })).toHaveValue('600');
+    await expect(panel.getByTestId('ai-messages')).not.toContainText('Read the saved file.');
+  } finally {
+    await model.close();
+  }
+});
+
+test('provider error and real Stop preserve history; next command, close and project switch use the correct session', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const model = await agentModelServer([
+    [{ name: 'write_file', args: { path: 'agent-history.txt', content: 'committed' } }],
+    { error: 'provider failed after write', status: 400 },
+    [{ name: 'shell', args: { command: 'echo AGENT_UI_ENTERED && sleep 20' } }],
+    [{ name: 'shell', args: { command: 'cat agent-history.txt && echo AGENT_UI_NEXT' } }],
+    'Continued.',
+    [{ name: 'shell', args: { command: 'echo AGENT_CLOSE_ENTERED && sleep 20' } }],
+    [{ name: 'shell', args: { command: 'echo FRESH_CHAT' } }],
+    'Fresh chat.',
+    [{ name: 'shell', args: { command: 'echo AGENT_SWITCH_ENTERED && sleep 20' } }],
+    [{ name: 'write_file', args: { path: 'new-project.txt', content: 'new project only' } }],
+    'New project.',
+  ]);
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await openChat(page);
+    await settings(page, model.baseUrl);
+    const panel = page.getByTestId('ai-panel');
+    await send(page, 'Commit a write.');
+    await expect(panel).toHaveAttribute('data-status', 'error', { timeout: 25000 });
+    await expect(panel).toContainText('provider failed after write');
+    await send(page, 'Continue with a long command.');
+    await expect.poll(() => terminalBuffer(page)).toMatch(/(?:^|\n)AGENT_UI_ENTERED(?:\r?\n|$)/);
+    await panel.getByRole('button', { name: 'Stop', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-status', 'aborted');
+    const stopped = await exported(page);
+    expect(toolResults(stopped).at(-1)?.details).toHaveProperty('status', 'cancelled');
+    await send(page, 'Run the next command.');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await expect
+      .poll(() => terminalBuffer(page))
+      .toMatch(/(?:^|\n)committedAGENT_UI_NEXT(?:\r?\n|$)/);
+    expect(model.requests[3]?.body.messages.filter((entry) => entry.role === 'tool')).toHaveLength(
+      2,
+    );
+    await send(page, 'Run another long command.');
+    await expect.poll(() => terminalBuffer(page)).toMatch(/(?:^|\n)AGENT_CLOSE_ENTERED(?:\r?\n|$)/);
+    await panel.getByRole('button', { name: 'Close chat', exact: true }).click();
+    await expect(panel).toHaveCount(0);
+    await openChat(page);
+    await send(page, 'Fresh conversation.');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    expect(model.requests[6]?.body.messages.filter((entry) => entry.role === 'user')).toHaveLength(
+      1,
+    );
+    await send(page, 'Switch while this command is active.');
+    await expect
+      .poll(() => terminalBuffer(page))
+      .toMatch(/(?:^|\n)AGENT_SWITCH_ENTERED(?:\r?\n|$)/);
+    await expect(panel).toHaveAttribute('data-status', 'running');
+    await pickStarter(page, 'node-worker');
+    await expect(panel.getByTestId('ai-messages')).not.toContainText('Fresh conversation.');
+    await send(page, 'Write only into this project.');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    expect(model.requests[9]?.body.messages.filter((entry) => entry.role === 'user')).toHaveLength(
+      1,
+    );
+    await expect(page.getByRole('treeitem', { name: /^new-project\.txt/ })).toBeVisible();
+    expect(toolResults(await exported(page))).toHaveLength(1);
+  } finally {
+    await model.close();
+  }
+});
+
+test('storage refusal stays usable; network errors name proxy remedy and budgets are distinct', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const model = await agentModelServer(['Waiting for model finish.', 'Next run works.']);
+  model.holdFinal('Waiting for model finish.');
+  try {
+    await page.addInitScript(() => {
+      const set = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key: string, value: string) {
+        if (key === 'rf.ai.v2') throw new DOMException('settings quota', 'QuotaExceededError');
+        return Reflect.apply(set, this, [key, value]);
+      };
+    });
+    await page.goto('/');
+    await pickStarter(page);
+    await openChat(page);
+    await settings(page, '/broken-model/v1');
+    const panel = page.getByTestId('ai-panel');
+    await expect(panel).toContainText('not saved');
+    await page.route('**/broken-model/v1/chat/completions', (route) => route.abort('failed'));
+    await send(page, 'Try the endpoint.');
+    await expect(panel).toHaveAttribute('data-status', 'error', { timeout: 25000 });
+    await expect(panel).toContainText('RIFTY_AI_PROXY_TARGET');
+    await expect(panel).toContainText('/ai-proxy/v1');
+    await settings(page, model.baseUrl, { seconds: 1 });
+    await send(page, 'Use the time budget.');
+    await expect(panel).toHaveAttribute('data-status', 'budget-exceeded');
+    expect((await exported(page)).status).toBe('budget-exceeded');
+    await send(page, 'Try again.');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await expect(panel).toContainText('Next run works.');
+  } finally {
+    await model.close();
+  }
+});
+
+test('opt-in benchmark hook seeds public files and exports actual session metadata', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const model = await agentModelServer([
+    [{ name: 'read_file', args: { path: 'bench-seed.txt' } }],
+    'Seed read.',
+  ]);
+  try {
+    await page.goto('/?agentBench=1');
+    await pickStarter(page);
+    await openChat(page);
+    await settings(page, model.baseUrl);
+    // agent-bench hook: external validation harness only. Not public API.
+    await page.evaluate(async () => {
+      const hook = Reflect.get(globalThis, '__riftyAgentBench') as {
+        seed(input: { taskId: string; files: Record<string, string> }): Promise<void>;
+      };
+      await hook.seed({
+        taskId: 'ui-hook-proof',
+        files: { 'bench-seed.txt': 'real seeded bytes' },
+      });
+    });
+    await send(page, 'Read the seed.');
+    await expect(page.getByTestId('ai-panel')).toHaveAttribute('data-status', 'done');
+    // agent-bench hook: external validation harness only. Not public API.
+    const actual = await page.evaluate(async () => {
+      const hook = Reflect.get(globalThis, '__riftyAgentBench') as {
+        exportTrace(): Promise<AgentTrace>;
+        sessionMetadata(): Promise<unknown>;
+      };
+      return { trace: await hook.exportTrace(), metadata: await hook.sessionMetadata() };
+    });
+    expect(JSON.stringify(toolResults(actual.trace))).toContain('real seeded bytes');
+    expect(actual.metadata).toMatchObject({
+      taskId: 'ui-hook-proof',
+      model: 'scripted',
+      profile: actual.trace.profile,
+      maxToolCalls: 100,
+      runTimeoutMs: 180_000,
+    });
+    await expect(page.getByRole('treeitem', { name: /^bench-seed\.txt/ })).toBeVisible();
+  } finally {
+    await model.close();
+  }
+});
+
+test('agent terminal preserves the same split stdout as a user-submitted command', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const command = `node -e "process.stdout.write('UI_PART'); setTimeout(() => process.stdout.write('_DONE'), 20)"`;
+  const model = await agentModelServer([[{ name: 'shell', args: { command } }], 'Stream ended.']);
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await openShellTerminal(page);
+    await runTerminalLineSettled(page, command);
+    expect(await terminalBuffer(page)).toContain('UI_PART_DONE');
+    await openChat(page);
+    await settings(page, model.baseUrl);
+    await send(page, 'Run the same stream.');
+    await expect(page.getByTestId('ai-panel')).toHaveAttribute('data-status', 'done');
+    const trace = await exported(page);
+    expect(toolResults(trace)[0]?.details).toHaveProperty('stdout', 'UI_PART_DONE');
+    expect(await terminalBuffer(page)).toContain('UI_PART_DONE');
+  } finally {
+    await model.close();
+  }
+});
+
+test('native failed tool result stays visibly failed after the model continues', async ({
+  page,
+}) => {
+  const model = await agentModelServer([
+    [{ name: 'read_file', args: { path: 'missing-agent-file.txt' } }],
+    'The file is absent.',
+  ]);
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await openChat(page);
+    await settings(page, model.baseUrl);
+    await send(page, 'Read the missing file.');
+    const panel = page.getByTestId('ai-panel');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    const row = panel.locator('[data-tool-name="read_file"]');
+    await expect(row).toHaveAttribute('data-state', 'error');
+    await row.locator('summary').click();
+    await expect(row.getByTestId('ai-tool-result')).toBeVisible();
+    await expect(row.getByTestId('ai-tool-result')).toContainText('missing-agent-file.txt');
+    expect(toolResults(await exported(page))[0]?.isError).toBe(true);
+  } finally {
+    await model.close();
+  }
+});
+
+test('agent leaf-component write reaches the live React preview before and after a build', async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const first = FILTER_BAR_TSX.replace(
+    '<div className="filter-bar">',
+    '<div className="filter-bar"><input aria-label="Agent first search" />',
+  );
+  const second = first.replace('Agent first search', 'Agent second search');
+  const model = await agentModelServer([
+    [{ name: 'write_file', args: { path: 'src/components/FilterBar.tsx', content: first } }],
+    'First edit.',
+    [{ name: 'write_file', args: { path: 'src/components/FilterBar.tsx', content: second } }],
+    [{ name: 'shell', args: { command: 'npm run build' } }],
+    'Second edit built.',
+  ]);
+  const messages: string[] = [];
+  const modules: { url: string; body: string }[] = [];
+  const pending: Promise<void>[] = [];
+  page.on('response', (response) => {
+    if (/FilterBar|@react-refresh/.test(response.url()))
+      pending.push(
+        response
+          .text()
+          .then((body) => {
+            modules.push({ url: response.url(), body });
+          })
+          .catch(() => {}),
+      );
+  });
+  page.on('console', (message) => {
+    if (/vite|hmr|refresh/i.test(message.text())) messages.push(message.text());
+  });
+  try {
+    await page.goto('/');
+    await pickStarter(page, 'real-vite');
+    const frame = page.frameLocator('[data-testid="preview"] iframe');
+    await expect(frame.locator('#root')).toContainText('Trackline', { timeout: 180_000 });
+    await frame.getByRole('link', { name: 'Issues', exact: true }).click();
+    await expect(frame.locator('.filter-bar')).toBeVisible();
+    await frame.locator('body').evaluate((element) => {
+      Reflect.set(element.ownerDocument.defaultView!, '__agentLeafDocument', 'same');
+    });
+    await openChat(page);
+    await settings(page, model.baseUrl);
+    await send(page, 'Add a search input.');
+    await expect(page.getByTestId('ai-panel')).toHaveAttribute('data-status', 'done');
+    console.log('AGENT LEAF FIRST', JSON.stringify(messages));
+    await expect(frame.getByLabel('Agent first search')).toBeVisible({ timeout: 15_000 });
+    await send(page, 'Rename the search input and build.');
+    // Includes a real stock-WASM production build, not just one UI update.
+    await expect(page.getByTestId('ai-panel')).toHaveAttribute('data-status', 'done', {
+      timeout: 120_000,
+    });
+    await expect(frame.getByLabel('Agent second search')).toBeVisible({ timeout: 15_000 });
+    expect(
+      await frame
+        .locator('body')
+        .evaluate((element) =>
+          Reflect.get(element.ownerDocument.defaultView!, '__agentLeafDocument'),
+        ),
+    ).toBe('same');
+    expect([
+      ...new Set(
+        modules
+          .filter((module) => module.url.includes('@react-refresh'))
+          .map((module) => module.url),
+      ),
+    ]).toHaveLength(1);
+  } finally {
+    console.log('AGENT LEAF HMR', JSON.stringify(messages));
+    await Promise.all(pending);
+    await writeFile('/tmp/pr333-hmr-modules.json', JSON.stringify(modules, null, 2));
+    await model.close();
+  }
+});
+
+for (const collapsed of [false, true]) {
+  test(`Agent shell reveals its terminal from Problems with collapsed=${collapsed}`, async ({
+    page,
+  }) => {
+    const model = await agentModelServer([
+      [{ name: 'shell', args: { command: 'echo AGENT_VISIBLE_FROM_PROBLEMS' } }],
+      'Command completed.',
+    ]);
+    try {
+      await page.goto('/');
+      await pickStarter(page);
+      await openChat(page);
+      await settings(page, model.baseUrl);
+      await page.getByRole('tab', { name: /^Problems/ }).click();
+      if (collapsed)
+        await page.getByRole('button', { name: 'Collapse panel', exact: true }).click();
+      await send(page, 'Run the command in the visible agent terminal.');
+      await expect(page.getByTestId('ai-panel')).toHaveAttribute('data-status', 'done');
+      expect(toolResults(await exported(page)).at(-1)?.details).toHaveProperty(
+        'stdout',
+        'AGENT_VISIBLE_FROM_PROBLEMS\n',
+      );
+      await expect(
+        page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal"]'),
+      ).toBeVisible({ timeout: 1500 });
+      await expect(page.getByRole('tab', { name: 'Agent', exact: true })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      await expect(page.locator('.rf-console__pane[data-view="terminal"]')).toHaveAttribute(
+        'data-active',
+        'true',
+      );
+      await expect(page.getByRole('button', { name: 'Collapse panel', exact: true })).toBeVisible();
+    } finally {
+      await model.close();
+    }
+  });
+}
+
+test('first pi command is refused before model dispatch and keeps the draft', async ({ page }) => {
+  test.setTimeout(180_000);
+  const model = await agentModelServer(['Plain message accepted.', 'Plain message accepted.']);
+  try {
+    await page.goto('/?agentBench=1');
+    await pickStarter(page);
+    await openChat(page);
+    await settings(page, model.baseUrl);
+    await page.evaluate(async () => {
+      const hook = Reflect.get(globalThis, '__riftyAgentBench') as {
+        seed(input: { taskId: string; files: Record<string, string> }): Promise<void>;
+      };
+      await hook.seed({
+        taskId: 'first-command',
+        files: {
+          '.pi/skills/deploy/SKILL.md':
+            '---\nname: deploy\ndescription: Deploy this project\n---\nDeploy.',
+          '.pi/prompts/review.md': 'Review.',
+        },
+      });
+    });
+    const panel = page.getByTestId('ai-panel');
+    for (const [index, command] of ['/skill:deploy', '/review'].entries()) {
+      await settings(page, model.baseUrl);
+      await send(page, command);
+      await expect(panel).toHaveAttribute('data-status', 'error', { timeout: 25000 });
+      await expect(panel.getByRole('alert')).toContainText(`Unsupported chat command ${command}`);
+      await expect(panel.getByLabel('Message', { exact: true })).toHaveValue(command);
+      expect(model.requests).toHaveLength(index);
+      expect((await exported(page)).transcript).toEqual([]);
+      await send(page, 'hello');
+      await expect(panel).toHaveAttribute('data-status', 'done');
+      expect(model.requests).toHaveLength(index + 1);
+    }
+  } finally {
+    await model.close();
+  }
+});
+
+test('project resources load at start; editor edits wait for chat /reload and visible report', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const model = await agentModelServer([
+    [{ name: 'read_file', args: { path: '.pi/skills/deploy/SKILL.md' } }],
+    'Arrr, skill read.',
+    'Arrr, still old.',
+    'Path noted.',
+    'Comment noted.',
+    'Missing noted.',
+    'Ignored noted.',
+    'New instructions applied.',
+  ]);
+  try {
+    await page.goto('/?agentBench=1');
+    await pickStarter(page);
+    await openChat(page);
+    await settings(page, model.baseUrl);
+    await page.evaluate(async () => {
+      const hook = Reflect.get(globalThis, '__riftyAgentBench') as {
+        seed(input: { taskId: string; files: Record<string, string> }): Promise<void>;
+      };
+      await hook.seed({
+        taskId: 'project-resources',
+        files: {
+          'AGENTS.md': 'Answer in pirate speak.',
+          'CLAUDE.md': 'Losing context.',
+          'sub/CLAUDE.md': 'Descendant context.',
+          '.pi/skills/deploy/SKILL.md':
+            '---\nname: deploy\ndescription: Deploy this project\n---\nFollow deployment steps.',
+          '.pi/skills/hidden/SKILL.md':
+            '---\nname: hidden\ndescription: Secret\ndisable-model-invocation: true\n---\nHidden.',
+          '.pi/extensions/foo.ts': 'export {};',
+          '.pi/prompts/review.md': 'Review.',
+          '.pi/prompts/ignored.md': 'Ignored.',
+          '.pi/prompts/.gitignore': 'ignored.md\n',
+          '.pi/skills/invalid/SKILL.md': '---\nname: invalid\n---\nMissing description.',
+        },
+      });
+    });
+    // New session starts over the completed fixture.
+    await settings(page, model.baseUrl);
+    await send(page, 'deploy this');
+    const panel = page.getByTestId('ai-panel');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    const prompt = (index: number) =>
+      String(
+        model.requests[index]?.body.messages.find((message) => message.role === 'system')?.content,
+      );
+    expect(prompt(0)).toContain('Answer in pirate speak.');
+    expect(prompt(0)).toContain('<name>deploy</name>');
+    expect(prompt(0)).not.toContain('<name>hidden</name>');
+    expect(prompt(0)).not.toContain('Losing context.');
+    expect(prompt(0)).not.toContain('Descendant context.');
+    const report = panel.getByTestId('ai-resources');
+    await expect(report).toContainText('AGENTS.md');
+    await expect(report).toContainText('deploy');
+    await expect(report).toContainText('.pi/extensions');
+    await expect(report).toContainText('.pi/prompts');
+    await expect(report).toContainText('description is required');
+    expect(prompt(0).indexOf('<project_context>')).toBeLessThan(
+      prompt(0).indexOf('<available_skills>'),
+    );
+    expect(prompt(0).indexOf('</available_skills>')).toBeLessThan(
+      prompt(0).indexOf('Current working directory:'),
+    );
+    expect(JSON.stringify(toolResults(await exported(page)))).toContain('Follow deployment steps.');
+    await page.getByRole('treeitem', { name: /^AGENTS\.md/ }).click();
+    // Existing editor hook fires the real Monaco change event; select-all is
+    // unreliable in headless Chromium (EditorHost's ADR-0166 test seam).
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const setValue = Reflect.get(globalThis, '__riftySetEditorValue') as
+            | ((path: string, text: string) => boolean)
+            | undefined;
+          return setValue?.('/AGENTS.md', 'Answer in plain speech.') ?? false;
+        }),
+      )
+      .toBe(true);
+    await expect(page.locator('[data-testid="editor"] .view-lines')).toContainText(
+      'Answer in plain speech.',
+    );
+    await expect(page.locator('[data-testid="editor"] .view-lines')).not.toContainText(
+      'Answer in pirate speak.',
+    );
+    await page.keyboard.press('ControlOrMeta+KeyS');
+    await expect(page.locator('.rf-toast[data-tone="success"]')).toContainText('Saved');
+    await send(page, 'same instructions?');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    expect(prompt(2)).toContain('Answer in pirate speak.');
+    await send(page, '/reload');
+    await expect(report).toContainText('Reloaded');
+    expect(model.requests).toHaveLength(3);
+    // Pi expands /skill:<loaded skill> and /<.pi/prompts template>: the chat refuses those
+    // instead of forwarding; every other '/'-text reaches the model unchanged, as in pi.
+    await send(page, '/skill:deploy');
+    await expect(panel.getByRole('alert')).toContainText('Unsupported chat command /skill:deploy');
+    await send(page, '/review');
+    await expect(panel.getByRole('alert')).toContainText('Unsupported chat command /review');
+    expect(model.requests).toHaveLength(3);
+    const plain = [
+      '/src/main.tsx needs a fix',
+      '// TODO: keep this',
+      '/missing explain this path',
+      '/ignored explain this path',
+    ];
+    for (const [index, text] of plain.entries()) {
+      await send(page, text);
+      await expect.poll(() => model.requests.length).toBe(4 + index);
+      await expect(panel).toHaveAttribute('data-status', 'done');
+      expect(JSON.stringify(model.requests[3 + index]?.body.messages.at(-1))).toContain(text);
+    }
+    await send(page, 'updated instructions?');
+    await expect.poll(() => model.requests.length).toBe(8);
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    expect(prompt(7)).toContain('Answer in plain speech.');
+    expect(prompt(7)).not.toContain('Answer in pirate speak.');
+  } finally {
+    await model.close();
+  }
+});
+
+function entry(id: string, baseUrl: string, image = false) {
+  return {
+    id,
+    name: id,
+    provider: id,
+    api: 'openai-completions',
+    baseUrl,
+    input: image ? ['text', 'image'] : ['text'],
+    reasoning: true,
+    contextWindow: 32768,
+    maxTokens: 4096,
+    thinking: 'medium',
+    temperature: 0.4,
+    compat: { supportsReasoningEffort: true },
+    samplingParams: { top_p: 0.9 },
+    cost: { input: 0.1, output: 0.5, cacheRead: 0, cacheWrite: 0 },
+  };
+}
+
+test('catalog controls switch providers after error without losing tool history', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const first = await agentModelServer([
+    [{ name: 'write_file', args: { path: 'catalog-proof.txt', content: 'written once' } }],
+    ...Array.from({ length: 4 }, () => ({
+      error: 'capacity exhausted CATALOG_UI_SECRET CATALOG_HEADER_SECRET catalog-title',
+      status: 429,
+    })),
+  ]);
+  const second = await agentModelServer(['Continued on second. catalog-title']);
+  try {
+    await page.goto('/?agentBench=1');
+    await pickStarter(page);
+    await page.getByRole('button', { name: '+chat', exact: true }).click();
+    const panel = page.getByTestId('ai-panel');
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    await panel.getByText('Advanced catalog', { exact: true }).click({ timeout: 5000 });
+    await panel.getByLabel('Model catalog (JSON)', { exact: true }).fill(
+      JSON.stringify([
+        {
+          ...entry('first', first.baseUrl),
+          headers: { 'X-Api-Key': 'Bearer CATALOG_HEADER_SECRET', 'X-Title': 'catalog-title' },
+        },
+        { ...entry('second', second.baseUrl), temperature: 0.8, thinking: 'high' },
+      ]),
+    );
+    await panel.getByLabel('API key (optional)', { exact: true }).fill('CATALOG_UI_SECRET');
+    await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
+    await panel.getByLabel('Message', { exact: true }).fill('Write the proof, then continue.');
+    await panel.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-status', 'error', { timeout: 25000 });
+    expect(first.requests[0]?.authorization).toBe('Bearer CATALOG_UI_SECRET');
+    expect(first.headers[0]).toMatchObject({
+      'x-api-key': 'Bearer CATALOG_HEADER_SECRET',
+      'x-title': 'catalog-title',
+    });
+    // Key and bare Bearer header token are masked; an ordinary header value is not a secret.
+    await expect(panel).toContainText('capacity exhausted [redacted] [redacted] catalog-title');
+    await expect(panel).not.toContainText('CATALOG_HEADER_SECRET');
+    await expect(panel).not.toContainText('CATALOG_UI_SECRET');
+    await expect(panel.getByTestId('ai-continuation')).toHaveCount(3);
+    expect(first.requests).toHaveLength(5);
+    await expect(panel.getByLabel('Message', { exact: true })).toHaveValue(
+      'Write the proof, then continue.',
+    );
+    await panel.getByRole('button', { name: 'Continue with second', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await expect(panel.getByLabel('Chat model', { exact: true })).toHaveValue('second');
+    await expect(panel).toContainText('Continued on second. catalog-title');
+    const request = second.requests[0]?.body;
+    expect(request).toMatchObject({
+      model: 'second',
+      temperature: 0.8,
+      reasoning_effort: 'high',
+      top_p: 0.9,
+      max_completion_tokens: 4096,
+    });
+    // The auto-restored prompt is already history: Continue sends `continue`, not a duplicate.
+    expect(userTexts(request?.messages)).toEqual(['Write the proof, then continue.', 'continue']);
+    expect(JSON.stringify(request?.messages)).toContain('catalog-proof.txt');
+    expect(request?.messages.filter((message) => message.role === 'tool')).toHaveLength(1);
+    const trace = await page.evaluate(async () =>
+      (
+        Reflect.get(globalThis, '__riftyAgentBench') as { exportTrace(): Promise<AgentTrace> }
+      ).exportTrace(),
+    );
+    expect(trace.transcript.filter((message) => message.role === 'toolResult')).toHaveLength(1);
+    expect(trace.config).toMatchObject({ model: 'second', thinking: 'high', temperature: 0.8 });
+    expect(JSON.stringify(trace.transcript)).toContain('Continued on second. catalog-title');
+    expect(JSON.stringify(trace)).not.toContain('CATALOG_UI_SECRET');
+    expect(JSON.stringify(trace)).not.toContain('CATALOG_HEADER_SECRET');
+    const stored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('rf.ai.v2') ?? 'null'),
+    );
+    expect(stored).toMatchObject({
+      model: 'second',
+      models: [
+        entry('first', first.baseUrl),
+        { ...entry('second', second.baseUrl), temperature: 0.8, thinking: 'high' },
+      ],
+    });
+    expect(JSON.stringify(stored)).not.toContain('CATALOG_UI_SECRET');
+    expect(JSON.stringify(stored)).not.toContain('CATALOG_HEADER_SECRET');
+    await page.reload();
+    await waitForProjectIndex(page);
+    if (await page.getByTestId('launcher').isVisible()) await openActiveProjectFromLauncher(page);
+    await openChat(page);
+    await expect(panel.getByLabel('Chat model', { exact: true })).toHaveValue('second');
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    await panel.getByLabel('Edit model', { exact: true }).selectOption('first');
+    await expect(panel.getByLabel('API key (optional)', { exact: true })).toHaveValue('');
+    await panel.getByText('Advanced catalog', { exact: true }).click();
+    expect(
+      JSON.parse(await panel.getByLabel('Model catalog (JSON)', { exact: true }).inputValue()),
+    ).toEqual(stored.models);
+    await panel.getByRole('button', { name: 'Add model', exact: true }).click();
+    const newEntry = JSON.parse(
+      await panel.getByLabel('Model catalog (JSON)', { exact: true }).inputValue(),
+    ).at(-1);
+    expect(newEntry).toMatchObject({
+      contextWindow: 128000,
+      maxTokens: 8192,
+      thinking: 'off',
+      reasoning: false,
+      input: ['text'],
+    });
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
+test('image reaches the model; binary attachment is an exact project file with a prompt path', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const model = await agentModelServer(['Attachments received.']);
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4H8AAAAASUVORK5CYII=',
+    'base64',
+  );
+  const pdf = Buffer.from('%PDF-1.4\n\x00\xffspec bytes');
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await page.getByRole('button', { name: '+chat', exact: true }).click();
+    const panel = page.getByTestId('ai-panel');
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    await panel.getByText('Advanced catalog', { exact: true }).click({ timeout: 5000 });
+    await panel
+      .getByLabel('Model catalog (JSON)', { exact: true })
+      .fill(JSON.stringify([entry('vision', model.baseUrl, true)]));
+    await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
+    await panel.getByLabel('Message', { exact: true }).fill('Inspect the screenshot and spec.');
+    await panel.getByLabel('Attach files', { exact: true }).setInputFiles([
+      { name: 'screen.png', mimeType: 'image/png', buffer: png },
+      { name: 'spec.pdf', mimeType: 'application/pdf', buffer: pdf },
+    ]);
+    await expect(panel).toContainText('/attachments/spec.pdf');
+    await panel.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    const user = model.requests[0]?.body.messages.find((message) => message.role === 'user');
+    expect(JSON.stringify(user)).toContain(`data:image/png;base64,${png.toString('base64')}`);
+    expect(JSON.stringify(user)).toContain('/attachments/spec.pdf');
+    expect(JSON.stringify(user)).not.toContain(pdf.toString('base64'));
+    const replacement = Buffer.from('%PDF-1.4\nsecond file');
+    await panel
+      .getByLabel('Attach files', { exact: true })
+      .setInputFiles({ name: 'spec.pdf', mimeType: 'application/pdf', buffer: replacement });
+    const attached = panel.getByTestId('ai-attachments').locator('[data-project-path]');
+    await expect(attached).toHaveCount(1);
+    const collisionPath = await attached.getAttribute('data-project-path');
+    expect(collisionPath).toMatch(/^\/attachments\//);
+    expect(collisionPath).not.toBe('/attachments/spec.pdf');
+    await page.locator('[data-action="open-palette"]').click();
+    await page
+      .getByTestId('command-palette')
+      .getByRole('button', { name: 'Stop project', exact: true })
+      .click();
+    await expect(page.locator('.rf-livepill')).toHaveAttribute('data-state', 'stopped');
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
+    const file = await (await download).path();
+    expect(file).toBeTruthy();
+    const archive = JSON.parse(await readFile(file!, 'utf8')) as {
+      files: { path: string; content: string }[];
+    };
+    expect(
+      Buffer.from(
+        archive.files.find((item) => item.path === 'attachments/spec.pdf')!.content,
+        'base64',
+      ),
+    ).toEqual(pdf);
+    expect(
+      Buffer.from(
+        archive.files.find((item) => `/${item.path}` === collisionPath)!.content,
+        'base64',
+      ),
+    ).toEqual(replacement);
+  } finally {
+    await model.close();
+  }
+});
+
+test('native compaction marker survives settlement; overflow offers larger model with retained summary', async ({
+  page,
+}) => {
+  test.setTimeout(180000);
+  const small = await agentModelServer([
+    'First answer',
+    {
+      text: 'Second answer',
+      usage: { prompt_tokens: 20000, completion_tokens: 3, total_tokens: 20003 },
+    },
+    'Saved old context',
+    'Recent answer',
+    { error: 'maximum context length is 5000 tokens', status: 400 },
+    'Recovery summary',
+    { error: 'maximum context length is 5000 tokens', status: 400 },
+  ]);
+  const large = await agentModelServer(['Continued with retained summary.']);
+  try {
+    await page.goto('/?agentBench=1');
+    await pickStarter(page);
+    await openChat(page);
+    const panel = page.getByTestId('ai-panel');
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    await panel.getByText('Advanced catalog', { exact: true }).click();
+    await panel.getByLabel('Model catalog (JSON)', { exact: true }).fill(
+      JSON.stringify([
+        { ...entry('small', small.baseUrl), contextWindow: 32000 },
+        { ...entry('large', large.baseUrl), contextWindow: 1000000 },
+      ]),
+    );
+    await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
+    await send(page, 'first '.repeat(10000));
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await send(page, 'old '.repeat(30000));
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await expect(panel.getByTestId('ai-continuation')).toContainText('Context compacted:');
+    expect(small.requests).toHaveLength(3);
+    await send(page, 'recent '.repeat(16000));
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await send(page, 'continue after compaction');
+    await expect(panel).toHaveAttribute('data-status', 'context-exceeded');
+    expect(small.requests).toHaveLength(7);
+    await expect(panel.getByTestId('ai-continuation')).toHaveCount(2);
+    await panel.getByRole('button', { name: 'Continue with large', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await expect(panel).toContainText('Continued with retained summary.');
+    expect(JSON.stringify(large.requests[0]?.body.messages)).toContain('Recovery summary');
+    const trace = await exported(page);
+    expect(trace.transcript[0]?.role).toBe('compactionSummary');
+    expect(trace.usage.totalTokens).toBeGreaterThan(20003);
+    expect(trace.events.filter(({ event }) => event.type === 'retry')).toHaveLength(0);
+    await expect(panel.getByTestId('ai-continuation')).toHaveCount(2);
+  } finally {
+    await small.close();
+    await large.close();
+  }
+});
+
+test('repeated failed exact edits stay visible, retain the file and steer before the next request', async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  const edit = { name: 'edit_file', args: { path: 'repeat.txt', old: 'alpha', new: 'wrong' } };
+  const model = await agentModelServer([
+    [edit, edit, edit, edit],
+    [{ name: 'read_file', args: { path: 'repeat.txt' } }],
+    'Read the locating feedback.',
+  ]);
+  try {
+    await page.goto('/?agentBench=1');
+    await pickStarter(page);
+    await openChat(page);
+    await settings(page, model.baseUrl);
+    await page.evaluate(async () =>
+      (
+        Reflect.get(globalThis, '__riftyAgentBench') as {
+          seed(input: { taskId: string; files: Record<string, string> }): Promise<void>;
+        }
+      ).seed({ taskId: 'repeat-proof', files: { 'repeat.txt': 'alpha\nbeta\nalpha\n' } }),
+    );
+    await send(page, 'Replace the exact text and inspect any failure.');
+    const panel = page.getByTestId('ai-panel');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await expect(panel.locator('[data-tool-name="edit_file"]')).toHaveCount(4);
+    await expect(panel.getByTestId('ai-messages')).toContainText('Repeated tool call: edit_file');
+    const trace = await exported(page);
+    const results = toolResults(trace).filter((result) => result.toolName === 'edit_file');
+    expect(results).toHaveLength(4);
+    expect(results.every((result) => result.isError)).toBe(true);
+    expect(JSON.stringify(results)).toContain('2 matches: lines 1, 3');
+    expect(trace.events.filter(({ event }) => event.type === 'repeated-call')).toHaveLength(1);
+    expect(JSON.stringify(model.requests[1]?.body.messages)).toContain('[Agent notice]');
+    const read = toolResults(trace).find((result) => result.toolName === 'read_file');
+    const text =
+      read?.content.map((part) => (part.type === 'text' ? part.text : '')).join('') ?? '';
+    expect(text.split('\n').slice(1).join('\n')).toBe('alpha\nbeta\nalpha\n');
+  } finally {
+    await model.close();
+  }
+});
+
+test('catalog JSON keeps typed text; basic fields re-serialize it', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/');
+  await pickStarter(page);
+  await openChat(page);
+  const panel = page.getByTestId('ai-panel');
+  await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+  await panel.getByText('Advanced catalog', { exact: true }).click();
+  const catalog = panel.getByLabel('Model catalog (JSON)', { exact: true });
+  const typed = JSON.stringify([entry('typed', 'http://127.0.0.1:9/v1')]);
+  await catalog.fill('');
+  await catalog.pressSequentially(typed);
+  expect(await catalog.inputValue()).toBe(typed);
+  await panel.getByLabel('Base URL', { exact: true }).fill('http://127.0.0.1:8/v1');
+  await expect
+    .poll(async () => JSON.parse(await catalog.inputValue())[0].baseUrl)
+    .toBe('http://127.0.0.1:8/v1');
+});
+
+test('basic UI models keep their own API keys', async ({ page }) => {
+  test.setTimeout(120_000);
+  const first = await agentModelServer(['Answered by A.']);
+  const second = await agentModelServer(['Answered by B.']);
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await openChat(page);
+    const panel = page.getByTestId('ai-panel');
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    const key = panel.getByLabel('API key (optional)', { exact: true });
+    await panel.getByLabel('Base URL', { exact: true }).fill(first.baseUrl);
+    await panel.getByLabel('Model', { exact: true }).fill('model-a');
+    await key.fill('KEY_A');
+    await panel.getByRole('button', { name: 'Add model', exact: true }).click();
+    await panel.getByLabel('Base URL', { exact: true }).fill(second.baseUrl);
+    await panel.getByLabel('Model', { exact: true }).fill('model-b');
+    await key.fill('KEY_B');
+    await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
+    await panel.getByLabel('Chat model', { exact: true }).selectOption('model-a');
+    await send(page, 'Ask model A.');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await panel.getByLabel('Chat model', { exact: true }).selectOption('model-b');
+    await send(page, 'Ask model B.');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await expect(panel).toContainText('Answered by B.');
+    expect(first.requests[0]?.authorization).toBe('Bearer KEY_A');
+    expect(second.requests[0]?.authorization).toBe('Bearer KEY_B');
+    const stored = await page.evaluate(() => localStorage.getItem('rf.ai.v2') ?? '');
+    expect(stored).toContain('model-b');
+    expect(stored).not.toContain('KEY_A');
+    expect(stored).not.toContain('KEY_B');
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
+test('Continue with another model sends the edited draft instead of continue', async ({ page }) => {
+  test.setTimeout(120_000);
+  const first = await agentModelServer([{ error: 'first model rejected', status: 400 }]);
+  const second = await agentModelServer(['Answered the edited draft.']);
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await openChat(page);
+    const panel = page.getByTestId('ai-panel');
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    await panel.getByText('Advanced catalog', { exact: true }).click();
+    await panel
+      .getByLabel('Model catalog (JSON)', { exact: true })
+      .fill(JSON.stringify([entry('first', first.baseUrl), entry('second', second.baseUrl)]));
+    await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
+    await send(page, 'original draft');
+    await expect(panel).toHaveAttribute('data-status', 'error', { timeout: 25000 });
+    const message = panel.getByLabel('Message', { exact: true });
+    await expect(message).toHaveValue('original draft');
+    await message.fill('use the edited draft');
+    await panel.getByRole('button', { name: 'Continue with second', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    const users = second.requests[0]?.body.messages.filter((entry) => entry.role === 'user');
+    expect(JSON.stringify(users?.at(-1))).toContain('use the edited draft');
+    expect(JSON.stringify(users)).not.toMatch(/"(?:content|text)":"continue"/);
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
+test('Continue with another model sends a pending attachment without the auto-restored prompt', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const first = await agentModelServer([
+    [{ name: 'write_file', args: { path: 'attach-proof.txt', content: 'written once' } }],
+    { error: 'first model rejected', status: 400 },
+  ]);
+  const second = await agentModelServer(['Read the attached notes.']);
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await openChat(page);
+    const panel = page.getByTestId('ai-panel');
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    await panel.getByText('Advanced catalog', { exact: true }).click();
+    await panel
+      .getByLabel('Model catalog (JSON)', { exact: true })
+      .fill(JSON.stringify([entry('first', first.baseUrl), entry('second', second.baseUrl)]));
+    await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
+    const prompt = 'Write the proof, then read my notes.';
+    await send(page, prompt);
+    await expect(panel).toHaveAttribute('data-status', 'error', { timeout: 25000 });
+    await expect(panel.getByLabel('Message', { exact: true })).toHaveValue(prompt);
+    await panel
+      .getByLabel('Attach files', { exact: true })
+      .setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('note\n') });
+    const attached = panel.getByTestId('ai-attachments').locator('[data-project-path]');
+    await expect(attached).toHaveCount(1);
+    const path = await attached.getAttribute('data-project-path');
+    expect(path).toMatch(/^\/attachments\/notes/);
+    await panel.getByRole('button', { name: 'Continue with second', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    await expect(panel).toContainText('Read the attached notes.');
+    const request = second.requests[0]?.body;
+    expect(JSON.stringify(request?.messages)).toContain('attach-proof.txt');
+    // The restored prompt is already history: the attachment alone is the next turn.
+    expect(userTexts(request?.messages)).toEqual([
+      prompt,
+      `Attached file: ${JSON.stringify(path)}`,
+    ]);
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
+test('headless transcript keeps completed and cancelled tools after budget exhaustion', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const model = await agentModelServer([
+    [
+      { name: 'write_file', args: { path: 'transcript-one.txt', content: 'written' } },
+      { name: 'write_file', args: { path: 'transcript-two.txt', content: 'must not write' } },
+    ],
+    'Unused.',
+  ]);
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await openChat(page);
+    await settings(page, model.baseUrl, { calls: 1 });
+    await send(page, 'Write both transcript files.');
+    const panel = page.getByTestId('ai-panel');
+    await expect(panel).toHaveAttribute('data-status', 'budget-exceeded');
+    await expect(panel.getByTestId('ai-messages')).toContainText('Write both transcript files.');
+    const tools = panel.locator('[data-tool-name="write_file"]');
+    await expect(tools).toHaveCount(2);
+    await expect(tools.nth(0)).toHaveAttribute('data-state', 'done');
+    await expect(tools.nth(1)).toHaveAttribute('data-state', 'cancelled');
+    await expect(panel.getByTestId('ai-messages')).toContainText('Maximum tool calls reached (1)');
+    const trace = await exported(page);
+    expect(toolResults(trace).map((message) => message.isError)).toEqual([false, true]);
+    const bounds = await panel.boundingBox();
+    expect(bounds?.width).toBeGreaterThan(200);
+    expect(bounds?.height).toBeGreaterThan(200);
+    await panel.screenshot({ path: testInfo.outputPath('transcript-budget.png') });
+  } finally {
+    await model.close();
+  }
+});
+
+test('headless transcript renders live command output and explicit cancelled state', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  const model = await agentModelServer([
+    [{ name: 'shell', args: { command: 'echo TRANSCRIPT_LIVE_OUTPUT && sleep 20' } }],
+    'Unused.',
+  ]);
+  try {
+    await page.goto('/');
+    await pickStarter(page);
+    await openChat(page);
+    await settings(page, model.baseUrl);
+    await send(page, 'Run a command until Stop.');
+    const panel = page.getByTestId('ai-panel');
+    await expect.poll(() => terminalBuffer(page)).toContain('TRANSCRIPT_LIVE_OUTPUT');
+    const command = panel.locator('[data-tool-name="shell"]');
+    await expect(command).toHaveAttribute('data-state', 'running');
+    await expect(command.getByTestId('ai-tool-output')).toContainText('TRANSCRIPT_LIVE_OUTPUT');
+    await panel.getByRole('button', { name: 'Stop', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-status', 'aborted');
+    await expect(command).toHaveAttribute('data-state', 'cancelled');
+    await expect(command.getByTestId('ai-tool-output')).toContainText('TRANSCRIPT_LIVE_OUTPUT');
+    await panel.screenshot({ path: testInfo.outputPath('transcript-cancelled.png') });
+  } finally {
+    await model.close();
+  }
+});

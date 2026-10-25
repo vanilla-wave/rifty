@@ -10,10 +10,10 @@
  * byte-equivalent to what a worker-side install produces, shims included.
  */
 // TODO(backlog: playground/baked-snapshot-regeneration)
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { RegistryClient, install } from '@riftydev/npm-client';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import {
@@ -26,6 +26,7 @@ import {
   inspectProjectDefinition,
   projects,
 } from '../../../packages/workbench/src/workbench/project-definition.ts';
+import { finalizePackageInstallFiles } from '../../../packages/workbench/src/workers/package-install-finalizer.ts';
 import { buildProjectPackageJson } from '../src/templates/project-spec.ts';
 import { allProjectSpecs } from '../src/templates/registry.ts';
 import { assertRollupWasmNodeLockstep } from '../src/templates/rollup-lockstep.ts';
@@ -41,6 +42,30 @@ const identityManifestPath = join(
 // (the in-browser proxy route is meaningless in Node).
 const registryBaseUrl = process.env.REGISTRY_BASE_URL ?? 'https://registry.npmjs.org';
 const decoder = new TextDecoder('utf-8', { fatal: true });
+// `--replay-committed-lockfile`: re-bake an installer/transform change over the
+// committed snapshot's exact pins (lockfile replay, ADR-0023) instead of
+// re-resolving ranges against today's registry.
+const replayCommittedLockfile = process.argv.includes('--replay-committed-lockfile');
+
+interface CommittedPins {
+  readonly lockfile: string;
+  readonly tarballCache: {
+    readonly root: string;
+    readonly files: readonly { path: string; encoding: string; content: string }[];
+  };
+}
+
+/** The committed snapshot's lockfile + replay cache (shadow pins need their cached bytes). */
+function committedPins(url: string): CommittedPins {
+  const path = join(publicDir, ...url.replace(/^\/+/, '').split('/'));
+  const snapshot = JSON.parse(
+    gunzipSync(readFileSync(path)).toString('utf8'),
+  ) as Partial<CommittedPins>;
+  if (typeof snapshot.lockfile !== 'string' || snapshot.tarballCache === undefined) {
+    throw new Error(`${path}: committed snapshot has no lockfile/replay cache`);
+  }
+  return snapshot as CommittedPins;
+}
 
 function finalProjectPackageJson(spec: ReturnType<typeof allProjectSpecs>[number]): string {
   const packageJson = buildProjectPackageJson(spec).json;
@@ -71,6 +96,15 @@ for (const spec of baked) {
   const { vfs, fsSync } = createMemoryFs();
   await vfs.mkdir(ROOT, { recursive: true });
   await vfs.writeFile(`${ROOT}/package.json`, finalProjectPackageJson(spec));
+  const pins = replayCommittedLockfile ? committedPins(url) : null;
+  if (pins !== null) {
+    await vfs.writeFile(`${ROOT}/package-lock.json`, pins.lockfile);
+    for (const file of pins.tarballCache.files) {
+      const cachePath = `${pins.tarballCache.root}/${file.path}`;
+      await vfs.mkdir(dirname(cachePath), { recursive: true });
+      await vfs.writeFile(cachePath, Buffer.from(file.content, file.encoding as BufferEncoding));
+    }
+  }
 
   const registry = new RegistryClient({
     baseUrl: registryBaseUrl,
@@ -78,6 +112,7 @@ for (const spec of baked) {
   });
   const result = await install({ vfs, cwd: ROOT, registry });
   assertRollupWasmNodeLockstep(spec.id, result.lockfile);
+  await finalizePackageInstallFiles({ root: ROOT, fs: fsSync });
 
   const deps = await readEffectiveDeps(vfs, ROOT);
   if (!deps) throw new Error(`bake(${spec.id}): package.json unreadable after install`);
@@ -87,6 +122,9 @@ for (const spec of baked) {
     packages: result.packages.length,
   });
   await verifyDepSnapshotReplayCache(snapshot);
+  if (pins !== null && snapshot.lockfile !== pins.lockfile) {
+    throw new Error(`bake(${spec.id}): replay changed the committed lockfile pins`);
+  }
 
   const json = serializeDepSnapshot(snapshot);
   const gz = gzipSync(Buffer.from(json), { level: 9 });

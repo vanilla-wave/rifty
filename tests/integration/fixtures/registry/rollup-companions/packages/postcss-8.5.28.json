@@ -1,0 +1,105 @@
+{
+  "bugs": { "url": "https://github.com/postcss/postcss/issues" },
+  "dist": {
+    "shasum": "da4563a99a06e62d6c1cd1acae363224bcaed6e9",
+    "tarball": "https://registry.npmjs.org/postcss/-/postcss-8.5.28.tgz",
+    "fileCount": 55,
+    "integrity": "sha512-RRuzqDtt5Y9h3quz5hWhK+TPnsmVs6WwSU6LkJMeY4HstUEDuYTG8UJSdawMRzmzAtV+KEoG8N3Qg2qLy5vM/A==",
+    "signatures": [
+      {
+        "sig": "MEQCICGlIb6CorxUAu3DbNoH0Ykqqm6CkwXTtV1xPl9bLwFwAiBuZq1F9i2V5mwjRkgAPKBBJyx9j03qSeuQIvFzk9HFng==",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/postcss@8.5.28",
+      "provenance": { "predicateType": "https://slsa.dev/provenance/v1" }
+    },
+    "unpackedSize": 218290
+  },
+  "main": "./lib/postcss.js",
+  "name": "postcss",
+  "types": "./lib/postcss.d.ts",
+  "author": { "name": "Andrey Sitnik", "email": "andrey@sitnik.es" },
+  "browser": {
+    "fs": false,
+    "url": false,
+    "path": false,
+    "source-map-js": false,
+    "./lib/terminal-highlight": false
+  },
+  "engines": { "node": "^10 || ^12 || >=14" },
+  "exports": {
+    ".": { "import": "./lib/postcss.mjs", "require": "./lib/postcss.js" },
+    "./lib/list": "./lib/list.js",
+    "./lib/node": "./lib/node.js",
+    "./lib/root": "./lib/root.js",
+    "./lib/rule": "./lib/rule.js",
+    "./lib/input": "./lib/input.js",
+    "./lib/parse": "./lib/parse.js",
+    "./lib/parser": "./lib/parser.js",
+    "./lib/result": "./lib/result.js",
+    "./lib/at-rule": "./lib/at-rule.js",
+    "./lib/comment": "./lib/comment.js",
+    "./lib/postcss": "./lib/postcss.js",
+    "./lib/symbols": "./lib/symbols.js",
+    "./lib/warning": "./lib/warning.js",
+    "./lib/fromJSON": "./lib/fromJSON.js",
+    "./lib/tokenize": "./lib/tokenize.js",
+    "./package.json": "./package.json",
+    "./lib/container": "./lib/container.js",
+    "./lib/processor": "./lib/processor.js",
+    "./lib/stringify": "./lib/stringify.js",
+    "./lib/warn-once": "./lib/warn-once.js",
+    "./lib/declaration": "./lib/declaration.js",
+    "./lib/lazy-result": "./lib/lazy-result.js",
+    "./lib/stringifier": "./lib/stringifier.js",
+    "./lib/previous-map": "./lib/previous-map.js",
+    "./lib/map-generator": "./lib/map-generator.js",
+    "./lib/no-work-result": "./lib/no-work-result.js",
+    "./lib/css-syntax-error": "./lib/css-syntax-error.js",
+    "./lib/terminal-highlight": "./lib/terminal-highlight.js"
+  },
+  "funding": [
+    { "url": "https://opencollective.com/postcss/", "type": "opencollective" },
+    { "url": "https://tidelift.com/funding/github/npm/postcss", "type": "tidelift" },
+    { "url": "https://github.com/sponsors/ai", "type": "github" }
+  ],
+  "gitHead": "e544bffc4f4b3966d8ec69c41744b3ed65afc64a",
+  "license": "MIT",
+  "_npmUser": {
+    "name": "GitHub Actions",
+    "email": "npm-oidc-no-reply@github.com",
+    "approver": { "name": "ai", "email": "andrey@sitnik.es" },
+    "trustedPublisher": {
+      "id": "github",
+      "oidcConfigId": "oidc:7015bb61-bff0-419f-9d41-14aac5a5ec5c"
+    }
+  },
+  "homepage": "https://postcss.org/",
+  "keywords": [
+    "css",
+    "manipulation",
+    "parser",
+    "postcss",
+    "preprocessor",
+    "rework",
+    "source map",
+    "transform",
+    "transpiler"
+  ],
+  "repository": { "url": "git+https://github.com/postcss/postcss.git", "type": "git" },
+  "_npmVersion": "11.19.0",
+  "description": "Tool for transforming styles with JS plugins",
+  "directories": {},
+  "maintainers": [{ "name": "ai", "email": "andrey@sitnik.es" }],
+  "_nodeVersion": "26.8.1",
+  "dependencies": { "nanoid": "^3.3.18", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" },
+  "_hasShrinkwrap": false,
+  "_npmOperationalInternal": {
+    "tmp": "tmp/postcss_8.5.28_1788448439724_0.41196797890085124",
+    "host": "s3://npm-registry-packages-npm-production"
+  },
+  "_id": "postcss@8.5.28",
+  "version": "8.5.28"
+}

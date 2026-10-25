@@ -20,9 +20,12 @@ natives are rare.)
 - **Optional** native dep (`optionalDependencies`) → **skipped with a warning**,
   matching npm's non-fatal-optional contract. This is why esbuild's `@esbuild/*`
   platform binaries (optional) are skipped and Vite still installs.
-- A package with a **shadow-registry substitution** (user `overrides` or the
-  builtin recipe table, D-005) is materialized from its exact synthetic or
-  registry-backed recipe *before* the check, so it never trips. Baked
+- A package with a **shadow-registry substitution** (a user `overrides` value
+  naming a package, or the builtin recipe table, D-005) is materialized from
+  its exact synthetic or registry-backed recipe *before* the check, so it
+  never trips. A user override npm reads as a version/range (`"pkg": "1.2.3"`,
+  `"pkg": "^1"`, `latest`) is the dependency's spec, not a substitution: the
+  check and the builtin recipes apply as for a declared `pkg@1.2.3` (ADR-0451). Baked
   substitutions are **never silent**: the install output names the shadow
   registry for every materialization
   (ADR-0188). An installed version outside a shim's proven range fails loudly
@@ -35,11 +38,11 @@ natives are rare.)
 |---|---|---|
 | `opencode-ai` | Distributed as a native binary (`bin: opencode.exe`, `os`/`cpu`, platform-binary optional deps). | ❌ `ENATIVEUNSUPPORTED` — cannot run; no JS port. |
 | `better-sqlite3` | node-gyp native addon. | ❌ — use `sql.js` / `@sqlite.org/sqlite-wasm` via an `override` (D-005). |
-| `bcrypt` | Native addon. | ✅ auto-shimmed → `bcryptjs` (baked override; the install prints the substitution line). |
+| `bcrypt` | Native addon. | ❌ the baked substitution resolves `bcryptjs@3.0.3` but fails the install: `npm install bcrypt` → `install failed: Installed package bcrypt has no top-level lock version` (the substitute is not placed at the requested name). Install `bcryptjs` directly. `backlog/npm-client/bcrypt-substitution-install` |
 | `fsevents` | macOS-only native; always an `optionalDependency`. | ⏭️ skipped with warning (non-fatal). |
-| `@esbuild/<platform>` | esbuild's platform binaries (optional deps of `esbuild`). | ⏭️ skipped; exact `esbuild@0.28.0` is synthetic-materialized by the builtin registry and binds the attested `esbuild-wasm@0.28.0` asset over guest VFS. There is no `@esbuild/wasi-preview1` package alias or alias tarball. The synthetic `esbuild` bin throws `NotImplementedError('esbuild.cli')`. **Vite 8 transforms via oxc/Rolldown, not esbuild** — its plan and capability stay empty. |
-| `@rollup/rollup-<platform>` | rollup's optional native binaries. | ⏭️ skipped; the installer patches `rollup/dist/native.js` at install time to the real `@rollup/wasm-node` parser, co-installed in version lockstep (ADR-0188). Vite 8 parses via `rolldown/parseAst`, not rollup — no rollup shim in a Vite 8 tree. |
-| `@rolldown/binding-<platform>` | Rolldown's native platform bindings. | ⏭️ skipped for native platforms; `@rolldown/binding-wasm32-wasi` installs and is wired through `node:wasi` + kernel-backed `worker_threads`; full createServer/transform proof requires a SAB + kernel-worker browser harness. |
+| `@esbuild/<platform>` | esbuild's native platform binaries. | ⏭️ substituted: COI installs the requested upstream `esbuild-wasm` version and delegates its stock Node API/bin. Verified 0.21.5/0.25.12/0.28.2; other versions ⚠️ not verified. No-COI uses upstream 0.28.0 through SW children; exact admission and the facade `esbuild.cli` gap remain. No preview1 alias. Vite 8 uses oxc/Rolldown. |
+| `@rollup/rollup-<platform>` | rollup's optional native binaries. | ⏭️ skipped. ⚠️ ceiling: rifty-patched bytes, `rollup ^4` only. The installer patches `rollup/dist/native.js` at install time to the real `@rollup/wasm-node` parser, co-installed in version lockstep (ADR-0188). Vite 8 parses via `rolldown/parseAst`, not rollup — no rollup shim in a Vite 8 tree. |
+| `@rolldown/binding-<platform>` | Rolldown's native platform bindings. | ⏭️ skipped for native platforms; `@rolldown/binding-wasm32-wasi` installs and is wired through `node:wasi` + kernel-backed `worker_threads`; full createServer/transform proof requires a SAB + kernel-worker browser harness. ⚠️ ceiling: proven only in the Vite 8.0.16 closure (`@emnapi/core@1.10.0` backport, `@napi-rs/wasm-runtime@1.1.6` override). |
 
 ## Escape hatch
 
@@ -51,5 +54,6 @@ entry in `@riftydev/shadow-registry`):
 { "overrides": { "better-sqlite3": "sql.js" } }
 ```
 
-A self-map (`"pkg": "pkg"`) bypasses the check if you're certain a `cpu`-pinned
-package is actually pure-JS (rare). See `docs/adr/npm-client/0051-native-dependency-install-policy.md`.
+A self-map (`"pkg": "pkg"`, or rifty's `"pkg": "pkg@1.2.3"`) bypasses the check
+if you're certain a `cpu`-pinned package is actually pure-JS (rare); npm's own
+version spelling (`"pkg": "1.2.3"`) does not. See `docs/adr/npm-client/0051-native-dependency-install-policy.md`.

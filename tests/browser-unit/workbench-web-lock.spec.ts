@@ -14,16 +14,17 @@ interface OpenAttempt {
   readonly message: string;
 }
 
-async function installWorkbenchHarness(page: Page): Promise<void> {
-  await page.evaluate(async () => {
+async function installWorkbenchHarness(page: Page, namespace?: string): Promise<void> {
+  await page.evaluate(async (namespace) => {
     interface Workbench {
       close(): Promise<void>;
     }
 
     interface WorkbenchHarness {
-      open(): Promise<void>;
+      open(namespace?: string): Promise<void>;
       close(): Promise<void>;
       workerConstructions(): number;
+      boundaryCalls(): { workers: number; locks: number; registrations: number };
     }
 
     interface HostAssets {
@@ -39,6 +40,20 @@ async function installWorkbenchHarness(page: Page): Promise<void> {
 
     const NativeWorker = globalThis.Worker;
     let workerConstructions = 0;
+    let lockRequests = 0;
+    let registrations = 0;
+    navigator.locks.request = new Proxy(navigator.locks.request, {
+      apply(target, receiver, args) {
+        lockRequests += 1;
+        return Reflect.apply(target, receiver, args);
+      },
+    });
+    navigator.serviceWorker.register = new Proxy(navigator.serviceWorker.register, {
+      apply(target, receiver, args) {
+        registrations += 1;
+        return Reflect.apply(target, receiver, args);
+      },
+    });
     globalThis.Worker = new Proxy(NativeWorker, {
       construct(target, args) {
         workerConstructions += 1;
@@ -66,7 +81,7 @@ async function installWorkbenchHarness(page: Page): Promise<void> {
     let workbench: Workbench | null = null;
     const scope = globalThis as typeof globalThis & { __workbenchLockHarness?: WorkbenchHarness };
     scope.__workbenchLockHarness = Object.freeze({
-      async open() {
+      async open(selectedNamespace = namespace) {
         if (workbench !== null) throw new Error('Workbench harness is already open');
         workbench = await publicEntry.openWorkbench({
           deployment: {
@@ -76,7 +91,10 @@ async function installWorkbenchHarness(page: Page): Promise<void> {
             previewProbeTimeoutMs: 30_000,
           },
           packageAcquisition: { registryUrl: '/npm-registry' },
-          storage: { persistence: 'ephemeral' },
+          storage: {
+            persistence: selectedNamespace === undefined ? 'ephemeral' : 'required',
+            ...(selectedNamespace === undefined ? {} : { namespace: selectedNamespace }),
+          },
         });
       },
       async close() {
@@ -86,20 +104,21 @@ async function installWorkbenchHarness(page: Page): Promise<void> {
         workbench = null;
       },
       workerConstructions: () => workerConstructions,
+      boundaryCalls: () => ({ workers: workerConstructions, locks: lockRequests, registrations }),
     });
-  });
+  }, namespace);
 }
 
-function openWorkbench(page: Page): Promise<void> {
-  return page.evaluate(async () => {
+function openWorkbench(page: Page, namespace?: string): Promise<void> {
+  return page.evaluate(async (namespace) => {
     const harness = (
       globalThis as typeof globalThis & {
-        __workbenchLockHarness?: { open(): Promise<void> };
+        __workbenchLockHarness?: { open(namespace?: string): Promise<void> };
       }
     ).__workbenchLockHarness;
     if (harness === undefined) throw new Error('Workbench lock harness is not installed');
-    await harness.open();
-  });
+    await harness.open(namespace);
+  }, namespace);
 }
 
 function closeWorkbench(page: Page): Promise<void> {
@@ -216,5 +235,72 @@ test('origin Web Lock excludes a second page and a page crash releases the lease
       await closeWorkbench(secondPage).catch(() => {});
       await secondPage.close();
     }
+  }
+});
+
+test('different storage namespaces still share the origin lease', async ({ context, page }) => {
+  const other = await context.newPage();
+  try {
+    await Promise.all([gotoHarness(page), gotoHarness(other)]);
+    await installWorkbenchHarness(page, 'lease-A');
+    await installWorkbenchHarness(other, 'lease-B');
+    await openWorkbench(page);
+    expect(await workerConstructions(other)).toBe(0);
+    expect(await attemptOpenWorkbench(other)).toEqual({
+      ok: false,
+      name: 'WorkbenchOriginOccupiedError',
+      message: "WorkbenchOriginOccupiedError: another page holds this origin's Workbench",
+    });
+    expect(await workerConstructions(other)).toBe(0);
+    expect(await workbenchLockSnapshot(other)).toEqual({
+      held: [{ name: WORKBENCH_LOCK, mode: 'exclusive' }],
+      pending: [],
+    });
+    await closeWorkbench(page);
+    await openWorkbench(other);
+    expect(await workerConstructions(other)).toBeGreaterThan(0);
+    expect(await workbenchLockSnapshot(other)).toEqual({
+      held: [{ name: WORKBENCH_LOCK, mode: 'exclusive' }],
+      pending: [],
+    });
+    await closeWorkbench(other);
+    expect(await workbenchLockSnapshot(other)).toEqual({ held: [], pending: [] });
+  } finally {
+    await closeWorkbench(page).catch(() => {});
+    await closeWorkbench(other).catch(() => {});
+    await other.close();
+  }
+});
+
+test('invalid public namespace rejects before native admission effects and permits a valid retry', async ({
+  page,
+}) => {
+  await gotoHarness(page);
+  await installWorkbenchHarness(page, 'a/b');
+  try {
+    const invalid = await attemptOpenWorkbench(page);
+    expect.soft(invalid.ok).toBe(false);
+    expect
+      .soft(
+        await page.evaluate(() => {
+          const harness = (
+            globalThis as typeof globalThis & {
+              __workbenchLockHarness?: {
+                boundaryCalls(): { workers: number; locks: number; registrations: number };
+              };
+            }
+          ).__workbenchLockHarness;
+          if (harness === undefined) throw new Error('Workbench lock harness is not installed');
+          return harness.boundaryCalls();
+        }),
+      )
+      .toEqual({ workers: 0, locks: 0, registrations: 0 });
+    await closeWorkbench(page);
+    await openWorkbench(page, 'valid-after-invalid');
+    expect(await workerConstructions(page)).toBeGreaterThan(0);
+    await closeWorkbench(page);
+    expect(await workbenchLockSnapshot(page)).toEqual({ held: [], pending: [] });
+  } finally {
+    await closeWorkbench(page);
   }
 });

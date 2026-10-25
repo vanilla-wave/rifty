@@ -1,0 +1,463 @@
+[
+  {
+    "sample": "ui-before-types",
+    "lane": "rifty",
+    "agentStatus": "done",
+    "stage": null,
+    "error": null,
+    "artifact": "agent-bench-baseline-ui-before-types.json.gz",
+    "observations": [
+      {
+        "tool": "read_file",
+        "arguments": {
+          "path": "package.json"
+        },
+        "isError": false,
+        "text": "{\"dependencies\":{\"react\":\"^19.0.0\",\"react-dom\":\"^19.0.0\",\"react-router-dom\":\"^7.0.0\"},\"devDependencies\":{\"@types/react\":\"^19.0.0\",\"@types/react-dom\":\"^19.0.0\",\"@vitejs/plugin-react\":\"^5.0.0\",\"typescript\":\"^5.0.0\",\"vite\":\"^7.0.0\"},\"name\":\"rifty-react-vite-app\",\"private\":true,\"scripts\":{\"build\":\"vite build\",\"dev\":\"vite\",\"preview\":\"vite preview\",\"vite\":\"vite\"},\"type\":\"module\",\"version\":\"0.0.0\"}\n"
+      },
+      {
+        "tool": "read_file",
+        "arguments": {
+          "path": "node_modules/@types/react/package.json"
+        },
+        "isError": true,
+        "text": "{\"name\":\"ProjectFileOperationError\",\"message\":\"ProjectFileOperationError: readFile /node_modules/@types/react/package.json failed (read)\",\"path\":\"/node_modules/@types/react/package.json\",\"mutationOutcome\":null}"
+      },
+      {
+        "tool": "read_file",
+        "arguments": {
+          "path": "node_modules/@types/react-dom/package.json"
+        },
+        "isError": true,
+        "text": "{\"name\":\"ProjectFileOperationError\",\"message\":\"ProjectFileOperationError: readFile /node_modules/@types/react-dom/package.json failed (read)\",\"path\":\"/node_modules/@types/react-dom/package.json\",\"mutationOutcome\":null}"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "./node_modules/.bin/tsc --noEmit"
+        },
+        "isError": true,
+        "text": "\u001b[91merror\u001b[0m\u001b[90m TS2688: \u001b[0mCannot find type definition file for 'babel__core'.\n  The file is in the program because:\n    Entry point for implicit type library 'babel__core'\n\n\u001b[91merror\u001b[0m\u001b[90m TS2688: \u001b[0mCannot find type definition file for 'babel__generator'.\n  The file is in the program because:\n    Entry point for implicit type library 'babel__generator'\n\n\u001b[91merror\u001b[0m\u001b[90m TS2688: \u001b[0mCannot find type definition file for 'babel__template'.\n  The file is in the program because:\n    Entry point for implicit type library 'babel__template'\n\n\u001b[91merror\u001b[0m\u001b[90m TS2688: \u001b[0mCannot find type definition file for 'babel__traverse'.\n  The file is in the program because:\n    Entry point for implicit type library 'babel__traverse'\n\n\u001b[91merror\u001b[0m\u001b[90m TS2688: \u001b[0mCannot find type definition file for 'estree'.\n  The file is in the program because:\n    Entry point for implicit type library 'estree'\n\n\u001b[91merror\u001b[0m\u001b[90m TS2688: \u001b[0mCannot find type definition file for 'react'.\n  The file is in the program because:\n    Entry point for implicit type library 'react'\n\n\u001b[91merror\u001b[0m\u001b[90m TS2688: \u001b[0mCannot find type definition file for 'react-dom'.\n  The file is in the program because:\n    Entry point for implicit type library 'react-dom'\n\n\nFound 7 errors.\n\n"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "node -e \"console.log('BASELINE_NODE_E')\""
+        },
+        "isError": false,
+        "text": "BASELINE_NODE_E\n"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "node -p \"6 * 7\""
+        },
+        "isError": false,
+        "text": "42\n"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "pwd && echo BASELINE_BUILTINS"
+        },
+        "isError": false,
+        "text": "/\nBASELINE_BUILTINS\n"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "git status --short"
+        },
+        "isError": false,
+        "text": "On branch main\nnothing to commit, working tree clean\n"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "echo BASELINE_PIPE | cat"
+        },
+        "isError": false,
+        "text": "BASELINE_PIPE\n"
+      },
+      {
+        "tool": "diagnostics",
+        "arguments": {
+          "path": "src/App.tsx"
+        },
+        "isError": false,
+        "text": "[{\"range\":{\"start\":{\"line\":8,\"character\":4},\"end\":{\"line\":28,\"character\":20}},\"severity\":1,\"message\":\"Could not find a declaration file for module 'react/jsx-runtime'. '/.rifty/workbench/v1/projects/scratch/tree/node_modules/react/jsx-runtime.js' implicitly has an 'any' type.\\n  Try `npm i --save-dev @types/react` if it exists or add a new declaration (.d.ts) file containing `declare module 'react/jsx-runtime';`\",\"code\":7016,\"source\":\"ts\"},{\"range\":{\"start\":{\"line\":9,\"character\":6},\"end\":{\"line\":9,\"character\":33}},\"severity\":1,\"message\":\"JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.\",\"code\":7026,\"source\":\"ts\"},{\"range\":{\"start\":{\"line\":10,\"character\":8},\"end\":{\"line\":10,\"character\":32}},\"severity\":1,\"message\":\"JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.\",\"code\":7026,\"source\":\"ts\"},{\"range\":{\"start\":{\"line\":10,\"character\":41},\"end\":{\"line\":10,\"character\":48}},\"severity\":1,\"message\":\"JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.\",\"code\":7026,\"source\":\"ts\"},{\"range\":{\"start\":{\"line\":11,\"character\":8},\"end\":{\"line\":11,\"character\":13}},\"severity\":1,\"message\":\"JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.\",\"code\":7026,\"source\":\"ts\"},{\"range\":{\"start\":{\"line\":17,\"character\":8},\"end\":{\"line\":17,\"character\":14}},\"severity\":1,\"message\":\"JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.\",\"code\":7026,\"source\":\"ts\"},{\"range\":{\"start\":{\"line\":18,\"character\":6},\"end\":{\"line\":18,\"character\":15}},\"severity\":1,\"message\":\"JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.\",\"code\":7026,\"source\":\"ts\"},{\"range\":{\"start\":{\"line\":19,\"character\":6},\"end\":{\"line\":19,\"character\":29}},\"severity\":1,\"message\":\"JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.\",\"code\":7026,\"source\":\"ts\"},{\"range\":{\"start\":{\"line\":27,\"character\":6},\"end\":{\"line\":27,\"character\":13}},\"severity\":1,\"message\":\"JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.\",\"code\":7026,\"source\":\"ts\"}]"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "npm install --save-dev vitest@2.1.9"
+        },
+        "isError": true,
+        "text": "$ npm install --save-dev vitest@2.1.9\nnpm: installing vitest@2.1.9…\nnpm: + @types/react@19.3.0 (cached)\nnpm: + csstype@3.2.3 (cached)\nnpm: + @types/react-dom@19.3.0 (cached)\nnpm: + @vitejs/plugin-react@5.2.0 (cached)\nnpm: + @babel/core@7.29.7 (cached)\nnpm: + debug@4.4.3 (cached)\nnpm: + ms@2.1.3 (cached)\nnpm: + json5@2.2.3 (cached)\nnpm: + semver@6.3.1 (cached)\nnpm: + gensync@1.0.0-beta.2 (cached)\nnpm: + @babel/types@7.29.8 (cached)\nnpm: + @babel/helper-string-parser@7.29.7 (cached)\nnpm: + @babel/helper-validator-identifier@7.29.7 (cached)\nnpm: + @babel/parser@7.29.8 (cached)\nnpm: + @babel/helpers@7.29.7 (cached)\nnpm: + @babel/template@7.29.7 (cached)\nnpm: + @babel/code-frame@7.29.7 (cached)\nnpm: + js-tokens@4.0.0 (cached)\nnpm: + picocolors@1.1.1 (cached)\nnpm: + @babel/traverse@7.29.8 (cached)\nnpm: + @babel/generator@7.29.8 (cached)\nnpm: + jsesc@3.1.0 (cached)\nnpm: + @jridgewell/gen-mapping@0.3.13 (cached)\nnpm: + @jridgewell/trace-mapping@0.3.31 (cached)\nnpm: + @jridgewell/resolve-uri@3.1.2 (cached)\nnpm: + @jridgewell/sourcemap-codec@1.6.0 (cached)\nnpm: + @babel/helper-globals@7.29.7 (cached)\nnpm: + convert-source-map@2.0.0 (cached)\nnpm: + @jridgewell/remapping@2.3.5 (cached)\nnpm: + @babel/helper-module-transforms@7.29.7 (cached)\nnpm: + @babel/helper-module-imports@7.29.7 (cached)\nnpm: + @babel/helper-compilation-targets@7.29.7 (cached)\nnpm: + lru-cache@5.1.1 (cached)\nnpm: + yallist@3.1.1 (cached)\nnpm: + browserslist@4.28.9 (cached)\nnpm: + caniuse-lite@1.0.30001810 (cached)\nnpm: + node-releases@2.0.55 (cached)\nnpm: + electron-to-chromium@1.5.427 (cached)\nnpm: + update-browserslist-db@1.3.3 (cached)\nnpm: + escalade@3.2.0 (cached)\nnpm: + baseline-browser-mapping@2.11.23 (cached)\nnpm: + @babel/compat-data@7.29.7 (cached)\nnpm: + @babel/helper-validator-option@7.29.7 (cached)\nnpm: + react-refresh@0.18.0 (cached)\nnpm: + @types/babel__core@7.20.5 (cached)\nnpm: + @types/babel__template@7.4.4 (cached)\nnpm: + @types/babel__traverse@7.28.0 (cached)\nnpm: + @types/babel__generator@7.27.0 (cached)\nnpm: + @rolldown/pluginutils@1.0.0-rc.3 (cached)\nnpm: + @babel/plugin-transform-react-jsx-self@7.29.7 (cached)\nnpm: + @babel/helper-plugin-utils@7.29.7 (cached)\nnpm: + @babel/plugin-transform-react-jsx-source@7.29.7 (cached)\nnpm: + vite@7.3.6 (cached)\nnpm: + fdir@6.5.0 (cached)\nnpm: + picomatch@4.0.7 (cached)\nnpm: + rollup@4.63.2 (cached)\nnpm: + @types/estree@1.0.9 (cached)\nnpm: + @rollup/wasm-node@4.63.2 (cached)\nnpm: + esbuild-wasm@0.28.0 (cached)\nnpm: + postcss@8.5.28 (cached)\nnpm: + nanoid@3.3.19 (cached)\nnpm: + source-map-js@1.2.1 (cached)\nnpm: + tinyglobby@0.2.17 (cached)\nnpm: + typescript@5.9.3 (cached)\nnpm: + vitest@2.1.9\nnpm: + chai@5.3.3\nnpm: + pathval@2.0.1\nnpm: + loupe@3.2.1\nnpm: + deep-eql@5.0.2\nnpm: + check-error@2.1.3\nnpm: + assertion-error@2.0.1\nnpm: + vite@5.4.21\nnpm: install failed: Not implemented: esbuild.version (shadow recipe does not admit ^0.21.3)\n"
+      },
+      {
+        "tool": "write_file",
+        "arguments": {
+          "path": "baseline.test.js",
+          "content": "import {it,expect} from 'vitest';\nimport {readFileSync} from 'node:fs';\nit('loads the real project package',()=>{expect(JSON.parse(readFileSync('package.json','utf8')).name).toBeTruthy();});\n"
+        },
+        "isError": false,
+        "text": "wrote 191 bytes to baseline.test.js"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "./node_modules/.bin/vitest run baseline.test.js"
+        },
+        "isError": true,
+        "text": "./node_modules/.bin/vitest: No such file or directory\n"
+      }
+    ]
+  },
+  {
+    "sample": "native",
+    "lane": "local-reference",
+    "agentStatus": "done",
+    "stage": null,
+    "error": null,
+    "artifact": "agent-bench-baseline-native.json.gz",
+    "observations": [
+      {
+        "tool": "read",
+        "arguments": {
+          "path": "package.json"
+        },
+        "isError": false,
+        "text": "{\"dependencies\":{\"react\":\"^19.0.0\",\"react-dom\":\"^19.0.0\",\"react-router-dom\":\"^7.0.0\"},\"devDependencies\":{\"@types/react\":\"^19.0.0\",\"@types/react-dom\":\"^19.0.0\",\"@vitejs/plugin-react\":\"^5.0.0\",\"typescript\":\"^5.0.0\",\"vite\":\"^7.0.0\"},\"name\":\"rifty-react-vite-app\",\"private\":true,\"scripts\":{\"build\":\"vite build\",\"dev\":\"vite\",\"preview\":\"vite preview\",\"vite\":\"vite\"},\"type\":\"module\",\"version\":\"0.0.0\"}\n"
+      },
+      {
+        "tool": "read",
+        "arguments": {
+          "path": "node_modules/@types/react/package.json"
+        },
+        "isError": false,
+        "text": "{\n    \"name\": \"@types/react\",\n    \"version\": \"19.2.18\",\n    \"description\": \"TypeScript definitions for react\",\n    \"homepage\": \"https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react\",\n    \"license\": \"MIT\",\n    \"contributors\": [\n        {\n            \"name\": \"Asana\",\n            \"url\": \"https://asana.com\"\n        },\n        {\n            \"name\": \"AssureSign\",\n            \"url\": \"http://www.assuresign.com\"\n        },\n        {\n            \"name\": \"Microsoft\",\n            \"url\": \"https://microsoft.com\"\n        },\n        {\n            \"name\": \"John Reilly\",\n            \"githubUsername\": \"johnnyreilly\",\n            \"url\": \"https://github.com/johnnyreilly\"\n        },\n        {\n            \"name\": \"Benoit Benezech\",\n            \"githubUsername\": \"bbenezech\",\n            \"url\": \"https://github.com/bbenezech\"\n        },\n        {\n            \"name\": \"Patricio Zavolinsky\",\n            \"githubUsername\": \"pzavolinsky\",\n            \"url\": \"https://github.com/pzavolinsky\"\n        },\n        {\n            \"name\": \"Eric Anderson\",\n            \"githubUsername\": \"ericanderson\",\n            \"url\": \"https://github.com/ericanderson\"\n        },\n        {\n            \"name\": \"Dovydas Navickas\",\n            \"githubUsername\": \"DovydasNavickas\",\n            \"url\": \"https://github.com/DovydasNavickas\"\n        },\n        {\n            \"name\": \"Josh Rutherford\",\n            \"githubUsername\": \"theruther4d\",\n            \"url\": \"https://github.com/theruther4d\"\n        },\n        {\n            \"name\": \"Guilherme Hübner\",\n            \"githubUsername\": \"guilhermehubner\",\n            \"url\": \"https://github.com/guilhermehubner\"\n        },\n        {\n            \"name\": \"Ferdy Budhidharma\",\n            \"githubUsername\": \"ferdaber\",\n            \"url\": \"https://github.com/ferdaber\"\n        },\n        {\n            \"name\": \"Johann Rakotoharisoa\",\n            \"githubUsername\": \"jrakotoharisoa\",\n            \"url\": \"https://github.com/jrakotoharisoa\"\n        },\n        {\n            \"name\": \"Olivier Pascal\",\n            \"githubUsername\": \"pascaloliv\",\n            \"url\": \"https://github.com/pascaloliv\"\n        },\n        {\n            \"name\": \"Martin Hochel\",\n            \"githubUsername\": \"hotell\",\n            \"url\": \"https://github.com/hotell\"\n        },\n        {\n            \"name\": \"Frank Li\",\n            \"githubUsername\": \"franklixuefei\",\n            \"url\": \"https://github.com/franklixuefei\"\n        },\n        {\n            \"name\": \"Jessica Franco\",\n            \"githubUsername\": \"Jessidhia\",\n            \"url\": \"https://github.com/Jessidhia\"\n        },\n        {\n            \"name\": \"Saransh Kataria\",\n            \"githubUsername\": \"saranshkataria\",\n            \"url\": \"https://github.com/saranshkataria\"\n        },\n        {\n            \"name\": \"Kanitkorn Sujautra\",\n            \"githubUsername\": \"lukyth\",\n            \"url\": \"https://github.com/lukyth\"\n        },\n        {\n            \"name\": \"Sebastian Silbermann\",\n            \"githubUsername\": \"eps1lon\",\n            \"url\": \"https://github.com/eps1lon\"\n        },\n        {\n            \"name\": \"Kyle Scully\",\n            \"githubUsername\": \"zieka\",\n            \"url\": \"https://github.com/zieka\"\n        },\n        {\n            \"name\": \"Cong Zhang\",\n            \"githubUsername\": \"dancerphil\",\n            \"url\": \"https://github.com/dancerphil\"\n        },\n        {\n            \"name\": \"Dimitri Mitropoulos\",\n            \"githubUsername\": \"dimitropoulos\",\n            \"url\": \"https://github.com/dimitropoulos\"\n        },\n        {\n            \"name\": \"JongChan Choi\",\n            \"githubUsername\": \"disjukr\",\n            \"url\": \"https://github.com/disjukr\"\n        },\n        {\n            \"name\": \"Victor Magalhães\",\n            \"githubUsername\": \"vhfmag\",\n            \"url\": \"https://github.com/vhfmag\"\n        },\n        {\n            \"name\": \"Priyanshu Rav\",\n            \"githubUsername\": \"priyanshurav\",\n            \"url\": \"https://github.com/priyanshurav\"\n        },\n        {\n            \"name\": \"Dmitry Semigradsky\",\n            \"githubUsername\": \"Semigradsky\",\n            \"url\": \"https://github.com/Semigradsky\"\n        },\n        {\n            \"name\": \"Matt Pocock\",\n            \"githubUsername\": \"mattpocock\",\n            \"url\": \"https://github.com/mattpocock\"\n        }\n    ],\n    \"main\": \"\",\n    \"types\": \"index.d.ts\",\n    \"typesVersions\": {\n        \"<=5.0\": {\n            \"*\": [\n                \"ts5.0/*\"\n            ]\n        }\n    },\n    \"exports\": {\n        \".\": {\n            \"types@<=5.0\": {\n                \"default\": \"./ts5.0/index.d.ts\"\n            },\n            \"types\": {\n                \"default\": \"./index.d.ts\"\n            }\n        },\n        \"./canary\": {\n            \"types@<=5.0\": {\n                \"default\": \"./ts5.0/canary.d.ts\"\n            },\n            \"types\": {\n                \"default\": \"./canary.d.ts\"\n            }\n        },\n        \"./compiler-runtime\": {\n            \"types\": {\n                \"default\": \"./compiler-runtime.d.ts\"\n            }\n        },\n        \"./experimental\": {\n            \"types@<=5.0\": {\n                \"default\": \"./ts5.0/experimental.d.ts\"\n            },\n            \"types\": {\n                \"default\": \"./experimental.d.ts\"\n            }\n        },\n        \"./jsx-runtime\": {\n            \"types@<=5.0\": {\n                \"default\": \"./ts5.0/jsx-runtime.d.ts\"\n            },\n            \"types\": {\n                \"default\": \"./jsx-runtime.d.ts\"\n            }\n        },\n        \"./jsx-dev-runtime\": {\n            \"types@<=5.0\": {\n                \"default\": \"./ts5.0/jsx-dev-runtime.d.ts\"\n            },\n            \"types\": {\n                \"default\": \"./jsx-dev-runtime.d.ts\"\n            }\n        },\n        \"./package.json\": \"./package.json\"\n    },\n    \"repository\": {\n        \"type\": \"git\",\n        \"url\": \"https://github.com/DefinitelyTyped/DefinitelyTyped.git\",\n        \"directory\": \"types/react\"\n    },\n    \"scripts\": {},\n    \"dependencies\": {\n        \"csstype\": \"^3.2.2\"\n    },\n    \"peerDependencies\": {},\n    \"typesPublisherContentHash\": \"7694d96d924f28718f57b029b2c1a3dd61c406fa6ac1ef2619887840a17bfc33\",\n    \"typeScriptVersion\": \"5.6\"\n}"
+      },
+      {
+        "tool": "read",
+        "arguments": {
+          "path": "node_modules/@types/react-dom/package.json"
+        },
+        "isError": false,
+        "text": "{\n    \"name\": \"@types/react-dom\",\n    \"version\": \"19.2.5\",\n    \"description\": \"TypeScript definitions for react-dom\",\n    \"homepage\": \"https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom\",\n    \"license\": \"MIT\",\n    \"contributors\": [\n        {\n            \"name\": \"Asana\",\n            \"url\": \"https://asana.com\"\n        },\n        {\n            \"name\": \"AssureSign\",\n            \"url\": \"http://www.assuresign.com\"\n        },\n        {\n            \"name\": \"Microsoft\",\n            \"url\": \"https://microsoft.com\"\n        },\n        {\n            \"name\": \"MartynasZilinskas\",\n            \"githubUsername\": \"MartynasZilinskas\",\n            \"url\": \"https://github.com/MartynasZilinskas\"\n        },\n        {\n            \"name\": \"Josh Rutherford\",\n            \"githubUsername\": \"theruther4d\",\n            \"url\": \"https://github.com/theruther4d\"\n        },\n        {\n            \"name\": \"Jessica Franco\",\n            \"githubUsername\": \"Jessidhia\",\n            \"url\": \"https://github.com/Jessidhia\"\n        },\n        {\n            \"name\": \"Sebastian Silbermann\",\n            \"githubUsername\": \"eps1lon\",\n            \"url\": \"https://github.com/eps1lon\"\n        }\n    ],\n    \"main\": \"\",\n    \"types\": \"index.d.ts\",\n    \"exports\": {\n        \".\": {\n            \"types\": {\n                \"default\": \"./index.d.ts\"\n            }\n        },\n        \"./client\": {\n            \"types\": {\n                \"default\": \"./client.d.ts\"\n            }\n        },\n        \"./canary\": {\n            \"types\": {\n                \"default\": \"./canary.d.ts\"\n            }\n        },\n        \"./server\": {\n            \"types\": {\n                \"default\": \"./server.d.ts\"\n            }\n        },\n        \"./server.browser\": {\n            \"types\": {\n                \"default\": \"./server.browser.d.ts\"\n            }\n        },\n        \"./server.bun\": {\n            \"types\": {\n                \"default\": \"./server.bun.d.ts\"\n            }\n        },\n        \"./server.edge\": {\n            \"types\": {\n                \"default\": \"./server.edge.d.ts\"\n            }\n        },\n        \"./server.node\": {\n            \"types\": {\n                \"default\": \"./server.node.d.ts\"\n            }\n        },\n        \"./static\": {\n            \"types\": {\n                \"default\": \"./static.d.ts\"\n            }\n        },\n        \"./static.browser\": {\n            \"types\": {\n                \"default\": \"./static.browser.d.ts\"\n            }\n        },\n        \"./static.edge\": {\n            \"types\": {\n                \"default\": \"./static.edge.d.ts\"\n            }\n        },\n        \"./static.node\": {\n            \"types\": {\n                \"default\": \"./static.node.d.ts\"\n            }\n        },\n        \"./experimental\": {\n            \"types\": {\n                \"default\": \"./experimental.d.ts\"\n            }\n        },\n        \"./test-utils\": {\n            \"types\": {\n                \"default\": \"./test-utils/index.d.ts\"\n            }\n        },\n        \"./package.json\": \"./package.json\"\n    },\n    \"repository\": {\n        \"type\": \"git\",\n        \"url\": \"https://github.com/DefinitelyTyped/DefinitelyTyped.git\",\n        \"directory\": \"types/react-dom\"\n    },\n    \"scripts\": {},\n    \"dependencies\": {},\n    \"peerDependencies\": {\n        \"@types/react\": \"^19.2.0\"\n    },\n    \"typesPublisherContentHash\": \"675738f9dc712dad833f796743a262525b9fb61df92128300424f5da03e88ab2\",\n    \"typeScriptVersion\": \"5.6\"\n}"
+      },
+      {
+        "tool": "bash",
+        "arguments": {
+          "command": "./node_modules/.bin/tsc --noEmit"
+        },
+        "isError": false,
+        "text": "(no output)"
+      },
+      {
+        "tool": "bash",
+        "arguments": {
+          "command": "node -e \"console.log('BASELINE_NODE_E')\""
+        },
+        "isError": false,
+        "text": "BASELINE_NODE_E\n"
+      },
+      {
+        "tool": "bash",
+        "arguments": {
+          "command": "node -p \"6 * 7\""
+        },
+        "isError": false,
+        "text": "42\n"
+      },
+      {
+        "tool": "bash",
+        "arguments": {
+          "command": "pwd && echo BASELINE_BUILTINS"
+        },
+        "isError": false,
+        "text": "/private/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-bench-baseline-local-reference-wq6SLm/baseline-stock/local-reference/1/workspace\nBASELINE_BUILTINS\n"
+      },
+      {
+        "tool": "bash",
+        "arguments": {
+          "command": "git status --short"
+        },
+        "isError": false,
+        "text": "(no output)"
+      },
+      {
+        "tool": "bash",
+        "arguments": {
+          "command": "echo BASELINE_PIPE | cat"
+        },
+        "isError": false,
+        "text": "BASELINE_PIPE\n"
+      },
+      {
+        "tool": "bash",
+        "arguments": {
+          "command": "npm install --save-dev vitest@2.1.9"
+        },
+        "isError": false,
+        "text": "\nadded 37 packages, and audited 110 packages in 12s\n\n20 packages are looking for funding\n  run `npm fund` for details\n\n5 vulnerabilities (2 moderate, 2 high, 1 critical)\n\nTo address all issues (including breaking changes), run:\n  npm audit fix --force\n\nRun `npm audit` for details.\n"
+      },
+      {
+        "tool": "write",
+        "arguments": {
+          "path": "baseline.test.js",
+          "content": "import {it,expect} from 'vitest';\nimport {readFileSync} from 'node:fs';\nit('loads the real project package',()=>{expect(JSON.parse(readFileSync('package.json','utf8')).name).toBeTruthy();});\n"
+        },
+        "isError": false,
+        "text": "Successfully wrote to baseline.test.js"
+      },
+      {
+        "tool": "bash",
+        "arguments": {
+          "command": "./node_modules/.bin/vitest run baseline.test.js"
+        },
+        "isError": false,
+        "text": "\n RUN  v2.1.9 /private/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-bench-baseline-local-reference-wq6SLm/baseline-stock/local-reference/1/workspace\n\n ✓ baseline.test.js (1 test) 1ms\n\n Test Files  1 passed (1)\n      Tests  1 passed (1)\n   Start at  05:50:21\n   Duration  155ms (transform 9ms, setup 0ms, collect 5ms, tests 1ms, environment 0ms, prepare 38ms)\n\n"
+      }
+    ]
+  },
+  {
+    "sample": "ui-fixed",
+    "lane": "rifty",
+    "agentStatus": "done",
+    "stage": null,
+    "error": null,
+    "artifact": "agent-bench-baseline-ui-fixed.json.gz",
+    "observations": [
+      {
+        "tool": "read_file",
+        "arguments": {
+          "path": "package.json"
+        },
+        "isError": false,
+        "text": "{\"dependencies\":{\"react\":\"^19.0.0\",\"react-dom\":\"^19.0.0\",\"react-router-dom\":\"^7.0.0\"},\"devDependencies\":{\"@types/react\":\"^19.0.0\",\"@types/react-dom\":\"^19.0.0\",\"@vitejs/plugin-react\":\"^5.0.0\",\"typescript\":\"^5.0.0\",\"vite\":\"^7.0.0\"},\"name\":\"rifty-react-vite-app\",\"private\":true,\"scripts\":{\"build\":\"vite build\",\"dev\":\"vite\",\"preview\":\"vite preview\",\"vite\":\"vite\"},\"type\":\"module\",\"version\":\"0.0.0\"}\n"
+      },
+      {
+        "tool": "read_file",
+        "arguments": {
+          "path": "node_modules/@types/react/package.json"
+        },
+        "isError": false,
+        "text": "{\n    \"name\": \"@types/react\",\n    \"version\": \"19.3.0\",\n    \"description\": \"TypeScript definitions for react\",\n    \"homepage\": \"https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react\",\n    \"license\": \"MIT\",\n    \"contributors\": [\n        {\n            \"name\": \"Asana\",\n            \"url\": \"https://asana.com\"\n        },\n        {\n            \"name\": \"AssureSign\",\n            \"url\": \"http://www.assuresign.com\"\n        },\n        {\n            \"name\": \"Microsoft\",\n            \"url\": \"https://microsoft.com\"\n        },\n        {\n            \"name\": \"John Reilly\",\n            \"githubUsername\": \"johnnyreilly\",\n            \"url\": \"https://github.com/johnnyreilly\"\n        },\n        {\n            \"name\": \"Benoit Benezech\",\n            \"githubUsername\": \"bbenezech\",\n            \"url\": \"https://github.com/bbenezech\"\n        },\n        {\n            \"name\": \"Patricio Zavolinsky\",\n            \"githubUsername\": \"pzavolinsky\",\n            \"url\": \"https://github.com/pzavolinsky\"\n        },\n        {\n            \"name\": \"Eric Anderson\",\n            \"githubUsername\": \"ericanderson\",\n            \"url\": \"https://github.com/ericanderson\"\n        },\n        {\n            \"name\": \"Dovydas Navickas\",\n            \"githubUsername\": \"DovydasNavickas\",\n            \"url\": \"https://github.com/DovydasNavickas\"\n        },\n        {\n            \"name\": \"Josh Rutherford\",\n            \"githubUsername\": \"theruther4d\",\n            \"url\": \"https://github.com/theruther4d\"\n        },\n        {\n            \"name\": \"Guilherme Hübner\",\n            \"githubUsername\": \"guilhermehubner\",\n            \"url\": \"https://github.com/guilhermehubner\"\n        },\n        {\n            \"name\": \"Ferdy Budhidharma\",\n            \"githubUsername\": \"ferdaber\",\n            \"url\": \"https://github.com/ferdaber\"\n        },\n        {\n            \"name\": \"Johann Rakotoharisoa\",\n            \"githubUsername\": \"jrakotoharisoa\",\n            \"url\": \"https://github.com/jrakotoharisoa\"\n        },\n        {\n            \"name\": \"Olivier Pascal\",\n            \"githubUsername\": \"pascaloliv\",\n            \"url\": \"https://github.com/pascaloliv\"\n        },\n        {\n            \"name\": \"Martin Hochel\",\n            \"githubUsername\": \"hotell\",\n            \"url\": \"https://github.com/hotell\"\n        },\n        {\n            \"name\": \"Frank Li\",\n            \"githubUsername\": \"franklixuefei\",\n            \"url\": \"https://github.com/franklixuefei\"\n        },\n        {\n            \"name\": \"Jessica Franco\",\n            \"githubUsername\": \"Jessidhia\",\n            \"url\": \"https://github.com/Jessidhia\"\n        },\n        {\n            \"name\": \"Saransh Kataria\",\n            \"githubUsername\": \"saranshkataria\",\n            \"url\": \"https://github.com/saranshkataria\"\n        },\n        {\n            \"name\": \"Kanitkorn Sujautra\",\n            \"githubUsername\": \"lukyth\",\n            \"url\": \"https://github.com/lukyth\"\n        },\n        {\n            \"name\": \"Sebastian Silbermann\",\n            \"githubUsername\": \"eps1lon\",\n            \"url\": \"https://github.com/eps1lon\"\n        },\n        {\n            \"name\": \"Kyle Scully\",\n            \"githubUsername\": \"zieka\",\n            \"url\": \"https://github.com/zieka\"\n        },\n        {\n            \"name\": \"Cong Zhang\",\n            \"githubUsername\": \"dancerphil\",\n            \"url\": \"https://github.com/dancerphil\"\n        },\n        {\n            \"name\": \"Dimitri Mitropoulos\",\n            \"githubUsername\": \"dimitropoulos\",\n            \"url\": \"https://github.com/dimitropoulos\"\n        },\n        {\n            \"name\": \"JongChan Choi\",\n            \"githubUsername\": \"disjukr\",\n            \"url\": \"https://github.com/disjukr\"\n        },\n        {\n            \"name\": \"Victor Magalhães\",\n            \"githubUsername\": \"vhfmag\",\n            \"url\": \"https://github.com/vhfmag\"\n        },\n        {\n            \"name\": \"Priyanshu Rav\",\n            \"githubUsername\": \"priyanshurav\",\n            \"url\": \"https://github.com/priyanshurav\"\n        },\n        {\n            \"name\": \"Dmitry Semigradsky\",\n            \"githubUsername\": \"Semigradsky\",\n            \"url\": \"https://github.com/Semigradsky\"\n        },\n        {\n            \"name\": \"Matt Pocock\",\n            \"githubUsername\": \"mattpocock\",\n            \"url\": \"https://github.com/mattpocock\"\n        }\n    ],\n    \"main\": \"\",\n    \"types\": \"index.d.ts\",\n    \"typesVersions\": {\n        \"<=5.0\": {\n            \"*\": [\n                \"ts5.0/*\"\n            ]\n        }\n    },\n    \"exports\": {\n        \".\": {\n            \"types@<=5.0\": {\n                \"default\": \"./ts5.0/index.d.ts\"\n            },\n            \"types\": {\n                \"default\": \"./index.d.ts\"\n            }\n        },\n        \"./canary\": {\n            \"types@<=5.0\": {\n                \"default\": \"./ts5.0/canary.d.ts\"\n            },\n            \"types\": {\n                \"default\": \"./canary.d.ts\"\n            }\n        },\n        \"./compiler-runtime\": {\n            \"types\": {\n                \"default\": \"./compiler-runtime.d.ts\"\n            }\n        },\n        \"./experimental\": {\n            \"types@<=5.0\": {\n                \"default\": \"./ts5.0/experimental.d.ts\"\n            },\n            \"types\": {\n                \"default\": \"./experimental.d.ts\"\n            }\n        },\n        \"./jsx-runtime\": {\n            \"types@<=5.0\": {\n                \"default\": \"./ts5.0/jsx-runtime.d.ts\"\n            },\n            \"types\": {\n                \"default\": \"./jsx-runtime.d.ts\"\n            }\n        },\n        \"./jsx-dev-runtime\": {\n            \"types@<=5.0\": {\n                \"default\": \"./ts5.0/jsx-dev-runtime.d.ts\"\n            },\n            \"types\": {\n                \"default\": \"./jsx-dev-runtime.d.ts\"\n            }\n        },\n        \"./package.json\": \"./package.json\"\n    },\n    \"repository\": {\n        \"type\": \"git\",\n        \"url\": \"https://github.com/DefinitelyTyped/DefinitelyTyped.git\",\n        \"directory\": \"types/react\"\n    },\n    \"scripts\": {},\n    \"dependencies\": {\n        \"csstype\": \"^3.2.2\"\n    },\n    \"peerDependencies\": {},\n    \"typesPublisherContentHash\": \"86ea5f223efc88fcaa71962f0f031a623142285e331499ee981e201dc8d2a77e\",\n    \"typeScriptVersion\": \"5.6\"\n}"
+      },
+      {
+        "tool": "read_file",
+        "arguments": {
+          "path": "node_modules/@types/react-dom/package.json"
+        },
+        "isError": false,
+        "text": "{\n    \"name\": \"@types/react-dom\",\n    \"version\": \"19.3.0\",\n    \"description\": \"TypeScript definitions for react-dom\",\n    \"homepage\": \"https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom\",\n    \"license\": \"MIT\",\n    \"contributors\": [\n        {\n            \"name\": \"Asana\",\n            \"url\": \"https://asana.com\"\n        },\n        {\n            \"name\": \"AssureSign\",\n            \"url\": \"http://www.assuresign.com\"\n        },\n        {\n            \"name\": \"Microsoft\",\n            \"url\": \"https://microsoft.com\"\n        },\n        {\n            \"name\": \"MartynasZilinskas\",\n            \"githubUsername\": \"MartynasZilinskas\",\n            \"url\": \"https://github.com/MartynasZilinskas\"\n        },\n        {\n            \"name\": \"Josh Rutherford\",\n            \"githubUsername\": \"theruther4d\",\n            \"url\": \"https://github.com/theruther4d\"\n        },\n        {\n            \"name\": \"Jessica Franco\",\n            \"githubUsername\": \"Jessidhia\",\n            \"url\": \"https://github.com/Jessidhia\"\n        },\n        {\n            \"name\": \"Sebastian Silbermann\",\n            \"githubUsername\": \"eps1lon\",\n            \"url\": \"https://github.com/eps1lon\"\n        }\n    ],\n    \"main\": \"\",\n    \"types\": \"index.d.ts\",\n    \"exports\": {\n        \".\": {\n            \"types\": {\n                \"default\": \"./index.d.ts\"\n            }\n        },\n        \"./client\": {\n            \"types\": {\n                \"default\": \"./client.d.ts\"\n            }\n        },\n        \"./canary\": {\n            \"types\": {\n                \"default\": \"./canary.d.ts\"\n            }\n        },\n        \"./server\": {\n            \"types\": {\n                \"default\": \"./server.d.ts\"\n            }\n        },\n        \"./server.browser\": {\n            \"types\": {\n                \"default\": \"./server.browser.d.ts\"\n            }\n        },\n        \"./server.bun\": {\n            \"types\": {\n                \"default\": \"./server.bun.d.ts\"\n            }\n        },\n        \"./server.edge\": {\n            \"types\": {\n                \"default\": \"./server.edge.d.ts\"\n            }\n        },\n        \"./server.node\": {\n            \"types\": {\n                \"default\": \"./server.node.d.ts\"\n            }\n        },\n        \"./static\": {\n            \"types\": {\n                \"default\": \"./static.d.ts\"\n            }\n        },\n        \"./static.browser\": {\n            \"types\": {\n                \"default\": \"./static.browser.d.ts\"\n            }\n        },\n        \"./static.edge\": {\n            \"types\": {\n                \"default\": \"./static.edge.d.ts\"\n            }\n        },\n        \"./static.node\": {\n            \"types\": {\n                \"default\": \"./static.node.d.ts\"\n            }\n        },\n        \"./experimental\": {\n            \"types\": {\n                \"default\": \"./experimental.d.ts\"\n            }\n        },\n        \"./test-utils\": {\n            \"types\": {\n                \"default\": \"./test-utils/index.d.ts\"\n            }\n        },\n        \"./package.json\": \"./package.json\"\n    },\n    \"repository\": {\n        \"type\": \"git\",\n        \"url\": \"https://github.com/DefinitelyTyped/DefinitelyTyped.git\",\n        \"directory\": \"types/react-dom\"\n    },\n    \"scripts\": {},\n    \"dependencies\": {},\n    \"peerDependencies\": {\n        \"@types/react\": \"^19.3.0\"\n    },\n    \"typesPublisherContentHash\": \"345e361651b67ba93e5757949902dbca94f299c8328b8d01937dc05b5e487d8f\",\n    \"typeScriptVersion\": \"5.6\"\n}"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "./node_modules/.bin/tsc --noEmit"
+        },
+        "isError": false,
+        "text": ""
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "node -e \"console.log('BASELINE_NODE_E')\""
+        },
+        "isError": false,
+        "text": "BASELINE_NODE_E\n"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "node -p \"6 * 7\""
+        },
+        "isError": false,
+        "text": "42\n"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "pwd && echo BASELINE_BUILTINS"
+        },
+        "isError": false,
+        "text": "/\nBASELINE_BUILTINS\n"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "git status --short"
+        },
+        "isError": false,
+        "text": "On branch main\nnothing to commit, working tree clean\n"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "echo BASELINE_PIPE | cat"
+        },
+        "isError": false,
+        "text": "BASELINE_PIPE\n"
+      },
+      {
+        "tool": "diagnostics",
+        "arguments": {
+          "path": "src/App.tsx"
+        },
+        "isError": false,
+        "text": "[]"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "npm install --save-dev vitest@2.1.9"
+        },
+        "isError": true,
+        "text": "$ npm install --save-dev vitest@2.1.9\nnpm: installing vitest@2.1.9…\nnpm: + @types/react@19.3.0 (cached)\nnpm: + csstype@3.2.3 (cached)\nnpm: + @types/react-dom@19.3.0 (cached)\nnpm: + @vitejs/plugin-react@5.2.0 (cached)\nnpm: + @babel/core@7.29.7 (cached)\nnpm: + debug@4.4.3 (cached)\nnpm: + ms@2.1.3 (cached)\nnpm: + json5@2.2.3 (cached)\nnpm: + semver@6.3.1 (cached)\nnpm: + gensync@1.0.0-beta.2 (cached)\nnpm: + @babel/types@7.29.8 (cached)\nnpm: + @babel/helper-string-parser@7.29.7 (cached)\nnpm: + @babel/helper-validator-identifier@7.29.7 (cached)\nnpm: + @babel/parser@7.29.8 (cached)\nnpm: + @babel/helpers@7.29.7 (cached)\nnpm: + @babel/template@7.29.7 (cached)\nnpm: + @babel/code-frame@7.29.7 (cached)\nnpm: + js-tokens@4.0.0 (cached)\nnpm: + picocolors@1.1.1 (cached)\nnpm: + @babel/traverse@7.29.8 (cached)\nnpm: + @babel/generator@7.29.8 (cached)\nnpm: + jsesc@3.1.0 (cached)\nnpm: + @jridgewell/gen-mapping@0.3.13 (cached)\nnpm: + @jridgewell/trace-mapping@0.3.31 (cached)\nnpm: + @jridgewell/resolve-uri@3.1.2 (cached)\nnpm: + @jridgewell/sourcemap-codec@1.6.0 (cached)\nnpm: + @babel/helper-globals@7.29.7 (cached)\nnpm: + convert-source-map@2.0.0 (cached)\nnpm: + @jridgewell/remapping@2.3.5 (cached)\nnpm: + @babel/helper-module-transforms@7.29.7 (cached)\nnpm: + @babel/helper-module-imports@7.29.7 (cached)\nnpm: + @babel/helper-compilation-targets@7.29.7 (cached)\nnpm: + lru-cache@5.1.1 (cached)\nnpm: + yallist@3.1.1 (cached)\nnpm: + browserslist@4.28.9 (cached)\nnpm: + caniuse-lite@1.0.30001810 (cached)\nnpm: + node-releases@2.0.55 (cached)\nnpm: + electron-to-chromium@1.5.427 (cached)\nnpm: + update-browserslist-db@1.3.3 (cached)\nnpm: + escalade@3.2.0 (cached)\nnpm: + baseline-browser-mapping@2.11.23 (cached)\nnpm: + @babel/compat-data@7.29.7 (cached)\nnpm: + @babel/helper-validator-option@7.29.7 (cached)\nnpm: + react-refresh@0.18.0 (cached)\nnpm: + @types/babel__core@7.20.5 (cached)\nnpm: + @types/babel__template@7.4.4 (cached)\nnpm: + @types/babel__traverse@7.28.0 (cached)\nnpm: + @types/babel__generator@7.27.0 (cached)\nnpm: + @rolldown/pluginutils@1.0.0-rc.3 (cached)\nnpm: + @babel/plugin-transform-react-jsx-self@7.29.7 (cached)\nnpm: + @babel/helper-plugin-utils@7.29.7 (cached)\nnpm: + @babel/plugin-transform-react-jsx-source@7.29.7 (cached)\nnpm: + vite@7.3.6 (cached)\nnpm: + fdir@6.5.0 (cached)\nnpm: + picomatch@4.0.7 (cached)\nnpm: + rollup@4.63.2 (cached)\nnpm: + @types/estree@1.0.9 (cached)\nnpm: + @rollup/wasm-node@4.63.2 (cached)\nnpm: + esbuild-wasm@0.28.0 (cached)\nnpm: + postcss@8.5.28 (cached)\nnpm: + nanoid@3.3.19 (cached)\nnpm: + source-map-js@1.2.1 (cached)\nnpm: + tinyglobby@0.2.17 (cached)\nnpm: + typescript@5.9.3 (cached)\nnpm: + vitest@2.1.9\nnpm: + chai@5.3.3\nnpm: + pathval@2.0.1\nnpm: + loupe@3.2.1\nnpm: + deep-eql@5.0.2\nnpm: + check-error@2.1.3\nnpm: + assertion-error@2.0.1\nnpm: + vite@5.4.21\nnpm: install failed: Not implemented: esbuild.version (shadow recipe does not admit ^0.21.3)\n"
+      },
+      {
+        "tool": "write_file",
+        "arguments": {
+          "path": "baseline.test.js",
+          "content": "import {it,expect} from 'vitest';\nimport {readFileSync} from 'node:fs';\nit('loads the real project package',()=>{expect(JSON.parse(readFileSync('package.json','utf8')).name).toBeTruthy();});\n"
+        },
+        "isError": false,
+        "text": "wrote 191 bytes to baseline.test.js"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "./node_modules/.bin/vitest run baseline.test.js"
+        },
+        "isError": true,
+        "text": "./node_modules/.bin/vitest: No such file or directory\n"
+      }
+    ]
+  },
+  {
+    "sample": "no-coi-fixed",
+    "lane": "rifty-no-coi",
+    "agentStatus": "done",
+    "stage": null,
+    "error": null,
+    "artifact": "agent-bench-baseline-no-coi-fixed.json.gz",
+    "observations": [
+      {
+        "tool": "read_file",
+        "arguments": {
+          "path": "package.json"
+        },
+        "isError": false,
+        "text": "{\"dependencies\":{\"react\":\"^19.0.0\",\"react-dom\":\"^19.0.0\",\"react-router-dom\":\"^7.0.0\"},\"devDependencies\":{\"@types/react\":\"^19.0.0\",\"@types/react-dom\":\"^19.0.0\",\"@vitejs/plugin-react\":\"^5.0.0\",\"typescript\":\"^5.0.0\",\"vite\":\"^7.0.0\"},\"name\":\"rifty-react-vite-app\",\"private\":true,\"scripts\":{\"build\":\"vite build\",\"dev\":\"vite\",\"preview\":\"vite preview\",\"vite\":\"vite\"},\"type\":\"module\",\"version\":\"0.0.0\"}\n"
+      },
+      {
+        "tool": "read_file",
+        "arguments": {
+          "path": "node_modules/@types/react/package.json"
+        },
+        "isError": false,
+        "text": "{\n    \"name\": \"@types/react\",\n    \"version\": \"19.3.0\",\n    \"description\": \"TypeScript definitions for react\",\n    \"homepage\": \"https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react\",\n    \"license\": \"MIT\",\n    \"contributors\": [\n        {\n            \"name\": \"Asana\",\n            \"url\": \"https://asana.com\"\n        },\n        {\n            \"name\": \"AssureSign\",\n            \"url\": \"http://www.assuresign.com\"\n        },\n        {\n            \"name\": \"Microsoft\",\n            \"url\": \"https://microsoft.com\"\n        },\n        {\n            \"name\": \"John Reilly\",\n            \"githubUsername\": \"johnnyreilly\",\n            \"url\": \"https://github.com/johnnyreilly\"\n        },\n        {\n            \"name\": \"Benoit Benezech\",\n            \"githubUsername\": \"bbenezech\",\n            \"url\": \"https://github.com/bbenezech\"\n        },\n        {\n            \"name\": \"Patricio Zavolinsky\",\n            \"githubUsername\": \"pzavolinsky\",\n            \"url\": \"https://github.com/pzavolinsky\"\n        },\n        {\n            \"name\": \"Eric Anderson\",\n            \"githubUsername\": \"ericanderson\",\n            \"url\": \"https://github.com/ericanderson\"\n        },\n        {\n            \"name\": \"Dovydas Navickas\",\n            \"githubUsername\": \"DovydasNavickas\",\n            \"url\": \"https://github.com/DovydasNavickas\"\n        },\n        {\n            \"name\": \"Josh Rutherford\",\n            \"githubUsername\": \"theruther4d\",\n            \"url\": \"https://github.com/theruther4d\"\n        },\n        {\n            \"name\": \"Guilherme Hübner\",\n            \"githubUsername\": \"guilhermehubner\",\n            \"url\": \"https://github.com/guilhermehubner\"\n        },\n        {\n            \"name\": \"Ferdy Budhidharma\",\n            \"githubUsername\": \"ferdaber\",\n            \"url\": \"https://github.com/ferdaber\"\n        },\n        {\n            \"name\": \"Johann Rakotoharisoa\",\n            \"githubUsername\": \"jrakotoharisoa\",\n            \"url\": \"https://github.com/jrakotoharisoa\"\n        },\n        {\n            \"name\": \"Olivier Pascal\",\n            \"githubUsername\": \"pascaloliv\",\n            \"url\": \"https://github.com/pascaloliv\"\n        },\n        {\n            \"name\": \"Martin Hochel\",\n            \"githubUsername\": \"hotell\",\n            \"url\": \"https://github.com/hotell\"\n        },\n        {\n            \"name\": \"Frank Li\",\n            \"githubUsername\": \"franklixuefei\",\n            \"url\": \"https://github.com/franklixuefei\"\n        },\n        {\n            \"name\": \"Jessica Franco\",\n            \"githubUsername\": \"Jessidhia\",\n            \"url\": \"https://github.com/Jessidhia\"\n        },\n        {\n            \"name\": \"Saransh Kataria\",\n            \"githubUsername\": \"saranshkataria\",\n            \"url\": \"https://github.com/saranshkataria\"\n        },\n        {\n            \"name\": \"Kanitkorn Sujautra\",\n            \"githubUsername\": \"lukyth\",\n            \"url\": \"https://github.com/lukyth\"\n        },\n        {\n            \"name\": \"Sebastian Silbermann\",\n            \"githubUsername\": \"eps1lon\",\n            \"url\": \"https://github.com/eps1lon\"\n        },\n        {\n            \"name\": \"Kyle Scully\",\n            \"githubUsername\": \"zieka\",\n            \"url\": \"https://github.com/zieka\"\n        },\n        {\n            \"name\": \"Cong Zhang\",\n            \"githubUsername\": \"dancerphil\",\n            \"url\": \"https://github.com/dancerphil\"\n        },\n        {\n            \"name\": \"Dimitri Mitropoulos\",\n            \"githubUsername\": \"dimitropoulos\",\n            \"url\": \"https://github.com/dimitropoulos\"\n        },\n        {\n            \"name\": \"JongChan Choi\",\n            \"githubUsername\": \"disjukr\",\n            \"url\": \"https://github.com/disjukr\"\n        },\n        {\n            \"name\": \"Victor Magalhães\",\n            \"githubUsername\": \"vhfmag\",\n            \"url\": \"https://github.com/vhfmag\"\n        },\n        {\n            \"name\": \"Priyanshu Rav\",\n            \"githubUsername\": \"priyanshurav\",\n            \"url\": \"https://github.com/priyanshurav\"\n        },\n        {\n            \"name\": \"Dmitry Semigradsky\",\n            \"githubUsername\": \"Semigradsky\",\n            \"url\": \"https://github.com/Semigradsky\"\n        },\n        {\n            \"name\": \"Matt Pocock\",\n            \"githubUsername\": \"mattpocock\",\n            \"url\": \"https://github.com/mattpocock\"\n        }\n    ],\n    \"main\": \"\",\n    \"types\": \"index.d.ts\",\n    \"typesVersions\": {\n        \"<=5.0\": {\n            \"*\": [\n                \"ts5.0/*\"\n            ]\n        }\n    },\n    \"exports\": {\n        \".\": {\n            \"types@<=5.0\": {\n                \"default\": \"./ts5.0/index.d.ts\"\n            },\n            \"types\": {\n                \"default\": \"./index.d.ts\"\n            }\n        },\n        \"./canary\": {\n            \"types@<=5.0\": {\n                \"default\": \"./ts5.0/canary.d.ts\"\n            },\n            \"types\": {\n                \"default\": \"./canary.d.ts\"\n            }\n        },\n        \"./compiler-runtime\": {\n            \"types\": {\n                \"default\": \"./compiler-runtime.d.ts\"\n            }\n        },\n        \"./experimental\": {\n            \"types@<=5.0\": {\n                \"default\": \"./ts5.0/experimental.d.ts\"\n            },\n            \"types\": {\n                \"default\": \"./experimental.d.ts\"\n            }\n        },\n        \"./jsx-runtime\": {\n            \"types@<=5.0\": {\n                \"default\": \"./ts5.0/jsx-runtime.d.ts\"\n            },\n            \"types\": {\n                \"default\": \"./jsx-runtime.d.ts\"\n            }\n        },\n        \"./jsx-dev-runtime\": {\n            \"types@<=5.0\": {\n                \"default\": \"./ts5.0/jsx-dev-runtime.d.ts\"\n            },\n            \"types\": {\n                \"default\": \"./jsx-dev-runtime.d.ts\"\n            }\n        },\n        \"./package.json\": \"./package.json\"\n    },\n    \"repository\": {\n        \"type\": \"git\",\n        \"url\": \"https://github.com/DefinitelyTyped/DefinitelyTyped.git\",\n        \"directory\": \"types/react\"\n    },\n    \"scripts\": {},\n    \"dependencies\": {\n        \"csstype\": \"^3.2.2\"\n    },\n    \"peerDependencies\": {},\n    \"typesPublisherContentHash\": \"86ea5f223efc88fcaa71962f0f031a623142285e331499ee981e201dc8d2a77e\",\n    \"typeScriptVersion\": \"5.6\"\n}"
+      },
+      {
+        "tool": "read_file",
+        "arguments": {
+          "path": "node_modules/@types/react-dom/package.json"
+        },
+        "isError": false,
+        "text": "{\n    \"name\": \"@types/react-dom\",\n    \"version\": \"19.3.0\",\n    \"description\": \"TypeScript definitions for react-dom\",\n    \"homepage\": \"https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom\",\n    \"license\": \"MIT\",\n    \"contributors\": [\n        {\n            \"name\": \"Asana\",\n            \"url\": \"https://asana.com\"\n        },\n        {\n            \"name\": \"AssureSign\",\n            \"url\": \"http://www.assuresign.com\"\n        },\n        {\n            \"name\": \"Microsoft\",\n            \"url\": \"https://microsoft.com\"\n        },\n        {\n            \"name\": \"MartynasZilinskas\",\n            \"githubUsername\": \"MartynasZilinskas\",\n            \"url\": \"https://github.com/MartynasZilinskas\"\n        },\n        {\n            \"name\": \"Josh Rutherford\",\n            \"githubUsername\": \"theruther4d\",\n            \"url\": \"https://github.com/theruther4d\"\n        },\n        {\n            \"name\": \"Jessica Franco\",\n            \"githubUsername\": \"Jessidhia\",\n            \"url\": \"https://github.com/Jessidhia\"\n        },\n        {\n            \"name\": \"Sebastian Silbermann\",\n            \"githubUsername\": \"eps1lon\",\n            \"url\": \"https://github.com/eps1lon\"\n        }\n    ],\n    \"main\": \"\",\n    \"types\": \"index.d.ts\",\n    \"exports\": {\n        \".\": {\n            \"types\": {\n                \"default\": \"./index.d.ts\"\n            }\n        },\n        \"./client\": {\n            \"types\": {\n                \"default\": \"./client.d.ts\"\n            }\n        },\n        \"./canary\": {\n            \"types\": {\n                \"default\": \"./canary.d.ts\"\n            }\n        },\n        \"./server\": {\n            \"types\": {\n                \"default\": \"./server.d.ts\"\n            }\n        },\n        \"./server.browser\": {\n            \"types\": {\n                \"default\": \"./server.browser.d.ts\"\n            }\n        },\n        \"./server.bun\": {\n            \"types\": {\n                \"default\": \"./server.bun.d.ts\"\n            }\n        },\n        \"./server.edge\": {\n            \"types\": {\n                \"default\": \"./server.edge.d.ts\"\n            }\n        },\n        \"./server.node\": {\n            \"types\": {\n                \"default\": \"./server.node.d.ts\"\n            }\n        },\n        \"./static\": {\n            \"types\": {\n                \"default\": \"./static.d.ts\"\n            }\n        },\n        \"./static.browser\": {\n            \"types\": {\n                \"default\": \"./static.browser.d.ts\"\n            }\n        },\n        \"./static.edge\": {\n            \"types\": {\n                \"default\": \"./static.edge.d.ts\"\n            }\n        },\n        \"./static.node\": {\n            \"types\": {\n                \"default\": \"./static.node.d.ts\"\n            }\n        },\n        \"./experimental\": {\n            \"types\": {\n                \"default\": \"./experimental.d.ts\"\n            }\n        },\n        \"./test-utils\": {\n            \"types\": {\n                \"default\": \"./test-utils/index.d.ts\"\n            }\n        },\n        \"./package.json\": \"./package.json\"\n    },\n    \"repository\": {\n        \"type\": \"git\",\n        \"url\": \"https://github.com/DefinitelyTyped/DefinitelyTyped.git\",\n        \"directory\": \"types/react-dom\"\n    },\n    \"scripts\": {},\n    \"dependencies\": {},\n    \"peerDependencies\": {\n        \"@types/react\": \"^19.3.0\"\n    },\n    \"typesPublisherContentHash\": \"345e361651b67ba93e5757949902dbca94f299c8328b8d01937dc05b5e487d8f\",\n    \"typeScriptVersion\": \"5.6\"\n}"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "./node_modules/.bin/tsc --noEmit"
+        },
+        "isError": false,
+        "text": ""
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "node -e \"console.log('BASELINE_NODE_E')\""
+        },
+        "isError": false,
+        "text": "BASELINE_NODE_E\n"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "node -p \"6 * 7\""
+        },
+        "isError": false,
+        "text": "42\n"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "pwd && echo BASELINE_BUILTINS"
+        },
+        "isError": false,
+        "text": "/bench\nBASELINE_BUILTINS\n"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "git init"
+        },
+        "isError": false,
+        "text": "Initialized empty Git repository\n"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "git status --short"
+        },
+        "isError": false,
+        "text": "On branch main\n  ?? .gitignore\n  ?? README.md\n  ?? index.html\n  ?? package-lock.json\n  ?? package.json\n  ?? src/App.tsx\n  ?? src/components/FilterBar.tsx\n  ?? src/components/IssueCard.tsx\n  ?? src/components/StatusBadge.tsx\n  ?? src/data/issues.ts\n  ?? src/main.tsx\n  ?? src/pages/Dashboard.tsx\n  ?? src/pages/IssueDetail.tsx\n  ?? src/pages/IssueList.tsx\n  ?? src/pages/Settings.tsx\n  ?? src/styles/global.css\n  ?? src/styles/issues.css\n  ?? tsconfig.json\n  ?? vite.config.ts\n"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "echo BASELINE_PIPE | cat"
+        },
+        "isError": false,
+        "text": "BASELINE_PIPE\n"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "npm install --save-dev vitest@2.1.9"
+        },
+        "isError": true,
+        "text": "npm: Not implemented: sandbox.project.npm-install (use toolchain.install)\n"
+      },
+      {
+        "tool": "write_file",
+        "arguments": {
+          "path": "baseline.test.js",
+          "content": "import {it,expect} from 'vitest';\nimport {readFileSync} from 'node:fs';\nit('loads the real project package',()=>{expect(JSON.parse(readFileSync('package.json','utf8')).name).toBeTruthy();});\n"
+        },
+        "isError": false,
+        "text": "wrote 191 bytes to baseline.test.js"
+      },
+      {
+        "tool": "shell",
+        "arguments": {
+          "command": "./node_modules/.bin/vitest run baseline.test.js"
+        },
+        "isError": true,
+        "text": "./node_modules/.bin/vitest: No such file or directory\n"
+      }
+    ]
+  },
+  {
+    "sample": "no-coi-vitest-owner",
+    "lane": "rifty-no-coi",
+    "agentStatus": "error",
+    "stage": "setup",
+    "error": "page.evaluate: NotImplementedError: Not implemented: esbuild.version (shadow recipe does not admit ^0.21.3)\n    at assertShadowRecipeAdmission (http://127.0.0.1:59103/rifty/chunk-LC3Z7GBE.js:3098:9)\n    at builtinRecipeForRequest (http://127.0.0.1:59103/rifty/chunk-LC3Z7GBE.js:3074:5)\n    at Object.resolve (http://127.0.0.1:59103/rifty/chunk-LC3Z7GBE.js:5028:22)\n    at http://127.0.0.1:59103/rifty/chunk-LC3Z7GBE.js:3559:47\n    at visit (http://127.0.0.1:59103/rifty/chunk-LC3Z7GBE.js:3653:7)\n    at http://127.0.0.1:59103/rifty/chunk-LC3Z7GBE.js:3626:15\n    at async http://127.0.0.1:59103/rifty/chunk-LC3Z7GBE.js:3626:9\n    at async walkAndPin (http://127.0.0.1:59103/rifty/chunk-LC3Z7GBE.js:3705:7)\n    at async install (http://127.0.0.1:59103/rifty/chunk-LC3Z7GBE.js:5212:16)\n    at async installToolchainPackages (http://127.0.0.1:59103/rifty/no-coi-toolchain-install-Z45JMICM.js:79:18)\n    at prepareNoCoi (/Users/vanilla-wave/.t3/worktrees/rifty/t3code-97531e7c/tools/agent-bench/src/lanes/rifty-no-coi.ts:11:31)\n    at async run (/Users/vanilla-wave/.t3/worktrees/rifty/t3code-97531e7c/tools/agent-bench/src/runner.ts:71:24)\n    at async <anonymous> (/Users/vanilla-wave/.t3/worktrees/rifty/t3code-97531e7c/tools/agent-bench/tests/baseline-probes.ts:70:18)",
+    "artifact": "agent-bench-baseline-no-coi-vitest-owner.json.gz",
+    "observations": []
+  }
+]

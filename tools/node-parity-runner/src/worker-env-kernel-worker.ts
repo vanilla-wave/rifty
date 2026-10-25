@@ -2,10 +2,11 @@ import hostProcess from 'node:process';
 import { parentPort, workerData } from 'node:worker_threads';
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
-import { SyncRpcFsSync, awaitDrain, releaseNodeEvalDrainOwnership } from '@riftydev/runtime-js';
+import { SyncRpcFsSync, awaitDrain } from '@riftydev/runtime-js';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { postNodeProcessListeningControl } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
+import { QUICKJS_WASM_URL_ENV, installNodeRuntime } from '@riftydev/runtime-js/install-process';
 import { setSyncMirror } from '@riftydev/vfs/internal';
 import { DEFAULT_PAYLOAD_CAPACITY, SabRing } from '../../../packages/kernel/src/ipc/sab-ring.ts';
 import { SyncRpcClient } from '../../../packages/kernel/src/ipc/sync-client.ts';
@@ -19,6 +20,7 @@ import {
   type WorkerSpawnSpec,
   runEntryLifecycle,
 } from '../../../packages/kernel/src/worker-entry.ts';
+import { workerInputReader } from '../../../packages/kernel/src/worker-stdin-rpc.ts';
 import {
   bindWorkerStdioOutput,
   sealWorkerOutput,
@@ -26,11 +28,10 @@ import {
 } from '../../../packages/kernel/src/worker-stdio-drain.ts';
 import { runNodeEntry } from '../../../packages/runtime-js/src/builtins/node-entry.ts';
 import {
-  beginNodeEvalUnhandled,
-  recordRejection,
+  handleRealmUncaughtError,
+  handleRealmUnhandledRejection,
   resetKeepalive,
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
-import { installNodeRuntime } from '../../../packages/runtime-js/src/ipc/install-process.ts';
 import { runNodeProgramLifecycle } from '../../../packages/workbench/src/workers/node-program-lifecycle.ts';
 import {
   NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT,
@@ -42,12 +43,17 @@ import {
   nodeCliEvalTransientSourceCarrierMutations,
 } from './node-cli-eval-vfs-observer.ts';
 import { installNodeHostRejectionEvents } from './node-host-rejection-events.ts';
-import type { NodeCliEvalVfsFault, PhysicalStdioDeliveryFault } from './run-in-rifty.ts';
+import type {
+  NodeCliEvalPreEntryFault,
+  NodeCliEvalVfsFault,
+  PhysicalStdioDeliveryFault,
+} from './run-in-rifty.ts';
 
 interface WorkerEnvHarnessData {
   readonly files: Readonly<Record<string, string>>;
   readonly nodeCliEvalVfsAudit: boolean;
   readonly nodeCliEvalVfsFault?: NodeCliEvalVfsFault;
+  readonly nodeCliEvalPreEntryFault?: NodeCliEvalPreEntryFault;
   readonly physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault;
 }
 
@@ -90,11 +96,17 @@ if (
 ) {
   throw new TypeError('worker-env parity received an unknown stdio delivery fault');
 }
-if (request.nodeCliEvalVfsAudit) {
-  // The disposable adapter is a real node:worker_threads Worker, while
-  // SyncRpcClient's production guard targets browser Worker globals. Expose the
-  // corresponding physical-worker markers only in eval children so the harness
-  // exercises the real SAB client without widening program siblings.
+if (
+  request.nodeCliEvalPreEntryFault !== undefined &&
+  request.nodeCliEvalPreEntryFault !== 'quickjs-readiness-rejection'
+) {
+  throw new TypeError('worker-env parity received an unknown pre-entry fault');
+}
+// The disposable adapter is a real node:worker_threads Worker, while
+// SyncRpcClient's production guard targets browser Worker globals. Expose the
+// corresponding physical-worker markers only in eval and worker-thread children
+// (their bootstraps read the owner store over SAB) without widening program siblings.
+function exposePhysicalWorkerMarkers(): void {
   Object.defineProperties(globalThis, {
     WorkerGlobalScope: {
       value: class WorkerGlobalScope {},
@@ -106,6 +118,7 @@ if (request.nodeCliEvalVfsAudit) {
     },
   });
 }
+if (request.nodeCliEvalVfsAudit) exposePhysicalWorkerMarkers();
 const vfs = new NodeCliEvalVfsObserver();
 vfs.loadFixture(
   Object.fromEntries(Object.entries(request.files).map(([path, source]) => [`/${path}`, source])),
@@ -114,18 +127,13 @@ setSyncMirror(vfs);
 
 resetKeepalive();
 installTimerGlobals();
-installNodeHostRejectionEvents(hostProcess, (reason) => {
-  if (!beginNodeEvalUnhandled(reason, 'rejection')) recordRejection(reason);
+// The host process stands in for the browser realm traps: the same product
+// handlers dispatch to the child's Node listeners first (ADR-0445).
+installNodeHostRejectionEvents(hostProcess, (reason, promise) => {
+  handleRealmUnhandledRejection(reason, promise);
 });
 const onUncaughtException = (error: unknown): void => {
-  if (
-    (typeof error === 'object' &&
-      error !== null &&
-      (error as { readonly code?: unknown }).code === 'RIFTY_PROCESS_EXIT') ||
-    beginNodeEvalUnhandled(error, 'uncaught-error')
-  ) {
-    return;
-  }
+  if (handleRealmUncaughtError(error)) return;
   hostProcess.removeListener('uncaughtException', onUncaughtException);
   throw error;
 };
@@ -154,7 +162,7 @@ function reportChildLocalVfsAudit(syncCall: (method: string, payload: unknown) =
   childLocalVfsAuditReported = true;
 }
 
-function installChildLocalVfsExitAudit(spec: WorkerSpawnSpec): void {
+function installChildLocalVfsLifecycleAudit(spec: WorkerSpawnSpec): void {
   if (!request.nodeCliEvalVfsAudit) return;
   const ipc = spec.stdio.ipc;
   const nativePost = ipc.postMessage.bind(ipc) as (
@@ -165,7 +173,9 @@ function installChildLocalVfsExitAudit(spec: WorkerSpawnSpec): void {
     configurable: true,
     value(message: unknown, options?: StructuredSerializeOptions | Transferable[]): void {
       const frame = message as { readonly kind?: unknown } | null;
-      if (frame?.kind === 'control:self-exit') {
+      // A served bootstrap now awaits natural drain. Capture the same completed
+      // decoder/eval interval before preview admission lets the parent stop it.
+      if (frame?.kind === 'control:self-exit' || frame?.kind === 'control:listening') {
         reportChildLocalVfsAudit(createSyncCall(spec));
       }
       nativePost(message, options);
@@ -173,7 +183,7 @@ function installChildLocalVfsExitAudit(spec: WorkerSpawnSpec): void {
   });
 }
 
-function installObservedNodeRuntime(spec: WorkerSpawnSpec): void {
+async function installObservedNodeRuntime(spec: WorkerSpawnSpec): Promise<void> {
   try {
     if (request.nodeCliEvalVfsFault === 'child-local-transient-decoder-file') {
       vfs.beginCarrierObservation('child-local');
@@ -207,7 +217,11 @@ function installObservedNodeRuntime(spec: WorkerSpawnSpec): void {
         }
       }
     }
-    installNodeRuntime(spec);
+    if (request.nodeCliEvalPreEntryFault !== undefined) {
+      (globalThis as unknown as Record<typeof QUICKJS_WASM_URL_ENV, string>)[QUICKJS_WASM_URL_ENV] =
+        '/rifty-parity-missing-quickjs-readiness.wasm';
+    }
+    await installNodeRuntime(spec);
   } catch (error) {
     if (request.nodeCliEvalVfsAudit) reportChildLocalVfsAudit(createSyncCall(spec));
     throw error;
@@ -260,6 +274,14 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
     }
     return;
   }
+  if (launchKind === 'worker-thread') {
+    // ADR-0446 §5: the Workbench bootstrap owns the worker-thread lifecycle
+    // (uncapped drain, Node's natural exit) over the owner's store, as in production.
+    exposePhysicalWorkerMarkers();
+    publishKernelSyncApi(createSyncApi(spec));
+    await import('../../../packages/workbench/src/workers/node-entry-bootstrap.ts');
+    return;
+  }
   const entryPath = spec.argv[1];
   if (entryPath === undefined) throw new Error('worker-env parity child has no argv[1]');
   const runEntry = () =>
@@ -276,12 +298,14 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
 
   registerNetBuiltins();
   const proc = globalThis.process;
+  // ADR-0446 §6: natural exit never calls a user-reassigned `process.exit`.
+  const nodeExit = proc.exit;
   await runNodeProgramLifecycle({
     runEntry,
     listPorts,
     onPortsChange: onRegistryChange,
-    awaitDrain: () => awaitDrain({ capMs: Number.POSITIVE_INFINITY }),
-    releaseDrainOwnership: releaseNodeEvalDrainOwnership,
+    awaitDrain: () =>
+      awaitDrain({ capMs: Number.POSITIVE_INFINITY, hasRef: () => listPorts().length > 0 }),
     servePreview: (port) =>
       serveCrossRealmPreview(
         port,
@@ -289,8 +313,7 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
         launch.previewScope === undefined ? {} : { scope: launch.previewScope },
       ),
     postListening: (ports) => postNodeProcessListeningControl(proc, ports, launch.previewScope),
-    readExitCode: () => proc.exitCode,
-    exit: (code) => proc.exit(code),
+    exit: (...code) => nodeExit(...code),
   });
 }
 
@@ -385,6 +408,7 @@ function installStdioDeliveryFault(spec: WorkerSpawnSpec): Promise<void> | undef
 }
 
 async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
+  if (spec.stdinMode === 'pull') exposePhysicalWorkerMarkers();
   const stdioDeliveryProof = installStdioDeliveryFault(spec);
   const stdout = bindDesiredWorkerStdioOutput(
     spec.stdio.stdout,
@@ -398,7 +422,7 @@ async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
     'stderr',
     spec.stdio.ipc,
   );
-  installChildLocalVfsExitAudit(spec);
+  installChildLocalVfsLifecycleAudit(spec);
   if (request.nodeCliEvalVfsAudit) {
     // This starts before runEntryLifecycle publishes/decodes the bootstrap and
     // stays live through process adoption, entry, and failure settlement.
@@ -414,6 +438,7 @@ async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
       stdout,
       stderr,
       stdin: spec.stdio.stdin,
+      ...(spec.stdinMode === 'pull' ? { input: workerInputReader(createSyncApi(spec)) } : {}),
       ipc: spec.stdio.ipc,
     },
   });

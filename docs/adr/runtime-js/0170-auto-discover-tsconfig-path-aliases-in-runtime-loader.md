@@ -47,3 +47,9 @@ TypeScript compiler API's own config parser.
   invalidation.
 - ADR-0066 remains active for the explicit map contract; only its "resolver does
   not read tsconfig" clause is corrected by this opt-in path.
+
+## Corrections (active)
+
+2026-09-07: ADR-0382 adds `await preloadTsconfigPaths()` before constructing a
+synchronous discovery-enabled loader/resolver. Explicit paths need no preload.
+The prior removal in ADR-0380 D1 is superseded; the example consumer remains.

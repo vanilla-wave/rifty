@@ -34,7 +34,7 @@ import { getKernelDispatcher, globalProcessManager, readKernelSyncApi } from '@r
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
-import { awaitDrain, installConsole, releaseNodeEvalDrainOwnership } from '@riftydev/runtime-js';
+import { awaitDrain, installConsole } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import {
@@ -54,6 +54,9 @@ import {
 import { installBundleLocalBuffer, installBundleLocalCwd } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
+// ADR-0446 §6: natural exit is Node's own `exit()`, captured before any user
+// code can reassign `process.exit` (vitest's pool workers do).
+const nodeExit = proc.exit;
 adoptNodeProcessBootstrap(proc, globalProcessManager);
 const nodeEntryBootstrap = readNodeEntryBootstrap();
 const launch = nodeEntryBootstrap.launch;
@@ -98,7 +101,12 @@ if (launch.remoteFs) {
   if (syncApi === null) {
     throw new Error('node-entry: remote owner fs requested but no kernel sync call published');
   }
-  const remoteFs = installNodeEntryRemoteFs(syncApi.call, syncApi.callBinary, launch.remoteFsRoot);
+  const remoteFs = installNodeEntryRemoteFs(
+    syncApi.call,
+    syncApi.callBinary,
+    launch.remoteFsRoot,
+    launch.publicRoot,
+  );
 
   // This realm owns the dispatcher for every kernel Worker it creates. Relay
   // the upstream-authoritative mirror so a nested Worker can load its entry/fs
@@ -119,6 +127,7 @@ if (launch.kind === 'eval') {
   await prepareNodeEntryRuntime({
     kind: 'eval',
     root: proc.cwd(),
+    runtimeBindings: launch.runtimeBindings ?? [],
     fs: syncMirror(),
   });
 } else {
@@ -127,6 +136,7 @@ if (launch.kind === 'eval') {
     root: proc.cwd(),
     args: proc.argv.slice(2),
     entryPath: requiredEntryPath(entryPath),
+    runtimeBindings: launch.runtimeBindings ?? [],
     fs: syncMirror(),
   });
 }
@@ -152,21 +162,19 @@ const runEntry = (): Promise<void> =>
 // the bootstrap (not the kernel drain hook) owns the run-vs-serve decision. Net
 // builtins are registered unconditionally here — http/net are needed both for
 // servers AND for client scripts that import them; the lifecycle decides
-// drain-exit vs stay-alive from whether the entry registered a port.
+// drain-exit from whether any ports or referenced runtime handles remain.
 //
 // The unhandledrejection trap + drain hook are ALREADY installed in this realm at
 // module top-level in kernel-worker-entry.ts (`installEventLoopKeepalive()`, beside
 // `installTimerGlobals()` — runs at worker module load, before any spawn; NOT in the
 // pre-entry hook). For a run-to-completion script (no listen) `awaitDrain` surfaces a
-// detached async rejection loudly (stderr + exit 1). A served entry returns without
-// awaiting the drain, so its detached rejection surfaces via the realm's default
-// `unhandledrejection` reporting (the keepalive trap deliberately does not
-// preventDefault) — never silently swallowed either way.
+// detached async rejection loudly (stderr + exit 1). The same drain remains
+// active while listening; a pending entry retains browser error reporting.
 //
 // `proc` is the ONE spec-seeded rich process the pre-entry seam installed (ADR-0157):
 // correct argv/cwd/stdin + fork-IPC `send`. No swap, so every entry path reads the
 // same runtime-owned flowing stdin and its loud unsupported pull/raw surfaces.
-// The else-branch (.bin/execSync) already has Buffer + nextTick from pre-entry;
+// The worker-thread and execSync branches already have Buffer + nextTick from pre-entry;
 // a server-capable launch additionally registers net builtins.
 if (nodeServe) {
   registerNetBuiltins();
@@ -177,8 +185,8 @@ if (nodeServe) {
     // A serve-capable foreground process may be a real long-lived supervisor
     // (nodemon) whose referenced watcher/timer handles are its Node lifetime.
     // The owner signal/peer boundary remains the physical stop authority.
-    awaitDrain: () => awaitDrain({ capMs: Number.POSITIVE_INFINITY }),
-    releaseDrainOwnership: releaseNodeEvalDrainOwnership,
+    awaitDrain: () =>
+      awaitDrain({ capMs: Number.POSITIVE_INFINITY, hasRef: () => listPorts().length > 0 }),
     servePreview: (port) =>
       serveCrossRealmPreview(
         port,
@@ -186,14 +194,18 @@ if (nodeServe) {
         previewScope === undefined ? {} : { scope: previewScope },
       ),
     postListening: (ports) => postNodeProcessListeningControl(proc, ports, previewScope),
-    readExitCode: () => proc.exitCode,
-    exit: (code) => proc.exit(code),
+    exit: (...code) => nodeExit(...code),
   });
-} else {
+} else if (launch.kind === 'worker-thread') {
+  // ADR-0446 §5: a worker thread ends when its loop drains — no cap, as in Node
+  // (a referenced `parentPort` keeps it until terminate()) — then Node's exit.
   await runEntry();
-  // Honor process.exitCode on a clean return (Node parity, ADR-0157 D4): the kernel
-  // reaps a no-throw return as exit 0, so a `.bin`/execSync CLI that set a non-zero
-  // process.exitCode must surface it (proc.exit throws RIFTY_PROCESS_EXIT → kernel
-  // maps the code). exitCode 0 stays a clean exit 0.
-  if (proc.exitCode) proc.exit(proc.exitCode);
+  await awaitDrain({ capMs: Number.POSITIVE_INFINITY });
+  nodeExit();
+} else {
+  // execSync `node <script>` child: Node's natural exit after the loop drains —
+  // `'exit'` once, then `exitCode ?? 0` (ADR-0445 rule 6). The throw carries the code.
+  await runEntry();
+  await awaitDrain();
+  nodeExit();
 }

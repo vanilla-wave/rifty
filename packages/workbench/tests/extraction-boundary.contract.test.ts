@@ -19,6 +19,15 @@ const EXPORTED_SOURCE_ENTRIES = [
   'src/workers/node-entry-bootstrap.ts',
   'src/workers/dev-server-child-bootstrap.ts',
   'src/workers/ts-lsp-worker-entry.ts',
+  'src/workers/no-coi-toolchain-worker.ts',
+] as const;
+
+// ADR-0437: independently built static carriers; not new package subpath exports.
+const SUPPORT_ASSET_ENTRIES = [
+  'src/support/support-worker.ts',
+  'src/support/support-child.ts',
+  'src/support/support-module.ts',
+  'src/support/support-service-worker.ts',
 ] as const;
 
 const EXPECTED_EXTERNAL_PACKAGES = [
@@ -29,9 +38,12 @@ const EXPECTED_EXTERNAL_PACKAGES = [
   '@riftydev/npm-client',
   '@riftydev/runtime-js',
   '@riftydev/service-worker',
+  '@riftydev/shadow-registry',
   '@riftydev/shell',
   '@riftydev/ts-language-service',
   '@riftydev/vfs',
+  'brotli-compress', // ADR-0546: lazy host-side snapshot encoder.
+  'semver',
 ] as const;
 
 interface PackageManifest {
@@ -42,7 +54,6 @@ interface PackageManifest {
 interface ModuleReference {
   readonly importer: string;
   readonly specifier: string;
-  readonly isStatic: boolean;
 }
 
 interface ClosureAudit {
@@ -81,11 +92,11 @@ function moduleReferences(path: string, sourceText: string): readonly ModuleRefe
       node.moduleSpecifier !== undefined &&
       ts.isStringLiteral(node.moduleSpecifier)
     ) {
-      references.push({ importer: path, specifier: node.moduleSpecifier.text, isStatic: true });
+      references.push({ importer: path, specifier: node.moduleSpecifier.text });
     } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       const argument = node.arguments[0];
       if (node.arguments.length === 1 && argument !== undefined && ts.isStringLiteral(argument)) {
-        references.push({ importer: path, specifier: argument.text, isStatic: false });
+        references.push({ importer: path, specifier: argument.text });
       }
     }
     ts.forEachChild(node, visit);
@@ -175,7 +186,6 @@ function sourceClosure(entries: readonly string[]): ClosureAudit {
     const references = moduleReferences(path, sourceText);
     allReferences.push(...references);
     for (const reference of references) {
-      if (!reference.isStatic) continue;
       const dependency = relativeSource(path, reference.specifier);
       if (dependency === null) {
         externalPackages.add(packageName(reference.specifier));
@@ -221,6 +231,13 @@ function resolvedExportEntries(): readonly string[] {
   return Object.values(readManifest().exports).map((target) => resolve(PACKAGE_ROOT, target));
 }
 
+function resolvedBuildEntries(): readonly string[] {
+  return [
+    ...resolvedExportEntries(),
+    ...SUPPORT_ASSET_ENTRIES.map((path) => resolve(PACKAGE_ROOT, path)),
+  ];
+}
+
 function sourceLoader(path: string): Loader {
   switch (extname(path)) {
     case '.ts':
@@ -242,7 +259,7 @@ async function runtimeBearingSourcesOutsideBuild(): Promise<readonly string[]> {
   const manifest = readManifest();
   const result = await build({
     absWorkingDir: PACKAGE_ROOT,
-    entryPoints: resolvedExportEntries(),
+    entryPoints: resolvedBuildEntries(),
     bundle: true,
     external: Object.keys(manifest.dependencies).flatMap((dependency) => [
       dependency,
@@ -281,10 +298,10 @@ async function runtimeBearingSourcesOutsideBuild(): Promise<readonly string[]> {
 }
 
 describe('@riftydev/workbench extraction boundary', () => {
-  it('pins the retained 224-file move, including all 107 tests and three fixtures', () => {
-    expect(EXTRACTION_MAP).toHaveLength(224);
-    expect(new Set(EXTRACTION_MAP.map(([source]) => source)).size).toBe(224);
-    expect(new Set(EXTRACTION_MAP.map(([, target]) => target)).size).toBe(224);
+  it('pins the retained 223-file move, including all 107 tests and three fixtures', () => {
+    expect(EXTRACTION_MAP).toHaveLength(223);
+    expect(new Set(EXTRACTION_MAP.map(([source]) => source)).size).toBe(223);
+    expect(new Set(EXTRACTION_MAP.map(([, target]) => target)).size).toBe(223);
     expect(
       EXTRACTION_MAP.filter(([, target]) =>
         /(?:[\\/]test-fixtures[\\/]|(?:\.(?:contract\.)?(?:fault\.)?test|\.test-fixture)\.[cm]?[jt]sx?$)/u.test(
@@ -299,13 +316,18 @@ describe('@riftydev/workbench extraction boundary', () => {
       ),
     ).toEqual([]);
     expect(
-      EXTRACTION_MAP.filter(([, target]) => !existsSync(resolve(PACKAGE_SRC_ROOT, target))).map(
-        ([, target]) => target,
-      ),
+      EXTRACTION_MAP.filter(
+        ([, target]) =>
+          !existsSync(
+            target === 'glue/npm-shell-command.test.ts'
+              ? resolve(PACKAGE_ROOT, '../../tests/integration/npm-shell-command.test.ts')
+              : resolve(PACKAGE_SRC_ROOT, target),
+          ),
+      ).map(([, target]) => target),
     ).toEqual([]);
   });
 
-  it('resolves exactly the seven sealed package source entries', () => {
+  it('resolves exactly the eight sealed package source entries', () => {
     const entries = resolvedExportEntries();
     expect(entries.map((path) => relative(PACKAGE_ROOT, path))).toEqual(EXPORTED_SOURCE_ENTRIES);
     expect(
@@ -315,7 +337,7 @@ describe('@riftydev/workbench extraction boundary', () => {
   });
 
   it('contains the whole production closure with no unreachable implementation files', () => {
-    const entries = resolvedExportEntries();
+    const entries = resolvedBuildEntries();
     const closure = sourceClosure(entries);
     const packageProductionFiles = productionFiles(PACKAGE_SRC_ROOT);
 
@@ -331,11 +353,35 @@ describe('@riftydev/workbench extraction boundary', () => {
     // 140 → 141 (2026-08-19, #247 item 5): emnapi install policy.
     // 141 → 143 (2026-08-24, ADR-0362): PTY pending-authority file-size split
     // and the owner-only `.bin` path classifier.
-    expect(packageProductionFiles).toHaveLength(143);
+    // 143 → 142 (2026-08-31, ADR-0371): delete the N=1 owner asset authority.
+    // 142 → 143 (2026-09-01, ADR-0375): public no-COI toolchain Worker.
+    // 143 → 145 (2026-09-01, ADR-0375): generic finalizer + bounded gap provenance.
+    // 145 → 146 (PR #122): browser-project-runtime.ts owns kind dispatch.
+    // 146 → 147 (ADR-0379): deep resident-entry admission authority.
+    // 147 → 148 (PR #313): first-use no-COI install/activation module.
+    // ADR-0384: seven package implementations now belong to registry.
+    // ADR-0386: standard dependency snapshot tar codec.
+    // ADR-0387: published dependency snapshot producer.
+    // ADR-0394: snapshot overlay, claim reading and owner type/tree helpers.
+    // ADR-0407: stored catalog schema/projection extracted without another state owner.
+    // ADR-0392: shared claim guard, thin claim FS, install context and durable-equality adapter.
+    // ADR-0412: source-only dependency snapshot preparation validation.
+    // ADR-0414/0415: companion package policy and pure package-runtime tree composition.
+    // ADR-0418: project policy view and invocation command composition.
+    // ADR-0420: explicit no-COI snapshot application composition.
+    // PR #299: targeted page reads extracted from the ratcheted owner module.
+    // ADR-0432: native storage diagnosis shares the owner's existing publication point.
+    // ADR-0437: three diagnostic modules and four separately emitted probe assets.
+    // ADR-0445: one no-COI invocation scope shared by project command and runBin.
+    // ADR-0487: package JSON/spec helpers split from the ratcheted npm command.
+    // ADR-0531: guest layout module; legacy index parsing split from the
+    // ratcheted playground project authority.
+    // ADR-0543: dependency snapshot projection selects the target runtime tier.
+    expect(packageProductionFiles).toHaveLength(176);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 
-  it('does not retain runtime-bearing source outside the seven published build entries', async () => {
+  it('does not retain runtime-bearing source outside published library and probe asset build entries', async () => {
     expect(await runtimeBearingSourcesOutsideBuild()).toEqual([]);
   });
 

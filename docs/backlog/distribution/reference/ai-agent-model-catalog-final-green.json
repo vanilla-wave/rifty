@@ -1,0 +1,246 @@
+{
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/distribution/ai-agent-model-catalog.md; agent-weak-models I1/I2; ADR-0471 и активные положения ADR-0436; BASE ce81e179ccfaf4c68deb22cf2f3799415fdc698b; HEAD c5bb64273b863696b97d4f27977e6761dbd2bb0e",
+  "overall_verdict": "concern",
+  "merge_call": "Срез I1/I2 принят: блокеров нет, один advisory к регрессионному покрытию. Независимо выполнено 101/101 tests; проверены GREEN-логи pr:check 25/25, browser 17, e2e 12, snapshot 1, no-COI 5, packed consumer 1. Цель продолжается.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:19",
+      "summary": "Передача изображений и честный отказ бинарному вводу."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:23",
+      "summary": "Playground catalog editor, picker, attachments и предложение переключения; context-exceeded UI после I5."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:41",
+      "summary": "Pi-parity compaction, сохранение полного usage, context-exceeded."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:38",
+      "summary": "Pi-parity agent-level retry после baseline."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:46",
+      "summary": "Локализующая диагностика edit_file без fuzzy application."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:49",
+      "summary": "Видимый steering после третьего одинакового вызова/результата."
+    },
+    {
+      "clause": "I9",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:36",
+      "summary": "600-секундный default и остаток бюджета в tool results."
+    },
+    {
+      "clause": "I10",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:52",
+      "summary": "Диагностика Workbench после мутаций; pending/unavailable."
+    },
+    {
+      "clause": "I11",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:55",
+      "summary": "Prompt recipe, новый profile id, recipe:false."
+    },
+    {
+      "clause": "I12",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:30",
+      "summary": "Catalog endpoint в bench, метрики и сохранённый Luna baseline до механизмов."
+    },
+    {
+      "clause": "I13",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:57",
+      "summary": "Повторный замер тех же задач; сравнение и отсутствие регрессии по задачам."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: только native Models + selected id; legacy forms и invalid id отвергаются до host work",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:167; packages/agent/src/session.test.ts:74",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: native параметры и transport; effective trace metadata; redaction built-in keys/catalog headers",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:63; packages/agent/src/catalog.test.ts:194; packages/agent/src/session.test.ts:84",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: active setModel, retained tool results после provider error, observable switches",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "weak",
+      "citation": "packages/agent/src/catalog.test.ts:118",
+      "note": "Model id, сохранение результата и события проверяются. Entries имеют одинаковые defaults; ошибочная фиксация defaults первого model не различается этим carrier. Текущая реализация корректна; отдельный reviewer probe подтвердил смену defaults."
+    },
+    {
+      "row": "Acceptance 4: playground, bench и installed-consumer migrations сохраняют real-host acceptance",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:68; tests/browser-unit/agent-core.spec.ts:303; tests/no-coi/no-coi-pi-agent.spec.ts:118; tests/integration/fixtures/workbench-vite-consumer/src/agent-proof.ts:28; tools/agent-bench/src/project-resources.test.ts:62",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: selected model, output limit, temperature, top_p, reasoning_effort совпадают с native pi",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:63",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: active selection сохраняет историю; provider failure не теряет prior tool results",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:118; docs/backlog/distribution/reference/ai-agent-model-catalog-evidence.md:55",
+      "note": ""
+    },
+    {
+      "row": "provider error × selected request: error, retained history, no replay",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:118",
+      "note": ""
+    },
+    {
+      "row": "invalid id × admission: throw before host work",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:167",
+      "note": ""
+    },
+    {
+      "row": "credential in provider error × export: redacted export, effective metadata",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:194",
+      "note": ""
+    },
+    {
+      "row": "createAgentSession / AgentSessionOptions: native catalog, initial model, per-id modelOptions; legacy forms удалены",
+      "source": "public-api",
+      "trace": "I1 + ADR-0471",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:63; packages/agent/src/catalog.test.ts:167; packages/agent/src/session.test.ts:74",
+      "note": ""
+    },
+    {
+      "row": "createModels: публичный native catalog constructor",
+      "source": "public-api",
+      "trace": "I1 + ADR-0471",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts:33; tests/integration/fixtures/workbench-vite-consumer/src/agent-proof.ts:28",
+      "note": ""
+    },
+    {
+      "row": "createProvider: публичный native custom transport constructor",
+      "source": "public-api",
+      "trace": "I1 + ADR-0471",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts:36; packages/agent/src/session.test.ts:84",
+      "note": ""
+    },
+    {
+      "row": "createOpenAIProvider / OpenAIProviderOptions / OpenAIModel: built-in transport, explicit limits, optional reasoning/input defaults",
+      "source": "public-api",
+      "trace": "I1 + ADR-0471",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:194; tests/integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts:52; tests/browser-unit/agent-core.spec.ts:237",
+      "note": ""
+    },
+    {
+      "row": "AgentSession.setModel(id): следующий request использует выбранный Model и defaults, история сохраняется",
+      "source": "public-api",
+      "trace": "I2 + ADR-0471",
+      "status": "weak",
+      "citation": "packages/agent/src/catalog.test.ts:118",
+      "note": "Та же advisory-слабость defaults при переключении, что в Acceptance 3; текущий код выбирает defaults по selected.id."
+    },
+    {
+      "row": "AgentSessionEvent.model: переключение наблюдаемо",
+      "source": "public-api",
+      "trace": "I2 + ADR-0471",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:157",
+      "note": ""
+    },
+    {
+      "row": "AgentTrace.config: выбранный Model и request defaults; credentials redacted; actual assistant identity сохранена",
+      "source": "public-api",
+      "trace": "I1 + ADR-0471 + ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/catalog.test.ts:102; packages/agent/src/catalog.test.ts:220; packages/agent/src/session.test.ts:117",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/agent/src/catalog.test.ts:118",
+          "summary": "Active-switch carrier проверяет model id, retained result и события, но не смену request defaults. По чтению тестов, mutant с defaults первоначального model сохранил бы GREEN. Дать entries разные reasoning/temperature/top_p и проверить следующий request. Текущая реализация корректна.",
+          "authority": "",
+          "evidence": "Независимо: pnpm exec vitest run packages/agent/src/catalog.test.ts packages/agent/src/session.test.ts packages/agent/src/history.test.ts tools/agent-bench/src/project-resources.test.ts → 101/101 PASS. Дополнительный node --import tsx probe реальных session/catalog + native pi и scripted network boundary: requests=[{model:one,temperature:0.2,top_p:0.6,reasoning:low,max:1024},{model:two,temperature:0.9,top_p:0.95,reasoning:high,max:1025}], status=done; trace selected two и те же defaults. Mutant не исполнялся; слабость committed carrier установлена чтением."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "c5bb64273b863696b97d4f27977e6761dbd2bb0e"
+}

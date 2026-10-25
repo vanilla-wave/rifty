@@ -1,0 +1,196 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED принят с 3 advisory concerns (REV-4), 0 blockers. Продолжать IMPLEMENT; это не Final+GREEN, не разрешение CLOSE/merge.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/ai-agent-weak-model-rerun.md; accepted goal docs/backlog/epics/agent-weak-models/goal.md I13 + Decisions; ADR-0478; BASE 1d1a759493536f981ec25bcc6d376decf77485ce; HEAD 55c572818a7d83afd821bec5f895ed38109c22db. Fresh independent read-only review; PR-4 old/new criteria inspected; I1–I12 accepted artifacts unchanged.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I13 / Acceptance 1–3",
+      "location": "docs/backlog/distribution/ai-agent-weak-model-rerun.md:22",
+      "summary": "Реализовать минимальный report --compare, получить GREEN и независимый Final+GREEN; настоящее production comparison сейчас отсутствует."
+    },
+    {
+      "clause": "I12 + I13 / Acceptance 4–5",
+      "location": "docs/backlog/distribution/ai-agent-weak-model-rerun.md:34",
+      "summary": "После реализации — полный same-config Luna rerun 42 cold runs с clean committed source и всеми originals/artifacts; no task/lane loss. Любая регрессия остаётся дефектом до исправления и полного повторного измерения; без task/judge recut или выбранных замен."
+    },
+    {
+      "clause": "I1–I13 / Acceptance 6",
+      "location": "docs/backlog/distribution/ai-agent-weak-model-rerun.md:42",
+      "summary": "Финальная проверка I13 с повторным использованием принятых I1–I12 artifacts; актуальные CLI/Chromium/CI и закрытие обязательных residuals перед CLOSE. На этом checkpoint rerun/goal closure не заявлены."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: обычный report, comparison artifacts, обе provenance-шапки/пути, exit 0/1 после записи",
+      "source": "acceptance",
+      "trace": "I13",
+      "status": "weak",
+      "citation": "tools/agent-bench/src/comparison.test.ts:156",
+      "note": "N3: реальные CLI/exit/artifacts проверяются; мутант без provenance проходит (mutant-provenance.log)."
+    },
+    {
+      "row": "Acceptance 2: одинаковые config/taskSet/count, полные уникальные совпадающие identities; profile/revision могут различаться",
+      "source": "acceptance",
+      "trace": "I13",
+      "status": "weak",
+      "citation": "tools/agent-bench/src/comparison.test.ts:60; tools/agent-bench/src/comparison.test.ts:128",
+      "note": "N2: config/count/duplicates имеют RED, но мутант без exact-identity проверки проходит (mutant-identity.log)."
+    },
+    {
+      "row": "Acceptance 3: task/lane before/after/delta всех метрик; ±1/3 noise; отрицательная строка всегда regression",
+      "source": "acceptance",
+      "trace": "I13",
+      "status": "weak",
+      "citation": "tools/agent-bench/src/comparison.test.ts:60",
+      "note": "N1: median/sums/pass/budget/noise/regression дискриминируются, context/edit omission выживает (mutant-metrics.log)."
+    },
+    {
+      "row": "Acceptance 4: неизменный config/tasks/count, cold 42, clean source, originals/traces/snapshots/hashes/manual classes; обязательная измеряемая цель после реализации",
+      "source": "acceptance",
+      "trace": "I12 + I13",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/ai-agent-weak-model-rerun.md:34; docs/backlog/distribution/reference/ai-agent-weak-model-rerun-evidence.md:18; tools/agent-bench/src/runner.ts:65; tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/README.md:42",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: no task/lane loss, без отмены noise/чужим gain; найденная регрессия требует исправления и нового полного измерения с сохранением предыдущего",
+      "source": "acceptance",
+      "trace": "I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/comparison.test.ts:79; tools/agent-bench/src/comparison.test.ts:195; docs/backlog/distribution/ai-agent-weak-model-rerun.md:39",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: Final+GREEN проверяет новый I13 и сохранённые I1–I12 artifacts, CLI/Chromium/CI перед CLOSE; сейчас только promise review",
+      "source": "acceptance",
+      "trace": "I1–I13",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/ai-agent-weak-model-rerun.md:42; docs/backlog/distribution/reference/ai-agent-weak-model-rerun-evidence.md:18; docs/backlog/epics/agent-weak-models/ledger.md:28",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: реальный CLI над двумя записанными отчётами, независимые counts/medians/sums, видимый отрицательный малый delta",
+      "source": "acceptance",
+      "trace": "I13",
+      "status": "weak",
+      "citation": "tools/agent-bench/src/comparison.test.ts:60; tools/agent-bench/src/comparison.test.ts:156",
+      "note": "N1: базовые counts/medians/sums и CLI имеют carrier; полный набор context/edit counters не дискриминируется."
+    },
+    {
+      "row": "Parity 2: frozen baseline byte-identical; formal measurement сохраняет config/tasks",
+      "source": "acceptance",
+      "trace": "I12 + I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/comparison.test.ts:38; tools/agent-bench/src/comparison.test.ts:180; docs/backlog/distribution/reference/ai-agent-weak-model-rerun-evidence.md:18; tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/manifest.json:3",
+      "note": ""
+    },
+    {
+      "row": "Fault: corrupt-input — missing, duplicate, unmatched identities/config отклоняются без zero/intersection",
+      "source": "fault-matrix",
+      "trace": "I13",
+      "status": "weak",
+      "citation": "tools/agent-bench/src/comparison.test.ts:128",
+      "note": "N2: count/duplicate/config faults покрыты; unmatched unique identity проходит count-only мутант."
+    },
+    {
+      "row": "Fault: lossy-aggregate — отрицательная task/lane строка не скрывается другим gain или noise",
+      "source": "fault-matrix",
+      "trace": "I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/comparison.test.ts:79; tools/agent-bench/src/comparison.test.ts:124; tools/agent-bench/src/comparison.test.ts:195",
+      "note": ""
+    },
+    {
+      "row": "Fault: provenance-lie — исходные infrastructure/agent failures/interrupted evidence сохраняются и классифицируются; rerun не заменяет выбранные failures",
+      "source": "fault-matrix",
+      "trace": "I12 + I13",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/ai-agent-weak-model-rerun.md:34; tools/agent-bench/src/runner.ts:141; tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/README.md:22; docs/backlog/distribution/reference/ai-agent-weak-model-rerun-evidence.md:18",
+      "note": ""
+    },
+    {
+      "row": "CLI report <current-dir> --compare <baseline-dir>: JSON/Markdown, baseline untouched, regression exit 1",
+      "source": "public-api",
+      "trace": "I13 + ADR-0478",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/comparison.test.ts:156",
+      "note": ""
+    },
+    {
+      "row": "Frozen comparison oracle: существующие 42 baseline runs, 14 групп по 3, 40 PASS; тестовые изменения только на copies",
+      "source": "frozen-artifact",
+      "trace": "I12 + I13",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/comparison.test.ts:38; tools/agent-bench/src/comparison.test.ts:61; tools/agent-bench/reports/summaries/2026-09-27-gpt-6-luna-baseline/manifest.json:3",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/src/comparison.test.ts:94",
+          "summary": "N1: Acceptance 3 / ADR-0478: assertions не проверяют contextExceeded и editFailures. Обнуление обоих счётчиков проходит все 10 тестов. Полезно добавить ненулевой context outcome и before/after/delta assertions для обоих полей.",
+          "authority": "",
+          "evidence": "Node v24.16.0 / Vitest 2.1.9. В scratch /private/tmp/rifty-pr359-comparison-mutants-abb3_6qx, неизменный comparison.test.ts: node /Users/vanilla-wave/.t3/worktrees/rifty/t3code-ee397980/node_modules/vitest/vitest.mjs run --config vitest.config.ts; контроль 10/10 PASS (/private/tmp/rifty-pr359-rerun-review-control.log), мутант metrics 10/10 PASS. node --import tsx probe.mts: {\"expectedContext\":1,\"actualContext\":0,\"expectedEditFailures\":9,\"actualEditFailures\":0}. Лог /private/tmp/rifty-pr359-rerun-review-mutant-metrics.log; source /private/tmp/rifty-pr359-comparison-mutants-abb3_6qx/report-mutant-metrics.ts, probe-metrics.mts; воспроизведение python3 /private/tmp/rifty-pr359-review-mutants.py. Это частично недискриминирующий carrier, advisory по REV-4; производственной реализации в diff нет."
+        },
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/src/comparison.test.ts:128",
+          "summary": "N2: Acceptance 2 / ADR-0478: проверки duplicate/count не различают несовпадающие уникальные run identities. Мутант без сверки идентичностей принимает baseline index 1 против current index 4. Полезен отдельный unmatched-identity RED при прежнем числе строк.",
+          "authority": "",
+          "evidence": "Node v24.16.0 / Vitest 2.1.9. В scratch /private/tmp/rifty-pr359-comparison-mutants-abb3_6qx, неизменный comparison.test.ts: node /Users/vanilla-wave/.t3/worktrees/rifty/t3code-ee397980/node_modules/vitest/vitest.mjs run --config vitest.config.ts; контроль 10/10 PASS (/private/tmp/rifty-pr359-rerun-review-control.log), мутант identity 10/10 PASS. node --import tsx probe.mts: {\"baselineIdentity\":1,\"currentIdentity\":4,\"rejected\":false,\"rows\":14}. Лог /private/tmp/rifty-pr359-rerun-review-mutant-identity.log; source /private/tmp/rifty-pr359-comparison-mutants-abb3_6qx/report-mutant-identity.ts, probe-identity.mts; воспроизведение python3 /private/tmp/rifty-pr359-review-mutants.py. Это частично недискриминирующий carrier, advisory по REV-4; производственной реализации в diff нет."
+        },
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/src/comparison.test.ts:177",
+          "summary": "N3: Acceptance 1: CLI assertions не проверяют обе revisions/profiles/config и пути исходных артефактов в сравнении. Мутант удаляет provenance из JSON/Markdown и проходит 10/10. Полезно проверить обе разные шапки и директории.",
+          "authority": "",
+          "evidence": "Node v24.16.0 / Vitest 2.1.9. В scratch /private/tmp/rifty-pr359-comparison-mutants-abb3_6qx, неизменный comparison.test.ts: node /Users/vanilla-wave/.t3/worktrees/rifty/t3code-ee397980/node_modules/vitest/vitest.mjs run --config vitest.config.ts; контроль 10/10 PASS (/private/tmp/rifty-pr359-rerun-review-control.log), мутант provenance 10/10 PASS. node --import tsx probe.mts: {\"keys\":[\"rows\",\"regressions\"],\"beforeHeaderPresent\":false,\"afterHeaderPresent\":false}. Лог /private/tmp/rifty-pr359-rerun-review-mutant-provenance.log; source /private/tmp/rifty-pr359-comparison-mutants-abb3_6qx/report-mutant-provenance.ts, probe-provenance.mts; воспроизведение python3 /private/tmp/rifty-pr359-review-mutants.py. Это частично недискриминирующий carrier, advisory по REV-4; производственной реализации в diff нет."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "55c572818a7d83afd821bec5f895ed38109c22db"
+}

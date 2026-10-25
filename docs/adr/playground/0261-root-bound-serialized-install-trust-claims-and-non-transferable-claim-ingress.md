@@ -272,3 +272,7 @@ This supersedes ADR-0194 only for its learned-pin 30-minute hard-TTL clause.
   Callers needing reload survival await the outer VFS flush.
 - First-install generated-baseline absorption may still await its global flush;
   this decision makes no broader performance claim.
+
+## Corrections (active)
+
+2026-09-10 — ADR-0415 supersedes only the reach/saved-open clauses named there; other decisions remain active.

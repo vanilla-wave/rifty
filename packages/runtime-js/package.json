@@ -21,6 +21,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./internal": "./src/internal/index.ts",
     "./worker": "./src/worker-entry.ts",
     "./install-process": "./src/ipc/install-process.ts",
     "./ipc/exec-sync-handler": "./src/ipc/exec-sync-handler.ts",
@@ -52,6 +53,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
+      },
+      "./internal": {
+        "types": "./dist/internal.d.ts",
+        "import": "./dist/internal.js"
       },
       "./worker": {
         "types": "./dist/worker.d.ts",

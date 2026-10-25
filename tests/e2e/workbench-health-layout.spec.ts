@@ -1,6 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 
 const APP_BOOT_TIMEOUT = 120_000;
+const WORKSPACE_OWNER_WORKER_URL_MARKER = 'quickjs-kernel-worker-host';
 
 test.describe('Workbench App recovery surfaces', () => {
   test.beforeEach(({ browserName }) => {
@@ -48,9 +49,11 @@ test.describe('Workbench App recovery surfaces', () => {
       page
         .workers()
         .map((worker) => worker.url())
-        .find((url) => url.includes('kernel-worker-entry')) ?? null;
+        .find((url) => url.includes(WORKSPACE_OWNER_WORKER_URL_MARKER)) ?? null;
     await expect.poll(ownerUrl, { timeout: 30_000 }).not.toBeNull();
-    const owner = page.workers().find((worker) => worker.url().includes('kernel-worker-entry'));
+    const owner = page
+      .workers()
+      .find((worker) => worker.url().includes(WORKSPACE_OWNER_WORKER_URL_MARKER));
     if (owner === undefined) {
       throw new Error('kernel-hosted Workbench owner realm was not observable');
     }

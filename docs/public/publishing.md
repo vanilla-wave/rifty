@@ -11,13 +11,13 @@ Each publishable package exposes two views of its entry points:
 
 Build is `tsup` (`pnpm build:libs`). First-party `@riftydev/*` and external deps stay external (not re-bundled), so installing several `@riftydev/*` packages at the same version shares one copy of kernel/vfs singletons.
 
-## Publishable set (16 packages)
+## Publishable set (17 packages)
 
-- `packages/*` (14, including the umbrella front door **`@riftydev/sdk`** — ADR-0071)
+- `packages/*` (15, including **`@riftydev/agent`** and the umbrella front door **`@riftydev/sdk`** — ADR-0436/0071)
 - `@riftydev/shadow-registry` (in `tools/`, a runtime dep of `@riftydev/npm-client`)
 - `@riftydev/eddy` (in `services/`, the opt-in fast-install resolver service — ADR-0182; hand-authored build, see below)
 
-`apps/playground`, all test fixtures, and the workspace root `rifty-workspace` stay `private`. All 16 published packages are under the `@riftydev` scope (the unscoped `rifty` name was blocked by npm as too similar to existing packages, so the umbrella ships as `@riftydev/sdk`).
+`apps/playground`, all test fixtures, and the workspace root `rifty-workspace` stay `private`. All 17 published packages are under the `@riftydev` scope (the unscoped `rifty` name was blocked by npm as too similar to existing packages, so the umbrella ships as `@riftydev/sdk`).
 
 ## Single source of truth
 
@@ -42,7 +42,7 @@ CI's `lint-and-typecheck` job runs `pnpm build:libs` on every PR, so the publish
 
 > ⚠️ Never run a bare `pnpm -r publish`: the workspace also contains non-`private` integration fixtures (`tools/integration-fixtures/*`) that must never reach npm. Always use the scoped filter above.
 
-`@riftydev/eddy` joined the automated set after its one-time token bootstrap and trusted-publisher setup. Tagged releases now ship all 16 names tokenlessly.
+After each name's one-time token bootstrap and trusted-publisher setup, tagged releases ship all 17 names tokenlessly.
 
 ### Tooling-version floor (do not regress)
 
@@ -59,7 +59,7 @@ setup-node uses **no `registry-url`** (it would write an `${NODE_AUTH_TOKEN}` pl
 ```bash
 # cut a release once the one-time setup below is done:
 git tag vX.Y.Z
-git push origin vX.Y.Z        # → release.yml builds & publishes all 16 packages, tokenless
+git push origin vX.Y.Z        # → release.yml builds & publishes all 17 packages, tokenless
 ```
 
 ## One-time setup (out of repo) — two phases
@@ -72,15 +72,15 @@ Create the **`@riftydev` org** on npmjs.com (free for public packages) so the sc
 
 ### Phase 1 — bootstrap-publish each name ONCE with a token
 
-The current 16-name `@riftydev` set is already bootstrapped. Do not rerun the
-unfiltered command against the live scope; this is the fresh-scope procedure,
-and `--only` is for a future new name.
+Do not rerun the unfiltered command against a live scope; it is the fresh-scope
+procedure. Bootstrap each later name separately with `--only` before a tag can
+publish the full lockstep set.
 
 No CI secret needed. Since the names don't exist yet, a granular token can't pre-select them — create a short-lived **granular token** with **All packages + Read and write + Bypass 2FA** (npm removed classic/automation tokens in Nov 2025; bypass-2FA is required for the non-interactive script). Put it in `$NPM_TOKEN` and run:
 
 ```bash
 pnpm install
-NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --dry-run   # packs all 16, publishes nothing
+NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --dry-run   # packs all 17, publishes nothing
 NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh             # the real publish
 ```
 
@@ -89,6 +89,15 @@ To bootstrap a **single new name later**, scope it with `--only` so the existing
 ```bash
 NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --only @riftydev/new-package --dry-run
 NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --only @riftydev/new-package
+```
+
+For the agent's first publication, run the same scoped flow before its first
+tagged release:
+
+```bash
+NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --only @riftydev/agent --dry-run
+NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --only @riftydev/agent
+bash tools/publishing/setup-trusted-publishers.sh --only @riftydev/agent
 ```
 
 The script runs `build:libs`, bundles `LICENSE` into each package, and publishes the filtered set (`./packages/*` + `@riftydev/shadow-registry` + `@riftydev/eddy`, `--access public`; or just `--only`'s filter). The token is read from `$NPM_TOKEN` and **never written to disk** — a throwaway npmrc holds the literal `${NPM_TOKEN}` placeholder that pnpm interpolates at read time, and it (plus the `LICENSE` copies) is removed on exit. Equivalent manual form:
@@ -101,7 +110,7 @@ pnpm -r --filter "./packages/*" --filter "@riftydev/shadow-registry" --filter "@
   publish --access public --no-git-checks   # --access public is mandatory for @riftydev/*
 ```
 
-All 16 names now exist on the registry. Revoke the token after Phase 2.
+All 17 names now exist on the registry. Revoke the token after Phase 2.
 
 ### Phase 2 — add a GitHub Actions trusted publisher to EACH package
 
@@ -115,11 +124,11 @@ On npmjs.com, for **each** published package → **Settings → Trusted Publishe
 | Environment | *(leave empty)* |
 | Allowed actions | tick **npm publish** |
 
-To skip the per-package toil: `bash tools/publishing/setup-trusted-publishers.sh` — idempotent, covers all 16 names via `npm trust github` (npm ≥ 11.15.0); `--only <name>` scopes a rerun. **Tokens don't work for trust ops** (granular + Bypass 2FA → 403, per npm docs) — the script needs an interactive `npm login` session; on the first browser 2FA prompt tick **"skip 2FA for 5 minutes"** and the rest of the loop passes silently. The package must already exist either way (Phase 1).
+To skip the per-package toil: `bash tools/publishing/setup-trusted-publishers.sh` — idempotent, covers all 17 names via `npm trust github` (npm ≥ 11.15.0); `--only <name>` scopes a rerun. **Tokens don't work for trust ops** (granular + Bypass 2FA → 403, per npm docs) — the script needs an interactive `npm login` session; on the first browser 2FA prompt tick **"skip 2FA for 5 minutes"** and the rest of the loop passes silently. The package must already exist either way (Phase 1).
 
 ### After that
 
-Every `git push origin vX.Y.Z` publishes all 16 packages tokenlessly via OIDC with provenance. **The repo must stay PUBLIC** — provenance silently emits nothing for a private repo.
+Every `git push origin vX.Y.Z` publishes all 17 packages tokenlessly via OIDC with provenance. **The repo must stay PUBLIC** — provenance silently emits nothing for a private repo.
 
 A `404`/`ENEEDAUTH` at publish almost always means: a trusted-publisher field typo (owner / repo-name-only / workflow-filename / environment case), a missing `id-token: write`, a stray `NODE_AUTH_TOKEN`, or pnpm pinned below 11.1.3.
 

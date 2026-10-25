@@ -1,0 +1,47 @@
+[
+  {
+    "names": ["widget/package.json", "widget/lib.js", "package/package.json"],
+    "entries": {
+      "lib.js": "{\"name\":\"native-root-probe\",\"version\":\"1.0.0\"}",
+      "package.json": "{\"name\":\"native-root-probe\",\"version\":\"1.0.0\"}"
+    }
+  },
+  {
+    "names": ["./widget/package.json", "./widget/lib.js", "package/package.json"],
+    "entries": {
+      "package.json": "{\"name\":\"native-root-probe\",\"version\":\"1.0.0\"}",
+      "widget/lib.js": "{\"name\":\"native-root-probe\",\"version\":\"1.0.0\"}",
+      "widget/package.json": "{\"name\":\"native-root-probe\",\"version\":\"1.0.0\"}"
+    }
+  },
+  {
+    "names": ["standalone.txt", "package/package.json"],
+    "entries": {
+      "package.json": "{\"name\":\"native-root-probe\",\"version\":\"1.0.0\"}"
+    }
+  },
+  {
+    "names": ["one/a.js", "two/b.js", "package/package.json"],
+    "entries": {
+      "a.js": "{\"name\":\"native-root-probe\",\"version\":\"1.0.0\"}",
+      "b.js": "{\"name\":\"native-root-probe\",\"version\":\"1.0.0\"}",
+      "package.json": "{\"name\":\"native-root-probe\",\"version\":\"1.0.0\"}"
+    }
+  },
+  {
+    "names": ["package/__proto__", "package/constructor", "package/package.json"],
+    "entries": {
+      "__proto__": "{\"name\":\"native-root-probe\",\"version\":\"1.0.0\"}",
+      "constructor": "{\"name\":\"native-root-probe\",\"version\":\"1.0.0\"}",
+      "package.json": "{\"name\":\"native-root-probe\",\"version\":\"1.0.0\"}"
+    }
+  },
+  {
+    "names": ["package/package.json", "package/old-format.js"],
+    "typeFlag": "\u0000",
+    "entries": {
+      "package.json": "{\"name\":\"native-root-probe\",\"version\":\"1.0.0\"}",
+      "old-format.js": "{\"name\":\"native-root-probe\",\"version\":\"1.0.0\"}"
+    }
+  }
+]

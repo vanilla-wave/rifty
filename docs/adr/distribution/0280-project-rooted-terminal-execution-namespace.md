@@ -55,3 +55,7 @@ public `/` rejects before filesystem or package-state effects.
 - Private transport keeps explicit bidirectional path projection; malformed or
   outside-root state fails loudly instead of being guessed.
 - This decision does not add origins, permissions, or a security sandbox.
+
+## Corrections (active)
+
+- 2026-10-16 (ADR-0531): "Public `/` maps to its exact physical tree", "Parent traversal cannot escape it" and the public-`/` destructive-mutation clause are superseded — the project is mounted at `publicProjectRoot` (default `/home/project`) beside project-owned `/tmp` and `/home/rifty`; the refusal applies to every mount point. Typed `remoteFsRoot` launch, npm mapping and owner-path PTY state stand.

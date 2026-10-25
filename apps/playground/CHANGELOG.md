@@ -2,6 +2,69 @@
 
 ## [Unreleased]
 
+- Baked Vite/TypeScript snapshots re-baked over their committed lockfile pins: installed Vite chunks are upstream bytes (ADR-0533).
+
+- Starters run at `/home/project` (ADR-0531): terminal links and the companion terminal state map the public root back to project paths; `/tmp` and `~` (`/home/rifty`) are project-owned.
+
+- `snapshots:bake --replay-committed-lockfile` re-bakes over each committed snapshot's lockfile pins and replay cache (fails if the pins change), so a transform change does not re-resolve ranges against today's registry.
+- Production installs route same-origin through a Netlify `/npm-registry/*` proxy rewrite (ADR-0528); the dead `registry.rifty.dev` / `eddy.rifty.dev` origins are no longer configured, eddy fast install is OFF in production.
+- Pin Vite 7 starters to admitted 7.3.6; fresh installs no longer select unsupported patch releases. Rebake Vite/TypeScript snapshots.
+- Retain the rebaked Vite graph's original npm registry fixtures; permanent closure guard catches missing packed-browser inputs.
+
+- Chat renders the agent transcript model: retain tools at budget exit, show live shell output/cancelled state and native continuation/capability notices.
+
+- Add manual browser proof page: support, real Vite install/build, durable reload and reopen, copyable device report.
+
+- Select the latest new preview port without ES2023 `findLast`.
+- Catalog JSON keeps the typed text while it is the edit source; other catalog edits re-serialize it.
+- Models created in Settings get their own provider, so each carries its own API key.
+- "Continue with …" sends an edited draft as-is; the auto-restored failed prompt is dropped, never a duplicate user turn: a pending attachment goes alone, otherwise `continue`.
+- Declare credential-named catalog header values (name contains auth/key/token/secret/cookie/session; raw and bare `Bearer` token, each only when at least 8 characters, so a short value such as `5` cannot corrupt `500: …` error text) as chat secrets; provider error echoes are masked before they reach history, status or UI; a non-credential match (Idempotency-Key) is masked too; other headers stay visible (ADR-0479).
+
+- Default AI run budget600s; built-in results expose remaining budget and mutation diagnostics, native repeated-call notices appear in history.
+
+- Show retry/compaction notices and offer explicit model continuation after context overflow.
+
+- Edit/persist a model catalog, switch without resetting history, continue after provider errors, attach images or exact project-file bytes.
+
+- Create chat sessions through native pi model catalogs.
+
+- First pi skill/template command now shows the session refusal and preserves the draft; admission stays inside the run budget (ADR-0442).
+- Show loaded agent files, skills and diagnostics; /reload applies editor changes without a model request.
+- Chat refuses `/skill:<loaded skill>` and `/<reported .pi/prompts template>` with a notice; other `/`-text (paths, comments, unknown names) is forwarded to the model as in pi.
+
+- Keep AI endpoint CORS/proxy guidance in the Playground UI while the public
+  agent package reports product-neutral network failures.
+
+- Agent shell names an incomplete command input as its failure; nothing executed.
+- Restore React type declarations in fresh installs and re-bake dependency snapshots with npm-correct archive paths.
+
+
+- Reveal the Agent terminal when launching commands from Problems, including a collapsed console.
+
+- Lazy +chat over the public Pi agent; real Agent terminal/preview/SCM, memory-only key/limits, Stop/Reset/export and opt-in benchmark hooks (ADR-0427/0431).
+- Refresh clean editor models and exact Document captures after public owner writes; preserve unpublished buffers/CAS, never write a refresh back (ADR-0430).
+- Prebundle the same Pi provider graph in the headerless no-COI test host.
+- Prepare lazy agent consumption; predeclare Pi optimizer dependencies so first use cannot reload the live project (ADR-0424).
+- Show legacy/corrupt storage loss through health without a false Retry or Reload action; retain real opening progress (ADR-0432).
+
+- Rebuild all dependency snapshots for the esbuild invocation cwd/ref artifact identity (ADR-0421).
+
+- Retain the concrete Playground SQLite asset type when validating against optional Workbench deployment options.
+
+- Clear authoritative Scratch Reset dirty state while retaining pending optimistic edit/starter protection; preserve editor, terminal, npm and Git classifications.
+
+- Expose real project-opening persistence operations through Workbench health and Playground preparing UI; scope counts to the existing open operation and clear them on settlement (ADR-0413).
+
+- Bake the existing installed-file preparation into dependency snapshot payloads.
+
+- Regenerate the copied App SW for scoped preview routing/protocol7 (ADR-0409).
+- Nodemon stop acceptance waits for foreground completion and a real output marker before counting further starts; HTTP absence alone does not settle admitted output.
+
+- Intentional snapshot starter replacement uses Reset; same-starter reload preserves saved source under Workbench's default snapshot policy (ADR-0394).
+
+- Refresh installed-package snapshots for registry-owned adaptation identity; normal semver resolution also updates PostCSS 8.5.26 → 8.5.28 (ADR-0384).
+
 ### Added
 
 - Dev-only snapshot fault seam: cookie `rifty-e2e-snapshot-fault`
@@ -9,6 +72,23 @@
   the dev server for restore-visibility e2e — the fetch is SW-mediated and
   unreachable for playwright routing (backlog:
   playground/cold-restore-progress-visibility).
+- **"Real npm project" is now an ordinary React app.** The `real-vite` tile
+  seeds the `react-vite` template — React 19 + React Router 7 + TypeScript on
+  Vite 7 with its own visible `vite.config.ts` (`@vitejs/plugin-react`), a
+  4-route issue tracker with 8 components and a mock dataset, and four planted
+  rough edges named in the seeded `README.md`. Setup stays `from-scratch` (the
+  terminal runs a visible `npm install`, no baked snapshot) and the preset id is
+  unchanged, so the launch deep-link, the landing card and `pnpm bench` still
+  address the same tile. The vanilla `vite` template is untouched and stays the
+  internal base for the instant presets. A template may now seed its own
+  package.json `scripts` (here `build`/`preview`); dev aliases stay derived, so
+  `npm run build` never boots the dev server. The launch benchmark (`pnpm
+  bench`) now measures this tile: `perf/benchmarks.json` regenerated
+  2026-09-02 — cold start 444 ms, install → first Vite response 9820 ms on the
+  standard transport; the eddy pass is `unmeasured` because the deployed
+  resolver (image 2026-08-23) resolves `esbuild@0.28.0` through the pre-#289
+  catalog shape, which carries no integrity, and declines every esbuild
+  closure (`distribution/eddy-live-esbuild-closure-decline`).
 
 - **Live terminal command completion (ADR-0362).** Tab completion now queries
   the active owner Shell instead of a page-side inventory, so registered
@@ -17,6 +97,16 @@
   failure shows `Completion failed: <reason>` without a fabricated menu.
   Foreground Tab remains child stdin, and switching sessions invalidates the
   hidden session's pending/menu state.
+- An ordinary webpack 5 / webpack-dev-server 5 starter now cold-installs its
+  npm-owned `webpack serve` script and reaches the generic routed preview with
+  stock HMR; its companion plan carries no webpack-specific runtime fields
+  (ADR-0349).
+- Hidden `npm-dev-server-node-ws` class-proof: the same zero-field
+  `kind: 'npm-dev-server'` seam with `scripts.dev` = `node server.mjs` (no extra
+  npm deps). Deep-link only (`?preset=npm-dev-server-node-ws`); not a gallery
+  tile. Hosted e2e proves LIVE + HTTP 200 + WS through the preview bridge on a
+  non-webpack tool that allow-lists the exact Playground page origin.
+
 - Express, Hono, and Koa pin real `nodemon@3.1.14`; owner-VFS edits now replace
   the app Worker on the same preview port with crash recovery and teardown.
   Direct `start` and non-server templates keep their paths (ADR-0324–0327).
@@ -40,6 +130,14 @@
   persistent terminal hint explains that `+` opens a second shell while a
   program owns stdin.
 
+- The webpack starter now allow-lists only the exact Playground page hostname
+  in its visible dev-server config, so stock HMR works on deployed aliases
+  without weakening Host/Origin checks (ADR-0355).
+- A preview-readiness failure no longer marks its still-live project process as
+  stopped or disables Stop Project; physical exit remains the state authority.
+- The Vite host kernel wrapper now publishes its emitted QuickJS WASM URL
+  before loading Workbench's sealed kernel entry, so transformed Emscripten
+  chunks never fetch the playground HTML fallback (ADR-0352).
 - Node 24 `require(ESM)` no longer makes the playground dev host discover
   `cjs-module-lexer` mid-session and full-reload away the live owner. Rebaked
   TypeScript/Vite snapshots carry the new esbuild recipe identity and refresh
@@ -86,6 +184,11 @@
 
 ### Changed (Workbench extraction)
 
+- Re-bake Vite 7, Vite 8, and TypeScript instant snapshots against ADR-0371.
+  Vite 7/TypeScript now carry exact `esbuild-wasm@0.28.0` in-tree; live ranges
+  also advance Rollup/`@rollup/wasm-node` 4.62.4→4.63.1 and picomatch
+  4.0.5→4.0.7 (Vite 8: picomatch only). Gzip sizes are 12.2/18.1/19.3 MB.
+
 - Dependency snapshots are re-baked against the catalog identity containing
   the exact Sass substitution; preset dependency sets remain unchanged.
 - TypeScript, Vite 7, and Vite 8 instant snapshots now carry protocol-v2
@@ -99,10 +202,9 @@
 - TypeScript, Vite 7, and Vite 8 dependency snapshots are re-baked against the
   schema-2 shadow catalog/install identity; stale schema-1 snapshots cannot be
   restored (ADR-0328).
-- Instant Vite 7 restores still skip `npm install`, but an empty verified
-  runtime CAS now has an explicit two-request esbuild-wasm acquisition contract
-  and loud `ESHADOWASSET/acquire` offline failure; warm CAS and Vite 8 are
-  registry-free (ADR-0320).
+- Instant Vite 7 restores skip `npm install` and carry the exact esbuild-wasm
+  twin in the tree, so physical-owner reopen stays registry-free offline;
+  from-scratch installs retain the ordinary two registry requests (ADR-0371).
 - Baked dependency snapshots re-baked against the live registry absorbed
   `postcss` 8.5.22 → 8.5.23 (vite's floating `^8.5.6` range) in all three
   presets; pinning bake inputs is
@@ -2351,7 +2453,7 @@
   (fast). Switching projects clears the terminal first. Template switcher groups
   presets under "Instant start" / "From scratch" with kind pills. Stamp
   invalidation is provisional —
-  `docs/backlog/playground/install-stamp-invalidation.md`.
+  `docs/adr/playground/0415-open-saved-projects-independently-of-installation-proof.md`.
 
 ### Changed
 

@@ -1,13 +1,12 @@
 export {
   DEFAULT_CWD,
   ProcessManager,
-  decodeIpcFrame,
   formatProcessSnapshot,
   globalProcessManager,
   readRootProcessSnapshot,
 } from './process-manager.ts';
+export { type IpcFrame, decodeIpcFrame } from './process-control-frame.ts';
 export type {
-  IpcFrame,
   ProcessHandle,
   ProcessHandleKind,
   ProcessIO,
@@ -47,7 +46,7 @@ export type {
 
 // ADR-0039 — pre-entry hook (runtime-js installs the Node `process` global
 // via this hook). The hook itself is registered by higher layers; the kernel
-// just exposes the setter and calls it after publishing `KernelProcessSpec`.
+// just exposes the setter and awaits it after publishing `KernelProcessSpec`.
 export {
   type KernelPreEntryHook,
   type KernelDrainHook,
@@ -108,14 +107,13 @@ export {
   KERNEL_SYNC_BINARY_CALL_KEY,
   KERNEL_SYNC_CALL_KEY,
   type KernelEntryBootstrapEnvelope,
-  type KernelEntryCapabilityPorts,
   type KernelProcessSpec,
   type KernelProcessStdioPorts,
   type KernelStdioOutputWriter,
+  type KernelStdioInputReader,
   type KernelSyncApi,
   type KernelSyncBinaryCall,
   type KernelSyncCall,
-  consumeKernelEntryCapabilityPorts,
   publishKernelEntryBootstrap,
   publishKernelProcessSpec,
   publishKernelSyncApi,

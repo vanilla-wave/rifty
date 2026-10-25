@@ -12,6 +12,8 @@
  *   serves its own HTML. No index.html is seeded — it would shadow the server.
  * - `'node-cli'` — the worker imports the ENTRY itself; the entry runs to
  *   completion and exits without a preview port.
+ * - `'npm-dev-server'` — npm runs the project-owned `scripts.dev`; the
+ *   installed package owns its HTTP/WebSocket server and preview port.
  *
  * Pure data + pure mapping function: no DOM, no channels, no solid-js (glue
  * altitude). Only `id` crosses a realm boundary (over env as
@@ -46,10 +48,15 @@ export interface NodeCliBootstrapConfig extends BootstrapConfigBase {
   readonly runtime: 'node-cli';
 }
 
+export interface NpmDevServerBootstrapConfig extends BootstrapConfigBase {
+  readonly runtime: 'npm-dev-server';
+}
+
 export type BootstrapConfig =
   | ViteBootstrapConfig
   | NodeServerBootstrapConfig
-  | NodeCliBootstrapConfig;
+  | NodeCliBootstrapConfig
+  | NpmDevServerBootstrapConfig;
 
 export interface ProjectEntry {
   /** Root-relative entry path with a leading slash (e.g. `/src/main.js`). */
@@ -67,6 +74,14 @@ interface ProjectSpecBase {
   readonly install: Readonly<Record<string, string>>;
   /** npm devDependencies to install into the worker-local node_modules. */
   readonly devDependencies?: Readonly<Record<string, string>>;
+  /**
+   * Extra package.json `scripts` seeded verbatim (e.g. a Vite template's own
+   * `build`/`preview`). Never a dev alias: the derived dev names always win,
+   * and only they boot the co-resident dev server ({@link isDevScriptName}).
+   */
+  readonly scripts?: Readonly<Record<string, string>>;
+  /** Defaults to ESM; `false` omits `type` for an ordinary CommonJS package. */
+  readonly packageType?: 'module' | false;
   readonly entry: ProjectEntry;
   readonly defaultPort: number;
   readonly estimatedBootSeconds: number;
@@ -112,7 +127,18 @@ export interface NodeCliProjectSpec extends NodeProjectSpecBase {
   readonly runtime: 'node-cli';
 }
 
-export type ProjectSpec = ViteProjectSpec | NodeServerProjectSpec | NodeCliProjectSpec;
+/** Template whose package.json `dev` script owns a long-running preview server. */
+export interface NpmDevServerProjectSpec extends NodeProjectSpecBase {
+  readonly runtime: 'npm-dev-server';
+  /** Exact package.json `scripts.dev` body. */
+  readonly devCommand: string;
+}
+
+export type ProjectSpec =
+  | ViteProjectSpec
+  | NodeServerProjectSpec
+  | NodeCliProjectSpec
+  | NpmDevServerProjectSpec;
 
 const NODEMON_VERSION = '3.1.14';
 const NODEMON_DEV_COMMAND = 'nodemon --legacy-watch --no-stdin --no-update-notifier src/main.js';
@@ -142,6 +168,7 @@ function buildIndexHtml(title: string, entryRelativePath: string): string {
  */
 export function devScriptCommand(spec: ProjectSpec): string {
   if (spec.runtime === 'vite') return 'vite';
+  if (spec.runtime === 'npm-dev-server') return spec.devCommand;
   if (spec.runtime === 'node-server' && spec.install.nodemon === NODEMON_VERSION) {
     return NODEMON_DEV_COMMAND;
   }
@@ -150,10 +177,12 @@ export function devScriptCommand(spec: ProjectSpec): string {
 
 /**
  * Is `name` one of the seeded auto-boot aliases? Runtime execution still
- * selects from the exact resolved script body, not this name.
+ * selects from the exact resolved script body, not this name. A template's own
+ * `scripts` (build/preview) are deliberately NOT dev aliases — `npm run build`
+ * must never boot the dev server.
  */
 export function isDevScriptName(spec: ProjectSpec, name: string): boolean {
-  return Object.hasOwn(projectScripts(spec), name);
+  return Object.hasOwn(devScriptAliases(spec), name);
 }
 
 /**
@@ -172,14 +201,24 @@ export function terminalDevLine(spec: ProjectSpec, root: string): string {
 }
 
 /**
- * package.json `scripts` for a spec. Node projects keep `start` on the direct
- * entry while `dev` may deliberately select an installed supervisor.
+ * The auto-boot aliases derived from the spec. Node projects keep `start` on
+ * the direct entry while `dev` may deliberately select an installed supervisor.
  */
-export function projectScripts(spec: ProjectSpec): Record<string, string> {
+function devScriptAliases(spec: ProjectSpec): Record<string, string> {
   const dev = devScriptCommand(spec);
   if (spec.runtime === 'vite') return { dev, vite: dev };
+  if (spec.runtime === 'npm-dev-server') return { dev };
   const start = `node ${spec.entry.relativePath.replace(/^\/+/, '')}`;
   return { dev, start };
+}
+
+/**
+ * package.json `scripts` for a spec: the template's own scripts first, then the
+ * derived dev aliases — the aliases win, so a template can never redefine the
+ * line the playground boots.
+ */
+export function projectScripts(spec: ProjectSpec): Record<string, string> {
+  return { ...spec.scripts, ...devScriptAliases(spec) };
 }
 
 const GIT_INIT_CONFIG = `[core]
@@ -218,7 +257,7 @@ export function buildProjectPackageJson(spec: ProjectSpec): {
     name,
     version,
     private: true,
-    type: 'module',
+    ...(spec.packageType === false ? {} : { type: 'module' }),
     scripts,
     dependencies: spec.install,
     ...(spec.devDependencies ? { devDependencies: spec.devDependencies } : {}),
@@ -264,13 +303,24 @@ export function resolveBootstrapConfig(
       ? { bakedNodeModulesTemplateId: spec.bakedNodeModulesTemplateId }
       : {}),
   };
-  if (spec.runtime === 'node-server' || spec.runtime === 'node-cli') {
+  if (
+    spec.runtime === 'node-server' ||
+    spec.runtime === 'node-cli' ||
+    spec.runtime === 'npm-dev-server'
+  ) {
     const seedFiles: Record<string, string> = {
       ...initializedGitFiles(root),
       [entryPath]: spec.entry.content,
       [`${root}/package.json`]: pkg.json,
     };
     addExtraFiles(seedFiles, root, spec.extraFiles);
+    if (spec.runtime === 'npm-dev-server') {
+      return {
+        ...base,
+        runtime: 'npm-dev-server',
+        seedFiles,
+      } satisfies NpmDevServerBootstrapConfig;
+    }
     if (spec.runtime === 'node-cli') {
       return { ...base, runtime: 'node-cli', seedFiles } satisfies NodeCliBootstrapConfig;
     }

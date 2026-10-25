@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- executeLine discards an owned incomplete line instead of leaving it in the interactive input (ADR-0431).
+- Add executeLine for externally owned commands through the existing input/busy/output lifetime, returning the real callback outcome; preserve submitLine's contract (ADR-0431).
 ### Added
 
 - Ctrl+Space (`NUL`) uses the existing Tab completion path while line input is

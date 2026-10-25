@@ -2,13 +2,7 @@
 
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { RegistryClient, install } from '@riftydev/npm-client';
-import {
-  createMemoryShadowAssetStorage,
-  createOriginExclusiveShadowAssetManager,
-  createRegistryShadowAssetSource,
-  createShadowAssetPortClient,
-  shadowAssetPlanForInstallResult,
-} from '@riftydev/npm-client/internal';
+import { shadowSubstitutionPlanForInstallResult } from '@riftydev/npm-client/internal';
 import {
   awaitDrain,
   installConsole,
@@ -18,11 +12,14 @@ import {
 import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import {
+  getProcessCwd,
   installProcessGlobals,
   riftyProcess,
   setProcessCwd,
 } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
+import { ref, unref } from '@riftydev/runtime-js/internal';
+import { activatePackageRuntimeAdapters } from '@riftydev/shadow-registry/runtime';
 import { asyncVfs, syncMirror } from '@riftydev/vfs';
 import { installMemoryFs } from '@riftydev/vfs/internal';
 import { installWorkerRealmCompat } from '../../../packages/runtime-js/src/ipc/worker-realm-compat.ts';
@@ -30,8 +27,7 @@ import { finalizePackageInstallFiles } from '../../../packages/workbench/src/wor
 import {
   prepareViteCli,
   viteCliPreparationFromArgs,
-} from '../../../packages/workbench/src/workers/vite-cli-prep.ts';
-import { activateWorkbenchRuntimeAdapters } from '../../../packages/workbench/src/workers/workbench-runtime-adapters.ts';
+} from '../../../tools/shadow-registry/src/runtime/vite-cli-prep.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -187,31 +183,18 @@ async function capturedNodeRun(options: {
 }
 
 async function activateViteRuntime(): Promise<void> {
-  if (registry === null || installResult === null) throw new Error('install must complete first');
-  const manager = createOriginExclusiveShadowAssetManager({
-    storage: createMemoryShadowAssetStorage(),
-    source: createRegistryShadowAssetSource(registry),
+  if (installResult === null) throw new Error('install must complete first');
+  const plan = shadowSubstitutionPlanForInstallResult(installResult);
+  await activatePackageRuntimeAdapters({
+    getCwd: getProcessCwd,
+    refs: { ref, unref },
+    bindings: plan.bindings.map((binding) => ({
+      ...binding,
+      packagePath: `${root}/${binding.packagePath}`,
+    })),
+    fs: syncMirror(),
+    cwd: root,
   });
-  const ready = await manager.ensure(shadowAssetPlanForInstallResult(installResult));
-  const channel = new MessageChannel();
-  const server = manager.serve(ready, channel.port2);
-  const client = createShadowAssetPortClient(channel.port1);
-  let failure: unknown;
-  try {
-    await activateWorkbenchRuntimeAdapters({ assets: client, fs: syncMirror(), cwd: root });
-  } catch (error) {
-    failure = error;
-  }
-  server.dispose();
-  try {
-    await manager.close();
-  } catch (closeError) {
-    if (failure !== undefined) {
-      throw new AggregateError([failure, closeError], 'runtime activation and close failed');
-    }
-    throw closeError;
-  }
-  if (failure !== undefined) throw failure;
 }
 
 async function dispatch(value: unknown): Promise<unknown> {

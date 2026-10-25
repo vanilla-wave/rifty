@@ -207,6 +207,18 @@ async function registryEntries(
       await registryEntry('napi-wasm', '1.1.3'),
     );
   }
+  if (recipe.name === 'esbuild') {
+    entries.push(
+      await registryEntry(
+        'esbuild-wasm',
+        '0.28.0',
+        {},
+        {
+          files: { 'esbuild.wasm': '\0asm-matrix-fixture' },
+        },
+      ),
+    );
+  }
   return entries;
 }
 
@@ -309,51 +321,31 @@ async function bundleFor(
   });
 }
 
-// TODO(backlog: npm-client/shadow-cache-ledger-independent-completion-order)
 function supportedFreshEvents(recipe: RecipeCase, shape: Shape): string[] {
-  if (recipe.name === 'esbuild') {
-    return shape === 'transitive'
-      ? [
-          `packument:${HOST}`,
-          `cache:get:${HOST}@1.0.0`,
-          `tarball:${HOST}`,
-          `cache:put:${HOST}@1.0.0`,
-        ]
-      : [];
-  }
+  const twin = recipe.name === 'esbuild' ? 'esbuild-wasm@0.28.0' : 'lightningcss-wasm@1.32.0';
+  const twinName = twin.slice(0, twin.lastIndexOf('@'));
   return shape === 'direct'
-    ? [
-        'packument:lightningcss-wasm',
-        'cache:get:lightningcss-wasm@1.32.0',
-        'tarball:lightningcss-wasm',
-        'cache:put:lightningcss-wasm@1.32.0',
-      ]
+    ? [`packument:${twinName}`, `cache:get:${twin}`, `tarball:${twinName}`, `cache:put:${twin}`]
     : [
         `packument:${HOST}`,
         `cache:get:${HOST}@1.0.0`,
-        'packument:lightningcss-wasm',
+        `packument:${twinName}`,
         `tarball:${HOST}`,
-        'cache:get:lightningcss-wasm@1.32.0',
-        'tarball:lightningcss-wasm',
+        `cache:get:${twin}`,
+        `tarball:${twinName}`,
         `cache:put:${HOST}@1.0.0`,
-        'cache:put:lightningcss-wasm@1.32.0',
+        `cache:put:${twin}`,
       ];
 }
 
 function replayCacheEvents(recipe: RecipeCase, shape: Shape): string[] {
-  return [
-    ...(shape === 'transitive' ? [`cache:get:${HOST}@1.0.0`] : []),
-    ...(recipe.name === 'lightningcss' ? ['cache:get:lightningcss-wasm@1.32.0'] : []),
-  ];
+  const twin = recipe.name === 'esbuild' ? 'esbuild-wasm@0.28.0' : 'lightningcss-wasm@1.32.0';
+  return [...(shape === 'transitive' ? [`cache:get:${HOST}@1.0.0`] : []), `cache:get:${twin}`];
 }
 
 function supportedEddyEvents(recipe: RecipeCase, shape: Shape): string[] {
-  if (recipe.name === 'esbuild') {
-    return shape === 'transitive'
-      ? ['eddy:POST', ...supportedFreshEvents(recipe, shape)]
-      : ['eddy:POST'];
-  }
-  const names = [...(shape === 'transitive' ? [`${HOST}@1.0.0`] : []), 'lightningcss-wasm@1.32.0'];
+  const twin = recipe.name === 'esbuild' ? 'esbuild-wasm@0.28.0' : 'lightningcss-wasm@1.32.0';
+  const names = [...(shape === 'transitive' ? [`${HOST}@1.0.0`] : []), twin];
   return [
     'eddy:POST',
     ...names.map((name) => `cache:put:${name}`),
@@ -377,6 +369,40 @@ function expectedEvents(testCase: MatrixCase): string[] {
     `cache:put:${HOST}@1.0.0`,
   ];
   return testCase.source === 'eddy' ? ['eddy:POST', ...host] : host;
+}
+
+function exactMultiset(
+  actual: readonly string[],
+  expected: readonly string[],
+  label: string,
+): void {
+  expect([...actual].sort(), label).toEqual([...expected].sort());
+  expect(actual, `${label}: duplicate count`).toHaveLength(expected.length);
+}
+
+function expectEventLedger(actual: readonly string[], testCase: MatrixCase): void {
+  const expected = expectedEvents(testCase);
+  const concurrentFreshPuts =
+    testCase.outcome === 'supported' &&
+    testCase.source === 'fresh' &&
+    testCase.recipe.name === 'lightningcss' &&
+    testCase.shape === 'transitive';
+  if (!concurrentFreshPuts) {
+    expect(actual).toEqual(expected);
+    return;
+  }
+
+  const actualPut = actual.findIndex((event) => event.startsWith('cache:put:'));
+  const expectedPut = expected.findIndex((event) => event.startsWith('cache:put:'));
+  expect(actualPut, 'first concurrent cache-write index').toBe(expectedPut);
+  expect(actual.slice(0, actualPut), 'ordered pre-cache-write events').toEqual(
+    expected.slice(0, expectedPut),
+  );
+  exactMultiset(
+    actual.slice(actualPut),
+    expected.slice(expectedPut),
+    'concurrent cache-write events',
+  );
 }
 
 function admissionFeature(error: unknown, seen = new Set<unknown>()): string | undefined {
@@ -495,7 +521,7 @@ describe('shadow recipe v2 data authority — ordinary install', () => {
       caught = error;
     }
 
-    expect(events).toEqual(expectedEvents(testCase));
+    expectEventLedger(events, testCase);
     if (testCase.outcome === 'supported') {
       expect(caught).toBeUndefined();
       expect(fetchSpy).toHaveBeenCalledTimes(testCase.source === 'eddy' ? 1 : 0);

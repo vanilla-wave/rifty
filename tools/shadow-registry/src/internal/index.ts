@@ -10,5 +10,12 @@ export type {
   ShadowRecipeAdmission,
   ShadowRecipeAcquisition,
   ShadowRegistryDependencyProjection,
-  ShadowRuntimeAsset,
 } from './model.ts';
+
+export {
+  builtinRecipeForTier,
+  canReprojectShadowRecipe,
+  builtinRecipeById,
+  specializeShadowRecipe,
+  type ShadowRuntimeTier,
+} from './recipe-selection.ts';

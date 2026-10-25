@@ -1,0 +1,16 @@
+{
+  "date": "2026-09-28T14:55:59.760Z",
+  "request": {
+    "browserName": "safari",
+    "platformName": "ios",
+    "safari:useSimulator": false,
+    "safari:diagnose": true
+  },
+  "response": {
+    "value": {
+      "error": "session not created",
+      "message": "Could not create a session: Some devices were found, but could not be used:\n",
+      "stacktrace": ""
+    }
+  }
+}

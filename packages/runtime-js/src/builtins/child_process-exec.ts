@@ -1,3 +1,4 @@
+import { runtimeProxy } from '../internal/proxy-identity.ts';
 /**
  * Inner script-execution helper for `child_process.spawn`. Split out of
  * `child_process.ts` to keep that file under the ADR-0024 line budget.
@@ -11,13 +12,21 @@
 import { Buffer, EventEmitter, NotImplementedError, Writable, loadBuiltin } from '@riftydev/io';
 import type { ProcessHandle, ProcessIO } from '@riftydev/kernel';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
-import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import {
+  type NodeIpcSerialization,
+  decodeNodeIpcMessage,
+  encodeNodeIpcMessage,
+} from '../internal/node-ipc-serialization.ts';
+import { Console } from './console.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import {
   attachNodeProcessBootstrapIdentity,
   readActiveNodeProcessBootstrap,
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
+import { makeStdioWriter } from './process-stdio-writer.ts';
+import { patchPromiseForNextTick, riftyProcess } from './process.ts';
+import { captureProcessStdio } from './stdio-fd-source.ts';
 import {
   clearImmediate as runtimeClearImmediate,
   setImmediate as runtimeSetImmediate,
@@ -26,7 +35,12 @@ import {
 export interface ExecScriptArgs {
   command: string;
   args: string[];
-  opts: { cwd?: string; env?: Record<string, string>; __fork?: boolean };
+  opts: {
+    cwd?: string;
+    env?: Record<string, string>;
+    __fork?: boolean;
+    serialization?: NodeIpcSerialization;
+  };
   io: ProcessIO;
   ownHandle: ProcessHandle;
   inboundIpc: EventEmitter;
@@ -96,17 +110,13 @@ const hostClearTimeout = globalThis.clearTimeout.bind(globalThis);
 const hostSetInterval = globalThis.setInterval.bind(globalThis);
 const hostClearInterval = globalThis.clearInterval.bind(globalThis);
 
-/**
- * Run a child script through `new Function`. Mutates `ownHandle.exitCode`
- * directly for non-zero exits (so the kernel preserves them) and emits
- * `'exit'` / `'close'` on the handle itself.
- */
+/** Run a same-realm script; the kernel owns terminal publication and retirement. */
 export async function execScript(a: ExecScriptArgs): Promise<void> {
   let streamsClosed = false;
-  const writeStdout = (chunk: string): void => {
+  const writeStdout = (chunk: string | Uint8Array): void => {
     a.io.write('stdout', chunk);
   };
-  const writeStderr = (chunk: string): void => {
+  const writeStderr = (chunk: string | Uint8Array): void => {
     a.io.write('stderr', chunk);
   };
   const closeStreams = (): void => {
@@ -119,10 +129,8 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
   const finish = (exitCode: number): void => {
     if (finished || a.ownHandle.exitCode !== null || a.ownHandle.signalCode !== null) return;
     finished = true;
-    a.ownHandle.exitCode = exitCode;
     closeStreams();
-    a.ownHandle.emit('exit', exitCode, null);
-    a.ownHandle.emit('close', exitCode, null);
+    a.io.complete(exitCode);
   };
 
   if (a.command !== 'node') {
@@ -142,6 +150,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
   try {
     const source = syncMirror().readFileBytesSync(scriptPath);
     const code = Buffer.from(source).toString();
+    patchPromiseForNextTick();
     let wakeLifecycle = (): void => {};
     const lifecycleWake = (): void => wakeLifecycle();
     const stdin = a.stdinPipe.attach(lifecycleWake);
@@ -276,15 +285,36 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       },
       { once: true },
     );
+    // Node: a child starts in the parent's cwd at spawn unless `cwd` is given.
+    const childCwd =
+      a.opts.cwd ?? (globalThis as { process?: { cwd?: () => string } }).process?.cwd?.() ?? '/';
     childProcess = {
       argv: ['rifty', scriptPath, ...a.args.slice(1)],
       env: a.opts.env ?? {},
       pid: a.ownHandle.pid,
       ppid: a.ownHandle.ppid,
       stdin,
-      stdout: { write: writeStdout },
-      stderr: { write: writeStderr },
-      cwd: () => a.opts.cwd ?? '/',
+      stdout: makeStdioWriter(
+        { write: (bytes) => writeStdout(bytes) },
+        1,
+        false,
+        { cols: 80, rows: 24 },
+        (callback) =>
+          riftyProcess.nextTick(() => {
+            if (!finished && !aborted) invokeGuest(callback);
+          }),
+      ),
+      stderr: makeStdioWriter(
+        { write: (bytes) => writeStderr(bytes) },
+        2,
+        false,
+        { cols: 80, rows: 24 },
+        (callback) =>
+          riftyProcess.nextTick(() => {
+            if (!finished && !aborted) invokeGuest(callback);
+          }),
+      ),
+      cwd: () => childCwd,
       on(event, cb) {
         processEvents.on(event, cb);
         if (event === 'message') ipcActive = true;
@@ -326,8 +356,11 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       childProcess.channel = nodeIpcChannel('process');
       childProcess.send = (msg, ...unsupported) => {
         if (unsupported.length > 0) throw new NotImplementedError('process.send.arguments');
-        const serialized = serializeNodeIpcMessage(msg);
-        queueMicrotask(() => a.outboundMessages.emit('message', serialized));
+        const serialization = a.opts.serialization ?? 'json';
+        const payload = encodeNodeIpcMessage(msg, serialization);
+        queueMicrotask(() =>
+          a.outboundMessages.emit('message', decodeNodeIpcMessage(payload, serialization)),
+        );
         return true;
       };
       childProcess.disconnect = () => {
@@ -338,10 +371,15 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
         lifecycleWake();
       };
     }
+    captureProcessStdio(childProcess);
     attachNodeProcessBootstrapIdentity(childProcess, {
       pid: a.ownHandle.pid,
       ppid: a.ownHandle.ppid,
     });
+    const childConsole = new Console(childProcess.stdout, childProcess.stderr) as Console & {
+      Console: typeof Console;
+    };
+    childConsole.Console = Console;
     const trackOwnedChild = <T>(value: T, event: 'close' | 'exit'): T => {
       if ((typeof value !== 'object' || value === null) && typeof value !== 'function') {
         return value;
@@ -386,7 +424,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       ) as Record<string, unknown>;
       const WorkerConstructor = builtin.Worker;
       if (typeof WorkerConstructor === 'function') {
-        const processWorker = new Proxy(WorkerConstructor, {
+        const processWorker = runtimeProxy(WorkerConstructor, {
           construct(target, args, newTarget) {
             return trackOwnedChild(
               withChildProcess(() => Reflect.construct(target, args, newTarget)),
@@ -426,6 +464,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       globalThis: { value: childGlobal, configurable: true },
       global: { value: childGlobal, configurable: true },
       self: { value: childGlobal, configurable: true },
+      console: { value: childConsole, configurable: true, writable: true },
       setTimeout: { value: localSetTimeout, configurable: true },
       clearTimeout: { value: localClearTimeout, configurable: true },
       setInterval: { value: localSetInterval, configurable: true },
@@ -433,7 +472,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       setImmediate: { value: localSetImmediate, configurable: true },
       clearImmediate: { value: localClearImmediate, configurable: true },
     });
-    const fn = new Function(
+    const validatedFunction = new Function(
       '__stdout_write',
       '__stderr_write',
       '__process',
@@ -450,6 +489,11 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       'require',
       `${code}\n//# sourceURL=${scriptPath}`,
     ) as (...args: unknown[]) => unknown;
+    const createChildFunction = new Function(
+      'console',
+      `return (${Function.prototype.toString.call(validatedFunction)});`,
+    ) as (console: Console) => (...args: unknown[]) => unknown;
+    const fn = createChildFunction(childConsole);
     const result = withChildProcess(() =>
       fn(
         writeStdout,
@@ -471,6 +515,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
           }
           const name = specifier.startsWith('node:') ? specifier.slice(5) : specifier;
           if (name === 'process') return childProcess;
+          if (name === 'console') return childConsole;
           const builtin = loadBuiltin(specifier);
           if (builtin !== null) {
             if (name === 'child_process') return bindChildProcessBuiltin(builtin);

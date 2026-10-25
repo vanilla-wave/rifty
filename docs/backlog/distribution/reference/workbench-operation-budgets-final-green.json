@@ -1,0 +1,311 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: I7 и принятая цель I1–I8 доказаны; допустим docs-only CLOSE в том же PR. Merge/publish не выполнялись.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/distribution/workbench-operation-budgets.md @ 666b2687bff3d78147beac85319a898791872a4d; BASE accepted I5 7f967cb546f51101397b99948575f18577680248; prep 0d11806a11a37c9bb1ae5cad985d1b7308196c04, bound 1d50e17c24f6957df85627539d86385c2126f30c. Accepted docs/backlog/epics/self-hosted-snapshot-workbench/goal.md I1–I8 + ADR-0410/0263/0360/0358/0391. Независимые команды/выводы: /tmp/rifty-316-i7-fresh-final-evidence.md:9 — 141 unit, 8 native, 175 controls PASS/1 прежний skip; PR-4 exact asset/source check PASS. Проверены фактические fullgate25/25, App7/7 и composed packed GREEN; тяжёлые lanes повторно не запускались.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Acceptance1: public B/F/T plus S/P; bounded original values, ceil, immutable capture, pre-effects rejection and omissions",
+      "source": "acceptance",
+      "trace": "I7+ADR-0410+ADR-0263",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budget-options.contract.test.ts:76",
+      "note": ""
+    },
+    {
+      "row": "Acceptance2: B reaches owner-ready and native storage proof; default30s and separate physical cleanup",
+      "source": "acceptance",
+      "trace": "I7+scenario7+ADR-0410",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-owner-startup-budget.contract.test.ts:82; tests/browser-unit/operation-storage-budget.spec.ts:135",
+      "note": ""
+    },
+    {
+      "row": "Acceptance3: F reaches post-applied phases and ACK/recovery; defaults, FIFO admission, applied/unknown bytes and one settlement",
+      "source": "acceptance",
+      "trace": "I7+scenario7+ADR-0410",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-file-budget.contract.test.ts:324; packages/workbench/src/glue/vfs-commit-coordinator.fault.test.ts:247",
+      "note": ""
+    },
+    {
+      "row": "Acceptance4: T reaches SCM/archive/durability/close; save admission, long/short/default, owner survival and late mutation honesty",
+      "source": "acceptance",
+      "trace": "I7+scenario7+ADR-0410",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-playground-budget.contract.test.ts:274",
+      "note": ""
+    },
+    {
+      "row": "Acceptance5: catalog uniform progress-only S independent of T; defaults, fatality and applied bytes",
+      "source": "acceptance",
+      "trace": "I7+ADR-0360",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-playground-budget.contract.test.ts:430; packages/workbench/src/workbench/workbench-browser-owner.test.ts:293",
+      "note": ""
+    },
+    {
+      "row": "Acceptance6: captured explicit B/F/T/S maximum, P excluded, omission30s, normalized decoder and paired scheduler forwarding",
+      "source": "acceptance",
+      "trace": "I7+scenario7+ADR-0410",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-budget-wire.contract.test.ts:50; tests/browser-unit/operation-storage-budget.spec.ts:64",
+      "note": ""
+    },
+    {
+      "row": "Acceptance7: native timeout reports without releasing lane/path fence; no resend, late byte-exact healing and capacity wait",
+      "source": "acceptance",
+      "trace": "I7+ADR-0358",
+      "status": "pass",
+      "citation": "tests/browser-unit/operation-storage-budget.spec.ts:105",
+      "note": ""
+    },
+    {
+      "row": "Acceptance8: mandatory packed /sandbox/ public-budget composition, real Vite/SCM/archive and retained prior proofs; documented semantics",
+      "source": "acceptance",
+      "trace": "I1+I2+I3+I4+I5+I6+I7+I8+scenario7",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/scoped-preview-proof.ts:144; tests/integration/workbench-scoped-preview-proof.mjs:216; packages/workbench/README.md:80; /tmp/rifty-316-i7-packed-green-kept.log:110",
+      "note": ""
+    },
+    {
+      "row": "Parity1: executed native timer boundary evidence; ceil/MAX/original-overflow are host policy",
+      "source": "acceptance",
+      "trace": "I7+ADR-0410",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/workbench-operation-budgets-range-decision.md:46; packages/workbench/src/workbench/workbench-operation-budget-options.contract.test.ts:76",
+      "note": ""
+    },
+    {
+      "row": "Parity2: real owner/VFS/Git/OPFS mutation and persistence graphs; real packed Vite/npm oracle",
+      "source": "acceptance",
+      "trace": "I7+ADR-0358+ADR-0360",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-playground-budget.contract.test.ts:245; tests/browser-unit/fixtures/operation-storage-budget-worker.ts:42; tests/integration/workbench-scoped-preview-proof.mjs:160",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × public budget/owner boot",
+      "source": "fault-matrix",
+      "trace": "I7+ADR-0410+ADR-0263",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budget-options.contract.test.ts:91; packages/workbench/src/workbench/workbench-budget-wire.contract.test.ts:82",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × startup/file/tool/catalog/native IO",
+      "source": "fault-matrix",
+      "trace": "I7+scenario7",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-file-budget.contract.test.ts:324; packages/workbench/src/workbench/workbench-budget-wire.contract.test.ts:51; tests/browser-unit/operation-storage-budget.spec.ts:105",
+      "note": ""
+    },
+    {
+      "row": "observable-order × file admission/tool save barrier",
+      "source": "fault-matrix",
+      "trace": "I7+ADR-0410",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-file-budget.contract.test.ts:382; packages/workbench/src/workbench/workbench-playground-budget.contract.test.ts:372",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × timeout/death/storage proof",
+      "source": "fault-matrix",
+      "trace": "I7+ADR-0358",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-file-budget.contract.test.ts:347; tests/browser-unit/operation-storage-budget.spec.ts:139",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key × timed-out native write",
+      "source": "fault-matrix",
+      "trace": "I7+ADR-0358",
+      "status": "pass",
+      "citation": "tests/browser-unit/operation-storage-budget.spec.ts:118",
+      "note": ""
+    },
+    {
+      "row": "unbounded-read × slow native report/capacity",
+      "source": "fault-matrix",
+      "trace": "I7+ADR-0358",
+      "status": "pass",
+      "citation": "tests/browser-unit/operation-storage-budget.spec.ts:111",
+      "note": ""
+    },
+    {
+      "row": "torn-state × admitted mutation/owner death",
+      "source": "fault-matrix",
+      "trace": "I7+ADR-0360",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-file-budget.contract.test.ts:416; packages/workbench/src/workbench/workbench-playground-budget.contract.test.ts:321",
+      "note": ""
+    },
+    {
+      "row": "false-progress × catalog silence",
+      "source": "fault-matrix",
+      "trace": "I7+ADR-0360",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-browser-owner.test.ts:293; packages/workbench/src/workbench/workbench-browser-owner.test.ts:394; packages/workbench/src/workbench/workbench-browser-owner.test.ts:717",
+      "note": ""
+    },
+    {
+      "row": "openWorkbench(options): B/F/T/S/P normalization, defaults and effective configuration",
+      "source": "public-api",
+      "trace": "I7+ADR-0410+ADR-0263",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budget-options.contract.test.ts:76; packages/workbench/src/workbench/open-workbench.test.ts:1",
+      "note": ""
+    },
+    {
+      "row": "openPlaygroundWorkbench(options): inherited budgets reach real catalog/session tools",
+      "source": "public-api",
+      "trace": "I7+ADR-0410+ADR-0263",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/scoped-preview-proof.ts:128; packages/workbench/src/workbench/workbench-playground-budget.contract.test.ts:274",
+      "note": ""
+    },
+    {
+      "row": "installOpfsFs(root?, options?): captured per-instance ioReportTimeoutMs",
+      "source": "public-api",
+      "trace": "I7+ADR-0410",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/operation-storage-budget-worker.ts:42; tests/browser-unit/operation-storage-budget.spec.ts:105",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.init(pair?, root?, options?): capture before async native initialization",
+      "source": "public-api",
+      "trace": "I7+ADR-0410",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/operation-storage-budget-worker.ts:48; tests/browser-unit/operation-storage-budget.spec.ts:105",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync constructor(root, pair?, options?): existing scheduler configured without changing fences/late healing",
+      "source": "public-api",
+      "trace": "I7+ADR-0410+ADR-0358",
+      "status": "pass",
+      "citation": "tests/browser-unit/operation-storage-budget.spec.ts:105; packages/vfs/src/opfs-sync.test.ts:1",
+      "note": ""
+    },
+    {
+      "row": "TypeScript-worker exact filename/10022664-byte/SHA exception; other compiler/WASM/client ceilings and criteria unchanged",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.test.ts:51; docs/backlog/distribution/reference/workbench-operation-budgets-assets.md:18; /tmp/rifty-316-i7-fresh-final-criteria.mjs:27",
+      "note": ""
+    },
+    {
+      "row": "Whole goal I1: public caller-manifest/lock producer, configured registry, identities, ordinary collision-free tar.gz and installed consumer restore",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/produce-snapshot.mjs:29; tests/integration/workbench-packed-consumer.mjs:1161; docs/backlog/distribution/reference/dep-snapshot-tar-final-green.json:1",
+      "note": ""
+    },
+    {
+      "row": "Whole goal I2: copied published closure boots real Vite without consumer Worker/SW compilation or wrappers",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:1; tests/integration/workbench-packed-consumer.mjs:1394; /tmp/rifty-316-i7-fresh-final-criteria.mjs:16",
+      "note": ""
+    },
+    {
+      "row": "Whole goal I3: snapshot-only zero registry/Eddy, required invalid snapshots fail before guest startup, unused asset cannot block saved state, missing packages never install online",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:55; tests/integration/workbench-packed-consumer.mjs:1295; packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:173",
+      "note": ""
+    },
+    {
+      "row": "Whole goal I4: selected namespace bounds preload/writes, new root empty, former projects and unrelated origin bytes preserved",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:93; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:217; tests/integration/workbench-packed-consumer.mjs:1298",
+      "note": ""
+    },
+    {
+      "row": "Whole goal I5: non-root scoped preview navigation/assets/HMR without guest source URL changes; native SW restart/reload and unrelated host intact",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/integration/workbench-scoped-preview-proof.mjs:194; tests/integration/workbench-scoped-preview-proof.mjs:257",
+      "note": ""
+    },
+    {
+      "row": "Whole goal I6: byte-exact public orphan enumeration/download, usable fresh Scratch and stable retained bytes after reopen; failed preservation protects sole copy",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/orphan-scratch-recovery-proof.ts:149; tests/integration/workbench-packed-consumer.mjs:1301; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:216",
+      "note": ""
+    },
+    {
+      "row": "Whole goal I7: effective startup/storage/file/catalog/SCM/archive budgets with explicit defaults and honest timeout settlement",
+      "source": "acceptance",
+      "trace": "I7+scenario7",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-file-budget.contract.test.ts:324; tests/browser-unit/operation-storage-budget.spec.ts:105; tests/integration/fixtures/workbench-vite-consumer/src/scoped-preview-proof.ts:144",
+      "note": ""
+    },
+    {
+      "row": "Whole goal I8: default saved-state priority despite changed snapshotId, incompatible state preserved, explicit same-ID apply with generic error/overwrite conflicts and unrelated paths intact",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:71; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:163; packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:143",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": [],
+  "reviewed_sha": "666b2687bff3d78147beac85319a898791872a4d"
+}

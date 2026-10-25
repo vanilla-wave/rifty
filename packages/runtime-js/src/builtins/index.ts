@@ -27,8 +27,8 @@ import { dgram, dns, readline, tls, http2 } from './null-net-stubs.ts';
 import osModule from './os.ts';
 import pathModule from './path.ts';
 import perfHooksModule from './perf_hooks.ts';
-import { readActiveNodeProcessBootstrap } from './process-bootstrap-identity.ts';
-import { NodeProcess, riftyProcess } from './process.ts';
+import { bindFileStdoutFactory } from './process-file-stdout.ts';
+import { publicNodeProcess } from './process-public.ts';
 import querystringModule from './querystring.ts';
 import streamWebModule from './stream-web.ts';
 import streamModule, { streamConsumers } from './stream.ts';
@@ -58,12 +58,8 @@ let runtimeJsBuiltinsRegistered = false;
 
 /** Rebind `node:process` to the active realm and evict its cached namespace. */
 export function refreshRuntimeJsProcessBuiltin(): void {
-  registerBuiltin('process', () => {
-    const active = readActiveNodeProcessBootstrap()?.process;
-    if (active !== undefined) return active;
-    const live = (globalThis as { process?: unknown }).process;
-    return live instanceof NodeProcess ? live : riftyProcess;
-  });
+  registerBuiltin('process', publicNodeProcess);
+  bindFileStdoutFactory(publicNodeProcess(), fsModule);
 }
 
 export function ensureRuntimeJsBuiltinsRegistered(): void {
@@ -71,6 +67,9 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
   runtimeJsBuiltinsRegistered = true;
 
   registerBuiltin('path', () => pathModule);
+  // Node: `require('path/posix') === require('path').posix`. `path/win32` stays
+  // unregistered: `path.win32` aliases posix (no Windows semantics).
+  registerBuiltin('path/posix', () => pathModule.posix);
   registerBuiltin('events', () => {
     const exports = EventEmitter as unknown as Record<string, unknown>;
     exports.EventEmitter = EventEmitter;

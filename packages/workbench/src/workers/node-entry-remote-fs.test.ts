@@ -3,7 +3,7 @@ import { resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installNodeEntryRemoteFs } from './node-entry-remote-fs.ts';
 
-const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
 
 describe('node-entry remote FS namespace', () => {
   afterEach(() => resetSyncMirror());
@@ -17,10 +17,11 @@ describe('node-entry remote FS namespace', () => {
       jsonCall: typeof call,
       binaryCall: typeof callBinary,
       remoteFsRoot?: string,
+      publicRoot?: string,
     ) => ReturnType<typeof installNodeEntryRemoteFs>;
-    const relay = install(call, callBinary, ROOT);
+    const relay = install(call, callBinary, ROOT, '/home/project');
 
-    expect(syncMirror().existsSync('/src/main.js')).toBe(true);
+    expect(syncMirror().existsSync('/home/project/src/main.js')).toBe(true);
     expect(callBinary).toHaveBeenLastCalledWith(
       'fs.exists',
       new TextEncoder().encode(`${ROOT}/src/main.js`),

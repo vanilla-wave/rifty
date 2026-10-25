@@ -14,7 +14,7 @@ const port = Number(process.env.RIFTY_PLAYGROUND_PORT ?? 5273);
 // never overlapping), `chromium-light` runs the rest in parallel. CI runs the
 // two lanes as separate steps so a heavy cold-boot never contends with the light
 // lane (no shared state, no overlap → fidelity preserved). firefox/webkit keep
-// the full spec set for the weekly cross-browser run.
+// the full spec set for the manual cross-browser run.
 const HEAVY_SPECS = [
   '**/restore-progress-visibility.spec.ts',
   '**/ts-language-service.spec.ts',
@@ -22,6 +22,17 @@ const HEAVY_SPECS = [
   '**/project-switch.spec.ts',
   '**/fullstack-demo.spec.ts',
   '**/npm-lock-replay.spec.ts',
+  // The "Real npm project" tile is a from-scratch React install (71 packages)
+  // + dep-optimizer cold boot — far past the light lane's per-test budget.
+  '**/react-vite-preset.spec.ts',
+  '**/react-vite-build.spec.ts',
+  '**/ai-mode.spec.ts',
+  '**/preset-deep-link.spec.ts',
+  '**/webpack-dev-server.spec.ts',
+  // Two cold-registry installs of the vitest 4.1.11 + vite 8.0.16 tree (48 packages).
+  '**/npm-override-bare-version.spec.ts',
+  // Cold vitest+vite 8 install (rolldown WASI) and 19 real vitest runs.
+  '**/vitest-run.spec.ts',
 ];
 
 export default defineConfig({
@@ -40,7 +51,9 @@ export default defineConfig({
   // cold-boot cycle. Tolerates a handful of retried flakes without finishing the
   // whole suite when something is fundamentally broken.
   maxFailures: process.env.CI ? 12 : undefined,
-  reporter: process.env.CI ? [['html'], ['github']] : 'list',
+  reporter: process.env.CI
+    ? [['html'], ['github'], ['json', { outputFile: 'playwright-report/coi-results.json' }]]
+    : 'list',
   use: {
     baseURL: `http://localhost:${port}`,
     trace: 'on-first-retry',

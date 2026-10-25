@@ -2,14 +2,15 @@ import { NotImplementedError } from '@riftydev/io';
 import {
   type BuiltinShadowSubstitutionRecipe,
   type ShadowRecipeAcquisition,
-  type ShadowRuntimeAsset,
+  type ShadowRegistryDependencyProjection,
+  builtinRecipeById,
   builtinShadowSubstitutionCatalog,
   canonicalShadowJson,
   decodeDenseDataArray,
-  shadowDigest,
 } from '@riftydev/shadow-registry/internal';
 import { type Vfs, joinPath } from '@riftydev/vfs';
 import { matchesRange } from '../../semver.ts';
+import { registryMetadataProjection } from './registry-projection.ts';
 import { isSchemaOneBuiltinShadowSubstitutionIdentity } from './schema-one-identity.ts';
 
 export interface AppliedShadowSubstitution {
@@ -32,14 +33,12 @@ export interface AppliedShadowSubstitution {
     version: string;
     files: readonly Readonly<{ path: string; sha256: string; bytes: number }>[];
   }>;
-  readonly binding?: Readonly<{ adapterId: string; assets: readonly string[] }>;
+  readonly binding?: Readonly<{ adapterId: string }>;
 }
 
-export interface ShadowAssetPlan {
-  readonly requiredSetDigest: string;
+export interface ShadowSubstitutionPlan {
   readonly substitutions: readonly Readonly<AppliedShadowSubstitution>[];
-  readonly assets: readonly Readonly<ShadowRuntimeAsset>[];
-  readonly bindings: readonly Readonly<{ adapterId: string; assets: readonly string[] }>[];
+  readonly bindings: readonly Readonly<{ adapterId: string; packagePath: string }>[];
 }
 
 export interface RegistryShadowEmbeddedDependency {
@@ -50,11 +49,13 @@ export interface RegistryShadowEmbeddedDependency {
 }
 
 export interface RegistryShadowEmbeddedSource {
+  readonly projection?: ShadowRegistryDependencyProjection;
   readonly acquisitionInstallPath: string;
   readonly dependencies: readonly RegistryShadowEmbeddedDependency[];
 }
 
 export interface AttestBuiltinShadowSubstitutionInput {
+  readonly substitutionId?: string;
   readonly trigger: Readonly<{ name: string; requestedRange: string | null; version: string }>;
   readonly installPath: string;
   readonly acquisition:
@@ -134,11 +135,19 @@ function freezeDeep<T>(value: T): T {
   return value;
 }
 
-function recipeForTrigger(name: string, version: string): BuiltinShadowSubstitutionRecipe {
-  const recipe = builtinShadowSubstitutionCatalog.recipes.find(
-    (candidate) => candidate.trigger.name === name && candidate.trigger.version === version,
-  );
-  if (!recipe) throw new NotImplementedError(`shadow-registry.${name}@${version}`);
+function recipeForTrigger(
+  name: string,
+  version: string,
+  id?: string,
+): BuiltinShadowSubstitutionRecipe {
+  const recipe =
+    id === undefined
+      ? builtinShadowSubstitutionCatalog.recipes.find(
+          (candidate) => candidate.trigger.name === name && candidate.trigger.version === version,
+        )
+      : builtinRecipeById(id, version);
+  if (!recipe || recipe.trigger.name !== name || recipe.trigger.version !== version)
+    throw new NotImplementedError(`shadow-registry.${name}@${version}`);
   return recipe;
 }
 
@@ -196,7 +205,16 @@ function acquisitionFact(
 export function attestBuiltinShadowSubstitution(
   inputValue: AttestBuiltinShadowSubstitutionInput,
 ): AppliedShadowSubstitution {
-  const input = exact(inputValue, ['acquisition', 'installPath', 'trigger'], 'shadow attestation');
+  const input = exact(
+    inputValue,
+    [
+      'acquisition',
+      'installPath',
+      'trigger',
+      ...(Object.hasOwn(inputValue, 'substitutionId') ? ['substitutionId'] : []),
+    ],
+    'shadow attestation',
+  );
   const trigger = exact(input.trigger, ['name', 'requestedRange', 'version'], 'shadow trigger');
   const name = text(trigger.name, 'shadow trigger name');
   const version = text(trigger.version, 'shadow trigger version');
@@ -207,7 +225,11 @@ export function attestBuiltinShadowSubstitution(
   ) {
     throw new TypeError('shadow requestedRange must be a non-empty string or null');
   }
-  const recipe = recipeForTrigger(name, version);
+  const recipe = recipeForTrigger(
+    name,
+    version,
+    input.substitutionId === undefined ? undefined : text(input.substitutionId, 'substitutionId'),
+  );
   const fact: AppliedShadowSubstitution = {
     catalog: {
       id: builtinShadowSubstitutionCatalog.id,
@@ -218,9 +240,7 @@ export function attestBuiltinShadowSubstitution(
     trigger: { name, requestedRange, version },
     acquisition: acquisitionFact(recipe, input.acquisition),
     materialization: materializationFact(recipe, text(input.installPath, 'shadow installPath')),
-    ...(recipe.binding
-      ? { binding: { adapterId: recipe.binding.adapterId, assets: [...recipe.binding.assets] } }
-      : {}),
+    ...(recipe.binding ? { binding: { adapterId: recipe.binding.adapterId } } : {}),
   };
   return freezeDeep(fact);
 }
@@ -261,14 +281,12 @@ function decodeApplied(value: unknown): AppliedShadowSubstitution {
     throw new TypeError('applied shadow substitution catalog identity drifted');
   }
   const substitutionId = text(raw.substitutionId, 'substitutionId');
-  const recipe = builtinShadowSubstitutionCatalog.recipes.find(
-    (candidate) => candidate.id === substitutionId,
-  );
+  const trigger = exact(raw.trigger, ['name', 'requestedRange', 'version'], 'applied trigger');
+  const recipe = builtinRecipeById(substitutionId, text(trigger.version, 'trigger version'));
   if (!recipe)
     throw new NotImplementedError(`shadow-registry.substitutionRecipe.${substitutionId}`);
   if (raw.recipeDigest !== recipe.digest)
     throw new TypeError('applied shadow substitution recipe digest drifted');
-  const trigger = exact(raw.trigger, ['name', 'requestedRange', 'version'], 'applied trigger');
   const requestedRange = trigger.requestedRange;
   if (
     requestedRange !== null &&
@@ -300,17 +318,14 @@ function decodeApplied(value: unknown): AppliedShadowSubstitution {
       bytes: bytes as number,
     };
   });
-  let suppliedBinding: Readonly<{ adapterId: string; assets: readonly string[] }> | undefined;
+  let suppliedBinding: Readonly<{ adapterId: string }> | undefined;
   if (raw.binding !== undefined) {
-    const binding = exact(raw.binding, ['adapterId', 'assets'], 'applied binding');
-    const assets = decodeDenseDataArray(binding.assets, 'applied binding assets');
-    suppliedBinding = {
-      adapterId: text(binding.adapterId, 'applied binding adapterId'),
-      assets: assets.map((asset, index) => text(asset, `applied binding asset ${index}`)),
-    };
+    const binding = exact(raw.binding, ['adapterId'], 'applied binding');
+    suppliedBinding = { adapterId: text(binding.adapterId, 'applied binding adapterId') };
   }
   const installPath = text(materialization.installPath, 'applied installPath');
   const decoded = attestBuiltinShadowSubstitution({
+    substitutionId,
     trigger: {
       name: text(trigger.name, 'applied trigger name'),
       requestedRange,
@@ -345,49 +360,36 @@ function decodeApplied(value: unknown): AppliedShadowSubstitution {
   return decoded;
 }
 
-function finishPlan(substitutions: readonly AppliedShadowSubstitution[]): ShadowAssetPlan {
-  const assetsById = new Map(
-    builtinShadowSubstitutionCatalog.assets.map((asset) => [asset.id, asset]),
-  );
-  const required = new Map<string, ShadowRuntimeAsset>();
-  const bindings = new Map<string, { adapterId: string; assets: readonly string[] }>();
-  for (const substitution of substitutions) {
-    if (!substitution.binding) continue;
-    const existing = bindings.get(substitution.binding.adapterId);
-    if (
-      existing &&
-      canonicalShadowJson(existing.assets) !== canonicalShadowJson(substitution.binding.assets)
-    ) {
-      throw new TypeError(`shadow adapter ${substitution.binding.adapterId} has divergent assets`);
-    }
-    bindings.set(substitution.binding.adapterId, {
-      adapterId: substitution.binding.adapterId,
-      assets: [...substitution.binding.assets],
-    });
-    for (const id of substitution.binding.assets) {
-      const asset = assetsById.get(id);
-      if (!asset) throw new TypeError(`shadow binding names unknown asset ${id}`);
-      required.set(id, asset);
-    }
-  }
-  const projectedBindings = [...bindings.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([, value]) => value);
-  const assets = [...required.values()]
-    .sort((a, b) => a.id.localeCompare(b.id))
-    .map((asset) => structuredClone(asset));
-  const payload = { schema: 1, substitutions, assets, bindings: projectedBindings };
+function finishPlan(substitutions: readonly AppliedShadowSubstitution[]): ShadowSubstitutionPlan {
+  const bindings = substitutions
+    .filter(
+      (
+        substitution,
+      ): substitution is AppliedShadowSubstitution & {
+        readonly binding: Readonly<{ adapterId: string }>;
+      } => substitution.binding !== undefined,
+    )
+    .map((substitution) => {
+      if (substitution.acquisition.kind !== 'registry') {
+        throw new TypeError(
+          `shadow adapter ${substitution.binding.adapterId} requires registry bytes`,
+        );
+      }
+      return {
+        adapterId: substitution.binding.adapterId,
+        packagePath: registryAcquisitionInstallPath(substitution),
+      };
+    })
+    .sort((left, right) => canonicalShadowJson(left).localeCompare(canonicalShadowJson(right)));
   return freezeDeep({
-    requiredSetDigest: shadowDigest(payload),
     substitutions: [...substitutions],
-    assets,
-    bindings: projectedBindings,
+    bindings,
   });
 }
 
 function planDecodedShadowSubstitutions(
   values: readonly AppliedShadowSubstitution[],
-): ShadowAssetPlan {
+): ShadowSubstitutionPlan {
   const decoded = [...values];
   decoded.sort((left, right) =>
     canonicalShadowJson(left).localeCompare(canonicalShadowJson(right)),
@@ -403,7 +405,7 @@ function planDecodedShadowSubstitutions(
 
 export function planAppliedShadowSubstitutions(
   values: readonly AppliedShadowSubstitution[],
-): ShadowAssetPlan {
+): ShadowSubstitutionPlan {
   return planDecodedShadowSubstitutions(
     decodeDenseDataArray(values, 'applied shadow substitutions').map(decodeApplied),
   );
@@ -412,84 +414,35 @@ export function planAppliedShadowSubstitutions(
 /** Package-private core for facts already returned by this module's attester. */
 export function planTrustedAppliedShadowSubstitutions(
   values: readonly AppliedShadowSubstitution[],
-): ShadowAssetPlan {
+): ShadowSubstitutionPlan {
   if (!Array.isArray(values) || values.some((value) => !Object.isFrozen(value))) {
     throw new TypeError('trusted shadow substitutions invariant failed');
   }
   return planDecodedShadowSubstitutions(values);
 }
 
-export function decodeShadowAssetPlan(value: unknown): ShadowAssetPlan {
-  const raw = exact(
-    value,
-    ['assets', 'bindings', 'requiredSetDigest', 'substitutions'],
-    'shadow asset plan',
-  );
+export function decodeShadowSubstitutionPlan(value: unknown): ShadowSubstitutionPlan {
+  const raw = exact(value, ['bindings', 'substitutions'], 'shadow substitution plan');
   const suppliedSubstitutions = decodeDenseDataArray(
     raw.substitutions,
     'shadow plan substitutions',
   ).map(decodeApplied);
-  const suppliedAssets = decodeDenseDataArray(raw.assets, 'shadow plan assets').map(
-    (value, index) => {
-      const asset = exact(
-        value,
-        [
-          'id',
-          'maxTarballBytes',
-          'maxUnpackedBytes',
-          'member',
-          'memberSha256',
-          'memberSize',
-          'source',
-        ],
-        `shadow plan asset ${index}`,
-      );
-      const source = exact(
-        asset.source,
-        ['integrity', 'name', 'version'],
-        `shadow plan asset ${index} source`,
-      );
-      return {
-        id: text(asset.id, `shadow plan asset ${index} id`),
-        source: {
-          name: text(source.name, `shadow plan asset ${index} source name`),
-          version: text(source.version, `shadow plan asset ${index} source version`),
-          integrity: strictIntegrity(
-            source.integrity,
-            `shadow plan asset ${index} source integrity`,
-          ),
-        },
-        member: text(asset.member, `shadow plan asset ${index} member`),
-        memberSha256: text(asset.memberSha256, `shadow plan asset ${index} memberSha256`),
-        memberSize: asset.memberSize,
-        maxTarballBytes: asset.maxTarballBytes,
-        maxUnpackedBytes: asset.maxUnpackedBytes,
-      };
-    },
-  );
   const suppliedBindings = decodeDenseDataArray(raw.bindings, 'shadow plan bindings').map(
     (value, index) => {
-      const binding = exact(value, ['adapterId', 'assets'], `shadow plan binding ${index}`);
-      const assets = decodeDenseDataArray(binding.assets, `shadow plan binding ${index} assets`);
+      const binding = exact(value, ['adapterId', 'packagePath'], `shadow plan binding ${index}`);
       return {
         adapterId: text(binding.adapterId, `shadow plan binding ${index} adapterId`),
-        assets: assets.map((asset, assetIndex) =>
-          text(asset, `shadow plan binding ${index} asset ${assetIndex}`),
-        ),
+        packagePath: text(binding.packagePath, `shadow plan binding ${index} packagePath`),
       };
     },
   );
-  const requiredSetDigest = text(raw.requiredSetDigest, 'shadow plan requiredSetDigest');
-  if (!SHA.test(requiredSetDigest)) throw new TypeError('shadow plan requiredSetDigest is invalid');
   const plan = planTrustedAppliedShadowSubstitutions(suppliedSubstitutions);
   const supplied = {
-    requiredSetDigest,
     substitutions: suppliedSubstitutions,
-    assets: suppliedAssets,
     bindings: suppliedBindings,
   };
   if (canonicalShadowJson(plan) !== canonicalShadowJson(supplied))
-    throw new TypeError('shadow asset plan is non-canonical or tampered');
+    throw new TypeError('shadow substitution plan is non-canonical or tampered');
   return plan;
 }
 
@@ -526,7 +479,7 @@ interface ShadowSubstitutionLockfileTraceFact {
     files: readonly Readonly<{ path: string; sha256: string; bytes: number }>[];
     bin: Readonly<Record<string, string>>;
   }>;
-  readonly binding?: Readonly<{ adapterId: string; assets: readonly string[] }>;
+  readonly binding?: Readonly<{ adapterId: string }>;
 }
 
 export interface ShadowSubstitutionLockfileTrace {
@@ -535,7 +488,7 @@ export interface ShadowSubstitutionLockfileTrace {
 }
 
 export function createShadowSubstitutionLockfileTrace(
-  plan: ShadowAssetPlan,
+  plan: ShadowSubstitutionPlan,
   lockfile: { readonly packages: Readonly<Record<string, unknown>> },
 ): ShadowSubstitutionLockfileTrace {
   if (!Object.isFrozen(plan) || !Object.isFrozen(plan.substitutions)) {
@@ -551,9 +504,7 @@ export function createShadowSubstitutionLockfileTrace(
   return freezeDeep({
     protocol: SHADOW_LOCKFILE_PROTOCOL,
     applied: plan.substitutions.map((substitution): ShadowSubstitutionLockfileTraceFact => {
-      const recipe = builtinShadowSubstitutionCatalog.recipes.find(
-        (candidate) => candidate.id === substitution.substitutionId,
-      );
+      const recipe = builtinRecipeById(substitution.substitutionId, substitution.trigger.version);
       if (!recipe) {
         throw new NotImplementedError(
           `shadow-registry.substitutionRecipe.${substitution.substitutionId}`,
@@ -580,14 +531,7 @@ export function createShadowSubstitutionLockfileTrace(
           files: substitution.materialization.files.map((file) => ({ ...file })),
           bin: { ...recipe.materialization.bin },
         },
-        ...(substitution.binding
-          ? {
-              binding: {
-                adapterId: substitution.binding.adapterId,
-                assets: [...substitution.binding.assets],
-              },
-            }
-          : {}),
+        ...(substitution.binding ? { binding: { adapterId: substitution.binding.adapterId } } : {}),
       };
     }),
   });
@@ -601,7 +545,8 @@ function registryTraceAcquisition(
   if (substitution.acquisition.kind !== 'registry' || recipe.acquisition.kind !== 'registry') {
     throw new TypeError(`shadow substitution ${substitution.substitutionId} acquisition drifted`);
   }
-  const projection = recipe.acquisition.dependencyProjection;
+  const projection = recipe.acquisition.dependencyProjection ?? embeddedSource?.projection;
+  if (!projection) throw new TypeError('range recipe metadata is missing');
   const bundled = embeddedSource?.dependencies ?? [];
   if (bundled.length !== projection.bundledDependencies.length) {
     throw new TypeError(
@@ -868,31 +813,53 @@ export function registryAcquisitionInstallPath(substitution: AppliedShadowSubsti
 
 export function registryShadowEmbeddedSourcesFromLockfile(
   lockfile: { readonly packages: Readonly<Record<string, unknown>> },
-  plan: ShadowAssetPlan,
+  plan: ShadowSubstitutionPlan,
 ): readonly RegistryShadowEmbeddedSource[] {
   try {
     const packages = plain(lockfile.packages, 'lockfile packages');
     const sources: RegistryShadowEmbeddedSource[] = [];
     for (const substitution of plan.substitutions) {
       if (substitution.acquisition.kind !== 'registry') continue;
-      const recipe = builtinShadowSubstitutionCatalog.recipes.find(
-        (candidate) => candidate.id === substitution.substitutionId,
-      );
+      const recipe = builtinRecipeById(substitution.substitutionId, substitution.trigger.version);
       if (!recipe || recipe.acquisition.kind !== 'registry') {
         throw brokenShadowTrace(
           `registry shadow substitution ${substitution.substitutionId} has no registry recipe`,
         );
       }
-      const projection = recipe.acquisition.dependencyProjection;
       const acquisitionInstallPath = registryAcquisitionInstallPath(substitution);
       const acquisitionEntry = plain(
         packages[acquisitionInstallPath],
         `lockfile package ${acquisitionInstallPath}`,
       );
+      const projection =
+        recipe.acquisition.dependencyProjection ??
+        registryMetadataProjection({
+          dependencies: optionalStringRecord(
+            acquisitionEntry.dependencies,
+            'registry dependencies',
+          ),
+          optionalDependencies: optionalStringRecord(
+            acquisitionEntry.optionalDependencies,
+            'registry optional dependencies',
+          ),
+          peerDependencies: optionalStringRecord(
+            acquisitionEntry.peerDependencies,
+            'registry peer dependencies',
+          ),
+          bundleDependencies: acquisitionEntry.bundleDependencies,
+        });
       const acquisitionDependencies = optionalStringRecord(
         acquisitionEntry.dependencies,
         `lockfile package ${acquisitionInstallPath} dependencies`,
       );
+      const acquisitionOptionalDependencies = optionalStringRecord(
+        acquisitionEntry.optionalDependencies,
+        `lockfile package ${acquisitionInstallPath} optionalDependencies`,
+      );
+      if (!matchesStringRecord(acquisitionOptionalDependencies, projection.optionalDependencies))
+        throw brokenShadowTrace(
+          `registry shadow substitution ${substitution.substitutionId} optional dependency projection drifted`,
+        );
       if (!matchesStringRecord(acquisitionDependencies, projection.dependencies)) {
         throw brokenShadowTrace(
           `registry shadow substitution ${substitution.substitutionId} dependency projection drifted`,
@@ -927,12 +894,19 @@ export function registryShadowEmbeddedSourcesFromLockfile(
           `registry shadow substitution ${substitution.substitutionId} bundle membership drifted`,
         );
       }
-      if (projection.bundledDependencies.length === 0) continue;
+      if (
+        projection.bundledDependencies.length === 0 &&
+        recipe.acquisition.dependencyProjection !== null
+      )
+        continue;
 
       const dependencies: RegistryShadowEmbeddedDependency[] = [];
       for (const name of projection.bundledDependencies) {
         const range = projection.dependencies[name] ?? projection.optionalDependencies[name];
-        if (range === undefined || acquisitionDependencies[name] !== range) {
+        if (
+          range === undefined ||
+          (acquisitionDependencies[name] ?? acquisitionOptionalDependencies[name]) !== range
+        ) {
           throw brokenShadowTrace(
             `registry shadow substitution ${substitution.substitutionId} bundled dependency ${name} range drifted`,
           );
@@ -954,7 +928,11 @@ export function registryShadowEmbeddedSourcesFromLockfile(
         }
         dependencies.push({ name, range, version: child.version, installPath });
       }
-      sources.push({ acquisitionInstallPath, dependencies });
+      sources.push({
+        acquisitionInstallPath,
+        dependencies,
+        ...(recipe.acquisition.dependencyProjection === null ? { projection } : {}),
+      });
     }
     return sources;
   } catch (error) {
@@ -1012,7 +990,7 @@ function validateLockfileEntryProvenance(
   }
 }
 
-export function planShadowSubstitutionsFromLockfile(value: unknown): ShadowAssetPlan {
+export function planShadowSubstitutionsFromLockfile(value: unknown): ShadowSubstitutionPlan {
   const lockfile = plain(value, 'lockfile');
   if (lockfile.lockfileVersion !== 3)
     throw new TypeError('shadow substitution replay requires lockfile v3');
@@ -1090,7 +1068,7 @@ export function planShadowSubstitutionsFromLockfile(value: unknown): ShadowAsset
 export async function materializeRegistryShadowSubstitutions(
   vfs: Vfs,
   root: string,
-  plan: ShadowAssetPlan,
+  plan: ShadowSubstitutionPlan,
   report: (line: string) => void,
   checkpoint: () => void = () => {},
 ): Promise<void> {
@@ -1100,9 +1078,7 @@ export async function materializeRegistryShadowSubstitutions(
   for (const substitution of plan.substitutions) {
     checkpoint();
     if (substitution.acquisition.kind !== 'registry') continue;
-    const recipe = builtinShadowSubstitutionCatalog.recipes.find(
-      (candidate) => candidate.id === substitution.substitutionId,
-    );
+    const recipe = builtinRecipeById(substitution.substitutionId, substitution.trigger.version);
     if (!recipe)
       throw new NotImplementedError(
         `shadow-registry.substitutionRecipe.${substitution.substitutionId}`,

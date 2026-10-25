@@ -25,7 +25,6 @@ import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { createNoShadowInstallResultFixture } from './install-result.test-fixture.ts';
 import {
   type OwnerPackageConfig,
-  type OwnerPackageMutationKind,
   type OwnerPackageState,
   createOwnerPackageState,
 } from './owner-package-state.ts';
@@ -33,6 +32,11 @@ import {
   type OwnerVfsAuthority,
   createOwnerVfsAuthorityComposition,
 } from './owner-vfs-authority.ts';
+import {
+  type PlaygroundPackageMutationKind as OwnerPackageMutationKind,
+  createPlaygroundNpmObserver,
+} from './playground-package-mutations.ts';
+import { vendoredRegistry } from './vendored-registry.test-fixture.ts';
 import {
   type WorkbenchProjectRuntime,
   createWorkbenchProjectRuntime,
@@ -56,7 +60,7 @@ const clearKernelWorkerUrl = (): void => {
   Reflect.apply(clearKernelWorkerUrlCandidate, undefined, []);
 };
 
-const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
 const NODE_ENTRY_WORKER_URL = 'https://example.test/node-entry.js';
 const DEV_SERVER_WORKER_URL = 'https://example.test/dev-server.js';
 const NODE_WORKER_RUNTIME_ENV = Object.freeze({
@@ -650,7 +654,7 @@ async function harness(
   reservationEvidence?: {
     readonly events: string[];
     readonly paths?: string[];
-    ready?: unknown;
+    runtimeBindings?: unknown;
   },
   packageAcquisition?: {
     readonly registry?: RegistryClient;
@@ -669,10 +673,12 @@ async function harness(
     `${ROOT}/package.json`,
     new TextEncoder().encode(activePackageConfig.cfg.packageJson),
   );
-  authority.writeFileSync(
-    activePackageConfig.cfg.entryPath,
-    new TextEncoder().encode('export {};\n'),
-  );
+  if ('entryPath' in activePackageConfig.cfg) {
+    authority.writeFileSync(
+      activePackageConfig.cfg.entryPath,
+      new TextEncoder().encode('export {};\n'),
+    );
+  }
   authority.writeFileSync(
     `${ROOT}/node_modules/.bin/vite`,
     new TextEncoder().encode('#!/usr/bin/env node\n'),
@@ -709,17 +715,9 @@ async function harness(
           reserveChildAdmission: async (root) => {
             reservationEvidence.paths?.push(root);
             const reservation = await packageState.reserveChildAdmission(root);
-            reservationEvidence.ready = reservation.snapshot.ready;
-            const snapshot = reservation.snapshot;
+            reservationEvidence.runtimeBindings = reservation.snapshot.runtimeBindings;
             return Object.freeze({
               ...reservation,
-              snapshot: Object.freeze({
-                ...snapshot,
-                dispose() {
-                  reservationEvidence.events.push('dispose');
-                  snapshot.dispose();
-                },
-              }),
               commit() {
                 reservationEvidence.events.push('commit');
                 reservation.commit();
@@ -739,6 +737,7 @@ async function harness(
     });
   const runtimeOptions = {
     projectRoot: ROOT,
+    publicRoot: '/',
     packageConfig: activePackageConfig,
     authority,
     packageState: runtimePackageState,
@@ -747,7 +746,9 @@ async function harness(
     nodeWorkerRuntimeEnv,
     mutationGuard,
     publicationBarrier,
-    ...(recordMutation === undefined ? {} : { recordMutation }),
+    ...(recordMutation === undefined
+      ? {}
+      : { observeNpmOperation: createPlaygroundNpmObserver(authority, recordMutation) }),
     send: (frame: OwnerToPageFrame) => {
       frames.push(frame);
       onSend?.(frame, () => {
@@ -982,6 +983,47 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     await h.runtime.close();
   });
 
+  it('reports a login HOME only when the seed brought it or the shell changed it (ADR-0531 §6)', async () => {
+    const h = await harness();
+    const exitEnv = async (sid: string, rid: string, line: string) => {
+      await h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid,
+        rid,
+        line,
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      });
+      const exit = h.frames.find((frame) => frame.type === 'pty:exit' && frame.rid === rid);
+      return exit?.type === 'pty:exit' ? exit.env : undefined;
+    };
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'login-plain', env: { KEEP: '1' } });
+    expect(await exitEnv('login-plain', 'r1', 'pwd')).toEqual({ KEEP: '1' });
+    expect(await exitEnv('login-plain', 'r2', 'HOME=/elsewhere')).toEqual({
+      KEEP: '1',
+      HOME: '/elsewhere',
+    });
+    h.runtime.handlePtyFrame({
+      type: 'pty:open',
+      sid: 'login-seeded',
+      env: { HOME: '/home/rifty' },
+    });
+    expect(await exitEnv('login-seeded', 'r3', 'pwd')).toEqual({ HOME: '/home/rifty' });
+    // A nested npm lifecycle shell inherits HOME; the session's provenance stays.
+    h.authority.writeFileSync(
+      `${ROOT}/package.json`,
+      new TextEncoder().encode('{"name":"login","scripts":{"x":"echo nested"}}\n'),
+    );
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'login-npm', env: { KEEP: '1' } });
+    expect(await exitEnv('login-npm', 'r4', 'npm run x')).toEqual({ KEEP: '1' });
+    expect(await exitEnv('login-npm', 'r5', 'pwd')).toEqual({ KEEP: '1' });
+    // A repeated open keeps the existing session and its Shell: provenance stays.
+    h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'login-npm', env: { HOME: '/home/rifty' } });
+    expect(await exitEnv('login-npm', 'r6', 'pwd')).toEqual({ KEEP: '1' });
+    await h.runtime.close();
+  });
+
   it('surfaces an unresolved nodemon launcher without a direct-node or dev-server fallback', async () => {
     const worker = boundaryWorker();
     const h = await harness(undefined, missingNodemonNodeServerPackageConfig);
@@ -1071,7 +1113,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         kind: 'url',
         url: DEV_SERVER_WORKER_URL,
         bootstrap: {
-          protocol: 'rifty.dev-server/v1',
+          protocol: 'rifty.dev-server/v2',
           payload: {
             nodeWorkerRuntime: NODE_WORKER_RUNTIME_CONFIG,
             cfg: {
@@ -1150,6 +1192,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       code: 130,
       exit: { code: null, signal: 'SIGTERM' },
       cwd: ROOT,
+      // The unchanged login HOME stays out of the reported state (ADR-0531 §6).
       env: {
         USER_FLAG: 'preserved',
         RIFTY_PREVIEW_SCOPE: 'guest-forged-scope',
@@ -1292,7 +1335,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     const reservationEvidence: {
       events: string[];
       paths: string[];
-      ready?: unknown;
+      runtimeBindings?: unknown;
     } = { events: [], paths: [] };
     const h = await harness(
       undefined,
@@ -1340,7 +1383,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         kind: 'url',
         url: NODE_ENTRY_WORKER_URL,
         bootstrap: {
-          protocol: 'rifty.node-entry/v3',
+          protocol: 'rifty.node-entry/v6',
           payload: {
             hostRuntime: NODE_WORKER_RUNTIME_ENV,
             launch: {
@@ -1376,8 +1419,10 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         'kind',
         'previewScope',
         'print',
+        'publicRoot',
         'remoteFs',
         'remoteFsRoot',
+        'runtimeBindings',
         'source',
         'terminal',
       ].sort(),
@@ -1388,7 +1433,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
 
     worker.finish(0);
     await running;
-    await vi.waitFor(() => expect(reservationEvidence.events).toEqual(['commit', 'dispose']));
+    expect(reservationEvidence.events).toEqual(['commit']);
     expect(globalProcessManager.get(spec.pid)).toBeNull();
     expect(writeHistory).not.toHaveBeenCalled();
     expect(unlinkHistory).not.toHaveBeenCalled();
@@ -1478,7 +1523,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         expect(spec).toMatchObject({
           entry: {
             bootstrap: {
-              protocol: 'rifty.node-entry/v3',
+              protocol: 'rifty.node-entry/v6',
               payload: {
                 launch: {
                   kind: 'eval',
@@ -1562,7 +1607,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
           argv: [NODE_PROCESS_IDENTITY.execPath, ...scriptArgs],
           entry: {
             bootstrap: {
-              protocol: 'rifty.node-entry/v3',
+              protocol: 'rifty.node-entry/v6',
               payload: {
                 launch: {
                   kind: 'eval',
@@ -1607,7 +1652,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         argv: [NODE_PROCESS_IDENTITY.execPath],
         entry: {
           bootstrap: {
-            protocol: 'rifty.node-entry/v3',
+            protocol: 'rifty.node-entry/v6',
             payload: {
               launch: {
                 kind: 'eval',
@@ -1654,7 +1699,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
           argv: [NODE_PROCESS_IDENTITY.execPath, '', 'alpha', '-x'],
           entry: {
             bootstrap: {
-              protocol: 'rifty.node-entry/v3',
+              protocol: 'rifty.node-entry/v6',
               payload: {
                 launch: {
                   kind: 'eval',
@@ -1829,7 +1874,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         argv: [NODE_PROCESS_IDENTITY.execPath, ...scriptArgs],
         entry: {
           bootstrap: {
-            protocol: 'rifty.node-entry/v3',
+            protocol: 'rifty.node-entry/v6',
             payload: {
               launch: {
                 kind: 'eval',
@@ -1855,7 +1900,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     const reservationEvidence: {
       events: string[];
       paths: string[];
-      ready?: unknown;
+      runtimeBindings?: unknown;
     } = { events: [], paths: [] };
     const h = await harness(
       undefined,
@@ -1905,7 +1950,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       argv: [NODE_PROCESS_IDENTITY.execPath, 'argv-a'],
       entry: {
         bootstrap: {
-          protocol: 'rifty.node-entry/v3',
+          protocol: 'rifty.node-entry/v6',
           payload: {
             launch: {
               kind: 'eval',
@@ -1924,7 +1969,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       argv: [NODE_PROCESS_IDENTITY.execPath, 'argv-b'],
       entry: {
         bootstrap: {
-          protocol: 'rifty.node-entry/v3',
+          protocol: 'rifty.node-entry/v6',
           payload: {
             launch: {
               kind: 'eval',
@@ -1964,9 +2009,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     secondWorker.finish(7);
     firstWorker.finish(0);
     await Promise.all([runningA, runningB]);
-    await vi.waitFor(() =>
-      expect(reservationEvidence.events.filter((event) => event === 'dispose')).toHaveLength(2),
-    );
+    expect(reservationEvidence.events).toEqual(['commit', 'commit']);
     expect(globalProcessManager.get(firstSpec.pid)).toBeNull();
     expect(globalProcessManager.get(secondSpec.pid)).toBeNull();
     expect(
@@ -2285,7 +2328,7 @@ describe('Workbench project runtime', () => {
     const reservationEvidence: {
       events: string[];
       paths: string[];
-      ready?: unknown;
+      runtimeBindings?: unknown;
     } = { events: [], paths: [] };
     const h = await harness(
       undefined,
@@ -2359,12 +2402,12 @@ describe('Workbench project runtime', () => {
     if (entry?.kind !== 'url' || entry.bootstrap === undefined) {
       throw new Error('expected node-entry URL bootstrap');
     }
-    expect(reservationEvidence.ready).toBeNull();
+    expect(reservationEvidence.runtimeBindings).toEqual([]);
     expect(reservationEvidence.paths).toEqual([`${ROOT}/node_modules/.bin/vite`]);
-    expect(Object.hasOwn(entry, 'capabilityPorts')).toBe(false);
     expect(reservationEvidence.events).toEqual(['commit']);
     const payload = entry.bootstrap.payload as NodeEntryBootstrapPayload;
     if (payload.launch.kind !== 'program') throw new Error('expected program launch');
+    expect(payload.launch.runtimeBindings ?? []).toEqual([]);
     expect(payload.launch.previewScope).not.toBe('scope-forged');
 
     worker.emitListening({
@@ -2413,7 +2456,7 @@ describe('Workbench project runtime', () => {
     worker.emitExit(null, 'SIGTERM');
     await expect(closing).resolves.toBeUndefined();
     await running;
-    expect(reservationEvidence.events).toEqual(['commit', 'dispose']);
+    expect(reservationEvidence.events).toEqual(['commit']);
   });
 
   it('exposes one project-rooted terminal namespace without leaking the owner root', async () => {
@@ -2501,22 +2544,12 @@ describe('Workbench project runtime', () => {
               : undefined));
       if (options === undefined) throw new Error('test install options missing');
       installCwds.push(options.cwd);
-      const packageJson = JSON.parse(
-        await options.vfs.readFileText(`${options.cwd}/package.json`),
-      ) as {
-        readonly dependencies?: Readonly<Record<string, string>>;
-      };
-      if (packageJson.dependencies?.['user-pkg'] === '1.0.0') {
-        await options.vfs.mkdir(`${options.cwd}/node_modules/user-pkg`, { recursive: true });
-        await options.vfs.writeFile(
-          `${options.cwd}/node_modules/user-pkg/package.json`,
-          '{"name":"user-pkg","version":"1.0.0"}\n',
-        );
-      }
+      if (options.cwd.endsWith('/sub')) return await installPackages(options);
       return await baseInstall(arg1, rootVersion, dependenciesOrOpts, explicitOpts);
     };
     const h = await harness(undefined, nodeCliPackageConfig, async () => {}, undefined, undefined, {
       install,
+      registry: vendoredRegistry(),
     });
     const nestedRoot = `${ROOT}/sub`;
     h.authority.mkdirSync(`${nestedRoot}/deep`, { recursive: true });
@@ -2529,7 +2562,7 @@ describe('Workbench project runtime', () => {
       type: 'pty:exec',
       sid: 'terminal-npm-prefix',
       rid: 'run-npm-prefix',
-      line: 'cd sub/deep && npm install user-pkg@1.0.0',
+      line: 'cd sub/deep && npm install ms@2.0.0 --save-exact',
       cols: 80,
       rows: 24,
       isTTY: true,
@@ -2543,10 +2576,10 @@ describe('Workbench project runtime', () => {
       ),
     ).toMatchObject({
       name: 'rifty-project',
-      dependencies: { 'user-pkg': '1.0.0' },
+      dependencies: { ms: '2.0.0' },
     });
-    expect(h.authority.existsSync(`${nestedRoot}/node_modules/user-pkg/package.json`)).toBe(true);
-    expect(h.authority.existsSync(`${ROOT}/node_modules/user-pkg/package.json`)).toBe(false);
+    expect(h.authority.existsSync(`${nestedRoot}/node_modules/ms/package.json`)).toBe(true);
+    expect(h.authority.existsSync(`${ROOT}/node_modules/ms/package.json`)).toBe(false);
     expect(h.frames).toContainEqual(
       expect.objectContaining({ type: 'pty:exit', rid: 'run-npm-prefix', code: 0 }),
     );
@@ -2563,7 +2596,7 @@ describe('Workbench project runtime', () => {
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-npm-mutations' });
 
     expect(createNpmCommand).toHaveBeenCalledWith(expect.any(Function), {
-      recordMutation,
+      observeOperation: expect.any(Function),
       mapInvocationContext: expect.any(Function),
     });
     await h.runtime.close();
@@ -2802,6 +2835,7 @@ describe('Workbench project runtime', () => {
     expect(() =>
       createWorkbenchProjectRuntime({
         projectRoot: ROOT,
+        publicRoot: '/',
         packageConfig: {
           ...packageConfig,
           cfg: { ...packageConfig.cfg, root: '/page-claimed-root' },

@@ -51,7 +51,7 @@ describe('Workbench owner storage runtime', () => {
     });
     expect(snapshot).toEqual({ policy: 'required', backend: 'opfs', durability: 'durable' });
 
-    expect(await opened.vfs.exists('/.rifty/workbench/v1/storage-proof/proof-1')).toBe(false);
+    expect(await opened.vfs.exists('/.rifty/workbench/v2/storage-proof/proof-1')).toBe(false);
     expect(h.openMemory).not.toHaveBeenCalled();
   });
 

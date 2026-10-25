@@ -67,3 +67,9 @@ is the quotable number; h2/h3 comparison remains gated by
 - ADR-0051 — native dependency policy (eddy applies the same gate).
 - `docs/process/decision-workflow.md` — record-and-continue + confirm-first for outward infra.
 - Backlog epic: `docs/backlog/epics/fast-install-resolver.md`.
+
+## Corrections (active)
+
+- 2026-09-08 — ADR-0398 requires configured registry for Eddy and its standard fallback; absent registry plus Eddy rejects before callbacks. Configured-registry behavior remains.
+
+- 2026-10-22 — Shell renders the existing `provenance.eddyFallback.reason` once on stderr after standard install; learned-pin write failures use the same terminal sink. Console diagnostics and acquisition/pin policy unchanged.

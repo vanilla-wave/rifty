@@ -11,6 +11,7 @@ import { EXPRESS_SQLITE_TEMPLATE } from './templates/express-sqlite.ts';
 import { HONO_API_TEMPLATE } from './templates/hono-api.ts';
 import { KOA_API_TEMPLATE } from './templates/koa-api.ts';
 import { MARKDOWN_SSG_TEMPLATE } from './templates/markdown-ssg.ts';
+import { REACT_VITE_TEMPLATE } from './templates/react-vite/index.ts';
 import { resolveProjectSpec } from './templates/registry.ts';
 import { SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
 import { TYPESCRIPT_TEMPLATE } from './templates/typescript.ts';
@@ -120,6 +121,12 @@ describe('playground presets', () => {
     expect(presetText(demo)).toContain('summarizeShape');
   });
 
+  // An HMR-enabled Vite preset must own an accept boundary, otherwise every
+  // edit degrades to a full reload. Hand-written `import.meta.hot.accept` is
+  // one way; a framework plugin that injects one (React Fast Refresh via
+  // `@vitejs/plugin-react`) is the other — which one a preset uses is visible
+  // in its seeded `vite.config.*`. The no-full-reload behavior itself is proven
+  // in the browser by tests/e2e/react-vite-preset.spec.ts (survive-sentinel).
   it('keeps HMR-enabled browser Vite presets as accept boundaries', () => {
     const browserVitePresets = PRESETS.filter((preset) => {
       const spec = resolveProjectSpec(preset.templateId ?? 'vite');
@@ -137,7 +144,11 @@ describe('playground presets', () => {
       'real-vite',
     ]);
     for (const preset of browserVitePresets) {
-      expect(presetText(preset)).toContain('import.meta.hot.accept');
+      const spec = resolveProjectSpec(preset.templateId ?? 'vite');
+      const fastRefreshPlugin =
+        spec.runtime === 'vite' &&
+        (spec.extraFiles?.['/vite.config.ts']?.includes('@vitejs/plugin-react') ?? false);
+      if (!fastRefreshPlugin) expect(presetText(preset)).toContain('import.meta.hot.accept');
       expect(presetText(preset)).not.toContain('location.reload');
     }
   });
@@ -189,6 +200,38 @@ describe('playground presets', () => {
     expect(demo.openFiles?.every((path) => openablePaths(demo).has(path))).toBe(true);
   });
 
+  it('ships the "Real npm project" tile as the from-scratch react-vite starter', () => {
+    const tile = PRESETS.find((preset) => preset.id === 'real-vite');
+    expect(tile).toBeDefined();
+    if (!tile) throw new Error('unreachable');
+    expect(tile.templateId).toBe('react-vite');
+    expect(tile.setup).toBe('from-scratch');
+    expect(tile.mode).toBe('real-vite');
+    expect(tile.category).toBe('Live preview');
+    expect(tile.label).toBe('Real npm project');
+    expect(tile.blurb).toMatch(/React 19/u);
+    expect(tile.blurb).toMatch(/Fast Refresh/u);
+    expect(tile.tag).toEqual({ text: 'npm install', tone: 'slow' });
+    expect(tile.openFiles).toEqual([
+      'src/App.tsx',
+      'src/components/StatusBadge.tsx',
+      'src/pages/IssueList.tsx',
+      'src/data/issues.ts',
+      'README.md',
+    ]);
+    expect(presetFileContent(tile, 'src/main.tsx')).toBe(REACT_VITE_TEMPLATE.entry.content);
+    // page-side explorer mirrors the worker-seeded template files in lockstep
+    const filePaths = new Set((tile.files ?? []).map((file) => file.path));
+    for (const relPath of Object.keys(REACT_VITE_TEMPLATE.extraFiles ?? {})) {
+      expect(filePaths.has(relPath.replace(/^\//u, ''))).toBe(true);
+    }
+    for (const file of tile.files ?? []) {
+      if (file.path === 'src/main.tsx') continue;
+      expect(REACT_VITE_TEMPLATE.extraFiles?.[`/${file.path}`]).toBe(file.content);
+    }
+    expect(resolveProjectSpec('react-vite').bakedNodeModulesUrl).toBeUndefined();
+  });
+
   it('ships Vite 8 as an opt-in instant preset distinct from default Vite 7', () => {
     const vite8 = PRESETS.find((preset) => preset.id === 'vite8');
     expect(vite8).toBeDefined();
@@ -197,6 +240,70 @@ describe('playground presets', () => {
     expect(vite8.setup).toBe('instant');
     expect(vite8.templateId).toBe('vite8');
     expect(vite8.blurb).toMatch(/Vite 8|Rolldown/i);
+  });
+
+  it('ships the ordinary webpack dev-server project as a from-scratch live preset', () => {
+    const demo = PRESETS.find((preset) => preset.id === 'webpack-dev-server');
+    expect(demo).toBeDefined();
+    if (!demo) throw new Error('unreachable');
+    const spec = resolveProjectSpec('webpack-dev-server');
+    if (spec.runtime !== 'npm-dev-server') throw new Error('unreachable');
+
+    expect(demo.label).toBe('Webpack dev server');
+    expect(demo.templateId).toBe('webpack-dev-server');
+    expect(demo.mode).toBe('real-vite');
+    expect(demo.setup).toBe('from-scratch');
+    expect(demo.category).toBe('Live preview');
+    expect(demo.glyph?.text).toBe('WP');
+    expect(demo.tag).toEqual({ text: 'npm install', tone: 'slow' });
+    expect((demo.files ?? []).map((file) => file.path).sort()).toEqual([
+      'README.md',
+      'public/index.html',
+      'src/index.js',
+      'src/styles.css',
+      'webpack.config.js',
+    ]);
+    expect(presetFileContent(demo, 'src/index.js')).toBe(spec.entry.content);
+    for (const [path, content] of Object.entries(spec.extraFiles)) {
+      expect(presetFileContent(demo, path.replace(/^\/+/, ''))).toBe(content);
+    }
+    expect(demo.openFiles).toEqual([
+      'src/index.js',
+      'webpack.config.js',
+      'src/styles.css',
+      'public/index.html',
+    ]);
+    expect(presetBootLines(demo, '/workspace')).toEqual([
+      'cd /workspace && npm install && npm run dev',
+    ]);
+  });
+
+  it('ships the node-ws class-proof as a hidden from-scratch npm-dev-server preset', () => {
+    const demo = PRESETS.find((preset) => preset.id === 'npm-dev-server-node-ws');
+    expect(demo).toBeDefined();
+    if (!demo) throw new Error('unreachable');
+    const spec = resolveProjectSpec('npm-dev-server-node-ws');
+    if (spec.runtime !== 'npm-dev-server') throw new Error('unreachable');
+
+    expect(demo.hidden).toBe(true);
+    expect(demo.templateId).toBe('npm-dev-server-node-ws');
+    expect(demo.setup).toBe('from-scratch');
+    expect(demo.tag).toEqual({ text: 'npm install', tone: 'slow' });
+    expect((demo.files ?? []).map((file) => file.path).sort()).toEqual([
+      'README.md',
+      'public/index.html',
+      'public/message.txt',
+      'server.mjs',
+    ]);
+    expect(presetFileContent(demo, 'server.mjs')).toBe(spec.entry.content);
+    for (const [path, content] of Object.entries(spec.extraFiles)) {
+      expect(presetFileContent(demo, path.replace(/^\/+/, ''))).toBe(content);
+    }
+    expect(presetBootLines(demo, '/workspace')).toEqual([
+      'cd /workspace && npm install && npm run dev',
+    ]);
+    expect(presetFileContent(demo, 'README.md')).toContain('node server.mjs');
+    expect(presetFileContent(demo, 'server.mjs')).not.toMatch(/webpack/i);
   });
 
   it('ships Socket Lab wired to its node-server template and socket matrix rows', () => {

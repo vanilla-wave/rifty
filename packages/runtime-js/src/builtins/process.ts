@@ -1,11 +1,8 @@
 /**
  * Node-compatible `process` global — the ONE `NodeProcess` class (ADR-0157).
  *
- * Spec-seeded (pid/ppid/argv/env/cwd + stdio MessagePorts + ADR-0045 fork-IPC)
- * AND mutable (chdir/nextTick/hrtime/uptime/exitCode). Built once: the kernel
- * pre-entry seam constructs `new NodeProcess(spec)` for kernel-spawned children
- * (see `ipc/install-process.ts`); the REPL worker uses the no-spec singleton
- * `riftyProcess`. No post-spawn `globalThis.process` swap.
+ * Kernel pre-entry constructs one spec-seeded NodeProcess (argv/env/stdio/IPC);
+ * the REPL uses `riftyProcess`. No later global process swap.
  *
  * `nextTick` is queued via `queueMicrotask`. To match Node's ordering (nextTick
  * always wins over `Promise.then`), `patchPromiseForNextTick` patches
@@ -19,7 +16,6 @@
 import {
   type IpcFrame,
   type KernelProcessSpec,
-  type KernelStdioOutputWriter,
   decodeIpcFrame,
   globalProcessManager,
 } from '@riftydev/kernel';
@@ -30,10 +26,15 @@ import {
   unref as unrefEventLoop,
 } from '../internal/event-loop-keepalive.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
-import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import {
+  type NodeIpcSerialization,
+  decodeNodeIpcMessage,
+  encodeNodeIpcMessage,
+} from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { memoryUsage } from './loud-members.ts';
 import {
   type NodeEntryLaunch,
   type NodeEntryTerminalBootstrap,
@@ -46,11 +47,22 @@ import {
   readNodeProcessBootstrapIdentity,
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
+import { installLazyFileStdout } from './process-file-stdout.ts';
 import {
   NODE_PROCESS_IDENTITY,
   type NodeProcessRelease,
   createNodeProcessRelease,
 } from './process-identity.ts';
+import {
+  NodeProcessExit,
+  attachNodeProcessExit,
+  dispatchUncaughtException,
+  rethrowUndispatched,
+} from './process-lifecycle-events.ts';
+import { type NodeStdin, makeStdinReader } from './process-stdin-reader.ts';
+import { type NodeStdioWriter, applyTtyShape, makeStdioWriter } from './process-stdio-writer.ts';
+import { type EmitWarning, installProcessWarnings } from './process-warnings.ts';
+import { captureProcessStdio } from './stdio-fd-source.ts';
 
 const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
   'rifty.runtime-js.process-terminal-bootstrap.v1',
@@ -81,7 +93,7 @@ let promisePatched = false;
 let currentCwd = '/workspace';
 
 export interface NodeProcessDescendantAuthority {
-  kill(pid: number, signal: string): boolean;
+  kill(pid: number, signal: string, realmEnding: boolean): boolean;
   snapshot(): readonly { readonly pid: number }[];
 }
 
@@ -119,7 +131,15 @@ function drainNextTicks(): void {
       // to): the seeded NodeProcess in a kernel child, else the REPL singleton.
       const active = (globalThis as { process?: unknown }).process;
       const target = active instanceof NodeProcess ? active : riftyProcess;
-      (target as unknown as EventEmitter).emit('uncaughtException', err);
+      const outcome = dispatchUncaughtException(err, 'uncaughtException', target);
+      if (outcome.kind === 'handled') continue;
+      // ADR-0445: the process is terminating — later ticks never run. An exit()
+      // already sent its request; a fatal error goes to the realm terminal path
+      // without a second dispatch.
+      nextTickQueue.length = 0;
+      drainHead = 0;
+      if (outcome.kind !== 'exited') rethrowUndispatched(err);
+      return;
     }
   }
   // Fully drained: clear the array + cursor so the next nextTick sees length
@@ -137,6 +157,56 @@ function ensureDrainScheduled(): void {
 function nextTick(fn: (...args: unknown[]) => void, ...args: unknown[]): void {
   nextTickQueue.push({ fn, args });
   ensureDrainScheduled();
+}
+
+// `this`-free Node-own members: own fields of every NodeProcess (like nextTick),
+// so `import { cwd } from 'node:process'` links and works unbound (Node shape).
+function cwd(): string {
+  return currentCwd;
+}
+
+function chdir(dir: string): void {
+  if (typeof dir !== 'string') {
+    throw Object.assign(new TypeError('chdir: path must be a string'), {
+      code: 'ERR_INVALID_ARG_TYPE',
+    });
+  }
+  const target = normalizePath(isAbsolute(dir) ? dir : joinPath(currentCwd, dir));
+  let stat: { isDirectory: boolean };
+  try {
+    stat = syncMirror().statSync(target);
+  } catch (err) {
+    throw Object.assign(new Error(`ENOENT: no such file or directory, chdir '${dir}'`), {
+      code: 'ENOENT',
+      syscall: 'chdir',
+      path: target,
+      cause: err,
+    });
+  }
+  if (!stat.isDirectory) {
+    throw Object.assign(new Error(`ENOTDIR: not a directory, chdir '${dir}'`), {
+      code: 'ENOTDIR',
+      syscall: 'chdir',
+      path: target,
+    });
+  }
+  currentCwd = target;
+}
+
+const monotonicNow = performance.now.bind(performance);
+
+function hrtime(time?: [number, number]): [number, number] {
+  const ms = monotonicNow();
+  const secs = Math.floor(ms / 1000);
+  const ns = Math.floor((ms - secs * 1000) * 1e6);
+  if (!time) return [secs, ns];
+  const [s0, n0] = time;
+  return [secs - s0, ns - n0];
+}
+hrtime.bigint = (): bigint => BigInt(Math.floor(monotonicNow() * 1e6));
+
+function uptime(): number {
+  return monotonicNow() / 1000;
 }
 
 /** Patch `Promise.prototype.then` so nextTick beats `.then` (Node ordering). */
@@ -163,288 +233,11 @@ export function patchPromiseForNextTick(): void {
   } as typeof Promise.prototype.then;
 }
 
-// --- stdio plumbing (shared by spec + no-spec processes) ---
-
-const STDIO_ENCODER = new TextEncoder();
-
-function encodeChunk(chunk: string | Uint8Array): Uint8Array {
-  return typeof chunk === 'string' ? STDIO_ENCODER.encode(chunk) : chunk;
-}
-
-type StdioCallback = () => void;
-
-interface NodeStdioWriter extends EventEmitter {
-  write(chunk: string | Uint8Array): boolean;
-  isTTY: boolean;
-  fd: number;
-  columns?: number;
-  rows?: number;
-  getWindowSize?(): [number, number];
-  clearLine?(dir?: number, cb?: StdioCallback): boolean;
-  cursorTo?(x: number, yOrCb?: number | StdioCallback, cb?: StdioCallback): boolean;
-  moveCursor?(dx: number, dy: number, cb?: StdioCallback): boolean;
-  clearScreenDown?(cb?: StdioCallback): boolean;
-}
-
-function writeControl(stream: NodeStdioWriter, sequence: string, cb?: StdioCallback): boolean {
-  const ok = stream.write(sequence);
-  if (cb) queueMicrotask(cb);
-  return ok;
-}
-
-function attachTtyControls(
-  stream: NodeStdioWriter,
-  size: { readonly cols: number; readonly rows: number },
-): NodeStdioWriter {
-  stream.columns = size.cols;
-  stream.rows = size.rows;
-  stream.getWindowSize = () => [stream.columns ?? 0, stream.rows ?? 0];
-  stream.clearLine = (dir, cb): boolean => {
-    const direction = dir ?? 0;
-    const mode = direction < 0 ? 1 : direction > 0 ? 0 : 2;
-    return writeControl(stream, `\x1b[${mode}K`, cb);
-  };
-  stream.cursorTo = (x, yOrCb, cb): boolean => {
-    const y = typeof yOrCb === 'number' ? yOrCb : undefined;
-    const callback = typeof yOrCb === 'function' ? yOrCb : cb;
-    const sequence = y === undefined ? `\x1b[${Math.max(0, x) + 1}G` : `\x1b[${y + 1};${x + 1}H`;
-    return writeControl(stream, sequence, callback);
-  };
-  stream.moveCursor = (dx, dy, cb): boolean => {
-    let sequence = '';
-    if (dx < 0) sequence += `\x1b[${-dx}D`;
-    else if (dx > 0) sequence += `\x1b[${dx}C`;
-    if (dy < 0) sequence += `\x1b[${-dy}A`;
-    else if (dy > 0) sequence += `\x1b[${dy}B`;
-    return writeControl(stream, sequence, cb);
-  };
-  stream.clearScreenDown = (cb): boolean => writeControl(stream, '\x1b[0J', cb);
-  return stream;
-}
-
-function detachTtyControls(stream: NodeStdioWriter): NodeStdioWriter {
-  Reflect.deleteProperty(stream, 'columns');
-  Reflect.deleteProperty(stream, 'rows');
-  Reflect.deleteProperty(stream, 'getWindowSize');
-  Reflect.deleteProperty(stream, 'clearLine');
-  Reflect.deleteProperty(stream, 'cursorTo');
-  Reflect.deleteProperty(stream, 'moveCursor');
-  Reflect.deleteProperty(stream, 'clearScreenDown');
-  return stream;
-}
-
-function applyTtyShape(
-  stream: NodeStdioWriter,
-  isTTY: boolean,
-  size: { readonly cols: number; readonly rows: number },
-): void {
-  stream.isTTY = isTTY;
-  if (isTTY) attachTtyControls(stream, size);
-  else detachTtyControls(stream);
-}
-
-/** Spec stdout/stderr writer: postMessage bytes to the child's stdio port. */
-function makeStdioWriter(
-  port: KernelStdioOutputWriter,
-  fd: number,
-  isTTY: boolean,
-  size: { readonly cols: number; readonly rows: number },
-): NodeStdioWriter {
-  const stream = Object.assign(new EventEmitter(), {
-    isTTY,
-    fd,
-    write(chunk: string | Uint8Array) {
-      const bytes = encodeChunk(chunk);
-      // A passed-in view may share storage with its caller; the semantic writer
-      // owns transport, while this adapter preserves Node's non-detaching write.
-      port.write(typeof chunk === 'string' ? bytes : new Uint8Array(bytes));
-      return true;
-    },
-  }) as NodeStdioWriter;
-  return isTTY ? attachTtyControls(stream, size) : stream;
-}
-
-export interface NodeStdin extends EventEmitter {
-  isTTY: boolean;
-  fd: number;
-  setEncoding(encoding?: string | null): NodeStdin;
-  resume(): NodeStdin;
-  pause(): NodeStdin;
-  read(size?: number): never;
-  pipe(destination: unknown): never;
-  setRawMode(enabled: boolean): never;
-  [Symbol.asyncIterator](): never;
-}
-
 type StdinListener = (...args: unknown[]) => void;
-
-function throwStdinGap(feature: string): never {
-  throw new NotImplementedError(feature);
-}
-
-/** Runtime-owned loud boundary shared by every spec-seeded and host process. */
-class NodeStdinEmitter extends EventEmitter implements NodeStdin {
-  readonly #onDataListener: () => void;
-
-  declare isTTY: boolean;
-  declare fd: number;
-  declare setEncoding: NodeStdin['setEncoding'];
-  declare resume: NodeStdin['resume'];
-  declare pause: NodeStdin['pause'];
-
-  constructor(onDataListener: () => void) {
-    super();
-    this.#onDataListener = onDataListener;
-  }
-
-  override addListener(event: string | symbol, listener: StdinListener): this {
-    if (event === 'readable') throwStdinGap('process.stdin.readable');
-    const result = super.addListener(event, listener);
-    if (event === 'data') this.#onDataListener();
-    return result;
-  }
-
-  override prependListener(event: string | symbol, listener: StdinListener): this {
-    if (event === 'readable') throwStdinGap('process.stdin.readable');
-    const result = super.prependListener(event, listener);
-    if (event === 'data') this.#onDataListener();
-    return result;
-  }
-
-  read(): never {
-    return throwStdinGap('process.stdin.read');
-  }
-
-  pipe(): never {
-    return throwStdinGap('process.stdin.pipe');
-  }
-
-  setRawMode(): never {
-    return throwStdinGap('process.stdin.setRawMode');
-  }
-
-  [Symbol.asyncIterator](): never {
-    return throwStdinGap('process.stdin[Symbol.asyncIterator]');
-  }
-}
-
-/**
- * Build a `process.stdin` Readable-ish EventEmitter fed by either a kernel
- * stdin MessagePort (spec child) or the host bridge (`writeProcessStdin`, REPL).
- * Returns the stdin + a `push(data)` the host source calls. Pre-listener
- * buffering + utf8 stream-decoding match Node's encoding semantics.
- */
-function makeStdinReader(
-  port?: MessagePort,
-  isTTY = false,
-): {
-  stdin: NodeStdin;
-  push(data: string | Uint8Array): void;
-} {
-  let encoding: string | null = null;
-  const pending: Array<string | Uint8Array> = [];
-  let decoder = new TextDecoder();
-  let flowing = false;
-  let explicitlyPaused = false;
-  let eofReceived = false;
-  let endEmitted = false;
-  let keepaliveHeld = false;
-  const syncKeepalive = (): void => {
-    const shouldHold = port !== undefined && flowing && !eofReceived;
-    if (shouldHold === keepaliveHeld) return;
-    keepaliveHeld = shouldHold;
-    if (shouldHold) refEventLoop();
-    else unrefEventLoop();
-  };
-  const stdin = new NodeStdinEmitter(() => {
-    if (explicitlyPaused) return;
-    flowing = true;
-    syncKeepalive();
-    queueMicrotask(flush);
-  });
-
-  const normalize = (data: string | Uint8Array): string | Uint8Array | null => {
-    if (typeof data === 'string') return data;
-    if (encoding && /^utf-?8$/iu.test(encoding)) {
-      const text = decoder.decode(data, { stream: true });
-      return text.length === 0 ? null : text;
-    }
-    return data;
-  };
-  function flush(): void {
-    while (flowing && pending.length > 0) {
-      const data = pending.shift();
-      if (data === undefined) continue;
-      const chunk = normalize(data);
-      if (chunk !== null) stdin.emit('data', chunk);
-    }
-    if (!flowing || pending.length > 0 || !eofReceived || endEmitted) return;
-    if (encoding && /^utf-?8$/iu.test(encoding)) {
-      const tail = decoder.decode();
-      if (tail.length > 0) stdin.emit('data', tail);
-    }
-    endEmitted = true;
-    stdin.emit('end');
-  }
-  const push = (data: string | Uint8Array): void => {
-    if (eofReceived) return;
-    pending.push(data);
-    flush();
-  };
-  const end = (): void => {
-    if (eofReceived) return;
-    eofReceived = true;
-    syncKeepalive();
-    flush();
-  };
-
-  Object.assign(stdin, {
-    isTTY,
-    fd: 0,
-    setEncoding(next: string | null) {
-      const requested = next ?? 'utf8';
-      if (!/^utf-?8$/iu.test(requested)) {
-        throw new NotImplementedError(`process.stdin.setEncoding('${requested}')`);
-      }
-      if (encoding === 'utf8') return stdin;
-      encoding = 'utf8';
-      decoder = new TextDecoder();
-      return stdin;
-    },
-    resume() {
-      explicitlyPaused = false;
-      flowing = true;
-      syncKeepalive();
-      flush();
-      return stdin;
-    },
-    pause() {
-      explicitlyPaused = true;
-      flowing = false;
-      syncKeepalive();
-      return stdin;
-    },
-  });
-  if (port) {
-    port.onmessage = (ev: MessageEvent): void => {
-      const data = ev.data;
-      if (typeof data === 'string' || data instanceof Uint8Array) push(data);
-      else if (isStdinEofFrame(data)) end();
-    };
-    port.start();
-  }
-  return { stdin, push };
-}
-
-function isStdinEofFrame(value: unknown): value is { readonly kind: 'stdin:eof' } {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as { readonly kind?: unknown }).kind === 'stdin:eof'
-  );
-}
+export type { NodeStdin } from './process-stdin-reader.ts';
 
 interface ProcessTerminalBootstrap {
+  readonly stdoutIsFile?: boolean;
   readonly stdinIsTTY: boolean;
   readonly stdoutIsTTY: boolean;
   readonly stderrIsTTY: boolean;
@@ -474,17 +267,8 @@ function processTerminalBootstrap(launch: NodeEntryLaunch | undefined): ProcessT
   };
 }
 
-/** Wrap an exit code to Node's unsigned 8-bit range (e.g. 257 → 1, -1 → 255). */
-export function toUint8ExitCode(n: number): number {
-  return ((Math.trunc(n) % 256) + 256) % 256;
-}
+export { resetNodeProcessExit, toUint8ExitCode } from './process-lifecycle-events.ts';
 
-/**
- * Node's `process.exitCode`/`process.exit(code)` coercion contract: a numeric
- * string coerces to its number; a non-integer number or a non-coercible value
- * throws LOUDLY (Fidelity — never silently swallow an invalid exit code, which is
- * what real Node does at the setter). undefined/null reset to 0.
- */
 export function coerceExitCode(v: unknown): number {
   if (v === undefined || v === null) return 0;
   if (typeof v === 'number') {
@@ -513,6 +297,7 @@ export function coerceExitCode(v: unknown): number {
  * `process instanceof require('events')` keeps working.
  */
 export class NodeProcess extends EventEmitter {
+  declare emitWarning: EmitWarning;
   pid: number;
   ppid: number;
   argv: string[];
@@ -522,27 +307,46 @@ export class NodeProcess extends EventEmitter {
   readonly platform = NODE_PROCESS_IDENTITY.platform;
   readonly arch = NODE_PROCESS_IDENTITY.arch;
   readonly version = NODE_PROCESS_IDENTITY.version;
-  // Shallow copy so per-process mutation (e.g. process.versions.x = …) works
-  // without throwing and doesn't leak across processes (ADR-0150: each
-  // foreground CLI gets an isolated child worker). `Record` keeps absent-key reads type-safe.
+  // Each process owns mutable version fields (ADR-0150).
   readonly versions: Record<string, string> = { ...NODE_PROCESS_IDENTITY.versions };
   readonly features = { require_module: true } as const;
   declare readonly release: NodeProcessRelease;
   readonly title = NODE_PROCESS_IDENTITY.title;
   env: Record<string, string | undefined>;
   // Node-faithful: assigning an invalid exit code throws at the SETTER (loud),
-  // a numeric string coerces; reads return the validated integer.
-  #exitCode = 0;
-  get exitCode(): number {
-    return this.#exitCode;
-  }
-  set exitCode(v: unknown) {
-    this.#exitCode = coerceExitCode(v);
-  }
+  // a numeric string coerces; reads return the validated integer, `undefined`
+  // until assigned or after `null`/`undefined` (ADR-0445). Own accessor
+  // (enumerable, non-configurable, as Node's) defined in the constructor.
+  #exitCode: number | undefined;
+  declare exitCode: number | undefined;
+  readonly #exit = new NodeProcessExit({
+    process: this,
+    readExitCode: () => this.#exitCode,
+    writeExitCode: (v) => {
+      this.#exitCode = v === undefined || v === null ? undefined : coerceExitCode(v);
+    },
+    writeStderr: (text) => {
+      this.stderr.write(text);
+    },
+    requestExit: (signal) => {
+      const evalLifecycleOwned = beginNodeEvalExplicitExit(signal, () => {
+        this.#requestSelfExit(signal.exitCode);
+        return signal;
+      });
+      if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(signal.exitCode);
+    },
+  });
+  #stdoutIsFile = false;
   stdout: NodeStdioWriter;
   stderr: NodeStdioWriter;
   stdin: NodeStdin;
   nextTick = nextTick;
+  cwd = cwd;
+  chdir = chdir;
+  hrtime = hrtime;
+  uptime = uptime;
+  // Named-loud (ADR-0443): vitest pool workers bind it at load; every call throws.
+  memoryUsage = memoryUsage;
 
   /** Fork-IPC (ADR-0045) — present only when seeded with a spec ipc port. */
   send?: (message: unknown, ...unsupported: unknown[]) => boolean;
@@ -554,8 +358,10 @@ export class NodeProcess extends EventEmitter {
   #ipcPort: MessagePort | null = null;
   #ipcDisconnected = false;
   #controlClosed = false;
+  #selfExitRequested = false;
   #publicIpc = false;
-  #jsonIpc = false;
+  /** A fork program's `serialization`; `null` for a launch-less URL Worker's raw port. */
+  #ipcSerialization: NodeIpcSerialization | null = null;
   #ipcKeepaliveHeld = false;
   readonly #workerMessageListeners = new Set<(message: unknown) => void>();
   readonly #workerIpcBacklog: unknown[] = [];
@@ -567,6 +373,15 @@ export class NodeProcess extends EventEmitter {
 
   constructor(spec?: KernelProcessSpec) {
     super();
+    Object.defineProperty(this, 'exitCode', {
+      get: (): number | undefined => this.#exitCode,
+      set: (v: unknown): void => {
+        this.#exitCode = v === undefined || v === null ? undefined : coerceExitCode(v);
+      },
+      enumerable: true,
+      configurable: false,
+    });
+    attachNodeProcessExit(this, this.#exit);
     Object.defineProperty(this, 'release', {
       value: createNodeProcessRelease(),
       writable: false,
@@ -625,16 +440,17 @@ export class NodeProcess extends EventEmitter {
       this.ppid = spec.ppid;
       this.argv = [...spec.argv];
       const launch = readNodeEntryBootstrapIfPresent()?.launch;
-      this.execArgv = launch?.kind === 'eval' ? [...launch.execArgv] : [];
+      this.execArgv = [...(launch?.execArgv ?? [])];
       // Copy so per-process env mutation does not leak into the published
       // Readonly spec (the kernel threads spec.env by reference).
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
       const terminal = processTerminalBootstrap(launch);
+      this.#stdoutIsFile = terminal.stdoutIsFile === true;
       const size = { cols: terminal.cols, rows: terminal.rows };
-      this.stdout = makeStdioWriter(spec.stdio.stdout, 1, terminal.stdoutIsTTY, size);
-      this.stderr = makeStdioWriter(spec.stdio.stderr, 2, terminal.stderrIsTTY, size);
-      const reader = makeStdinReader(spec.stdio.stdin, terminal.stdinIsTTY);
+      this.stdout = makeStdioWriter(spec.stdio.stdout, 1, terminal.stdoutIsTTY, size, nextTick);
+      this.stderr = makeStdioWriter(spec.stdio.stderr, 2, terminal.stderrIsTTY, size, nextTick);
+      const reader = makeStdinReader(spec.stdio.stdin, terminal.stdinIsTTY, spec.stdio.input);
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
       if (
@@ -646,7 +462,8 @@ export class NodeProcess extends EventEmitter {
         this.#wireWorkerIpc(spec.stdio.ipc);
       } else {
         this.#publicIpc = true;
-        this.#jsonIpc = launch?.kind === 'program';
+        const ipc = launch?.kind === 'program' ? launch.ipc : undefined;
+        this.#ipcSerialization = ipc === 'json' || ipc === 'advanced' ? ipc : null;
         this.connected = true;
         this.channel = nodeIpcChannel('process');
         this.#wireIpc(spec.stdio.ipc);
@@ -656,26 +473,29 @@ export class NodeProcess extends EventEmitter {
       this.ppid = 0;
       this.argv = ['rifty', 'repl'];
       this.env = Object.create(null);
-      this.stdout = Object.assign(new EventEmitter(), {
-        write: (chunk: string | Uint8Array) => {
-          console.log(chunk);
-          return true;
-        },
-        isTTY: false,
-        fd: 1,
-      }) as NodeStdioWriter;
-      this.stderr = Object.assign(new EventEmitter(), {
-        write: (chunk: string | Uint8Array) => {
-          console.error(chunk);
-          return true;
-        },
-        isTTY: false,
-        fd: 2,
-      }) as NodeStdioWriter;
+      const size = { cols: 80, rows: 24 };
+      const decoder = new TextDecoder();
+      this.stdout = makeStdioWriter(
+        { write: (bytes) => console.log(decoder.decode(bytes)) },
+        1,
+        false,
+        size,
+        nextTick,
+      );
+      this.stderr = makeStdioWriter(
+        { write: (bytes) => console.error(decoder.decode(bytes)) },
+        2,
+        false,
+        size,
+        nextTick,
+      );
       const reader = makeStdinReader();
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
     }
+    captureProcessStdio(this);
+    if (this.#stdoutIsFile) installLazyFileStdout(this);
+    installProcessWarnings(this);
   }
 
   override addListener(event: string | symbol, listener: StdinListener): this {
@@ -702,68 +522,14 @@ export class NodeProcess extends EventEmitter {
     return result;
   }
 
-  cwd(): string {
-    return currentCwd;
-  }
+  // Own instance-bound fields, not prototype methods: Node's detached
+  // `const { exit } = process; exit(3)` / `import { kill }` still hit this process.
+  // Node `exit()` (ADR-0445): an argument assigns `exitCode`, `'exit'` fires once,
+  // the uint8 status is read after the listeners; throws the exit signal.
+  exit: (code?: unknown) => never = (...args: unknown[]): never =>
+    this.#exit.exit(args.length !== 0, args[0]);
 
-  chdir(dir: string): void {
-    if (typeof dir !== 'string') {
-      throw Object.assign(new TypeError('chdir: path must be a string'), {
-        code: 'ERR_INVALID_ARG_TYPE',
-      });
-    }
-    const target = normalizePath(isAbsolute(dir) ? dir : joinPath(currentCwd, dir));
-    let stat: { isDirectory: boolean };
-    try {
-      stat = syncMirror().statSync(target);
-    } catch (err) {
-      throw Object.assign(new Error(`ENOENT: no such file or directory, chdir '${dir}'`), {
-        code: 'ENOENT',
-        syscall: 'chdir',
-        path: target,
-        cause: err,
-      });
-    }
-    if (!stat.isDirectory) {
-      throw Object.assign(new Error(`ENOTDIR: not a directory, chdir '${dir}'`), {
-        code: 'ENOTDIR',
-        syscall: 'chdir',
-        path: target,
-      });
-    }
-    currentCwd = target;
-  }
-
-  hrtime(time?: [number, number]): [number, number] {
-    const ms = performance.now();
-    const secs = Math.floor(ms / 1000);
-    const ns = Math.floor((ms - secs * 1000) * 1e6);
-    if (!time) return [secs, ns];
-    const [s0, n0] = time;
-    return [secs - s0, ns - n0];
-  }
-
-  uptime(): number {
-    return performance.now() / 1000;
-  }
-
-  exit(code: unknown = 0): never {
-    const c = coerceExitCode(code); // coerce string / throw on invalid (Node parity)
-    this.#exitCode = c;
-    const exitCode = toUint8ExitCode(c);
-    const exitError = Object.assign(new Error(`process.exit(${c})`), {
-      code: RIFTY_PROCESS_EXIT,
-      exitCode, // OS-style uint8 wrap (process.exit(257) → 1)
-    });
-    const evalLifecycleOwned = beginNodeEvalExplicitExit(exitError, () => {
-      this.#requestSelfExit(exitCode);
-      return exitError;
-    });
-    if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(exitCode);
-    throw exitError;
-  }
-
-  kill(pid: number, signal = 'SIGTERM'): boolean {
+  kill = (pid: number, signal = 'SIGTERM'): boolean => {
     if (pid !== this.pid || signal !== 'SIGUSR2') {
       throw new NotImplementedError(
         'process.kill',
@@ -771,7 +537,7 @@ export class NodeProcess extends EventEmitter {
       );
     }
     return this.#requestSelfSignal(signal);
-  }
+  };
 
   /** Host bridge: deliver terminal/process stdin into this realm's process. */
   pushStdin(data: string | Uint8Array): void {
@@ -787,7 +553,11 @@ export class NodeProcess extends EventEmitter {
       if (frame === null) return;
       if (frame.kind === 'ipc:message') {
         if (this.#ipcDisconnected) return;
-        const payload = this.#jsonIpc ? serializeNodeIpcMessage(frame.payload) : frame.payload;
+        const serialization = this.#ipcSerialization;
+        const payload =
+          serialization === null
+            ? frame.payload
+            : decodeNodeIpcMessage(frame.payload, serialization);
         if (this.listenerCount('message') === 0) {
           this.#ipcBacklog.push(payload);
         } else {
@@ -800,7 +570,7 @@ export class NodeProcess extends EventEmitter {
       } else if (frame.kind === 'control:signal') {
         this.#receiveSignal(frame.signal);
       } else if (frame.kind === 'control:kill-tree') {
-        this.#killDescendant(frame.pid, frame.signal);
+        this.#killDescendant(frame.pid, frame.signal, frame.cascade);
       } else {
         this.#rejectControlFrame();
       }
@@ -827,7 +597,9 @@ export class NodeProcess extends EventEmitter {
     this.send = (message: unknown, ...unsupported: unknown[]): boolean => {
       if (unsupported.length > 0) throw new NotImplementedError('process.send.arguments');
       if (this.#ipcDisconnected) return false;
-      const payload = this.#jsonIpc ? serializeNodeIpcMessage(message) : message;
+      const serialization = this.#ipcSerialization;
+      const payload =
+        serialization === null ? message : encodeNodeIpcMessage(message, serialization);
       try {
         const frame: IpcFrame = { kind: 'ipc:message', payload };
         port.postMessage(frame);
@@ -861,7 +633,7 @@ export class NodeProcess extends EventEmitter {
       } else if (frame.kind === 'control:signal') {
         this.#receiveSignal(frame.signal);
       } else if (frame.kind === 'control:kill-tree') {
-        this.#killDescendant(frame.pid, frame.signal);
+        this.#killDescendant(frame.pid, frame.signal, frame.cascade);
       } else {
         this.#rejectControlFrame();
       }
@@ -885,7 +657,7 @@ export class NodeProcess extends EventEmitter {
       } else if (frame.kind === 'control:signal') {
         this.#receiveSignal(frame.signal);
       } else if (frame.kind === 'control:kill-tree') {
-        this.#killDescendant(frame.pid, frame.signal);
+        this.#killDescendant(frame.pid, frame.signal, frame.cascade);
       } else {
         this.#rejectControlFrame();
       }
@@ -930,8 +702,11 @@ export class NodeProcess extends EventEmitter {
     if (this.#controlClosed || this.#ipcPort === null) {
       throw new Error('process exit requires an active control port');
     }
+    // ADR-0445: the first delivered request is the status; a later exit() adds none.
+    if (this.#selfExitRequested) return;
     try {
       this.#ipcPort.postMessage({ kind: 'control:self-exit', code } satisfies IpcFrame);
+      this.#selfExitRequested = true;
     } catch (error) {
       this.#closeControl();
       throw error;
@@ -951,10 +726,11 @@ export class NodeProcess extends EventEmitter {
     this.#requestSelfExit(1);
   }
 
-  #killDescendant(pid: number, signal: string): void {
+  #killDescendant(pid: number, signal: string, realmEnding: boolean): void {
     const authority = this.#descendantAuthority ?? globalProcessManager;
+    const killed = authority.kill(pid, signal, realmEnding);
     // Absence proves a federated descendant is already physically retired.
-    if (!authority.kill(pid, signal) && authority.snapshot().some((row) => row.pid === pid)) {
+    if (!killed && authority.snapshot().some((row) => row.pid === pid)) {
       throw new Error(`process control could not kill descendant PID ${pid}`);
     }
   }
@@ -972,8 +748,8 @@ export class NodeProcess extends EventEmitter {
       throw new TypeError('process descendant authority requires kill() and snapshot()');
     }
     this.#descendantAuthority = Object.freeze({
-      kill: (pid: number, signal: string): boolean =>
-        Reflect.apply(kill, authority, [pid, signal]) as boolean,
+      kill: (pid: number, signal: string, realmEnding: boolean): boolean =>
+        Reflect.apply(kill, authority, [pid, signal, realmEnding]) as boolean,
       snapshot: (): readonly { readonly pid: number }[] =>
         Reflect.apply(snapshot, authority, []) as readonly { readonly pid: number }[],
     });
@@ -985,7 +761,7 @@ export class NodeProcess extends EventEmitter {
     }
     this.#latestTtyControlSize = { cols, rows };
     let changed = false;
-    for (const stream of [this.stdout, this.stderr]) {
+    for (const stream of this.#stdoutIsFile ? [this.stderr] : [this.stdout, this.stderr]) {
       if (!stream.isTTY || (stream.columns === cols && stream.rows === rows)) continue;
       stream.columns = cols;
       stream.rows = rows;
@@ -999,7 +775,9 @@ export class NodeProcess extends EventEmitter {
     const snapshot = snapshotNodeEntryTerminalBootstrap(terminal, 'process terminal bootstrap');
     const size = this.#latestTtyControlSize ?? { cols: snapshot.cols, rows: snapshot.rows };
     this.stdin.isTTY = snapshot.stdinIsTTY;
-    applyTtyShape(this.stdout, snapshot.stdoutIsTTY, size);
+    if (snapshot.stdoutIsFile && !this.#stdoutIsFile) installLazyFileStdout(this);
+    this.#stdoutIsFile = snapshot.stdoutIsFile === true;
+    if (!this.#stdoutIsFile) applyTtyShape(this.stdout, snapshot.stdoutIsTTY, size);
     applyTtyShape(this.stderr, snapshot.stderrIsTTY, size);
   }
 
@@ -1047,7 +825,10 @@ export class NodeProcess extends EventEmitter {
   }
 
   #syncIpcKeepalive(): void {
-    const shouldHold = this.#jsonIpc && !this.#ipcDisconnected && this.listenerCount('message') > 0;
+    const shouldHold =
+      this.#ipcSerialization !== null &&
+      !this.#ipcDisconnected &&
+      this.listenerCount('message') > 0;
     if (shouldHold === this.#ipcKeepaliveHeld) return;
     this.#ipcKeepaliveHeld = shouldHold;
     if (shouldHold) refEventLoop();
@@ -1171,9 +952,6 @@ export function nodeProcessWorkerIpc(process: unknown): NodeProcessWorkerIpc {
   }
   return (receiver as () => NodeProcessWorkerIpc)();
 }
-
-(NodeProcess.prototype as unknown as { hrtime: { bigint: () => bigint } }).hrtime.bigint = () =>
-  BigInt(Math.floor(performance.now() * 1e6));
 
 /** REPL/default singleton (no spec). Kernel children get their own seeded one. */
 export const riftyProcess = new NodeProcess();

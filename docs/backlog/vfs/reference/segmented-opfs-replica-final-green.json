@@ -1,0 +1,267 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS replica unit: B1–B4 закрыты; PR-4/RDY-6 приняты. Goal продолжается.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "631615fb94e4d027371ac972aada93b2deeec55d",
+  "unit_goal_source": "docs/backlog/vfs/segmented-opfs-replica.md; goal docs/backlog/epics/fast-project-open-reopen/goal.md; BASE 93c05f463cc266eb47f36b4fd8cf528c9ad1d0b3. Reviewer /root/replica_final_review. Проверены чистый committed HEAD, ancestry, actual final diff. B1–B3: независимый native verify38/38 PASS на5936, /tmp/rifty-replica-independent-verify.log; исходные reviewer probes: dirty=1 до full-scope repair, 369 concurrent reads без ошибок. Пять raw mutant RED изучены. T medians335.840/223.420/274.860ms. Final delta: private ledger/Set simplification, TS fixture, compiler pin, документы. Ledger semantics сохранена: failure/sequence неизменны, mutable subtreeSequence приватен, локальный dirCreates после передачи не мутируется. Source blob6fa4b199c8786281287313706d6715dc24513f95 совпадает с независимо оценённым. Matrix не повторялась без нового concern. B4: /tmp/rifty-pr299-budget-repair-packed.log — main85980/86000B, четыре packed SDK scenarios PASS; ceiling неизменён. Current pr:check25/25 PASS /tmp/rifty-pr299-budget-final-pr-check.log; после shrink95 existing OPFS tests/1 skip и native structural8 PASS. PR-4: BASE TS test/ADR-0166 требуют real registered formatter, nonempty edits и applied source spacing; cached-clean reopen не заявлен discriminator. format-proof.ts устраняет preset collision; visible-source await усиливает readiness; прежние assertions сохранены. /tmp/rifty-pr299-ts-format-fresh-fixture.log:1 PASS; test blob782c4732fd2f0a6e6a490ad3732859ad43f20e8a совпадает с независимо оценённым. C1: raw instrument и unchanged editor source подтверждают отдельный clean-cache defect, записанный в docs/backlog/playground/editor-conflict-recovery.md. RDY-6 final-written-result PASS: draft blob a8792289a7a84c08f286df367b1590a16c697b8b, reviewer /root/replica_final_review. Факты соответствуют источникам; editor repair/ready scope и новая пользовательская политика не заявлены. Compiler exact pin обновлён по ADR-0391 без ослабления gates. Public T/npm/offline proof и legacy notice остаются goal work. Goal.md неизменён; старые BLOCK JSON сохранены; текущих unit residuals нет.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md:123",
+      "summary": "Public T openProject → executable Node command с durable flush ≤2 s; isolated storage proof не закрывает композицию."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md:126",
+      "summary": "Public fresh-process offline T reopen: executable session после storage restore ≤2 s."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/fast-project-open-reopen/map.md:12",
+      "summary": "Linked legacy unit: именованный storage-layout health notice и definition materialization end-to-end."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md:138",
+      "summary": "Public offline T reopen ≤2 s после настоящего post-init npm install с ≥5000 изменёнными путями."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Workbench/configured no-COI используют replica под captured root; standalone per-file сохранён; eager replay.",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:12; tests/no-coi/replica-storage.spec.ts:5; tests/browser-unit/workbench-storage-namespace.spec.ts:24",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: binary bytes, shape, copy/rename/delete и timestamps переживают replay точно; healthy paired reads возвращают committed bytes.",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:120; tests/browser-unit/opfs-structural-repair.spec.ts:6; tests/browser-unit/replica-native-read.spec.ts:30; tests/browser-unit/replica-native-read.spec.ts:51",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: T manifest, per-path discriminator, три fresh offline samples, flush/replay ≤2 s до и после 5000 изменений; проверены все bytes.",
+      "source": "acceptance",
+      "trace": "I1+I2+I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-storage-budget.spec.ts:10; tests/browser-unit/fixtures/replica-persistence-worker.ts:233",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: v2 не принимает valid v1 definition/project; материализация использует definition, старые bytes сохранены.",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-project-store-layout.contract.test.ts:6; tests/browser-unit/replica-persistence.spec.ts:42; tests/browser-unit/workbench-playground-companion.spec.ts:1230",
+      "note": ""
+    },
+    {
+      "row": "Parity: FsSync reference сохранён; binary/structural/metadata-only utimes roundtrip и существующие sync/owner suites.",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/replica-persistence-worker.ts:430; packages/vfs/src/opfs-sync.test.ts:505; /tmp/rifty-pr299-replica-review-pr-check.log:28",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input: invalid HEAD/segment/truncation даёт diagnosed cold restoration без old file/claim; native evidence сохранена.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:42; tests/browser-unit/fixtures/replica-persistence-worker.ts:275",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie: live cache не скрывает corrupt native bytes; paired read отвергает их, healthy read успешен.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0392+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:52; tests/browser-unit/replica-persistence.spec.ts:311",
+      "note": ""
+    },
+    {
+      "row": "native read failure: NotReadableError остаётся OpfsPreloadError с причиной, без cold restore/memory success.",
+      "source": "fault-matrix",
+      "trace": "ADR-0393+ADR-0411",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:42; tests/browser-unit/workbench-preload-honesty.spec.ts:17",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail + lossy-aggregate: failed batch сохраняет footprint 230 writes за пределами sample 20; один repair лечит один путь.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0358+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:151; tests/browser-unit/fixtures/replica-persistence-worker.ts:446",
+      "note": ""
+    },
+    {
+      "row": "quota during compaction: dirty report, prior HEAD/tree доступны, reachable old segments не удалены.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:42; tests/browser-unit/fixtures/replica-persistence-worker.ts:410",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key: competing writer не принят до real settle; timeout держит guard/fence; late success heals.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0358+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:185; tests/browser-unit/fixtures/replica-persistence-worker.ts:462",
+      "note": ""
+    },
+    {
+      "row": "Worker death/torn-state: kill before/after HEAD close при append и compaction даёт complete old/new tree.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:236; tests/browser-unit/fixtures/replica-persistence-worker.ts:486",
+      "note": ""
+    },
+    {
+      "row": "Native admission deadline: busy Worker release ожидается; preferred не скрывает expiry; late granted handle закрывается.",
+      "source": "acceptance",
+      "trace": "ADR-0428",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:282; tests/browser-unit/replica-guard-deadline.spec.ts:4; /tmp/rifty-pr299-late-handle-mutant.log:18",
+      "note": ""
+    },
+    {
+      "row": "initBackend configured storage выбирает replica; существующий standalone default сохраняется.",
+      "source": "public-api",
+      "trace": "ADR-0425+ADR-0419",
+      "status": "pass",
+      "citation": "tests/no-coi/replica-storage.spec.ts:5; tests/browser-unit/opfs-no-coi-policy.spec.ts:1",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.utimes регистрирует собственную durable metadata mutation.",
+      "source": "public-api",
+      "trace": "ADR-0425+ADR-0029",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/replica-persistence-worker.ts:437; tests/browser-unit/replica-persistence.spec.ts:120",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.closeAll сохраняет guard до настоящего settlement.",
+      "source": "public-api",
+      "trace": "ADR-0425+ADR-0428",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:182; tests/browser-unit/replica-native-read.spec.ts:61",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.persistMutation: paired mutations ожидают собственный real outcome, включая failure/repair/report timeout.",
+      "source": "public-api",
+      "trace": "ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-paired-vfs.spec.ts:4; tests/browser-unit/fixtures/replica-paired-vfs-worker.ts:6",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.preloadContent в replica выбрасывает named NotImplementedError; default per-file control сохранён.",
+      "source": "public-api",
+      "trace": "ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-native-read.spec.ts:35; tests/browser-unit/fixtures/replica-native-read-worker.ts:24",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.refreshIndex в replica выбрасывает named NotImplementedError; default per-file control сохранён.",
+      "source": "public-api",
+      "trace": "ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-native-read.spec.ts:35; tests/browser-unit/fixtures/replica-native-read-worker.ts:24",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.openSync в replica выбрасывает named NotImplementedError; default per-file control сохранён.",
+      "source": "public-api",
+      "trace": "ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-native-read.spec.ts:35; tests/browser-unit/fixtures/replica-native-read-worker.ts:24",
+      "note": ""
+    },
+    {
+      "row": "Exact TypeScript worker fingerprint обновлён без расширения compiler exception; browser proof сохранён.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:96; tools/checks/esbuild-legacy-retirement.test.ts:1; /tmp/rifty-pr299-budget-final-pr-check.log:22",
+      "note": ""
+    },
+    {
+      "row": "Structural failure: entry success не снимает unproven subtree; full-scope proof лечит только покрытые sequences. Both modes: rm/rename/failed mkdir/late rm.",
+      "source": "fault-matrix",
+      "trace": "Acceptance 2+ADR-0429",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-structural-repair.spec.ts:6; tests/browser-unit/fixtures/opfs-structural-repair-worker.ts:63",
+      "note": ""
+    },
+    {
+      "row": "Reader reclamation: admitted readFile/stat/readdir/content завершаются до удаления старых сегментов; новые readers используют новый committed map.",
+      "source": "fault-matrix",
+      "trace": "Acceptance 2+ADR-0429",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-native-read.spec.ts:30; tests/browser-unit/replica-native-read.spec.ts:51; tests/browser-unit/fixtures/replica-native-read-worker.ts:110",
+      "note": ""
+    },
+    {
+      "row": "TS formatting: registered provider, nonempty real edits и applied source spacing; fresh fixture ждёт настоящее editor content.",
+      "source": "acceptance",
+      "trace": "ADR-0166",
+      "status": "pass",
+      "citation": "tests/e2e/ts-language-service.spec.ts:1308; tests/e2e/ts-language-service.spec.ts:1444; tests/e2e/ts-language-service.spec.ts:1502; /tmp/rifty-pr299-ts-format-fresh-fixture.log:1",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

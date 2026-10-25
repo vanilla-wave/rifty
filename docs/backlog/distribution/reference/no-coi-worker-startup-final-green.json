@@ -1,0 +1,199 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "Do not accept startup unit yet: omitted default preferred loses its fallback reason when native sync OPFS API is unavailable. I3\u2013I6 remain separate required goal continuation.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/distribution/no-coi-worker-startup.md at cd364f29bbb0d89fa6f2bacbea05ec8d126b19ee; BASE ca4f4786244f86a377626cef3f857ab3ae7488ef; goal I1/I2 and ADR-0419; prior refinement accepted.",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance 2 \u2192 I1; ADR-0419 default preferred and return fallback reason",
+      "location": "packages/rifty/src/sandbox.ts:275",
+      "summary": "Omitted storage reaches initBackend(undefined), whose unsupported-native-API path returns memory without a reason; make SDK default preferred observable and add its regression carrier."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/no-coi-self-hosted-project/goal.md:44",
+      "summary": "Repair default preferred fallback reason and independently verify startup unit."
+    },
+    {
+      "clause": "I3+I4+I5+I6",
+      "location": "docs/backlog/epics/no-coi-self-hosted-project/map.md:8",
+      "summary": "Linked project-open unit remains: snapshot application, ordinary saved access, explicit conflict policy and honest failure; packed Vite goal acceptance still required."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: public namespace reaches native preload; A/B/default roots persist independently across restart/recreation and preserve unrelated bytes",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: required acquisition rejects, preferred exposes fallback reason, acquired unreadable preload rejects",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "weak",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:70; tests/no-coi/no-coi-preload-failure.spec.ts:5",
+      "note": "Committed explicit-preferred acquisition failure passes while omitted default preferred with missing native sync API returns memory without vfs.reason; native executed defect below."
+    },
+    {
+      "row": "Acceptance 3: public bounded startup budget controls initial/restart construction/import/preload/handshake, including 11s native preload under 30s",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:102; packages/runtime-js/src/host-startup.fault.test.ts:48",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: invalid namespace, persistence and budget reject before effects",
+      "source": "acceptance",
+      "trace": "I1+I2",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox-startup.contract.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: timeout/close/dispose settle startup/eval/fs, terminate Worker and reject late readiness",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/host-startup.fault.test.ts:88; tests/no-coi/no-coi-configured-startup.spec.ts:130",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input \u00d7 boot config: invalid public options reject without Worker/SW effects",
+      "source": "fault-matrix",
+      "trace": "I1+I2",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox-startup.contract.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail \u00d7 native acquisition: required rejection/teardown and observable preferred fallback",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "weak",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:70",
+      "note": "Committed explicit-preferred acquisition failure passes while omitted default preferred with missing native sync API returns memory without vfs.reason; native executed defect below."
+    },
+    {
+      "row": "corrupt-input \u00d7 acquired preload: rejection preserves disk and never activates memory",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-preload-failure.spec.ts:5",
+      "note": ""
+    },
+    {
+      "row": "unbounded-read \u00d7 slow preload: below-budget success; deadline terminates and settles pending calls",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:102; packages/runtime-js/src/host-startup.fault.test.ts:88",
+      "note": ""
+    },
+    {
+      "row": "torn-state \u00d7 close/dispose during boot: pending calls reject without late revival",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/host-startup.fault.test.ts:105; tests/no-coi/no-coi-configured-startup.spec.ts:130",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift \u00d7 restart: captured namespace and startup budget remain effective",
+      "source": "fault-matrix",
+      "trace": "I1+I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:5; tests/no-coi/no-coi-configured-startup.spec.ts:102",
+      "note": ""
+    },
+    {
+      "row": "Public SDK toolchain storage and startupTimeoutMs input; immutable pre-effect capture, captured restart",
+      "source": "public-api",
+      "trace": "I1+I2+ADR-0419",
+      "status": "weak",
+      "citation": "packages/rifty/src/sandbox-startup.contract.test.ts:6; tests/no-coi/no-coi-configured-startup.spec.ts:5",
+      "note": "Input rejection and restart are covered; default preferred reason has the reproduced defect."
+    },
+    {
+      "row": "Public initBackend storage parameter, namespace validator and storage capture reuse native root behavior",
+      "source": "public-api",
+      "trace": "ADR-0419",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:5; packages/rifty/src/sandbox-startup.contract.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Protocol v4 rejects pre-configuration workers before accepting storage",
+      "source": "public-api",
+      "trace": "ADR-0419",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/host-startup.fault.test.ts:73",
+      "note": ""
+    },
+    {
+      "row": "Existing compiler asset exact identity exception retains fixed size and rejection of retired payload carriers",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.test.ts:51; tools/checks/esbuild-legacy-retirement.mjs:96",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "packages/rifty/src/sandbox.ts:275",
+          "summary": "Default preferred loses the required fallback reason when the native sync OPFS API is absent. Omitted storage stays undefined, selecting initBackend\u2019s legacy silent-memory path at packages/vfs/src/boot.ts:87; explicit preferred correctly produces a reason. Fault class: sibling-drift between omitted/default and explicit preferred. Missing RED: omitted storage with unavailable createSyncAccessHandle. Sweep the SDK/default worker-name capture alongside explicit preferred and ephemeral, preserving generic unconfigured VFS behavior.",
+          "authority": "Acceptance 1/2 \u2192 I1; ADR-0419: omission is preferred OPFS and fallback reason is returned",
+          "evidence": "Executed native Chromium: node /tmp/rifty-332-default-storage-probe.mjs; /tmp/rifty-332-default-storage-probe.log => [{\"config\":\"omitted\",\"vfs\":{\"backend\":\"memory\"}},{\"config\":{\"persistence\":\"preferred\"},\"vfs\":{\"backend\":\"memory\",\"reason\":\"OPFS is unavailable in this realm\"}}]. Probe disables only external native FileSystemFileHandle.prototype.createSyncAccessHandle, then boots real SDK and Worker via local Vite. Source at reviewed SHA was unchanged during probe."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "cd364f29bbb0d89fa6f2bacbea05ec8d126b19ee"
+}

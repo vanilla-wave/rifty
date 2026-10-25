@@ -4,9 +4,10 @@
  * into them on the dev path. Every access throws so we notice if one does.
  */
 import { NotImplementedError } from '@riftydev/io';
+import { runtimeProxy } from '../internal/proxy-identity.ts';
 
 function loudProxy(name: string): Record<string, unknown> {
-  return new Proxy(
+  return runtimeProxy(
     {},
     {
       get(_target, prop) {

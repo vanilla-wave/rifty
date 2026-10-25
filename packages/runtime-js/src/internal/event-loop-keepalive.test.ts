@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as keepalive from './event-loop-keepalive.ts';
 import {
   activeRefs,
   awaitDrain,
@@ -11,7 +12,6 @@ import {
   registerNodeEvalDrainLifecycle,
   releaseNodeEvalDrainOwnership,
   resetKeepalive,
-  trackKeepalivePromise,
   unref,
 } from './event-loop-keepalive.ts';
 
@@ -21,6 +21,70 @@ afterEach(() => {
 });
 
 describe('event-loop keepalive', () => {
+  it('a serialized invocation takes its failure without resetting live handles or future failures', async () => {
+    const marker = new Error('reported invocation');
+    ref();
+    recordRejection(marker);
+    const take = Reflect.get(keepalive, 'takeUnhandledRejection') as () => {
+      reason: unknown;
+    } | null;
+    expect(typeof take).toBe('function');
+    expect(take()?.reason).toBe(marker);
+    expect(activeRefs()).toBe(1);
+    expect(take()).toBeNull();
+    const queue: Array<() => void> = [];
+    const drain = awaitDrain({ scheduleMacrotask: (callback) => queue.push(callback) });
+    queue.shift()!();
+    expect(queue).toHaveLength(1);
+    unref();
+    queue.shift()!();
+    queue.shift()!(); // ADR-0445 rule 7: idle confirmed one host task later
+    await expect(drain).resolves.toBeUndefined();
+    recordRejection(new Error('next invocation'));
+    const next = awaitDrain({ scheduleMacrotask: (callback) => queue.push(callback) });
+    queue.shift()!();
+    await expect(next).rejects.toThrow('next invocation');
+  });
+
+  it('holds eval flush until caller-owned handles and timer refs both drain', async () => {
+    const queue: Array<() => void> = [];
+    let listening = true;
+    const flushed: string[] = [];
+    registerNodeEvalDrainLifecycle({
+      beforeExit: () => {
+        flushed.push('print');
+      },
+      projectUnhandled: (reason) => reason,
+      terminateUnhandled: (reason) => reason,
+    });
+    const options = {
+      hasRef: () => listening,
+      scheduleMacrotask: (cb: () => void) => queue.push(cb),
+    };
+    const drain = awaitDrain(options);
+    queue.shift()!();
+    expect(flushed).toEqual([]);
+    listening = false;
+    ref();
+    queue.shift()!();
+    expect(flushed).toEqual([]);
+    unref();
+    queue.shift()!();
+    expect(flushed).toEqual([]);
+    queue.shift()!(); // ADR-0445 rule 7: idle confirmed one host task later
+    await drain;
+    expect(flushed).toEqual(['print']);
+  });
+
+  it('a live caller-owned handle does not hide a terminal rejection', async () => {
+    const queue: Array<() => void> = [];
+    const options = { hasRef: () => true, scheduleMacrotask: (cb: () => void) => queue.push(cb) };
+    recordRejection(new Error('served failure'));
+    const drain = awaitDrain(options);
+    queue.shift()!();
+    await expect(drain).rejects.toThrow('served failure');
+  });
+
   it('ref/unref tracks active handles', () => {
     expect(activeRefs()).toBe(0);
     ref();
@@ -36,7 +100,8 @@ describe('event-loop keepalive', () => {
     const p = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
     queue.shift()!(); // first tick: refCount=1, re-schedules
     unref();
-    queue.shift()!(); // next tick: refCount=0 → resolves
+    queue.shift()!(); // next tick: refCount=0 → confirms one host task later
+    queue.shift()!(); // ADR-0445 rule 7: still 0, no rejection → resolves
     await expect(p).resolves.toBeUndefined();
   });
 
@@ -60,13 +125,17 @@ describe('event-loop keepalive', () => {
     await expect(p).rejects.toThrow(/exceeded keepalive drain cap/);
   });
 
-  it('awaitDrain resolves on the first tick when already drained (refCount 0)', async () => {
+  // ADR-0445 rule 7 (was: resolves on the first tick): a Chromium
+  // `unhandledrejection` task may sit behind the first zero-ref sample.
+  it('awaitDrain resolves one confirming tick after the first zero-ref sample', async () => {
     // No ref() — refCount stays 0
     const queue: Array<() => void> = [];
     const p = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
     expect(queue.length).toBe(1);
-    queue.shift()!(); // first tick: refCount=0 → resolves immediately
-    expect(queue.length).toBe(0); // no second tick queued
+    queue.shift()!(); // first tick: refCount=0 → one confirming tick
+    expect(queue.length).toBe(1);
+    queue.shift()!(); // still 0, no rejection → resolves
+    expect(queue.length).toBe(0); // no third tick queued
     await expect(p).resolves.toBeUndefined();
   });
 
@@ -104,6 +173,7 @@ describe('event-loop keepalive', () => {
       });
       drain = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
       queue.shift()!();
+      queue.shift()!(); // ADR-0445 rule 7: idle confirmed one host task later
       interceptedCalls = calls;
     } finally {
       Object.defineProperty(Promise, 'resolve', descriptor);
@@ -453,28 +523,6 @@ describe('event-loop keepalive', () => {
     expect(events).toEqual(['print', 'exit:7']);
     expect(queue).toEqual([]);
     expect(drainSettled).toBe(false);
-  });
-
-  it('trackKeepalivePromise pins until a detached promise settles', async () => {
-    let resolveTask!: () => void;
-    trackKeepalivePromise(
-      new Promise<void>((resolve) => {
-        resolveTask = resolve;
-      }),
-    );
-    expect(activeRefs()).toBe(1);
-    resolveTask();
-    await Promise.resolve();
-    expect(activeRefs()).toBe(0);
-  });
-
-  it('trackKeepalivePromise records detached promise rejection for awaitDrain', async () => {
-    trackKeepalivePromise(Promise.reject(new Error('detached boom')));
-    await Promise.resolve();
-    const queue: Array<() => void> = [];
-    const p = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
-    queue.shift()!();
-    await expect(p).rejects.toThrow('detached boom');
   });
 });
 

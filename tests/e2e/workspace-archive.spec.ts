@@ -7,6 +7,7 @@ import {
   pickStarter,
   readActiveProjectText,
   runTerminalLineSettled,
+  terminalHistoryExitCode,
 } from './helpers/playground.ts';
 
 const OWNER_TIMEOUT = 90_000;
@@ -159,6 +160,13 @@ test('archive restores Files and editor bytes immediately and survives reload', 
   const editor = page.locator('[data-testid="editor"] .view-lines').first();
   await expect(editor).toContainText(archivedMarker, { timeout: 30_000 });
   await expect(editor).not.toContainText(mutatedMarker);
+
+  // The editable archive excludes dependencies. I8 forbids reinstall on saved
+  // reopen, so recovery is an explicit terminal action before durable reload.
+  await openShellTerminal(page);
+  await runTerminalLineSettled(page, 'npm install', 180_000);
+  expect(await terminalHistoryExitCode(page, 'npm install')).toBe(0);
+  await saveWorkspace(page);
 
   await page.reload();
   await page.locator('[data-action="open-launcher"]').click();

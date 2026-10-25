@@ -12,6 +12,7 @@ import {
   registryShadowEmbeddedSourcesFromLockfile,
 } from './internal/shadow/planner.ts';
 import type { Lockfile, LockfileEntry } from './linker.ts';
+import { parseNpmAlias } from './npm-alias.ts';
 import { matchesRange } from './semver.ts';
 
 export async function readExistingLockfile(vfs: Vfs, cwd: string): Promise<Lockfile | null> {
@@ -21,9 +22,9 @@ export async function readExistingLockfile(vfs: Vfs, cwd: string): Promise<Lockf
   let parsed: { lockfileVersion?: unknown; packages?: unknown };
   try {
     parsed = JSON.parse(text);
-  } catch (parseError) {
-    const message = parseError instanceof Error ? parseError.message : String(parseError);
-    throw new Error(`lockfile corrupt at ${path}: ${message}`, { cause: parseError });
+  } catch {
+    // npm install resolves afresh for JSON syntax failure (ADR-0023); I/O remains outside this catch.
+    return null;
   }
   // v1 (npm 5/6) and v2 (npm 7) have a different shape than v3. Returning
   // null would trigger a fresh resolve that overwrites the user's lockfile
@@ -147,7 +148,8 @@ export function lockfileCovers(
     // source-level lookup the walk uses for transitives.
     const hit = pinnedEntryForParent(lockfile, name, '');
     if (!hit) return null;
-    if (!matchesRange(hit.entry.version, range)) return null;
+    const alias = parseNpmAlias(range);
+    if (!matchesRange(hit.entry.version, alias?.range ?? range)) return null;
     pinned.set(name, hit.entry.version);
   }
   return pinned;
@@ -217,7 +219,7 @@ function bundleCompletenessGapForValidatedPaths(
   for (const [path, entry] of Object.entries(lockfile.packages)) {
     if (path === '') continue; // the root project is not a tarball
     if (!reachablePaths.has(path) || embeddedDependencyPaths.has(path)) continue;
-    const name = lockfilePathBareName(path);
+    const name = entry.name ?? lockfilePathBareName(path);
     if (!entry.version || !entry.resolved || !entry.integrity) {
       return `bundle lockfile entry ${path} lacks replay fields (resolved/integrity)`;
     }

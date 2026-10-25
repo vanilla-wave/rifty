@@ -1,0 +1,78 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS для supplemental OPFS accounting repair; root завершает CI в PR359, без merge. Предыдущий whole-goal I1–I13 PASS сохранён.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "963195c917d7b796d2612c607b591fe112f00f8b",
+  "unit_goal_source": "PR359: observed OPFS acceptance-accounting failure; BASE 550538dd714d2acdf217412a52d4ae00c3e84c9e, original opfs-parallel-drain.spec.ts:191; CI36365591064 attempts 1/2 each 274 browser PASS, 1 skip, 1 FAIL. Authority: raw ADR-0358 I3 and exact BASE acceptance spec/worker. Fresh independent reviewer /root, requested depth1/max1/no children, clean committed HEAD; tracked tree read-only. Prior whole-goal I1–I13 PASS at 136c94ade523ef1b65837cd65a4a36d6ac78e4b5 reused: unchanged agent/runtime/bench/config/tasks/judges, no invalidating evidence. RDY-6 final factual review of perf/opfs-parallel-drain-load-sensitive-threshold plus reference/pr359-opfs-overhead-accounting: PASS, draft remains provisional. Detailed PR-4 comparison, authority/source audit and execution record: /private/tmp/different.txt.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Measured population: one awaited mkdir flush plus one awaited write flush per manifest file; 26811 of each, total53622, product2315 mkdir calls.",
+      "source": "acceptance",
+      "trace": "ADR-0358 I3 + named BASE faithful-serial acceptance baseline",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/opfs-parallel-drain-worker.ts:333; packages/vfs/src/opfs-sync.ts:879; tests/browser-unit/opfs-parallel-drain.spec.ts:173; tests/browser-unit/opfs-parallel-drain.spec.ts:182; /private/tmp/rifty-pr359-opfs-independent-review.log; /private/tmp/rifty-pr359-opfs-linux-green.log",
+      "note": ""
+    },
+    {
+      "row": "PR-4 population repair: positive write delta times write calls plus positive mkdir delta times mkdir calls, jointly bounded by existing10% faithful duration; common/write-only/mkdir-only/combined over-budget costs reject.",
+      "source": "acceptance",
+      "trace": "ADR-0358 I3 + named BASE same-run pending-overhead guard against manufactured speedup",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/opfs-drain-overhead.ts:11; tests/browser-unit/opfs-parallel-drain.spec.ts:185; tools/checks/opfs-drain-overhead.test.ts:39; /private/tmp/rifty-pr359-opfs-independent-green.log; /private/tmp/rifty-pr359-opfs-independent-review.log; /private/tmp/rifty-pr359-opfs-independent-review/original_predicate.log; /private/tmp/rifty-pr359-opfs-independent-review/independent_bounds.log; /private/tmp/rifty-pr359-opfs-independent-review/missing_mkdir.log; /private/tmp/rifty-pr359-opfs-independent-review/missing_write.log; /private/tmp/rifty-pr359-opfs-independent-review/double_write_population.log",
+      "note": ""
+    },
+    {
+      "row": "No negative credit: a faster shape cannot cancel overhead of the other shape; clamp each measured delta separately.",
+      "source": "acceptance",
+      "trace": "ADR-0358 I3 + named BASE nonnegative pending-overhead estimates",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/opfs-drain-overhead.ts:14; tools/checks/opfs-drain-overhead.test.ts:57; /private/tmp/rifty-pr359-opfs-independent-review.log; /private/tmp/rifty-pr359-opfs-independent-review/negative_credit.log",
+      "note": ""
+    },
+    {
+      "row": "Same-run empty-flush cost times all faithful calls remains bounded by10% of faithfulMs; measured means/count assertions remain active.",
+      "source": "acceptance",
+      "trace": "ADR-0358 I3 + named BASE empty-overhead guard",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-parallel-drain.spec.ts:173; tests/browser-unit/fixtures/opfs-parallel-drain-worker.ts:346; /private/tmp/rifty-pr359-opfs-independent-review.log; /private/tmp/rifty-pr359-opfs-linux-green.log",
+      "note": ""
+    },
+    {
+      "row": "Real ≥20k-file manifest, raw unrounded same-run faithful/product speedup ≥2.5×1.05; no ratio rounding, threshold widening or lane disablement.",
+      "source": "acceptance",
+      "trace": "ADR-0358 I3 + named BASE raw-ratio acceptance criterion",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-parallel-drain.spec.ts:149; tests/browser-unit/opfs-parallel-drain.spec.ts:189; tests/browser-unit/fixtures/opfs-parallel-drain-worker.ts:446; /private/tmp/rifty-pr359-opfs-independent-review.log; /private/tmp/rifty-pr359-opfs-linux-green.log; /private/tmp/rifty-pr359-opfs-probe/linux-test.cjs",
+      "note": ""
+    },
+    {
+      "row": "Both variants retain clean cumulative ledgers and fresh-surface whole-tree exact entries and every file byte:26811 files,2314 dirs,166782155 bytes.",
+      "source": "acceptance",
+      "trace": "ADR-0358 clean-ledger/durability obligations + named BASE whole-tree acceptance proof",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-parallel-drain.spec.ts:150; tests/browser-unit/opfs-parallel-drain.spec.ts:153; tests/browser-unit/opfs-parallel-drain.spec.ts:160; tests/browser-unit/fixtures/opfs-parallel-drain-worker.ts:206; tests/browser-unit/fixtures/opfs-parallel-drain-worker.ts:424; /private/tmp/rifty-pr359-opfs-linux-green.log; /private/tmp/rifty-pr359-opfs-linux-baseline.log; /private/tmp/rifty-pr359-ci-opfs-isolated.log; /private/tmp/rifty-pr359-opfs-independent-review.log",
+      "note": ""
+    },
+    {
+      "row": "Frozen CI attempts1/2 measurements match raw logs exactly; original failure history retained; preparatory01a766cc3 preserves the original conjunction as max, RED precedes repair.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0358 I3 + named observed baseline CI36365591064 attempts1/2",
+      "status": "pass",
+      "citation": "tools/checks/opfs-drain-overhead.test.ts:5; docs/backlog/perf/reference/pr359-opfs-overhead-accounting.md:3; /private/tmp/rifty-pr359-final-ci-failed-output.log:119; /private/tmp/rifty-pr359-final-ci-retry-failure.log:119; /private/tmp/rifty-pr359-opfs-overhead-red.log; /private/tmp/rifty-pr359-opfs-overhead-revert.log; /private/tmp/rifty-pr359-opfs-independent-review.log; /private/tmp/rifty-pr359-opfs-independent-review/original_predicate.log",
+      "note": ""
+    }
+  ],
+  "axes": [
+    { "axis": "Completeness", "verdict": "pass", "findings": [] },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    { "axis": "Bugs", "verdict": "pass", "findings": [] },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+  ]
+}

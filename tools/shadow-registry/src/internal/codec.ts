@@ -7,7 +7,6 @@ import type {
   ShadowRecipeAcquisition,
   ShadowRecipeAdmission,
   ShadowRegistryDependencyProjection,
-  ShadowRuntimeAsset,
 } from './model.ts';
 
 const SHA = /^[0-9a-f]{64}$/;
@@ -144,26 +143,6 @@ function sha(value: unknown, path: string): string {
   return value;
 }
 
-function integrity(value: unknown, path: string): string {
-  if (typeof value !== 'string' || !/^sha(?:256|384|512)-[A-Za-z0-9+/]+={0,2}$/.test(value)) {
-    throw new ShadowRegistryCodecError(path, 'invalid integrity');
-  }
-  const dash = value.indexOf('-');
-  const algorithm = value.slice(0, dash);
-  const encoded = value.slice(dash + 1);
-  let decoded: string;
-  try {
-    decoded = atob(encoded);
-  } catch {
-    throw new ShadowRegistryCodecError(path, 'invalid base64');
-  }
-  const expectedBytes = algorithm === 'sha256' ? 32 : algorithm === 'sha384' ? 48 : 64;
-  if (decoded.length !== expectedBytes || btoa(decoded) !== encoded) {
-    throw new ShadowRegistryCodecError(path, 'non-canonical or wrong-length digest');
-  }
-  return value;
-}
-
 function positiveInteger(value: unknown, path: string): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
     throw new ShadowRegistryCodecError(path, 'must be a positive safe integer');
@@ -280,39 +259,13 @@ function decodeDependencyProjection(
   };
 }
 
-function decodeAsset(value: unknown, path: string): ShadowRuntimeAsset {
-  const item = record(
-    value,
-    ['id', 'source', 'member', 'memberSha256', 'memberSize', 'maxTarballBytes', 'maxUnpackedBytes'],
-    path,
-  );
-  const source = record(item.source, ['integrity', 'name', 'version'], `${path}.source`);
-  const asset: ShadowRuntimeAsset = {
-    id: identifier(item.id, `${path}.id`),
-    source: {
-      name: packageName(source.name, `${path}.source.name`),
-      version: exactVersion(source.version, `${path}.source.version`),
-      integrity: integrity(source.integrity, `${path}.source.integrity`),
-    },
-    member: relativePath(item.member, `${path}.member`),
-    memberSha256: sha(item.memberSha256, `${path}.memberSha256`),
-    memberSize: positiveInteger(item.memberSize, `${path}.memberSize`),
-    maxTarballBytes: positiveInteger(item.maxTarballBytes, `${path}.maxTarballBytes`),
-    maxUnpackedBytes: positiveInteger(item.maxUnpackedBytes, `${path}.maxUnpackedBytes`),
-  };
-  if (asset.maxUnpackedBytes < asset.memberSize) {
-    throw new ShadowRegistryCodecError(path, 'unpacked cap is below member size');
-  }
-  return asset;
-}
-
 function decodeAdmission(value: unknown, path: string): ShadowRecipeAdmission {
   const raw = plainObject(value, path);
   if (!Object.hasOwn(raw, 'kind')) {
     record(raw, ['kind', 'unsupportedFeature'], path);
   }
   const kind = raw.kind;
-  if (kind !== 'semver-admits' && kind !== 'exact-only') {
+  if (kind !== 'semver-admits' && kind !== 'exact-only' && kind !== 'requested-range') {
     throw new ShadowRegistryCodecError(`${path}.kind`, 'unsupported admission');
   }
   const item = record(raw, ['kind', 'unsupportedFeature'], path);
@@ -322,7 +275,11 @@ function decodeAdmission(value: unknown, path: string): ShadowRecipeAdmission {
   };
 }
 
-function decodeAcquisition(value: unknown, path: string): ShadowRecipeAcquisition {
+function decodeAcquisition(
+  value: unknown,
+  path: string,
+  template: boolean,
+): ShadowRecipeAcquisition {
   const raw = plainObject(value, path);
   const kind = raw.kind;
   if (kind === 'synthetic') {
@@ -334,11 +291,14 @@ function decodeAcquisition(value: unknown, path: string): ShadowRecipeAcquisitio
     return {
       kind,
       name: packageName(item.name, `${path}.name`),
-      version: exactVersion(item.version, `${path}.version`),
-      dependencyProjection: decodeDependencyProjection(
-        item.dependencyProjection,
-        `${path}.dependencyProjection`,
-      ),
+      version:
+        template && item.version === '$version'
+          ? '$version'
+          : exactVersion(item.version, `${path}.version`),
+      dependencyProjection:
+        template && item.dependencyProjection === null
+          ? null
+          : decodeDependencyProjection(item.dependencyProjection, `${path}.dependencyProjection`),
     };
   }
   throw new ShadowRegistryCodecError(`${path}.kind`, 'unsupported acquisition');
@@ -496,11 +456,7 @@ function validateMaterializationManifest(
   }
 }
 
-function decodeRecipe(
-  value: unknown,
-  path: string,
-  assetIds: ReadonlySet<string>,
-): BuiltinShadowSubstitutionRecipe {
+function decodeRecipe(value: unknown, path: string): BuiltinShadowSubstitutionRecipe {
   if (
     value === null ||
     typeof value !== 'object' ||
@@ -509,22 +465,28 @@ function decodeRecipe(
     throw new ShadowRegistryCodecError(path, 'must be a plain object');
   }
   const hasBinding = Object.hasOwn(value, 'binding');
+  const hasTier = Object.hasOwn(value, 'runtimeTier');
   const item = record(
     value,
-    hasBinding
-      ? [
-          'schema',
-          'id',
-          'digest',
-          'trigger',
-          'admission',
-          'acquisition',
-          'materialization',
-          'binding',
-        ]
-      : ['schema', 'id', 'digest', 'trigger', 'admission', 'acquisition', 'materialization'],
+    [
+      'schema',
+      'id',
+      'digest',
+      'trigger',
+      'admission',
+      'acquisition',
+      'materialization',
+      ...(hasBinding ? ['binding'] : []),
+      ...(hasTier ? ['runtimeTier'] : []),
+    ],
     path,
   );
+  const admission = decodeAdmission(item.admission, `${path}.admission`);
+  const template = admission.kind === 'requested-range';
+  const versionValue = (value: unknown, path: string): string =>
+    template && value === '$version' ? '$version' : exactVersion(value, path);
+  if (hasTier && item.runtimeTier !== 'coi' && item.runtimeTier !== 'no-coi')
+    throw new ShadowRegistryCodecError(`${path}.runtimeTier`, 'unsupported tier');
   if (item.schema !== 2) {
     throw new ShadowRegistryCodecError(`${path}.schema`, 'unsupported schema');
   }
@@ -546,7 +508,7 @@ function decodeRecipe(
     }
   }
   const materializationName = packageName(materialization.name, `${path}.materialization.name`);
-  const materializationVersion = exactVersion(
+  const materializationVersion = versionValue(
     materialization.version,
     `${path}.materialization.version`,
   );
@@ -557,15 +519,25 @@ function decodeRecipe(
     bin,
     `${path}.materialization`,
   );
+  const acquisition = decodeAcquisition(item.acquisition, `${path}.acquisition`, template);
+  if (
+    template &&
+    (trigger.version !== '$version' ||
+      materializationVersion !== '$version' ||
+      acquisition.kind !== 'registry' ||
+      acquisition.version !== '$version')
+  )
+    throw new ShadowRegistryCodecError(path, 'range recipe version placeholders must agree');
   const recipeWithoutDigest = {
     schema: 2 as const,
     id: identifier(item.id, `${path}.id`),
     trigger: {
       name: packageName(trigger.name, `${path}.trigger.name`),
-      version: exactVersion(trigger.version, `${path}.trigger.version`),
+      version: versionValue(trigger.version, `${path}.trigger.version`),
     },
-    admission: decodeAdmission(item.admission, `${path}.admission`),
-    acquisition: decodeAcquisition(item.acquisition, `${path}.acquisition`),
+    admission,
+    ...(hasTier ? { runtimeTier: item.runtimeTier as 'coi' | 'no-coi' } : {}),
+    acquisition,
     materialization: {
       name: materializationName,
       version: materializationVersion,
@@ -574,21 +546,9 @@ function decodeRecipe(
     },
     ...(hasBinding
       ? (() => {
-          const binding = record(item.binding, ['adapterId', 'assets'], `${path}.binding`);
-          const assets = denseArray(binding.assets, `${path}.binding.assets`).map((id, index) =>
-            identifier(id, `${path}.binding.assets[${index}]`),
-          );
-          sortedUnique(assets, `${path}.binding.assets`, 'member');
-          for (const id of assets) {
-            if (!assetIds.has(id)) {
-              throw new ShadowRegistryCodecError(`${path}.binding.assets`, `unknown asset ${id}`);
-            }
-          }
+          const binding = record(item.binding, ['adapterId'], `${path}.binding`);
           return {
-            binding: {
-              adapterId: identifier(binding.adapterId, `${path}.binding.adapterId`),
-              assets,
-            },
+            binding: { adapterId: identifier(binding.adapterId, `${path}.binding.adapterId`) },
           };
         })()
       : {}),
@@ -609,32 +569,33 @@ function freezeDeep<T>(value: T): T {
 }
 
 export function decodeShadowSubstitutionCatalog(value: unknown): BuiltinShadowSubstitutionCatalog {
-  const item = record(value, ['assets', 'digest', 'id', 'recipes', 'schema'], 'catalog');
+  const item = record(value, ['digest', 'id', 'recipes', 'schema'], 'catalog');
   if (item.schema !== 2) {
     throw new ShadowRegistryCodecError('catalog.schema', 'unsupported schema');
   }
-  const assets = denseArray(item.assets, 'catalog.assets').map((asset, index) =>
-    decodeAsset(asset, `catalog.assets[${index}]`),
-  );
-  sortedUnique(
-    assets.map((asset) => asset.id),
-    'catalog.assets',
-    'identity',
-  );
-  const assetIds = new Set(assets.map((asset) => asset.id));
   const recipes = denseArray(item.recipes, 'catalog.recipes').map((recipe, index) =>
-    decodeRecipe(recipe, `catalog.recipes[${index}]`, assetIds),
+    decodeRecipe(recipe, `catalog.recipes[${index}]`),
   );
   sortedUnique(
     recipes.map((recipe) => recipe.id),
     'catalog.recipes',
     'identity',
   );
+  const triggers = new Set<string>();
+  for (const recipe of recipes) {
+    for (const tier of recipe.runtimeTier === undefined
+      ? ['coi', 'no-coi']
+      : [recipe.runtimeTier]) {
+      const key = `${recipe.trigger.name}:${tier}`;
+      if (triggers.has(key))
+        throw new ShadowRegistryCodecError('catalog.recipes', `ambiguous trigger ${key}`);
+      triggers.add(key);
+    }
+  }
   const payload = {
     schema: 2 as const,
     id: identifier(item.id, 'catalog.id'),
     recipes,
-    assets,
   };
   const digest = sha(item.digest, 'catalog.digest');
   if (shadowDigest(payload) !== digest) {

@@ -28,12 +28,12 @@ import {
   createTsLanguageServiceClient,
 } from './typescript-relay-client.ts';
 
-const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const PROJECT_ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
 const OWNER_FILE = `${PROJECT_ROOT}/src/main.ts`;
 const OWNER_SECONDARY_FILE = `${PROJECT_ROOT}/src/secondary.ts`;
 const PUBLIC_FILE = '/src/main.ts';
 const PUBLIC_SECONDARY_FILE = '/src/secondary.ts';
-const FOREIGN_FILE = '/.rifty/workbench/v1/projects/project-b/tree/src/foreign.ts';
+const FOREIGN_FILE = '/.rifty/workbench/v2/projects/project-b/tree/src/foreign.ts';
 const REFERENCE_ROOT = '/reference-project';
 const REAL_MAIN_TEXT =
   "import { value } from './secondary';\nexport const answer: number = value;\n";

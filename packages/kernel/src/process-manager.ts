@@ -11,24 +11,33 @@
  * manager; tests exercise the manager directly.
  */
 
-import { Readable, Writable } from '@riftydev/io';
+import { Readable, type Writable } from '@riftydev/io';
 import { EventEmitter } from './internal/event-emitter.ts';
 import { getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
 import type { SyncRpcCallerContext } from './ipc/sync-dispatch.ts';
+import {
+  type IpcFrame,
+  decodeIpcFrame,
+  positivePid,
+  rpcRecord,
+  ttyDimension,
+} from './process-control-frame.ts';
 import { readKernelProcessSpec, readKernelSyncApi } from './shared-globals.ts';
 import { type SpawnWorkerSpec, spawnKernelWorker } from './spawn-worker.ts';
 import type { WorkerStdioPorts } from './worker-entry.ts';
+import { bindPortAsWritable } from './worker-stdin-writer.ts';
 import {
   type WorkerStdioOutputReceiver,
   abandonWorkerOutput,
   bindWorkerStdioOutputReceiver,
   cutWorkerOutput,
-  decodeWorkerStdioOrderFrame,
   isWorkerOutputChildSealed,
 } from './worker-stdio-drain.ts';
 
 export interface ProcessIO {
-  write(stream: 'stdout' | 'stderr', chunk: string): void;
+  /** Publish a handler process's terminal outcome through its manager. */
+  complete(code: number): boolean;
+  write(stream: 'stdout' | 'stderr', chunk: string | Uint8Array): void;
   /** Send a structured IPC message (used by fork). */
   send(message: unknown): void;
   /** Listen for incoming IPC messages. */
@@ -37,43 +46,8 @@ export interface ProcessIO {
   signal: AbortSignal;
 }
 
-/**
- * Discriminator tagging which spawn path produced the handle. Callers MUST
- * branch on this field rather than reaching for `handle.ports`:
- *
- *   - `'same-realm'` — produced by `ProcessManager.spawn(...)`. Runs the
- *     supplied handler in the parent realm; `ports` is always `undefined`.
- *   - `'worker'` — produced by `ProcessManager.spawnWorker(...)`. Backed by
- *     a real `kernel.spawnWorker` Worker realm (ADR-0011 phase 2); `ports`
- *     carries the parent-side stdio `MessagePort`s.
- */
+/** Handler-based or kernel-Worker process; raw stdio ports exist only on Worker handles. */
 export type ProcessHandleKind = 'same-realm' | 'worker';
-
-/**
- * Wire frame for the shared user-IPC/process-control channel between
- * {@link WorkerProcessHandle} and the worker-side `process` shim
- * (ADR-0045/0225). No version field — parent and child are built together.
- */
-export type IpcFrame =
-  | { readonly kind: 'ipc:message'; readonly payload: unknown }
-  | { readonly kind: 'ipc:tty-resize'; readonly cols: number; readonly rows: number }
-  | { readonly kind: 'ipc:disconnect' }
-  | { readonly kind: 'control:signal'; readonly signal: string }
-  | { readonly kind: 'control:self-signal'; readonly signal: string }
-  | { readonly kind: 'control:self-exit'; readonly code: number }
-  | { readonly kind: 'control:peer-closing' }
-  | { readonly kind: 'control:kill-tree'; readonly pid: number; readonly signal: string }
-  | {
-      readonly kind: 'control:stdio-order';
-      readonly stream: 'stdout' | 'stderr';
-      readonly order: number;
-      readonly attestation: string;
-    }
-  | {
-      readonly kind: 'control:listening';
-      readonly ports: readonly number[];
-      readonly previewScope?: string;
-    };
 
 export interface ProcessListeningControl {
   /** Kernel-attested process identity; never accepted from the guest frame. */
@@ -82,12 +56,6 @@ export interface ProcessListeningControl {
   readonly previewScope?: string;
 }
 
-/**
- * Fields common to both spawn branches. Each variant carries its own `send`
- * signature: same-realm routes through an in-realm `EventEmitter`,
- * Worker-backed through a `MessagePort` pair (ADR-0045). Callers narrow on
- * `handle.kind` first.
- */
 interface ProcessHandleBase extends EventEmitter {
   readonly pid: number;
   readonly ppid: number;
@@ -99,13 +67,10 @@ interface ProcessHandleBase extends EventEmitter {
   exitCode: number | null;
   signalCode: string | null;
   kill(signal?: string): boolean;
+  controlKill?(pid: number, signal: string, cascade: boolean): boolean;
 }
 
-/**
- * Same-realm `spawn(...)` handle — `ports` is `undefined` by construction.
- * Carries `send()` for fork-mode IPC; callers MUST narrow on
- * `handle.kind === 'same-realm'` before reaching for it.
- */
+/** Handler process; its control loop may own an external Worker (ADR-0539). */
 export interface SameRealmProcessHandle extends ProcessHandleBase {
   readonly kind: 'same-realm';
   readonly ports?: undefined;
@@ -162,7 +127,7 @@ export interface WorkerProcessHandle extends ProcessHandleBase {
    * remains available for process controls such as TTY resize until exit.
    */
   disconnect(): void;
-  controlKill(pid: number, signal: string): boolean;
+  controlKill(pid: number, signal: string, cascade: boolean): boolean;
   onListeningControl(listener: (control: ProcessListeningControl) => void): () => void;
 }
 
@@ -230,6 +195,11 @@ export interface SpawnOptions {
   cwd?: string;
   threadIdentity?: { readonly pid: number; readonly ppid: number };
   federated?: boolean;
+  /** A host-managed Worker uses the existing process federation authority. */
+  remoteControl?: {
+    readonly context: SyncRpcCallerContext;
+    kill(pid: number, signal: string, cascade: boolean): boolean;
+  };
 }
 
 /** Root cwd for processes that have no parent. */
@@ -336,100 +306,6 @@ function reserveProcessFederation(
   };
 }
 
-function ttyDimension(value: number, name: 'cols' | 'rows'): number {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new RangeError(`TTY ${name} must be a positive safe integer; received ${value}`);
-  }
-  return value;
-}
-
-function controlSignal(value: unknown): string {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new TypeError('process control signal must be a non-empty string');
-  }
-  return value;
-}
-
-function controlExitCode(value: unknown): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) > 255) {
-    throw new RangeError('process control exit code must be an unsigned byte');
-  }
-  return value as number;
-}
-
-function listeningPorts(value: unknown): number[] {
-  if (
-    !Array.isArray(value) ||
-    value.some(
-      (port) => !Number.isSafeInteger(port) || (port as number) <= 0 || (port as number) > 65_535,
-    ) ||
-    new Set(value).size !== value.length
-  ) {
-    throw new TypeError('process listening ports must be unique valid TCP ports');
-  }
-  return [...(value as number[])];
-}
-
-export function decodeIpcFrame(value: unknown): IpcFrame {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new TypeError('process control frame must be an object');
-  }
-  const kind = (value as Record<string, unknown>).kind;
-  if (typeof kind !== 'string') throw new TypeError('process control frame kind must be a string');
-  const fields = (names: readonly string[]): Record<string, unknown> =>
-    rpcRecord(value, ['kind', ...names], 'process control frame');
-  switch (kind) {
-    case 'ipc:message': {
-      const record = fields(['payload']);
-      return { kind, payload: record.payload };
-    }
-    case 'ipc:tty-resize': {
-      const record = fields(['cols', 'rows']);
-      return {
-        kind,
-        cols: ttyDimension(record.cols as number, 'cols'),
-        rows: ttyDimension(record.rows as number, 'rows'),
-      };
-    }
-    case 'ipc:disconnect':
-    case 'control:peer-closing':
-      fields([]);
-      return { kind };
-    case 'control:signal':
-    case 'control:self-signal': {
-      const record = fields(['signal']);
-      return { kind, signal: controlSignal(record.signal) };
-    }
-    case 'control:self-exit': {
-      const record = fields(['code']);
-      return { kind, code: controlExitCode(record.code) };
-    }
-    case 'control:kill-tree': {
-      const record = fields(['pid', 'signal']);
-      return {
-        kind,
-        pid: positivePid(record.pid, 'process control target'),
-        signal: controlSignal(record.signal),
-      };
-    }
-    case 'control:stdio-order':
-      return decodeWorkerStdioOrderFrame(value);
-    case 'control:listening': {
-      const hasScope = Object.prototype.hasOwnProperty.call(value, 'previewScope');
-      const record = fields(hasScope ? ['ports', 'previewScope'] : ['ports']);
-      const previewScope =
-        record.previewScope === undefined ? undefined : controlSignal(record.previewScope);
-      return {
-        kind,
-        ports: listeningPorts(record.ports),
-        ...(previewScope === undefined ? {} : { previewScope }),
-      };
-    }
-    default:
-      throw new TypeError(`unknown process control frame kind ${kind}`);
-  }
-}
-
 export class ProcessManager {
   private nextPid = 2; // PID 1 is reserved for the main worker.
   private readonly table: Map<number, ProcessRecord> = new Map();
@@ -453,6 +329,8 @@ export class ProcessManager {
   >();
   private readonly forwardedRoutes = new Map<number, ForwardedProcessRoute>();
   private readonly physicalRoutes = new WeakMap<SyncRpcCallerContext, ProcessRecord>();
+  /** One-way: an ancestor kill ends this realm, so its Workers are released (ADR-0548). */
+  private realmEnding = false;
 
   spawn(
     command: string,
@@ -483,6 +361,9 @@ export class ProcessManager {
       treeParentPid: ppid,
       published: true,
       upstreamAuthority: federation !== null,
+      ...(options.remoteControl === undefined
+        ? {}
+        : { physicalRoute: options.remoteControl.context }),
       remoteListening: false,
       command,
       cwd: initialCwd,
@@ -520,6 +401,7 @@ export class ProcessManager {
       kill(signal = 'SIGTERM'): boolean {
         return manager.killRecordTree(record, signal);
       }
+      readonly controlKill = options.remoteControl?.kill.bind(options.remoteControl);
     }
 
     const handle = new Handle();
@@ -616,6 +498,8 @@ export class ProcessManager {
     childToParent.on('stderr', (chunk) => handle.emit('stderr', chunk));
 
     record.handle = handle;
+    if (options.remoteControl !== undefined)
+      this.physicalRoutes.set(options.remoteControl.context, record);
     this.table.set(pid, record);
     try {
       federation?.commit();
@@ -626,6 +510,7 @@ export class ProcessManager {
     }
 
     const io: ProcessIO = {
+      complete: (code) => settle(code, null),
       write(stream, chunk) {
         childToParent.emit(stream, chunk);
       },
@@ -754,6 +639,9 @@ export class ProcessManager {
 
     const abortController = new AbortController();
     const ports = spawnResult.ports;
+    // ADR-0548: an ending realm's own termination retires its nested Workers.
+    const endWorker = (): void =>
+      this.realmEnding ? spawnResult.release() : spawnResult.terminate();
 
     const record: ProcessRecord = {
       pid,
@@ -841,7 +729,8 @@ export class ProcessManager {
         return this.#stderrReadable;
       }
       stdin(): Writable {
-        if (!this.#stdinWritable) this.#stdinWritable = bindPortAsWritable(ports.stdin);
+        if (!this.#stdinWritable)
+          this.#stdinWritable = bindPortAsWritable(ports.stdin, spawnResult.stdinWriter);
         return this.#stdinWritable;
       }
       /**
@@ -969,7 +858,7 @@ export class ProcessManager {
           return false;
         }
       }
-      controlKill(targetPid: number, signal: string): boolean {
+      controlKill(targetPid: number, signal: string, cascade: boolean): boolean {
         if (this.#controlClosed || this.exitCode !== null || this.signalCode !== null) {
           return false;
         }
@@ -978,6 +867,7 @@ export class ProcessManager {
             kind: 'control:kill-tree',
             pid: targetPid,
             signal,
+            cascade,
           } satisfies IpcFrame);
           return true;
         } catch {
@@ -1018,7 +908,7 @@ export class ProcessManager {
           // Abrupt death cannot attest complete drain, so committed-but-
           // undelivered chunks drop; real Node delivers pre-death pipe data.
           // TODO(backlog: kernel/sigkill-abandons-committed-stdio)
-          spawnResult.terminate();
+          endWorker();
           this._abandonTerminal();
         } else if (afterDescendants === undefined) {
           this._startOutputCut();
@@ -1238,7 +1128,7 @@ export class ProcessManager {
           attempt(() => manager.terminateDescendants(pid, 'SIGTERM'));
         }
         attempt(() => abortController.abort());
-        attempt(() => spawnResult.terminate());
+        attempt(endWorker);
         const reason =
           outcome.kind === 'peererror'
             ? outcome.error
@@ -1361,7 +1251,7 @@ export class ProcessManager {
       attempt(() => abortController.abort(error));
       // The Worker exists physically but was never published upstream. Tear it
       // down synchronously: no owner settlement barrier can discover or await it.
-      attempt(() => spawnResult.terminate());
+      attempt(endWorker);
       attempt(() =>
         manager.retireOwnerDescendants(
           record,
@@ -1421,7 +1311,9 @@ export class ProcessManager {
     ];
   }
 
-  kill(pid: number, signal = 'SIGTERM'): boolean {
+  /** `realmEnding`: the caller's ancestor kill also ends this realm (ADR-0548). */
+  kill(pid: number, signal = 'SIGTERM', realmEnding = false): boolean {
+    if (realmEnding) this.realmEnding = true;
     const record = this.table.get(pid); // ADR-0347: manager confirms settlement; handles admit once.
     // TODO(backlog: kernel/sigkill-escalation-after-accepted-outcome): the ack
     // makes SIGKILL a no-op once any outcome was accepted — a stranded SIGTERM
@@ -1430,7 +1322,9 @@ export class ProcessManager {
     const route = this.forwardedRoutes.get(pid);
     if (route === undefined || route.killRequested) return route !== undefined;
     const owner = this.physicalOwnerHandle(route.ownerPid, route.ownerRoute);
-    if (owner?.kind !== 'worker' || !owner.controlKill(pid, signal)) return false;
+    if (!owner?.controlKill?.(pid, signal, this.hostEnds(route.ownerPid, route.ownerRoute))) {
+      return false;
+    }
     route.killRequested = true;
     return true;
   }
@@ -1538,7 +1432,7 @@ export class ProcessManager {
     record.terminate = (signal) => {
       if (!this.isLive(record) || killRequested) return false;
       const route = this.physicalOwnerHandle(ownerPid, ownerRoute);
-      if (route?.kind !== 'worker' || !route.controlKill(pid, signal)) return false;
+      if (!route?.controlKill?.(pid, signal, this.hostEnds(ownerPid, ownerRoute))) return false;
       record.terminationRequested = true;
       killRequested = true;
       return true;
@@ -1626,7 +1520,7 @@ export class ProcessManager {
     }
     if (owned) return;
     const route = this.physicalOwnerHandle(ownerPid, ownerRoute);
-    if (route?.kind !== 'worker') {
+    if (route?.controlKill === undefined) {
       throw new Error(`process.listening: owner PID ${ownerPid} has no live worker route`);
     }
     route.emit('control:listening', { ...control, pid });
@@ -1650,7 +1544,7 @@ export class ProcessManager {
       return;
     }
     const owner = this.physicalOwnerHandle(ownerPid, ownerRoute);
-    if (owner?.kind !== 'worker') {
+    if (owner?.controlKill === undefined) {
       throw new Error(`process.peer-death: owner PID ${ownerPid} has no live worker route`);
     }
     const errors: unknown[] = [];
@@ -1691,7 +1585,7 @@ export class ProcessManager {
     const errors: unknown[] = [];
     if (record.remoteListening) {
       const owner = this.physicalOwnerHandle(ownerPid, ownerRoute);
-      if (owner?.kind !== 'worker') {
+      if (owner?.controlKill === undefined) {
         errors.push(new Error(`process.settle: owner PID ${ownerPid} has no live worker route`));
       } else {
         try {
@@ -1989,6 +1883,19 @@ export class ProcessManager {
     return false;
   }
 
+  /** Whether the realm hosting a route ends with an admitted kill of it or an ancestor. */
+  private hostEnds(ownerPid: number, ownerRoute?: SyncRpcCallerContext): boolean {
+    let record =
+      ownerRoute === undefined ? this.table.get(ownerPid) : this.physicalRoutes.get(ownerRoute);
+    const seen = new Set<ProcessRecord>();
+    while (record !== undefined && !seen.has(record)) {
+      if (record.terminationRequested) return true;
+      seen.add(record);
+      record = this.table.get(record.treeParentPid);
+    }
+    return this.realmEnding;
+  }
+
   private physicalOwnerHandle(
     ownerPid: number,
     ownerRoute?: SyncRpcCallerContext,
@@ -2124,32 +2031,6 @@ export function formatProcessSnapshot(
     ].join('\n');
   }
   return null;
-}
-
-function positivePid(value: unknown, owner: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) <= 0) {
-    throw new TypeError(`${owner} must be a positive safe integer PID`);
-  }
-  return value as number;
-}
-
-function rpcRecord(
-  value: unknown,
-  fields: readonly string[],
-  owner: string,
-): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new TypeError(`${owner} payload must be an object`);
-  }
-  const record = value as Record<string, unknown>;
-  const keys = Reflect.ownKeys(record);
-  if (
-    keys.length !== fields.length ||
-    fields.some((field) => !Object.prototype.hasOwnProperty.call(record, field))
-  ) {
-    throw new TypeError(`${owner} payload must contain exactly ${fields.join(', ')}`);
-  }
-  return record;
 }
 
 function rpcOwner(
@@ -2358,34 +2239,5 @@ export function installProcessFederation(manager: ProcessManager): void {
       ? undefined
       : relayOptional(PROCESS_SNAPSHOT_RPC, payload);
     return relayed === undefined ? manager.snapshot() : relayed;
-  });
-}
-
-function bindPortAsWritable(port: MessagePort): Writable {
-  return new Writable({
-    write(chunk, _encoding, cb) {
-      try {
-        if (chunk instanceof Uint8Array) {
-          port.postMessage(chunk);
-        } else if (typeof chunk === 'string') {
-          port.postMessage(new TextEncoder().encode(chunk));
-        } else {
-          // Object-mode payloads pass through verbatim.
-          port.postMessage(chunk);
-        }
-        cb();
-      } catch (err) {
-        cb(err instanceof Error ? err : new Error(String(err)));
-      }
-    },
-    final(cb) {
-      try {
-        port.postMessage({ kind: 'stdin:eof' });
-        port.close();
-        cb();
-      } catch (err) {
-        cb(err instanceof Error ? err : new Error(String(err)));
-      }
-    },
   });
 }

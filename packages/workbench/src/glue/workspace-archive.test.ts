@@ -31,7 +31,7 @@ describe('workspace archive', () => {
     write(fs, '/workspace/node_modules/pkg/index.js', 'ignored');
     write(fs, '/workspace/.git/config', 'ignored');
     write(fs, '/workspace/dist/bundle.js', 'ignored');
-    write(fs, '/workspace/.vite/deps/x.js', 'ignored');
+    write(fs, '/workspace/.vite/deps/x.js', 'user-owned');
 
     const archive = exportWorkspaceArchive(fs, '/workspace');
     const target = new MemoryFsSync();
@@ -42,7 +42,7 @@ describe('workspace archive', () => {
     expect(target.existsSync('/workspace/node_modules/pkg/index.js')).toBe(false);
     expect(target.existsSync('/workspace/.git/config')).toBe(false);
     expect(target.existsSync('/workspace/dist/bundle.js')).toBe(false);
-    expect(target.existsSync('/workspace/.vite/deps/x.js')).toBe(false);
+    expect(read(target, '/workspace/.vite/deps/x.js')).toBe('user-owned');
   });
 
   it('serializes as JSON archive v1 with base64 file contents', () => {

@@ -66,10 +66,7 @@ interface NativeValidationLocations {
 
 const policyUrl = new URL('../esbuild-runtime-policy.json', import.meta.url);
 const manifestUrl = new URL('../generated/esbuild-runtime-manifest.json', import.meta.url);
-const outputUrl = new URL(
-  '../../../packages/workbench/src/workers/generated/esbuild-runtime.js',
-  import.meta.url,
-);
+const outputUrl = new URL('../src/runtime/generated/esbuild-runtime.js', import.meta.url);
 const policy = JSON.parse(readFileSync(policyUrl, 'utf8')) as RuntimePolicy;
 const require = createRequire(import.meta.url);
 const lines = (...parts: readonly string[]): string => parts.join('\n');
@@ -108,6 +105,7 @@ function replacementFor(
         'import { createEsbuildCallbackFs } from "../esbuild-runtime-fs.ts";',
         'const module = { exports: {} };',
         'let startEsbuildRuntime;',
+        'let setEsbuildRuntimeCwd;',
         '(module=>{',
         '"use strict";',
       );
@@ -115,10 +113,13 @@ function replacementFor(
       return lines(
         'var runtimeFs;',
         'var runtimeDefaultWD;',
-        'startEsbuildRuntime = ({ wasm, fs, cwd }) => {',
+        'var runtimeRefs;',
+        'setEsbuildRuntimeCwd = (cwd) => { runtimeDefaultWD = cwd; };',
+        'startEsbuildRuntime = ({ wasm, fs, cwd, refs }) => {',
         '  if (initializePromise || longLivedService) throw new Error("Cannot start the esbuild runtime more than once");',
         '  runtimeFs = createEsbuildCallbackFs(fs, cwd);',
         '  runtimeDefaultWD = cwd;',
+        '  runtimeRefs = refs;',
         '  initializePromise = startRunningService("", wasm, false);',
         '  return initializePromise.then(() => module.exports);',
         '};',
@@ -133,7 +134,7 @@ function replacementFor(
         'var browser_default = browser_exports;',
         '})(module);',
         'const esbuild = module.exports;',
-        'export { startEsbuildRuntime };',
+        'export { startEsbuildRuntime, setEsbuildRuntimeCwd };',
         'export default esbuild;',
       );
     case 'node-callback-fs/main':
@@ -151,6 +152,11 @@ function replacementFor(
       );
     case 'channel-has-fs/main':
       return lines('    isSync: false,', '    hasFS: true,', '    esbuild: browser_exports');
+    case 'runtime-service-refs/build':
+    case 'runtime-service-refs/transform':
+    case 'runtime-service-refs/format':
+    case 'runtime-service-refs/analyze':
+      return lines(anchor.anchor, '    refs ??= runtimeRefs;');
     case 'runtime-default-wd/main':
       return lines(
         '        defaultWD: runtimeDefaultWD,',
@@ -453,7 +459,7 @@ function derive(): { readonly manifest: string; readonly output: string } {
     patches: policy.patches,
     hunks: generated.patches,
     output: {
-      path: 'packages/workbench/src/workers/generated/esbuild-runtime.js',
+      path: 'tools/shadow-registry/src/runtime/generated/esbuild-runtime.js',
       format: 'esm',
       bytes: Buffer.byteLength(output),
       sha256: sha256(output),

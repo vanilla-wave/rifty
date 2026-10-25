@@ -1,4 +1,5 @@
 import { RegistryClient } from '@riftydev/npm-client';
+import type { VfsMutationIntent } from '@riftydev/vfs';
 import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import type { HostCommitRequest } from '../glue/owner-vfs-protocol.ts';
@@ -10,10 +11,11 @@ import type {
 } from '../workbench/project-vfs-protocol.ts';
 import { type OwnerPackageConfig, createOwnerPackageState } from './owner-package-state.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
+import { playgroundMutationIsDirty } from './playground-package-mutations.ts';
 import { createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
 
-const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
-const OUTSIDE = '/.rifty/workbench/v1/projects/project-b/tree';
+const ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
+const OUTSIDE = '/.rifty/workbench/v2/projects/project-b/tree';
 const OWNER_EPOCH = 'workbench-project-vfs-test';
 const encoder = new TextEncoder();
 const packageJson = '{"name":"project-a","version":"1.0.0"}\n';
@@ -36,6 +38,12 @@ const packageConfig: OwnerPackageConfig = {
 
 class FaultInjectableMemoryFsSync extends MemoryFsSync {
   #readdirFailure: Error | null = null;
+  readonly contentReads: string[] = [];
+
+  override readFileBytesSync(path: string): Uint8Array {
+    this.contentReads.push(path);
+    return super.readFileBytesSync(path);
+  }
 
   failNextReaddir(error: Error): void {
     this.#readdirFailure = error;
@@ -76,7 +84,11 @@ function harness(
     throw error;
   },
   onEmit: (frame: OwnerProjectVfsFrame) => void = () => {},
-  recordMutation: (kind: 'guest' | 'file', treeRevision: number) => Promise<void> = async () => {},
+  recordMutation: (
+    kind: 'guest' | 'file',
+    treeRevision: number,
+    intents: readonly VfsMutationIntent[],
+  ) => Promise<void> = async () => {},
 ) {
   const memory = createMemoryFs();
   const rawFs = new FaultInjectableMemoryFsSync(memory.backend);
@@ -127,6 +139,7 @@ function harness(
     authority,
     emitted,
     vfs,
+    contentReads: rawFs.contentReads,
     failNextReaddir: (error: Error) => rawFs.failNextReaddir(error),
   };
 }
@@ -215,13 +228,19 @@ describe('Workbench project VFS owner adapter', () => {
     expect(recordMutation).toHaveBeenCalledTimes(2);
   });
 
-  // ADR-0307: writes strictly inside node_modules are extraneous — they must
-  // not reach recordMutation (no Scratch dirty), while publication still runs.
+  // ADR-0414: VFS forwards facts; the companion retains ADR-0307 dirty exclusions.
   it('does not record extraneous node_modules writes as dirtying mutations', async () => {
     const events: string[] = [];
-    const recordMutation = vi.fn(async (kind: string, treeRevision: number) => {
-      events.push(`dirty:${kind}:${String(treeRevision)}`);
-    });
+    const recordMutation = vi.fn(
+      async (
+        kind: 'file' | 'guest',
+        treeRevision: number,
+        intents: readonly VfsMutationIntent[],
+      ) => {
+        if (!playgroundMutationIsDirty(kind, intents)) return;
+        events.push(`dirty:${kind}:${String(treeRevision)}`);
+      },
+    );
     const h = harness(undefined, (frame) => events.push(`emit:${frame.type}`), recordMutation);
     const dir = `${ROOT}/node_modules/.vite-temp`;
     const temp = `${dir}/vite.config.ts.timestamp-1.mjs`;
@@ -246,17 +265,22 @@ describe('Workbench project VFS owner adapter', () => {
       request: writeRequest('extraneous-host-write', temp, h.authority.versionOf(temp)),
     });
     expect(events).toEqual(['emit:workbench:project-vfs-state', 'emit:rifty:owner-vfs-commit-ack']);
-    expect(recordMutation).not.toHaveBeenCalled();
+    expect(recordMutation).toHaveBeenCalledTimes(2);
+    expect(recordMutation.mock.calls[0]?.[2]).toEqual([
+      { kind: 'mkdir', path: dir },
+      { kind: 'write', path: temp },
+    ]);
 
     events.splice(0);
     const src = `${ROOT}/src/main.ts`;
     await h.vfs.mutationGuard([{ kind: 'write', path: src }], () => {
       h.authority.writeFileSync(src, encoder.encode('guest'));
     });
-    expect(recordMutation).toHaveBeenCalledTimes(1);
+    expect(recordMutation).toHaveBeenCalledTimes(3);
+    expect(events[0]).toMatch(/^dirty:guest:/);
   });
 
-  it('publishes only the active source tree and serves each read from one atomic snapshot', () => {
+  it('publishes only the active source tree and reads atomically without unrelated content', () => {
     const h = harness();
 
     h.vfs.publishSnapshot();
@@ -274,13 +298,13 @@ describe('Workbench project VFS owner adapter', () => {
     });
     expect(JSON.stringify(h.emitted[0])).not.toContain(OUTSIDE);
 
-    const snapshot = vi.spyOn(h.authority, 'snapshot');
+    h.contentReads.length = 0;
     h.vfs.handleFrame({
       type: 'workbench:project-vfs-read-file',
       requestId: 'read-file-1',
       path: `${ROOT}/src/main.ts`,
     });
-    expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(h.contentReads).toEqual([`${ROOT}/src/main.ts`]);
     expect(h.emitted.at(-1)).toEqual({
       type: 'workbench:project-vfs-read-file-result',
       requestId: 'read-file-1',
@@ -296,13 +320,13 @@ describe('Workbench project VFS owner adapter', () => {
       },
     });
 
-    snapshot.mockClear();
+    h.contentReads.length = 0;
     h.vfs.handleFrame({
       type: 'workbench:project-vfs-read-directory',
       requestId: 'read-dir-1',
       path: `${ROOT}/src`,
     });
-    expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(h.contentReads).toEqual([]);
     expect(h.emitted.at(-1)).toEqual({
       type: 'workbench:project-vfs-read-directory-result',
       requestId: 'read-dir-1',
@@ -1323,7 +1347,7 @@ describe('Workbench project VFS owner adapter', () => {
 
   it('returns an exact read failure without making a second authority observation', () => {
     const h = harness();
-    const snapshot = vi.spyOn(h.authority, 'snapshot');
+    h.contentReads.length = 0;
 
     h.vfs.handleFrame({
       type: 'workbench:project-vfs-read-file',
@@ -1331,7 +1355,7 @@ describe('Workbench project VFS owner adapter', () => {
       path: `${ROOT}/missing.ts`,
     });
 
-    expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(h.contentReads).toEqual([]);
     expect(h.emitted).toEqual([
       {
         type: 'workbench:project-vfs-read-file-result',
@@ -1407,10 +1431,10 @@ describe('Workbench project VFS owner adapter', () => {
     'rejects an out-of-project read before observing authority',
     (frame) => {
       const h = harness();
-      const snapshot = vi.spyOn(h.authority, 'snapshot');
+      h.contentReads.length = 0;
 
       expect(() => h.vfs.handleFrame(frame)).toThrow(TypeError);
-      expect(snapshot).not.toHaveBeenCalled();
+      expect(h.contentReads).toEqual([]);
       expect(h.emitted).toEqual([]);
     },
   );

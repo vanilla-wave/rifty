@@ -26,11 +26,19 @@ import {
   isSabIpcSupported,
   readRootProcessSnapshot,
 } from '@riftydev/kernel';
-import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
+import { referenceChildPipe } from '../internal/child-pipe-reference.ts';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
-import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import {
+  type NodeIpcSerialization,
+  decodeNodeIpcMessage,
+  encodeNodeIpcMessage,
+} from '../internal/node-ipc-serialization.ts';
+import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts';
+import { WorkerReference } from '../internal/worker-reference.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
+import { spawnNoCoiChild } from '../ipc/no-coi-child-process.ts';
+import { inspect } from '../repl/inspect.ts';
 import { SameRealmStdinPipe, execScript } from './child_process-exec.ts';
 import {
   type BufferedExecutionCallback,
@@ -43,17 +51,22 @@ import {
   type SpawnStdio,
   activeChildProcessContext,
   activeProcessStdio,
+  forkExecArgv,
   forwardWorkerStdio,
   resolveWorkerStdio,
+  snapshotChildEnvironment,
   spawnWorkerChild,
 } from './child_process-worker.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { execFileSync, spawnSync } from './loud-members.ts';
 import { nodeChildSpawnOptions } from './node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
 import {
   readActiveNodeProcessBootstrap,
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
+import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
+import { readNodeProcessTerminal } from './process-lifecycle-events.ts';
 
 // ADR-0011 phase 3 / ADR-0039: the runtime-js `'execSync'` handler. Kernel ships
 // no default handlers after ADR-0039 — execSync is Node-API knowledge and lives
@@ -86,9 +99,12 @@ interface SpawnOptions {
   env?: Record<string, string>;
   stdio?: SpawnStdio;
   silent?: boolean;
-  serialization?: 'json' | 'advanced';
+  serialization?: NodeIpcSerialization;
+  execArgv?: unknown;
   /** Internal flag set by `fork()` to enable IPC. */
   __fork?: boolean;
+  /** Internal: fork's compiled startup tokens (ADR-0449). */
+  __execArgv?: readonly string[];
 }
 
 interface ExecOptions extends SpawnOptions {
@@ -123,14 +139,17 @@ class ChildProcess extends EventEmitter {
   private readonly handle: ProcessHandle;
   private readonly ownerProcess: unknown;
   private readonly ownerBootstrap: ReturnType<typeof readActiveNodeProcessBootstrap>;
-  #keepaliveHeld = true;
+  readonly #reference = new WorkerReference();
+  readonly #pipeReferences: WorkerReference[] = [];
+  #ipcClosedByParent = false;
   /** Bus the child's script subscribes to for parent-sent `'childMessage'`
    * events. Exposed to the spawner via `internalIpc()`. */
   readonly inboundIpc: EventEmitter = new EventEmitter();
 
   constructor(
     handle: ProcessHandle,
-    ipcEnabled: boolean,
+    /** The fork's IPC `serialization`; `null` without an IPC channel. */
+    ipc: NodeIpcSerialization | null,
     streams: {
       readonly stdout: Readable;
       readonly stderr: Readable;
@@ -150,15 +169,26 @@ class ChildProcess extends EventEmitter {
     const stdio: (Readable | Writable | null)[] = [this.stdin, this.stdout, this.stderr];
     while (stdio.length < streams.slots) stdio.push(null);
     this.stdio = stdio;
-    refEventLoop();
+    this.#reference.ref();
+    for (const stream of this.stdio) {
+      if (stream === null) continue;
+      this.#pipeReferences.push(referenceChildPipe(stream, stream === this.stdin));
+    }
     handle.on('exit', (code, signal) => {
       this.finishIpc();
       this.emitToOwner('exit', code, signal);
     });
     handle.on('close', (code, signal) => {
       this.#releaseKeepalive();
+      const parentEnded = readNodeProcessTerminal(this.ownerProcess) !== null;
+      if (parentEnded) {
+        streams.stdout.removeAllListeners();
+        streams.stderr.removeAllListeners();
+      }
       if (!streams.stdout._readableState.ended) streams.stdout.push(null);
       if (!streams.stderr._readableState.ended) streams.stderr.push(null);
+      // Node 24 leaves its IPC close count pending after parent disconnect (parity-pinned).
+      if (parentEnded || this.#ipcClosedByParent) return;
       if (handle.kind === 'same-realm') {
         queueMicrotask(() => this.emitToOwner('close', code, signal));
       } else {
@@ -168,7 +198,7 @@ class ChildProcess extends EventEmitter {
     handle.on('peererror', (error) => {
       this.emitToOwner('error', error instanceof Error ? error : new Error(String(error)));
     });
-    if (ipcEnabled) {
+    if (ipc !== null) {
       this.connected = true;
       this.channel = nodeIpcChannel('child_process');
       this.send = (message: unknown, ...unsupported: unknown[]): boolean => {
@@ -176,22 +206,23 @@ class ChildProcess extends EventEmitter {
           throw new NotImplementedError('child_process.send.arguments');
         }
         if (!this.connected) return false;
-        const serialized = serializeNodeIpcMessage(message);
-        if (handle.kind === 'worker') return handle.send(serialized);
-        queueMicrotask(() => this.inboundIpc.emit('childMessage', serialized));
+        const payload = encodeNodeIpcMessage(message, ipc);
+        if (handle.kind === 'worker') return handle.send(payload);
+        queueMicrotask(() =>
+          this.inboundIpc.emit('childMessage', decodeNodeIpcMessage(payload, ipc)),
+        );
         return true;
       };
       this.disconnect = (): void => {
         if (!this.connected) return;
+        this.#ipcClosedByParent = true;
         if (handle.kind === 'worker') handle.disconnect();
         this.finishIpc();
       };
-      if (handle.kind === 'worker') {
-        handle.on('message', (message) => {
-          this.emitToOwner('message', serializeNodeIpcMessage(message));
-        });
-        handle.on('disconnect', () => this.finishIpc());
-      }
+      handle.on('message', (message) => {
+        this.emitToOwner('message', decodeNodeIpcMessage(message, ipc));
+      });
+      handle.on('disconnect', () => this.finishIpc());
     }
   }
 
@@ -203,6 +234,7 @@ class ChildProcess extends EventEmitter {
   }
 
   private emitToOwner(event: string, ...args: unknown[]): boolean {
+    if (readNodeProcessTerminal(this.ownerProcess) !== null) return false;
     const realm = globalThis as { process?: unknown };
     const previous = realm.process;
     const previousBootstrap = readActiveNodeProcessBootstrap();
@@ -232,9 +264,16 @@ class ChildProcess extends EventEmitter {
   }
 
   #releaseKeepalive(): void {
-    if (!this.#keepaliveHeld) return;
-    this.#keepaliveHeld = false;
-    unrefEventLoop();
+    WorkerReference.dispose(this.#reference);
+    for (const reference of this.#pipeReferences) WorkerReference.dispose(reference);
+  }
+
+  ref(): void {
+    this.#reference.ref();
+  }
+
+  unref(): void {
+    this.#reference.unref();
   }
 
   get exitCode(): number | null {
@@ -319,19 +358,21 @@ function rejectedChildCwd(cwd: string): ChildProcess | null {
   return null;
 }
 
-export function spawn(command: string, args: string[] = [], opts: SpawnOptions = {}): ChildProcess {
-  if (opts.serialization === 'advanced') {
-    throw new NotImplementedError(
-      'child_process.serialization.advanced',
-      "Node's advanced IPC serializer is not implemented; use default JSON",
-    );
-  }
+export function spawn(
+  executable: string,
+  args: string[] = [],
+  opts: SpawnOptions = {},
+): ChildProcess {
+  const command = executable === NODE_PROCESS_IDENTITY.execPath ? 'node' : executable;
   const stdio = resolveWorkerStdio(
     opts.stdio,
     activeProcessStdio(),
     opts.__fork === true,
     opts.silent === true,
   );
+  // Node validates it after stdio, with or without an IPC channel.
+  const serialization = validateSerialization(opts.serialization);
+  const ipc = stdio.ipc ? serialization : null;
   if (opts.cwd !== undefined) {
     // Only an explicitly requested directory is checked: an inherited cwd is
     // where the parent already runs, and Node does not re-validate it either.
@@ -345,14 +386,50 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
     isSabIpcSupported() &&
     getKernelWorkerUrl() !== null &&
     getNodeEntryWorkerUrl() !== null;
+  const execArgv = opts.__execArgv ?? [];
+  if (command === 'node' && args[0] !== undefined && isSandboxToolchainRealm()) {
+    const remote = spawnNoCoiChild(args, {
+      cwd: opts.cwd,
+      env: opts.env,
+      ipc: ipc ?? 'none',
+      execArgv,
+    });
+    const child = new ChildProcess(remote.handle, ipc, {
+      ...remote,
+      expose: stdio.expose,
+      slots: stdio.slots,
+    });
+    child.inboundIpc.on('childMessage', (payload) =>
+      remote.inbound.emit('send', encodeNodeIpcMessage(payload, ipc ?? 'json')),
+    );
+    child.inboundIpc.on('signal', (signal) => remote.inbound.emit('signal', signal));
+    if (ipc !== null) {
+      // Match the send() microtask boundary so accepted messages precede disconnect.
+      child.once('disconnect', () =>
+        queueMicrotask(() => remote.inbound.emit('disconnect-request')),
+      );
+    }
+    forwardWorkerStdio(
+      {
+        stdin: () => remote.stdin,
+        stdout: () => remote.stdout,
+        stderr: () => remote.stderr,
+        once: remote.handle.once.bind(remote.handle),
+      },
+      stdio,
+    );
+    return child;
+  }
   if (workerRoute) {
     const handle = spawnWorkerChild(command, args, {
       cwd: opts.cwd,
       env: opts.env,
-      fork: opts.__fork === true,
+      ipc: ipc ?? 'none',
+      execArgv,
+      stdoutIsFile: stdio.stdout?.isFile,
     });
     if (handle.kind !== 'worker') throw new Error('child_process.spawn: expected Worker handle');
-    const child = new ChildProcess(handle, stdio.ipc, {
+    const child = new ChildProcess(handle, ipc, {
       stdin: handle.stdin(),
       stdout: handle.stdout(),
       stderr: handle.stderr(),
@@ -362,7 +439,25 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
     forwardWorkerStdio(handle, stdio);
     return child;
   }
-  return spawnViaSameRealm(command, args, opts, stdio);
+  if (execArgv.length > 0) {
+    throw new NotImplementedError(
+      'child_process.fork.execArgv.same-realm',
+      'a same-realm child runs in its parent realm and cannot start with its own options',
+    );
+  }
+  return spawnViaSameRealm(command, args, { ...opts, serialization }, stdio, ipc);
+}
+
+function validateSerialization(value: unknown): NodeIpcSerialization {
+  if (value === undefined || value === 'json' || value === 'advanced') return value ?? 'json';
+  let inspected = inspect(value);
+  if (inspected.length > 128) inspected = `${inspected.slice(0, 128)}...`;
+  throw Object.assign(
+    new TypeError(
+      `The property 'options.serialization' must be one of: undefined, 'json', 'advanced'. Received ${inspected}`,
+    ),
+    { code: 'ERR_INVALID_ARG_VALUE' },
+  );
 }
 
 function spawnViaSameRealm(
@@ -370,6 +465,7 @@ function spawnViaSameRealm(
   args: string[],
   opts: SpawnOptions,
   stdio: ReturnType<typeof resolveWorkerStdio>,
+  ipc: NodeIpcSerialization | null,
 ): ChildProcess {
   // The handler needs the `ProcessHandle` and `ChildProcess`, both built AFTER
   // it's registered. A mutable container lets the handler read them on the next
@@ -381,13 +477,14 @@ function spawnViaSameRealm(
   const stdinPipe = new SameRealmStdinPipe();
   const stdin = stdinPipe.writable;
   const parent = activeChildProcessContext();
+  const env = snapshotChildEnvironment(opts.env, parent.env);
   const execution = buildChildExecutionPlan(
     parent.cwd,
     opts.cwd,
     command === 'node' ? args[0] : undefined,
   );
   const resolvedArgs =
-    execution.entryPath === undefined ? args : [execution.entryPath, ...args.slice(1)];
+    execution.entryPath === undefined ? args.slice() : [execution.entryPath, ...args.slice(1)];
 
   const handle = globalProcessManager.spawn(
     command,
@@ -398,17 +495,17 @@ function spawnViaSameRealm(
         throw new Error('child_process.spawn: wiring not populated before handler ran');
       }
       if (command === 'ps') {
-        stdout.push(renderPs(args));
+        stdout.push(renderPs(resolvedArgs));
         return;
       }
       if (command === 'kill') {
-        runKill(args);
+        runKill(resolvedArgs);
         return;
       }
       await execScript({
         command,
         args: resolvedArgs,
-        opts: { ...opts, cwd: execution.cwd, env: opts.env ?? parent.env },
+        opts: { ...opts, cwd: execution.cwd, env },
         io,
         ownHandle,
         inboundIpc: child.inboundIpc,
@@ -426,7 +523,7 @@ function spawnViaSameRealm(
   wiring.handle = handle;
   handle.on('stdout', (chunk) => stdout.push(chunk));
   handle.on('stderr', (chunk) => stderr.push(chunk));
-  const child = new ChildProcess(handle, stdio.ipc, {
+  const child = new ChildProcess(handle, ipc, {
     stdin,
     stdout,
     stderr,
@@ -651,15 +748,25 @@ export function fork(
   args: string[] = [],
   opts: SpawnOptions = {},
 ): ChildProcess {
-  return spawn('node', [modulePath, ...args], { ...opts, __fork: true });
+  const execArgv = forkExecArgv(opts.execArgv);
+  return spawn('node', [modulePath, ...args], { ...opts, __fork: true, __execArgv: execArgv });
 }
 
 // `execSync` lives in `./child_process-sync.ts` to keep the SAB-vs-fallback
 // branch with its helpers. Re-exported here for the public `child_process`
 // surface.
-export { execSync };
+export { execSync, execFileSync };
 
 export const ChildProcess_ = ChildProcess;
 
-const child_process = { spawn, exec, execFile, fork, execSync, ChildProcess: ChildProcess_ };
+const child_process = {
+  spawn,
+  spawnSync,
+  execFileSync,
+  exec,
+  execFile,
+  fork,
+  execSync,
+  ChildProcess: ChildProcess_,
+};
 export default child_process;

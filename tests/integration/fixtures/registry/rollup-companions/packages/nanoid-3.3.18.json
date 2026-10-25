@@ -1,0 +1,93 @@
+{
+  "bin": { "nanoid": "bin/nanoid.cjs" },
+  "bugs": { "url": "https://github.com/ai/nanoid/issues" },
+  "dist": {
+    "shasum": "f66a2de1199ffde0fcf21c8a5f13106b1c081913",
+    "tarball": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.18.tgz",
+    "fileCount": 25,
+    "integrity": "sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==",
+    "signatures": [
+      {
+        "sig": "MEQCICi/NpJkcXppd6BuQtgxSBgSxLeFk0ru/c0Fx8qeAlXKAiAWfb3xZgl3aXFvP6ImzWzDBcV+cr17V7unSutMF/pkdA==",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/nanoid@3.3.18",
+      "provenance": { "predicateType": "https://slsa.dev/provenance/v1" }
+    },
+    "unpackedSize": 25198
+  },
+  "main": "index.cjs",
+  "name": "nanoid",
+  "type": "module",
+  "types": "./index.d.ts",
+  "author": { "name": "Andrey Sitnik", "email": "andrey@sitnik.ru" },
+  "module": "index.js",
+  "browser": {
+    "./index.js": "./index.browser.js",
+    "./index.cjs": "./index.browser.cjs",
+    "./async/index.js": "./async/index.browser.js",
+    "./async/index.cjs": "./async/index.browser.cjs"
+  },
+  "engines": { "node": "^10 || ^12 || ^13.7 || ^14 || >=15.0.1" },
+  "exports": {
+    ".": {
+      "import": { "types": "./index.d.ts", "default": "./index.js" },
+      "browser": "./index.browser.js",
+      "default": "./index.js",
+      "require": { "types": "./index.d.cts", "default": "./index.cjs" },
+      "react-native": "./index.browser.js"
+    },
+    "./async": {
+      "import": { "types": "./index.d.ts", "default": "./async/index.js" },
+      "browser": "./async/index.browser.js",
+      "default": "./async/index.js",
+      "require": { "types": "./index.d.cts", "default": "./async/index.cjs" }
+    },
+    "./non-secure": {
+      "import": { "types": "./index.d.ts", "default": "./non-secure/index.js" },
+      "default": "./non-secure/index.js",
+      "require": { "types": "./index.d.cts", "default": "./non-secure/index.cjs" }
+    },
+    "./package.json": "./package.json",
+    "./url-alphabet": {
+      "import": { "types": "./index.d.ts", "default": "./url-alphabet/index.js" },
+      "default": "./url-alphabet/index.js",
+      "require": { "types": "./index.d.cts", "default": "./url-alphabet/index.cjs" }
+    },
+    "./async/package.json": "./async/package.json",
+    "./non-secure/package.json": "./non-secure/package.json",
+    "./url-alphabet/package.json": "./url-alphabet/package.json"
+  },
+  "funding": [{ "url": "https://github.com/sponsors/ai", "type": "github" }],
+  "gitHead": "9ad98052b316c5e707f8098ace509d2ae165e54d",
+  "license": "MIT",
+  "_npmUser": {
+    "name": "GitHub Actions",
+    "email": "npm-oidc-no-reply@github.com",
+    "approver": { "name": "ai", "email": "andrey@sitnik.es" },
+    "trustedPublisher": {
+      "id": "github",
+      "oidcConfigId": "oidc:012e1798-4fc7-407a-b875-bbc877f0017d"
+    }
+  },
+  "homepage": "https://github.com/ai/nanoid#readme",
+  "keywords": ["uuid", "random", "id", "url"],
+  "repository": { "url": "git+https://github.com/ai/nanoid.git", "type": "git" },
+  "_npmVersion": "11.19.0",
+  "description": "A tiny (116 bytes), secure URL-friendly unique string ID generator",
+  "directories": {},
+  "maintainers": [{ "name": "ai", "email": "andrey@sitnik.es" }],
+  "sideEffects": false,
+  "_nodeVersion": "26.7.0",
+  "react-native": "index.js",
+  "_hasShrinkwrap": false,
+  "readmeFilename": "README.md",
+  "_npmOperationalInternal": {
+    "tmp": "tmp/nanoid_3.3.18_1786120865378_0.5733006731913135",
+    "host": "s3://npm-registry-packages-npm-production"
+  },
+  "_id": "nanoid@3.3.18",
+  "version": "3.3.18"
+}

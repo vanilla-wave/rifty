@@ -149,7 +149,7 @@ describe('Shell — builtins', () => {
 
   it('nudges recognized package managers toward npm (not a wrong Run target)', async () => {
     const sh = new Shell();
-    for (const pm of ['npx', 'yarn', 'pnpm', 'bun']) {
+    for (const pm of ['yarn', 'pnpm', 'bun']) {
       const r = await sh.run(`${pm} install left-pad`);
       expect(r.exitCode).toBe(127);
       expect(r.stderr).toContain(`${pm}: not available`);

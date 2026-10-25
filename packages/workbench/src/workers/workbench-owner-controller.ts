@@ -1,3 +1,4 @@
+import type { VfsMutationIntent } from '@riftydev/vfs';
 import {
   ClosedHandleError,
   ProjectBusyError,
@@ -95,10 +96,12 @@ export interface WorkbenchOwnerProjectRuntimeInput {
   readonly recordMutation?: (
     kind: PlaygroundProjectMutationKind,
     treeRevision: number,
+    intents?: readonly VfsMutationIntent[],
   ) => Promise<void>;
 }
 
 export interface WorkbenchOwnerControllerDependencies {
+  readonly setProjectOpenOperation?: (opId: string | undefined) => void;
   readonly materializer?: ProjectMaterializer;
   readonly createProject: (
     input: WorkbenchOwnerProjectRuntimeInput,
@@ -158,10 +161,7 @@ type PlaygroundCatalogMessage = Extract<
   { readonly type: 'workbench:playground-catalog' }
 >;
 
-/**
- * Single owner-side lifecycle chokepoint. Bootstrap owns initialization and the
- * physical process; this controller owns every subsequent project transition.
- */
+/** Project lifetime/correlation owner; bootstrap initializes the physical worker. */
 export function createWorkbenchOwnerController(
   dependencies: WorkbenchOwnerControllerDependencies,
 ): WorkbenchOwnerController {
@@ -176,7 +176,8 @@ export function createWorkbenchOwnerController(
   const issuedTokens = new Set<string>();
   let operationTail = Promise.resolve();
   let active: ActiveProject | null = null;
-  let fencedProjectToken: OwnerProjectToken | null = null;
+  // The last closing project: a late close-project for its token gets its close outcome.
+  let lastFencedProject: ActiveProject | null = null;
   let poison: unknown;
   let shutdownRequested = false;
   let shutdownPromise: Promise<void> | null = null;
@@ -218,11 +219,11 @@ export function createWorkbenchOwnerController(
   const closedOwnerError = (): ClosedHandleError => new ClosedHandleError('Workbench owner');
   const inactiveTokenError = (): Error => new Error('Workbench project token is not active');
   const isExpectedPostFenceToken = (projectToken: OwnerProjectToken): boolean =>
-    fencedProjectToken === projectToken &&
+    lastFencedProject?.token === projectToken &&
     (active === null || (active.token === projectToken && !active.acceptingInput));
   const fenceProjectInput = (project: ActiveProject): void => {
     project.acceptingInput = false;
-    fencedProjectToken = project.token;
+    lastFencedProject = project;
   };
   const poisonedError = (): Error => {
     const detail = serializeWorkbenchOwnerError(poison).message;
@@ -295,6 +296,15 @@ export function createWorkbenchOwnerController(
     send({ type: 'workbench:project-vfs', projectToken: project.token, frame: output.frame });
   };
 
+  const duringOpen = async (opId: string, operation: () => Promise<void>): Promise<void> => {
+    dependencies.setProjectOpenOperation?.(opId);
+    try {
+      await operation();
+    } finally {
+      dependencies.setProjectOpenOperation?.(undefined);
+    }
+  };
+
   const performOpen = async (message: OpenMessage): Promise<void> => {
     try {
       if (shutdownRequested) throw closedOwnerError();
@@ -329,7 +339,7 @@ export function createWorkbenchOwnerController(
         release: null,
       };
       active = project;
-      fencedProjectToken = null;
+      lastFencedProject = null;
 
       if (shutdownRequested) {
         fenceProjectInput(project);
@@ -398,11 +408,12 @@ export function createWorkbenchOwnerController(
           projectRoot,
           acquisition,
         }),
-        recordMutation: (kind, treeRevision) =>
+        recordMutation: (kind, treeRevision, intents) =>
           playground.authority.recordMutation({
             kind,
             project: authorityProject,
             treeRevision,
+            ...(intents === undefined ? {} : { intents }),
           }),
         emit(output) {
           if (project === null) throw new ClosedHandleError('Workbench project output');
@@ -423,7 +434,7 @@ export function createWorkbenchOwnerController(
         release,
       };
       active = project;
-      fencedProjectToken = null;
+      lastFencedProject = null;
 
       if (shutdownRequested) {
         fenceProjectInput(project);
@@ -481,7 +492,25 @@ export function createWorkbenchOwnerController(
       if (playground === undefined)
         throw new TypeError('Playground companion owner is unavailable');
       const command = message.command;
+      let completion: PlaygroundOwnerToPageMessage = {
+        type: 'workbench:playground-catalog-completed',
+        opId: message.opId,
+      };
       switch (command.kind) {
+        case 'list-retained-scratch':
+          completion = {
+            type: 'workbench:playground-retained-scratch-listed',
+            opId: message.opId,
+            records: await playground.authority.listRetainedScratch(),
+          };
+          break;
+        case 'export-retained-scratch':
+          completion = {
+            type: 'workbench:playground-retained-scratch-exported',
+            opId: message.opId,
+            archiveJson: await playground.authority.exportRetainedScratch(command.id),
+          };
+          break;
         case 'create-scratch':
           await playground.authority.createScratch({
             definition: recreatePlaygroundProjectDefinition(
@@ -523,7 +552,7 @@ export function createWorkbenchOwnerController(
           break;
       }
       if (shutdownRequested) throw closedOwnerError();
-      playground.send({ type: 'workbench:playground-catalog-completed', opId: message.opId });
+      playground.send(completion);
     } catch (error) {
       sendFailure(error, message.opId);
     }
@@ -654,7 +683,7 @@ export function createWorkbenchOwnerController(
         return performPlaygroundTools(message.frame, project);
       }
       return message.type === 'workbench:playground-open-project'
-        ? enqueue(() => performPlaygroundOpen(message))
+        ? enqueue(() => duringOpen(message.opId, () => performPlaygroundOpen(message)))
         : enqueue(() => performPlaygroundCatalog(message));
     }
     let message: PageToWorkbenchOwnerMessage;
@@ -667,7 +696,7 @@ export function createWorkbenchOwnerController(
     if (message.type === 'workbench:shutdown') return requestShutdown();
     if (message.type === 'workbench:close-project') {
       if (poison !== undefined) return rejectImmediately(poisonedError(), message.opId);
-      const project = active;
+      const project = active ?? lastFencedProject;
       if (project === null || project.token !== message.projectToken) {
         return rejectImmediately(inactiveTokenError(), message.opId);
       }
@@ -697,7 +726,7 @@ export function createWorkbenchOwnerController(
       return rejectImmediately(new TypeError('Workbench owner is already initialized'));
     }
     if (message.type === 'workbench:open-project') {
-      return enqueue(() => performOpen(message));
+      return enqueue(() => duringOpen(message.opId, () => performOpen(message)));
     }
     if (message.type === 'workbench:delete-project') {
       return enqueue(() => performDelete(message));

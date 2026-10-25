@@ -8,10 +8,19 @@
  * `/workspace`-rooted overlay. Runs on live resolve, lockfile replay, and the
  * eddy-seeded path alike (all converge on `install()`'s post-link step).
  */
+
 import { NotImplementedError } from '@riftydev/io';
 import { type InternalsShim, internalsShims } from '@riftydev/shadow-registry';
+import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
 import { type Vfs, joinPath } from '@riftydev/vfs';
-import { type OverrideMap, type ResolvedOverrideTarget, resolveOverride } from './overrides.ts';
+import { parseNpmAlias } from './npm-alias.ts';
+import {
+  type OverrideMap,
+  type ResolvedOverrideTarget,
+  hasNpmAliasOverride,
+  resolveOverride,
+  userOverrideSpec,
+} from './overrides.ts';
 import { matchesRange } from './semver.ts';
 
 /** Minimal pinned-package view the applier needs. */
@@ -30,6 +39,7 @@ function publicName(name: string, shim: InternalsShim): string {
 export interface EffectivePackageRequest {
   readonly override: ResolvedOverrideTarget | null;
   readonly effectiveName: string;
+  readonly installName?: string;
   readonly effectiveRange: string | null;
 }
 
@@ -37,17 +47,35 @@ export interface EffectivePackageRequest {
  * One override/request authority for live resolve and replay.
  * Baked aliases preserve the caller's semver contract; explicit user overrides
  * intentionally replace it and therefore own the effective target range.
+ * A user version/range override is the edge's spec, not a substitution
+ * (ADR-0451, npm `edge.spec`): the request continues as a plain `name@spec`
+ * edge, so baked redirects and the ADR-0051 native gate still apply.
  */
 export function resolveEffectivePackageRequest(
   name: string,
   range: string | null,
   parent: string | undefined,
   userOverrides: OverrideMap | undefined,
+  runtimeTier?: ShadowRuntimeTier,
 ): EffectivePackageRequest {
-  const override = resolveOverride(name, parent, userOverrides);
-  const effectiveName = override?.name ?? name;
-  const effectiveRange = override?.range ?? range;
-  return { override, effectiveName, effectiveRange };
+  const spec = userOverrideSpec(name, parent, userOverrides);
+  const override = resolveOverride(
+    name,
+    parent,
+    spec === null ? userOverrides : undefined,
+    runtimeTier,
+  );
+  const alias = parseNpmAlias(spec ?? range);
+  const effectiveName = override?.name ?? alias?.name ?? name;
+  const effectiveRange = override?.range ?? (spec === null ? alias?.range : spec) ?? range;
+  const installName =
+    hasNpmAliasOverride(name, parent, userOverrides) || (!override && alias) ? name : effectiveName;
+  return {
+    override,
+    effectiveName,
+    effectiveRange,
+    ...(installName === effectiveName ? {} : { installName }),
+  };
 }
 
 /**

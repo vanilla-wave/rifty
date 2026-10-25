@@ -60,8 +60,8 @@ describe('node-entry host bootstrap config', () => {
     resetNodeEntryWorkerUrl();
   });
 
-  it('uses the one atomic node-entry v3 wire contract', () => {
-    expect(NODE_ENTRY_BOOTSTRAP_PROTOCOL).toBe('rifty.node-entry/v3');
+  it('uses the one atomic node-entry v6 wire contract', () => {
+    expect(NODE_ENTRY_BOOTSTRAP_PROTOCOL).toBe('rifty.node-entry/v6');
   });
 
   it('snapshots host runtime values out of band from the guest environment', () => {
@@ -120,7 +120,7 @@ describe('node-entry host bootstrap config', () => {
     expect(entry).toMatchObject({
       kind: 'url',
       bootstrap: {
-        protocol: 'rifty.node-entry/v3',
+        protocol: 'rifty.node-entry/v6',
         payload: {
           launch: {
             kind: 'eval',
@@ -136,6 +136,71 @@ describe('node-entry host bootstrap config', () => {
     });
   });
 
+  // TODO(backlog: runtime-js/node-entry-runtime-binding-variant-coverage)
+  it('snapshots exact package-path runtime bindings into existing launch metadata', () => {
+    const runtimeBindings = [
+      {
+        adapterId: 'rifty.runtime-adapter.esbuild.v1',
+        packagePath: '/node_modules/esbuild-wasm',
+      },
+    ];
+    const entry = buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
+      kind: 'program',
+      bin: false,
+      remoteFs: true,
+      nodeServe: false,
+      runtimeBindings,
+    } as unknown as NodeEntryLaunch);
+    runtimeBindings[0]!.packagePath = '/mutated';
+
+    expect(entry.bootstrap?.payload).toMatchObject({
+      launch: {
+        runtimeBindings: [
+          {
+            adapterId: 'rifty.runtime-adapter.esbuild.v1',
+            packagePath: '/node_modules/esbuild-wasm',
+          },
+        ],
+      },
+    });
+    const launch = (entry.bootstrap?.payload as { launch?: { runtimeBindings?: unknown } })?.launch;
+    expect(Object.isFrozen(launch?.runtimeBindings)).toBe(true);
+    const binding = (launch?.runtimeBindings as readonly unknown[] | undefined)?.[0];
+    expect(Object.isFrozen(binding)).toBe(true);
+  });
+
+  it.each([
+    ['non-array', {}, /runtimeBindings.*array/i],
+    ['sparse', new Array(1), /runtimeBindings.*dense|element/i],
+    ['unknown field', [{ adapterId: 'a', packagePath: '/pkg', extra: true }], /unexpected field/i],
+    ['empty adapter', [{ adapterId: '', packagePath: '/pkg' }], /adapterId/i],
+    ['relative path', [{ adapterId: 'a', packagePath: 'node_modules/pkg' }], /packagePath/i],
+    ['root path', [{ adapterId: 'a', packagePath: '/' }], /packagePath/i],
+    [
+      'non-normal absolute path',
+      [{ adapterId: 'a', packagePath: '/workspace/../forged' }],
+      /packagePath/i,
+    ],
+    [
+      'duplicate adapter',
+      [
+        { adapterId: 'a', packagePath: '/first' },
+        { adapterId: 'a', packagePath: '/second' },
+      ],
+      /duplicate.*adapter/i,
+    ],
+  ] as const)('rejects corrupt runtime bindings: %s', (_label, runtimeBindings, error) => {
+    expect(() =>
+      buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
+        kind: 'program',
+        bin: false,
+        remoteFs: true,
+        nodeServe: false,
+        runtimeBindings,
+      } as unknown as NodeEntryLaunch),
+    ).toThrow(error);
+  });
+
   it.each([
     {
       kind: 'program',
@@ -145,11 +210,12 @@ describe('node-entry host bootstrap config', () => {
         remoteFs: true,
         nodeServe: false,
         remoteFsRoot: REMOTE_FS_ROOT,
+        publicRoot: '/',
       } satisfies NodeEntryLaunch,
     },
     {
       kind: 'eval',
-      launch: evalLaunch({ remoteFsRoot: REMOTE_FS_ROOT }),
+      launch: evalLaunch({ remoteFsRoot: REMOTE_FS_ROOT, publicRoot: '/' }),
     },
     {
       kind: 'worker-thread',
@@ -157,6 +223,7 @@ describe('node-entry host bootstrap config', () => {
         kind: 'worker-thread',
         remoteFs: true,
         remoteFsRoot: REMOTE_FS_ROOT,
+        publicRoot: '/',
         threadId: 7,
       } satisfies NodeEntryLaunch,
     },
@@ -164,7 +231,7 @@ describe('node-entry host bootstrap config', () => {
     const entry = buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, launch);
 
     expect(entry.bootstrap?.payload).toMatchObject({
-      launch: { remoteFsRoot: REMOTE_FS_ROOT },
+      launch: { remoteFsRoot: REMOTE_FS_ROOT, publicRoot: '/' },
     });
   });
 
@@ -178,6 +245,7 @@ describe('node-entry host bootstrap config', () => {
           bin: false,
           remoteFs: true,
           remoteFsRoot: REMOTE_FS_ROOT,
+          publicRoot: '/',
           nodeServe: true,
         },
       },
@@ -191,7 +259,7 @@ describe('node-entry host bootstrap config', () => {
     ];
     for (const nestedLaunch of nestedLaunches) {
       expect(buildConfiguredNodeEntryWorkerEntry(nestedLaunch)).toMatchObject({
-        bootstrap: { payload: { launch: { remoteFsRoot: REMOTE_FS_ROOT } } },
+        bootstrap: { payload: { launch: { remoteFsRoot: REMOTE_FS_ROOT, publicRoot: '/' } } },
       });
     }
   });
@@ -206,6 +274,7 @@ describe('node-entry host bootstrap config', () => {
           bin: true,
           remoteFs: true,
           remoteFsRoot: REMOTE_FS_ROOT,
+          publicRoot: '/',
           nodeServe: true,
           previewScope: 'owner-preview',
         },
@@ -229,6 +298,7 @@ describe('node-entry host bootstrap config', () => {
             launch: {
               previewScope: 'owner-preview',
               remoteFsRoot: REMOTE_FS_ROOT,
+              publicRoot: '/',
             },
           },
         },
@@ -243,6 +313,7 @@ describe('node-entry host bootstrap config', () => {
         hostRuntime: HOST_RUNTIME,
         launch: evalLaunch({
           remoteFsRoot: REMOTE_FS_ROOT,
+          publicRoot: '/',
           previewScope: 'eval-owner-preview',
         }),
       },
@@ -262,6 +333,7 @@ describe('node-entry host bootstrap config', () => {
           launch: {
             previewScope: 'eval-owner-preview',
             remoteFsRoot: REMOTE_FS_ROOT,
+            publicRoot: '/',
           },
         },
       },
@@ -312,6 +384,7 @@ describe('node-entry host bootstrap config', () => {
         bin: false,
         remoteFs: false,
         remoteFsRoot: REMOTE_FS_ROOT,
+        publicRoot: '/',
         nodeServe: false,
       }),
     ).toThrow(/remoteFsRoot.*requires.*remoteFs.*true/i);
@@ -327,6 +400,7 @@ describe('node-entry host bootstrap config', () => {
           bin: false,
           remoteFs: true,
           remoteFsRoot: REMOTE_FS_ROOT,
+          publicRoot: '/',
           nodeServe: true,
         },
       },
@@ -338,6 +412,7 @@ describe('node-entry host bootstrap config', () => {
         kind: 'worker-thread',
         remoteFs: true,
         remoteFsRoot: '/.rifty/workbench/v1/projects/project-b/tree',
+        publicRoot: '/',
         threadId: 12,
       }),
     ).toThrow(/cannot replace.*remoteFsRoot/i);
@@ -404,17 +479,40 @@ describe('node-entry host bootstrap config', () => {
     expect(() => readNodeEntryBootstrap()).toThrow(/protocol/i);
   });
 
-  it('does not read or fall back to the retired node-entry v2 protocol', () => {
-    publishKernelEntryBootstrap({
-      protocol: 'rifty.node-entry/v2',
-      payload: {
-        hostRuntime: HOST_RUNTIME,
-        launch: { kind: 'program', bin: false, remoteFs: true, nodeServe: false },
-      },
-    });
+  it.each(['v2', 'v3', 'v4', 'v5'])(
+    'does not read or fall back to retired node-entry %s',
+    (version) => {
+      publishKernelEntryBootstrap({
+        protocol: `rifty.node-entry/${version}`,
+        payload: {
+          hostRuntime: HOST_RUNTIME,
+          launch: { kind: 'program', bin: false, remoteFs: true, nodeServe: false },
+        },
+      });
 
-    expect(readNodeEntryBootstrapIfPresent()).toBeNull();
-    expect(() => readNodeEntryBootstrap()).toThrow(/protocol.*v3.*v2/i);
+      expect(readNodeEntryBootstrapIfPresent()).toBeNull();
+      expect(() => readNodeEntryBootstrap()).toThrow(/protocol.*v6/i);
+    },
+  );
+
+  // ADR-0448: fork's `serialization: 'advanced'` rides the program launch.
+  it('carries an advanced fork IPC lane on a program launch', () => {
+    const entry = buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
+      ...PROGRAM_LAUNCH,
+      ipc: 'advanced',
+    } as unknown as NodeEntryLaunch);
+    publishKernelEntryBootstrap(entry.bootstrap ?? null);
+
+    expect(readNodeEntryBootstrap().launch).toMatchObject({ kind: 'program', ipc: 'advanced' });
+  });
+
+  it.each(['structured', 'JSON', null])('rejects program launch ipc %s', (ipc) => {
+    expect(() =>
+      buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
+        ...PROGRAM_LAUNCH,
+        ipc,
+      } as unknown as NodeEntryLaunch),
+    ).toThrow(/launch\.ipc/i);
   });
 
   it.each([

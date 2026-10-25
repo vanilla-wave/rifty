@@ -1,0 +1,168 @@
+{
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/ai-agent-playground-model-catalog.md @ 9837f10c20513055c12b0795b5dfea8b13a74108; BASE c5bb64273b863696b97d4f27977e6761dbd2bb0e; goal docs/backlog/epics/agent-weak-models/goal.md I3/I4, I2 interaction; raw answers 4-6 in docs/backlog/distribution/reference/agent-weak-models-refine-evidence.md; ADR-0471. Fresh independent reviewer images_ui_contract_review. PR-4: only additive test carriers; baseline assertions/config/oracle not weakened. RDY-6: images vs project-file routing and manual switching match raw user answers; advanced JSON/file picker/folder are route choices. pi-agent-core/pi-ai package manifests both 0.85.1; independent vitest images.test.ts run: 6 intended RED, native oracle runs first; /private/tmp/rifty-pr359-review-images-red.log. UI run: 2 intended RED; /private/tmp/rifty-pr359-review-ui-red.log. No product implementation reviewed.",
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted: 0 blockers, 1 advisory; proceed to implementation and independent Final+GREEN, not product merge.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/e2e/ai-mode.spec.ts:781",
+          "summary": "The new catalog scenario checks written storage but does not reload a multi-entry catalog, exercise new-entry defaults, or supply provider credentials/headers. The existing reload test covers legacy simple settings and still asserts the old exact storage shape. Extend that existing carrier when migrating its expectation, preserving secret/limit clearing and proving restored catalog selection. This is an advisory carrier gap, not an executed false-green claim (REV-5).",
+          "authority": "",
+          "evidence": "Read tests/e2e/ai-mode.spec.ts:175-233 and :733-790 against baseline c5bb64273b863696b97d4f27977e6761dbd2bb0e. Independently ran RIFTY_PLAYGROUND_PORT=5399 pnpm exec playwright test --project=chromium-heavy --workers=1 tests/e2e/ai-mode.spec.ts --grep \"catalog controls|binary attachment\": 2 RED at missing Advanced catalog, no setup/import failure after permitted local-server rerun. Log /private/tmp/rifty-pr359-review-ui-red.log."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Acceptance 1: native image+text and image-only input retained on wire and trace",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/agent/src/images.test.ts:48",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: text-only refusal, binary prompt refusal and explicit unsupported tool images",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/agent/src/images.test.ts:73; packages/agent/src/tools.ts:386; packages/agent/README.md:147",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: native catalog fields/defaults, catalog and selection persistence, memory-only credentials and limits",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:733; tests/e2e/ai-mode.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: model picker and user-triggered provider-error continuation preserve history and effective defaults",
+      "source": "acceptance",
+      "trace": "I4 + I2",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:733",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: image attachments reach model; binary files preserve bytes and expose prompt paths without overwriting files",
+      "source": "acceptance",
+      "trace": "I4 + scenario",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:797",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: same native pi/rifty image+text and image-only wire content and retained image trace",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/agent/src/images.test.ts:48",
+      "note": ""
+    },
+    {
+      "row": "Text-only model × image send: named refusal and zero dispatch",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/agent/src/images.test.ts:73",
+      "note": ""
+    },
+    {
+      "row": "Non-image bytes × model prompt: NotImplementedError and zero dispatch",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/agent/src/images.test.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Provider error × UI continuation: another model, retained history, no tool replay",
+      "source": "fault-matrix",
+      "trace": "I4 + I2",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:733",
+      "note": ""
+    },
+    {
+      "row": "Project filename collision × attach: prior bytes preserved with a unique new path",
+      "source": "fault-matrix",
+      "trace": "I4 + scenario",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:831",
+      "note": ""
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3 + I4",
+      "location": "docs/backlog/distribution/ai-agent-playground-model-catalog.md:39",
+      "summary": "Implement this approved image/catalog UI contract and prove GREEN; Contract+RED alone does not deliver it."
+    },
+    {
+      "clause": "I4 + I5",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:27",
+      "summary": "Compaction markers and context-exceeded switch offer remain linked to the compaction unit after I12."
+    },
+    {
+      "clause": "I12",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:17",
+      "summary": "Record catalog-aware weak-model baseline before mechanisms."
+    },
+    {
+      "clause": "I5 + I6 + I7 + I8 + I9 + I10 + I11",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:23",
+      "summary": "Post-baseline mechanism units remain open with their existing goal links."
+    },
+    {
+      "clause": "I13",
+      "location": "docs/backlog/epics/agent-weak-models/map.md:43",
+      "summary": "Re-run identical tasks/config/count and establish no per-task regression before goal closure."
+    }
+  ],
+  "goal_complete": false,
+  "reviewed_sha": "9837f10c20513055c12b0795b5dfea8b13a74108"
+}

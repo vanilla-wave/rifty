@@ -1,0 +1,157 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted; proceed to implementation. No merge approval before Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/agent-per-capability-project-policy.md @ a1fd603c50b93439298b2f76116840b807f40677; BASE 34198608833979f1ef390fa8179f9a55e7e4b244; docs/backlog/epics/no-coi-agent-host-kit/goal.md I4 and Decisions; ADR-0484 partially supersedes ADR-0426 D1. Earlier accepted I6/I10 excluded; their re-chart records inspected only for drift.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1 + I2",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:130",
+      "summary": "Typed occupied/busy/persistence/conflict outcomes remain in sdk-typed-sandbox-outcomes."
+    },
+    {
+      "clause": "I1 + I3",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:143",
+      "summary": "Real waiting/boot/snapshot progress remains in sdk-boot-and-snapshot-progress-events."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:148",
+      "summary": "Contract+RED accepted here; implementation, unrestricted README update and Final+GREEN still required."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:164",
+      "summary": "Transcript reducer and consumer integration remain in agent-transcript-model."
+    },
+    {
+      "clause": "I8 + scenario 1–9",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:170",
+      "summary": "Packed reference host / benchmark composition and whole-goal end-to-end proof remain open."
+    },
+    {
+      "clause": "I9",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:180",
+      "summary": "Agent npm install, registry/no-registry outcomes and truthful instructions remain open."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: one agent session permits file writes and refuses shell redirection / Node fs writes without changing bytes",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:4",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: inverse file/shell policy and isolation between sequential capability calls",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:107",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: common defaults, present-field replacement, explicit undefined clearing, empty allowlist denial, one root and SDK enforcement",
+      "source": "acceptance",
+      "trace": "I4 + ADR-0426 + ADR-0484",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:102",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: unrestricted reference example and actual npm build; explicit allowlist checks nested project bins",
+      "source": "acceptance",
+      "trace": "I4 + scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:150",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × files/shell: SDK enforces each effective policy",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:4",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × capability root: reject another root, retain common root",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:219",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × policy notes: capture effective values without caller-array drift",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:233",
+      "note": ""
+    },
+    {
+      "row": "createSandboxAgentHost policies.files/policies.shell additive API; shared project root, absent/present/undefined semantics",
+      "source": "public-api",
+      "trace": "I4 + ADR-0484",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:84",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/no-coi/agent-capability-policy.spec.ts:257",
+          "summary": "Notes proof checks a files readonly substring and stable snapshots, but does not assert shell readonly/command values or cleared common restrictions in the notes. Consider checking those effective values when implementing; no executed mutant, so advisory only under REV-5 and coverage remains pass.",
+          "authority": "",
+          "evidence": "Independent run: RIFTY_NO_COI_PORT=5511 RIFTY_NO_COI_ORACLE_PORT=5512 RIFTY_NO_COI_RESOURCE_PORT=5513 pnpm test:no-coi tests/no-coi/agent-capability-policy.spec.ts; /tmp/rifty-pr357-policy-contract-review-red.log: 3 intended failures, 1 npm control passed (7.0s), exit 1. This run establishes baseline RED, not survival of a hypothetical notes mutant."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "a1fd603c50b93439298b2f76116840b807f40677"
+}

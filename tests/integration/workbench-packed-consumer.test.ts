@@ -7,6 +7,9 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const runner = resolve(repoRoot, 'tests/integration/workbench-packed-consumer.mjs');
 const enabled = process.env.RIFTY_RUN_PACKED_CONSUMER === '1';
 const maxOutputBytes = 1024 * 1024;
+// Original packed journey (820s) plus its later, serial benchmark subprocess (600s).
+// Inner operation deadlines stay in the runner; reserve 80s for termination/cleanup.
+const runnerTimeoutMs = 820_000 + 600_000;
 
 function appendBounded(output: string, chunk: unknown): string {
   const next = output + String(chunk);
@@ -14,41 +17,48 @@ function appendBounded(output: string, chunk: unknown): string {
 }
 
 describe.skipIf(!enabled)('packed Workbench external consumer', () => {
-  it('installs only tarballs and proves Vite preview plus HMR in fresh Chromium', async () => {
-    const result = await new Promise<{ readonly code: number | null; readonly output: string }>(
-      (resolveRun, rejectRun) => {
-        const child = spawn(process.execPath, [runner], {
-          cwd: repoRoot,
-          env: { ...process.env, CI: '1', COREPACK_ENABLE_NETWORK: '0' },
-          stdio: ['ignore', 'pipe', 'pipe'],
-        });
-        let output = '';
-        let forceKill: ReturnType<typeof setTimeout> | undefined;
-        const timeout = setTimeout(() => {
-          output = appendBounded(output, '\nPacked consumer exceeded 820000ms; terminating\n');
-          child.kill('SIGTERM');
-          forceKill = setTimeout(() => child.kill('SIGKILL'), 60_000);
-        }, 820_000);
-        child.stdout.on('data', (chunk) => {
-          output = appendBounded(output, chunk);
-        });
-        child.stderr.on('data', (chunk) => {
-          output = appendBounded(output, chunk);
-        });
-        child.on('error', (error) => {
-          clearTimeout(timeout);
-          clearTimeout(forceKill);
-          rejectRun(error);
-        });
-        child.on('close', (code) => {
-          clearTimeout(timeout);
-          clearTimeout(forceKill);
-          resolveRun({ code, output });
-        });
-      },
-    );
+  it(
+    'installs only tarballs and proves Vite preview plus HMR in fresh Chromium',
+    async () => {
+      const result = await new Promise<{ readonly code: number | null; readonly output: string }>(
+        (resolveRun, rejectRun) => {
+          const child = spawn(process.execPath, [runner], {
+            cwd: repoRoot,
+            env: { ...process.env, CI: '1', COREPACK_ENABLE_NETWORK: '0' },
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+          let output = '';
+          let forceKill: ReturnType<typeof setTimeout> | undefined;
+          const timeout = setTimeout(() => {
+            output = appendBounded(
+              output,
+              `\nPacked consumer exceeded ${runnerTimeoutMs}ms; terminating\n`,
+            );
+            child.kill('SIGTERM');
+            forceKill = setTimeout(() => child.kill('SIGKILL'), 60_000);
+          }, runnerTimeoutMs);
+          child.stdout.on('data', (chunk) => {
+            output = appendBounded(output, chunk);
+          });
+          child.stderr.on('data', (chunk) => {
+            output = appendBounded(output, chunk);
+          });
+          child.on('error', (error) => {
+            clearTimeout(timeout);
+            clearTimeout(forceKill);
+            rejectRun(error);
+          });
+          child.on('close', (code) => {
+            clearTimeout(timeout);
+            clearTimeout(forceKill);
+            resolveRun({ code, output });
+          });
+        },
+      );
 
-    expect(result.code, result.output).toBe(0);
-    expect(result.output).toContain('Packed Workbench consumer passed');
-  }, 900_000);
+      expect(result.code, result.output).toBe(0);
+      expect(result.output).toContain('Packed Workbench consumer passed');
+    },
+    runnerTimeoutMs + 80_000,
+  );
 });

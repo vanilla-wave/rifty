@@ -8,6 +8,7 @@ import {
 import type {
   NodeCliPlaygroundPlan,
   NodeServerPlaygroundPlan,
+  NpmDevServerPlaygroundPlan,
   PlaygroundProjectCatalog,
   PlaygroundProjectOpenOptions,
   PlaygroundProjectPlan,
@@ -114,6 +115,7 @@ export function createPlaygroundWorkbenchFacade(
 
   function define(plan: VitePlaygroundPlan): ProjectDefinition<PreviewHandle>;
   function define(plan: NodeServerPlaygroundPlan): ProjectDefinition<PreviewHandle>;
+  function define(plan: NpmDevServerPlaygroundPlan): ProjectDefinition<PreviewHandle>;
   function define(plan: NodeCliPlaygroundPlan): ProjectDefinition<void>;
   function define(plan: PlaygroundProjectPlan): ProjectDefinition<unknown>;
   function define(plan: PlaygroundProjectPlan): ProjectDefinition<unknown> {

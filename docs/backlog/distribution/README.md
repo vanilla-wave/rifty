@@ -16,9 +16,8 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | file | status | epic | gist |
 |---|---|---|---|
 | `public-api-ai-agent-contract-snapshot-restore.md` | parked | SDK API | residual disk-state snapshot/restore/fork API after ADR-0131 FS slice |
-| `public-api-ai-agent-exec-preview.md` | parked | SDK API | residual streamed exec + preview URL API after ADR-0131 FS slice |
+| `public-api-ai-agent-preview-question.md` | draft | SDK API | inherited generic consumer/demo preview URL question |
 | `workbench-controllers.md` | ready | embeddable-dev-loop | build deep project sessions in safe slices; Playground dogfood, then mechanical package extraction + packed Chromium proof |
-| `workbench-guest-vfs-namespace.md` | draft | embeddable-dev-loop | decide one honest guest root; prevent active programs from reaching retained project/owner storage |
 | `react-bindings.md` | ready | embeddable-dev-loop | `@riftydev/react` provider + Terminal/Preview/Editor/FileTree/CapabilitiesGate atoms, headless+themeable (DD-4) |
 | `embed-host-vite-example.md` | ready | embeddable-dev-loop | reference Vite React host + `docs/public/` embedding doc + CI e2e on the built bundle |
 | `iframe-embed.md` | draft | — | hosted-embed tier (StackBlitz-style iframe + postMessage); records the top-level COOP/COEP+allow constraint |
@@ -27,8 +26,12 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `readme-open-auditable-rewrite.md` | ready | open-auditable-launch | root README reframed to the open/auditable wedge (GIF + MIT + compat + vs-WC) |
 | `publish-git-and-ts-language-service.md` | ready | open-auditable-launch | publish @riftydev/git + @riftydev/ts-language-service to npm |
 | `landing-compare-page.md` | ready | webcontainers-alternative-search-slot | rifty.dev/compare — verifiable WebContainers-alternative table + link-checker |
-| `ai-sandbox-reference-demo.md` | draft | open-bolt-ai-sandbox-demo | open client-side AI sandbox (eval+install slice; live preview gated on exec-preview) |
+| `ai-sandbox-reference-demo.md` | draft | open-bolt-ai-sandbox-demo | open client-side AI sandbox (eval+install slice; live preview question remains) |
 | `landing-blog-surface.md` | ready | wasi-in-browser-showcase | rifty.dev/blog route + first WASI post |
+| `ai-agent-context-file-unicode-tags.md` | draft | — | question: strip invisible Unicode tag chars from loaded AGENTS.md/SKILL.md (pi byte parity vs Claude Code strip); user fork at pickup |
+| `agent-tool-text-cap-and-run-budgets-measure.md` | draft | — | measure the 16 KiB cap before changing ADR-0424 D7; run budgets settled by agent-weak-models I9 |
+| `no-coi-command-env-and-npm-lifecycle-vars.md` | draft | — | real env + npm lifecycle vars for no-COI commands |
+| `no-coi-node-print-and-input-type-flags.md` | draft | — | `node -p` / `--input-type` / `-r` on the no-COI path |
 
 ## Dependency map
 

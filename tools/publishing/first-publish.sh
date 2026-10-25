@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# One-time FIRST publish of the rifty packages with a token (16: the 15 libs +
-# the @riftydev/eddy service). The live 16-name set already exists: do not rerun
-# the unfiltered command there. Pass --only <filter> for a future new name.
+# One-time FIRST publish of the rifty packages with a token (17: the 16 libs +
+# the @riftydev/eddy service). Do not rerun the unfiltered command on a live
+# scope. Pass --only <filter> for each newly added name.
 #
 # Why a token (just this once): npm OIDC trusted publishing cannot create a
 # package name that does not exist yet (npm/cli#8544). After this initial
@@ -10,7 +10,7 @@
 # (see docs/public/publishing.md) and every subsequent release is TOKENLESS via
 # .github/workflows/release.yml on a `v*` tag.
 #
-# The publish set: ./packages/* (14, incl. the umbrella `@riftydev/sdk`),
+# The publish set: ./packages/* (15, incl. agent and the sdk umbrella),
 # @riftydev/shadow-registry, and the @riftydev/eddy service (services/eddy).
 # apps/playground + test fixtures stay private and are never matched by the
 # filter.

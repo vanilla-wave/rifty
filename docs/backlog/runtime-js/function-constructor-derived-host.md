@@ -24,16 +24,20 @@ Node treats both constructors as the same process `Function` and resolves
 constructor is the browser host constructor; letting it run would resolve
 outside the VFS loader or fail with a host dynamic-import callback error.
 
-Current behavior is therefore a directed ceiling when a derived constructor is
-used to compile source that contains or may contain `import`:
+Current behavior is a directed ceiling only when static constructor arguments
+contain `import`:
 `NotImplementedError('module-loader.function-constructor-derived-host')`.
+Runtime-computed constructor source is not inspectable by the loader and can
+still execute through the host constructor, including a host-realm dynamic
+import. This item owns that remaining derived-constructor gap; the shipped
+compat claim is intentionally limited to statically visible source.
 
 ## Options / Next
 
-Parity-first when a real consumer needs this. Plausible fixes need an isolated
-realm/prototype membrane or a loader-owned Function prototype path so
-`fn.constructor` and lexical `Function` share one routed constructor without
-mutating the browser host.
+Parity-first when a real consumer needs runtime-computed source. Plausible fixes
+need an isolated realm/prototype membrane or a loader-owned Function prototype
+path so `fn.constructor` and lexical `Function` share one routed constructor
+without mutating the browser host.
 
 ## Reversibility
 

@@ -50,7 +50,7 @@ export function StartersTab(props: {
     GROUPS.map((g) => ({
       label: g.label,
       note: g.note,
-      items: props.presets.filter((p) => groupOf(p) === g.id && matches(p)),
+      items: props.presets.filter((p) => p.hidden !== true && groupOf(p) === g.id && matches(p)),
     })).filter((g) => g.items.length > 0);
   const glyphText = (p: Preset): string => p.glyph?.text ?? p.label.slice(0, 1).toUpperCase();
   const glyphColor = (p: Preset): string => p.glyph?.color ?? FALLBACK_GLYPH_COLOR;

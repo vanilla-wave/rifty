@@ -1,5 +1,20 @@
 import { createBrowserOpenWorkbench } from './internal/browser-workbench-composition.ts';
 
+export { checkSandboxSupport } from '../support/check-sandbox-support.ts';
+export type {
+  SandboxSupportCheck,
+  SandboxSupportCheckId,
+  SandboxSupportMode,
+  SandboxSupportOptions,
+  SandboxSupportReport,
+} from '../support/types.ts';
+
+export { produceDependencySnapshot } from '../glue/dep-snapshot-producer.ts';
+export type {
+  ProduceDependencySnapshotOptions,
+  ProducedDependencySnapshot,
+} from '../glue/dep-snapshot-producer.ts';
+
 export {
   ClosedHandleError,
   DirtyProjectDocumentError,
@@ -9,6 +24,7 @@ export {
   ProjectDocumentSaveInProgressError,
   ProjectFileOperationError,
   ProjectRunExitedBeforeReadyError,
+  SnapshotApplicationConflictError,
   StaleProjectDocumentError,
   StdinClosedError,
   WorkbenchOriginOccupiedError,
@@ -25,6 +41,7 @@ export type {
   WorkbenchHealth,
   WorkbenchHealthIssue,
   WorkbenchHealthSnapshot,
+  WorkbenchProjectOpenProgress,
   WorkbenchRecoveryScope,
 } from './health.ts';
 export type {
@@ -34,7 +51,9 @@ export type {
   WorkbenchSnapshot,
   WorkbenchStorageSnapshot,
 } from './open-workbench.ts';
+export type { WorkbenchPackageAcquisition } from './internal/workbench-package-acquisition.ts';
 export type { PreviewHandle } from './preview-readiness.ts';
+export { DEFAULT_PUBLIC_PROJECT_ROOT } from '../workers/guest-layout.ts';
 export { projects } from './project-definition.ts';
 export type { ProjectDefinition } from './project-definition.ts';
 export type {

@@ -1,6 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { readRootProcessSnapshot } from '@riftydev/kernel';
 import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
+import { binNameOf, createPreviewScope } from '@riftydev/shadow-registry/runtime/common';
 import {
   type BinExecutor,
   type CommandContext,
@@ -14,8 +15,15 @@ import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { runNestedShellCommand } from '../glue/run-nested-shell-command.ts';
 import { nodeProjectRootShellCommand } from '../workbench/internal/node-command.ts';
 import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
+import { toProjectPath } from '../workbench/project-file-boundary.ts';
 import { isBinShimPath } from './bin-entry-path.ts';
 import { createDevServerController } from './dev-server-controller.ts';
+import {
+  GUEST_HOME,
+  type GuestRoots,
+  createGuestLayout,
+  resolveGuestPath,
+} from './guest-layout.ts';
 import { classifyNodeInvocation, resolveNodeEntry } from './node-entry-resolve.ts';
 import { readNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
@@ -25,8 +33,8 @@ import {
   createOwnerChildNodeExecutor,
 } from './owner-child-node-executor.ts';
 import type {
+  OwnerNpmCommandOptions,
   OwnerPackageConfig,
-  OwnerPackageMutationKind,
   OwnerPackageState,
 } from './owner-package-state.ts';
 import { createOwnerProcessListCommand } from './owner-process-list-command.ts';
@@ -43,24 +51,26 @@ import {
   createProjectTerminalNamespace,
 } from './project-terminal-namespace.ts';
 import { type PtyServer, createPtyServer } from './pty-server.ts';
-import { binNameOf, createPreviewScope } from './vite-cli-prep.ts';
 
 export interface WorkbenchProjectRuntimeOptions {
   /** Materializer-owned root. Page claims and project ids are resolved before this seam. */
   readonly projectRoot: string;
+  /** Guest mount point of the project (Workbench `publicProjectRoot`, ADR-0531). */
+  readonly publicRoot: string;
   /** Exact config already activated by the lifetime package authority. */
   readonly packageConfig: OwnerPackageConfig;
   readonly authority: OwnerVfsAuthority;
   readonly packageState: OwnerPackageState;
   readonly nodeEntryWorkerUrl: string;
   readonly devServerWorkerUrl: string;
+  readonly previewPrefix?: string;
   readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
   /** Project VFS owns package FIFO, semantic evidence, and reply publication. */
   readonly mutationGuard: VfsMutationGuard;
   /** Owner-applied VFS state must precede every observable PTY completion. */
   readonly publicationBarrier: () => Promise<void>;
-  /** Companion metadata reflection for terminal package mutations. */
-  readonly recordMutation?: (kind: OwnerPackageMutationKind, treeRevision: number) => Promise<void>;
+  /** Optional consumer of real npm invocation facts. */
+  readonly observeNpmOperation?: OwnerNpmCommandOptions['observeOperation'];
   /** Raw project-local PTY frames; lifetime owner wraps tokens outside this module. */
   readonly send: (frame: OwnerToPageFrame) => void;
 }
@@ -75,6 +85,9 @@ interface CloseFailure {
   readonly phase: 'preview-fence' | 'pty' | 'packages' | 'durability';
   readonly error: unknown;
 }
+
+/** Login-shell defaults a restored terminal seed may override (ADR-0531 §6). */
+const LOGIN_ENV: Readonly<Record<string, string>> = Object.freeze({ HOME: GUEST_HOME });
 
 const CLOSE_PHASE_ORDER: Readonly<Record<CloseFailure['phase'], number>> = Object.freeze({
   pty: 0,
@@ -120,11 +133,11 @@ function publicNodeServerConfig(
 ): NodeServerPackageConfig {
   return {
     ...cfg,
-    root: '/',
-    entryPath: namespace.toProjectPath(cfg.entryPath),
+    root: namespace.layout.publicRoot,
+    entryPath: namespace.toGuestPath(cfg.entryPath),
     seedFiles: Object.fromEntries(
       Object.entries(cfg.seedFiles).map(([path, content]) => [
-        namespace.toProjectPath(path),
+        namespace.toGuestPath(path),
         content,
       ]),
     ),
@@ -137,7 +150,7 @@ function projectSeedCwd(
 ): string | undefined {
   if (ownerCwd === undefined) return undefined;
   try {
-    return namespace.toProjectPath(ownerCwd);
+    return namespace.toGuestPath(ownerCwd);
   } catch {
     return undefined;
   }
@@ -148,33 +161,60 @@ export function createWorkbenchProjectRuntime(
   options: WorkbenchProjectRuntimeOptions,
 ): WorkbenchProjectRuntime {
   const projectRoot = assertProjectRoot(options);
+  const layout = createGuestLayout(options.publicRoot, projectRoot);
+  const guestRoots: GuestRoots = Object.freeze({
+    remoteFsRoot: projectRoot,
+    publicRoot: layout.publicRoot,
+  });
   const namespace = createProjectTerminalNamespace({
-    projectRoot,
+    layout,
     fileSystem: options.authority,
     mutationGuard: options.mutationGuard,
     assertPortablePaths: (paths) => options.authority.assertPortablePaths(paths),
   });
+  // A guest path with no owner tree (a mount ancestor such as `/`) maps to the
+  // project root: owner PTY state and package admission are project-scoped.
+  const ownerPathOrRoot = (path: string): string => {
+    const resolved = resolveGuestPath(layout, path);
+    return resolved.kind === 'mount' ? resolved.owner : projectRoot;
+  };
+  /** Per PTY session (set at `pty:open`): login defaults its seed did not bring (ADR-0531 §6). */
+  const seededLogin = new Map<string, readonly string[]>();
+  // An unchanged injected default stays out of the reported state, so a
+  // persisted terminal state round-trips exactly (ADR-0278).
+  const reportedEnv = (sid: string, env: Readonly<Record<string, string>>) => {
+    const reported = { ...env };
+    for (const key of seededLogin.get(sid) ?? []) {
+      if (reported[key] === LOGIN_ENV[key]) delete reported[key];
+    }
+    return reported;
+  };
   const send = (frame: OwnerToPageFrame): void => {
     if (frame.type === 'pty:exit') {
-      options.send({ ...frame, cwd: namespace.toOwnerPath(frame.cwd) });
+      options.send({
+        ...frame,
+        cwd: ownerPathOrRoot(frame.cwd),
+        env: reportedEnv(frame.sid, frame.env),
+      });
       return;
     }
     if (frame.type === 'pty:dev-server' && frame.cwd !== undefined) {
-      options.send({ ...frame, cwd: namespace.toOwnerPath(frame.cwd) });
+      options.send({ ...frame, cwd: ownerPathOrRoot(frame.cwd) });
       return;
     }
     options.send(frame);
   };
-  const previews = createPreviewRegistry({ send });
+  const previews = createPreviewRegistry({ send, previewPrefix: options.previewPrefix });
   const serverRef: { current?: PtyServer } = {};
   let binSequence = 0;
   let nodeSequence = 0;
   let closePromise: Promise<void> | undefined;
   const reserveChildAdmission = (path: string) =>
-    options.packageState.reserveChildAdmission(namespace.toOwnerPath(path));
+    options.packageState.reserveChildAdmission(ownerPathOrRoot(path));
   const directNodeServerCommand =
     options.packageConfig.cfg.runtime === 'node-server'
-      ? nodeProjectRootShellCommand(namespace.toProjectPath(options.packageConfig.cfg.entryPath))
+      ? // The npm `dev` script names the entry relative to the project root.
+        nodeProjectRootShellCommand(toProjectPath(projectRoot, options.packageConfig.cfg.entryPath))
       : null;
 
   const ownerNodeExecutor = createOwnerChildNodeExecutor(
@@ -201,7 +241,7 @@ export function createWorkbenchProjectRuntime(
                 params: {
                   cfg: childCfg,
                   env: { ...ctx.env },
-                  remoteFsRoot: projectRoot,
+                  guestRoots,
                   previewScope: createPreviewScope(),
                   isTTY: ctx.isTTY === true,
                   cols: ctx.cols ?? 80,
@@ -240,7 +280,7 @@ export function createWorkbenchProjectRuntime(
       }),
       (request) => ({
         ...request,
-        remoteFsRoot: projectRoot,
+        guestRoots,
         ...(options.packageConfig.cfg.runtime === 'node-server' &&
         isBinShimPath(request.shimPath) &&
         binNameOf(request.shimPath) === 'nodemon'
@@ -259,8 +299,13 @@ export function createWorkbenchProjectRuntime(
       return childBinExecutor(binPath, args, ctx);
     };
     const shell = new Shell({
-      cwd: reachableCwd(namespace.fileSystem, projectSeedCwd(namespace, seed?.cwd), '/'),
-      env: { ...(seed?.env ?? {}) },
+      cwd: reachableCwd(
+        namespace.fileSystem,
+        projectSeedCwd(namespace, seed?.cwd),
+        layout.publicRoot,
+      ),
+      // A login-shell HOME unless the seed brings its own (ADR-0531 §6).
+      env: { ...LOGIN_ENV, ...(seed?.env ?? {}) },
       execBin: executeInstalledBin,
       fileSystem: namespace.fileSystem,
       mutationGuard: namespace.mutationGuard,
@@ -275,7 +320,7 @@ export function createWorkbenchProjectRuntime(
             controller: devServer,
             ctx: {
               ...ctx,
-              cwd: namespace.toProjectPath(ctx.cwd),
+              cwd: namespace.toGuestPath(ctx.cwd),
               fileSystem: namespace.fileSystem,
               mutationGuard: namespace.mutationGuard,
               assertPortablePaths: namespace.assertPortablePaths,
@@ -289,7 +334,9 @@ export function createWorkbenchProjectRuntime(
       },
       {
         mapInvocationContext: namespace.toOwnerContext,
-        ...(options.recordMutation === undefined ? {} : { recordMutation: options.recordMutation }),
+        ...(options.observeNpmOperation === undefined
+          ? {}
+          : { observeOperation: options.observeNpmOperation }),
       },
     );
     shell.registerCommand('npm', async (args, ctx) => {
@@ -317,7 +364,7 @@ export function createWorkbenchProjectRuntime(
           cwd: ctx.cwd,
           sid,
           previewScope,
-          remoteFsRoot: projectRoot,
+          guestRoots,
         }),
       );
     };
@@ -451,7 +498,18 @@ export function createWorkbenchProjectRuntime(
 
   return Object.freeze({
     handlePtyFrame(frame: PageToOwnerFrame): void | Promise<void> {
-      return ptyServer.handleFrame(frame);
+      // Provenance lives with the session: set when an open creates it (a repeated
+      // open keeps the Shell), dropped when its close settles.
+      if (frame.type === 'pty:open' && !seededLogin.has(frame.sid)) {
+        const seeded = frame.env ?? {};
+        seededLogin.set(
+          frame.sid,
+          Object.keys(LOGIN_ENV).filter((key) => !Object.hasOwn(seeded, key)),
+        );
+      }
+      const handled = ptyServer.handleFrame(frame);
+      if (frame.type !== 'pty:close') return handled;
+      return Promise.resolve(handled).finally(() => seededLogin.delete(frame.sid));
     },
     close,
   });

@@ -1,5 +1,5 @@
 import { NotImplementedError } from '@riftydev/io';
-import { VfsError, basename, guardVfsMutations, joinPath } from '@riftydev/vfs';
+import { type FsSync, VfsError, basename, guardVfsMutations, joinPath } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
 import { commandFileSystem, resolve, strerror } from './_shared.ts';
 
@@ -38,6 +38,43 @@ function parse(args: string[]): { opts: Opts; operands: string[] } {
   return { opts, operands };
 }
 
+/** Source mtimes onto the copy, children before their directory (a child write restamps it). */
+function copyMtimes(fs: FsSync, src: string, dst: string): void {
+  const stat = fs.statSync(src);
+  if (stat.isDirectory) {
+    for (const entry of fs.readdirSync(src))
+      copyMtimes(fs, `${src}/${entry.name}`, `${dst}/${entry.name}`);
+  }
+  // FsSync exposes no atime; GNU keeps both, the copy carries mtime for both.
+  if (stat.mtime !== undefined) fs.utimes(dst, stat.mtime, stat.mtime);
+}
+
+/**
+ * GNU mv across filesystems: rename's destination rules, then copy with
+ * timestamps and remove the source. A non-empty directory target is refused.
+ */
+function moveAcrossMounts(
+  fs: FsSync,
+  srcAbs: string,
+  dstAbs: string,
+  ctx: Parameters<ShellCommand>[1],
+): boolean {
+  const target = fs.statSyncOrNull(dstAbs);
+  if (target?.isDirectory && fs.statSync(srcAbs).isDirectory) {
+    if (fs.readdirSync(dstAbs).length > 0) {
+      ctx.stderr.write(
+        `mv: inter-device move failed: '${srcAbs}' to '${dstAbs}'; unable to remove target: Directory not empty\n`,
+      );
+      return false;
+    }
+    fs.rmSync(dstAbs, { recursive: true });
+  }
+  fs.cpSync(srcAbs, dstAbs, { recursive: true });
+  copyMtimes(fs, srcAbs, dstAbs);
+  fs.rmSync(srcAbs, { recursive: true });
+  return true;
+}
+
 /** One src→dst move honoring -n/-v. Returns 0 on success/skip, 1 on VfsError. */
 function move(
   srcAbs: string,
@@ -48,7 +85,12 @@ function move(
   const fs = commandFileSystem(ctx);
   if (opts.noClobber && fs.existsSync(dstAbs)) return 0; // skip silently (GNU -n)
   try {
-    fs.renameSync(srcAbs, dstAbs);
+    try {
+      fs.renameSync(srcAbs, dstAbs);
+    } catch (error) {
+      if (!(error instanceof VfsError) || error.code !== 'EXDEV') throw error;
+      if (!moveAcrossMounts(fs, srcAbs, dstAbs, ctx)) return 1;
+    }
   } catch (e) {
     if (e instanceof VfsError) {
       // GNU wording via shared strerror: a missing SRC is a stat failure, any

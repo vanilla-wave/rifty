@@ -6,8 +6,8 @@
  * MessagePorts + ADR-0045 fork-IPC — and installs it on `globalThis.process`.
  * `installNodeRuntime` is the pre-entry hook: it builds the process AND, gated
  * to Node workers, runs the rich extras (`patchPromiseForNextTick` for nextTick
- * ordering + `globalThis.Buffer` + `globalThis.global`). WASI workers skip
- * those (no over-Node).
+ * ordering + `globalThis.Buffer` + `globalThis.global`). QuickJS-selected Node
+ * workers return engine readiness; WASI/rewrite workers remain synchronous.
  *
  * Registers itself as the kernel's pre-entry hook at module load — host bundles
  * wire it in by importing this BEFORE `@riftydev/kernel/worker-entry`:
@@ -41,8 +41,16 @@ import {
   bindNodeProcessDescendantAuthority,
   patchPromiseForNextTick,
 } from '../builtins/process.ts';
+import { resolveVmEngineName } from '../builtins/vm/engine-config.ts';
+import { QUICKJS_WASM_URL_ENV, ensureVmEngineReady } from '../builtins/vm/quickjs-loader.ts';
 import { installWebGlobals } from '../builtins/web-globals.ts';
+import { installCloneAdmission } from '../internal/clone-admission.ts';
+import { installMessagePortReference } from '../internal/message-port-ref.ts';
+import { installNodeStartupOptions } from '../internal/node-startup-options.ts';
 import { installGlobalAlias, installWorkerRealmCompat } from './worker-realm-compat.ts';
+
+/** Host bootstrap key for the QuickJS asset consumed by this pre-entry installer. */
+export { QUICKJS_WASM_URL_ENV };
 
 /**
  * The `process` shim installed for kernel-spawned children. Alias of the unified
@@ -93,9 +101,16 @@ export function installNodeProcessShim(
  * children lacked them.
  * Timers + keepalive stay universal at `kernel-worker-entry.ts` module top-level.
  */
-export function installNodeRuntime(spec: Pick<WorkerSpawnSpec, 'pid' | 'ppid' | 'env'>): void {
-  const isNodeEntry = readNodeEntryBootstrapIfPresent() !== null;
+export function installNodeRuntime(
+  spec: Pick<WorkerSpawnSpec, 'pid' | 'ppid' | 'env'>,
+): void | Promise<void> {
+  const launch = readNodeEntryBootstrapIfPresent()?.launch;
+  const isNodeEntry = launch !== undefined;
   const isNode = isNodeEntry || spec.env.__RIFTY_WASI_WASM_URL === undefined;
+  // ADR-0449 §5: conditions/preloads/import.meta.resolve before any loader exists.
+  if (launch !== undefined) {
+    installNodeStartupOptions(launch.kind === 'eval' ? [] : (launch.execArgv ?? []));
+  }
   const processSpec = readKernelProcessSpec();
   if (processSpec === null || processSpec.pid !== spec.pid || processSpec.ppid !== spec.ppid) {
     throw new Error('installNodeRuntime requires the matching kernel-published process spec');
@@ -115,6 +130,12 @@ export function installNodeRuntime(spec: Pick<WorkerSpawnSpec, 'pid' | 'ppid' | 
     // `worker-realm-compat.ts`. Node workers only (a WASI guest runs raw WASI,
     // no JS realm-compat); folded here so the host pre-entry hook needs no change.
     installWorkerRealmCompat();
+    // Node's `MessagePort#ref` as a counted keepalive handle (ADR-0447): emnapi
+    // holds the loop for pending napi async work through it.
+    installMessagePortReference();
+    // Node's DataCloneError for markAsUncloneable graphs (Fetch instances) on every clone surface.
+    installCloneAdmission();
+    if (resolveVmEngineName() === 'quickjs') return ensureVmEngineReady().then(() => undefined);
   }
 }
 

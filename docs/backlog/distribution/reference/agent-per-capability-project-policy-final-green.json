@@ -1,0 +1,144 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS for this slice at 8d55757fc; no unit blockers. Final pr:check 27/27 GREEN (test:run 214.7s, parity 120.1s). Whole-goal PR remains in progress.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "8d55757fc7471975d337ac47ace0b84f0fbe8696",
+  "unit_goal_source": "docs/backlog/distribution/agent-per-capability-project-policy.md @ 8d55757fc7471975d337ac47ace0b84f0fbe8696; BASE 34198608833979f1ef390fa8179f9a55e7e4b244; docs/backlog/epics/no-coi-agent-host-kit/goal.md I4 and Decisions; ADR-0484 partially supersedes ADR-0426 D1. Independent Contract+RED at a1fd603c50b93439298b2f76116840b807f40677 inspected with raw RED. Earlier accepted I6/I10 excluded except changed dependencies. Final-review provenance-lie repair verified against real descriptor RED and five-test GREEN; original evidence preserved in docs/backlog/distribution/reference/agent-per-capability-project-policy-evidence.md:30. Raw final gate: /tmp/rifty-pr357-policy-final-pr-check.log.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1 + I2",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:130",
+      "summary": "Typed occupied/busy/persistence/conflict outcomes remain in distribution/sdk-typed-sandbox-outcomes."
+    },
+    {
+      "clause": "I1 + I3",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:143",
+      "summary": "Real waiting/boot/snapshot progress remains in distribution/sdk-boot-and-snapshot-progress-events."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:164",
+      "summary": "Transcript reducer and consumer integration remain in distribution/agent-transcript-model."
+    },
+    {
+      "clause": "I8 + I4 reference composition + scenario 1–9",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:170",
+      "summary": "Packed connections-only reference host, shared unrestricted benchmark composition and whole-goal end-to-end proof remain in distribution/no-coi-agent-reference-host."
+    },
+    {
+      "clause": "I9",
+      "location": "docs/backlog/epics/no-coi-agent-host-kit/goal.md:180",
+      "summary": "Agent npm install, registry/no-registry outcomes and truthful instructions remain in distribution/no-coi-agent-npm-install."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: one agent session permits file writes while shell redirects and Node fs writes are refused, retaining correct bytes",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:4",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: inverse file/shell policy and isolation between sequential capability calls",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:73",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: common inheritance, present-field replacement, explicit undefined clearing, empty command denial, shared root and SDK-only enforcement",
+      "source": "acceptance",
+      "trace": "I4 + ADR-0426 + ADR-0484",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:73; tests/no-coi/agent-capability-policy.spec.ts:274",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: unrestricted README default; actual npm build runs its bin; explicit allowlist checks nested commands",
+      "source": "acceptance",
+      "trace": "I4 + scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:163; packages/agent/README.md:108",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × files/shell: SDK enforces each effective policy",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:4; tests/no-coi/agent-capability-policy.spec.ts:274",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × capability root: reject another root and retain the common root",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:216",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × policy notes: captured notes describe effective common/files/shell fields without caller-array drift, including accepted non-enumerable fields",
+      "source": "fault-matrix",
+      "trace": "I4 + ADR-0484",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:216; tests/no-coi/agent-capability-policy.spec.ts:274; packages/agent/src/sandbox-host.ts:46",
+      "note": ""
+    },
+    {
+      "row": "createSandboxAgentHost policies.files/policies.shell additive API: common root, absent/present/undefined policy semantics",
+      "source": "public-api",
+      "trace": "I4 + ADR-0484",
+      "status": "pass",
+      "citation": "tests/no-coi/agent-capability-policy.spec.ts:73; tests/no-coi/agent-capability-policy.spec.ts:216; packages/agent/src/types.ts:81",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -1,0 +1,198 @@
+import { normalizePath, syncMirror } from '@riftydev/vfs';
+import {
+  type PackageBinSpawnRequest,
+  binNameOf,
+  createPreviewScope,
+  isBinShimPath,
+} from './launch.ts';
+import { prepareViteEsbuildRuntime } from './vite-esbuild-runtime.ts';
+
+export type ViteCliMode = 'dev' | 'build' | 'preview' | 'optimize' | 'info';
+const VITE_BIN_SUFFIX = '/.bin/vite';
+
+export interface ViteCliPreparation {
+  readonly root: string;
+  readonly mode: ViteCliMode;
+  readonly executedBinPath: string;
+}
+
+/** Derive one complete Vite preparation from the executed entry + real argv. */
+export function viteCliPreparationFromArgs(options: {
+  readonly root: string;
+  readonly args: readonly string[];
+  readonly executedBinPath: string;
+}): ViteCliPreparation | null {
+  const binPath = normalizePath(options.executedBinPath);
+  const nodeModules = binPath.endsWith(VITE_BIN_SUFFIX)
+    ? binPath.slice(0, -VITE_BIN_SUFFIX.length)
+    : '';
+  return !nodeModules.endsWith('/node_modules')
+    ? null
+    : {
+        root: options.root,
+        mode: viteCliMode(options.args),
+        executedBinPath: options.executedBinPath,
+      };
+}
+
+function vitePackageRoot(root: string, executedBinPath?: string): string {
+  if (executedBinPath === undefined) return normalizePath(`${root}/node_modules/vite`);
+  const binPath = normalizePath(executedBinPath);
+  if (!binPath.endsWith(VITE_BIN_SUFFIX)) {
+    throw new Error(`vite CLI preparation expected an executed .bin/vite; got ${executedBinPath}`);
+  }
+  const nodeModules = binPath.slice(0, -VITE_BIN_SUFFIX.length);
+  if (!nodeModules.endsWith('/node_modules')) {
+    throw new Error(`vite CLI preparation cannot resolve package from ${executedBinPath}`);
+  }
+  return `${nodeModules}/vite`;
+}
+
+export async function prepareViteCli(options: ViteCliPreparation): Promise<void> {
+  const packageRoot = vitePackageRoot(options.root, options.executedBinPath);
+  if (options.mode === 'info') return;
+  const fs = syncMirror();
+  await prepareViteEsbuildRuntime({
+    fs,
+    packageRoot,
+  });
+}
+
+// ——— vite CLI mode/env preparation (relocated from real-vite-bootstrap so the
+// behavioral tests can import it in node vitest — the bootstrap module drags
+// worker-only deps). Args remain byte-for-byte user-owned.
+
+// vite CLI grammar, copied from vite 7.3.6 dist/node/cli.js declarations and
+// probed against the real binary (matrix: vite-cli-prep.test.ts, 2026-07-07).
+// cac matches a command by parsing argv PER CANDIDATE with mri: flags the
+// candidate declares boolean never consume; EVERY other flag — value-taking,
+// [optional], unknown — consumes the next non-dash token; `--` ends matching.
+const VITE_GLOBAL_BOOLEAN_FLAGS = ['--clearScreen', '-h', '--help', '-v', '--version'];
+
+interface ViteCliCommand {
+  readonly names: readonly string[];
+  readonly mode: ViteCliMode;
+  readonly booleans: readonly string[];
+}
+
+const VITE_DEV_COMMAND: ViteCliCommand = {
+  names: ['serve', 'dev'],
+  mode: 'dev',
+  booleans: ['--cors', '--strictPort', '--force'],
+};
+
+// Registration order of dist/node/cli.js; dev `[root]` is the default fallback.
+const VITE_CLI_COMMANDS: readonly ViteCliCommand[] = [
+  VITE_DEV_COMMAND,
+  { names: ['build'], mode: 'build', booleans: ['--emptyOutDir', '-w', '--watch', '--app'] },
+  { names: ['optimize'], mode: 'optimize', booleans: ['--force'] },
+  { names: ['preview'], mode: 'preview', booleans: ['--strictPort'] },
+];
+
+type ViteCliToken =
+  | {
+      readonly kind: 'flag';
+      readonly flag: string;
+      readonly value: string | null;
+      readonly raw: readonly string[];
+    }
+  | { readonly kind: 'positional'; readonly value: string; readonly raw: readonly string[] }
+  /** `--` and everything after it — excluded from command matching. */
+  | { readonly kind: 'rest'; readonly raw: readonly string[] };
+
+function scanViteCliArgs(args: readonly string[], booleans: ReadonlySet<string>): ViteCliToken[] {
+  const out: ViteCliToken[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === undefined) continue;
+    if (arg === '--') {
+      out.push({ kind: 'rest', raw: args.slice(i) });
+      break;
+    }
+    if (arg === '-' || !arg.startsWith('-')) {
+      out.push({ kind: 'positional', value: arg, raw: [arg] });
+      continue;
+    }
+    const eq = arg.indexOf('=');
+    if (eq !== -1) {
+      out.push({ kind: 'flag', flag: arg.slice(0, eq), value: arg.slice(eq + 1), raw: [arg] });
+      continue;
+    }
+    const next = args[i + 1];
+    if (
+      booleans.has(arg) ||
+      arg.startsWith('--no-') ||
+      next === undefined ||
+      next.startsWith('-')
+    ) {
+      out.push({ kind: 'flag', flag: arg, value: null, raw: [arg] });
+      continue;
+    }
+    out.push({ kind: 'flag', flag: arg, value: next, raw: [arg, next] });
+    i += 1;
+  }
+  return out;
+}
+
+function viteCliGrammar(cmd: ViteCliCommand): ReadonlySet<string> {
+  return new Set([...VITE_GLOBAL_BOOLEAN_FLAGS, ...cmd.booleans]);
+}
+
+interface ViteCliParse {
+  readonly mode: ViteCliMode;
+  readonly tokens: readonly ViteCliToken[];
+}
+
+function parseViteCliArgs(args: readonly string[]): ViteCliParse {
+  let matched: { cmd: ViteCliCommand; tokens: ViteCliToken[] } | null = null;
+  for (const cmd of VITE_CLI_COMMANDS) {
+    const tokens = scanViteCliArgs(args, viteCliGrammar(cmd));
+    const first = tokens.find((t) => t.kind === 'positional');
+    if (first?.kind === 'positional' && cmd.names.includes(first.value)) {
+      matched = { cmd, tokens };
+      break;
+    }
+  }
+  const namedCommandMatched = matched !== null;
+  matched ??= {
+    cmd: VITE_DEV_COMMAND,
+    tokens: scanViteCliArgs(args, viteCliGrammar(VITE_DEV_COMMAND)),
+  };
+  const hasHelp = matched.tokens.some(
+    (t) => t.kind === 'flag' && (t.flag === '--help' || t.flag === '-h'),
+  );
+  const hasVersion = matched.tokens.some(
+    (t) => t.kind === 'flag' && (t.flag === '--version' || t.flag === '-v'),
+  );
+  return {
+    mode: hasHelp || (hasVersion && !namedCommandMatched) ? 'info' : matched.cmd.mode,
+    tokens: matched.tokens,
+  };
+}
+
+export function viteCliMode(args: readonly string[]): ViteCliMode {
+  return parseViteCliArgs(args).mode;
+}
+
+export function prepareViteBinSpawnRequest<T extends PackageBinSpawnRequest>(
+  request: T,
+): T & { readonly previewScope?: string } {
+  if (!isBinShimPath(request.shimPath) || binNameOf(request.shimPath) !== 'vite') return request;
+  const mode = viteCliMode(request.args);
+  const previewMode = mode === 'dev' || mode === 'preview';
+  return {
+    ...request,
+    env: {
+      ...request.env,
+      // Public napi-rs selector: rifty installs WASI bindings and no native
+      // platform package. This is guest-visible library configuration, not a
+      // host launch-role/control channel (ADR-0051/0162).
+      NAPI_RS_FORCE_WASI: '1',
+    },
+    ...(previewMode && request.previewScope === undefined
+      ? { previewScope: createPreviewScope() }
+      : {}),
+  };
+}
+
+export { binNameOf, createPreviewScope } from './launch.ts';

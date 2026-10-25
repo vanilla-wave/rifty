@@ -13,6 +13,8 @@ export interface WorkspaceArchiveV1 {
   readonly version: 1;
   readonly root: string;
   readonly files: readonly WorkspaceArchiveFile[];
+  /** Explicit directories, including empty ones; omitted by legacy exports. */
+  readonly directories?: readonly string[];
 }
 
 export interface WorkspaceArchiveFs {
@@ -26,6 +28,7 @@ export interface WorkspaceArchiveFs {
 
 export interface ExportWorkspaceArchiveOptions {
   readonly exclude?: readonly string[];
+  readonly includeDirectories?: boolean;
 }
 
 export interface ImportWorkspaceArchiveOptions {
@@ -83,6 +86,13 @@ function assertArchive(value: unknown): asserts value is WorkspaceArchiveV1 {
     throw new Error(`Unsupported workspace archive version ${value.version}`);
   if (typeof value.root !== 'string') throw new Error('Workspace archive root must be a string');
   if (!Array.isArray(value.files)) throw new Error('Workspace archive files must be an array');
+  if (
+    value.directories !== undefined &&
+    (!Array.isArray(value.directories) ||
+      value.directories.some((path) => typeof path !== 'string'))
+  ) {
+    throw new Error('Workspace archive directories must be an array of strings');
+  }
   for (const [index, file] of value.files.entries()) {
     if (!isRecord(file)) throw new Error(`Workspace archive file ${index} must be an object`);
     if (typeof file.path !== 'string') {
@@ -114,6 +124,7 @@ export function buildWorkspaceArchive(
   const normalizedRoot = normalizePath(root);
   const exclude = new Set(options.exclude ?? SNAPSHOT_EXCLUDE_DIRS);
   const files: WorkspaceArchiveFile[] = [];
+  const directories: string[] = [];
 
   const walk = (dir: string): void => {
     const children = fs.readdirSync(dir);
@@ -127,7 +138,10 @@ export function buildWorkspaceArchive(
       // namespace before descending, not only a marker-shaped file.
       if (isInstallStampPath(path)) continue;
       if (child.isDirectory) {
-        if (!exclude.has(child.name)) walk(path);
+        if (!exclude.has(child.name)) {
+          if (options.includeDirectories) directories.push(relativePath(normalizedRoot, path));
+          walk(path);
+        }
         continue;
       }
       // Install claims are owner authority state, never portable project or
@@ -142,7 +156,12 @@ export function buildWorkspaceArchive(
   };
 
   walk(normalizedRoot);
-  return { version: 1, root: normalizedRoot, files };
+  return {
+    version: 1,
+    root: normalizedRoot,
+    files,
+    ...(options.includeDirectories ? { directories } : {}),
+  };
 }
 
 export function importWorkspaceArchive(
@@ -162,12 +181,17 @@ export function applyWorkspaceArchive(
   prepareWorkspaceArchiveImport(fs, archive, options).apply();
 }
 
-/** Validate/decode without mutation; the returned apply owns the root replace. */
-export function prepareWorkspaceArchiveImport(
-  fs: WorkspaceArchiveFs,
+export interface DecodedWorkspaceArchive {
+  readonly root: string;
+  readonly files: readonly { readonly target: string; readonly content: Uint8Array }[];
+  readonly directories: readonly { readonly target: string }[];
+}
+
+/** One path/namespace/decode boundary for replacement and entry-overlay imports. */
+export function decodeWorkspaceArchive(
   archive: unknown,
   options: ImportWorkspaceArchiveOptions = {},
-): PreparedWorkspaceArchiveImport {
+): DecodedWorkspaceArchive {
   assertArchive(archive);
   const root = normalizePath(options.root ?? archive.root);
   const archiveRoot = normalizePath(archive.root);
@@ -179,21 +203,30 @@ export function prepareWorkspaceArchiveImport(
   }
   if (root === '/') throw new Error('Refusing to import a workspace archive at /');
 
-  const decoded = archive.files.map((file) => {
-    assertSafeRelativePath(file.path);
-    const target = joinPath(root, file.path);
+  const targetFor = (path: string): string => {
+    assertSafeRelativePath(path);
+    const target = joinPath(root, path);
     if (isInstallStampPath(target)) {
-      throw new Error(`Workspace archive contains reserved install-stamp claim "${file.path}"`);
+      throw new Error(`Workspace archive contains reserved install-stamp claim "${path}"`);
     }
-    if (!options.rebase && file.path.split('/').includes('node_modules')) {
-      throw new Error(`Workspace archive contains derived node_modules path "${file.path}"`);
+    if (!options.rebase && path.split('/').includes('node_modules')) {
+      throw new Error(`Workspace archive contains derived node_modules path "${path}"`);
     }
-    if (!target.startsWith(`${root}/`)) throw new Error(`Archive path escaped root: ${file.path}`);
-    return { path: file.path, target, content: base64ToBytes(file.content) };
-  });
+    if (!target.startsWith(`${root}/`)) throw new Error(`Archive path escaped root: ${path}`);
+    return target;
+  };
+  const decoded = archive.files.map((file) => ({
+    path: file.path,
+    target: targetFor(file.path),
+    content: base64ToBytes(file.content),
+  }));
+  const directories = (archive.directories ?? []).map((path) => ({
+    path,
+    target: targetFor(path),
+  }));
 
   const archivePathByTarget = new Map<string, string>();
-  for (const file of decoded) {
+  for (const file of [...decoded, ...directories]) {
     const priorPath = archivePathByTarget.get(file.target);
     if (priorPath !== undefined) {
       throw new Error(
@@ -202,11 +235,12 @@ export function prepareWorkspaceArchiveImport(
     }
     archivePathByTarget.set(file.target, file.path);
   }
-  for (const file of decoded) {
+  const fileTargets = new Set(decoded.map((file) => file.target));
+  for (const file of [...decoded, ...directories]) {
     let parent = dirname(file.target);
     while (parent !== root) {
       const parentArchivePath = archivePathByTarget.get(parent);
-      if (parentArchivePath !== undefined) {
+      if (parentArchivePath !== undefined && fileTargets.has(parent)) {
         throw new Error(
           `Workspace archive target collision: file "${parentArchivePath}" is an ancestor of "${file.path}"`,
         );
@@ -217,6 +251,15 @@ export function prepareWorkspaceArchiveImport(
     }
   }
 
+  return { root, files: decoded, directories };
+}
+
+export function prepareWorkspaceArchiveImport(
+  fs: WorkspaceArchiveFs,
+  archive: unknown,
+  options: ImportWorkspaceArchiveOptions = {},
+): PreparedWorkspaceArchiveImport {
+  const { root, files: decoded, directories } = decodeWorkspaceArchive(archive, options);
   return {
     root,
     apply() {
@@ -238,6 +281,12 @@ export function prepareWorkspaceArchiveImport(
           fs.mkdirSync(dir, { recursive: true });
         }
         fs.writeFileSync(target, file.content);
+      }
+      for (const dir of directories) {
+        if (!mkdirDone.has(dir.target)) {
+          mkdirDone.add(dir.target);
+          fs.mkdirSync(dir.target, { recursive: true });
+        }
       }
     },
   };

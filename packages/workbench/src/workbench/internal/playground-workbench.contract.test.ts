@@ -38,6 +38,7 @@ import {
   type InspectedProjectDefinition,
   defineNodeCliProject,
   defineNodeServerProject,
+  defineNpmDevServerProject,
   projects,
 } from '../project-definition.ts';
 import type { ProjectDocumentReadEntry } from '../project-documents.ts';
@@ -438,6 +439,12 @@ function catalog(
       listener(snapshot);
       return () => {};
     },
+    listRetainedScratch: async () => {
+      throw new Error('Unexpected retained catalog operation at this fixture boundary');
+    },
+    exportRetainedScratch: async () => {
+      throw new Error('Unexpected retained catalog operation at this fixture boundary');
+    },
     createScratch: async () => snapshot,
     saveScratch: async () => snapshot,
     activate: async () => snapshot,
@@ -613,6 +620,8 @@ function definePlan(plan: PlaygroundProjectPlan): ProjectDefinition<unknown> {
       return projects.vite({ ...common, viteVersion: plan.viteVersion });
     case 'node-server':
       return defineNodeServerProject({ ...common, entryPath: plan.entryPath, port: plan.port });
+    case 'npm-dev-server':
+      return defineNpmDevServerProject(common);
     case 'node-cli':
       return defineNodeCliProject({ ...common, entryPath: plan.entryPath, args: plan.args });
   }
@@ -639,6 +648,7 @@ describe('Playground companion sealed contract', () => {
     expect(Object.keys(companionModule).sort()).toEqual(['openPlaygroundWorkbench']);
     expect(Object.keys(rootModule).sort()).toEqual([
       'ClosedHandleError',
+      'DEFAULT_PUBLIC_PROJECT_ROOT',
       'DirtyProjectDocumentError',
       'FileConflictError',
       'ProjectBusyError',
@@ -646,10 +656,13 @@ describe('Playground companion sealed contract', () => {
       'ProjectDocumentSaveInProgressError',
       'ProjectFileOperationError',
       'ProjectRunExitedBeforeReadyError',
+      'SnapshotApplicationConflictError',
       'StaleProjectDocumentError',
       'StdinClosedError',
       'WorkbenchOriginOccupiedError',
+      'checkSandboxSupport',
       'openWorkbench',
+      'produceDependencySnapshot',
       'projects',
     ]);
     expect(rootModule).not.toHaveProperty('openPlaygroundWorkbench');
@@ -1339,7 +1352,7 @@ describe('Playground plan validation', () => {
         ...options().packageAcquisition,
         snapshotUrl: '/retired-snapshot.json.gz',
       },
-    } as WorkbenchOptions;
+    } as unknown as WorkbenchOptions;
 
     await expect(open(legacy)).rejects.toThrow(/snapshotUrl/);
     expect(effect).not.toHaveBeenCalled();

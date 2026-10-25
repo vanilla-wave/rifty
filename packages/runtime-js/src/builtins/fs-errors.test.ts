@@ -4,6 +4,7 @@
  * `Record<VfsErrorCode, true>` literal makes a VfsErrorCode union growth a
  * COMPILE error here, forcing the table update.
  */
+import { getSystemErrorMap } from 'node:util';
 import { VfsError, type VfsErrorCode } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import { FS_ERRNO, fsError, toNodeFsError } from './fs-errors.ts';
@@ -17,11 +18,24 @@ const ALL_VFS_CODES: Record<VfsErrorCode, true> = {
   EPERM: true,
   EINVAL: true,
   EACCES: true,
+  EXDEV: true,
+  EROFS: true,
   EDQUOT: true,
   EIO: true,
 };
 
 describe('fs-errors errno table', () => {
+  it('preserves native read-only filesystem errno and description', () => {
+    const native = getSystemErrorMap().get(-30);
+    expect(native?.[0]).toBe('EROFS');
+    expect(toNodeFsError(new VfsError('EROFS', '/locked'), 'open', '/locked')).toMatchObject({
+      code: 'EROFS',
+      errno: -30,
+      syscall: 'open',
+      path: '/locked',
+      message: `EROFS: ${native?.[1]}, open '/locked'`,
+    });
+  });
   it('FS_ERRNO maps every VfsErrorCode (no bare-code Node errors)', () => {
     for (const code of Object.keys(ALL_VFS_CODES)) {
       expect(FS_ERRNO[code], `missing FS_ERRNO entry: ${code}`).toBeDefined();

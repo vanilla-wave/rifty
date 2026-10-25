@@ -90,7 +90,18 @@ export async function gzip(bytes: Uint8Array): Promise<Uint8Array> {
     .stream()
     .pipeThrough(new CompressionStream('gzip'));
   const ab = await new Response(stream).arrayBuffer();
-  return new Uint8Array(ab);
+  const compressed = new Uint8Array(ab);
+  if (
+    compressed.length < 10 ||
+    compressed[0] !== 0x1f ||
+    compressed[1] !== 0x8b ||
+    compressed[2] !== 0x08
+  ) {
+    throw new TypeError('CompressionStream returned an invalid gzip header');
+  }
+  // RFC 1952 OS=255: fixture identity must not encode the host platform.
+  compressed[9] = 0xff;
+  return compressed;
 }
 
 /**

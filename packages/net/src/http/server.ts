@@ -1,3 +1,4 @@
+import { fetchNodeNetwork } from '@riftydev/io';
 /**
  * HTTP `Server` + `request()` client over the port registry.
  *
@@ -13,12 +14,11 @@
  * through the host `fetch`. The returned emitter carries `'response'` with an
  * `IncomingMessageFromFetch`.
  *
- * Scope: the port registry is realm-local (per Worker process); cross-realm
- * loopback bridges realms over the per-port preview `BroadcastChannel`
- * (`cross-realm/preview-port.ts`, ADR-0180).
+ * Scope: registry realm-local per Worker; sibling loopback uses the per-port
+ * preview `BroadcastChannel` (`cross-realm/preview-port.ts`, ADR-0180).
  */
 
-import { Buffer, EventEmitter, NotImplementedError } from '@riftydev/io';
+import { Buffer, EventEmitter, NotImplementedError, openHostBroadcastChannel } from '@riftydev/io';
 import { claimPort, releasePort } from '../cross-realm/port-claim.ts';
 import { dispatchCrossRealmLoopback } from '../cross-realm/preview-port.ts';
 import {
@@ -27,16 +27,15 @@ import {
   dispatchToPort,
   getHandler,
   isPortBound,
+  portRegistrationOwner,
   registerPort,
   unregisterPort,
 } from '../registry.ts';
 import { type AddressInfo, createVirtualAddressInfo } from '../server-address.ts';
 import { channelNameFor, portChannelNameFor, portChannelNameForPort } from '../ws/channel.ts';
 import type { WsMessage } from '../ws/in-process.ts';
-import { METHODS, maxHeaderSize } from './methods.ts';
 import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 import { ServerResponse } from './response.ts';
-import { STATUS_CODES } from './status-codes.ts';
 import {
   type WebSocketBridgeFrame,
   WebSocketClientSocket,
@@ -66,7 +65,7 @@ export type RequestListener = (req: IncomingMessage, res: ServerResponse) => voi
 
 export type ServerOptions = Record<string, unknown>;
 
-function assertSupportedServerOptions(options: ServerOptions | undefined): void {
+export function assertSupportedServerOptions(options: ServerOptions | undefined): void {
   if (options === undefined) return;
   const unsupported = Object.keys(options);
   if (unsupported.length === 0) return;
@@ -125,11 +124,10 @@ export class HttpServer extends EventEmitter {
       queueMicrotask(() => this.emit('error', addrInUseError('127.0.0.1', requested)));
       return this;
     }
-    // `listen(0)` / `listen({ port: 0 })` allocates a virtual ephemeral port from
-    // the realm registry (no OS socket), exposed via `address().port` until close.
+    // `listen(0)` allocates a virtual ephemeral registry port exposed by `address()`.
     const register = (port: number): void => {
       this.boundAddress = createVirtualAddressInfo(port);
-      registerPort(port, (request) => {
+      const handler = (request: Request) => {
         if (isWebSocketUpgradeRequest(request)) {
           return new Response('WebSocket upgrade requires the rifty WebSocket bridge transport', {
             status: 400,
@@ -142,7 +140,8 @@ export class HttpServer extends EventEmitter {
         this.handler(req, res);
         this.emit('request', req, res);
         return res.toResponse();
-      });
+      };
+      registerPort(port, handler, portRegistrationOwner(this));
       this.listenForWebSocketUpgrades(port);
     };
     const port = requested === 0 ? allocateEphemeralPort() : requested;
@@ -199,7 +198,7 @@ export class HttpServer extends EventEmitter {
 
   private listenForWebSocketUpgrades(port: number): void {
     if (typeof BroadcastChannel === 'undefined') return;
-    const channel = new BroadcastChannel(portChannelNameForPort(port));
+    const channel = openHostBroadcastChannel(portChannelNameForPort(port));
     channel.addEventListener('message', this.onWebSocketBridgeMessage);
     this.upgradeChannels.push(channel);
   }
@@ -240,10 +239,7 @@ export class HttpServer extends EventEmitter {
       } satisfies WebSocketBridgeFrame);
       return;
     }
-    // No URL-port check: frames arrive only on THIS server's port-keyed
-    // discovery channel — the channel IS the port intent. The remapped preview
-    // client (ADR-0189) keeps the stock URL (host page origin, foreign port);
-    // the consumer ('upgrade' listener / npm ws) validates path/protocols.
+    // Port channel owns remapped guest intent; consumer validates path/protocols (ADR-0189).
     if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
       return;
     }
@@ -264,6 +260,7 @@ export class HttpServer extends EventEmitter {
       url: `http://${url.host}${url.pathname}${url.search}`,
       headers: createWebSocketUpgradeHeaders({
         host: url.host,
+        ...(typeof frame.origin === 'string' ? { origin: frame.origin } : {}),
         key,
         protocols,
       }),
@@ -611,7 +608,7 @@ export function request(
         const response =
           route.kind === 'local'
             ? await dispatchToPort(route.port, new Request(url, init))
-            : await fetch(url, init);
+            : await fetchNodeNetwork(url, init);
         const incoming = new IncomingMessageFromFetch(response);
         cb?.(incoming);
         emitter.emit('response', incoming);
@@ -707,8 +704,9 @@ function openWebSocketClientUpgrade(opts: {
     throw new Error('WebSocket client upgrade missing a valid Sec-WebSocket-Key header');
   }
   const protocols = splitHeaderList(headerValue(opts.headers, 'sec-websocket-protocol'));
-  const channels = [...new Set([channelNameFor(wsUrl), portChannelNameFor(wsUrl)])].map(
-    (name) => new BroadcastChannel(name),
+  const origin = headerValue(opts.headers, 'origin');
+  const channels = [...new Set([channelNameFor(wsUrl), portChannelNameFor(wsUrl)])].map((name) =>
+    openHostBroadcastChannel(name),
   );
   let activeChannel: BroadcastChannel | null = null;
   let opened = false;
@@ -793,6 +791,7 @@ function openWebSocketClientUpgrade(opts: {
     type: 'open',
     cid,
     url: wsUrl,
+    ...(origin === undefined ? {} : { origin }),
     key,
     protocols,
   });
@@ -994,16 +993,3 @@ export function get(
   req.end();
   return req;
 }
-
-const http = {
-  createServer,
-  request,
-  get,
-  Server: HttpServer,
-  IncomingMessage,
-  ServerResponse,
-  STATUS_CODES,
-  METHODS,
-  maxHeaderSize,
-};
-export default http;

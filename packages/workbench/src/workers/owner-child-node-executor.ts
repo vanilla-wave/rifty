@@ -4,7 +4,6 @@
  * stdout/stderr bytes. Physical project roots stay in bootstrap config.
  */
 import {
-  type KernelEntryCapabilityPorts,
   type ProcessTerminalEventSource,
   type SpawnWorkerSpec,
   globalProcessManager,
@@ -13,6 +12,7 @@ import {
 import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
 import {
   type NodeEntryLaunch,
+  type NodeEntryRuntimeBinding,
   buildNodeEntryWorkerEntry,
 } from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { InstallRuntimeJsExecSyncOptions } from '@riftydev/runtime-js/ipc/exec-sync-handler';
@@ -23,14 +23,11 @@ import {
   type ForegroundWritable,
   runForegroundChild,
 } from '../glue/run-foreground-child.ts';
-import { toOwnerProjectPath } from '../workbench/project-file-boundary.ts';
+import { type GuestRoots, guestRootsLayout, resolveGuestPath } from './guest-layout.ts';
 import {
   type ReserveOwnerChildAdmission,
-  abortOwnerChildAdmissionAfterSpawn,
-  abortOwnerChildAdmissionBeforeSpawn,
-  attachOwnerChildCapabilities,
-  commitOwnerChildAdmission,
   observeOwnerChildExit,
+  projectOwnerChildRuntimeBindings,
 } from './owner-child-admission.ts';
 
 type OwnerExecSyncRunner = NonNullable<InstallRuntimeJsExecSyncOptions['runWorker']>;
@@ -84,35 +81,40 @@ function concatChunks(chunks: readonly Uint8Array[]): Uint8Array {
 export function createOwnerExecSyncRunner(
   nodeEntryUrl: string,
   nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
-  getActiveProjectRoot: () => string,
+  getActiveGuestRoots: () => GuestRoots,
   reserveAdmission: ReserveOwnerChildAdmission,
   spawn: OwnerExecSyncSpawn = spawnOwnerExecSyncChild,
 ): OwnerExecSyncRunner {
   return async (spec, context) => {
-    const remoteFsRoot = getActiveProjectRoot();
-    const reservation = await reserveAdmission(toOwnerProjectPath(remoteFsRoot, spec.entryPath));
+    const guestRoots = getActiveGuestRoots();
+    const entry = resolveGuestPath(guestRootsLayout(guestRoots), spec.entryPath);
+    if (entry.kind !== 'mount') throw new TypeError('execSync entry is outside the guest mounts');
+    const reservation = await reserveAdmission(entry.owner);
     let child: OwnerExecSyncChild;
     try {
+      const projectedBindings = projectOwnerChildRuntimeBindings(
+        reservation.snapshot.runtimeBindings,
+        guestRoots,
+      );
       child = spawn(
         {
-          entry: attachOwnerChildCapabilities(
-            buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
-              kind: 'program',
-              bin: false,
-              remoteFs: true,
-              remoteFsRoot,
-              nodeServe: false,
-            }),
-            reservation.snapshot.capabilityPorts,
-          ),
+          entry: buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
+            kind: 'program',
+            bin: false,
+            remoteFs: true,
+            ...guestRoots,
+            nodeServe: false,
+            runtimeBindings: projectedBindings,
+          }),
           argv: spec.argv,
+          stdinMode: 'pull',
           env: { ...spec.env },
           cwd: spec.cwd,
         },
         context?.parentPid ?? 1,
       );
     } catch (error) {
-      abortOwnerChildAdmissionBeforeSpawn(reservation, error);
+      reservation.abortBeforeSpawn(error);
       throw error;
     }
     let resolvePhysicalExit = (): void => {};
@@ -158,7 +160,7 @@ export function createOwnerExecSyncRunner(
       child.stderr.on('data', (chunk) => {
         if (chunk instanceof Uint8Array) stderr.push(chunk);
       });
-      commitOwnerChildAdmission(reservation, physicalExit);
+      reservation.commit();
     } catch (error) {
       let failure = error;
       // SIGTERM starts the kernel's ordered teardown; the worker is gone only
@@ -173,7 +175,7 @@ export function createOwnerExecSyncRunner(
           'execSync child setup and termination failed',
         );
       }
-      await abortOwnerChildAdmissionAfterSpawn(reservation, failure, termination);
+      await reservation.abortAfterChildSettlement(failure, termination);
       throw failure;
     }
     return result;
@@ -200,14 +202,17 @@ export function buildNodeChildSpawnSpec(
   cols = 80,
   rows = 24,
   previewScope?: string,
-  remoteFsRoot?: string,
-  capabilityPorts?: KernelEntryCapabilityPorts,
+  guestRoots?: GuestRoots,
+  runtimeBindings: readonly NodeEntryRuntimeBinding[] = [],
+  stdoutIsFile?: boolean,
 ): SpawnWorkerSpec {
+  const projectedBindings = projectOwnerChildRuntimeBindings(runtimeBindings, guestRoots);
   const common = {
     remoteFs: true,
-    ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
+    ...(guestRoots ?? {}),
     ...(previewScope === undefined ? {} : { previewScope }),
-    terminal: childTerminalBootstrap({ isTTY: tty, cols, rows }),
+    terminal: childTerminalBootstrap({ isTTY: tty, cols, rows, stdoutIsFile }),
+    runtimeBindings: projectedBindings,
   } as const;
   const launch: NodeEntryLaunch =
     typeof execution === 'string'
@@ -226,10 +231,8 @@ export function buildNodeChildSpawnSpec(
         };
   const workerEntry = buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, launch);
   return {
-    entry:
-      capabilityPorts === undefined
-        ? workerEntry
-        : attachOwnerChildCapabilities(workerEntry, capabilityPorts),
+    stdinMode: 'pull',
+    entry: workerEntry,
     argv:
       typeof execution === 'string'
         ? ['rifty', execution, ...args]
@@ -260,8 +263,8 @@ export interface NodeRunHooks {
   readonly sid: string;
   /** Owner-minted provenance bound to this launch, never guest env. */
   readonly previewScope?: string;
-  /** Host-only physical root behind the child process's public `/` namespace. */
-  readonly remoteFsRoot?: string;
+  /** Host-only project roots behind the child process's guest namespace. */
+  readonly guestRoots?: GuestRoots;
   readonly onListening: (sid: string, pid: number, ports: number[], previewScope?: string) => void;
   readonly onExit: (sid: string) => void;
 }
@@ -307,12 +310,13 @@ export function createOwnerChildNodeExecutor(
           ctx.cols ?? 80,
           ctx.rows ?? 24,
           hooks.previewScope,
-          hooks.remoteFsRoot,
-          reservation.snapshot.capabilityPorts,
+          hooks.guestRoots,
+          reservation.snapshot.runtimeBindings,
+          ctx.stdoutIsFile,
         ),
       );
     } catch (error) {
-      abortOwnerChildAdmissionBeforeSpawn(reservation, error);
+      reservation.abortBeforeSpawn(error);
       throw error;
     }
     const physicalExit = observeOwnerChildExit(handle);
@@ -325,14 +329,14 @@ export function createOwnerChildNodeExecutor(
           hooks.onListening(hooks.sid, control.pid, control.ports, control.previewScope),
         onExit: () => hooks.onExit(hooks.sid),
       });
-      commitOwnerChildAdmission(reservation, physicalExit);
+      reservation.commit();
     } catch (error) {
       try {
         handle.kill('SIGTERM');
       } catch {
         // Exact physical exit observation below remains authoritative.
       }
-      await abortOwnerChildAdmissionAfterSpawn(reservation, error, physicalExit);
+      await reservation.abortAfterChildSettlement(error, physicalExit);
       throw error;
     }
     return running;

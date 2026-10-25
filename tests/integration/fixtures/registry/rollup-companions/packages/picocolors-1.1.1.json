@@ -1,0 +1,40 @@
+{
+  "bugs": { "url": "https://github.com/alexeyraspopov/picocolors/issues" },
+  "dist": {
+    "shasum": "3d321af3eab939b083c8f929a1d12cda81c26b6b",
+    "tarball": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+    "fileCount": 7,
+    "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==",
+    "signatures": [
+      {
+        "sig": "MEUCIQD1ga0Ghvdul0FY1X3tDEHWjLF2ImSjnhKBBPgfOq1CvAIgSrqciFjzA8uVTKSuA6NKBADmO/cxtGcYXQhHjD0U1Nw=",
+        "keyid": "SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA"
+      }
+    ],
+    "unpackedSize": 6373
+  },
+  "main": "./picocolors.js",
+  "name": "picocolors",
+  "types": "./picocolors.d.ts",
+  "author": { "name": "Alexey Raspopov" },
+  "browser": { "./picocolors.js": "./picocolors.browser.js" },
+  "gitHead": "6f0a4638348ed20633d623ee973f9c9a96f65104",
+  "license": "ISC",
+  "_npmUser": { "name": "alexeyraspopov", "email": "oleksii.raspopov@gmail.com" },
+  "homepage": "https://github.com/alexeyraspopov/picocolors#readme",
+  "keywords": ["terminal", "colors", "formatting", "cli", "console"],
+  "repository": { "url": "git+https://github.com/alexeyraspopov/picocolors.git", "type": "git" },
+  "_npmVersion": "10.8.3",
+  "description": "The tiniest and the fastest library for terminal output formatting with ANSI colors",
+  "directories": {},
+  "maintainers": [{ "name": "alexeyraspopov", "email": "oleksii.raspopov@gmail.com" }],
+  "sideEffects": false,
+  "_nodeVersion": "22.9.0",
+  "_hasShrinkwrap": false,
+  "_npmOperationalInternal": {
+    "tmp": "tmp/picocolors_1.1.1_1729102803686_0.7395028803649382",
+    "host": "s3://npm-registry-packages"
+  },
+  "_id": "picocolors@1.1.1",
+  "version": "1.1.1"
+}

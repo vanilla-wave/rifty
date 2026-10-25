@@ -1,6 +1,6 @@
 #!/usr/bin/env node
+import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import {
   cp,
   lstat,
@@ -17,32 +17,76 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
-import { gunzip } from 'node:zlib';
 import ts from 'typescript';
+import {
+  CLIENT_BUNDLE_BUDGETS,
+  assertClientBundleBudgets,
+} from '../../tools/checks/client-bundle-budget.mjs';
+import { provePackedArchive } from './agent-archive-browser-proof.mjs';
+import { browserRegistryPackages } from './browser-registry-fixture.mjs';
+import { provePackedCompilerLoading } from './client-bundle-browser-proof.mjs';
+import {
+  closeServer,
+  findInstalledPackage,
+  installedClosure,
+  listen,
+  packInstalledPackages,
+  readJson,
+  registryEntries,
+  startInstalledRegistry,
+} from './installed-registry.mjs';
+import { provePackedAgent } from './no-coi-agent-browser-proof.mjs';
+import { provePackedNoCoiChildren } from './no-coi-child-browser-proof.mjs';
+import { proveNoCoiEsbuildGraph } from './no-coi-esbuild-graph-proof.mjs';
+import { provePackedInstallLoading } from './no-coi-install-browser-proof.mjs';
+import { provePackedNoCoiPiAgent } from './no-coi-pi-agent-browser-proof.mjs';
+import { provePackedNoCoiSnapshots } from './no-coi-snapshot-browser-proof.mjs';
+import { provePackedVmSelection } from './no-coi-vm-browser-proof.mjs';
+import { provePackedReferenceHost } from './reference-host-browser-proof.mjs';
+import { proveSdkPackaging } from './sdk-packaging-proof.mjs';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
-import { installedPackagePackPlan } from './workbench-packed-consumer-package-manager.mjs';
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
+import { provePackedScopedPreview } from './workbench-scoped-preview-proof.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const fixtureRoot = resolve(repoRoot, 'tests/integration/fixtures/workbench-vite-consumer');
+const surfaceOnly = process.argv.includes('--surface-only');
+const checkBudgets = process.argv.includes('--check-budgets');
+if (checkBudgets && !surfaceOnly) throw new Error('--check-budgets requires --surface-only');
+const fixtureRoot = resolve(
+  repoRoot,
+  surfaceOnly
+    ? 'tests/integration/fixtures/no-coi-packed-toolchain-consumer'
+    : 'tests/integration/fixtures/workbench-vite-consumer',
+);
 const workbenchRoot = resolve(repoRoot, 'packages/workbench');
-const viteSnapshot = resolve(
-  repoRoot,
-  'apps/playground/public/snapshots/vite-node-modules.json.gz',
-);
-const esbuildWasmManifest = resolve(
-  repoRoot,
-  'tools/shadow-registry/node_modules/esbuild-wasm/package.json',
-);
 const keepTemp = process.argv.includes('--keep');
-const unknownArguments = process.argv.slice(2).filter((argument) => argument !== '--keep');
+const archiveModelIndex = process.argv.indexOf('--archive-model-config');
+const archiveModelPath = archiveModelIndex < 0 ? undefined : process.argv[archiveModelIndex + 1];
+if (archiveModelIndex >= 0 && !archiveModelPath)
+  throw new Error('--archive-model-config requires a JSON config path');
+const archiveEndpoint = archiveModelPath
+  ? JSON.parse(await readFile(resolve(repoRoot, archiveModelPath), 'utf8')).endpoint
+  : undefined;
+const archiveModel = archiveEndpoint
+  ? { baseUrl: archiveEndpoint.baseUrl, model: archiveEndpoint.id }
+  : undefined;
+const unknownArguments = process.argv
+  .slice(2)
+  .filter(
+    (argument) =>
+      ![
+        '--keep',
+        '--surface-only',
+        '--check-budgets',
+        '--archive-model-config',
+        archiveModelPath,
+      ].includes(argument),
+  );
 if (unknownArguments.length > 0) {
   throw new Error(`Unknown packed-consumer arguments: ${unknownArguments.join(', ')}`);
 }
 
 const maxCapturedOutput = 1024 * 1024;
-const gunzipAsync = promisify(gunzip);
 const resources = createResourceCleanup({
   exit: (code) => process.exit(code),
   reportError: (error) => {
@@ -134,27 +178,6 @@ function run(command, args, options = {}) {
   });
 }
 
-async function readJson(path) {
-  return JSON.parse(await readFile(path, 'utf8'));
-}
-
-async function findInstalledPackage(name, startingDirectory) {
-  let directory = startingDirectory;
-  while (true) {
-    const candidate = resolve(directory, 'node_modules', ...name.split('/'));
-    try {
-      return await realpath(candidate);
-    } catch (error) {
-      if (error?.code !== 'ENOENT') throw error;
-    }
-    const parent = dirname(directory);
-    if (parent === directory) {
-      throw new Error(`Cannot resolve installed package ${name} from ${startingDirectory}`);
-    }
-    directory = parent;
-  }
-}
-
 async function workspacePackages() {
   const roots = [resolve(repoRoot, 'packages'), resolve(repoRoot, 'tools')];
   const packages = new Map();
@@ -181,7 +204,8 @@ function workspaceDependencyNames(manifest) {
 
 async function packedDependencyClosure() {
   const packages = await workspacePackages();
-  const pending = ['@riftydev/workbench'];
+  const pending = ['@riftydev/sdk', '@riftydev/workbench'];
+  if (!surfaceOnly) pending.push('@riftydev/agent');
   const closure = new Map();
   while (pending.length > 0) {
     const name = pending.pop();
@@ -200,23 +224,6 @@ function externalDependencyNames(manifest) {
   return Object.entries(manifest.dependencies ?? {})
     .filter(([, specifier]) => typeof specifier !== 'string' || !specifier.startsWith('workspace:'))
     .map(([name]) => name);
-}
-
-function installedDependencyNames(manifest) {
-  return [
-    ...new Set([
-      ...Object.keys(manifest.dependencies ?? {}),
-      ...Object.keys(manifest.optionalDependencies ?? {}),
-      ...Object.keys(manifest.peerDependencies ?? {}),
-    ]),
-  ];
-}
-
-function isOptionalInstalledDependency(manifest, name) {
-  return (
-    Object.hasOwn(manifest.optionalDependencies ?? {}, name) ||
-    manifest.peerDependenciesMeta?.[name]?.optional === true
-  );
 }
 
 async function resolveFixtureExternal(name, version, contexts) {
@@ -260,29 +267,7 @@ async function externalDependencyClosure(workspaceClosure) {
     pending.push(await resolveFixtureExternal(name, version, fixtureContexts));
   }
 
-  const closure = new Map();
-  while (pending.length > 0) {
-    const dir = pending.pop();
-    if (dir === undefined) continue;
-    const manifest = await readJson(resolve(dir, 'package.json'));
-    const existing = closure.get(manifest.name);
-    if (existing !== undefined) {
-      if (existing.manifest.version !== manifest.version) {
-        throw new Error(
-          `Offline consumer requires two ${manifest.name} versions: ${existing.manifest.version}, ${manifest.version}`,
-        );
-      }
-      continue;
-    }
-    closure.set(manifest.name, { dir, manifest });
-    for (const name of installedDependencyNames(manifest)) {
-      try {
-        pending.push(await findInstalledPackage(name, dir));
-      } catch (error) {
-        if (!isOptionalInstalledDependency(manifest, name)) throw error;
-      }
-    }
-  }
+  const closure = await installedClosure(pending);
   return [...closure.entries()].sort(([left], [right]) => left.localeCompare(right));
 }
 
@@ -296,10 +281,11 @@ async function assertExtractedWorkbench() {
     './node-worker',
     './dev-server-worker',
     './typescript-worker',
+    './no-coi-toolchain-worker',
   ];
   const actualExports = Object.keys(manifest.exports ?? {}).sort();
   if (JSON.stringify(actualExports) !== JSON.stringify([...expectedExports].sort())) {
-    throw new Error(`Packed Workbench requires seven sealed exports: ${actualExports.join(', ')}`);
+    throw new Error(`Packed Workbench requires eight sealed exports: ${actualExports.join(', ')}`);
   }
   const missingPaths = [];
   for (const target of Object.values(manifest.exports)) {
@@ -332,322 +318,6 @@ async function packPackages(packages, tarballRoot) {
   return tarballs;
 }
 
-async function packInstalledPackages(packages, tarballRoot, npmCacheRoot) {
-  const tarballs = new Map();
-  const stagingRoot = resolve(
-    dirname(tarballRoot),
-    `${basename(tarballRoot)}-installed-package-staging`,
-  );
-  await mkdir(stagingRoot, { recursive: true });
-  let packageIndex = 0;
-  for (const [name, packageEntry] of packages) {
-    const before = new Set(await readdir(tarballRoot));
-    const packPlan = installedPackagePackPlan(
-      packageEntry.dir,
-      resolve(stagingRoot, String(packageIndex)),
-      tarballRoot,
-      npmCacheRoot,
-    );
-    packageIndex += 1;
-    await cp(packPlan.copy.source, packPlan.copy.destination, packPlan.copy.options);
-    await run(packPlan.command.command, packPlan.command.args, packPlan.command.options);
-    const created = (await readdir(tarballRoot)).filter(
-      (entry) => entry.endsWith('.tgz') && !before.has(entry),
-    );
-    if (created.length !== 1) {
-      throw new Error(`Packing ${name} created ${created.length} tarballs: ${created.join(', ')}`);
-    }
-    tarballs.set(name, resolve(tarballRoot, created[0]));
-  }
-  return tarballs;
-}
-
-function snapshotPackagePath(path) {
-  const segments = path.split('/');
-  if (segments[0] === '.bin') return null;
-  if (segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..')) {
-    throw new Error(`Invalid committed snapshot path: ${path}`);
-  }
-  if (segments[0]?.startsWith('@')) {
-    if (segments.length < 3) throw new Error(`Invalid scoped snapshot package path: ${path}`);
-    return {
-      name: `${segments[0]}/${segments[1]}`,
-      path: segments.slice(2).join('/'),
-    };
-  }
-  if (segments.length < 2) throw new Error(`Invalid committed snapshot package path: ${path}`);
-  return { name: segments[0], path: segments.slice(1).join('/') };
-}
-
-function lockfilePackageName(path) {
-  const prefix = 'node_modules/';
-  if (!path.startsWith(prefix)) throw new Error(`Unsupported snapshot lock path: ${path}`);
-  const segments = path.slice(prefix.length).split('/');
-  if (segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..')) {
-    throw new Error(`Packed consumer snapshot requires a flat package tree: ${path}`);
-  }
-  if (segments[0]?.startsWith('@') && segments.length === 2) {
-    return `${segments[0]}/${segments[1]}`;
-  }
-  if (segments.length === 1) return segments[0];
-  throw new Error(`Packed consumer snapshot requires a flat package tree: ${path}`);
-}
-
-async function materializeSnapshotPackages(snapshotRoot) {
-  const compressed = await readFile(viteSnapshot);
-  const snapshot = JSON.parse(String(await gunzipAsync(compressed)));
-  if (snapshot.version !== 3 || snapshot.templateId !== 'vite') {
-    throw new Error('Packed consumer requires the committed Vite snapshot v3');
-  }
-  const lockfile = JSON.parse(snapshot.lockfile);
-  const expected = new Map();
-  for (const [path, entry] of Object.entries(lockfile.packages ?? {})) {
-    if (path.length === 0) continue;
-    const name = lockfilePackageName(path);
-    if (expected.has(name)) {
-      throw new Error(`Packed consumer snapshot contains duplicate ${name}`);
-    }
-    expected.set(name, { version: entry.version, integrity: entry.integrity });
-  }
-
-  const manifestCandidates = new Map();
-  for (const file of snapshot.nodeModules?.files ?? []) {
-    const packagePath = snapshotPackagePath(file.path);
-    if (packagePath === null || !expected.has(packagePath.name)) continue;
-    if (file.encoding !== 'base64' || typeof file.content !== 'string') {
-      throw new Error(`Unsupported committed snapshot encoding for ${file.path}`);
-    }
-    const packageRoot = resolve(snapshotRoot, ...packagePath.name.split('/'));
-    const target = resolve(packageRoot, packagePath.path);
-    if (!target.startsWith(`${packageRoot}/`)) {
-      throw new Error(`Committed snapshot path escapes ${packagePath.name}: ${file.path}`);
-    }
-    await mkdir(dirname(target), { recursive: true });
-    await writeFile(target, Buffer.from(file.content, 'base64'));
-    if (packagePath.path.endsWith('package.json')) {
-      const candidates = manifestCandidates.get(packagePath.name) ?? [];
-      candidates.push(target);
-      manifestCandidates.set(packagePath.name, candidates);
-    }
-  }
-
-  const packages = new Map();
-  for (const [name, source] of [...expected.entries()].sort(([left], [right]) =>
-    left.localeCompare(right),
-  )) {
-    let matched;
-    for (const candidate of manifestCandidates.get(name) ?? []) {
-      const manifest = await readJson(candidate);
-      if (manifest.name === name && manifest.version === source.version) {
-        matched = { dir: dirname(candidate), manifest };
-        break;
-      }
-    }
-    if (matched === undefined) {
-      throw new Error(`Committed snapshot package mismatch for ${name}@${String(source.version)}`);
-    }
-    packages.set(name, matched);
-  }
-  return packages;
-}
-
-function tarballIntegrity(bytes) {
-  return `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
-}
-
-async function browserRegistryPackages(options) {
-  const snapshotPackages = await materializeSnapshotPackages(options.packageRoot);
-  const assetManifest = await readJson(esbuildWasmManifest);
-  if (assetManifest.name !== 'esbuild-wasm' || assetManifest.version !== '0.28.0') {
-    throw new Error(
-      `Packed consumer registry asset drifted: ${String(assetManifest.name)}@${String(assetManifest.version)}`,
-    );
-  }
-  snapshotPackages.set('esbuild-wasm', {
-    dir: dirname(esbuildWasmManifest),
-    manifest: assetManifest,
-  });
-  const tarballs = await packInstalledPackages(
-    [...snapshotPackages.entries()],
-    options.tarballRoot,
-    options.npmCacheRoot,
-  );
-  const packages = new Map();
-  for (const [name, packageEntry] of snapshotPackages) {
-    const tarball = tarballs.get(name);
-    if (tarball === undefined) throw new Error(`Missing browser-registry tarball for ${name}`);
-    const bytes = await readFile(tarball);
-    packages.set(name, {
-      name,
-      manifest: packageEntry.manifest,
-      tarball,
-      integrity: tarballIntegrity(bytes),
-      shasum: createHash('sha1').update(bytes).digest('hex'),
-    });
-  }
-  return packages;
-}
-
-function listen(server, port = 0) {
-  return new Promise((resolveListen, rejectListen) => {
-    const onError = (error) => {
-      server.off('listening', onListening);
-      rejectListen(error);
-    };
-    const onListening = () => {
-      server.off('error', onError);
-      resolveListen();
-    };
-    server.once('error', onError);
-    server.once('listening', onListening);
-    server.listen(port, '127.0.0.1');
-  });
-}
-
-function closeServer(server) {
-  return new Promise((resolveClose, rejectClose) => {
-    server.close((error) => (error === undefined ? resolveClose() : rejectClose(error)));
-  });
-}
-
-function sendResponse(request, response, status, headers, body) {
-  response.writeHead(status, {
-    'Access-Control-Allow-Origin': '*',
-    'Cross-Origin-Resource-Policy': 'cross-origin',
-    ...headers,
-  });
-  if (request.method === 'HEAD' || body === undefined) response.end();
-  else response.end(body);
-}
-
-async function startBrowserRegistry(packages) {
-  const requests = [];
-  const responses = [];
-  let origin = '';
-  const tarballRoutes = new Map();
-  const server = createServer((request, response) => {
-    void (async () => {
-      const requestUrl = new URL(request.url ?? '/', origin || 'http://127.0.0.1');
-      requests.push(`${request.method ?? 'GET'} ${requestUrl.pathname}`);
-      if (request.method === 'OPTIONS') {
-        sendResponse(request, response, 204, { 'Access-Control-Allow-Methods': 'GET, HEAD' });
-        return;
-      }
-      if (request.method !== 'GET' && request.method !== 'HEAD') {
-        sendResponse(request, response, 405, { Allow: 'GET, HEAD' });
-        return;
-      }
-
-      const tarballPackage = tarballRoutes.get(requestUrl.pathname);
-      if (tarballPackage !== undefined) {
-        const bytes = await readFile(tarballPackage.tarball);
-        responses.push({
-          kind: 'tarball',
-          packageName: tarballPackage.name,
-          status: 200,
-        });
-        sendResponse(
-          request,
-          response,
-          200,
-          {
-            'Content-Type': 'application/octet-stream',
-            'Content-Length': String(bytes.byteLength),
-          },
-          bytes,
-        );
-        return;
-      }
-
-      let name;
-      try {
-        name = decodeURIComponent(requestUrl.pathname.slice(1));
-      } catch {
-        sendResponse(request, response, 400, { 'Content-Type': 'application/json' }, '{}');
-        return;
-      }
-      const packageEntry = packages.get(name);
-      if (packageEntry === undefined) {
-        sendResponse(request, response, 404, { 'Content-Type': 'application/json' }, '{}');
-        return;
-      }
-      const version = packageEntry.manifest.version;
-      const tarballPath = [...tarballRoutes.entries()].find(
-        ([, entry]) => entry === packageEntry,
-      )?.[0];
-      if (tarballPath === undefined) throw new Error(`Missing registry tarball route for ${name}`);
-      const manifest = {
-        ...packageEntry.manifest,
-        dist: {
-          tarball: `${origin}${tarballPath}`,
-          integrity: packageEntry.integrity,
-          shasum: packageEntry.shasum,
-        },
-      };
-      const body = Buffer.from(
-        JSON.stringify({
-          _id: name,
-          name,
-          'dist-tags': { latest: version },
-          versions: { [version]: manifest },
-        }),
-      );
-      responses.push({ kind: 'packument', packageName: name, status: 200 });
-      sendResponse(
-        request,
-        response,
-        200,
-        { 'Content-Type': 'application/json', 'Content-Length': String(body.byteLength) },
-        body,
-      );
-    })().catch((error) => {
-      if (!response.headersSent) {
-        sendResponse(
-          request,
-          response,
-          500,
-          { 'Content-Type': 'text/plain' },
-          Buffer.from(error instanceof Error ? error.message : String(error)),
-        );
-      } else {
-        response.destroy(error instanceof Error ? error : new Error(String(error)));
-      }
-    });
-  });
-  const listening = listen(server);
-  const registryResource = resources.register(async () => {
-    await withDeadline(
-      listening.catch(() => {}),
-      5_000,
-      'Packed consumer registry did not settle before cleanup',
-    );
-    if (!server.listening) return;
-    server.closeAllConnections();
-    await withDeadline(
-      closeServer(server),
-      5_000,
-      'Packed consumer registry did not close during cleanup',
-    );
-  });
-  await listening;
-  const address = server.address();
-  if (address === null || typeof address === 'string') {
-    throw new Error('Packed consumer registry did not bind a TCP port');
-  }
-  origin = `http://127.0.0.1:${address.port}`;
-  for (const [name, packageEntry] of packages) {
-    const tarballPath = `/-/tarballs/${encodeURIComponent(name)}-${packageEntry.manifest.version}.tgz`;
-    tarballRoutes.set(tarballPath, packageEntry);
-  }
-  server.unref();
-  return {
-    origin,
-    requests,
-    responses,
-    close: () => registryResource.cleanup(),
-  };
-}
-
 function delay(milliseconds) {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 }
@@ -670,6 +340,15 @@ async function runCleanups(label, cleanups) {
   }
   if (errors.length === 1) throw errors[0];
   if (errors.length > 1) throw new AggregateError(errors, label);
+}
+
+function startBrowserRegistry(packages) {
+  return startInstalledRegistry(packages, {
+    registerClose: (close) =>
+      resources.register(() =>
+        withDeadline(close(), 5_000, 'Packed consumer registry did not close during cleanup'),
+      ),
+  });
 }
 
 async function reserveLoopbackPort() {
@@ -858,14 +537,15 @@ async function assertFirstPartyImportsStayExternal(installedRoot, manifest) {
   assertExactFirstPartyImports(expected, actual);
 }
 
-async function assertTarballInstall(consumerRoot, tarballs) {
+async function assertTarballInstall(consumerRoot, tarballs, installedRegistry) {
   const manifest = await readJson(resolve(consumerRoot, 'package.json'));
   const invalidSpecs = Object.entries({
     ...(manifest.dependencies ?? {}),
     ...(manifest.devDependencies ?? {}),
   }).filter(
-    ([, specifier]) =>
-      typeof specifier !== 'string' || !/^file:\.\.\/tarballs\/[^/]+\.tgz$/u.test(specifier),
+    ([name, specifier]) =>
+      typeof specifier !== 'string' ||
+      (name.startsWith('@riftydev/') && !/^file:\.\.\/tarballs\/[^/]+\.tgz$/u.test(specifier)),
   );
   if (invalidSpecs.length > 0) {
     throw new Error(`Non-tarball consumer dependencies: ${JSON.stringify(invalidSpecs)}`);
@@ -889,6 +569,12 @@ async function assertTarballInstall(consumerRoot, tarballs) {
     if (workspaceSpecs.length > 0) {
       throw new Error(`Packed ${name} retained workspace dependencies`);
     }
+    if (
+      name.startsWith('@riftydev/') &&
+      (await stat(resolve(installedRoot, 'src')).catch(() => null)) !== null
+    ) {
+      throw new Error(`Packed ${name} unexpectedly shipped workspace sources`);
+    }
   }
 
   const installedWorkbenchRoot = resolve(nodeModulesRoot, '@riftydev/workbench');
@@ -900,9 +586,6 @@ async function assertTarballInstall(consumerRoot, tarballs) {
     }
     await stat(resolve(installedWorkbenchRoot, target));
   }
-  if ((await stat(resolve(installedWorkbenchRoot, 'src')).catch(() => null)) !== null) {
-    throw new Error('Packed Workbench unexpectedly shipped workspace sources');
-  }
   await assertFirstPartyImportsStayExternal(installedWorkbenchRoot, installedWorkbench);
 
   const lockfile = await readJson(resolve(consumerRoot, 'package-lock.json'));
@@ -910,6 +593,10 @@ async function assertTarballInstall(consumerRoot, tarballs) {
     ([packagePath, packageEntry]) => {
       if (packageEntry?.link === true) return [[packagePath, 'link']];
       const resolved = packageEntry?.resolved;
+      if (typeof resolved === 'string' && /^https?:/u.test(resolved)) {
+        installedRegistry.assertResolution(packageEntry);
+        return [];
+      }
       return typeof resolved === 'string' && /^(?:https?:|link:|workspace:)/u.test(resolved)
         ? [[packagePath, resolved]]
         : [];
@@ -962,6 +649,22 @@ function assertHmrProof(proof) {
 
 async function runChromiumJourney(consumerRoot, registryPackages) {
   const registry = await startBrowserRegistry(registryPackages);
+  await run('node', ['produce-snapshot.mjs', registry.origin], {
+    cwd: consumerRoot,
+    timeoutMs: 120_000,
+  });
+  await run('node', ['produce-vite-snapshot.mjs', registry.origin], {
+    cwd: consumerRoot,
+    // Quality 11 spends ~40s on Vite encoding alone; leave headroom for slower CI.
+    timeoutMs: 300_000,
+  });
+  await provePackedNoCoiSnapshots(consumerRoot);
+  await provePackedNoCoiPiAgent(consumerRoot);
+  await provePackedReferenceHost(consumerRoot, registry.origin);
+  await run('node', ['prepare-orphan-payload.mjs'], {
+    cwd: consumerRoot,
+    timeoutMs: 120_000,
+  });
   const previewPort = await reserveLoopbackPort();
   const previewOrigin = `http://127.0.0.1:${previewPort}`;
   const preview = startProcess(
@@ -993,6 +696,7 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
       }
     });
     browser = await browserLaunch;
+    await provePackedArchive(browser, previewOrigin, archiveModel);
     const context = await browser.newContext({ serviceWorkers: 'allow' });
     const blockedUrls = [];
     const observedUrls = [];
@@ -1010,16 +714,50 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
 
     const page = await context.newPage();
     const pageErrors = [];
+    const pageConsole = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
+    page.on('console', (message) => pageConsole.push(`[${message.type()}] ${message.text()}`));
     await page.goto(previewOrigin, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-    await page.waitForFunction(
-      () => document.querySelector('#status')?.textContent !== 'opening packed Workbench',
-      undefined,
-      { timeout: 300_000 },
-    );
+    let bootWaitError = null;
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('#status')?.textContent !== 'opening packed Workbench',
+        undefined,
+        { timeout: 300_000 },
+      );
+    } catch (error) {
+      bootWaitError = error;
+    }
     const status = await page.locator('#status').textContent();
-    if (status !== 'ready') {
-      throw new Error(`Packed Workbench Chromium boot failed: ${String(status)}`);
+    if (bootWaitError !== null || status !== 'ready') {
+      const failure = await page.evaluate(async (bootTimedOut) => {
+        const seen = new WeakSet();
+        const serialize = (value) => {
+          if (!(value instanceof Error)) return { thrown: String(value) };
+          if (seen.has(value)) return { name: value.name, message: '[cycle]' };
+          seen.add(value);
+          return {
+            name: value.name,
+            message: value.message,
+            stack: value.stack,
+            ...(value instanceof AggregateError
+              ? { errors: Array.from(value.errors, serialize) }
+              : {}),
+            ...(value.cause === undefined ? {} : { cause: serialize(value.cause) }),
+          };
+        };
+        if (bootTimedOut) return { pending: true };
+        try {
+          await window.__RIFTY_PACKED_WORKBENCH__;
+          return null;
+        } catch (error) {
+          return serialize(error);
+        }
+      }, bootWaitError !== null);
+      const diagnostics = await page.evaluate(() => window.__RIFTY_PACKED_WORKBENCH_DIAGNOSTICS__);
+      throw new Error(
+        `Packed Workbench Chromium boot failed: ${String(status)}\n${JSON.stringify(failure)}\nDiagnostics:\n${JSON.stringify(diagnostics)}\nPage errors:\n${pageErrors.join('\n')}\nPage console:\n${pageConsole.join('\n')}\nObserved URLs:\n${observedUrls.join('\n')}\nBlocked URLs:\n${blockedUrls.join('\n')}`,
+      );
     }
     const acceptance = await page.evaluate(async () => {
       const opened = await window.__RIFTY_PACKED_WORKBENCH__;
@@ -1027,6 +765,8 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
         previewUrl: opened.previewUrl,
         sqliteProof: opened.sqliteProof,
         companionLoaded: opened.companionLoaded,
+        sdkLoaded: opened.sdkLoaded,
+        noCoiToolchainWorkerUrl: opened.noCoiToolchainWorkerUrl,
         typescriptWorkerUrl: opened.typescriptWorkerUrl,
         hostWasm: opened.hostWasm,
         crossOriginIsolated: globalThis.crossOriginIsolated,
@@ -1042,12 +782,21 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     if (!acceptance.companionLoaded) {
       throw new Error('Packed Workbench playground export did not load');
     }
+    if (!acceptance.sdkLoaded) {
+      throw new Error('Packed SDK root export did not load');
+    }
     if (!acceptance.sqliteProof.includes('packed-sqlite-42')) {
       throw new Error(`Packed Workbench sqlite proof was lost: ${acceptance.sqliteProof}`);
     }
-    const hostWasmUrls = [assertHostAsset(acceptance.hostWasm.sqlite, previewOrigin, 'sql.js')];
+    const hostWasmUrls = [
+      assertHostAsset(acceptance.hostWasm.quickjs, previewOrigin, 'QuickJS'),
+      assertHostAsset(acceptance.hostWasm.sqlite, previewOrigin, 'sql.js'),
+    ];
     if (new URL(acceptance.typescriptWorkerUrl, previewOrigin).origin !== previewOrigin) {
       throw new Error('Packed Workbench TypeScript worker did not resolve from the packed host');
+    }
+    if (new URL(acceptance.noCoiToolchainWorkerUrl, previewOrigin).origin !== previewOrigin) {
+      throw new Error('Packed no-COI toolchain Worker did not resolve from the packed host');
     }
     for (const assetUrl of hostWasmUrls) {
       if (!observedUrls.includes(assetUrl)) {
@@ -1124,6 +873,44 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     assertHmrProof({ expectedSentinel, ...hmrProof });
 
     await page.evaluate(async () => (await window.__RIFTY_PACKED_WORKBENCH__).close());
+    for (const assetPath of ['/producer-snapshot.tar.gz', '/producer-snapshot-decoded.tar']) {
+      const before = registry.requests.length;
+      const proof = await page.evaluate(
+        async (assetUrl) => (await window.__RIFTY_PACKED_WORKBENCH__).runSnapshotProof(assetUrl),
+        new URL(assetPath, previewOrigin).href,
+      );
+      if (proof.version !== '2.0.0' || !proof.output.includes('packed-snapshot-2000')) {
+        throw new Error(`Packed producer restore failed: ${JSON.stringify(proof)}`);
+      }
+      if (registry.requests.length !== before)
+        throw new Error('Packed snapshot restore attempted registry acquisition');
+    }
+    console.log(
+      'Packed producer browser restore: raw gzip and HTTP-decoded tar, zero registry requests',
+    );
+    const registryBeforeApplication = registry.requests.length;
+    const unusedAssetsBefore = observedUrls.filter((url) =>
+      url.includes('/unused-new-snapshot.tar'),
+    ).length;
+    await page.evaluate(
+      async (assetUrl) =>
+        (await window.__RIFTY_PACKED_WORKBENCH__).proveSnapshotApplication(assetUrl),
+      new URL('/producer-snapshot.tar.gz', previewOrigin).href,
+    );
+    assert.equal(
+      registry.requests.length,
+      registryBeforeApplication,
+      'snapshot application never falls back to registry',
+    );
+    assert.equal(
+      observedUrls.filter((url) => url.includes('/unused-new-snapshot.tar')).length,
+      unusedAssetsBefore,
+      'saved state does not fetch the unused new asset',
+    );
+    console.log(
+      'Packed snapshot policy: durable saved-state reopen, public conflict details, repeated same-ID overwrite and real Node output',
+    );
+    await page.evaluate(async () => (await window.__RIFTY_PACKED_WORKBENCH__).proveCopiedAssets());
     if (pageErrors.length > 0) {
       throw new Error(`Packed Workbench Chromium page errors:\n${pageErrors.join('\n')}`);
     }
@@ -1147,7 +934,163 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
       throw new Error('Packed Workbench requested the retired @esbuild/wasi-preview1 alias');
     }
     await context.close();
-    console.log('Packed Workbench Chromium passed: Vite 7.3.6 preview + native HMR + sqlite');
+    registry.deny();
+    // A fresh browser context cannot reuse SQLite; the deployed asset is absent too.
+    const sqliteAsset = resolve(consumerRoot, 'dist/rifty/sql-wasm.wasm');
+    const sqliteBytes = await readFile(sqliteAsset);
+    await rm(sqliteAsset);
+    const strictBefore = registry.requests.length;
+    const strictContext = await browser.newContext({ serviceWorkers: 'allow' });
+    const strictRequests = [];
+    const strictBlocked = [];
+    strictContext.on('request', (request) => strictRequests.push(request.url()));
+    await strictContext.route('**/*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.origin === previewOrigin || url.protocol === 'blob:' || url.protocol === 'data:') {
+        await route.continue();
+      } else {
+        strictBlocked.push(url.href);
+        await route.abort('blockedbyclient');
+      }
+    });
+    try {
+      const strictPage = await strictContext.newPage();
+      const strictErrors = [];
+      strictPage.on('pageerror', (error) => {
+        console.error('Snapshot-only page error:', error.stack ?? error.message);
+        strictErrors.push(error.message);
+      });
+      await strictPage.goto(`${previewOrigin}/?snapshot-only`, { waitUntil: 'domcontentloaded' });
+      const strictProof = await strictPage.evaluate(async () => {
+        const opened = await window.__RIFTY_PACKED_SNAPSHOT_ONLY__;
+        return { previewUrl: opened.previewUrl, buildOutput: opened.buildOutput };
+      });
+      assert.match(strictProof.buildOutput, /built in|build completed/i, 'real npm Vite build');
+      const strictApp = strictPage.frameLocator('#preview').locator('#app');
+      await strictApp.waitFor({ state: 'visible', timeout: 120_000 });
+      await strictPage.waitForFunction(
+        () =>
+          document.querySelector('#preview')?.contentDocument?.querySelector('#app')
+            ?.textContent === 'snapshot-only-vite-ready',
+        undefined,
+        { timeout: 120_000 },
+      );
+      await waitForHmrBridge(strictApp, 30_000);
+      const strictKey = `rifty:packed-snapshot-only:${Date.now()}`;
+      const strictSentinel = await strictApp.evaluate((_, key) => {
+        globalThis.__riftyPackedHmrSentinel = key;
+        localStorage.setItem(`${key}:messages`, '[]');
+        localStorage.removeItem(`${key}:beforeunload`);
+        globalThis.addEventListener(
+          'beforeunload',
+          () => localStorage.setItem(`${key}:beforeunload`, '1'),
+          { once: true },
+        );
+        globalThis.addEventListener('rifty:ws:message', (event) => {
+          const messages = JSON.parse(localStorage.getItem(`${key}:messages`) ?? '[]');
+          messages.push(event.detail);
+          localStorage.setItem(`${key}:messages`, JSON.stringify(messages));
+        });
+        return key;
+      }, strictKey);
+      const strictMessage = 'snapshot-only-vite-edited';
+      await strictPage.evaluate(
+        async (message) => (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).writeMessage(message),
+        strictMessage,
+      );
+      await strictPage.waitForFunction(
+        (message) =>
+          document.querySelector('#preview')?.contentDocument?.querySelector('#app')
+            ?.textContent === message,
+        strictMessage,
+        { timeout: 60_000 },
+      );
+      const strictHmr = await strictApp.evaluate(
+        (_, key) => ({
+          sentinel: globalThis.__riftyPackedHmrSentinel,
+          beforeUnload: localStorage.getItem(`${key}:beforeunload`),
+          messages: JSON.parse(localStorage.getItem(`${key}:messages`) ?? '[]'),
+        }),
+        strictKey,
+      );
+      assertHmrProof({ expectedSentinel: strictSentinel, ...strictHmr });
+      const agentTrace = await strictPage.evaluate(async () =>
+        (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).proveAgent('packed-agent-repaired'),
+      );
+      assert.equal(agentTrace.status, 'done', 'packed public agent build recovery');
+      await strictPage.waitForFunction(
+        () =>
+          document.querySelector('#preview')?.contentDocument?.querySelector('#app')
+            ?.textContent === 'packed-agent-repaired',
+        undefined,
+        { timeout: 60_000 },
+      );
+      const agentDocument = await strictApp.evaluate(() => {
+        globalThis.__agentDocumentMarker = 'packed-agent-original-document';
+        return globalThis.__agentDocumentMarker;
+      });
+      await strictPage.evaluate(async () =>
+        (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).agentWriteMessage('packed-agent-hmr'),
+      );
+      await strictPage.waitForFunction(
+        () =>
+          document.querySelector('#preview')?.contentDocument?.querySelector('#app')
+            ?.textContent === 'packed-agent-hmr',
+        undefined,
+        { timeout: 60_000 },
+      );
+      assert.equal(
+        await strictApp.evaluate(() => globalThis.__agentDocumentMarker),
+        agentDocument,
+        'agent write preserves preview document through HMR',
+      );
+      await strictPage.evaluate(async () =>
+        (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).closeAndProveSavedState(),
+      );
+      await strictPage.evaluate(async () =>
+        (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).proveStorageNamespaces(),
+      );
+      await strictPage.evaluate(async () =>
+        (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).proveOrphanScratchRecovery(),
+      );
+      assert.equal(
+        registry.requests.length,
+        strictBefore,
+        'zero registry requests including service worker proxy',
+      );
+      assert.deepEqual(strictBlocked, [], 'snapshot-only attempted no external acquisition');
+      assert.deepEqual(
+        strictRequests.filter((url) =>
+          /npm-registry|eddy|unused-new-snapshot/.test(new URL(url).pathname),
+        ),
+        [],
+        'no implicit registry/Eddy/unused snapshot routes',
+      );
+      assert.deepEqual(
+        strictRequests.filter((url) =>
+          /(?:sql-wasm|guest-sqlite-must-not-load)\.wasm$/.test(new URL(url).pathname),
+        ),
+        [],
+        'no SQLite request without deployment.wasm.sqlite',
+      );
+      assert.deepEqual(strictErrors, [], 'snapshot-only public browser errors');
+      console.log(
+        'Packed snapshot-only: producer Vite npm build/dev/HMR, local script, refused required install and persistent saved-state proof; zero registry/Eddy requests',
+      );
+    } finally {
+      await strictContext.close();
+      await writeFile(sqliteAsset, sqliteBytes);
+    }
+    await provePackedScopedPreview({
+      browser,
+      origin: previewOrigin,
+      registryRequests: registry.requests,
+      waitForHmrBridge,
+      assertHmrProof,
+    });
+    console.log(
+      'Packed Workbench Chromium passed: registry Vite/HMR/sqlite and snapshot-only Vite',
+    );
   } catch (error) {
     throw new Error(
       `${error instanceof Error ? error.stack : String(error)}\nPacked consumer preview output:\n${preview.output()}\nRegistry requests:\n${registry.requests.join('\n')}`,
@@ -1183,44 +1126,141 @@ async function main() {
   const consumerRoot = resolve(tempRoot, 'consumer');
   const npmCacheRoot = resolve(tempRoot, 'npm-cache');
   const npmPackCacheRoot = resolve(tempRoot, 'npm-pack-cache');
-  const browserTarballRoot = resolve(tempRoot, 'browser-tarballs');
-  const browserPackageRoot = resolve(tempRoot, 'browser-packages');
-  const browserPackCacheRoot = resolve(tempRoot, 'browser-pack-cache');
   await cp(fixtureRoot, consumerRoot, { recursive: true });
   await mkdir(tarballRoot, { recursive: true });
-  await mkdir(browserTarballRoot, { recursive: true });
 
   let failure;
   try {
-    await run('pnpm', ['-r', '--filter', '@riftydev/workbench...', 'run', 'build'], {
-      timeoutMs: 600_000,
-    });
+    await run(
+      'pnpm',
+      [
+        '-r',
+        '--filter',
+        '@riftydev/sdk...',
+        '--filter',
+        '@riftydev/workbench...',
+        ...(!surfaceOnly ? ['--filter', '@riftydev/agent...'] : []),
+        'run',
+        'build',
+      ],
+      {
+        timeoutMs: 600_000,
+      },
+    );
     const workspaceTarballs = await packPackages(workspaceClosure, tarballRoot);
     const externalTarballs = await packInstalledPackages(
       externalClosure,
       tarballRoot,
       npmPackCacheRoot,
+      run,
     );
-    const tarballs = new Map([...workspaceTarballs, ...externalTarballs]);
-    await writePackedConsumerManifest(consumerRoot, tarballs);
-    await run('npm', ['install', '--offline', '--no-audit', '--no-fund'], {
-      cwd: consumerRoot,
-      timeoutMs: 600_000,
-      env: { npm_config_cache: npmCacheRoot, npm_config_offline: 'true' },
-    });
-    await assertTarballInstall(consumerRoot, tarballs);
-    await run('npm', ['run', 'typecheck'], { cwd: consumerRoot, timeoutMs: 180_000 });
-    await run('npm', ['run', 'build'], { cwd: consumerRoot, timeoutMs: 300_000 });
-    await stat(resolve(consumerRoot, 'dist/index.html'));
-    const registryPackages = await browserRegistryPackages({
-      packageRoot: browserPackageRoot,
-      tarballRoot: browserTarballRoot,
-      npmCacheRoot: browserPackCacheRoot,
-    });
-    await runChromiumJourney(consumerRoot, registryPackages);
-    console.log(
-      `Packed Workbench consumer passed: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, packed TypeScript/build, fresh Chromium`,
-    );
+    const installedPackages = await registryEntries(externalClosure, externalTarballs);
+    const installedRegistry = await startBrowserRegistry(installedPackages);
+    try {
+      await writePackedConsumerManifest(consumerRoot, workspaceTarballs);
+      await run(
+        'npm',
+        ['install', '--no-audit', '--no-fund', '--registry', installedRegistry.origin],
+        {
+          cwd: consumerRoot,
+          timeoutMs: 600_000,
+          env: { npm_config_cache: npmCacheRoot, npm_config_offline: 'false' },
+        },
+      );
+      await assertTarballInstall(consumerRoot, workspaceTarballs, installedRegistry);
+    } finally {
+      await installedRegistry.close();
+    }
+    if (surfaceOnly) {
+      const failures = [];
+      for (const [script, timeoutMs] of [
+        ['typecheck', 180_000],
+        ['build', 300_000],
+      ]) {
+        try {
+          await run('npm', ['run', script], { cwd: consumerRoot, timeoutMs });
+        } catch (error) {
+          failures.push(error instanceof Error ? error.stack : String(error));
+        }
+      }
+      if (failures.length > 0) {
+        throw new Error(`Packed toolchain surface failures:\n\n${failures.join('\n\n')}`);
+      }
+      await stat(resolve(consumerRoot, 'dist/main.js'));
+      await stat(resolve(consumerRoot, 'dist/worker.js'));
+      const boot = await provePackedCompilerLoading(
+        consumerRoot,
+        await readJson(resolve(consumerRoot, 'measure/report.json')),
+      );
+      await provePackedVmSelection(
+        consumerRoot,
+        await readJson(resolve(consumerRoot, 'measure/report.json')),
+      );
+      await proveSdkPackaging(
+        consumerRoot,
+        await readJson(resolve(consumerRoot, 'measure/report.json')),
+      );
+      await provePackedInstallLoading(
+        consumerRoot,
+        await readJson(resolve(consumerRoot, 'measure/report.json')),
+      );
+      await proveNoCoiEsbuildGraph(consumerRoot);
+      await provePackedNoCoiChildren(
+        consumerRoot,
+        await readJson(resolve(consumerRoot, 'measure/report.json')),
+        repoRoot,
+      );
+      const agentRegistry = await startBrowserRegistry(await browserRegistryPackages(repoRoot));
+      try {
+        await provePackedAgent(consumerRoot, agentRegistry.origin);
+        assert(
+          agentRegistry.responses.some(
+            (response) =>
+              response.kind === 'tarball' &&
+              response.packageName === 'vite' &&
+              response.status === 200,
+          ),
+          'agent build must install the original Vite npm tarball',
+        );
+      } finally {
+        await agentRegistry.close();
+      }
+      if (checkBudgets) {
+        const report = await readJson(resolve(consumerRoot, 'measure/report.json'));
+        assertClientBundleBudgets(report, boot);
+        for (const row of report.rows.filter((row) => row.name in CLIENT_BUNDLE_BUDGETS)) {
+          const ceiling = CLIENT_BUNDLE_BUDGETS[row.name];
+          console.log(
+            `${row.name}: min ${row.min}/${ceiling.min} B; gzip ${row.gzip}/${ceiling.gzip} B`,
+          );
+        }
+      }
+      console.log(
+        `Packed toolchain surface passed: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, strict TypeScript + generic SDK/Worker graphs`,
+      );
+    } else {
+      await run('npm', ['run', 'typecheck'], { cwd: consumerRoot, timeoutMs: 180_000 });
+      await run('npm', ['run', 'build'], { cwd: consumerRoot, timeoutMs: 300_000 });
+      await stat(resolve(consumerRoot, 'dist/index.html'));
+      const registryPackages = await browserRegistryPackages(repoRoot);
+      await runChromiumJourney(consumerRoot, registryPackages);
+      await run(
+        'pnpm',
+        [
+          'exec',
+          'playwright',
+          'test',
+          '-c',
+          'tools/agent-bench/playwright.config.ts',
+          'reference-host.spec.ts',
+        ],
+        { timeoutMs: 600_000 },
+      );
+      console.log('Packed benchmark shared reference host passed');
+      console.log(
+        `Packed Workbench consumer passed: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, packed TypeScript/build, fresh Chromium`,
+      );
+    }
   } catch (error) {
     failure = error;
   }

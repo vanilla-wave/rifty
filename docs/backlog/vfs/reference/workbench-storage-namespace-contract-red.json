@@ -1,0 +1,235 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "PASS Contract+RED с одной advisory NOTE; продолжить IMPLEMENT. Merge/готовность I4 этим checkpoint не подтверждены.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/vfs/workbench-storage-namespace.md at clean HEAD1bf453c0ed35ee6dc1734384ab4c79a14f815a9c against prior accepted I3 BASE0f8ec6f96b35983a141937e86fbadcff2ed3c85b. Fresh independent reviewer /root/storage_namespace_contract_review, no children or tracked edits. Authority: unchanged docs/backlog/epics/self-hosted-snapshot-workbench/goal.md I4/scenario5/recorded user decisions, docs/backlog/distribution/reference/embedder-gaps-evidence.md, ADR-0402 and retained ADR-0072/0263/0279/0358/0372. No original raw report/answer transcript is available separately; scope audit checks the already accepted destination and its in-session records, without claiming new raw-source verification. All eight supplied carrier hashes matched. Independent current reruns: options 16 RED/14 GREEN, storage controls15/15 GREEN; Chromium11=7RED/4GREEN; docs:check and git diff --check GREEN. Every browser RED is semantic, not load/type/timeout failure. Packed build/pack/install log /tmp/rifty-316-i4-packed-red.log shows expected installed-declaration TS2345 for absent public namespace at tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:77; inspected, not independently rerun or represented as a browser result. Lower real public/native semantic REDs independently establish storage absence. PR-4 comparison from git BASE: original lease/crash test body exact; packed gate/config, saved-state/application proof and two storage controls byte-identical; new packed call extends the unchanged strict zero-egress window. No new production source or oracle/gate relaxation. No frozen oracle is added: native sentinels are controlled input bytes and Node expected output reuses the accepted real-producer reference.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:83",
+      "summary": "Namespace promise/RED prepared; implementation, GREEN packed/native proof and independent Final+GREEN still required."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/playground/orphan-scratch-recovery.md",
+      "summary": "Retain/enumerate/download orphan Scratch bytes, including captured unreadable-preload preservation prerequisite, remains linked next work."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/service-worker/workbench-preview-prefix.md",
+      "summary": "Host-selected scoped preview prefix with real iframe/assets/HMR remains linked."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/distribution/workbench-operation-budgets.md",
+      "summary": "Effective host operation budgets and composed whole-goal packed proof remain linked."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: both Workbench entries preserve literal optional namespace; legacy omission and policy-independent ingress rejection; owner wire retains selection.",
+      "source": "acceptance",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:40; packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:51; packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:68; tests/browser-unit/workbench-web-lock.spec.ts:275; tests/browser-unit/workbench-storage-namespace.spec.ts:23; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:73",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: one captured native pair bounds preload, reads/writes, directory/cache/proof/claim addressing; logical paths persist; conflicting async re-init rejects.",
+      "source": "acceptance",
+      "trace": "I4 + ADR-0402 + ADR-0072",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:11; tests/browser-unit/opfs-storage-namespace.spec.ts:92; tests/browser-unit/fixtures/opfs-storage-namespace-worker.ts:73; tests/browser-unit/workbench-storage-namespace.spec.ts:23; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:152",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: absent A/B start without prior projects; same-id data and binary/source bytes survive selection/reopen; outside data not preloaded or changed.",
+      "source": "acceptance",
+      "trace": "I4 + scenario5",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:11; tests/browser-unit/workbench-storage-namespace.spec.ts:23; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:152",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: ephemeral stays memory-only; native entry-file conflict refuses required or visibly falls back preferred without deleting existing data; prior open/proof policies retained.",
+      "source": "acceptance",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-storage-namespace.spec.ts:97; tests/browser-unit/workbench-storage-namespace.spec.ts:132; tests/browser-unit/workbench-storage-namespace.spec.ts:156; packages/workbench/src/workers/owner-storage.test.ts:47; packages/workbench/src/workers/workbench-owner-storage.test.ts:68",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: real global lease excludes distinct persistent namespaces; cooperative close and page death release the prior lease.",
+      "source": "acceptance",
+      "trace": "I4 + ADR-0263",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-web-lock.spec.ts:192; tests/browser-unit/workbench-web-lock.spec.ts:241",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: acknowledged durable namespace bytes survive uncooperative page/Worker reload; scoped catalog reopen preserves default/A/B bytes.",
+      "source": "acceptance",
+      "trace": "I4 + ADR-0279 + ADR-0358",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-storage-namespace.spec.ts:23; tests/browser-unit/workbench-storage-namespace.spec.ts:56; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:200",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: mandatory installed public consumer uses copied assets and real snapshots for independent A/B/default saved projects, exact bytes and Node output, with unchanged zero-egress assertions.",
+      "source": "acceptance",
+      "trace": "I1 + I2 + I3 + I4 + scenario5",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:64; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:152; tests/integration/workbench-packed-consumer.mjs:1293",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: native Chromium A/B/default physical entries and byte-exact data agree with paired VFS and public reopen.",
+      "source": "acceptance",
+      "trace": "I4 + ADR-0072",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:11; tests/browser-unit/workbench-storage-namespace.spec.ts:74",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × namespace ingress: no normalization/escape; public pre-effect rejection and owner-wire rejection.",
+      "source": "fault-matrix",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:40; packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:51; packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:81; tests/browser-unit/workbench-web-lock.spec.ts:275",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × paired root: paired reads/writes and internal storage paths inherit selected handle; native sentinels distinguish A/B/default.",
+      "source": "fault-matrix",
+      "trace": "I4 + ADR-0072",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:11; tests/browser-unit/fixtures/opfs-storage-namespace-worker.ts:94; tests/browser-unit/workbench-storage-namespace.spec.ts:74; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:200",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × changed selection/re-init: old files stay on old mount; conflicting async init refuses root drift.",
+      "source": "fault-matrix",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:92; tests/browser-unit/workbench-storage-namespace.spec.ts:23; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:217",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail × namespace open/proof: required refusal or preferred visible fallback retains selected entries and other roots.",
+      "source": "fault-matrix",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-storage-namespace.spec.ts:132; tests/browser-unit/workbench-storage-namespace.spec.ts:156; packages/workbench/src/workers/owner-storage.test.ts:47; packages/workbench/src/workers/workbench-owner-storage.test.ts:68",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key × A/B owner open: global native Web Lock rejects second owner before Worker construction.",
+      "source": "fault-matrix",
+      "trace": "I4 + ADR-0263",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-web-lock.spec.ts:241",
+      "note": ""
+    },
+    {
+      "row": "torn-state × durable write then page/owner death: fresh same-namespace owner restores acknowledged bytes without modifying other selections.",
+      "source": "fault-matrix",
+      "trace": "I4 + ADR-0279 + ADR-0358",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-storage-namespace.spec.ts:56; tests/browser-unit/workbench-storage-namespace.spec.ts:74",
+      "note": ""
+    },
+    {
+      "row": "Planned public openWorkbench storage.namespace option and default preservation.",
+      "source": "public-api",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:40; tests/browser-unit/workbench-web-lock.spec.ts:241; tests/browser-unit/workbench-web-lock.spec.ts:275",
+      "note": ""
+    },
+    {
+      "row": "Planned public openPlaygroundWorkbench storage.namespace option and persistent catalog composition.",
+      "source": "public-api",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-storage-namespace.spec.ts:23; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:73",
+      "note": ""
+    },
+    {
+      "row": "Planned installOpfsFs(root?) paired installation preserves default and mounts the supplied native handle.",
+      "source": "public-api",
+      "trace": "I4 + ADR-0402 + ADR-0072",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:11; tests/browser-unit/fixtures/opfs-storage-namespace-worker.ts:73",
+      "note": ""
+    },
+    {
+      "row": "Planned OpfsVfs.init(root?) fixes instance root, accepts same-entry/no-arg re-init, rejects different entry.",
+      "source": "public-api",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:92; tests/browser-unit/fixtures/opfs-storage-namespace-worker.ts:42",
+      "note": ""
+    },
+    {
+      "row": "Planned OpfsFsSync.init(paired?, root?) obtains scoped index/preload and paired write-through through the real installer.",
+      "source": "public-api",
+      "trace": "I4 + ADR-0402 + ADR-0072",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:11; tests/browser-unit/fixtures/opfs-storage-namespace-worker.ts:73",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/vfs/workbench-storage-namespace.md:47",
+          "authority": "",
+          "summary": "Advisory proof strength: selected-namespace proof failure and interrupted catalog replay are covered compositionally by native file-conflict/reload carriers plus unchanged policy/recovery authorities; the new native tests do not directly pause/reject those inner boundaries. A native selected-prefix proof refusal or interrupted recovery case would strengthen Final+GREEN. No executed surviving mutant; coverage stays pass under REV-4/5.",
+          "evidence": "Reviewer rerun: pnpm exec vitest run packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts packages/workbench/src/workers/owner-storage.test.ts packages/workbench/src/workers/workbench-owner-storage.test.ts --reporter=json --outputFile=/tmp/rifty-316-i4-review-options.json: 16 expected RED + 29 GREEN (15 unchanged storage controls). RIFTY_PLAYGROUND_PORT=5396 pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/opfs-storage-namespace.spec.ts tests/browser-unit/workbench-storage-namespace.spec.ts tests/browser-unit/workbench-web-lock.spec.ts --reporter=list: 7 semantic RED + 4 GREEN, Chrome148.0.7778.96,23.7s; /tmp/rifty-316-i4-review-browser.log. The two public persistent cases reload after acknowledged durable B-write and recover A/B/default; file-conflict cases exercise real native entry refusal, while existing unit controls execute proof divergence/timeout."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "1bf453c0ed35ee6dc1734384ab4c79a14f815a9c"
+}

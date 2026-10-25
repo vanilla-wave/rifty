@@ -36,6 +36,7 @@ const BOOT_CONFIG = Object.freeze({
     previewProbeTimeoutMs: 3_000,
   }),
   packageAcquisition: Object.freeze({
+    mode: 'registry',
     registryUrl: 'https://registry.invalid/',
     eddy: Object.freeze({
       resolverUrl: 'https://eddy.invalid/resolve',
@@ -197,6 +198,17 @@ describe('Workbench owner protocol', () => {
         },
       }),
     ).toThrow(TypeError);
+  });
+
+  it('admits the optional layout notice and refuses a blank or non-string diagnosis', () => {
+    const frame = {
+      type: 'workbench:owner-ready',
+      storage: REQUIRED_STORAGE,
+      storageLayout: 'Legacy storage was excluded',
+    };
+    expect(ownerMessage(frame)).toEqual(frame);
+    for (const storageLayout of [undefined, null, '', '   ', 3, {}])
+      expect(() => ownerMessage({ ...frame, storageLayout })).toThrow(TypeError);
   });
 
   it('admits owner-ready storage, correlated lifecycle replies, and exact failures', () => {
@@ -1081,5 +1093,18 @@ describe('Workbench owner protocol', () => {
         ).toThrow(TypeError);
       }
     });
+  });
+});
+
+describe('optional SQLite owner boot', () => {
+  it.each([undefined, {}])('accepts omitted SQLite configuration: %j', (wasm) => {
+    const { wasm: _wasm, ...deployment } = BOOT_CONFIG.deployment;
+    const config = {
+      ...BOOT_CONFIG,
+      deployment: { ...deployment, ...(wasm === undefined ? {} : { wasm }) },
+    };
+    expect(() =>
+      inspectPageToWorkbenchOwnerMessage({ type: 'workbench:initialize', config }),
+    ).not.toThrow();
   });
 });

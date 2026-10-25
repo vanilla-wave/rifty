@@ -1,3 +1,4 @@
+import { guestPrivateRoot } from '../../workers/guest-layout.ts';
 import type {
   PlaygroundProjectOpenOptions,
   PlaygroundTerminalStateRestoreInput,
@@ -121,14 +122,20 @@ export function projectTerminalStateToOwner(
   return Object.freeze({ cwd, env: Object.freeze({ ...state.env }) });
 }
 
-/** Physical owner cwd → public project root; an exact-root escape rejects the whole value. */
+/**
+ * Physical owner cwd → project-relative cwd. A cwd in the project's own guest
+ * area (`/tmp`, `~`, ADR-0531) persists as the project root; any other escape
+ * rejects the whole value.
+ */
 export function projectTerminalStateFromOwner(
   projectRoot: string,
   value: unknown,
 ): ProjectTerminalSnapshot {
   const state = ownTerminalStateRecord(value, 'Owner terminal state');
+  const privateRoot = guestPrivateRoot(projectRoot);
+  const ownGuestArea = state.cwd === privateRoot || state.cwd.startsWith(`${privateRoot}/`);
   return Object.freeze({
-    cwd: toProjectPath(projectRoot, state.cwd),
+    cwd: ownGuestArea ? '/' : toProjectPath(projectRoot, state.cwd),
     env: state.env,
   });
 }

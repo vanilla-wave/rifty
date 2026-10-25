@@ -62,7 +62,27 @@ import {
   nodeCliEvalPreviewScope,
   runNodeCliEvalMatrix,
 } from './node-cli-eval.ts';
+import type {
+  NodeCliEvalBootstrapFault,
+  NodeCliEvalPreEntryFault,
+  NodeCliEvalPreviewExpectation,
+  NodeCliEvalPreviewProbe,
+  NodeCliEvalVfsFault,
+  NodeCliEvalVfsProbe,
+  PhysicalStdioDeliveryFault,
+  RunInRiftyOptions,
+} from './run-in-rifty-options.ts';
 import { type ParityCase, type ResolvedNodeCliEvalInvocation, caseCwd } from './types.ts';
+
+export type {
+  NodeCliEvalBootstrapFault,
+  NodeCliEvalPreEntryFault,
+  NodeCliEvalPreviewProbe,
+  NodeCliEvalVfsFault,
+  NodeCliEvalVfsProbe,
+  PhysicalStdioDeliveryFault,
+  RunInRiftyOptions,
+} from './run-in-rifty-options.ts';
 
 /**
  * Normalised shape returned by the injected `__riftyHttpRequest` driver. Both
@@ -296,17 +316,6 @@ class StdioPortCapture {
   }
 }
 
-export type NodeCliEvalVfsFault =
-  | 'child-local-transient-decoder-file'
-  | 'child-local-transient-source-file'
-  | 'sab-remote-transient-source-file'
-  | 'workbench-owner-transient-source-file';
-
-export interface NodeCliEvalVfsProbe {
-  readonly expectedGuestMutations: readonly NodeCliEvalVfsMutation[];
-  readonly fault?: NodeCliEvalVfsFault;
-}
-
 function childLocalVfsMutation(value: unknown): value is NodeCliEvalVfsMutation {
   if (typeof value !== 'object' || value === null) return false;
   const mutation = value as Partial<NodeCliEvalVfsMutation>;
@@ -346,51 +355,6 @@ function childLocalVfsAudit(value: unknown): NodeCliEvalVfsAudit {
     throw new TypeError('node-cli-eval child-local VFS audit boundary is invalid');
   }
   return { missing, unexpected };
-}
-
-export type NodeCliEvalBootstrapFault =
-  | 'wrong-protocol'
-  | 'missing-source'
-  | 'missing-print'
-  | 'missing-exec-argv'
-  | 'missing-remote-fs'
-  | 'source-not-string'
-  | 'print-not-boolean'
-  | 'exec-argv-not-array'
-  | 'remote-fs-not-boolean'
-  | 'extra-launch-field'
-  | 'exec-argv-first-not-string'
-  | 'exec-argv-middle-not-string'
-  | 'exec-argv-last-not-string'
-  | 'program-bin'
-  | 'program-node-serve'
-  | 'program-ipc';
-
-interface NodeCliEvalPreviewExpectation {
-  readonly port: number;
-  readonly status: number;
-  readonly body: string;
-}
-
-export type NodeCliEvalPreviewProbe = Readonly<Record<string, NodeCliEvalPreviewExpectation>>;
-
-export type PhysicalStdioDeliveryFault = 'stderr-before-two-stdout';
-
-export interface RunInRiftyOptions {
-  /** Same-realm fault-injection seam for the browser MessageChannel boundary. */
-  readonly createMessageChannel?: () => MessageChannel;
-  /** Receiver-side deadline for processing the stdin EOF transport frame. */
-  readonly stdinTimeoutMs?: number;
-  /** Parent-owned execution deadline; settlement still awaits Worker termination. */
-  readonly caseTimeoutMs?: number;
-  /** Physical eval-only source-carrier audit; serializable across the disposable Worker. */
-  readonly nodeCliEvalVfsProbe?: NodeCliEvalVfsProbe;
-  /** Physical eval-only scoped-preview audit; serializable across the disposable Worker. */
-  readonly nodeCliEvalPreviewProbe?: NodeCliEvalPreviewProbe;
-  /** Physical eval-only raw corrupt-input injection, downstream of the host builder. */
-  readonly nodeCliEvalBootstrapFault?: NodeCliEvalBootstrapFault;
-  /** Physical cross-port delivery inversion; leaves control IPC FIFO intact. */
-  readonly physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault;
 }
 
 const DEFAULT_STDIN_TIMEOUT_MS = 2_000;
@@ -774,6 +738,7 @@ async function installPhysicalWorkerMode(
   testCase: ParityCase,
   nodeCliEvalVfsFault?: NodeCliEvalVfsFault,
   nodeCliEvalBootstrapFault?: NodeCliEvalBootstrapFault,
+  nodeCliEvalPreEntryFault?: NodeCliEvalPreEntryFault,
   physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault,
 ): Promise<PhysicalWorkerMode> {
   const { getKernelWorkerUrl, globalProcessManager, setKernelWorkerUrl } = await import(
@@ -898,6 +863,7 @@ async function installPhysicalWorkerMode(
           files: testCase.kind === 'node-cli-eval' ? {} : (testCase.setup?.files ?? {}),
           nodeCliEvalVfsAudit: testCase.kind === 'node-cli-eval',
           ...(workerVfsFault === undefined ? {} : { nodeCliEvalVfsFault: workerVfsFault }),
+          ...(nodeCliEvalPreEntryFault === undefined ? {} : { nodeCliEvalPreEntryFault }),
           ...(physicalStdioDeliveryFault === undefined ? {} : { physicalStdioDeliveryFault }),
         },
       });
@@ -1149,7 +1115,7 @@ function corruptNodeCliEvalEntry(
     ...candidate,
     execArgv: [...(candidate.execArgv as readonly string[])],
   };
-  let protocol = 'rifty.node-entry/v3';
+  let protocol = 'rifty.node-entry/v6';
   switch (fault) {
     case 'wrong-protocol':
       protocol = 'rifty.node-entry/v2';
@@ -1369,7 +1335,9 @@ async function installExecSyncMode(): Promise<() => void> {
   const { createModuleLoader } = await import(
     '../../../packages/runtime-js/src/module-loader/loader.ts'
   );
-  const { riftyProcess } = await import('../../../packages/runtime-js/src/builtins/process.ts');
+  const { resetNodeProcessExit, riftyProcess } = await import(
+    '../../../packages/runtime-js/src/builtins/process.ts'
+  );
   const { isAbsolute, joinPath, normalizePath } = await import('@riftydev/vfs');
 
   // Capability stubs so runtime-js `execSync` takes the SAB branch. SAB +
@@ -1445,7 +1413,7 @@ async function installExecSyncMode(): Promise<() => void> {
       const prevEnv = riftyProcess.env;
       const prevCwd = getProcessCwd();
       (riftyProcess as { stdout: unknown }).stdout = capture;
-      riftyProcess.exitCode = 0;
+      resetNodeProcessExit(riftyProcess);
       riftyProcess.env = { ...env };
       setProcessCwd(cwd);
       procHost.process = riftyProcess;
@@ -1459,12 +1427,13 @@ async function installExecSyncMode(): Promise<() => void> {
           isAbsolute(scriptPath) ? scriptPath : joinPath(cwd, scriptPath),
         );
         loader.require(entryAbs, entryAbs);
-        exitCode = riftyProcess.exitCode;
+        exitCode = riftyProcess.exitCode ?? 0;
       } catch {
         exitCode = riftyProcess.exitCode || 1;
       } finally {
         procHost.process = prevGlobalProcess;
         (riftyProcess as { stdout: unknown }).stdout = prevStdout;
+        resetNodeProcessExit(riftyProcess);
         riftyProcess.exitCode = prevExitCode;
         riftyProcess.env = prevEnv;
         setProcessCwd(prevCwd);
@@ -1586,6 +1555,9 @@ export async function runInRiftyInCurrentRealm(
   }
   if (options.nodeCliEvalBootstrapFault !== undefined && testCase.kind !== 'node-cli-eval') {
     throw new TypeError('RunInRiftyOptions.nodeCliEvalBootstrapFault requires kind node-cli-eval');
+  }
+  if (options.nodeCliEvalPreEntryFault !== undefined && testCase.kind !== 'node-cli-eval') {
+    throw new TypeError('RunInRiftyOptions.nodeCliEvalPreEntryFault requires kind node-cli-eval');
   }
   if (options.physicalStdioDeliveryFault !== undefined && !isPhysicalWorkerCase(testCase)) {
     throw new TypeError(
@@ -1777,6 +1749,13 @@ export async function runInRiftyInCurrentRealm(
       installRuntimeJsFsHandlers(dispatcher, () => fsMirror);
     }
 
+    if (testCase.kind === 'worker-env') {
+      // Worker threads read the owner's store over sync-RPC (remoteFs), as in production.
+      const { getKernelDispatcher } = await import('../../../packages/kernel/src/index.ts');
+      const { installRuntimeJsFsHandlers } = await import('@riftydev/runtime-js');
+      installRuntimeJsFsHandlers(getKernelDispatcher(), () => fsMirror);
+    }
+
     // ADR-0267: only a physical kernel child can prove that typed host
     // bootstrap metadata stays outside exact inherited/replacement guest env.
     let physicalWorkerMode: PhysicalWorkerMode | undefined;
@@ -1785,6 +1764,7 @@ export async function runInRiftyInCurrentRealm(
         testCase,
         options.nodeCliEvalVfsProbe?.fault,
         options.nodeCliEvalBootstrapFault,
+        options.nodeCliEvalPreEntryFault,
         options.physicalStdioDeliveryFault,
       );
       cleanups.defer(() => physicalWorkerMode?.teardown());
@@ -1953,6 +1933,7 @@ function runInDisposableWorker(
   nodeCliEvalVfsProbe?: NodeCliEvalVfsProbe,
   nodeCliEvalPreviewProbe?: NodeCliEvalPreviewProbe,
   nodeCliEvalBootstrapFault?: NodeCliEvalBootstrapFault,
+  nodeCliEvalPreEntryFault?: NodeCliEvalPreEntryFault,
   physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault,
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
@@ -1964,6 +1945,7 @@ function runInDisposableWorker(
         nodeCliEvalVfsProbe,
         nodeCliEvalPreviewProbe,
         nodeCliEvalBootstrapFault,
+        nodeCliEvalPreEntryFault,
         physicalStdioDeliveryFault,
       },
     });
@@ -2050,6 +2032,7 @@ export async function runInRifty(
       options.nodeCliEvalVfsProbe,
       options.nodeCliEvalPreviewProbe,
       options.nodeCliEvalBootstrapFault,
+      options.nodeCliEvalPreEntryFault,
       options.physicalStdioDeliveryFault,
     );
   }

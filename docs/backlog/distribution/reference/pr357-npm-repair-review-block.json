@@ -1,0 +1,123 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK: fix resolved optional admission save before merge; other inspected repair work passes. Packed consumer was still running and is not claimed GREEN.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #357 observed-defect repair; BASE87c370fa71760a91621bb7f5f8d3f759aace84a6, reviewed clean HEAD7cdc15abc45ea1daf365a5865e4f25bba2ef70ff. Fresh independent reviewer /root/pr357_final_review, read-only tracked tree, no children. User requested both inline npm bugs fixed, dataField/prototype-depth rationale and actual accessor cases investigated, compiler-byte delta explained, existing PR GREEN. Read full repair diff, historical raw goal I9/scenario6 at becdaddfb1b35484a4c183a18556d7abe5a8d47f, ADR0487/0488/0504/0051, baseline/current catalog fixture and actual tests. Earlier accepted units remain baseline under REV-1; no whole-goal closure claim here. Evidence location docs/backlog/distribution/reference/pr357-npm-repair-evidence.md. RDY-8: raw initial RED8/controls2 shared+Chromium, revert RED10/controls20, focused GREEN195 and Chromium GREEN14 inspected. Full pr:check clean reviewed HEAD passes27/27 (test:run196.9s, parity126.5s, no isolation reruns), /tmp/pr357-repair-pr-check-clean.log. Earlier catalog2 failures reproduced in isolation and repaired; earlier native parity exit134 remains honestly recorded. PR-4: compared BASE and HEAD criterion directly; added genuine packument response admits the newly correct metadata request, while quota/permission injected primitive, command failure, manifest mutation and durable reload assertions are unchanged. Independent native exact reinstall probe /tmp/pr357-review-native-metadata.mts confirms /ms requested twice while version stays2.0.0; first sandbox listen EPERM was environmental, escalated probe passed. dataField explanation checked against actual own-cause-gap browser receipt, five existing serializer tests, native DOMException descriptors and occupied browser cases; no third-party accessor failure invented, depth8 is only a traversal budget. Compiler artifacts independently hashed and diffed: main10022694/8e175378... versus baseline10022664/ffeebf6f..., only shared/dynamic import references/order and one side-effect import removed; compiler body identical. RDY-6 final source/attribution check of docs/backlog/toolchain-build/parity-native-cjs-lexer-crash.md: raw /tmp/pr357-repair-pr-check-final.log shows cjs_lexer::Parse, cjsPreparseModuleExports, native Worker and exit134 after the named last PASS; /tmp/pr357-repair-parity-worker-isolated.log passes20 cases. Draft correctly leaves actual failing case/root cause unknown, owner parity harness and recurrence/reproducer trigger; no new policy, user choice, coordination or silent assertion change. Full packed consumer /tmp/pr357-repair-packed.log was in flight; no completion claim. New independent native-policy differential exposes the blocker below.",
+  "unit_residuals": [
+    {
+      "clause": "I9 + ADR-0487 D3 + ADR-0051 D3: legitimate optional native skips preserve native saved range",
+      "location": "packages/npm-client/src/installer-walk.ts:582",
+      "summary": "Preserve selected metadata across admission rejection; add differential RED and verify native ^0.28.0 instead of fabricated npm:null@*."
+    }
+  ],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Named bare, explicit-range, wildcard and exact-save reinstall refresh satisfying retained root pin",
+      "source": "acceptance",
+      "trace": "I9 + ADR-0487 + ADR-0504",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/npm-install-update-cases.ts:2",
+      "note": ""
+    },
+    {
+      "row": "No-args install and unrelated addition retain prior root pin",
+      "source": "acceptance",
+      "trace": "I9 + ADR-0504",
+      "status": "pass",
+      "citation": "tests/no-coi/fixtures/npm-install-update-cases.ts:16",
+      "note": ""
+    },
+    {
+      "row": "Legitimate skipped optionals continue shell execution and save native dependency/root-lock maps",
+      "source": "acceptance",
+      "trace": "I9 + ADR-0487 + ADR-0488 + ADR-0504",
+      "status": "weak",
+      "citation": "tests/integration/npm-shell-update-parity.test.ts:42",
+      "note": "Existing metadata-miss and tarball-failure carriers pass while resolved optional-native admission writes npm:null@*. Actual violation independently executed; blocker at installer-walk.ts:582."
+    },
+    {
+      "row": "Fresh Eddy install followed by selective named update preserves unrelated installed root",
+      "source": "acceptance",
+      "trace": "I9 + ADR-0504",
+      "status": "pass",
+      "citation": "tests/integration/npm-shell-eddy-glue.test.ts:741",
+      "note": ""
+    },
+    {
+      "row": "InstallOptions.updateNames carries selected root update intent through existing installer without changing no-intent replay",
+      "source": "public-api",
+      "trace": "ADR-0504",
+      "status": "pass",
+      "citation": "tests/integration/npm-shell-update-parity.test.ts:35",
+      "note": ""
+    },
+    {
+      "row": "InstallResult.skippedOptionalDependencies distinguishes selected metadata from unresolved optional requests",
+      "source": "public-api",
+      "trace": "ADR-0504",
+      "status": "weak",
+      "citation": "tests/no-coi/fixtures/npm-install-update-cases.ts:23",
+      "note": "Resolution admission throws after manifest selection are reported as null; native-policy differential in blocker exposes the lost selected fact."
+    },
+    {
+      "row": "Shared no-COI Worker executes same npm differential and preserves command continuation",
+      "source": "acceptance",
+      "trace": "I9 + scenario6",
+      "status": "pass",
+      "citation": "tests/no-coi/npm-update-parity.spec.ts:13",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "packages/npm-client/src/installer-walk.ts:582",
+          "summary": "Resolved optional native admission failures are mislabeled unresolved: source.resolve selects a real manifest, then assertNativeSupported throws before selected is assigned. Named optional @esbuild/darwin-arm64@0.28.0 saves npm:null@* instead of native npm ^0.28.0. Next installation also encounters the unsupported-alias ceiling unnecessarily. Fault class: false-fallback/lossy-aggregate at resolution-result projection. Missing RED: named root optional rejected by native policy after manifest selection. Sweep other post-selection throws inside both registry and lockfile sources, including lifecycle/shadow admission, without inferring a version from request text.",
+          "authority": "I9: package.json and lockfile change as npm would; ADR-0487 D3 native installed-version save semantics; ADR-0051 D3 legitimate optional-native skip; ADR-0504 selected optional-resolution facts",
+          "evidence": "Executed node --import tsx /tmp/pr357-review-native-optional.mts on clean HEAD7cdc15abc45ea1daf365a5865e4f25bba2ef70ff; raw output /tmp/pr357-review-native-optional.log. Genuine installed @esbuild/darwin-arm64 0.28.0 metadata (cpu arm64, os darwin), same local registry and HTTP500 tarball fault for native npm and real rifty installer. Both exit0; native optionalDependencies={\"@esbuild/darwin-arm64\":\"^0.28.0\"}, rifty={\"@esbuild/darwin-arm64\":\"npm:null@*\"}. Node24.16.0/npm11.17.0 confirmed independently in /tmp/pr357-review-native-metadata.log. Relevant code: installer-sources.ts:453 calls assertNativeSupported after selecting manifest; installer-walk.ts:571 assigns selected only after resolve returns; npm-shell-command.ts:747 converts null to npm:null alias."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

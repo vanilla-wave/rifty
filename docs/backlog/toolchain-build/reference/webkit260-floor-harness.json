@@ -1,0 +1,12 @@
+{
+  "run": "floor-webkit-2026-09-27T22:59:09.694Z",
+  "revision": "850eeee2640aae0793c5c629994acd20821cbf95",
+  "platform": "darwin/arm64",
+  "runner": "1.55.1",
+  "engine": "webkit",
+  "requestedBuild": "^26\\.0(?:\\.|$)",
+  "result": "unknown",
+  "steps": [],
+  "pageErrors": [],
+  "reason": "harness-launch: Error: browserType.launchPersistentContext: Protocol error (Playwright.setDownloadBehavior): Browser started with no default context\nCall log:\n\u001b[2m  - <launching> /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-floor-runner-Io2on3/browsers/webkit-2203/pw_run.sh --inspector-pipe --headless --user-data-dir=/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-floor-profile-RA1Au2 about:blank\u001b[22m\n\u001b[2m  - <launched> pid=31520\u001b[22m\n\u001b[2m  - [pid=31520] <gracefully close start>\u001b[22m\n\u001b[2m  - [pid=31520] <process did exit: exitCode=0, signal=null>\u001b[22m\n\u001b[2m  - [pid=31520] starting temporary directories cleanup\u001b[22m\n\u001b[2m  - [pid=31520] finished temporary directories cleanup\u001b[22m\n\u001b[2m  - [pid=31520] <gracefully close end>\u001b[22m\n"
+}

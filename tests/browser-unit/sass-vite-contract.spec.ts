@@ -22,6 +22,7 @@ import {
   sealedWorkbenchFixtureUrl,
   writeOwnerFile,
 } from './fixtures.ts';
+import { serveSassViteOracleRegistry } from './sass-registry-fixture.ts';
 
 interface HostEsbuild {
   build(options: Readonly<Record<string, unknown>>): Promise<{
@@ -193,8 +194,8 @@ function directCjsContractRunner(probeBundle: string): string {
   return `${probeBundle}
 const fs = require('node:fs');
 const cjs = require('sass-embedded');
-const compilerPath = '/.sass-compiler.scss';
-const compilerUrl = 'file:///.sass-compiler.scss';
+const compilerPath = '/home/project/.sass-compiler.scss';
+const compilerUrl = 'file:///home/project/.sass-compiler.scss';
 
 void (async () => {
   const outputPath = process.argv[2];
@@ -223,8 +224,8 @@ ${probeBundle}
 const require = createRequire(import.meta.url);
 const cjs = require('sass-embedded');
 const esm = await import('sass-embedded');
-const compilerPath = '/.sass-compiler.scss';
-const compilerUrl = 'file:///.sass-compiler.scss';
+const compilerPath = '/home/project/.sass-compiler.scss';
+const compilerUrl = 'file:///home/project/.sass-compiler.scss';
 const outputPath = process.argv[2];
 if (!outputPath) throw new Error('missing Sass ESM contract output path');
 const transcript = await RiftySassContractProbe.probeSassContract(
@@ -368,7 +369,7 @@ async function readText(page: Page, path: string): Promise<string> {
 }
 
 async function inspectSassTree(page: Page): Promise<SassTreeEvidence> {
-  const guestOutputPath = '/.sass-tree-evidence.json';
+  const guestOutputPath = '/home/project/.sass-tree-evidence.json';
   const ownerOutputPath = '/scratch/.sass-tree-evidence.json';
   const inspected = await execLine(page, `node .inspect-sass-tree.cjs ${guestOutputPath}`);
   expect(inspected.exit, inspected.out).toBe(0);
@@ -603,6 +604,7 @@ test('sass-embedded exact facade matches Node and powers Vite 7.3.6 SCSS dev/HMR
   page,
 }) => {
   test.setTimeout(300_000);
+  await serveSassViteOracleRegistry(context);
   const requests: string[] = [];
   context.on('request', (request) => requests.push(request.url()));
   const probeBundle = await bundleContractProbe();
@@ -774,7 +776,10 @@ test('sass-embedded exact facade matches Node and powers Vite 7.3.6 SCSS dev/HMR
         .map(({ substitutionId }) => substitutionId)
         .sort(),
     ).toEqual(
-      ['rifty.shadow-substitution.esbuild.v2', 'rifty.shadow-substitution.sass-embedded.v2'].sort(),
+      [
+        'rifty.shadow-substitution.esbuild.wasm-node.v1',
+        'rifty.shadow-substitution.sass-embedded.v2',
+      ].sort(),
     );
     const applied = plainRecord(
       appliedFacts.find(

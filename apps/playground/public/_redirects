@@ -1,1 +1,4 @@
+# npm registry proxy route (ADR-0528) — before the SPA fallback; mirrored in netlify.toml.
+/npm-registry/*  https://registry.npmjs.org/:splat  200
+/npm-registry    https://registry.npmjs.org/        200
 /*  /index.html  200

@@ -1,5 +1,238 @@
+import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { Buffer } from './buffer.ts';
+import { Buffer, isAscii, isUtf8 } from './buffer.ts';
+
+describe('Buffer.from backing-store ownership', () => {
+  it('aliases an ArrayBuffer window bidirectionally', () => {
+    const arrayBuffer = Uint8Array.from([0, 1, 2, 3, 4]).buffer;
+    const bytes = new Uint8Array(arrayBuffer);
+    const buffer = Buffer.from(arrayBuffer, 1, 3);
+
+    expect(buffer.buffer).toBe(arrayBuffer);
+    expect(buffer.byteOffset).toBe(1);
+    expect(Array.from(buffer)).toEqual([1, 2, 3]);
+
+    bytes[1] = 9;
+    buffer[1] = 8;
+    expect(Array.from(buffer)).toEqual([9, 8, 3]);
+    expect(Array.from(bytes)).toEqual([0, 9, 8, 3, 4]);
+  });
+
+  it('aliases a SharedArrayBuffer window when shared memory is available', () => {
+    const shared = new SharedArrayBuffer(5);
+    const bytes = new Uint8Array(shared);
+    bytes.set([0, 1, 2, 3, 4]);
+    const buffer = Buffer.from(shared, 1, 3);
+
+    expect(buffer.buffer).toBe(shared);
+    bytes[1] = 9;
+    buffer[1] = 8;
+    expect(Array.from(buffer)).toEqual([9, 8, 3]);
+    expect(Array.from(bytes)).toEqual([0, 9, 8, 3, 4]);
+  });
+
+  it('accepts SharedArrayBuffer in the byte predicates', () => {
+    const shared = new SharedArrayBuffer(3);
+    new Uint8Array(shared).set([0x61, 0x62, 0x63]);
+
+    expect(isUtf8(shared)).toBe(true);
+    expect(isAscii(shared)).toBe(true);
+  });
+
+  it('recognizes ArrayBuffer and SharedArrayBuffer from another realm', () => {
+    const foreign = runInNewContext('new ArrayBuffer(4)') as ArrayBuffer;
+    const foreignShared = runInNewContext('new SharedArrayBuffer(4)') as SharedArrayBuffer;
+
+    expect(foreign instanceof ArrayBuffer).toBe(false);
+    expect(foreignShared instanceof SharedArrayBuffer).toBe(false);
+
+    const buffer = Buffer.from(foreign, 1, 2);
+    const sharedBuffer = Buffer.from(foreignShared, 1, 2);
+    new Uint8Array(foreign)[1] = 7;
+    new Uint8Array(foreignShared)[1] = 8;
+
+    expect(buffer.buffer).toBe(foreign);
+    expect(sharedBuffer.buffer).toBe(foreignShared);
+    expect(buffer[0]).toBe(7);
+    expect(sharedBuffer[0]).toBe(8);
+  });
+
+  it('keeps typed-array input as an explicit copy', () => {
+    const typed = new Uint8Array([1, 2, 3]);
+    const buffer = Buffer.from(typed);
+
+    expect(buffer.buffer).not.toBe(typed.buffer);
+    typed[0] = 9;
+    buffer[1] = 8;
+    expect(Array.from(typed)).toEqual([9, 2, 3]);
+    expect(Array.from(buffer)).toEqual([1, 8, 3]);
+  });
+
+  it('length-tracks a resizable ArrayBuffer only when length is omitted', () => {
+    const resizable = new (
+      ArrayBuffer as unknown as {
+        new (
+          byteLength: number,
+          options: { maxByteLength: number },
+        ): ArrayBuffer & {
+          resize(byteLength: number): void;
+        };
+      }
+    )(4, { maxByteLength: 8 });
+    new Uint8Array(resizable).set([1, 2, 3, 4]);
+    const tracked = Buffer.from(resizable);
+    const trackedOffset = Buffer.from(resizable, 1);
+    const fixed = Buffer.from(resizable, 0, 4);
+
+    expect([tracked.length, trackedOffset.length, fixed.length]).toEqual([4, 3, 4]);
+
+    resizable.resize(8);
+    new Uint8Array(resizable).set([5, 6, 7, 8], 4);
+    expect([tracked.length, trackedOffset.length, fixed.length]).toEqual([8, 7, 4]);
+    expect(tracked.toString('hex')).toBe('0102030405060708');
+    expect(fixed.toString('hex')).toBe('01020304');
+
+    resizable.resize(2);
+    expect([tracked.length, trackedOffset.length, fixed.length]).toEqual([2, 1, 0]);
+    expect(tracked.toString('hex')).toBe('0102');
+  });
+
+  it('length-tracks a growable SharedArrayBuffer only when length is omitted', () => {
+    const growable = new (
+      SharedArrayBuffer as unknown as {
+        new (
+          byteLength: number,
+          options: { maxByteLength: number },
+        ): SharedArrayBuffer & {
+          grow(byteLength: number): void;
+        };
+      }
+    )(4, { maxByteLength: 8 });
+    const tracked = Buffer.from(growable);
+    const fixed = Buffer.from(growable, 0, 4);
+
+    growable.grow(8);
+
+    expect([tracked.length, fixed.length]).toEqual([8, 4]);
+  });
+
+  it('observes writes made through WebAssembly.Memory after view creation', () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const buffer = Buffer.from(memory.buffer, 0, 3);
+
+    new Uint8Array(memory.buffer, 0, 3).set([0x61, 0x62, 0x63]);
+    expect(buffer.buffer).toBe(memory.buffer);
+    expect(buffer.toString()).toBe('abc');
+  });
+
+  it('tracks unshared WebAssembly.Memory detachment after grow', () => {
+    const memory = new WebAssembly.Memory({ initial: 1, maximum: 2 });
+    const original = memory.buffer;
+    const buffer = Buffer.from(original, 0, 3);
+
+    memory.grow(1);
+
+    expect(original.byteLength).toBe(0);
+    expect(memory.buffer).not.toBe(original);
+    expect(buffer.buffer).toBe(original);
+    expect(buffer.length).toBe(0);
+    expect(buffer.toString()).toBe('');
+  });
+
+  it('keeps shared WebAssembly.Memory views fixed-length after grow', () => {
+    let memory: WebAssembly.Memory;
+    try {
+      memory = new WebAssembly.Memory({ initial: 1, maximum: 2, shared: true });
+    } catch {
+      return;
+    }
+    const original = memory.buffer;
+    const buffer = Buffer.from(original, 1, 3);
+    new Uint8Array(original).set([0, 1, 2, 3]);
+
+    memory.grow(1);
+    new Uint8Array(memory.buffer)[1] = 9;
+
+    expect(original.byteLength).toBe(65_536);
+    expect(memory.buffer.byteLength).toBe(131_072);
+    expect(memory.buffer).not.toBe(original);
+    expect(buffer.buffer).toBe(original);
+    expect(buffer.length).toBe(3);
+    expect(Array.from(buffer)).toEqual([9, 2, 3]);
+  });
+
+  it('reflects detached ArrayBuffer state and rejects a new detached view', () => {
+    const arrayBuffer = new ArrayBuffer(4);
+    const buffer = Buffer.from(arrayBuffer);
+
+    structuredClone(arrayBuffer, { transfer: [arrayBuffer] });
+
+    expect(arrayBuffer.byteLength).toBe(0);
+    expect(buffer.buffer).toBe(arrayBuffer);
+    expect(buffer.length).toBe(0);
+    expect(buffer.toString()).toBe('');
+    const error = captureError(() => Buffer.from(arrayBuffer));
+    expect(error).toBeInstanceOf(TypeError);
+    expect(error.code).toBeUndefined();
+  });
+
+  it('still coerces toString bounds for empty and detached backing stores', () => {
+    const empty = Buffer.alloc(0);
+    expect(() => empty.toString('utf8', Symbol() as unknown as number)).toThrow(TypeError);
+
+    const arrayBuffer = new ArrayBuffer(1);
+    const detached = Buffer.from(arrayBuffer);
+    structuredClone(arrayBuffer, { transfer: [arrayBuffer] });
+
+    expect(() => detached.toString('utf8', Symbol() as unknown as number)).toThrow(TypeError);
+  });
+
+  it('matches Node coercion and bounds errors for offset and length', () => {
+    const arrayBuffer = Uint8Array.from([0, 1, 2, 3]).buffer;
+    const coercedOffset = Buffer.from(arrayBuffer, '1' as unknown as number);
+    const fractionalLength = Buffer.from(arrayBuffer, 0, 1.9);
+    const negativeLength = Buffer.from(arrayBuffer, 0, -1);
+
+    expect(coercedOffset.byteOffset).toBe(1);
+    expect(Array.from(coercedOffset)).toEqual([1, 2, 3]);
+    expect(Array.from(fractionalLength)).toEqual([0]);
+    expect(negativeLength.length).toBe(0);
+
+    expect(Buffer.from(arrayBuffer, Number.NaN).byteOffset).toBe(0);
+    expect(Buffer.from(arrayBuffer, -0.2).byteOffset).toBe(0);
+    expect(Buffer.from(arrayBuffer, 1.9).byteOffset).toBe(1);
+
+    const negativeOffsetError = captureError(() => Buffer.from(arrayBuffer, -1));
+    expect(negativeOffsetError).toBeInstanceOf(RangeError);
+    expect(negativeOffsetError.code).toBeUndefined();
+    expect(negativeOffsetError.message).toBe('Start offset -1 is outside the bounds of the buffer');
+
+    const offsetError = captureError(() => Buffer.from(arrayBuffer, 5));
+    expect(offsetError).toBeInstanceOf(RangeError);
+    expect(offsetError.code).toBe('ERR_BUFFER_OUT_OF_BOUNDS');
+    expect(offsetError.message).toBe('"offset" is outside of buffer bounds');
+
+    const fractionalOffsetError = captureError(() => Buffer.from(arrayBuffer, 4.2));
+    expect(fractionalOffsetError.code).toBe('ERR_BUFFER_OUT_OF_BOUNDS');
+
+    const lengthError = captureError(() => Buffer.from(arrayBuffer, 3, 2));
+    expect(lengthError).toBeInstanceOf(RangeError);
+    expect(lengthError.code).toBe('ERR_BUFFER_OUT_OF_BOUNDS');
+    expect(lengthError.message).toBe('"length" is outside of buffer bounds');
+
+    const fractionalWindowError = captureError(() => Buffer.from(arrayBuffer, 3.2, 1));
+    expect(fractionalWindowError.code).toBe('ERR_BUFFER_OUT_OF_BOUNDS');
+  });
+});
+
+function captureError(fn: () => unknown): Error & { code?: string } {
+  try {
+    fn();
+  } catch (error) {
+    return error as Error & { code?: string };
+  }
+  throw new Error('expected function to throw');
+}
 
 describe('Buffer.write', () => {
   it('honors `length` (truncation)', () => {

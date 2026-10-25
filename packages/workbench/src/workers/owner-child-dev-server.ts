@@ -6,11 +6,12 @@
  * but the child is a long-lived SERVER (serve:true), not run-to-completion.
  */
 import {
-  type KernelEntryCapabilityPorts,
   type SpawnWorkerSpec,
   globalProcessManager,
   observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
+import type { NodeEntryRuntimeBinding } from '@riftydev/runtime-js/builtins/node-entry-url';
+import { preparePackageServerEnvironment } from '@riftydev/shadow-registry/runtime/common';
 import type { ProcessExit } from '@riftydev/shell';
 import {
   type ChildTerminalContext,
@@ -26,20 +27,18 @@ import {
   DevServerRunError,
   type SupervisedDevServerHandle,
 } from './dev-server-controller.ts';
+import type { GuestRoots } from './guest-layout.ts';
 import type { NodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import {
   type ReserveOwnerChildAdmission,
-  abortOwnerChildAdmissionAfterSpawn,
-  abortOwnerChildAdmissionBeforeSpawn,
-  attachOwnerChildCapabilities,
-  commitOwnerChildAdmission,
   observeOwnerChildExit,
+  projectOwnerChildRuntimeBindings,
 } from './owner-child-admission.ts';
 
 export interface DevServerChildSpawnParams extends ChildTerminalContext {
   readonly cfg: NodeServerPackageConfig;
   readonly env: Readonly<Record<string, string>>;
-  readonly remoteFsRoot?: string;
+  readonly guestRoots?: GuestRoots;
   readonly previewScope?: string;
 }
 
@@ -48,25 +47,23 @@ export function buildDevServerChildSpawnSpec(
   params: DevServerChildSpawnParams,
   devServerWorkerUrl: string,
   nodeWorkerRuntime: NodeWorkerRuntimeConfig,
-  capabilityPorts?: KernelEntryCapabilityPorts,
+  runtimeBindings: readonly NodeEntryRuntimeBinding[] = [],
 ): SpawnWorkerSpec {
+  const projectedBindings = projectOwnerChildRuntimeBindings(runtimeBindings, params.guestRoots);
   const entry = buildDevServerChildEntry(devServerWorkerUrl, {
     nodeWorkerRuntime,
     cfg: params.cfg,
     terminal: childTerminalBootstrap(params),
-    ...(params.remoteFsRoot === undefined ? {} : { remoteFsRoot: params.remoteFsRoot }),
+    ...(params.guestRoots ?? {}),
     ...(params.previewScope === undefined ? {} : { previewScope: params.previewScope }),
+    ...(projectedBindings.length === 0 ? {} : { runtimeBindings: projectedBindings }),
   });
   return {
-    entry:
-      capabilityPorts === undefined ? entry : attachOwnerChildCapabilities(entry, capabilityPorts),
+    stdinMode: 'pull',
+    entry,
     argv: ['rifty', params.cfg.entryPath],
     env: {
-      ...params.env,
-      // rifty has no native bindings by construction. Force napi-rs consumers
-      // onto their WASI path so a failed WASI load stays loud instead of falling
-      // through to the generic "Cannot find native binding" diagnostic.
-      NAPI_RS_FORCE_WASI: '1',
+      ...preparePackageServerEnvironment(params.env),
       // node-server template entries bind `process.env.PORT`; set it to the dev
       // port so the child's entry listens where the owner expects (ADR-0150 P6b).
       // The in-realm `process.env.PORT` mutation in dev-server-boot doesn't reach
@@ -167,11 +164,11 @@ export function createOwnerChildDevServer(
             opts.params,
             devServerWorkerUrl,
             nodeWorkerRuntime,
-            reservation.snapshot.capabilityPorts,
+            reservation.snapshot.runtimeBindings,
           ),
         );
       } catch (error) {
-        abortOwnerChildAdmissionBeforeSpawn(reservation, error);
+        reservation.abortBeforeSpawn(error);
         throw error;
       }
       const admissionExit = observeOwnerChildExit(handle);
@@ -466,10 +463,10 @@ export function createOwnerChildDevServer(
             'dev-server child setup and termination failed',
           );
         }
-        await abortOwnerChildAdmissionAfterSpawn(reservation, setupError, admissionExit);
+        await reservation.abortAfterChildSettlement(setupError, admissionExit);
         throw setupError;
       }
-      commitOwnerChildAdmission(reservation, admissionExit);
+      reservation.commit();
       return boot;
     },
   };

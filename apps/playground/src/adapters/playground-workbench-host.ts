@@ -1,6 +1,5 @@
 import { WorkbenchOriginOccupiedError } from '@riftydev/workbench';
 import devServerWorkerUrl from '@riftydev/workbench/dev-server-worker?worker&url';
-import kernelWorkerUrl from '@riftydev/workbench/kernel-worker?worker&url';
 import nodeWorkerUrl from '@riftydev/workbench/node-worker?worker&url';
 import ownerWorkerUrl from '@riftydev/workbench/owner-worker?worker&url';
 import {
@@ -15,6 +14,7 @@ import typescriptWorkerUrl from '@riftydev/workbench/typescript-worker?worker&ur
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { getRegistryProxyPrefix } from '../glue/registry-config.ts';
 import { getEddyBundleBaseUrl, getResolverUrl } from '../glue/resolver-config.ts';
+import kernelWorkerUrl from '../workers/quickjs-kernel-worker-host.ts?worker&url';
 
 function presetPins(value: unknown): Readonly<Record<string, string>> | undefined {
   if (value === undefined || value === '') return undefined;
@@ -41,7 +41,7 @@ function presetPins(value: unknown): Readonly<Record<string, string>> | undefine
 }
 
 /** Vite/bundler deployment boundary; semantic App code receives no worker URLs. */
-export function playgroundWorkbenchOptions(): PlaygroundWorkbenchOptions {
+export function playgroundWorkbenchOptions() {
   const resolverUrl = getResolverUrl();
   const bundleBaseUrl = getEddyBundleBaseUrl();
   const pins = presetPins(import.meta.env.VITE_RIFTY_EDDY_PINS);
@@ -71,7 +71,7 @@ export function playgroundWorkbenchOptions(): PlaygroundWorkbenchOptions {
           }),
     }),
     storage: Object.freeze({ persistence: 'preferred' as const }),
-  });
+  }) satisfies PlaygroundWorkbenchOptions;
 }
 
 export interface OpenedPlaygroundAppWorkbench {

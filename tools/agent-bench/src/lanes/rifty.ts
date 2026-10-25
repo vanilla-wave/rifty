@@ -1,0 +1,224 @@
+import { readFile } from 'node:fs/promises';
+import { type Page, expect } from '@playwright/test';
+import type { AgentSessionEvent, AgentTrace } from '@riftydev/agent';
+import {
+  openShellTerminal,
+  pickStarter,
+  runTerminalLine,
+  runTerminalLineSettled,
+  terminalBuffer,
+  terminalHistoryExitCode,
+} from '../../../../tests/e2e/helpers/playground.ts';
+import type { FileTree } from '../files.ts';
+import { coreObservation } from './core-observation.ts';
+import type { Input, Prepared } from './types.ts';
+
+async function stopProject(page: Page) {
+  const pill = page.locator('.rf-livepill');
+  if ((await pill.getAttribute('data-state')) === 'stopped') return;
+  await page.locator('[data-action="open-palette"]').click();
+  await page
+    .getByTestId('command-palette')
+    .getByRole('button', { name: 'Stop project', exact: true })
+    .click();
+  await expect(pill).toHaveAttribute('data-state', 'stopped', { timeout: 90000 });
+}
+async function archive(page: Page): Promise<FileTree> {
+  await stopProject(page);
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  const path = await (await download).path();
+  if (!path) throw new Error('Workspace archive has no file');
+  const data = JSON.parse(await readFile(path, 'utf8')) as {
+    files: { path: string; content: string }[];
+  };
+  return Object.fromEntries(
+    data.files
+      .filter(
+        (file) =>
+          !file.path.startsWith('.git/') &&
+          !file.path.startsWith('node_modules/') &&
+          !file.path.startsWith('dist/'),
+      )
+      .map((file) => [file.path, Buffer.from(file.content, 'base64').toString('utf8')]),
+  );
+}
+export async function prepareRifty(input: Input): Promise<Prepared> {
+  const { browser, task, config, endpoint, key, playgroundUrl } = input;
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await context.newPage();
+  try {
+    await page.goto(`${playgroundUrl}?agentBench=1`);
+    await pickStarter(page, task.preset);
+    if (task.corpus) {
+      await stopProject(page);
+      const chooser = page.waitForEvent('filechooser');
+      await page.locator('[data-action="open-palette"]').click();
+      await page
+        .getByTestId('command-palette')
+        .getByRole('button', { name: 'Import workspace archive', exact: true })
+        .click();
+      await (await chooser).setFiles({
+        name: 'corpus.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(
+          JSON.stringify({
+            version: 1,
+            root: '/',
+            files: Object.entries(task.files).map(([path, text]) => ({
+              path,
+              encoding: 'base64',
+              content: Buffer.from(text).toString('base64'),
+            })),
+          }),
+        ),
+      });
+      await expect(
+        page
+          .locator('.rf-toast[data-tone="success"]')
+          .filter({ hasText: 'Workspace archive imported' }),
+      ).toBeVisible({ timeout: 90000 });
+      await openShellTerminal(page);
+      await runTerminalLineSettled(page, 'npm install', 300000);
+      if ((await terminalHistoryExitCode(page, 'npm install')) !== 0)
+        throw new Error(`Corpus install failed: ${await terminalBuffer(page)}`);
+    } else {
+      await expect(
+        page.frameLocator('[data-testid="preview"] iframe').locator(task.node ? 'h1' : '#root'),
+      ).toContainText(task.node ? 'Hono' : 'Trackline', { timeout: 240000 });
+    }
+    await page.getByRole('button', { name: '+chat', exact: true }).click();
+    const panel = page.getByTestId('ai-panel');
+    await expect(panel).toBeVisible();
+    await panel.getByRole('button', { name: 'Settings', exact: true }).click();
+    const { envKey: _envKey, ...entry } = endpoint;
+    await panel.getByText('Advanced catalog', { exact: true }).click();
+    await panel.getByLabel('Model catalog (JSON)', { exact: true }).fill(JSON.stringify([entry]));
+    await panel.getByLabel('API key (optional)', { exact: true }).fill(key ?? '');
+    await panel.getByLabel('Tool limit', { exact: true }).fill(String(config.limits.maxToolCalls));
+    await panel
+      .getByLabel('Time limit (seconds)', { exact: true })
+      .fill(String(config.limits.runTimeoutMs / 1000));
+    await panel.getByRole('button', { name: 'Apply and reset chat', exact: true }).click();
+    await page.evaluate(async (taskId) => {
+      const hook = Reflect.get(globalThis, '__riftyAgentBench') as {
+        seed(input: { taskId: string; files: Record<string, string> }): Promise<void>;
+      };
+      await hook.seed({ taskId, files: {} });
+    }, task.id);
+    const before = await archive(page);
+    const terminal = await openShellTerminal(page);
+    if (!task.commandJudge) {
+      await runTerminalLine(page, 'npm run dev', terminal);
+      await expect(page.locator('.rf-livepill')).toHaveAttribute('data-state', 'running', {
+        timeout: 180000,
+      });
+    }
+    const requests: unknown[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && request.url().startsWith(endpoint.baseUrl)) {
+        const body = request.postDataJSON() as unknown;
+        requests.push(body);
+      }
+    });
+    return {
+      context,
+      page,
+      before,
+      async apply(files) {
+        await page.evaluate(async (files) => {
+          const hook = Reflect.get(globalThis, '__riftyAgentBench') as {
+            seed(input: { taskId: string; files: Record<string, string> }): Promise<void>;
+          };
+          await hook.seed({ taskId: 'trusted-control', files });
+        }, files);
+      },
+      async command(line) {
+        await openShellTerminal(page);
+        await runTerminalLineSettled(page, line, 30000);
+        return {
+          exitCode: await terminalHistoryExitCode(page, line),
+          stdout: await terminalBuffer(page),
+          stderr: '',
+        };
+      },
+      async run() {
+        const observation = await page.evaluateHandle(() => {
+          const hook = Reflect.get(globalThis, '__riftyAgentBench') as {
+            observe(listener: (event: AgentSessionEvent) => void): () => void;
+          };
+          const events: AgentSessionEvent[] = [];
+          const detach = hook.observe((event) => {
+            if (
+              (event.type === 'agent' && event.event.type === 'message_end') ||
+              ['retry', 'compaction', 'repeated-call'].includes(event.type)
+            )
+              events.push(structuredClone(event));
+          });
+          return { events, detach };
+        });
+        try {
+          await panel.getByLabel('Message', { exact: true }).fill(task.prompt);
+          await panel.getByRole('button', { name: 'Send', exact: true }).click();
+          await expect(panel).toHaveAttribute(
+            'data-status',
+            /^(done|error|aborted|budget-exceeded|context-exceeded)$/,
+            { timeout: config.limits.runTimeoutMs + 120000 },
+          );
+          const trace = await page.evaluate(async () => {
+            const hook = Reflect.get(globalThis, '__riftyAgentBench') as {
+              exportTrace(): Promise<AgentTrace>;
+            };
+            return hook.exportTrace();
+          });
+          const events = await observation.evaluate((value) => value.events);
+          return coreObservation(trace, requests, events);
+        } finally {
+          await observation.evaluate((value) => value.detach());
+          await observation.dispose();
+        }
+      },
+      async preview() {
+        if ((await page.locator('.rf-livepill').getAttribute('data-state')) === 'stopped') {
+          await runTerminalLine(page, 'npm run dev', terminal);
+          await expect(page.locator('.rf-livepill')).toHaveAttribute('data-state', 'running', {
+            timeout: 180000,
+          });
+        }
+        await expect(page.locator('[data-testid="preview"] .rf-preview__status')).toHaveAttribute(
+          'data-phase',
+          'live',
+          { timeout: 180000 },
+        );
+        const element = await page.locator('[data-testid="preview"] iframe').elementHandle();
+        const view = await element?.contentFrame();
+        if (!view) throw new Error('No actual playground preview frame');
+        await view.waitForLoadState('domcontentloaded');
+        return { view, previewUrl: view.url() };
+      },
+      async snapshot() {
+        const tab = page.locator(
+          `.rf-terminal-tab__select[data-session-id="${terminal.sessionId}"]`,
+        );
+        const running = tab.locator('..');
+        if ((await running.getAttribute('data-running')) === 'true') {
+          await tab.click();
+          const input = page
+            .locator(`.rf-terminal-slot[data-session-id="${terminal.sessionId}"] textarea`)
+            .first();
+          await input.focus();
+          await input.press('Control+C');
+          await expect(running).toHaveAttribute('data-running', 'false', { timeout: 90000 });
+        }
+        await expect(page.locator('.rf-livepill')).toHaveAttribute('data-state', 'stopped', {
+          timeout: 90000,
+        });
+        return archive(page);
+      },
+      close: () => context.close(),
+    };
+  } catch (error) {
+    await context.close();
+    throw error;
+  }
+}

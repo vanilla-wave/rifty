@@ -1,0 +1,74 @@
+{
+  "node": "v24.16.0",
+  "probes": [
+    {
+      "name": "defaultVariable",
+      "source": "const native=Atomics; { const {native={waitAsync:()=>1}}={}; if(typeof native.waitAsync==='function') Atomics.waitAsync(new Int32Array(new SharedArrayBuffer(4)),0,0,0); }",
+      "reviewBaselineGuard": [],
+      "reviewEmittedGuard": ["worker.js:1:92: post-ES2022 builtin Atomics.waitAsync"],
+      "currentGuard": ["worker.js:1:103: post-ES2022 builtin Atomics.waitAsync"],
+      "emitted": [
+        {
+          "minify": false,
+          "source": "const native = Atomics;\n{\n  const { native: native2 = { waitAsync: () => 1 } } = {};\n  if (typeof native2.waitAsync === \"function\") Atomics.waitAsync(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 0);\n}\n",
+          "guard": ["worker.js:4:48: post-ES2022 builtin Atomics.waitAsync"]
+        },
+        {
+          "minify": true,
+          "source": "const native=Atomics;{const{native:n={waitAsync:()=>1}}={};typeof n.waitAsync==\"function\"&&Atomics.waitAsync(new Int32Array(new SharedArrayBuffer(4)),0,0,0)}\n",
+          "guard": ["worker.js:1:92: post-ES2022 builtin Atomics.waitAsync"]
+        }
+      ],
+      "missingNativeRuntime": {
+        "name": "TypeError",
+        "message": "Atomics.waitAsync is not a function"
+      }
+    },
+    {
+      "name": "arrayVariable",
+      "source": "const native=Atomics; { const [native]=[{waitAsync:()=>1}]; if(typeof native.waitAsync==='function') Atomics.waitAsync(new Int32Array(new SharedArrayBuffer(4)),0,0,0); }",
+      "reviewBaselineGuard": [],
+      "reviewEmittedGuard": ["worker.js:1:84: post-ES2022 builtin Atomics.waitAsync"],
+      "currentGuard": ["worker.js:1:102: post-ES2022 builtin Atomics.waitAsync"],
+      "emitted": [
+        {
+          "minify": false,
+          "source": "const native = Atomics;\n{\n  const [native2] = [{ waitAsync: () => 1 }];\n  if (typeof native2.waitAsync === \"function\") Atomics.waitAsync(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 0);\n}\n",
+          "guard": ["worker.js:4:48: post-ES2022 builtin Atomics.waitAsync"]
+        },
+        {
+          "minify": true,
+          "source": "const native=Atomics;{const[n]=[{waitAsync:()=>1}];typeof n.waitAsync==\"function\"&&Atomics.waitAsync(new Int32Array(new SharedArrayBuffer(4)),0,0,0)}\n",
+          "guard": ["worker.js:1:84: post-ES2022 builtin Atomics.waitAsync"]
+        }
+      ],
+      "missingNativeRuntime": {
+        "name": "TypeError",
+        "message": "Atomics.waitAsync is not a function"
+      }
+    },
+    {
+      "name": "varRedeclare",
+      "source": "var native=Atomics; native.waitAsync(new Int32Array(new SharedArrayBuffer(4)),0,0,0); var native={};",
+      "reviewBaselineGuard": [],
+      "reviewEmittedGuard": [],
+      "currentGuard": ["worker.js:1:21: post-ES2022 builtin Atomics.waitAsync"],
+      "emitted": [
+        {
+          "minify": false,
+          "source": "var native = Atomics;\nnative.waitAsync(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 0);\nvar native = {};\n",
+          "guard": ["worker.js:2:1: post-ES2022 builtin Atomics.waitAsync"]
+        },
+        {
+          "minify": true,
+          "source": "var native=Atomics;native.waitAsync(new Int32Array(new SharedArrayBuffer(4)),0,0,0);var native={};\n",
+          "guard": ["worker.js:1:20: post-ES2022 builtin Atomics.waitAsync"]
+        }
+      ],
+      "missingNativeRuntime": {
+        "name": "TypeError",
+        "message": "native.waitAsync is not a function"
+      }
+    }
+  ]
+}

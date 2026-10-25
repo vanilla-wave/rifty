@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- WASM boot fetches through the host I/O boundary, independent of guest Node Fetch globals (ADR-0541).
+
 ### Added
 
 - **`runWasi` accepts a precompiled `WebAssembly.Module` (ADR-0193):** callers

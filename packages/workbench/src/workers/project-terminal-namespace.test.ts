@@ -7,9 +7,12 @@ import {
 } from '@riftydev/vfs';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
+import { createGuestLayout } from './guest-layout.ts';
 import { createProjectTerminalNamespace } from './project-terminal-namespace.ts';
 
-const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
+// These rows pin the project-at-`/` mapping (ADR-0280 seam); ADR-0531 rows cover the mounts.
+const LAYOUT = createGuestLayout('/', ROOT);
 const GUESSED_PHYSICAL_ROOT = '/projects/project-files';
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -73,7 +76,7 @@ describe('project terminal namespace', () => {
     fsSync.writeFileSync('/src/renamed.txt', bytes('outside rename target'));
     fsSync.writeFileSync('/global-only.txt', bytes('outside only'));
     fsSync.utimes('/src/input.txt', 777, 777);
-    const namespace = createProjectTerminalNamespace({ projectRoot: ROOT, fileSystem: fsSync });
+    const namespace = createProjectTerminalNamespace({ layout: LAYOUT, fileSystem: fsSync });
     const projectFs = namespace.fileSystem;
 
     projectFs.mkdirSync('/src', { recursive: true });
@@ -114,7 +117,7 @@ describe('project terminal namespace', () => {
     fsSync.mkdirSync(`${GUESSED_PHYSICAL_ROOT}/src`, { recursive: true });
     fsSync.writeFileSync(`${GUESSED_PHYSICAL_ROOT}/src/main.js`, bytes('outside guess'));
     fsSync.writeFileSync('/escape.txt', bytes('outside escape'));
-    const namespace = createProjectTerminalNamespace({ projectRoot: ROOT, fileSystem: fsSync });
+    const namespace = createProjectTerminalNamespace({ layout: LAYOUT, fileSystem: fsSync });
 
     namespace.fileSystem.writeFileSync('/../../escape.txt', bytes('inside clamp'));
     namespace.fileSystem.mkdirSync(`${GUESSED_PHYSICAL_ROOT}/src`, { recursive: true });
@@ -157,7 +160,7 @@ describe('project terminal namespace', () => {
 
   it.each(reservedOperations)('rejects top-level owner metadata through %s', (_, operation) => {
     const fsSync = seededProject();
-    const namespace = createProjectTerminalNamespace({ projectRoot: ROOT, fileSystem: fsSync });
+    const namespace = createProjectTerminalNamespace({ layout: LAYOUT, fileSystem: fsSync });
 
     const error = thrown(() => operation(namespace.fileSystem));
 
@@ -170,7 +173,7 @@ describe('project terminal namespace', () => {
 
   it('keeps missing-path diagnostics in the public namespace', () => {
     const fsSync = seededProject();
-    const namespace = createProjectTerminalNamespace({ projectRoot: ROOT, fileSystem: fsSync });
+    const namespace = createProjectTerminalNamespace({ layout: LAYOUT, fileSystem: fsSync });
 
     const error = thrown(() => namespace.fileSystem.readFileBytesSync('/missing.txt'));
 
@@ -185,7 +188,7 @@ describe('project terminal namespace', () => {
     const { calls: guardCalls, guard } = trackedApplyingGuard();
     const assertPortablePaths = vi.fn();
     const namespace = createProjectTerminalNamespace({
-      projectRoot: ROOT,
+      layout: LAYOUT,
       fileSystem: fsSync,
       mutationGuard: guard,
       assertPortablePaths,
@@ -280,7 +283,7 @@ describe('project terminal namespace', () => {
     (_, observe, operation) => {
       const fsSync = seededProject();
       const innerCall = observe(fsSync);
-      const namespace = createProjectTerminalNamespace({ projectRoot: ROOT, fileSystem: fsSync });
+      const namespace = createProjectTerminalNamespace({ layout: LAYOUT, fileSystem: fsSync });
 
       const error = thrown(() => operation(namespace.fileSystem));
 
@@ -309,7 +312,7 @@ describe('project terminal namespace', () => {
       const apply = vi.fn(() => fsSync.writeFileSync(`${ROOT}/keep.txt`, bytes('changed')));
       const { calls: guardCalls, guard } = trackedApplyingGuard();
       const namespace = createProjectTerminalNamespace({
-        projectRoot: ROOT,
+        layout: LAYOUT,
         fileSystem: fsSync,
         mutationGuard: guard,
       });
@@ -327,7 +330,7 @@ describe('project terminal namespace', () => {
 
   it('removes owner roots from VfsError, generic Error, and AggregateError diagnostics', () => {
     const fsSync = seededProject();
-    const namespace = createProjectTerminalNamespace({ projectRoot: ROOT, fileSystem: fsSync });
+    const namespace = createProjectTerminalNamespace({ layout: LAYOUT, fileSystem: fsSync });
     const ownerVfsError = new VfsError(
       'ENOENT',
       `${ROOT}/vfs.txt`,
@@ -362,7 +365,7 @@ describe('project terminal namespace', () => {
     const fsSync = seededProject();
     const stdout: Array<string | Uint8Array> = [];
     const stderr: Array<string | Uint8Array> = [];
-    const namespace = createProjectTerminalNamespace({ projectRoot: ROOT, fileSystem: fsSync });
+    const namespace = createProjectTerminalNamespace({ layout: LAYOUT, fileSystem: fsSync });
     const owner = namespace.toOwnerContext({
       cwd: '/',
       env: {},
@@ -378,5 +381,20 @@ describe('project terminal namespace', () => {
     expect(stderr).toEqual(['failed /src/broken.js']);
     expect(String(stdout[0])).not.toContain(ROOT);
     expect(String(stderr[0])).not.toContain(ROOT);
+  });
+});
+
+describe('virtual ancestor metadata', () => {
+  it('keeps root stat readable when a project entry collides with a nested mount', () => {
+    const fsSync = seededProject();
+    fsSync.mkdirSync(`${ROOT}/feature`, { recursive: true });
+    const fs = createProjectTerminalNamespace({ layout: LAYOUT, fileSystem: fsSync }).fileSystem;
+    const before = fs.statSync('/');
+    fsSync.mkdirSync(`${ROOT}/tmp`, { recursive: true });
+    expect(() => fs.readdirSync('/')).toThrow(/EEXIST.*\/tmp/);
+    expect(() => fs.readdirSync('/tmp')).toThrow(/EEXIST.*\/tmp/);
+    expect(fs.statSync('/')).toMatchObject({ isDirectory: true, nlink: before.nlink });
+    expect(fs.statSyncOrNull('/')).toMatchObject({ isDirectory: true, nlink: before.nlink });
+    expect(fs.existsSync('/')).toBe(true);
   });
 });

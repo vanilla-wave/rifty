@@ -1,0 +1,36 @@
+{
+  "date": "2026-09-28",
+  "node": "v24.16.0",
+  "probes": [
+    {
+      "name": "mutableAlias",
+      "source": "let wait = () => ({ value: 'fallback' });\nif (typeof Atomics.waitAsync === 'function') wait = Atomics.waitAsync;\nif (typeof wait === 'function') Atomics.waitAsync(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 0);",
+      "reviewBaselineGuard": [],
+      "currentGuard": ["worker.js:3:33: post-ES2022 builtin Atomics.waitAsync"],
+      "missingNativeRuntime": {
+        "name": "TypeError",
+        "message": "Atomics.waitAsync is not a function"
+      }
+    },
+    {
+      "name": "catchShadow",
+      "source": "const native = Atomics; try { throw {waitAsync: () => 1}; } catch (native) { if (typeof native.waitAsync === 'function') Atomics.waitAsync(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 0); }",
+      "reviewBaselineGuard": [],
+      "currentGuard": ["worker.js:1:122: post-ES2022 builtin Atomics.waitAsync"],
+      "missingNativeRuntime": {
+        "name": "TypeError",
+        "message": "Atomics.waitAsync is not a function"
+      }
+    },
+    {
+      "name": "destructuredParameter",
+      "source": "function run({Atomics}) { if(typeof Atomics.waitAsync === 'function') globalThis.Atomics.waitAsync(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 0); } run({Atomics:{waitAsync:()=>1}});",
+      "reviewBaselineGuard": [],
+      "currentGuard": ["worker.js:1:71: post-ES2022 builtin Atomics.waitAsync"],
+      "missingNativeRuntime": {
+        "name": "TypeError",
+        "message": "globalThis.Atomics.waitAsync is not a function"
+      }
+    }
+  ]
+}

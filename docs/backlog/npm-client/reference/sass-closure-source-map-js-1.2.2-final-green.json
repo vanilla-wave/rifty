@@ -1,0 +1,111 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Дефектов diff не найдено; merge — после GREEN browser-unit-chromium на reviewed SHA.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "833d9504aac7e1ca283216e32331ec97fa9aa53b",
+  "unit_goal_source": "PR #365, no-doc repair frozen Sass closure drift; BASE 25266b71af68972c283b4577b0c240edb8c55348. Baseline/template: 0196de47dfd703bf82a14c7b4804384d0b27c76f. Authorities: docs/backlog/npm-client/sass-closure-upstream-dependency-drift.md, docs/backlog/npm-client/reference/sass-1.100.0-packument.md, tools/shadow-registry/CHANGELOG.md:37, ADR-0344. Scope: per-release refresh source-map-js 1.2.1→1.2.2; recurring-policy draft не закрывается.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Vendored source-map-js@1.2.2: официальные bytes, SHA-256, SRI и manifest.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0344",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/internal/catalog-v2-data-authority.contract.test.ts:916",
+      "note": ""
+    },
+    {
+      "row": "sass-1.100.0-closure.json: точная required closure и идентичности зависимостей.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0344",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-sass-embedded-substitution.contract.test.ts:912; tests/browser-unit/sass-vite-contract.spec.ts:429",
+      "note": ""
+    },
+    {
+      "row": "sass-vite-7.3.6-node-build.json: воспроизводимый real-Node build oracle.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0344",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/generate-sass-vite-node-oracle.ts:463; tests/browser-unit/sass-vite-contract.spec.ts:466",
+      "note": ""
+    },
+    {
+      "row": "sass-vite-7.3.6-package-lock.fixture: точные identities и воспроизводимый offline replay.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0344",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/generate-sass-vite-node-oracle.ts:459",
+      "note": ""
+    },
+    {
+      "row": "Именованные Sass differential rows сохраняются с обновлённой зависимостью.",
+      "source": "acceptance",
+      "trace": "ADR-0344",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/sass-capsule.contract.test.ts:195",
+      "note": ""
+    },
+    {
+      "row": "Chromium carrier проверяет точную closure и Vite SCSS dev/HMR/build/offline.",
+      "source": "acceptance",
+      "trace": "ADR-0344",
+      "status": "pass",
+      "citation": "tests/browser-unit/sass-vite-contract.spec.ts:601; tests/browser-unit/sass-vite-contract.spec.ts:755",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/shadow-registry/src/fixtures/sass-1.100.0-closure.json:39",
+          "evidence": "gh run view 36749173503 --json headSha,status,jobs → headSha=833d9504aac7e1ca283216e32331ec97fa9aa53b; browser-unit-chromium job 110003253035 IN_PROGRESS, conclusion empty: https://github.com/vanilla-wave/rifty/actions/runs/36749173503/job/110003253035. Независимо выполнено: pnpm exec vitest run tools/shadow-registry/src/sass-capsule.contract.test.ts tools/shadow-registry/src/internal/catalog-v2-data-authority.contract.test.ts packages/npm-client/src/installer-sass-embedded-substitution.contract.test.ts → 3 files / 143 tests passed, 228.99s. pnpm --filter @riftydev/shadow-registry sass-vite-oracle:check → exit 0; Node v24.16.0/npm 11.17.0, две online npm ci сборки + offline replay. Node crypto probe → bytes=36349, sha256=05c8cf8e7c3a6b56cada7668fe9342b10f4b625efc92aba9ba05b9e8fe4d71a3; вычисленный SRI совпал с npm view source-map-js@1.2.2 dist.integrity → sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==. npm view source-map-js time --json → 1.2.2 published 2026-09-30T14:08:09.382Z. gh run view 36743897994 --job 109985491065 --log → expectExactSassClosure:442 expected 1.2.1/UXWM…, received 1.2.2/KGj…; 315 passed, 1 failed. git diff BASE 19f94f5b26e05c15c42d30afd1fb361ac85710cc -- tests/browser-unit/sass-vite-contract.spec.ts tools/shadow-registry/src/fixtures/sass-1.100.0-closure.json → пусто. git diff --check BASE..HEAD → exit 0; git status --short → пусто.",
+          "summary": "Browser GREEN ещё не подтверждён: CI выполняется. Дискриминирующий carrier, исходный RED и корректность refresh проверены; локальные проверки не заменяют browser acceptance. Это ограничение доказательства, не найденный дефект.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

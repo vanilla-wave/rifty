@@ -55,6 +55,16 @@ class CountingDelayedRegistry extends RegistryClient {
   }
 }
 
+/** Delays named packuments so a sibling's deferred tarball rejection lands mid-walk. */
+class SlowPackumentRegistry extends CountingDelayedRegistry {
+  readonly slowPackuments = new Set<string>();
+
+  override async getPackument(name: string): Promise<Packument> {
+    if (this.slowPackuments.has(name)) await new Promise((r) => setTimeout(r, 80));
+    return super.getPackument(name);
+  }
+}
+
 /**
  * Records the PEAK number of `getTarball` calls in flight at once via a live
  * gauge: increment on enter, await a gap so siblings overlap, decrement on exit.
@@ -425,6 +435,39 @@ describe('install — optional-dep fetch failure stays non-fatal under concurren
     await expect(
       install('root', '1.0.0', { main: '1.0.0' }, { vfs, cwd: '/proj', registry }),
     ).rejects.toThrow('simulated fetch failure for req@1.0.0');
+  });
+
+  it('[fault: observable-order] a required fetch rejecting mid-walk is observed by the install, never an unhandled rejection', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    // root → main (deferred tarball rejects after 5 ms), parent → slow (packument 80 ms):
+    // the walk still awaits slow's packument when main's rejection lands.
+    db.set('main', new Map([['1.0.0', await makeEntry('main', '1.0.0')]]));
+    db.set('parent', new Map([['1.0.0', await makeEntry('parent', '1.0.0', { slow: '1.0.0' })]]));
+    db.set('slow', new Map([['1.0.0', await makeEntry('slow', '1.0.0')]]));
+    const registry = new SlowPackumentRegistry(db);
+    registry.rejectKeys.add('main@1.0.0');
+    registry.slowPackuments.add('slow');
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const unhandled: string[] = [];
+    const record = (reason: unknown) => {
+      unhandled.push(reason instanceof Error ? reason.message : String(reason));
+    };
+    process.on('unhandledRejection', record);
+    try {
+      await expect(
+        install(
+          'root',
+          '1.0.0',
+          { main: '1.0.0', parent: '1.0.0' },
+          { vfs, cwd: '/proj', registry },
+        ),
+      ).rejects.toThrow('simulated fetch failure for main@1.0.0');
+      await new Promise((r) => setTimeout(r, 20));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', record);
+    }
   });
 
   it('[fault: concurrent-same-key] promotes a deferred optional-descendant fetch when a later required path dedupes', async () => {

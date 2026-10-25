@@ -1,0 +1,257 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted with advisory notes; proceed to implementation, then packed acceptance and independent Final+GREEN. Independent rerun: 12 intended RED, 0 timeouts; Pi oracle 7 PASS; agent typecheck PASS.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/ai-ide-pi-agent-harness.md; accepted goal docs/backlog/epics/ai-agent-mode-and-bench/goal.md and raw refine/FIT evidence; BASE acf594da9 (origin/main), clean reviewed HEAD 3807502ac; independent browser log /tmp/pr333-core-review-red.log; independent Node oracle /tmp/pr333-core-review-oracle-p3AjrS (Node v24.16.0)",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1 + I2 + I3 + I4 + I7",
+      "location": "docs/backlog/distribution/ai-ide-pi-agent-harness.md",
+      "summary": "This checkpoint proves preparation only. Implement core and prove GREEN, including packed consumer/no caller alias, before claiming these invariants delivered."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/playground/ai-mode-chat.md",
+      "summary": "Playground chat, visible terminal, settings, reset/export and live endpoint acceptance remain in the linked UI child."
+    },
+    {
+      "clause": "I3 + I6 + I7",
+      "location": "docs/backlog/distribution/ai-agent-no-coi-host.md",
+      "summary": "no-COI adapter, host capability transitions, resident exit/full cycle, project policy and replaced-worker uncertainty remain in the linked no-COI child."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/distribution/agent-bench.md",
+      "summary": "Three-lane benchmark and identical judge smoke remain in the linked measurement child."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: real Workbench files/search/patch/shell, consumer tool/instructions/fetch, absent capability notes and custom stream history/events",
+      "source": "acceptance",
+      "trace": "I1 + I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:16; tests/browser-unit/agent-core.spec.ts:100; tests/browser-unit/agent-core.spec.ts:168",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: provider failure retains completed write; prompt continuation and Stop settle calls and permit next command",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:48; tests/browser-unit/agent-core.spec.ts:67; tests/browser-unit/agent-core.spec.ts:168",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: tool/time budgets, UTF-8 head/tail cap, trace with timings/usage/output/diff and key-free settings",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:16; tests/browser-unit/agent-core.spec.ts:90; tests/browser-unit/agent-core.spec.ts:117; tests/browser-unit/agent-core.spec.ts:147; tests/browser-unit/agent-core.spec.ts:180",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: real companion diagnostics/diff and host URL/frame preview actions; absent tools omitted",
+      "source": "acceptance",
+      "trace": "I1 + I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:16; tests/browser-unit/agent-core.spec.ts:117; tests/browser-unit/agent-core.spec.ts:134",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: fixed snapshot/no registry, failed build then repair/build and preview update; same behavioral scenario to run packed after implementation",
+      "source": "acceptance",
+      "trace": "I1 + I7",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core-snapshot.spec.ts:5; tests/browser-unit/fixtures/agent-snapshot-proof.ts:9; docs/backlog/distribution/reference/ai-agent-core-evidence.md:41",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: same ProjectTerminal shell text/exit; Stop physically settles and closes before reuse",
+      "source": "acceptance",
+      "trace": "I1 + I3 + ADR-0341",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:16; tests/browser-unit/agent-core.spec.ts:67; tests/browser-unit/agent-core-snapshot.spec.ts:29",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: owner/CAS write behavior and watched preview update",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:188; tests/browser-unit/agent-core-snapshot.spec.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: exact edit/patch errors and real syntactic plus semantic diagnostics",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:100; tests/browser-unit/agent-core.spec.ts:117; tests/browser-unit/fixtures/agent-core-proof.ts:195",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: retained Pi actions after request failure and explicit skipped-call outcomes for custom streams",
+      "source": "acceptance",
+      "trace": "I2 + I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:48; tests/browser-unit/agent-core.spec.ts:168; tests/browser-unit/fixtures/agent-core-proof.ts:34; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:29",
+      "note": ""
+    },
+    {
+      "row": "provider / torn-state after committed write: visible error and history retained",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:48; tests/browser-unit/fixtures/agent-core-proof.ts:106",
+      "note": ""
+    },
+    {
+      "row": "host command / cancellation: real Stop and release; unexecuted pending calls receive errors",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:67; tests/browser-unit/agent-core.spec.ts:168; tests/browser-unit/fixtures/agent-core-proof.ts:131",
+      "note": ""
+    },
+    {
+      "row": "provider/tool / unbounded-read: wall-clock abort, byte cap and distinct budget status",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:90; tests/browser-unit/agent-core.spec.ts:147; tests/browser-unit/agent-core.spec.ts:180",
+      "note": ""
+    },
+    {
+      "row": "file / corrupt-input or concurrent edit: exact-match/CAS failure and host facts",
+      "source": "fault-matrix",
+      "trace": "I1 + I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:100; tests/browser-unit/agent-core.spec.ts:188; tests/browser-unit/fixtures/agent-core-proof.ts:337",
+      "note": ""
+    },
+    {
+      "row": "capabilities / sibling-drift: offered tool set and prompt reflect the host",
+      "source": "fault-matrix",
+      "trace": "I1 + I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:16; tests/browser-unit/agent-core.spec.ts:117; tests/browser-unit/agent-core.spec.ts:134",
+      "note": ""
+    },
+    {
+      "row": "createAgentSession: native Pi tools and transport, retained send/stop/history/events/export lifecycle",
+      "source": "public-api",
+      "trace": "ADR-0424 + I2 + I3 + I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/agent-core-proof.ts:24; tests/browser-unit/agent-core.spec.ts:16; tests/browser-unit/agent-core.spec.ts:48; tests/browser-unit/agent-core.spec.ts:67; tests/browser-unit/agent-core.spec.ts:168; tests/browser-unit/agent-core.spec.ts:180",
+      "note": ""
+    },
+    {
+      "row": "createWorkbenchAgentHost: real public project files/terminal and optional companion capabilities",
+      "source": "public-api",
+      "trace": "ADR-0424 + I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/agent-core-proof.ts:27; tests/browser-unit/fixtures/agent-core-proof.ts:247; tests/browser-unit/agent-core.spec.ts:188",
+      "note": ""
+    },
+    {
+      "row": "createBrowserAgentPreview: supplied URL/frame fetch/query/click/type",
+      "source": "public-api",
+      "trace": "ADR-0424 + I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/agent-core-proof.ts:259; tests/browser-unit/agent-core.spec.ts:134",
+      "note": ""
+    },
+    {
+      "row": "Native Pi tool/event/message/StreamFn types and Type export for consumer extensions",
+      "source": "public-api",
+      "trace": "ADR-0424 + I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/agent-core-proof.ts:34; tests/browser-unit/fixtures/agent-core-proof.ts:60; tests/browser-unit/agent-core.spec.ts:16; tests/browser-unit/agent-core.spec.ts:168",
+      "note": ""
+    },
+    {
+      "row": "Frozen Pi 0.85.1 oracle: prompt/follow-up recovery, OpenAI wire, abort variants, ignored abort and replay declaration",
+      "source": "frozen-artifact",
+      "trace": "ADR-0424 + I2 + I3",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:29; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:56; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:95; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:117; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:145; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:169",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/fixtures/agent-core-proof.ts:195",
+          "summary": "Parity 3 names ambiguous old text and mismatched patch hunks, but the fixture exercises missing old text and a valid patch only. glob/list_files/read_file are invoked without validating their returned contents. Add direct assertions when implementing these branches. This is a reading concern, not an executed surviving mutant; coverage remains pass under REV-4/REV-5.",
+          "authority": "",
+          "evidence": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/fixtures/agent-snapshot-proof.ts:14",
+          "summary": "The preview iframe is appended without first observing the original page or its document identity. The final text assertion may observe the first load or a reload, so this source scenario alone is weaker evidence for the specifically promised HMR transition. Packed behavior still needs its planned post-implementation run. No executed mutant claimed.",
+          "authority": "",
+          "evidence": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/agent-core.spec.ts:44",
+          "summary": "Key removal is checked only with settings that never supply an apiKey; trace.events/output retention and capping of consumer extension results are also not asserted directly. Exercise these declared I4 cases in the GREEN proof. No executed mutant claimed.",
+          "authority": "",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/agent-core.spec.ts:16",
+          "summary": "Parity 1 promises shell text/exit equality with the same ProjectTerminal command. Current assertions observe cat output and later build success/error, but never run the reference command for a differential text/exit comparison. Keep the explicit parity promise visible for implementation/GREEN; no executed mutant or false oracle claim was established at this checkpoint.",
+          "authority": "",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "3807502aca22fef2407af19e423941f80bdc5f40"
+}

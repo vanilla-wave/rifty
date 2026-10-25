@@ -1,0 +1,539 @@
+{
+  "run": "floor-webkit-2026-09-27T23:02:34.494Z",
+  "revision": "ef446585d179b84f20df53b6b496abf5993439a6",
+  "worktreeDirty": false,
+  "platform": "darwin/arm64",
+  "runner": "current",
+  "engine": "webkit",
+  "requestedBuild": "current",
+  "result": "fail",
+  "steps": [
+    {
+      "step": "support",
+      "status": "fail",
+      "ms": 15,
+      "value": {
+        "checkedAt": 1790550155735,
+        "checks": [
+          {
+            "id": "window",
+            "status": "passed",
+            "reason": "window: current context supports the operation"
+          },
+          {
+            "id": "secure-context",
+            "status": "passed",
+            "reason": "secure-context: current context supports the operation"
+          },
+          {
+            "id": "cross-origin-isolated",
+            "status": "failed",
+            "reason": "cross-origin-isolated: Error: Current document is not cross-origin isolated",
+            "error": {
+              "name": "Error",
+              "message": "Current document is not cross-origin isolated"
+            }
+          },
+          {
+            "id": "crypto",
+            "status": "passed",
+            "reason": "crypto: current context supports the operation"
+          },
+          {
+            "id": "page-locks",
+            "status": "passed",
+            "reason": "Web Locks acquired and released a private Window lock; origin lease availability is unverified"
+          },
+          {
+            "id": "module-worker",
+            "status": "passed",
+            "reason": "Module Worker loaded and received structured input"
+          },
+          {
+            "id": "module-import",
+            "status": "passed",
+            "reason": "module-import: native operation succeeded in dedicated Worker"
+          },
+          {
+            "id": "nested-worker",
+            "status": "passed",
+            "reason": "nested-worker: native operation succeeded in dedicated Worker"
+          },
+          {
+            "id": "message-port",
+            "status": "passed",
+            "reason": "Transferred MessagePort and ArrayBuffer roundtrip preserved exact bytes"
+          },
+          {
+            "id": "broadcast-channel",
+            "status": "passed",
+            "reason": "BroadcastChannel exchanged messages between Window and Worker"
+          },
+          {
+            "id": "js-eval",
+            "status": "passed",
+            "reason": "js-eval: native operation succeeded in dedicated Worker"
+          },
+          {
+            "id": "wasm",
+            "status": "passed",
+            "reason": "wasm: native operation succeeded in dedicated Worker"
+          },
+          {
+            "id": "shared-memory",
+            "status": "failed",
+            "reason": "shared-memory: ReferenceError: Can't find variable: SharedArrayBuffer",
+            "error": {
+              "name": "ReferenceError",
+              "message": "Can't find variable: SharedArrayBuffer"
+            }
+          },
+          {
+            "id": "opfs",
+            "status": "failed",
+            "reason": "opfs: DataCloneError: The object can not be cloned.",
+            "error": {
+              "name": "DataCloneError",
+              "message": "The object can not be cloned."
+            }
+          },
+          {
+            "id": "service-worker-api",
+            "status": "passed",
+            "reason": "service-worker-api: current context supports the operation"
+          },
+          {
+            "id": "service-worker-registration",
+            "status": "passed",
+            "reason": "classic Service Worker registered and activated in a private scope; deployment control unverified"
+          },
+          {
+            "id": "service-worker-module-registration",
+            "status": "passed",
+            "reason": "module Service Worker registered and activated in a private scope; deployment control unverified"
+          },
+          {
+            "id": "deployment-control",
+            "status": "incomplete",
+            "reason": "Actual deployment controller and routing are not verified by disposable browser probes"
+          }
+        ],
+        "modes": {
+          "coi": {
+            "composition": "openWorkbench",
+            "conclusion": "unsupported",
+            "required": [
+              "window",
+              "secure-context",
+              "crypto",
+              "module-worker",
+              "module-import",
+              "message-port",
+              "js-eval",
+              "opfs",
+              "cross-origin-isolated",
+              "page-locks",
+              "nested-worker",
+              "broadcast-channel",
+              "shared-memory",
+              "wasm",
+              "service-worker-api",
+              "service-worker-registration"
+            ],
+            "unmet": ["cross-origin-isolated", "shared-memory", "opfs"],
+            "limitations": []
+          },
+          "nonCoi": {
+            "composition": "sdk-toolchain",
+            "conclusion": "unsupported",
+            "required": [
+              "window",
+              "secure-context",
+              "crypto",
+              "module-worker",
+              "module-import",
+              "message-port",
+              "js-eval",
+              "opfs"
+            ],
+            "unmet": ["opfs"],
+            "limitations": []
+          }
+        },
+        "cleanup": {
+          "id": "cleanup",
+          "status": "passed",
+          "reason": "Probe Workers/ports/channels terminated and every owned native resource removed"
+        },
+        "limits": [
+          "Only tested browser prerequisites in the current context: actual deployment assets, CSP differences and controlling Service Worker configuration remain unverified.",
+          "No guarantee of arbitrary npm package compatibility, future storage availability or durability, or an available Workbench origin lease.",
+          "Non-COI describes the SDK toolchain composition; openWorkbench still requires COI."
+        ]
+      },
+      "error": {
+        "name": "SupportProbeFailure",
+        "message": "non-COI unsupported: opfs"
+      }
+    },
+    {
+      "step": "boot",
+      "status": "pass",
+      "ms": 86,
+      "value": {
+        "vfs": {
+          "backend": "opfs"
+        }
+      }
+    },
+    {
+      "step": "seed",
+      "status": "pass",
+      "ms": 13
+    },
+    {
+      "step": "install",
+      "status": "pass",
+      "ms": 7351
+    },
+    {
+      "step": "build",
+      "status": "pass",
+      "ms": 885,
+      "value": {
+        "exitCode": 0,
+        "html": "<!doctype html>\n<script type=\"module\" crossorigin src=\"/assets/index-CFqj0nU3.js\"></script>\n<title>rifty-floor-proof</title>"
+      }
+    },
+    {
+      "step": "flush",
+      "status": "pass",
+      "ms": 0,
+      "value": {
+        "applied": "yes",
+        "persistence": "flushed"
+      }
+    },
+    {
+      "step": "reload",
+      "status": "pass",
+      "ms": 0,
+      "value": {
+        "previous": 1790550155454,
+        "current": 1790550164075
+      }
+    },
+    {
+      "step": "reopen-boot",
+      "status": "pass",
+      "ms": 125,
+      "value": {
+        "vfs": {
+          "backend": "opfs"
+        }
+      }
+    },
+    {
+      "step": "reopen-saved-bytes",
+      "status": "pass",
+      "ms": 1,
+      "value": {
+        "exactSource": true,
+        "exactBuiltHtml": true
+      }
+    },
+    {
+      "step": "reopen",
+      "status": "pass",
+      "ms": 312
+    },
+    {
+      "step": "rebuild",
+      "status": "pass",
+      "ms": 740,
+      "value": {
+        "exitCode": 0,
+        "html": "<!doctype html>\n<script type=\"module\" crossorigin src=\"/assets/index-CFqj0nU3.js\"></script>\n<title>rifty-floor-proof</title>"
+      }
+    }
+  ],
+  "pageErrors": [],
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.4 Safari/605.1.15",
+  "build": "26.4",
+  "report": {
+    "schemaVersion": 1,
+    "date": "2026-09-27T23:02:35.719Z",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.4 Safari/605.1.15",
+    "coi": false,
+    "namespace": "browser-floor-8e2d85b1-9644-4d20-8100-34b08907bac6",
+    "result": "fail",
+    "steps": [
+      {
+        "step": "support",
+        "status": "fail",
+        "ms": 15,
+        "value": {
+          "checkedAt": 1790550155735,
+          "checks": [
+            {
+              "id": "window",
+              "status": "passed",
+              "reason": "window: current context supports the operation"
+            },
+            {
+              "id": "secure-context",
+              "status": "passed",
+              "reason": "secure-context: current context supports the operation"
+            },
+            {
+              "id": "cross-origin-isolated",
+              "status": "failed",
+              "reason": "cross-origin-isolated: Error: Current document is not cross-origin isolated",
+              "error": {
+                "name": "Error",
+                "message": "Current document is not cross-origin isolated"
+              }
+            },
+            {
+              "id": "crypto",
+              "status": "passed",
+              "reason": "crypto: current context supports the operation"
+            },
+            {
+              "id": "page-locks",
+              "status": "passed",
+              "reason": "Web Locks acquired and released a private Window lock; origin lease availability is unverified"
+            },
+            {
+              "id": "module-worker",
+              "status": "passed",
+              "reason": "Module Worker loaded and received structured input"
+            },
+            {
+              "id": "module-import",
+              "status": "passed",
+              "reason": "module-import: native operation succeeded in dedicated Worker"
+            },
+            {
+              "id": "nested-worker",
+              "status": "passed",
+              "reason": "nested-worker: native operation succeeded in dedicated Worker"
+            },
+            {
+              "id": "message-port",
+              "status": "passed",
+              "reason": "Transferred MessagePort and ArrayBuffer roundtrip preserved exact bytes"
+            },
+            {
+              "id": "broadcast-channel",
+              "status": "passed",
+              "reason": "BroadcastChannel exchanged messages between Window and Worker"
+            },
+            {
+              "id": "js-eval",
+              "status": "passed",
+              "reason": "js-eval: native operation succeeded in dedicated Worker"
+            },
+            {
+              "id": "wasm",
+              "status": "passed",
+              "reason": "wasm: native operation succeeded in dedicated Worker"
+            },
+            {
+              "id": "shared-memory",
+              "status": "failed",
+              "reason": "shared-memory: ReferenceError: Can't find variable: SharedArrayBuffer",
+              "error": {
+                "name": "ReferenceError",
+                "message": "Can't find variable: SharedArrayBuffer"
+              }
+            },
+            {
+              "id": "opfs",
+              "status": "failed",
+              "reason": "opfs: DataCloneError: The object can not be cloned.",
+              "error": {
+                "name": "DataCloneError",
+                "message": "The object can not be cloned."
+              }
+            },
+            {
+              "id": "service-worker-api",
+              "status": "passed",
+              "reason": "service-worker-api: current context supports the operation"
+            },
+            {
+              "id": "service-worker-registration",
+              "status": "passed",
+              "reason": "classic Service Worker registered and activated in a private scope; deployment control unverified"
+            },
+            {
+              "id": "service-worker-module-registration",
+              "status": "passed",
+              "reason": "module Service Worker registered and activated in a private scope; deployment control unverified"
+            },
+            {
+              "id": "deployment-control",
+              "status": "incomplete",
+              "reason": "Actual deployment controller and routing are not verified by disposable browser probes"
+            }
+          ],
+          "modes": {
+            "coi": {
+              "composition": "openWorkbench",
+              "conclusion": "unsupported",
+              "required": [
+                "window",
+                "secure-context",
+                "crypto",
+                "module-worker",
+                "module-import",
+                "message-port",
+                "js-eval",
+                "opfs",
+                "cross-origin-isolated",
+                "page-locks",
+                "nested-worker",
+                "broadcast-channel",
+                "shared-memory",
+                "wasm",
+                "service-worker-api",
+                "service-worker-registration"
+              ],
+              "unmet": ["cross-origin-isolated", "shared-memory", "opfs"],
+              "limitations": []
+            },
+            "nonCoi": {
+              "composition": "sdk-toolchain",
+              "conclusion": "unsupported",
+              "required": [
+                "window",
+                "secure-context",
+                "crypto",
+                "module-worker",
+                "module-import",
+                "message-port",
+                "js-eval",
+                "opfs"
+              ],
+              "unmet": ["opfs"],
+              "limitations": []
+            }
+          },
+          "cleanup": {
+            "id": "cleanup",
+            "status": "passed",
+            "reason": "Probe Workers/ports/channels terminated and every owned native resource removed"
+          },
+          "limits": [
+            "Only tested browser prerequisites in the current context: actual deployment assets, CSP differences and controlling Service Worker configuration remain unverified.",
+            "No guarantee of arbitrary npm package compatibility, future storage availability or durability, or an available Workbench origin lease.",
+            "Non-COI describes the SDK toolchain composition; openWorkbench still requires COI."
+          ]
+        },
+        "error": {
+          "name": "SupportProbeFailure",
+          "message": "non-COI unsupported: opfs"
+        }
+      },
+      {
+        "step": "boot",
+        "status": "pass",
+        "ms": 86,
+        "value": {
+          "vfs": {
+            "backend": "opfs"
+          }
+        }
+      },
+      {
+        "step": "seed",
+        "status": "pass",
+        "ms": 13
+      },
+      {
+        "step": "install",
+        "status": "pass",
+        "ms": 7351
+      },
+      {
+        "step": "build",
+        "status": "pass",
+        "ms": 885,
+        "value": {
+          "exitCode": 0,
+          "html": "<!doctype html>\n<script type=\"module\" crossorigin src=\"/assets/index-CFqj0nU3.js\"></script>\n<title>rifty-floor-proof</title>"
+        }
+      },
+      {
+        "step": "flush",
+        "status": "pass",
+        "ms": 0,
+        "value": {
+          "applied": "yes",
+          "persistence": "flushed"
+        }
+      },
+      {
+        "step": "reload",
+        "status": "pass",
+        "ms": 0,
+        "value": {
+          "previous": 1790550155454,
+          "current": 1790550164075
+        }
+      },
+      {
+        "step": "reopen-boot",
+        "status": "pass",
+        "ms": 125,
+        "value": {
+          "vfs": {
+            "backend": "opfs"
+          }
+        }
+      },
+      {
+        "step": "reopen-saved-bytes",
+        "status": "pass",
+        "ms": 1,
+        "value": {
+          "exactSource": true,
+          "exactBuiltHtml": true
+        }
+      },
+      {
+        "step": "reopen",
+        "status": "pass",
+        "ms": 312
+      },
+      {
+        "step": "rebuild",
+        "status": "pass",
+        "ms": 740,
+        "value": {
+          "exitCode": 0,
+          "html": "<!doctype html>\n<script type=\"module\" crossorigin src=\"/assets/index-CFqj0nU3.js\"></script>\n<title>rifty-floor-proof</title>"
+        }
+      }
+    ],
+    "built": {
+      "exitCode": 0,
+      "html": "<!doctype html>\n<script type=\"module\" crossorigin src=\"/assets/index-CFqj0nU3.js\"></script>\n<title>rifty-floor-proof</title>"
+    },
+    "storage": {
+      "quota": 20615843021,
+      "usage": 37722398
+    },
+    "memory": {
+      "status": "unknown",
+      "reason": "No portable total-memory API on this non-COI page; attach OS observation manually."
+    },
+    "eviction": {
+      "status": "unknown",
+      "reason": "Requires revisit on the same browser profile after seven days; survival is not an eviction guarantee."
+    },
+    "reloadOrigin": 1790550155454
+  },
+  "failingStep": "support"
+}

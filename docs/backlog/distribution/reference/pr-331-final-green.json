@@ -1,0 +1,642 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Merged tree c3b1ac320 (PR #331 over main c1658a757) passes Final+GREEN: no blocker, no missing row; advisory concerns only. Re-executed at HEAD by this reviewer: 11 unit carrier files 123/123 (sandbox, host, esbuild-cwd, extraction-boundary, snapshot-input, project-command/fs/watches, worker-fs-structured, listener-scope, command-policy); no-COI Playwright agent-sdk+snapshot-application+installed-cli+network 19/19 on ports 5811-5813; scratch mutants M1 (drop admitted&& on rejection status), M2 (recordEffects no-op), M3/M3b (drop refs+getCwd / getCwd-only forwarding in entry-preparation), M4 (handshake also accepts v4), M5 (eval fails on unhealed report) each RED exactly on its carrier; reviewer probe of host-fs-recovery mkdir/rename/rm passed. Driver artifacts inspected: pr:check 25/25 (/tmp/rifty-331-prcheck2.log), test:no-coi 90/90 (/tmp/rifty-331-nocoi-final.log), test:client-bundles PASS 4 agent scenarios (/tmp/rifty-331-bundles.log). Mergeable once PR #331 CI is observed green on this revision (I4, goal residual); no push/merge performed here.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/distribution/reference/pr-331-implementation-evidence.md (only unit document at HEAD; §'Merge with main and post-review repairs (2026-09-11)' line 191 lists the PR-side delta) + delete-on-done contracts read at revision 5417b5c3c: no-coi-project-files.md, public-api-ai-agent-exec-preview.md, epics/no-coi-agent-sdk goal.md (I1-I4); ADR-0418/0421/0422 (unit), ADR-0417/0419/0420/0423 (landed on main, merged); original issue325-source.json / issue326-source.json and user answer issues325-326-refine-evidence.md; BASE 5417b5c3c159256cb6426f921fc55d7868a1fe8d (prior Final+GREEN PASS pr-331-final-green.json); observed baseline main c1658a757b0926b24106188903998291fb95e679",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4 — PR #331 CI is green on the delivered revision",
+      "location": "docs/backlog/epics/no-coi-agent-sdk/goal.md@5417b5c3c:31; https://github.com/vanilla-wave/rifty/pull/331",
+      "summary": "Prior CI proof (run 34547673623) is bound to 5417b5c3c. HEAD c3b1ac320 has not been observed on CI at review time (branch not pushed by the reviewer). Local equivalents executed and green: pr:check 25/25, test:no-coi 90/90, test:client-bundles PASS. Closes when the PR CI run on c3b1ac320 (or its documentation-only successor) is green."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Files Acceptance 1: structured read/write/list/stat/mkdir/rename/remove share the real Worker VFS through a packed consumer",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:151; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:61; packages/runtime-js/src/worker-fs-structured.test.ts:31; /tmp/rifty-331-bundles.log:92",
+      "note": "re-executed: agent-sdk spec 5/5 at HEAD (reviewer run), worker-fs-structured 14/14; packed agentFilesScenario PASS (driver log)"
+    },
+    {
+      "row": "Files Acceptance 2: raw root anchoring and project file/command root plus readonly agreement",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0131",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:61; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:95; tests/no-coi/no-coi-agent-sdk.spec.ts:178",
+      "note": "re-executed at HEAD (agentFilesScenario/agentCommandsScenario)"
+    },
+    {
+      "row": "Files Acceptance 3: applied/persistence effects remain honest across failed storage and termination",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:146; packages/runtime-js/src/worker-fs-structured.test.ts:186; tests/no-coi/no-coi-agent-sdk.spec.ts:79; tests/no-coi/no-coi-dev-hmr.spec.ts:1110",
+      "note": "re-executed: agent-sdk:79 native OPFS fault at HEAD; dev-hmr via driver test:no-coi 90/90"
+    },
+    {
+      "row": "Files Acceptance 4: explicit console eval contract; structured files/command outcomes need no control files",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/protocol.ts:22; packages/runtime-js/src/host.ts:79; packages/rifty/README.md:228; packages/runtime-js/src/worker-entry.ts:120; tests/no-coi/no-coi-agent-sdk.spec.ts:138; tests/integration/no-coi-agent-browser-proof.mjs:7",
+      "note": "re-executed: PR-4 criterion change from BASE (eval failed on any unhealed OPFS report) to evaluation-only result + fs.flush() receipt; mutant M5 (revert to BASE handleEval) RED at agent-sdk.spec.ts:138 and main baseline no-coi-snapshot-application.spec.ts:298; HEAD 19/19"
+    },
+    {
+      "row": "Files fault: quota/permission/torn mutation or flush cannot report durable success",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:186; packages/runtime-js/src/worker-fs-structured.test.ts:220; packages/runtime-js/src/worker-fs-structured.test.ts:236; tests/no-coi/no-coi-agent-sdk.spec.ts:128",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "Files fault: peer death before reply preserves unknown/non-application distinction without replay",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-dev-hmr.spec.ts:1110; tests/no-coi/no-coi-agent-sdk.spec.ts:235; packages/runtime-js/src/host.ts:235",
+      "note": ""
+    },
+    {
+      "row": "Files fault: malformed paths/options, missing entries and readonly reject honestly",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:93; packages/runtime-js/src/worker-fs-structured.test.ts:108; packages/runtime-js/src/worker-fs-structured.test.ts:126; tests/no-coi/no-coi-agent-sdk.spec.ts:188; packages/workbench/src/workers/no-coi-project-fs.test.ts:92",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "Commands Acceptance 1: invocation completion/stop/output is structured and unambiguous",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:111; tests/no-coi/no-coi-agent-sdk.spec.ts:193; tests/no-coi/no-coi-agent-sdk.spec.ts:214; packages/workbench/src/workers/no-coi-project-command.test.ts:55; packages/rifty/src/sandbox.test.ts:982; tests/integration/no-coi-agent-browser-proof.mjs:78",
+      "note": "re-executed: agentCommandsScenario/agentStopScenario at HEAD; new never-admitted status carrier sandbox.test.ts:982 (mutant M1 RED)"
+    },
+    {
+      "row": "Commands Acceptance 2: independent cwd/env after success/failure/Stop, within-call sequencing and persistent effects",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:111; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:152; tests/no-coi/no-coi-agent-sdk.spec.ts:193",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "Commands Acceptance 3: Stop owns real settlement or Worker replacement; next run output stays separate",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:7; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:152; tests/no-coi/no-coi-agent-sdk.spec.ts:218; packages/workbench/src/workers/no-coi-project-command.test.ts:55; tests/integration/no-coi-agent-browser-proof.mjs:78",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "Commands Acceptance 4: applied effects, failed flush, unacknowledged writes and replacement stay explicit",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:7; tests/no-coi/no-coi-agent-sdk.spec.ts:79; tests/no-coi/no-coi-agent-sdk.spec.ts:235; packages/rifty/src/sandbox.test.ts:1020; packages/rifty/src/sandbox.ts:588",
+      "note": "re-executed: new restart unflushedWrites carrier sandbox.test.ts:1020 (mutant M2 RED); browser rows at HEAD"
+    },
+    {
+      "row": "Commands Acceptance 5: existing Shell, root/host policy and ordinary Node filesystem agreement",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:95; tests/no-coi/no-coi-agent-sdk.spec.ts:193; tests/no-coi/no-coi-agent-installed-cli.spec.ts:3",
+      "note": "re-executed: installed-cli spec at HEAD (11.0s)"
+    },
+    {
+      "row": "Commands Acceptance 6: host can prohibit background launch; ADR-0418 offers no background admission",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:126; tests/no-coi/no-coi-agent-sdk.spec.ts:203",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "Commands Acceptance 7: real no-COI browser covers Stop-next, failure-success, pending mutation and policy agreement",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:7; tests/no-coi/no-coi-agent-sdk.spec.ts:151; /tmp/rifty-331-bundles.log:92",
+      "note": "re-executed: source specs at HEAD; packed proof 4/4 scenarios (driver test:client-bundles on HEAD)"
+    },
+    {
+      "row": "Commands fault: cooperative abort awaits handler/final flush and preserves applied effects",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:7; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:152",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "Commands fault: non-cooperative/ended Worker exposes termination and unknown effects, next owner independent",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:172; tests/no-coi/no-coi-agent-sdk.spec.ts:235; tests/no-coi/no-coi-dev-hmr.spec.ts:1214",
+      "note": "re-executed: agentStopScenario at HEAD"
+    },
+    {
+      "row": "Commands fault: storage failure is not clean success or rollback/replay",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:79; packages/runtime-js/src/worker-fs-structured.test.ts:186; packages/workbench/src/workers/no-coi-toolchain-worker.ts:344",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "Commands fault: overlapping calls preserve the existing explicit Worker busy result",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0376",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:162; tests/no-coi/no-coi-agent-sdk.spec.ts:214; packages/rifty/src/sandbox.test.ts:982; packages/workbench/src/workers/no-coi-toolchain-worker.ts:397",
+      "note": "re-executed: busy + preceding Stop now reports failed (M1 RED)"
+    },
+    {
+      "row": "Commands fault: malformed root/policy and readonly boundary rejection",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:95; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:129; tests/no-coi/no-coi-agent-sdk.spec.ts:203; packages/workbench/src/workers/no-coi-project-fs.test.ts:92",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "RuntimeFs.readFile retains raw-root paths, UTF8/bytes and detached results",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:78; packages/runtime-js/src/worker-fs-structured.test.ts:108; packages/runtime-js/src/worker-fs-structured.test.ts:186",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: readdir",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:31",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: stat",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:46",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: mkdir",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:58",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: rename",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:67",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: rm",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:72",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: flush",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:236; tests/no-coi/no-coi-agent-sdk.spec.ts:140",
+      "note": "re-executed: sandbox.fs.flush() rejects SandboxPersistenceError with effects after native fault (HEAD)"
+    },
+    {
+      "row": "ADR-0418 public shape: ToolchainSandbox.project/project.fs",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:61; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:95; packages/rifty/src/sandbox.ts:580",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: project.run",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:111; packages/workbench/src/workers/no-coi-project-command.test.ts:55; tests/integration/no-coi-agent-browser-proof.mjs:78",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: run.onOutput",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:120; tests/no-coi/no-coi-agent-sdk.spec.ts:202; packages/workbench/src/workers/no-coi-project-command.test.ts:55",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: run.completion (status exited/cancelled/failed; cancelled requires admission)",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:111; packages/rifty/src/sandbox-project.ts:155; packages/rifty/src/sandbox-project.ts:185; packages/rifty/src/sandbox.test.ts:982",
+      "note": "re-executed: M1 RED"
+    },
+    {
+      "row": "ADR-0418 public shape: run.stop",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:163; tests/no-coi/no-coi-agent-sdk.spec.ts:218; packages/workbench/src/workers/no-coi-project-command.test.ts:55; packages/rifty/src/sandbox-project.ts:198",
+      "note": ""
+    },
+    {
+      "row": "Recorded native Node directory/stat/rename/removal observation, VFS metadata rather than full Stats prototype",
+      "source": "frozen-artifact",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/pr-331-implementation-evidence.md:10; packages/runtime-js/src/worker-fs-structured.test.ts:31; tests/no-coi/no-coi-agent-sdk.spec.ts:183",
+      "note": ""
+    },
+    {
+      "row": "RuntimeFs.writeFile retains Promise<void>, auto-parents and honest mutation errors",
+      "source": "public-api",
+      "trace": "ADR-0418+ADR-0131",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:79; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/public-types.ts:40",
+      "note": ""
+    },
+    {
+      "row": "RuntimeController.eval/EvalResult explicitly returns undefined on console-oriented success; durability is an fs receipt, never the eval result",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/protocol.ts:22; packages/runtime-js/src/host.ts:79; packages/runtime-js/src/worker-entry.ts:120; packages/rifty/README.md:228; tests/no-coi/no-coi-agent-sdk.spec.ts:138",
+      "note": "re-executed: M5 RED; main baseline no-coi-snapshot-application.spec.ts:285 GREEN at HEAD"
+    },
+    {
+      "row": "SDK project/options/output/outcome/effect/stat/dirent types are consumable from packed public exports",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/public-types.ts:31; packages/rifty/src/index.ts:30; /tmp/rifty-331-bundles.log:101",
+      "note": "packed strict typecheck/build PASS (driver log on HEAD)"
+    },
+    {
+      "row": "ShellOptions.assertCommand checks actual selected expanded dispatch; policy survives nested scripts",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/shell/tests/command-policy.test.ts:12; packages/workbench/src/workers/no-coi-project-command.test.ts:194",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "ShellOptions.allowBackground=false rejects every bare background operator before launch",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/shell/tests/command-policy.test.ts:40",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "activatePackageRuntimeAdapters getCwd/refs preserves acquisition-time CJS cwd/identity and real request/context drain",
+      "source": "public-api",
+      "trace": "ADR-0421+ADR-0384",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/runtime/runtime-adapters.ts:146; packages/workbench/src/workers/no-coi-project-esbuild-cwd.test.ts:87",
+      "note": "re-executed: M3 (refs) RED at :130, M3b (getCwd) RED at :162"
+    },
+    {
+      "row": "ADR-0421 real esbuild Node differential: repeat invocation cwd, require then chdir, caught missing build and live context/dispose",
+      "source": "acceptance",
+      "trace": "ADR-0421",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-esbuild-cwd.test.ts:21",
+      "note": "re-executed at HEAD (native esbuild vs runtime, 5 entries equal)"
+    },
+    {
+      "row": "Saved-toolchain preparation (open/restore/runBin/startBin via ADR-0417/0420 prepareSavedToolchain) forwards ADR-0421 getCwd/refs; merge regression repaired",
+      "source": "acceptance",
+      "trace": "ADR-0421+ADR-0417+ADR-0420",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/runtime/entry-preparation.ts:56; packages/workbench/src/workers/no-coi-toolchain-install.ts:43; packages/workbench/src/workers/workbench-runtime-adapters.ts:8; packages/workbench/src/workers/no-coi-toolchain-worker.ts:279; packages/workbench/src/workers/no-coi-project-esbuild-cwd.test.ts:87",
+      "note": "re-executed: PR-4 — test now activates through preparePackageEntryRuntime(kind eval) instead of direct activation; dropping forwarding (M3/M3b) RED, HEAD GREEN"
+    },
+    {
+      "row": "Unref timers created by a completed invocation cannot leak; earlier realm timers survive",
+      "source": "acceptance",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-command.test.ts:57",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "Real HTTP Node listener remains owned until Stop settles close",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0418",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-network.spec.ts:3",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "Same installed Vite project builds, edits/rebuilds, Stops buildStart, edits and builds again",
+      "source": "acceptance",
+      "trace": "I2+I3+I4",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-installed-scenario.ts:3; tests/no-coi/no-coi-agent-installed-cli.spec.ts:3; tests/integration/no-coi-agent-browser-proof.mjs:84; /tmp/rifty-331-bundles.log:96",
+      "note": "re-executed: source spec at HEAD; packed agentInstalledBuildScenario PASS (driver)"
+    },
+    {
+      "row": "Runtime protocol v5 exact handshake: current accepted; retired project-less v4 (main), prior v1 and future v10 rejected with teardown",
+      "source": "acceptance",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/protocol.ts:200; packages/runtime-js/src/host.ts:671; packages/runtime-js/src/host.test.ts:300; packages/runtime-js/src/host.test.ts:320; packages/rifty/src/sandbox.test.ts:429",
+      "note": "re-executed: PR-4 — BASE retired v3/future v5 replaced by retired v4/future v10 after both sides bumped to v4 with different meanings; mutant M4 (also accept v4) RED; host.test 32/32 at HEAD"
+    },
+    {
+      "row": "Generated esbuild runtime/manifest keep upstream input and validation hashes; declared 13th ref patch has exact hunks",
+      "source": "frozen-artifact",
+      "trace": "ADR-0226+ADR-0421",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/esbuild-generated-provenance.test.ts:75; tools/shadow-registry/tools/esbuild-exact-patcher.mjs:84",
+      "note": "unchanged since BASE; check:esbuild-runtime-drift PASS in pr:check on HEAD"
+    },
+    {
+      "row": "Generated esbuild emitted client SHA-256 is updated exactly, without extra client/asset allowance",
+      "source": "frozen-artifact",
+      "trace": "ADR-0384+ADR-0391+ADR-0421",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:87",
+      "note": "PR-4: pin unchanged since BASE (861f57…), differs from main's pre-ADR-0421 pin only; check:esbuild-legacy-retirement PASS on HEAD"
+    },
+    {
+      "row": "TypeScript compiler emitted asset retains main's 10,022,694 bytes with an exact new hash; no ceiling/filename waiver expansion",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:96; tools/checks/esbuild-legacy-retirement.mjs:98",
+      "note": "PR-4: size comes from main (BASE had 10,022,664); only the exact sha changed with shared runtime imports; gate PASS on HEAD (pr:check2)"
+    },
+    {
+      "row": "vite baked snapshot payload and recorded ID: exact prepared package bytes, replay cache and current install identity",
+      "source": "frozen-artifact",
+      "trace": "ADR-0412+ADR-0384",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts:58; apps/playground/src/generated/baked-snapshot-identities.json:1",
+      "note": "unchanged since BASE; check:snapshot-artifact-drift PASS on HEAD"
+    },
+    {
+      "row": "vite8 baked snapshot payload and recorded ID: exact prepared package bytes, replay cache and current install identity",
+      "source": "frozen-artifact",
+      "trace": "ADR-0412+ADR-0384",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts:58; apps/playground/src/generated/baked-snapshot-identities.json:1",
+      "note": "unchanged since BASE; gate PASS on HEAD"
+    },
+    {
+      "row": "typescript baked snapshot payload and recorded ID: exact prepared package bytes, replay cache and current install identity",
+      "source": "frozen-artifact",
+      "trace": "ADR-0412+ADR-0384",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts:58; apps/playground/src/generated/baked-snapshot-identities.json:1",
+      "note": "unchanged since BASE; gate PASS on HEAD"
+    },
+    {
+      "row": "Install artifact identity remains generated from the exact source recipe",
+      "source": "frozen-artifact",
+      "trace": "ADR-0384+ADR-0412",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/generate-install-artifact-identity.ts:1; packages/workbench/src/generated/install-artifact-identity.json:1",
+      "note": "check:install-artifact-drift PASS on HEAD"
+    },
+    {
+      "row": "Vite 7.3.6 raw CLI upstream SHA remains pinned; prepared baked CLI equals exact acquisition transform",
+      "source": "frozen-artifact",
+      "trace": "ADR-0384+ADR-0412",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/esbuild-contract-source-pin.test.ts:95",
+      "note": "unchanged since BASE; test:run PASS on HEAD"
+    },
+    {
+      "row": "Original emnapi core 1.10.0 tarball is SHA512/lock pinned; raw readable/minified hoisted/nested bytes drive unchanged refusal oracle",
+      "source": "frozen-artifact",
+      "trace": "ADR-0384+ADR-0412",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-preparation.contract.test.ts:254; packages/workbench/src/workers/workbench-snapshot-apply-preparation.contract.test.ts:432",
+      "note": "unchanged since BASE; test:run PASS on HEAD"
+    },
+    {
+      "row": "Captured nanoid 3.3.19 manifest/tarball satisfy actual baked lock integrity; fixture registry performs real tarball installation",
+      "source": "frozen-artifact",
+      "trace": "ADR-0412+I4",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/provenance.json:1; /tmp/rifty-331-bundles.log:101",
+      "note": "unchanged since BASE; packed gate PASS on HEAD"
+    },
+    {
+      "row": "Workbench production closure is exactly 162 files (main 160 + ADR-0418 project-fs/command modules); source closure equality preserved",
+      "source": "frozen-artifact",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/workbench/tests/extraction-boundary.contract.test.ts:350",
+      "note": "re-executed at HEAD (5/5); PR-4: BASE 161 vs main 160 resolved to 162, exact equality assertion retained"
+    },
+    {
+      "row": "captureEventEmitterListenerScope retires new process/stdio listeners quietly and retains surviving original callbacks without reviving fired once handlers or removals",
+      "source": "public-api",
+      "trace": "ADR-0422+scenario",
+      "status": "pass",
+      "citation": "packages/io/src/event-emitter-listener-scope.test.ts:4; packages/io/src/event-emitter.ts:266",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "F1: on/once/prependListener/prependOnceListener from completed Node entries cannot respond to later Stop with old stdout or file effects",
+      "source": "acceptance",
+      "trace": "ADR-0422+scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-command.test.ts:55; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:171; tests/no-coi/no-coi-agent-sdk.spec.ts:228",
+      "note": "re-executed at HEAD (old handler stdout '' and oldEffect ENOENT)"
+    },
+    {
+      "row": "Guest stdio callbacks and process removeListener meta-events do not run after invocation retirement",
+      "source": "acceptance",
+      "trace": "ADR-0422+scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-command.test.ts:102",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "A later watchFile on the same path obtains a live poller without stale callbacks",
+      "source": "acceptance",
+      "trace": "ADR-0422+scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-watches.test.ts:58",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "Completed unref FSWatcher abort/change/close callbacks retire quietly; ordinary explicit close remains asynchronous once",
+      "source": "acceptance",
+      "trace": "ADR-0422+scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-watches.test.ts:82; packages/workbench/src/workers/no-coi-project-watches.test.ts:108",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "Retired unref timer promises detach abort rejection callbacks",
+      "source": "acceptance",
+      "trace": "ADR-0422+scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-watches.test.ts:127",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "Scope disposal removes only command-added watchFile callbacks from a shared pre-existing poller; earlier host callbacks continue",
+      "source": "acceptance",
+      "trace": "ADR-0422+scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-watches.test.ts:148",
+      "note": "re-executed at HEAD"
+    },
+    {
+      "row": "Restart report: a settled command with failed/unknown persistence marks unflushedWrites once; the following restart reports false",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0418",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox.ts:588; packages/rifty/src/sandbox-project.ts:153; packages/rifty/src/sandbox.test.ts:1020; packages/rifty/README.md:219",
+      "note": "re-executed: M2 RED (unflushedWrites false), HEAD 25/25"
+    },
+    {
+      "row": "Never-admitted invocation (busy Worker / invalid input) reports failed even when Stop preceded the rejection; the stop frame cannot abort the other active command",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0418+ADR-0376",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox-project.ts:185; packages/rifty/src/sandbox.test.ts:982; packages/workbench/src/workers/no-coi-toolchain-worker.ts:390; packages/rifty/README.md:217",
+      "note": "re-executed: M1 RED"
+    },
+    {
+      "row": "Recovery state through main's validators: command completion posts cwd/bindings/files/directories, host validates including optional directories and '/' cwd; restore recreates directories on memory/mismatch backends",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0418+ADR-0420",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/toolchain-input.ts:211; packages/runtime-js/src/internal/toolchain-input.ts:214; packages/runtime-js/src/host.ts:592; packages/workbench/src/workers/no-coi-toolchain-worker.ts:344; packages/workbench/src/workers/no-coi-toolchain-worker.ts:263; tests/no-coi/no-coi-agent-sdk.spec.ts:151",
+      "note": "directories acceptance discriminated by every browser command completion at HEAD (a rejecting validator fails agentCommandsScenario); validator body byte-equal to BASE host-toolchain-inputs.ts"
+    },
+    {
+      "row": "ADR-0418 §5: filesystem receipts leave no stale rename/remove snapshot entries; memory recovery restores mkdir/rename/rm effects and '/'-rooted project state",
+      "source": "acceptance",
+      "trace": "ADR-0418",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/host-fs-recovery.ts:36; packages/runtime-js/src/host-recovery.fault.test.ts:85; tests/no-coi/no-coi-dev-hmr.spec.ts:1110",
+      "note": "No committed carrier exercises host-side recovery for mkdir/rename/rm/directories or a memory-backend restore after rm/rename, nor a '/'-rooted project recovery; committed carriers cover writeFile recovery only, and browser Stop replacement runs OPFS→OPFS (files omitted, directories unused). A wrong implementation ignoring 'rm' would pass every committed test. Reviewer probe (scratch, executed): mkdir/writeFile/rename/rm sequence yields exact files/directories — PASS. Code unchanged since BASE (REV-1); advisory concern, see Completeness."
+    },
+    {
+      "row": "Resident-concurrency rejection covers install/open/apply-snapshot/runBin/command/project-fs while a resident bin is active",
+      "source": "acceptance",
+      "trace": "ADR-0418+ADR-0376+ADR-0420",
+      "status": "weak",
+      "citation": "packages/workbench/src/workers/no-coi-toolchain-worker.ts:283; tests/no-coi/no-coi-dev-hmr.spec.ts:894; tests/no-coi/no-coi-snapshot-application.spec.ts:69",
+      "note": "Carriers prove install/runBin/startBin (dev-hmr:894) and apply-snapshot (snapshot-application:69); no test drives project.run/project.fs against a live resident bin, so dropping 'command'/'project-fs' from the list at worker:289 survives. Unchanged since BASE; advisory."
+    },
+    {
+      "row": "Goal I4: PR #331 CI is green on the reviewed delivered revision, including no-COI browser and browser-unit acceptance",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "weak",
+      "citation": "docs/backlog/epics/no-coi-agent-sdk/goal.md@5417b5c3c:31; /tmp/rifty-331-prcheck2.log:28; /tmp/rifty-331-nocoi-final.log:95; /tmp/rifty-331-bundles.log:101",
+      "note": "CI proof is SHA-bound (run 34547673623 @5417b5c3c); HEAD c3b1ac320 not yet observed on CI. Local equivalents on HEAD: pr:check 25/25 (driver, post-eval-repair), test:no-coi 90/90 (driver) + 19/19 (reviewer), test:client-bundles PASS (driver). Recorded as goal residual."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/host-fs-recovery.ts:36",
+          "evidence": "Scratch probe (untracked vitest file, removed after): mkdir '/p/src/deep' → writeFile '/p/src/deep/x.txt' → rename '/p/src'→'/p/moved' → rm '/p/moved' recursive → rm '/p/a.txt' produced directories ['/p','/p/src','/p/src/deep'] → ['/p','/p/moved','/p/moved/deep'] → ['/p'] and files ['/p/a.txt','/p/moved/deep/x.txt'] → ['/p/a.txt'] → []; 1 passed. grep -rn \"op: 'rm'|op: 'rename'|op: 'mkdir'|directories\" over host.test.ts/host-recovery.fault.test.ts/sandbox.test.ts: no matches.",
+          "summary": "ADR-0418 §5 (no stale rename/remove snapshot entries; directories restored on memory replacement) has no committed discriminating carrier: host-recovery.fault.test.ts covers writeFile only; browser Stop/replacement runs OPFS→OPFS with files omitted and directories unused; no '/'-rooted project recovery test. Unchanged since BASE (REV-1), advisory: add a unit carrier for applyRecoveryFsOperation mkdir/rename/rm/directories (and one memory-backend restart after rm) rather than relying on reading.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/no-coi-toolchain-worker.ts:289",
+          "evidence": "grep -rn resident-concurrency tests/no-coi packages/rifty packages/workbench: only dev-hmr.spec.ts:894/899 and snapshot-application.spec.ts:69.",
+          "summary": "Resident-concurrency list includes 'command' and 'project-fs' but no carrier drives project.run/project.fs against a live resident bin (dev-hmr:894 covers install/runBin/startBin; snapshot-application:69 covers apply-snapshot). Dropping either op from the list survives every committed test. Unchanged since BASE; advisory.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/rifty/CHANGELOG.md:9",
+          "evidence": "grep -n protocol packages/rifty/CHANGELOG.md → lines 7, 9, 14.",
+          "summary": "Unreleased section now carries three contradictory protocol lines: 'protocol v5' (:7), 'now v3' (:9, PR-side, stale) and main's 'now v4 (v3 never shipped)' (:14). None shipped; collapse to one v5 line noting v3/v4 never shipped.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "packages/workbench/src/workers/no-coi-toolchain-worker.ts:294",
+          "evidence": "",
+          "summary": "NotImplementedError message still says 'install/open/runBin while a resident bin is active' although the guarded set is install/open/apply-snapshot/run-bin/command/project-fs (:285-290).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/rifty/README.md:228",
+          "evidence": "tests/no-coi/no-coi-agent-sdk.spec.ts:138 evalResult ok:true with bytes visible and sandbox.fs.flush() rejecting SandboxPersistenceError effects {applied:'yes', persistence:'failed'} — 19/19 at HEAD; mutant M5 RED.",
+          "summary": "After the eval repair, README/TSDoc (host.ts:79) say console eval prints and resolves value undefined but do not state that eval success never certifies persistence and that `fs.flush()` / the next `restart().unflushedWrites` is the durability receipt (only worker-entry.ts:122 says it). An embedder driving `runtime.eval` with node:fs writes could read `ok: true` as durable. Documentation-only; the executed carrier (agent-sdk.spec.ts:138-143) fixes the semantics.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "c3b1ac32072d6bea88177e31674cbd0ea3907f9e"
+}

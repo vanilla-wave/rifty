@@ -16,6 +16,9 @@ export type {
   SerializedRuntimeError,
   TelemetrySnapshot,
   WorkerMessage,
+  RuntimeEffects,
+  RuntimeFsDirent,
+  RuntimeFsStat,
 } from './protocol.ts';
 // Telemetry DATA types only — the `diagnostic` event/message payload. The sink's
 // mutation fns (recordX/snapshot/reset) stay internal.
@@ -29,17 +32,15 @@ export { NODE_PROCESS_IDENTITY } from './builtins/process-identity.ts';
 export { installRuntimeJsFsHandlers } from './ipc/fs-handlers.ts';
 export { SyncRpcFsSync, installRemoteSyncFs } from './ipc/sync-rpc-fs.ts';
 export type { SyncBinaryCall, SyncCall } from './ipc/sync-rpc-fs.ts';
-export {
-  publishRuntimeEsbuild,
-  readRuntimeEsbuild,
-  type RuntimeEsbuildCjsOuter,
-} from './internal/worker-globals.ts';
+export {} from './internal/worker-globals.ts';
 export { FS_RPC_CHUNK } from './ipc/fs-rpc-protocol.ts';
 export { installConsole, type ConsoleSink } from './repl/console.ts';
 export {
   awaitDrain,
   installEventLoopKeepalive,
   releaseNodeEvalDrainOwnership,
-  trackKeepalivePromise,
 } from './internal/event-loop-keepalive.ts';
 export { installFetchKeepalive } from './builtins/fetch-keepalive.ts';
+export { installHostAsyncKeepalive } from './builtins/host-async-keepalive.ts';
+
+export type { RuntimeProgressEvent, SnapshotProgress } from './protocol.ts';

@@ -1,5 +1,5 @@
 import { pinnedEntryForParent } from './installer-lockfile-reader.ts';
-import type { ShadowAssetPlan } from './internal/shadow/planner.ts';
+import type { ShadowSubstitutionPlan } from './internal/shadow/planner.ts';
 import type { Lockfile, RootLockfileDependencyMaps } from './linker.ts';
 import type { VersionManifest } from './registry.ts';
 
@@ -100,7 +100,7 @@ export function assertLockfileReplayCoverage(
   lockfile: Lockfile,
   reachedLockfilePaths: ReadonlySet<string>,
   skippedLockfilePaths: ReadonlySet<string>,
-  shadowPlan: ShadowAssetPlan,
+  shadowPlan: ShadowSubstitutionPlan,
 ): void {
   const shadowMaterializationPaths = new Set(
     shadowPlan.substitutions.map((substitution) => substitution.materialization.installPath),

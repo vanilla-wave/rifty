@@ -5,7 +5,7 @@
  * Uses the host's `DecompressionStream('gzip')` when available (browser, Node 18+).
  *
  * Type-flags handled:
- *   - `'0'` / `''` — regular file.
+ *   - `'0'` / NUL — regular file.
  *   - `'5'` — directory (skipped at extract time).
  *   - `'2'` — symlink — throws {@link NotImplementedError} (`npm-client.tar.symlink`).
  *     M9 doesn't support symlinks in the VFS; we'd rather break loudly with the
@@ -94,7 +94,7 @@ function parseTar(bytes: Uint8Array): TarEntry[] {
     const fullName = pendingLongName ?? parsedName;
     pendingLongName = null;
     const type: TarEntry['type'] =
-      typeFlag === '5' ? 'dir' : typeFlag === '0' || typeFlag === '' ? 'file' : 'other';
+      typeFlag === '5' ? 'dir' : typeFlag === '0' || typeFlag === '\0' ? 'file' : 'other';
     out.push({ name: fullName, type, data });
     offset = nextOffset;
   }
@@ -134,14 +134,18 @@ export function parseTarEntries(tar: Uint8Array): Array<{ name: string; data: Ui
 /**
  * Extract a `.tgz` payload into a flat map of paths → bytes.
  *
- * The npm convention is for tarballs to put everything under `package/...`;
- * we strip that prefix.
+ * npm strips one path component, regardless of its name (including DefinitelyTyped roots).
  */
 export async function extractTarGz(tgz: Uint8Array): Promise<Record<string, Uint8Array>> {
   const tar = await gunzip(tgz);
-  const out: Record<string, Uint8Array> = {};
+  const out: Record<string, Uint8Array> = Object.create(null);
   for (const e of parseTarEntries(tar)) {
-    const stripped = e.name.startsWith('package/') ? e.name.slice('package/'.length) : e.name;
+    // Validate the outer component too: stripping must not admit an escaping raw member.
+    if (e.name.startsWith('/') || e.name.split('/')[0] === '..')
+      throw invalidPackageTarPath(e.name);
+    const slash = e.name.indexOf('/');
+    if (slash < 0) continue;
+    const stripped = e.name.slice(slash + 1);
     const path = normalizePackageEntryPath(stripped);
     if (path === null) continue;
     out[path] = e.data;

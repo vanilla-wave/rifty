@@ -1,0 +1,21 @@
+--- a/codex-proxy.mjs
++++ b/codex-proxy.mjs
+@@ -51530,7 +51530,8 @@
+ }
+ var OpenAIResponsesLanguageModel = class {
+   constructor(modelId, config22) {
+-    this.specificationVersion = "v3";
++    // Bundled provider returns V2 finish/usage; let AI SDK convert it to V3.
++    this.specificationVersion = "v2";
+     this.supportedUrls = {
+       "image/*": [/^https?:\/\/.*$/],
+       "application/pdf": [/^https?:\/\/.*$/]
+@@ -53070,7 +53071,7 @@
+   };
+   const createModel = (modelId) => new CodexResponsesLanguageModel(modelId, config22);
+   const providerFn = (modelId) => createModel(modelId);
+-  const specificationVersion = "v3";
++  const specificationVersion = "v2";
+   return Object.assign(providerFn, {
+     specificationVersion,
+     languageModel: createModel,

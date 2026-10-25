@@ -98,3 +98,7 @@ Split from the three phases because the WASI host-program test is gated on the v
 > existing SAB chain binds each child ring to trusted parent context and
 > federates reserve/commit/abort/settle with one owner-root ProcessManager.
 > Sync RPC, Worker-as-process, and its loud capability gates otherwise stand.
+
+> **Correction 2026-09-27 (ADR-0470):** selected no-COI production toolchain
+> rejects `worker_threads.Worker` synchronously. Its former same-realm fallback
+> cannot provide independent execution; generic fallback and COI kernel paths remain.

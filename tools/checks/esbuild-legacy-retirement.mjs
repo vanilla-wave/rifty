@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 /**
- * esbuild/Vite cutover deletion ratchet.
+ * esbuild carrier deletion ratchet and emitted-output inventory.
  *
  * Browser parity proves the registry adapter. This finite inventory proves the
- * retired ADR-0047 vendored-WASI carrier cannot remain beside it or return.
+ * retired vendored-WASI and Pattern-2 asset carriers cannot remain or return.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 export const RETIRED_ESBUILD_PATHS = Object.freeze([
+  'packages/npm-client/src/internal/shadow/manager.ts',
+  'packages/npm-client/src/internal/shadow/port.ts',
+  'packages/npm-client/src/internal/shadow/source.ts',
+  'packages/workbench/src/workers/owner-shadow-assets.ts',
   'tests/integration/esbuild-wasi-transform.test.ts',
   'tools/shadow-registry/scripts/fetch-esbuild-wasi.mjs',
   'tools/shadow-registry/src/esbuild-binding.ts',
@@ -19,16 +24,109 @@ export const RETIRED_ESBUILD_PATHS = Object.freeze([
 ]);
 
 export const RETIRED_ESBUILD_REFERENCES = Object.freeze([
+  'KernelEntryCapabilityPorts',
+  'OriginExclusiveShadowAssetManager',
+  'PackageTreeShadowAssetBoundary',
+  'SHADOW_ASSET_PORT_CAPABILITY',
+  'ShadowAssetPlan',
+  'ShadowAssetPortServer',
+  'ShadowAssetReadySet',
+  'ShadowAssetStorageClass',
+  'ShadowAssetVfsDurability',
+  'ShadowRuntimeAsset',
   '@riftydev/shadow-registry/esbuild-binding',
   '@riftydev/shadow-registry/esbuild-transform',
+  'capabilityPorts',
+  'consumeKernelEntryCapabilityPorts',
+  'createMemoryShadowAssetStorage',
+  'createOriginExclusiveShadowAssetManager',
+  'createRegistryShadowAssetSource',
+  'createShadowAssetPortClient',
+  'createVfsShadowAssetStorage',
   'ESBUILD_WASM_VENDOR_PATH',
   'loadVendoredEsbuildWasm',
+  'probeBrowserShadowAssetStorageClass',
+  'shadowAssetPlanForInstallResult',
+  'shadowAssets',
   'fetch-esbuild-wasi.mjs',
+]);
+
+export const ALLOWED_SHADOW_PRODUCTION_SOURCES = Object.freeze([
+  'packages/npm-client/src/internal/shadow/admission.ts',
+  'packages/npm-client/src/internal/shadow/index.ts',
+  'packages/npm-client/src/internal/shadow/install-result.ts',
+  'packages/npm-client/src/internal/shadow/planner.ts',
+  'packages/npm-client/src/internal/shadow/registry-projection.ts',
+  'packages/npm-client/src/internal/shadow/runtime-tier.ts',
+  'packages/npm-client/src/internal/shadow/schema-one-identity.ts',
+  'packages/npm-client/src/internal/shadow/substitution.ts',
+]);
+
+export const ALLOWED_COORDINATION_SOURCES = Object.freeze([
+  // ADR-0437: disposable browser probes, never runtime asset distribution.
+  'packages/workbench/src/support/check-sandbox-support.ts',
+  'packages/workbench/src/support/support-child.ts',
+  'packages/workbench/src/support/support-worker.ts',
+  'packages/workbench/src/support/types.ts',
+  'packages/workbench/src/glue/vfs-snapshot-port.ts',
+  'packages/workbench/src/workbench/service-worker-control.ts',
+  'tools/shadow-registry/src/runtime/generated/esbuild-runtime.js',
+  'packages/workbench/src/workers/no-coi-toolchain-owner.ts',
 ]);
 
 const SELF = new Set([
   'tools/checks/esbuild-legacy-retirement.mjs',
   'tools/checks/esbuild-legacy-retirement.test.ts',
+  'packages/kernel/tests/entry-bootstrap-public-surface.test.ts',
+]);
+
+const DIST_ROOTS = Object.freeze([
+  'packages/workbench/dist',
+  'packages/npm-client/dist',
+  'tools/shadow-registry/dist',
+]);
+const PUBLISHED_PACKAGE_ROOTS = Object.freeze([
+  'packages/workbench',
+  'packages/npm-client',
+  'tools/shadow-registry',
+]);
+const EXPECTED_PACKAGE_FILES = Object.freeze(['dist', 'CHANGELOG.md']);
+const GENERATED_CLIENT_SHA256 = '861f57235acf3609ee15d0a8d7ac9529166d72ce866e8f15a6658722ec70573d';
+const MAX_PUBLISHED_OUTPUT_BYTES = 2_000_000;
+// ADR-0391: exact existing compiler/runtime assets; never a directory-wide waiver.
+const WORKBENCH_ASSET_ROOT = 'packages/workbench/dist/assets/';
+const WORKBENCH_COMPILER_OUTPUTS = Object.freeze({
+  'chunk-EMDIREKY.js': {
+    bytes: 4_893_418,
+    sha256: '39be666ac003c7361e9fbcd88abdda1ed51052350ade9b57b4d2716f1e296498',
+  },
+  'typescript-worker.js': {
+    bytes: 10022694,
+    sha256: 'b27005eb694cc1e87eb8e18b2e79cf46d4588b25d6fa318a414c56a75b9e6326',
+  },
+});
+const WORKBENCH_WASM_OUTPUTS = Object.freeze({
+  'quickjs.wasm': {
+    bytes: 503_134,
+    sha256: '105c3bed22d457e43e3d1c3c1c6959fda62a8fe06f0fc8a985303c3a2be72232',
+  },
+  'sql-wasm.wasm': {
+    bytes: 659_730,
+    sha256: '438c88f666dc054ce4e9395f80fe9db4218b1a3c379960454880f048a7898aed',
+  },
+});
+const CJS_MODULE_LEXER_WASM_SHA256 =
+  'b40099ca01477f581bd752acc8ed6d25c14b0e8beb9a00e0dc1744a2b041a104';
+const LARGE_BASE64_RUN = /[A-Za-z0-9+/]{1000000,}={0,2}/u;
+const COORDINATION_SOURCE =
+  /\b(?:BroadcastChannel|MessageChannel|MessagePort|SharedWorker|WebSocket|WebTransport|postMessage)\b/u;
+const RETIRED_BUNDLE_TOKENS = Object.freeze([
+  'ShadowAssetPlan',
+  'capabilityPorts',
+  'createOriginExclusiveShadowAssetManager',
+  'createShadowAssetPortClient',
+  'requiredSetDigest',
+  'rifty.shadow-assets.ready/v1',
 ]);
 
 function trackedFiles(root) {
@@ -71,12 +169,165 @@ export function evaluateEsbuildLegacyRetirement(
         violations.push(`${path}: retired reference ${JSON.stringify(reference)}`);
       }
     }
+    if (
+      path.startsWith('packages/npm-client/src/internal/shadow/') &&
+      path.endsWith('.ts') &&
+      !path.includes('.test.') &&
+      !path.includes('/fixtures/') &&
+      !ALLOWED_SHADOW_PRODUCTION_SOURCES.includes(path)
+    ) {
+      violations.push(`${path}: unapproved shadow production source`);
+    }
+    if (
+      (path.startsWith('packages/workbench/src/') ||
+        path.startsWith('packages/npm-client/src/') ||
+        path.startsWith('tools/shadow-registry/src/')) &&
+      !path.includes('.test.') &&
+      !path.includes('/_test-fixtures/') &&
+      COORDINATION_SOURCE.test(source) &&
+      !ALLOWED_COORDINATION_SOURCES.includes(path)
+    ) {
+      violations.push(`${path}: coordination source is outside the exact allowed inventory`);
+    }
+  }
+  return violations;
+}
+
+export function evaluateEsbuildPackagePacklists(
+  root,
+  readManifest = (path) => JSON.parse(readFileSync(`${root}/${path}`, 'utf8')),
+) {
+  const violations = [];
+  for (const packageRoot of PUBLISHED_PACKAGE_ROOTS) {
+    const manifestPath = `${packageRoot}/package.json`;
+    let manifest;
+    try {
+      manifest = readManifest(manifestPath);
+    } catch {
+      violations.push(`${manifestPath}: package manifest is unreadable`);
+      continue;
+    }
+    if (JSON.stringify(manifest.files) !== JSON.stringify(EXPECTED_PACKAGE_FILES)) {
+      violations.push(
+        `${manifestPath}: packed files must be exactly ${JSON.stringify(EXPECTED_PACKAGE_FILES)}`,
+      );
+    }
+  }
+  return violations;
+}
+
+function outputFiles(root) {
+  const files = [];
+  const walk = (relative) => {
+    for (const name of readdirSync(`${root}/${relative}`)) {
+      const path = `${relative}/${name}`;
+      if (statSync(`${root}/${path}`).isDirectory()) walk(path);
+      else files.push(path);
+    }
+  };
+  for (const relative of DIST_ROOTS) {
+    if (!existsSync(`${root}/${relative}`)) return null;
+    walk(relative);
+  }
+  return files;
+}
+
+export function evaluateEsbuildBundleInventory(
+  root,
+  files = outputFiles(root),
+  readOutput = (path) => readFileSync(`${root}/${path}`),
+) {
+  if (files === null) return ['build outputs missing; run pnpm build:libs'];
+  const violations = [];
+  const generatedClients = [];
+  for (const path of files) {
+    const bytes = readOutput(path);
+    const assetName = path.startsWith(WORKBENCH_ASSET_ROOT)
+      ? path.slice(WORKBENCH_ASSET_ROOT.length)
+      : null;
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    const wasm = assetName === null ? undefined : WORKBENCH_WASM_OUTPUTS[assetName];
+    if (wasm?.bytes === bytes.byteLength && wasm.sha256 === digest) continue;
+    if (path.endsWith('.wasm')) violations.push(`${path}: runtime wasm shipped in package output`);
+    // Only the two exact compiler artifacts bypass the original carrier ceiling.
+    const compiler = assetName === null ? undefined : WORKBENCH_COMPILER_OUTPUTS[assetName];
+    if (
+      bytes.byteLength > MAX_PUBLISHED_OUTPUT_BYTES &&
+      (compiler?.bytes !== bytes.byteLength || compiler.sha256 !== digest)
+    ) {
+      violations.push(`${path}: published output exceeds the exact 2 MB carrier ceiling`);
+    }
+    const rawText = bytes.toString('utf8');
+    const text =
+      assetName !== null && path.endsWith('.js')
+        ? rawText.replace(/AGFzbQ[A-Za-z0-9+/]*={0,2}/gu, (literal) =>
+            literal.length === 29_556 &&
+            createHash('sha256').update(Buffer.from(literal, 'base64')).digest('hex') ===
+              CJS_MODULE_LEXER_WASM_SHA256
+              ? ''
+              : literal,
+          )
+        : rawText;
+    if (path.endsWith('.js') && text.includes('AGFzbQ')) {
+      violations.push(`${path}: output contains an inline WebAssembly base64 prefix`);
+    }
+    if (text.includes('H4sI') || LARGE_BASE64_RUN.test(text)) {
+      violations.push(`${path}: output contains a packed runtime-byte candidate`);
+    }
+    if (bytes.includes(Buffer.from([0x1f, 0x8b, 0x08]))) {
+      violations.push(`${path}: output contains a gzip payload`);
+    }
+    if (!path.endsWith('.js.map')) continue;
+    let map;
+    try {
+      map = JSON.parse(text);
+    } catch {
+      violations.push(`${path}: source map is not valid JSON`);
+      continue;
+    }
+    const sources = Array.isArray(map.sources) ? map.sources : [];
+    const contents = Array.isArray(map.sourcesContent) ? map.sourcesContent : [];
+    for (let index = 0; index < sources.length; index += 1) {
+      const source = typeof sources[index] === 'string' ? sources[index] : '';
+      const content = typeof contents[index] === 'string' ? contents[index] : '';
+      if (createHash('sha256').update(content).digest('hex') === GENERATED_CLIENT_SHA256) {
+        generatedClients.push({ path, source, content });
+      }
+      for (const token of RETIRED_BUNDLE_TOKENS) {
+        if (content.includes(token)) {
+          violations.push(
+            `${path}:${source}: retired emitted source token ${JSON.stringify(token)}`,
+          );
+        }
+      }
+    }
+  }
+  if (generatedClients.length !== 1) {
+    violations.push(
+      `emitted generated esbuild client count is ${generatedClients.length}, expected 1`,
+    );
+  } else {
+    if (!generatedClients[0].source.endsWith('/src/runtime/generated/esbuild-runtime.js')) {
+      violations.push(
+        `emitted generated esbuild client source is ${generatedClients[0].source}, expected the recorded generated source`,
+      );
+    }
+    const digest = createHash('sha256').update(generatedClients[0].content).digest('hex');
+    if (digest !== GENERATED_CLIENT_SHA256) {
+      violations.push(
+        `emitted generated esbuild client sha256 is ${digest}, expected ${GENERATED_CLIENT_SHA256}`,
+      );
+    }
   }
   return violations;
 }
 
 function main() {
-  const violations = evaluateEsbuildLegacyRetirement(process.cwd());
+  const violations = [
+    ...evaluateEsbuildLegacyRetirement(process.cwd()),
+    ...evaluateEsbuildPackagePacklists(process.cwd()),
+    ...evaluateEsbuildBundleInventory(process.cwd()),
+  ];
   if (violations.length > 0) {
     console.error(`esbuild-legacy-retirement: ${violations.length} violation(s):`);
     for (const violation of violations) console.error(`  ✗ ${violation}`);
@@ -84,7 +335,7 @@ function main() {
     return;
   }
   console.log(
-    `esbuild-legacy-retirement: ${RETIRED_ESBUILD_PATHS.length} paths and ${RETIRED_ESBUILD_REFERENCES.length} references absent`,
+    `esbuild-legacy-retirement: ${RETIRED_ESBUILD_PATHS.length} paths, ${RETIRED_ESBUILD_REFERENCES.length} references, and exact emitted inventory verified`,
   );
 }
 

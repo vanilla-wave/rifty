@@ -1,19 +1,4 @@
-/**
- * `Shell` — minimal command dispatcher.
- *
- * `run(line)` tokenizes, splits on `&&`/`||`/`;` joiners (quoted instances stay
- * literal — the tokenizer only emits joiners outside quotes), and runs segments
- * per POSIX short-circuit semantics; final exit is the LAST executed segment.
- *
- * Streaming: when `options.onChunk` is supplied, terminal-visible stdout and
- * all stderr invoke the callback synchronously _before_ capture, so the
- * terminal sees `npm install` / `vite dev` output live instead of after
- * `await`. Redirected stdout and non-final pipe stdout are captured/routed but
- * stay silent. `RunResult` still keeps the full blob for callers that read it.
- *
- * `cwd`/`env` are mutable; only built-in `cd` can mutate cwd (via closure).
- * Custom commands see only a snapshot via the context.
- */
+/** Stateful command dispatcher with POSIX short-circuit joins and byte-preserving pipes. */
 
 import { NotImplementedError } from '@riftydev/io';
 import {
@@ -31,6 +16,7 @@ import { suggestCommandName } from './command-suggestion.ts';
 import { hasGlobMeta, matchSegment } from './commands/_glob.ts';
 import { resolve } from './commands/_shared.ts';
 import type { ShellJobListItem } from './commands/jobs.ts';
+import { npx } from './commands/npx.ts';
 import { type ShellCompletionResult, createShellCompleter } from './language-service.ts';
 import { type Token, isOp, tokenize } from './tokenize.ts';
 import type {
@@ -70,6 +56,10 @@ export interface ShellOptions {
   mutationGuard?: VfsMutationGuard;
   /** Synchronous namespace policy; never acquires the mutation FIFO. */
   assertPortablePaths?: (absolutePaths: readonly string[]) => void;
+  /** Host policy at actual dispatch, after expansion and short-circuit selection. */
+  assertCommand?: (name: string, args: readonly string[]) => void;
+  /** False rejects every background operator before any command starts. */
+  allowBackground?: boolean;
 }
 
 export interface RunResult {
@@ -233,7 +223,7 @@ const ABORTED = Symbol('shell.aborted');
 const SIGINT_EXIT = 130;
 
 /** Package managers that get a directed npm nudge instead of `command not found`. */
-const PACKAGE_MANAGERS = new Set(['npx', 'yarn', 'pnpm', 'bun']);
+const PACKAGE_MANAGERS = new Set(['yarn', 'pnpm', 'bun']);
 
 /** Directed nudge for a recognized package manager (rifty wires only npm). */
 function packageManagerNudge(cmd: string): string | null {
@@ -280,6 +270,8 @@ export class Shell {
   private readonly fileSystem?: FsSync;
   private readonly mutationGuard?: VfsMutationGuard;
   private readonly assertPortablePaths?: (absolutePaths: readonly string[]) => void;
+  private readonly assertCommand?: ShellOptions['assertCommand'];
+  private readonly allowBackground: boolean;
 
   constructor(options: ShellOptions = {}) {
     this._cwd = normalizePath(options.cwd ?? '/');
@@ -288,6 +280,8 @@ export class Shell {
     this.fileSystem = options.fileSystem;
     this.mutationGuard = options.mutationGuard;
     this.assertPortablePaths = options.assertPortablePaths;
+    this.assertCommand = options.assertCommand;
+    this.allowBackground = options.allowBackground ?? true;
     this.commandResolver = new CommandResolver(this.commands, () => this.activeFileSystem());
     const builtins = builtinCommands(
       (p) => {
@@ -300,6 +294,14 @@ export class Shell {
       () => this.registeredCommandNames(),
     );
     for (const [name, cmd] of Object.entries(builtins)) this.commands.set(name, cmd);
+    this.commands.set(
+      'npx',
+      npx(
+        (name, cwd) => this.commandResolver.resolveBin(name, cwd),
+        this.execBin,
+        this.assertCommand,
+      ),
+    );
   }
 
   get cwd(): string {
@@ -363,6 +365,9 @@ export class Shell {
     // expansion on the same line — POSIX: `FOO=bar echo $FOO` prints the OUTER FOO.
     const tokens = tokenize(line, this.env);
     if (tokens.length === 0) return runResult(0, '', '');
+    if (!this.allowBackground && tokens.some((token) => isOp(token) && token.op === '&')) {
+      throw new NotImplementedError('shell.background', 'background execution is prohibited');
+    }
 
     // A run cancelled before dispatch starts NOTHING — including a trailing
     // background job, which would otherwise fork before the segment pre-check.
@@ -590,6 +595,8 @@ export class Shell {
       fileSystem: this.fileSystem,
       mutationGuard: this.mutationGuard,
       assertPortablePaths: this.assertPortablePaths,
+      assertCommand: this.assertCommand,
+      allowBackground: this.allowBackground,
     });
     for (const [name, command] of this.customCommands) shell.registerCommand(name, command);
     return shell;
@@ -731,6 +738,7 @@ export class Shell {
     const cmd = cmdTok && !isOp(cmdTok) ? cmdTok.value : '';
     // Command-name token (rest[0]) stays literal; only ARGUMENTS glob-expand.
     const args = this.expandArgs(rest.slice(1));
+    this.assertCommand?.(cmd, args);
     const resolution = this.commandResolver.resolve(cmd, this._cwd);
 
     const streamDisplayStdout = streamStdout && redirectTo === null;
@@ -823,6 +831,7 @@ export class Shell {
       // A redirected OR non-final-pipe sink is never a TTY (ADR-0089): force
       // isTTY false so `ls --color=auto > f` / `ls | cat` write no SGR bytes.
       isTTY,
+      ...(redirectTo ? { stdoutIsFile: true } : {}),
       get cols() {
         return terminal?.current().cols ?? options.cols;
       },

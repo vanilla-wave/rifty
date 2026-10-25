@@ -1,3 +1,5 @@
+import type { ReplicaAdmissionEvent } from './opfs-replica-types.ts';
+import type { FsStat } from './stat-metadata.ts';
 /**
  * Synchronous mirror of a VFS — needed by `fs.readFileSync` and friends.
  *
@@ -18,8 +20,10 @@
 import type { FsSync } from './fs-sync.ts';
 import { MemoryBackend } from './memory-backend.ts';
 import { MemoryVfs } from './memory.ts';
+import type { OpfsLayoutIssue } from './opfs-replica-types.ts';
+import { createReplicaPair } from './opfs-replica.ts';
 import { OpfsFsSync } from './opfs-sync.ts';
-import { OpfsVfs } from './opfs.ts';
+import { OpfsVfs, acquireOpfsRoot } from './opfs.ts';
 import { joinPath, normalizeAbsolute } from './path.ts';
 import type { Vfs, VfsDirent } from './types.ts';
 
@@ -56,13 +60,11 @@ export class MemoryFsSync implements FsSync {
     this.#backend.rm(normalizeAbsolute(path), options);
   }
 
-  statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } {
+  statSync(path: string): FsStat {
     return this.#backend.stat(normalizeAbsolute(path));
   }
 
-  statSyncOrNull(
-    path: string,
-  ): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } | null {
+  statSyncOrNull(path: string): FsStat | null {
     // One normalize, no throw: exists() gates stat() so a miss returns null
     // (ADR-0083). The wrapper's statSync normalizes twice (here + via exists);
     // this path normalizes once.
@@ -140,14 +142,44 @@ export function installMemoryFs(): MemoryBackend {
  * `syncMirror()` returns an `OpfsFsSync` and `asyncVfs()` returns the
  * paired `OpfsVfs`.
  */
-export async function installOpfsFs(): Promise<{ vfs: OpfsVfs; fsSync: OpfsFsSync }> {
-  const vfs = new OpfsVfs();
-  await vfs.init();
+export function installOpfsFs(
+  root?: FileSystemDirectoryHandle,
+  options?: { readonly ioReportTimeoutMs?: number; readonly layout?: 'files' },
+): Promise<{ vfs: OpfsVfs; fsSync: OpfsFsSync }>;
+export function installOpfsFs(
+  root: FileSystemDirectoryHandle | undefined,
+  options: {
+    readonly ioReportTimeoutMs?: number;
+    readonly layout: 'replica';
+    readonly onAdmission?: (event: ReplicaAdmissionEvent) => void;
+  },
+): Promise<{ vfs: Vfs; fsSync: OpfsFsSync; layoutIssue?: OpfsLayoutIssue }>;
+export async function installOpfsFs(
+  root?: FileSystemDirectoryHandle,
+  options: {
+    readonly ioReportTimeoutMs?: number;
+    readonly layout?: 'files' | 'replica';
+    readonly onAdmission?: (event: ReplicaAdmissionEvent) => void;
+  } = {},
+): Promise<{ vfs: Vfs; fsSync: OpfsFsSync; layoutIssue?: OpfsLayoutIssue }> {
+  const ioReportTimeoutMs = options.ioReportTimeoutMs;
+  const layout = options.layout ?? 'files';
+  if (layout !== 'files' && layout !== 'replica') throw new TypeError('Unknown OPFS layout');
+  const mount = root ?? (await acquireOpfsRoot());
+  if (layout === 'replica') {
+    const pair = await createReplicaPair(mount, {
+      ioReportTimeoutMs,
+      onAdmission: options.onAdmission,
+    });
+    setSyncMirror(pair.fsSync, { async: pair.vfs });
+    return pair;
+  }
+  const vfs = new OpfsVfs(mount);
   // Pair the async surface into the sync mirror (ADR-0072) so write-through
   // and boot preload route through OPFS. Passing the structural
   // `PairedAsyncSurface` (which `OpfsVfs` satisfies) avoids a reverse import of
   // `OpfsVfs` into `opfs-sync.ts`.
-  const fsSync = await OpfsFsSync.init(vfs);
+  const fsSync = await OpfsFsSync.init(vfs, mount, { ioReportTimeoutMs });
   setSyncMirror(fsSync, { async: vfs });
   return { vfs, fsSync };
 }

@@ -1,6 +1,6 @@
 name: Release
 
-# Publishes all 16 public @riftydev/* packages (incl. @riftydev/sdk + eddy) to npm
+# Publishes all 17 public @riftydev/* packages (incl. agent, sdk + eddy) to npm
 # when a vX.Y.Z tag is pushed — TOKENLESS via npm OIDC trusted publishing
 # (ADR-0070, ADR-0071). There is NO NPM_TOKEN / NODE_AUTH_TOKEN secret anywhere.
 #

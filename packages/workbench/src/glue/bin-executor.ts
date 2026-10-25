@@ -33,12 +33,13 @@ export interface BinSpawnRequest {
   readonly env: Record<string, string>;
   readonly cwd: string;
   readonly isTTY: boolean;
+  readonly stdoutIsFile?: boolean;
   readonly cols?: number;
   readonly rows?: number;
   /** Host-minted preview correlation; never part of guest `process.env`. */
   readonly previewScope?: string;
-  /** Host-only physical root behind the child process's public `/` namespace. */
-  readonly remoteFsRoot?: string;
+  /** Host-only project roots behind the child process's guest namespace (ADR-0531). */
+  readonly guestRoots?: { readonly remoteFsRoot: string; readonly publicRoot: string };
 }
 
 export interface BinExecutorDeps {

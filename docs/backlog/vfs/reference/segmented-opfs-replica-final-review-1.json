@@ -1,0 +1,283 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "Не сливать: два воспроизведённых native-дефекта и три missing API carriers; после ремонта нужен independent verify.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "f06caca523304b26283a2d85b7a481e283a56edf",
+  "unit_goal_source": "docs/backlog/vfs/segmented-opfs-replica.md; accepted goal docs/backlog/epics/fast-project-open-reopen/goal.md; BASE 93c05f463cc266eb47f36b4fd8cf528c9ad1d0b3. Raw authorities/diff/Contract+RED/ADR0425/0428 inspected. PR-4: v1→v2 fixtures, fresh-Worker/native observers, before/after HEAD install cut, explicit no-adoption baseline and ADR0391 compiler pin compared with BASE; no weakened criterion found. Supplied logs: pr:check 25/25; browser 175 pass/1 skip; packed consumer and SDK GREEN; T medians flush/replay/post-mutation 337.515/223.470/283.610 ms. Reviewer independently executed native probes in /tmp; tracked tree unchanged.",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance 2; ADR-0425 Decisions 3/6",
+      "location": "packages/vfs/src/opfs-sync.ts:695",
+      "summary": "B1: failed removal cannot become clean while native stale descendants remain."
+    },
+    {
+      "clause": "Acceptance 2; ADR-0425 Decision 5",
+      "location": "packages/vfs/src/opfs-replica-store.ts:265",
+      "summary": "B2: healthy paired native reads must survive compaction."
+    },
+    {
+      "clause": "ADR-0425: replica backend controls",
+      "location": "packages/vfs/src/opfs-sync.ts:230",
+      "summary": "B3: committed carriers missing for preloadContent/refreshIndex/openSync named refusal."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md:123",
+      "summary": "Public T openProject → executable Node command с durable flush ≤2 s; isolated storage proof не закрывает композицию."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md:126",
+      "summary": "Public fresh-process offline T reopen: executable session после storage restore ≤2 s."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/fast-project-open-reopen/map.md:12",
+      "summary": "Linked legacy unit: именованный storage-layout health notice и definition materialization end-to-end."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md:138",
+      "summary": "Public offline T reopen ≤2 s после настоящего post-init npm install с ≥5000 изменёнными путями."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Workbench/configured no-COI используют replica под captured root; standalone per-file сохранён; eager replay.",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:12; tests/no-coi/replica-storage.spec.ts:5; tests/browser-unit/workbench-storage-namespace.spec.ts:24",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: binary bytes, shape, copy/rename/delete и timestamps переживают replay точно; healthy paired reads возвращают committed bytes.",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0425",
+      "status": "weak",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:120; tests/browser-unit/replica-paired-vfs.spec.ts:4",
+      "note": "B1/B2: текущая реализация проходит committed roundtrip, но после failed rm возвращает удалённый файл при clean ledger; concurrent healthy read получает ENOENT на compaction. Оба случая исполнены на native Chromium."
+    },
+    {
+      "row": "Acceptance 3: T manifest, per-path discriminator, три fresh offline samples, flush/replay ≤2 s до и после 5000 изменений; проверены все bytes.",
+      "source": "acceptance",
+      "trace": "I1+I2+I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-storage-budget.spec.ts:10; tests/browser-unit/fixtures/replica-persistence-worker.ts:233",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: v2 не принимает valid v1 definition/project; материализация использует definition, старые bytes сохранены.",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-project-store-layout.contract.test.ts:6; tests/browser-unit/replica-persistence.spec.ts:42; tests/browser-unit/workbench-playground-companion.spec.ts:1230",
+      "note": ""
+    },
+    {
+      "row": "Parity: FsSync reference сохранён; binary/structural/metadata-only utimes roundtrip и существующие sync/owner suites.",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/replica-persistence-worker.ts:375; packages/vfs/src/opfs-sync.test.ts:505; /tmp/rifty-pr299-replica-review-pr-check.log:28",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input: invalid HEAD/segment/truncation даёт diagnosed cold restoration без old file/claim; native evidence сохранена.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:42; tests/browser-unit/fixtures/replica-persistence-worker.ts:275",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie: live cache не скрывает corrupt native bytes; paired read отвергает их, healthy read успешен.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0392+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:42; tests/browser-unit/replica-persistence.spec.ts:120",
+      "note": ""
+    },
+    {
+      "row": "native read failure: NotReadableError остаётся OpfsPreloadError с причиной, без cold restore/memory success.",
+      "source": "fault-matrix",
+      "trace": "ADR-0393+ADR-0411",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:42; tests/browser-unit/workbench-preload-honesty.spec.ts:17",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail + lossy-aggregate: failed batch сохраняет footprint 230 writes за пределами sample 20; один repair лечит один путь.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0358+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:151; tests/browser-unit/fixtures/replica-persistence-worker.ts:391",
+      "note": ""
+    },
+    {
+      "row": "quota during compaction: dirty report, prior HEAD/tree доступны, reachable old segments не удалены.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:42; tests/browser-unit/fixtures/replica-persistence-worker.ts:355",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key: competing writer не принят до real settle; timeout держит guard/fence; late success heals.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0358+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:185; tests/browser-unit/fixtures/replica-persistence-worker.ts:407",
+      "note": ""
+    },
+    {
+      "row": "Worker death/torn-state: kill before/after HEAD close при append и compaction даёт complete old/new tree.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:236; tests/browser-unit/fixtures/replica-persistence-worker.ts:431",
+      "note": ""
+    },
+    {
+      "row": "Native admission deadline: busy Worker release ожидается; preferred не скрывает expiry; late granted handle закрывается.",
+      "source": "acceptance",
+      "trace": "ADR-0428",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:282; tests/browser-unit/replica-guard-deadline.spec.ts:4; /tmp/rifty-pr299-late-handle-mutant.log:18",
+      "note": ""
+    },
+    {
+      "row": "initBackend configured storage выбирает replica; существующий standalone default сохраняется.",
+      "source": "public-api",
+      "trace": "ADR-0425+ADR-0419",
+      "status": "pass",
+      "citation": "tests/no-coi/replica-storage.spec.ts:5; tests/browser-unit/opfs-no-coi-policy.spec.ts:1",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.utimes регистрирует собственную durable metadata mutation.",
+      "source": "public-api",
+      "trace": "ADR-0425+ADR-0029",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/replica-persistence-worker.ts:382; tests/browser-unit/replica-persistence.spec.ts:120",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.closeAll сохраняет guard до настоящего settlement.",
+      "source": "public-api",
+      "trace": "ADR-0425+ADR-0428",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:185; tests/browser-unit/replica-guard-deadline.spec.ts:4",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.persistMutation: paired mutations ожидают собственный real outcome, включая failure/repair/report timeout.",
+      "source": "public-api",
+      "trace": "ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-paired-vfs.spec.ts:4; tests/browser-unit/fixtures/replica-paired-vfs-worker.ts:6",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.preloadContent в replica выбрасывает named NotImplementedError; default per-file control сохранён.",
+      "source": "public-api",
+      "trace": "ADR-0425",
+      "status": "missing",
+      "citation": "packages/vfs/src/opfs-sync.ts:230",
+      "note": "B3: нет committed behavioral carrier для replica-вызова preloadContent; существующие вызовы проверяют per-file mode."
+    },
+    {
+      "row": "OpfsFsSync.refreshIndex в replica выбрасывает named NotImplementedError; default per-file control сохранён.",
+      "source": "public-api",
+      "trace": "ADR-0425",
+      "status": "missing",
+      "citation": "packages/vfs/src/opfs-sync.ts:253",
+      "note": "B3: нет committed behavioral carrier для replica-вызова refreshIndex; существующие вызовы проверяют per-file mode."
+    },
+    {
+      "row": "OpfsFsSync.openSync в replica выбрасывает named NotImplementedError; default per-file control сохранён.",
+      "source": "public-api",
+      "trace": "ADR-0425",
+      "status": "missing",
+      "citation": "packages/vfs/src/opfs-sync.ts:311",
+      "note": "B3: нет committed behavioral carrier для replica-вызова openSync; существующие вызовы проверяют per-file mode."
+    },
+    {
+      "row": "Exact TypeScript worker fingerprint обновлён без расширения compiler exception; browser proof сохранён.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:96; tools/checks/esbuild-legacy-retirement.test.ts:1; /tmp/rifty-pr299-packed-consumer-vfs-seed.log:1",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "packages/vfs/src/opfs-sync.ts:230",
+          "authority": "ADR-0425, final paragraph: native prewarm/external-refresh controls throw named NotImplementedError in replica; REV-4 requires a committed carrier for changed traced public API.",
+          "summary": "B3: новые replica-отказы публичных preloadContent/refreshIndex/openSync не имеют committed behavioral carrier. Guards в коде есть; отсутствует проверка объявленного отказа. Это coverage-only, отдельного product defect здесь не установлено.",
+          "evidence": "Read-only rg по tests/browser-unit, tests/no-coi, packed-consumer fixture и packages/vfs/src: replica fixtures не вызывают эти controls; существующие opfs-sync/preload/namespace вызовы создают per-file backend. Новые ветки: opfs-sync.ts:230,253,311; публичный export OpfsFsSync: index.ts:11."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "packages/vfs/src/opfs-sync.ts:695",
+          "authority": "Acceptance 2 → scenario, ADR-0425; ADR-0425 Decisions 3/6: exact failure ledger and truthful later persistence.",
+          "summary": "B1: successful mkdir/child write ложно лечит failed recursive rm; старые descendants возвращаются после clean flush/reopen. captureReplicaRecords берёт tombstones только текущего batch, а healing снимает прежний rm-failure по одному directory image. Fault class: lossy-aggregate / torn-state. Нужен RED failed rm → recreate → native replay; sibling sweep: failed rename, ancestor healing и per-file counterpart.",
+          "evidence": "Независимо: pnpm exec esbuild /tmp/rifty-replica-review-probe/worker.ts --bundle --format=esm --platform=browser --outfile=/tmp/rifty-replica-review-probe/worker.js; node /tmp/rifty-replica-review-probe/run.mjs. Chromium 148.0.7778.96, native OPFS, только quota на createWritable сегмента. /tmp/rifty-replica-review-probe/result.log: dirty.total=1 (/a, rm), repaired.total=0, live=[new], native=[new,old], reopened=[new,old]."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "packages/vfs/src/opfs-replica-store.ts:265",
+          "authority": "Acceptance 2 → scenario, ADR-0425: healthy paired native reads return committed bytes; ADR-0425 Decision 5.",
+          "summary": "B2: compaction удаляет сегмент in-flight native reader. readFile захватывает старый entry до await; GC не ждёт читателя, поэтому неизменённый существующий файл даёт ENOENT. Fault class: observable-order / torn-state. Нужен RED concurrent read + compaction; sibling sweep: stat/readdir через nativeEntry и content read после metadata.",
+          "evidence": "Независимо, без fault injection: node /tmp/rifty-replica-review-probe/run-concurrent.mjs; stable /a читается параллельно 140 flush-записям /b. Chromium 148.0.7778.96. /tmp/rifty-replica-review-probe/concurrent.log: 2 errors/363 reads; concurrent-detailed.log: 3 ENOENT/364 reads, rounds 127/128/130; все flush clean. Тот же scenario в сохранённом per-file mode: node /tmp/rifty-replica-review-probe/run-reference.mjs; reference.log: 266 reads, errors=[], reports=[]."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

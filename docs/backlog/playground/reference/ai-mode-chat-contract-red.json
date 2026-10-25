@@ -1,0 +1,207 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED принят с 3 advisory NOTE; IMPLEMENT разрешён. Merge/закрытие цели после UI GREEN, живой приёмки и I8; сейчас не завершены.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "d33b8de82a7ceeb26f749a627e33473bedab0774",
+  "unit_goal_source": "docs/backlog/playground/ai-mode-chat.md @ d33b8de82a7ceeb26f749a627e33473bedab0774; BASE prior no-COI Final+GREEN 1989bdfca0dbb50ee9078a7a94c16b3553c61851. Fresh independent /root/ui_contract_review read raw accepted goal/map/refine/FIT, prior delivered verdicts, ADR-0424/0426/0427 and actual PR-111/current UI sources. Executed current-tree 5 intended missing-+chat RED, 0 whole-test timeouts; native Pi HTTP fixture protocol PASS. Full independent commands/results and PR-4 comparison: /tmp/pr333-ai-ui-independent-review-evidence.md.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I5: playground hands-on UI and live endpoint acceptance",
+      "location": "docs/backlog/epics/ai-agent-mode-and-bench/goal.md:70",
+      "summary": "Current checkpoint proves promise/RED only. Implement lazy +chat, terminal/files/SCM/preview, settings/lifetimes/Stop/Reset/export and hooks; execute complete deterministic GREEN plus supplied no-auth model workflow/trace and independent Final+GREEN."
+    },
+    {
+      "clause": "I8: three-lane benchmark",
+      "location": "docs/backlog/epics/ai-agent-mode-and-bench/goal.md:80",
+      "summary": "Linked distribution/agent-bench remains: accepted tasks and runs, all three deterministic smoke lanes with identical judges, evidence/human failure classes, delta/report and tool-context caveat."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: real React write/build/preview, visible tool args/results/editor/SCM/Agent terminal and pre-finish streaming",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: endpoint/model-only persistence, memory key/limits/conversation, usable corrupt/refused settings and key-free export",
+      "source": "acceptance",
+      "trace": "I2 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:137; tests/e2e/ai-mode.spec.ts:246",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: physical Stop, retained provider-error write/history, next command, distinct budget and complete export",
+      "source": "acceptance",
+      "trace": "I3 + I4 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:185; tests/e2e/ai-mode.spec.ts:105; tests/e2e/ai-mode.spec.ts:271",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: Reset/close/reopen/project binding/settings reset and running-control exclusion",
+      "source": "acceptance",
+      "trace": "I5 + ADR-0427",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:162; tests/e2e/ai-mode.spec.ts:222; tests/e2e/ai-mode.spec.ts:87; tests/e2e/ai-mode.spec.ts:19",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: cold lazy loading, side-by-side desktop geometry/screenshot and keyboard send",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:61; tests/e2e/ai-mode.spec.ts:83; tests/e2e/ai-mode.spec.ts:113",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: unreachable endpoint exposes dev-proxy remedy; live no-auth React workflow and trace remain delivery acceptance target",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:263; tests/e2e/ai-mode.spec.ts:57; docs/backlog/playground/reference/ai-mode-chat-evidence.md:41",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: opt-in private bench seed/export/actual metadata through public files and actual chat input",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:283; tests/e2e/ai-mode.spec.ts:112",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: UI terminal shares native command settlement/output and Stop permits next command",
+      "source": "acceptance",
+      "trace": "I3 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:210; docs/backlog/distribution/reference/ai-agent-core-final-green.json:1",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: native completion/error/tool-result meanings remain in UI and trace",
+      "source": "acceptance",
+      "trace": "I2 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:85; tests/e2e/ai-mode.spec.ts:208; tests/e2e/ai-mode.spec.ts:215; docs/backlog/distribution/reference/ai-agent-core-final-green.json:1",
+      "note": ""
+    },
+    {
+      "row": "provider / torn-state after write: visible failure with retained committed write/history",
+      "source": "fault-matrix",
+      "trace": "I3 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:189",
+      "note": ""
+    },
+    {
+      "row": "command / cancellation: physical Stop with partial outcome and next command",
+      "source": "fault-matrix",
+      "trace": "I3 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:210",
+      "note": ""
+    },
+    {
+      "row": "provider / unbounded-read: distinct core time budget and usable next request",
+      "source": "fault-matrix",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:250; tests/e2e/ai-mode.spec.ts:271",
+      "note": ""
+    },
+    {
+      "row": "settings / corrupt-input or refused storage: usable settings and explicit persistence notice",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:151; tests/e2e/ai-mode.spec.ts:253",
+      "note": ""
+    },
+    {
+      "row": "project/panel lifetime / sibling-drift: stopped old session and fresh project conversation",
+      "source": "fault-matrix",
+      "trace": "I5 + ADR-0427",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:222",
+      "note": ""
+    },
+    {
+      "row": "endpoint / unreachable: visible failure names dev-proxy remedy",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:263",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/e2e/ai-mode.spec.ts:222",
+          "summary": "Late lifecycle proof is narrow: close is exercised during a command, but its physical settlement is not directly observed; project switch occurs only after done, and Apply is tested before conversation. At GREEN inspect active switch/close ownership and settings reset against Acceptance 4/ADR-0427. No executed surviving mutant, so advisory only.",
+          "authority": "",
+          "evidence": "Reading. Independent current-tree run /tmp/pr333-ai-ui-independent-red.log reaches missing +chat in all five tests; later lifecycle assertions cannot run before implementation. No fabricated UI or mutant result claimed."
+        },
+        {
+          "severity": "concern",
+          "location": "tests/e2e/ai-mode.spec.ts:90",
+          "summary": "Tool UI assertions name tools/arguments; result content and native error meaning are chiefly checked through export/provider status. At GREEN inspect/execute expanded tool results and failure styling against Acceptance 1/Parity 2. No executed payload-classification mutant; advisory, coverage remains pass under REV-4.",
+          "authority": "",
+          "evidence": "Reading of tests/e2e/ai-mode.spec.ts:90-111,208-215. Real Pi/HTTP protocol separately passes /tmp/pr333-ai-ui-native-fixture-probe.log; that probe does not prove a future UI renderer."
+        },
+        {
+          "severity": "concern",
+          "location": "tests/e2e/ai-mode.spec.ts:75",
+          "summary": "Lazy-load request filter names /ai/, pi-agent-core, pi-ai and openai-completions; packages/agent/src paths or built hashed chunks are not explicitly recognized. Match the delivered graph when proving cold-loading at GREEN. No eager-load mutation executed, so advisory only.",
+          "authority": "",
+          "evidence": "Reading of the request matcher; independent current-tree test passes the cold-request assertion and then fails at missing +chat. Production AI bundle does not exist yet."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

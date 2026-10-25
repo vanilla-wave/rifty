@@ -12,15 +12,20 @@ const {
 
 const EXPECTED_GENERIC_RUNTIME_ADAPTER_MODULES = Object.freeze([
   'packages/npm-client/src/installer.ts',
+  'packages/npm-client/src/eddy-fast-path.ts',
+  'packages/npm-client/src/installer-bin-claims.ts',
+  'packages/npm-client/src/installer-peers.ts',
+  'packages/npm-client/src/installer-request.ts',
+  'packages/npm-client/src/installer-sources.ts',
+  'packages/npm-client/src/installer-walk.ts',
+  'packages/npm-client/src/internal/shadow/substitution.ts',
+  'packages/npm-client/src/utils/abort-signal.ts',
   'packages/npm-client/src/linker.ts',
   'packages/npm-client/src/internal/shadow/admission.ts',
   'packages/npm-client/src/internal/shadow/planner.ts',
-  'packages/npm-client/src/internal/shadow/manager.ts',
-  'packages/npm-client/src/internal/shadow/port.ts',
   'packages/workbench/src/workers/package-acquisition-authority.ts',
   'packages/workbench/src/workers/owner-package-state.ts',
   'packages/workbench/src/workers/owner-child-admission.ts',
-  'packages/workbench/src/workers/owner-shadow-assets.ts',
   'packages/workbench/src/workers/workbench-project-runtime.ts',
   'packages/workbench/src/workers/workbench-owner-controller.ts',
   'packages/workbench/src/workers/owner-child-node-executor.ts',
@@ -28,14 +33,24 @@ const EXPECTED_GENERIC_RUNTIME_ADAPTER_MODULES = Object.freeze([
   'packages/workbench/src/workers/owner-child-dev-server.ts',
   'packages/workbench/src/workers/node-entry-bootstrap.ts',
   'packages/workbench/src/workers/node-entry-runtime-preparation.ts',
+  'packages/workbench/src/workers/package-install-finalizer.ts',
+  'packages/workbench/src/workers/package-install-generic-finalizer.ts',
+  'packages/workbench/src/workers/preview-producer-bindings.ts',
+  'packages/workbench/src/glue/project-deps.ts',
+  'packages/workbench/src/workers/dev-server-boot.ts',
+  'packages/runtime-js/src/internal/worker-globals.ts',
 ] as const);
 
 const EXPECTED_SASS_FORBIDDEN_SURFACE = Object.freeze({
   catalogConsumers: EXPECTED_GENERIC_RUNTIME_ADAPTER_MODULES,
   registrySourceProvenance: Object.freeze([
     'packages/npm-client/src/registry.ts',
-    'packages/npm-client/src/internal/shadow/source.ts',
     'packages/npm-client/src/installer.ts',
+    'packages/npm-client/src/eddy-fast-path.ts',
+    'packages/npm-client/src/installer-bin-claims.ts',
+    'packages/npm-client/src/installer-sources.ts',
+    'packages/npm-client/src/installer-walk.ts',
+    'packages/npm-client/src/internal/shadow/substitution.ts',
     'packages/npm-client/src/linker.ts',
     'packages/npm-client/src/internal/shadow/planner.ts',
   ]),
@@ -47,16 +62,12 @@ const EXPECTED_SASS_FORBIDDEN_SURFACE = Object.freeze({
   ]),
   workbench: Object.freeze(['packages/workbench/src']),
   managerStoreMessagePort: Object.freeze([
-    'packages/npm-client/src/internal/shadow/manager.ts',
-    'packages/npm-client/src/internal/shadow/port.ts',
-    'packages/workbench/src/workers/owner-shadow-assets.ts',
     'packages/workbench/src/workers/owner-storage.ts',
     'packages/workbench/src/workers/workbench-owner-storage.ts',
   ]),
   esbuildAdapter: Object.freeze([
-    'packages/workbench/src/workers/workbench-runtime-adapters.ts',
-    'packages/workbench/src/workers/esbuild-runtime-fs.ts',
-    'packages/workbench/src/workers/vite-esbuild-runtime.ts',
+    'tools/shadow-registry/src/runtime/esbuild-runtime-fs.ts',
+    'tools/shadow-registry/src/runtime/vite-esbuild-runtime.ts',
   ]),
 });
 
@@ -104,7 +115,7 @@ describe('runtime adapter generic-module boundary', () => {
         ['packages/kernel/src/sass-contract.ts', 'SASS_KERNEL_RUNTIME'],
         ['packages/workbench/src/sass-contract.ts', 'SASS_WORKBENCH_RUNTIME'],
         ['packages/workbench/src/workers/owner-storage.ts', 'SASS_MANAGER_STORE_MESSAGE_PORT'],
-        ['packages/workbench/src/workers/workbench-runtime-adapters.ts', 'SASS_ESBUILD_ADAPTER'],
+        ['tools/shadow-registry/src/runtime/vite-esbuild-runtime.ts', 'SASS_ESBUILD_ADAPTER'],
       ] as const;
       for (const [path, identifier] of injections) write(path, `${identifier};\n`);
 

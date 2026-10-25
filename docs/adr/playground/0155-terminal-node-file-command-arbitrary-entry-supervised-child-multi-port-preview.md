@@ -55,3 +55,7 @@ IRREVERSIBLE — adds wire contracts (`pty:preview`, `pty:preview-req`, `rifty:n
 > public `process.send` message. The runtime publishes typed listening, removal,
 > and physical-exit facts on private descendant control; Workbench's existing
 > preview registry and request/snapshot recovery remain the only route owner.
+
+## Corrections (2026-09-08)
+
+ADR-0385 supersedes §2’s permanent serve handoff: one foreground drain now follows listeners through last close. Other decisions remain.
