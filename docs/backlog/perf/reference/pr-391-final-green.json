@@ -1,0 +1,90 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS for PR #391 (gate-criterion repair, PR-4 accepted: median-of-5 is a robust estimator at the unchanged 10% budget, not a widening). Merge after this verdict is committed as docs/backlog/perf/reference/pr-391-final-green.json (check:pass-binding currently fails only for the missing landing artifact) and browser-unit-chromium is green at HEAD.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "c736e31dec02860dd0105a349b99a0ef4a5b5469",
+  "unit_goal_source": "PR #391, observed-defect repair, no backlog contract (draft perf/opfs-parallel-drain-load-sensitive-threshold deleted in this PR; BASE text read via git show). Observed baseline verified from raw CI logs: main runs 39375394764 (sha 40837803b, job 118473780455) and 39888233973 (sha 8874e47d6, job 120201740981), browser-unit-chromium, tests/browser-unit/opfs-parallel-drain.spec.ts pending-flush overhead gate: 11128.58 > 10846.8 (mkdir 0.9333 vs 0.5583 ms) and 26330.41 > 12012.5 (write 2.9911 vs 2.0243 ms); neighbouring green run 39974798025 (sha 132137bca, job 121017546836) deltas 0.019/0.016 ms, 954.5 <= 9746.1; vfs identical across the three (PD256-ACCEPTANCE lines in /tmp/pr391-review/ci-records.log). BASE 132137bca4a0a706b1a082aa7e63521eaeca4602 (origin/main = merge-base), HEAD c736e31dec02860dd0105a349b99a0ef4a5b5469. Authority: ADR-0358 (epic invariant I3: >=2.5x in the headless browser-unit lane, clean ledger) + the named BASE acceptance spec/worker/helper (git show BASE:tests/browser-unit/opfs-parallel-drain.spec.ts, fixtures/opfs-drain-overhead.ts). PR-4 applied: old criterion (one 200-op window per shape, max(0,single-batched) x population <= 0.1 x faithfulMs) compared against the new one (5 rounds, median of per-round projections, same budget, same populations). Fresh independent reviewer (REV-11), read-only tracked tree, scratch under /tmp/pr391-review. Executed: RED proof BASE helper vs HEAD helper on the exact CI records (/tmp/pr391-review/red-proof.log), committed unit test 12/12 (green-unit.log), four helper mutants min/max/mean/lower-middle each rejected by the committed test (mutants.log), real acceptance spec on this tree: 1 passed 1.3m, speedupRaw 3.0826, 5 rounds, median 169.6 ms <= 3980.9, both trees byte-exact (spec.log, spec-eval.log), biome clean (biome.log), root tsc shows no error in changed files (tsc.log), check:file-size OK, backlog:check OK, refs:check OK. PR CI at HEAD: all lanes green except check:pass-binding (missing landing verdict, REV-8) and browser-unit-chromium pending at review time (pr-checks.log).",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Pending-flush overhead guard: median over 5 rounds of (positive write delta x write calls + positive mkdir delta x mkdir calls) <= 10% faithfulMs; a per-flush cost present in every round still fails; the two red main records reproduce as one-round samples.",
+      "source": "acceptance",
+      "trace": "ADR-0358 I3 + named BASE same-run pending-overhead guard against manufactured speedup",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/opfs-drain-overhead.ts:18; tests/browser-unit/fixtures/opfs-drain-overhead.ts:32; tests/browser-unit/opfs-parallel-drain.spec.ts:172; tests/browser-unit/opfs-parallel-drain.spec.ts:179; tools/checks/opfs-drain-overhead.test.ts:117; tools/checks/opfs-drain-overhead.test.ts:126; tools/checks/opfs-drain-overhead.test.ts:136; /tmp/pr391-review/red-proof.log; /tmp/pr391-review/green-unit.log",
+      "note": ""
+    },
+    {
+      "row": "Estimator is the median (upper middle on even counts), order-independent, refuses an empty round set; min/max/mean/lower-middle substitutes are rejected.",
+      "source": "acceptance",
+      "trace": "ADR-0358 I3 + named BASE pending-overhead guard (PR-4 criterion change)",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/opfs-drain-overhead.ts:34; tests/browser-unit/fixtures/opfs-drain-overhead.ts:38; tools/checks/opfs-drain-overhead.test.ts:149; tools/checks/opfs-drain-overhead.test.ts:169; /tmp/pr391-review/mutants.log",
+      "note": ""
+    },
+    {
+      "row": "Probe shape unchanged per round: four back-to-back 200-op windows (single-pending write, batched write, single-pending mkdir, batched mkdir), fresh paths per round, clean ledger checks, run on the drained faithful instance outside the timed window and outside the verified namespace; spec pins exactly 5 rounds with positive means.",
+      "source": "acceptance",
+      "trace": "ADR-0358 I3 + named BASE probe design (opfs-parallel-drain-worker.ts)",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/opfs-parallel-drain-worker.ts:132; tests/browser-unit/fixtures/opfs-parallel-drain-worker.ts:335; tests/browser-unit/fixtures/opfs-parallel-drain-worker.ts:355; tests/browser-unit/fixtures/opfs-parallel-drain-worker.ts:377; tests/browser-unit/fixtures/opfs-parallel-drain-worker.ts:399; tests/browser-unit/opfs-parallel-drain.spec.ts:172; /tmp/pr391-review/spec.log; /tmp/pr391-review/spec-eval.log",
+      "note": ""
+    },
+    {
+      "row": "Same-run empty-flush mean x all faithful flush calls <= 10% faithfulMs, unchanged.",
+      "source": "acceptance",
+      "trace": "ADR-0358 I3 + named BASE empty-overhead guard",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-parallel-drain.spec.ts:164; /tmp/pr391-review/spec.log",
+      "note": ""
+    },
+    {
+      "row": "Raw unrounded same-run faithful/product speedup >= 2.5 x 1.05 on a real >=20k-file manifest, unchanged (no threshold widening, no lane disablement).",
+      "source": "acceptance",
+      "trace": "ADR-0358 I3 + named BASE raw-ratio acceptance criterion",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-parallel-drain.spec.ts:183; /tmp/pr391-review/spec.log",
+      "note": ""
+    },
+    {
+      "row": "Both variants keep clean cumulative ledgers and fresh-surface whole-tree exact entries with byte-exact reads: 26811 files, 2314 dirs, 166782155 bytes, unchanged.",
+      "source": "acceptance",
+      "trace": "ADR-0358 clean-ledger/durability obligations + named BASE whole-tree acceptance proof",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-parallel-drain.spec.ts:143; tests/browser-unit/opfs-parallel-drain.spec.ts:150; tests/browser-unit/opfs-parallel-drain.spec.ts:153; /tmp/pr391-review/spec.log",
+      "note": ""
+    },
+    {
+      "row": "Frozen records: the quiet/stalledWrite/stalledMkdir samples equal the raw PD256-ACCEPTANCE lines of CI jobs 121017546836 / 120201740981 / 118473780455; the PR359 attempt1/2 population records are retained and still graded by the unchanged weighted-sum.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0358 I3 + named observed baseline runs 39375394764, 39888233973, 39974798025 and CI36365591064",
+      "status": "pass",
+      "citation": "tools/checks/opfs-drain-overhead.test.ts:8; tools/checks/opfs-drain-overhead.test.ts:97; tools/checks/opfs-drain-overhead.test.ts:103; tools/checks/opfs-drain-overhead.test.ts:109; /tmp/pr391-review/ci-records.log; /tmp/pr391-review/red-proof.log",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/perf/reference/pr359-opfs-overhead-accounting.md:34",
+          "evidence": "Deleted draft (git show 132137bca:docs/backlog/perf/opfs-parallel-drain-load-sensitive-threshold.md) titled the ratio 'load-sensitive' but its 2026-08-18 sample 'expected <= 12023, got 41786' is a 10%-budget overhead assertion; pr-333-final-green.json:175 (run 34763376182: 14283.6 > 11441.9) and CI36365591064, 39375394764, 39888233973 all failed the same pending-overhead gate. No recorded speedupRaw failure (observed 3.08-3.98 vs 2.625).",
+          "summary": "Deletion of the draft is justified (hypothesis with no observed defect), but the reference note could state in one clause that every recorded red hit the pending-overhead gate and the speedupRaw gate has no recorded failure, so the former draft's ratio question is closed by evidence, not dropped.",
+          "authority": ""
+        }
+      ]
+    },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    { "axis": "Bugs", "verdict": "pass", "findings": [] },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+  ]
+}
