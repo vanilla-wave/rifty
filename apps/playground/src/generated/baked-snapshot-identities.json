@@ -1,8 +1,8 @@
 {
   "version": 1,
   "snapshots": {
-    "typescript": "sha256:7cb5a840baf2ca4de7a3092063bfd2131bfe6d70fc2af9cc6868f3f9490e34e2",
-    "vite": "sha256:6d5f3ff3e00001c38557fd7b4e9a7499b4711c1e475214e5d2072acad91c2c00",
-    "vite8": "sha256:ed45181fccfc2f360a12b7d11a9014e930406f4e2bec56c72fe29ec26714957e"
+    "typescript": "sha256:8263912c7e0f9e87e8d694d5707ad77924ce68eb86724af5c70f2cd3b1b5b7c3",
+    "vite": "sha256:d6f436d3ba68af6c49bb14e85872993d674ae0189eed8833ff140763dd6a8444",
+    "vite8": "sha256:fd1200f6ebd8ae3616e461731513e735d5eb7a5fb0473ea16c265fc346cd2501"
   }
 }

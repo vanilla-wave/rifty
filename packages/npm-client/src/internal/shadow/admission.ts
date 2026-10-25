@@ -97,7 +97,7 @@ export function registryRecipeForResolution(
 
 export function assertShadowRecipeAdmission(
   recipe: Readonly<{
-    trigger: Pick<BuiltinShadowSubstitutionRecipe['trigger'], 'version'>;
+    trigger: Pick<BuiltinShadowSubstitutionRecipe['trigger'], 'name' | 'version'>;
     admission: BuiltinShadowSubstitutionRecipe['admission'];
     runtimeTier?: ShadowRuntimeTier;
   }>,
@@ -111,6 +111,6 @@ export function assertShadowRecipeAdmission(
   if (admitted) return;
   throw new NotImplementedError(
     recipe.admission.unsupportedFeature,
-    `${recipe.runtimeTier === 'no-coi' ? 'no-COI ' : ''}shadow recipe does not admit ${requestedRange ?? '*'}`,
+    `${recipe.runtimeTier === 'no-coi' ? 'no-COI ' : ''}${recipe.trigger.name}@${requestedRange ?? '*'} refused: substitutes ${recipe.trigger.name}@${recipe.trigger.version}; admission rule ${recipe.admission.kind}`,
   );
 }
