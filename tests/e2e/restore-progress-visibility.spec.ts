@@ -20,18 +20,24 @@
  * - the slow-window floor asserts the RESPONSE duration (`gz.end - gz.start`)
  *   against the injected stall — an immediate response fails even if local
  *   restore work happens to be slow;
- * - the reopen test writes an OPFS sentinel into the persisted tree and
- *   requires it to survive: a reopen that reseeds a fresh Scratch fails.
+ * - the reopen test interrupts the FIRST materialization mid-restore (tab
+ *   reload while the snapshot stalls — the reachable way a persisted catalog
+ *   entry exists without an install claim) and reads durable state from the
+ *   native replica, never live owner caches.
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { type BrowserContext, type Page, type Request, expect, test } from '@playwright/test';
+import type * as NativeObserver from '../browser-unit/fixtures/native-replica-observer.ts';
 
+const CATALOG_PATH = '/.rifty/workbench/playground/catalog.json';
 const STAMP_PATH =
-  '/.rifty/workbench/v1/projects/scratch/tree/node_modules/.rifty-install-stamp.json';
-const SENTINEL_PATH = '/.rifty/workbench/v1/projects/scratch/tree/e2e-reopen-sentinel.txt';
+  '/.rifty/workbench/v2/projects/scratch/tree/node_modules/.rifty-install-stamp.json';
+const OBSERVER_URL = `/@fs${process.cwd()}/tests/browser-unit/fixtures/native-replica-observer.ts`;
 const FAULT_COOKIE = 'rifty-e2e-snapshot-fault';
 const DELAY_MS = 4_000;
+/** First materialization stalls far past the interrupt point. */
+const INTERRUPTED_DELAY_MS = 120_000;
 const RESPONSE_FLOOR_MS = DELAY_MS - 500;
 const BOOT_TIMEOUT = 120_000;
 
@@ -82,18 +88,60 @@ const SAMPLER_INIT = `(() => {
   }, 100);
 })();`;
 
-async function armSlowSnapshots(context: BrowserContext, baseURL: string): Promise<void> {
-  await context.addCookies([{ name: FAULT_COOKIE, value: `delay:${DELAY_MS}`, url: baseURL }]);
+async function armSlowSnapshots(
+  context: BrowserContext,
+  baseURL: string,
+  delayMs = DELAY_MS,
+): Promise<void> {
+  await context.addCookies([{ name: FAULT_COOKIE, value: `delay:${delayMs}`, url: baseURL }]);
 }
 
-function watchSnapshotFetch(page: Page): { first: () => { start: number; end: number } | null } {
+/** First snapshot response that STARTED at/after `since` (an aborted earlier fetch never counts). */
+function watchSnapshotFetch(
+  page: Page,
+  since = 0,
+): { first: () => { start: number; end: number } | null } {
   let first: { start: number; end: number } | null = null;
   page.on('requestfinished', (req: Request) => {
     if (!/node-modules\.json\.gz/.test(req.url()) || first !== null) return;
     const t = req.timing();
+    if (t.startTime < since) return;
     first = { start: Math.round(t.startTime), end: Math.round(t.startTime + t.responseEnd) };
   });
   return { first: () => first };
+}
+
+interface PersistedScratch {
+  readonly active: string | null;
+  readonly starterId: string | null;
+  readonly claimed: boolean;
+}
+
+/** Durable custody (native replica), not the live owner: active plan + install claim. */
+async function persistedScratch(page: Page): Promise<PersistedScratch | null> {
+  return page.evaluate(
+    async ({ observerUrl, catalogPath, stampPath }) => {
+      try {
+        const observer = (await import(/* @vite-ignore */ observerUrl)) as typeof NativeObserver;
+        const native = await observer.nativeReplicaEntries(await navigator.storage.getDirectory());
+        const catalog = native.get(catalogPath);
+        if (catalog?.bytes === undefined) return null;
+        const parsed = JSON.parse(new TextDecoder().decode(catalog.bytes)) as {
+          active?: { kind?: string };
+          scratch?: { starterId?: string };
+        };
+        return {
+          active: parsed.active?.kind ?? null,
+          starterId: parsed.scratch?.starterId ?? null,
+          claimed: native.get(stampPath)?.kind === 'file',
+        };
+      } catch {
+        // A segment compacted under the read: the poll retries.
+        return null;
+      }
+    },
+    { observerUrl: OBSERVER_URL, catalogPath: CATALOG_PATH, stampPath: STAMP_PATH },
+  );
 }
 
 async function waitForPublication(page: Page): Promise<void> {
@@ -112,52 +160,6 @@ async function collectSampler(page: Page): Promise<SamplerData> {
     clearInterval(S.iv);
     return { samples: S.samples };
   });
-}
-
-async function opfsFileExists(page: Page, path: string): Promise<boolean> {
-  return page.evaluate(async (target: string) => {
-    try {
-      const segs = target.split('/').filter(Boolean);
-      let dir = await navigator.storage.getDirectory();
-      for (const seg of segs.slice(0, -1)) dir = await dir.getDirectoryHandle(seg);
-      await dir.getFileHandle(segs[segs.length - 1] as string);
-      return true;
-    } catch {
-      return false;
-    }
-  }, path);
-}
-
-async function waitForTrustedBoot(page: Page): Promise<void> {
-  // Dev-server ready line = restore finished, project published, autorun ran.
-  await expect
-    .poll(() => page.evaluate(() => document.body.innerText.includes('Local:')), {
-      timeout: BOOT_TIMEOUT,
-    })
-    .toBe(true);
-  // Stamp presence = restore writes drained; safe to mutate OPFS afterwards.
-  await expect.poll(() => opfsFileExists(page, STAMP_PATH), { timeout: BOOT_TIMEOUT }).toBe(true);
-}
-
-async function writeSentinel(page: Page): Promise<void> {
-  await page.evaluate(async (target: string) => {
-    const segs = target.split('/').filter(Boolean);
-    let dir = await navigator.storage.getDirectory();
-    for (const seg of segs.slice(0, -1)) dir = await dir.getDirectoryHandle(seg);
-    const file = await dir.getFileHandle(segs[segs.length - 1] as string, { create: true });
-    const writable = await file.createWritable();
-    await writable.write('persisted-reopen-sentinel');
-    await writable.close();
-  }, SENTINEL_PATH);
-}
-
-async function evictNodeModules(page: Page): Promise<void> {
-  await page.evaluate(async (stampPath: string) => {
-    const segs = stampPath.split('/').filter(Boolean);
-    let dir = await navigator.storage.getDirectory();
-    for (const seg of segs.slice(0, -2)) dir = await dir.getDirectoryHandle(seg);
-    await dir.removeEntry(segs[segs.length - 2] as string, { recursive: true });
-  }, STAMP_PATH);
 }
 
 function assertVisibleWindow(data: SamplerData, gz: { start: number; end: number } | null): void {
@@ -201,32 +203,38 @@ test.describe('cold snapshot restore visibility', () => {
   });
 
   // RED (backlog: playground/cold-restore-progress-visibility Acceptance 2):
-  // the no-query persisted reopen goes through `openActive`
-  // (playground-app.tsx) without `projectBusy`, so today the whole re-restore
-  // window is silent — no pill, no launcher, no terminal yet.
-  test('no-query reload after node_modules eviction keeps an indicator through the restore', async ({
+  // the no-query reopen goes through `openActive` (adapters/playground-app.tsx
+  // initialize) outside the project-open progress bracket, so the whole
+  // re-restore window is silent — no pill, no launcher, no terminal yet.
+  test('no-query reopen after an interrupted first restore keeps an indicator through the re-restore', async ({
     page,
     context,
     baseURL,
   }) => {
     test.setTimeout(BOOT_TIMEOUT * 2 + 60_000);
     await context.addInitScript(SAMPLER_INIT);
-    await page.goto('/?preset=vite8&autorun=1', { waitUntil: 'domcontentloaded' });
-    await waitForTrustedBoot(page);
-    await writeSentinel(page);
-    await evictNodeModules(page);
+    await armSlowSnapshots(context, baseURL as string, INTERRUPTED_DELAY_MS);
+    let firstRequested = false;
+    page.on('request', (req) => {
+      if (/node-modules\.json\.gz/.test(req.url())) firstRequested = true;
+    });
+    await page.goto('/?preset=vite8&autorun=1', { waitUntil: 'commit' });
+    await expect.poll(() => firstRequested, { timeout: BOOT_TIMEOUT }).toBe(true);
+    // Interrupt point: the active plan is durable, its install claim is not.
+    await expect
+      .poll(() => persistedScratch(page), { timeout: BOOT_TIMEOUT })
+      .toEqual({ active: 'scratch', starterId: 'vite8', claimed: false });
     await armSlowSnapshots(context, baseURL as string);
-    const gz = watchSnapshotFetch(page);
+    const reopenAt = Date.now();
+    const gz = watchSnapshotFetch(page, reopenAt);
     await page.goto('/', { waitUntil: 'commit' });
     await waitForPublication(page);
     const data = await collectSampler(page);
     assertVisibleWindow(data, gz.first());
-    // The reopened project must BE the persisted one: reseeding a fresh
-    // Scratch (which would also repaint progress) loses the user's tree.
-    expect(
-      await opfsFileExists(page, SENTINEL_PATH),
-      'persisted tree must survive the reopen',
-    ).toBe(true);
+    // The reopen completes the SAME persisted plan (not a chooser, not another starter).
+    await expect
+      .poll(() => persistedScratch(page), { timeout: BOOT_TIMEOUT })
+      .toEqual({ active: 'scratch', starterId: 'vite8', claimed: true });
   });
 
   // RED (backlog: playground/cold-restore-progress-visibility Acceptance 3):
