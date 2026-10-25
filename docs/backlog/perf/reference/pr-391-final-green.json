@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Final+GREEN PASS for PR #391 (gate-criterion repair, PR-4 accepted: median-of-5 is a robust estimator at the unchanged 10% budget, not a widening). Merge after this verdict is committed as docs/backlog/perf/reference/pr-391-final-green.json (check:pass-binding currently fails only for the missing landing artifact) and browser-unit-chromium is green at HEAD.",
+  "merge_call": "Final+GREEN PASS re-bound to merged HEAD f242c3152 (merge of origin/main 8c883fcf7; pure merge, no overlap with the unit paths, checks re-executed). PR-4 accepted: median-of-5 is a robust estimator at the unchanged 10% budget, not a widening. Merge once browser-unit-chromium and check:pass-binding are green at this HEAD.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "c736e31dec02860dd0105a349b99a0ef4a5b5469",
-  "unit_goal_source": "PR #391, observed-defect repair, no backlog contract (draft perf/opfs-parallel-drain-load-sensitive-threshold deleted in this PR; BASE text read via git show). Observed baseline verified from raw CI logs: main runs 39375394764 (sha 40837803b, job 118473780455) and 39888233973 (sha 8874e47d6, job 120201740981), browser-unit-chromium, tests/browser-unit/opfs-parallel-drain.spec.ts pending-flush overhead gate: 11128.58 > 10846.8 (mkdir 0.9333 vs 0.5583 ms) and 26330.41 > 12012.5 (write 2.9911 vs 2.0243 ms); neighbouring green run 39974798025 (sha 132137bca, job 121017546836) deltas 0.019/0.016 ms, 954.5 <= 9746.1; vfs identical across the three (PD256-ACCEPTANCE lines in /tmp/pr391-review/ci-records.log). BASE 132137bca4a0a706b1a082aa7e63521eaeca4602 (origin/main = merge-base), HEAD c736e31dec02860dd0105a349b99a0ef4a5b5469. Authority: ADR-0358 (epic invariant I3: >=2.5x in the headless browser-unit lane, clean ledger) + the named BASE acceptance spec/worker/helper (git show BASE:tests/browser-unit/opfs-parallel-drain.spec.ts, fixtures/opfs-drain-overhead.ts). PR-4 applied: old criterion (one 200-op window per shape, max(0,single-batched) x population <= 0.1 x faithfulMs) compared against the new one (5 rounds, median of per-round projections, same budget, same populations). Fresh independent reviewer (REV-11), read-only tracked tree, scratch under /tmp/pr391-review. Executed: RED proof BASE helper vs HEAD helper on the exact CI records (/tmp/pr391-review/red-proof.log), committed unit test 12/12 (green-unit.log), four helper mutants min/max/mean/lower-middle each rejected by the committed test (mutants.log), real acceptance spec on this tree: 1 passed 1.3m, speedupRaw 3.0826, 5 rounds, median 169.6 ms <= 3980.9, both trees byte-exact (spec.log, spec-eval.log), biome clean (biome.log), root tsc shows no error in changed files (tsc.log), check:file-size OK, backlog:check OK, refs:check OK. PR CI at HEAD: all lanes green except check:pass-binding (missing landing verdict, REV-8) and browser-unit-chromium pending at review time (pr-checks.log).",
+  "reviewed_sha": "f242c3152309c960748b6690006ebc0b198e025f",
+  "unit_goal_source": "PR #391, observed-defect repair, no backlog contract (draft perf/opfs-parallel-drain-load-sensitive-threshold deleted in this PR; BASE text read via git show). Observed baseline verified from raw CI logs: main runs 39375394764 (sha 40837803b, job 118473780455) and 39888233973 (sha 8874e47d6, job 120201740981), browser-unit-chromium, tests/browser-unit/opfs-parallel-drain.spec.ts pending-flush overhead gate: 11128.58 > 10846.8 (mkdir 0.9333 vs 0.5583 ms) and 26330.41 > 12012.5 (write 2.9911 vs 2.0243 ms); neighbouring green run 39974798025 (sha 132137bca, job 121017546836) deltas 0.019/0.016 ms, 954.5 <= 9746.1; vfs identical across the three (PD256-ACCEPTANCE lines in /tmp/pr391-review/ci-records.log). BASE 132137bca4a0a706b1a082aa7e63521eaeca4602 (origin/main = merge-base), HEAD c736e31dec02860dd0105a349b99a0ef4a5b5469. Authority: ADR-0358 (epic invariant I3: >=2.5x in the headless browser-unit lane, clean ledger) + the named BASE acceptance spec/worker/helper (git show BASE:tests/browser-unit/opfs-parallel-drain.spec.ts, fixtures/opfs-drain-overhead.ts). PR-4 applied: old criterion (one 200-op window per shape, max(0,single-batched) x population <= 0.1 x faithfulMs) compared against the new one (5 rounds, median of per-round projections, same budget, same populations). Fresh independent reviewer (REV-11), read-only tracked tree, scratch under /tmp/pr391-review. Executed: RED proof BASE helper vs HEAD helper on the exact CI records (/tmp/pr391-review/red-proof.log), committed unit test 12/12 (green-unit.log), four helper mutants min/max/mean/lower-middle each rejected by the committed test (mutants.log), real acceptance spec on this tree: 1 passed 1.3m, speedupRaw 3.0826, 5 rounds, median 169.6 ms <= 3980.9, both trees byte-exact (spec.log, spec-eval.log), biome clean (biome.log), root tsc shows no error in changed files (tsc.log), check:file-size OK, backlog:check OK, refs:check OK. PR CI at HEAD: all lanes green except check:pass-binding (missing landing verdict, REV-8) and browser-unit-chromium pending at review time (pr-checks.log). Verify pass on the merged tree (PR-6/REV-8): HEAD f242c3152309c960748b6690006ebc0b198e025f = merge of origin/main 8c883fcf7da26cd18cccce29274d10840a50651d (PR #383) into 1ffb0d0a6 (unit + committed landing verdict); git merge-tree --write-tree 1ffb0d0a6 origin/main = 23e76ab3ded30eb4c65b3c2aeb7257d8da760056 = f242c3152^{tree} (no hand edits); git diff origin/main f242c3152 = exactly the unit 8 files (4 unit files, CHANGELOG line, deleted draft, pr359 reference note, pr-391-final-green.json), differing from the BASE diff only in CHANGELOG context lines and index hashes; main delta 132137bca..8c883fcf7 (41 paths) touches no packages/vfs, opfs-parallel-drain*, opfs-drain-overhead or tools/checks/opfs path; re-executed on the merged tree: unit test 12/12, biome clean on the 4 unit files, tsc no errors in unit files; committed pr-391-final-green.json byte-equal to the c736e31de verdict. Logs: /tmp/pr391-review/merged/{merge-purity,diff-equality,diff-of-diffs,main-delta,green-unit,biome,tsc,committed-verdict-check,validator}.log.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -79,12 +79,40 @@
         }
       ]
     },
-    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
-    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
-    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
-    { "axis": "Scope", "verdict": "pass", "findings": [] },
-    { "axis": "Bugs", "verdict": "pass", "findings": [] },
-    { "axis": "Regressions", "verdict": "pass", "findings": [] },
-    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
   ]
 }
