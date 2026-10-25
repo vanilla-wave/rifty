@@ -1,5 +1,7 @@
 # Changelog
 
+- Forward `control:kill-tree` `cascade` to the descendant authority; a missing or non-boolean bit is a loud self-exit (ADR-0548).
+
 - Preserve Buffer chunks on process.stdin after merging shared descriptor reads with no-COI children.
 
 - Preserve immediate fork disconnect and send ordering; match Node24 parent-disconnect terminal events.

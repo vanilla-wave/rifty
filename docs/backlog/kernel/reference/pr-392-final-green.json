@@ -1,0 +1,158 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Verify pass at 61e480c6b376b25fb59fe3a81c61e84bbf745969: no blockers. The repairs work. The ADR-0333 deadline line is removed and the drift is routed to backlog kernel/descendant-barrier-adr-0333-drift with owner, trigger and probe. The standalone repro is committed and re-runs. The release() listener carrier now fails mutant H. The nit is fixed. The remaining concerns are NOTE-level. Product sources and browser specs are byte-identical to 67e3e04, so the earlier browser runs carry over. This commit is not pushed yet: push it, put the committed-bytes counts in the PR body, commit this verdict as the landing record, and merge only on green PR CI at HEAD (PR-6). PR-4 (unchanged from the first pass): the kill-tree expectations only got stricter. The typescript-worker pin was verified by rebuilding BASE (f3330277…) and HEAD (b27005eb…): same 10022694 bytes, 48 bytes differ across 6 chunk-hash specifiers. Gates I ran at 61e480c: lint, backlog:check, refs:check, check:contract-drift, check:source-grep, check:dir-owner, check:file-size, and kernel/runtime-js typecheck all pass; the two changed unit files pass 60/60.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "61e480c6b376b25fb59fe3a81c61e84bbf745969",
+  "unit_goal_source": "PR #392, an observed-defect repair on the rifty-fix route. BASE 7d038adb0439147d26eec2e419faebd4f5891167..HEAD 61e480c6b376b25fb59fe3a81c61e84bbf745969; this verify pass reviews 67e3e045447e59b28d57cbbf3548aab538edf0ed..61e480c6b. Baseline: the zero-Worker poll at tests/browser-unit/workbench-vite-lifecycle.spec.ts:1050-1054 fails after workbench.close() on origin/main. CI run 40200855912 job 121191795076 shows 'Received: 2' at :1054, re-read from the job log; this is 4 of the last 4 browser-unit reds. Local baseline: 1/6 red in /tmp/rifty-flake/baseline-repeat6.log. Constraints come from the deleted draft kernel/workbench-vite-worker-retirement-ci, read at BASE via git show: keep the zero-Worker assertion and its 5 s deadline. Authorities: that baseline, the new ADR-0548, and the dated corrections added to ADR-0326 and ADR-0334; ADR-0333 now keeps only the ADR-0548 cascade line.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Baseline: after workbench.close() following Vite A to B to A, no kernel-asset Worker remains within the unchanged 5 s poll",
+      "source": "acceptance",
+      "trace": "baseline (CI run 40200855912 job 121191795076, workbench-vite-lifecycle.spec.ts:1054 Received 2) + ADR-0548",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-vite-lifecycle.spec.ts:1050 (unchanged vs BASE); tests/browser-unit/nested-worker-retirement.spec.ts:81; /tmp/rifty-review-green-lifecycle.log (4/4 pass at 67e3e04, product identical at 61e480c); /tmp/rifty-flake/green-lifecycle.log (12/12) vs /tmp/rifty-flake/baseline-repeat6.log (1/6 red)",
+      "note": ""
+    },
+    {
+      "row": "An ancestor kill of a realm that hosts a nested Worker, while that realm is busy, retires every nested thread (ADR-0548 Proof: RED with 21 Workers retained, then green)",
+      "source": "acceptance",
+      "trace": "ADR-0548",
+      "status": "pass",
+      "citation": "tests/browser-unit/nested-worker-retirement.spec.ts:48; tests/browser-unit/nested-worker-retirement.spec.ts:76; /tmp/rifty-review-red-base.log (BASE sources: 2/2 red, Received 21); /tmp/rifty-review-green-nested.log (6/6 pass); /tmp/rifty-review-mutant-sender-false.log (Received 21)",
+      "note": ""
+    },
+    {
+      "row": "IpcFrame control:kill-tree requires a boolean cascade; the process shim refuses a missing or non-boolean bit with a loud control:self-exit 1",
+      "source": "public-api",
+      "trace": "ADR-0548",
+      "status": "pass",
+      "citation": "packages/kernel/src/process-control-frame.ts:131; packages/runtime-js/src/ipc/install-process-ipc.test.ts:174",
+      "note": ""
+    },
+    {
+      "row": "WorkerProcessHandle.controlKill(pid, signal, cascade): the sender sets cascade=true when the route's physical owner or one of its tree ancestors has an admitted kill, and false for a live host",
+      "source": "public-api",
+      "trace": "ADR-0548",
+      "status": "pass",
+      "citation": "packages/kernel/tests/process-manager-tree.fault.test.ts:569; packages/kernel/tests/process-manager-tree.fault.test.ts:626; packages/kernel/tests/process-manager-tree.fault.test.ts:1104; packages/kernel/tests/process-manager-tree.fault.test.ts:1329; packages/kernel/tests/process-manager-tree.fault.test.ts:1533; packages/kernel/tests/process-manager-tree.fault.test.ts:1536",
+      "note": ""
+    },
+    {
+      "row": "ProcessManager.kill(pid, signal, realmEnding) latches the manager one-way. Later frames carry cascade=true, and every later physical end is release() without terminate()",
+      "source": "public-api",
+      "trace": "ADR-0548",
+      "status": "pass",
+      "citation": "packages/kernel/tests/process-manager-tree.fault.test.ts:1568; packages/kernel/tests/process-manager-tree.fault.test.ts:1595; packages/kernel/tests/process-manager-tree.fault.test.ts:1599",
+      "note": ""
+    },
+    {
+      "row": "SpawnWorkerResult.release(): closes input, detaches the ring, removes listeners, keeps the error guard, never calls terminate()",
+      "source": "public-api",
+      "trace": "ADR-0548",
+      "status": "weak",
+      "citation": "packages/kernel/tests/process-manager-tree.fault.test.ts:1587; packages/kernel/tests/process-manager-tree.fault.test.ts:1588; packages/kernel/tests/process-manager-tree.fault.test.ts:1589",
+      "note": "Most of the clause is now discriminated: no terminate(), ring detach, and only the error listener left (mutant H, which keeps lifecycle listeners, fails). 'Input closed' is still not: mutant I (release skips inputBinding.dispose()) passes all 296 kernel tests. See the Bugs concern on release()."
+    },
+    {
+      "row": "A live realm (owner root, or a parent that outlives its killed child) still calls terminate() at once",
+      "source": "acceptance",
+      "trace": "ADR-0548",
+      "status": "pass",
+      "citation": "packages/kernel/tests/process-manager-tree.fault.test.ts:636; packages/kernel/tests/process-manager-tree.fault.test.ts:1124; packages/kernel/tests/process-manager-tree.fault.test.ts:1370",
+      "note": ""
+    },
+    {
+      "row": "The bound descendant authority kill(pid, signal, realmEnding) receives the frame's cascade bit",
+      "source": "public-api",
+      "trace": "ADR-0548 + ADR-0334",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/install-process-ipc.test.ts:389",
+      "note": ""
+    },
+    {
+      "row": "SpawnOptions.remoteControl.kill(pid, signal, cascade): the no-COI sender forwards cascade on its kill-tree frame",
+      "source": "public-api",
+      "trace": "ADR-0548 + ADR-0539",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/ipc/no-coi-child-process.ts:153; docs/backlog/kernel/nested-worker-notice-drop-residuals.md:45",
+      "note": "No carrier tests the frame contents. Mutant C (cascade:false) still passes. In no-COI realms the bit has no behavioral effect: their children are raw Workers (child_process.ts:389), and the cleanup terminate() ignores the latch. Reception recorded this as NOTE in the residuals. See the Bugs concern on no-COI."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/nested-worker-retirement.spec.ts:20",
+          "evidence": "First pass: I re-ran the committed spec. BASE sources gave 2/2 red with 'Received: 21' (/tmp/rifty-review-red-base.log); HEAD gave 6/6 pass (/tmp/rifty-review-green-nested.log); the sender-false mutant gave 'Received: 21'. The spec is byte-identical at 61e480c ('git diff --quiet 67e3e04 61e480c -- tests' → unchanged).",
+          "summary": "NOTE accepted. The implementer's counts came from a pre-commit version of the spec, and the PR body still carries them. The PR body update to cite the committed-bytes runs is pending: the commit is not pushed, so I could not verify it.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/kernel/src/process-manager.ts:643",
+          "evidence": "First-pass unit mutants A, B, D, E, F and G were all killed (/tmp/rifty-review-mutants.sh). Residual artifact /tmp/rifty-flake/residual-guest-kill-exit.log: 'LEFT 21' in both runs. I re-ran the committed standalone repro at 61e480c on Chromium 148.0.7778.96: 'explicit-busy: retained 8/8', 'cascade-busy: retained 0/8'.",
+          "summary": "Unchanged from the first pass. The machinery is minimal, but the same fault class stays reachable at the endWorker chokepoint: a guest kills its child and then exits on its own (21 Workers retained). The owner-level close and rollback shapes also remain. They are recorded in backlog kernel/nested-worker-notice-drop-residuals with owner, trigger and probe. A topology change is the only class-kill on record.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/ipc/no-coi-child-process.ts:154",
+          "evidence": "First pass: with mutant C (no-COI posts cascade:false), the kernel and runtime-js ipc unit files ran 'Test Files 16 passed (16) Tests 167 passed (167)'. At 61e480c, child_process.ts:383-391 sends the kernel Worker route only through isSabIpcSupported(), and sandbox-toolchain realms use spawnNoCoiChild raw Workers.",
+          "summary": "NOTE accepted and recorded in the residuals draft (:45). The forwarded bit is inert in no-COI realms, so only a frame-content or omission carrier could catch a regression. Dropping the field would make a no-COI ancestor kill of a grandchild self-exit 1, and nothing tests that.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/kernel/src/spawn-worker.ts:201",
+          "evidence": "On a scratch copy of 61e480c, 'pnpm exec vitest run packages/kernel'. Mutant H (release keeps lifecycle listeners): '× … releases killed Workers once an ancestor kill ends the realm, and stays ending', 'Tests 1 failed | 295 passed (296)'. Mutant I ('if (!release) inputBinding?.dispose();'): 'Test Files 27 passed (27) Tests 296 passed (296)'.",
+          "summary": "The release() fix works: listener removal is now discriminated. ADR-0548:44's 'input closed' is still not. A release() that skips inputBinding.dispose() passes every kernel test. This is advisory: release and terminate still share tearDownWorker.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}
