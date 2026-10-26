@@ -1,0 +1,70 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: pr:check и реальные RED→GREEN→revert подтверждены; merge после зелёного CI на итоговом HEAD.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "3e82fe33dd01be119283f8e9bb1aa22f902a6f84",
+  "unit_goal_source": "PR #393; BASE 7c88bd336ed5386edfdf5dabe7d235fc1b7fc865. Baseline: tests/browser-unit/sandbox-support.spec.ts:248,372; ADR-0437. PR-4: baseline config compared with HEAD; retries, timeout, assertions unchanged. RDY-6: restore-service-worker-network-traces draft checked against handoff, native gdb stack, Chromium 148/156 source and upstream fix.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Real HTTP-denied Service Worker registration leaves the traced browser alive",
+      "source": "acceptance",
+      "trace": "scenario: PR #393 baseline sandbox-support denial checks",
+      "status": "pass",
+      "citation": "tests/browser-unit/service-worker-trace.spec.ts:4",
+      "note": ""
+    },
+    {
+      "row": "Native registration denial and changed prerequisites preserve honest support verdicts",
+      "source": "acceptance",
+      "trace": "ADR-0437",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:248",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
