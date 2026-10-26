@@ -132,6 +132,13 @@ describe('scanner scope', () => {
     const files = [...walkTestFiles(dir)];
     expect(files.some((p) => p.endsWith('.spec.ts'))).toBe(true);
   });
+
+  it('covers the e2e lane (.spec.ts) — a grep there must not bypass the gate', () => {
+    expect(SCAN_ROOTS).toContain('tests/e2e');
+    const dir = fileURLToPath(new URL('../../tests/e2e', import.meta.url));
+    const files = [...walkTestFiles(dir)];
+    expect(files.some((p) => p.endsWith('.spec.ts'))).toBe(true);
+  });
 });
 
 describe('allowlist ratchet', () => {

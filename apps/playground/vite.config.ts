@@ -44,6 +44,37 @@ function e2eFixturesPlugin(): Plugin {
 }
 
 /**
+ * Dev-only snapshot fault seam for restore-visibility e2e
+ * (`tests/e2e/restore-progress-visibility.spec.ts`): the baked-snapshot fetch is
+ * SW-mediated, so playwright route() never sees it and network throttling would
+ * drag the whole module graph — the only faithful slow/fail injection point is
+ * the dev server itself. Cookie `rifty-e2e-snapshot-fault` = `delay:<ms>`
+ * stalls delivery; any other value is a loud 400. Never part of the
+ * production build.
+ */
+function snapshotFaultPlugin(): Plugin {
+  return {
+    name: 'rifty-snapshot-fault',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (!req.url?.includes('node-modules.json.gz')) return next();
+        const fault = /(?:^|;\s*)rifty-e2e-snapshot-fault=([^;]+)/.exec(
+          req.headers.cookie ?? '',
+        )?.[1];
+        if (fault === undefined) return next();
+        const delayMs = /^delay:(\d+)$/.exec(decodeURIComponent(fault))?.[1];
+        if (delayMs === undefined) {
+          res.statusCode = 400;
+          return void res.end(`malformed rifty-e2e-snapshot-fault: ${fault}`);
+        }
+        setTimeout(next, Number(delayMs));
+      });
+    },
+  };
+}
+
+/**
  * monaco-editor 0.52 ships `marked.umd.js` with a dangling
  * `//# sourceMappingURL=marked.umd.js.map`, but never publishes the `.map`.
  * With monaco served as source (optimizeDeps.exclude below) Vite tries to read
@@ -76,7 +107,7 @@ const aiProxyTarget = process.env.RIFTY_AI_PROXY_TARGET;
 
 export default defineConfig({
   customLogger: quietLogger,
-  plugins: [solid(), rifySwPlugin(), e2eFixturesPlugin()],
+  plugins: [solid(), rifySwPlugin(), e2eFixturesPlugin(), snapshotFaultPlugin()],
   server: {
     port,
     strictPort: true,

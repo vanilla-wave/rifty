@@ -144,8 +144,6 @@ export interface PtyServerDeps {
     slug: string;
     setup: 'instant' | 'from-scratch';
   }) => void | Promise<void>;
-  /** Owner dependency gate after run registration; `emit` streams its progress. */
-  readonly beforeRun?: (emit: (chunk: string, stream: PtyStream) => void) => void | Promise<void>;
   /** Await owner-side state publication after command settlement, before `pty:exit`. */
   readonly beforeExit?: () => void | Promise<void>;
 }
@@ -160,14 +158,6 @@ export interface PtyServer {
 }
 
 const enc = new TextEncoder();
-
-/** Resolves when the signal aborts (immediately for an already-aborted one). */
-function abortSettled(signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return Promise.resolve();
-  return new Promise((resolve) => {
-    signal.addEventListener('abort', () => resolve(), { once: true });
-  });
-}
 
 function validDimension(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0;
@@ -408,16 +398,6 @@ class PtySessionActor {
     let exit: ProcessExit = { code: 0, signal: null };
     let error: string | undefined;
     try {
-      if (frame.line.trim() !== '') {
-        const gate = this.#deps.beforeRun?.((chunk, stream) => {
-          if (!run.controller.signal.aborted) this.#emitChunk(run, chunk, stream);
-        });
-        if (gate !== undefined) {
-          const gatePromise = Promise.resolve(gate);
-          await Promise.race([gatePromise, abortSettled(run.controller.signal)]);
-          gatePromise.catch(() => {});
-        }
-      }
       if (run.controller.signal.aborted) {
         code = 130;
         exit = { code: null, signal: 'SIGINT' };

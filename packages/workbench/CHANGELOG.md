@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+- Remove the PTY `beforeRun` dependency gate: no production caller since PR #167; tests hold runs with a registered Shell command instead.
+
 - Use Brotli quality 11 for smaller dependency snapshot downloads; document production CPU cost (ADR-0546).
 
 - Add optional Brotli dependency snapshot production with lazy browser-compatible WASM, explicit contentEncoding, unchanged TAR identities and gzip default (ADR-0546).

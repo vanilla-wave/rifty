@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Plain-URL reopen of a project whose first dependency restore was cut short shows the SWITCHING pill until it publishes: `openActive` now runs inside the same project-open progress bracket as starter/project switches (was a silent workbench for the whole restore). Records the PR #167 loss of the «restoring project dependencies…» line (visibility kept, line not restored); `withSlowProgress` drops its unused `onSettledAfterSlow`/`now` options. e2e: `restore-progress-visibility.spec.ts` (also pins the deep-link indicator).
+
 - Baked Vite/TypeScript snapshots re-baked over their committed lockfile pins: installed Vite chunks are upstream bytes (ADR-0533).
 
 - Starters run at `/home/project` (ADR-0531): terminal links and the companion terminal state map the public root back to project paths; `/tmp` and `~` (`/home/rifty`) are project-owned.
@@ -67,6 +69,10 @@
 
 ### Added
 
+- Dev-only snapshot fault seam: cookie `rifty-e2e-snapshot-fault=delay:<ms>`
+  stalls baked-snapshot delivery in the dev server for restore-visibility e2e
+  (malformed value → 400) — the fetch is SW-mediated and unreachable for
+  playwright routing.
 - **"Real npm project" is now an ordinary React app.** The `real-vite` tile
   seeds the `react-vite` template — React 19 + React Router 7 + TypeScript on
   Vite 7 with its own visible `vite.config.ts` (`@vitejs/plugin-react`), a
