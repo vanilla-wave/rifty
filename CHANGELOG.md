@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Browser-unit: omit Playwright's SW network instrumentation until Chromium's stopped-target `Network.getResponseBody` crash is fixed upstream (crbug 573662744). Native SW checks, page/DOM tracing and zero retries remain; real HTTP-denial stress regression covers the observer boundary.
+
 - Browser-unit: `opfs-parallel-drain.spec.ts` pending-flush overhead gate takes the median of 5 probe rounds instead of one 200-op window per shape — a single runner stall (~1 ms mean shift ×26 811 calls) had turned main red twice with vfs unchanged (runs 39375394764, 39888233973); a per-flush cost present in every round still fails. Recorded red/green samples in `tools/checks/opfs-drain-overhead.test.ts`; draft `perf/opfs-parallel-drain-load-sensitive-threshold` deleted.
 - Close honest-substitution-signals I1–I4 (PR #383); real Vite7 install/type/refusal acceptance and independent Final+GREEN retained in `docs/backlog/npm-client/reference/honest-substitution-signals-final-green.json`.
 

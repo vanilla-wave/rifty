@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Chromium crashes when HAR reads a stopped SW's body (crbug 573662744).
+// Keep native SWs and page/DOM tracing; omit only SW network instrumentation.
+// TODO(backlog: toolchain-build/restore-service-worker-network-traces)
+process.env.PLAYWRIGHT_DISABLE_SERVICE_WORKER_NETWORK = '1';
+
 /**
  * Browser-unit lane (ADR-0196): thin Playwright harness that serves
  * `apps/playground/unit-harness.html` via the REAL playground vite dev server
