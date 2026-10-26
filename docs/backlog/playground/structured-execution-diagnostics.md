@@ -20,7 +20,7 @@ Do not invent PID/job identity, CPU time, npm percentages, Eddy provenance befor
 ## Evidence 2026-08-30 — restore/promotion diagnostics slice
 
 Folded from the Contract+RED review of
-`[[cold-restore-progress-visibility]]` (dedup: same owner-to-page diagnostics
+`playground/cold-restore-progress-visibility` (landed, PR #301) (dedup: same owner-to-page diagnostics
 boundary; own draft withdrawn). Measured (spikes 2026-08-29/30, chromium
 148.0.7778.96, playwright 1.60.0):
 
