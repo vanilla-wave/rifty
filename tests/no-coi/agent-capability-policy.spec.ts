@@ -62,6 +62,7 @@ test('one agent host writes through file tools while shell redirects and Node wr
   expect(value.bytes).toBe('file-tool');
   expect(JSON.stringify(tools.slice(1, 3))).toMatch(/EROFS|read.only/i);
   expect(value.notes.join('\n')).toMatch(/files.*shell/s);
+  expect(value.notes).toContain('The shell rejects background `cmd &` with NotImplementedError.');
   expect(value.notes.join('\n')).toContain(
     JSON.stringify({
       files: { root: '/policy' },

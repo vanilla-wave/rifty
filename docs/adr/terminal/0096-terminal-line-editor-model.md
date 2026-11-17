@@ -53,3 +53,7 @@ small host rewrites without turning `@riftydev/terminal` into shell/readline.
 - [x] Wide/combining/wrapped cursor movement and repaint tests.
 - [x] Readline/history/kill-ring/undo/redo key tests.
 - [x] Host highlighter/validator/rewrite seams covered via package tests.
+
+## Decisions
+
+- 2026-11-17 — `@riftydev/shell` runs a submitted buffer that holds newlines as a newline-separated command list; its exported validator ignores word-initial `#` comment text and reports `complete` at an unquoted `<<` (the shell then fails loudly, `shell.heredoc`). Gap: an xterm paste reaches the editor with `\r` line ends, which it drops, and the playground wires no validator, so pasted lines join into one: `backlog/terminal/paste-newlines-dropped`.
