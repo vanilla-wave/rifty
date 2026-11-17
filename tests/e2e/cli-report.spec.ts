@@ -825,8 +825,9 @@ test.describe('CLI report template through the worker lifecycle', () => {
     test.skip(browserName !== 'chromium', 'physical supervised children require Chromium');
     test.setTimeout(240_000);
     const problems = capturePageProblems(page);
-    const fixture = createHostFixture();
+    // Ports first: a failed pick must not strand the fixture's temp directory.
     const portBase = await freeHostPortPair();
+    const fixture = createHostFixture();
     const invocationA = previewInvocation('preview-a', '/fixtures/a', '-e', 'alpha', portBase);
     const invocationB = previewInvocation(
       'preview-b',
