@@ -26,6 +26,15 @@ Not executed here: `Readable.pipe` (`packages/io/src/streams/readable.ts`
 `pipe`) calls `dest.on('drain'|'error'|'close', …)`, which a `{ write }`
 object lacks — the throw is code reading plus the u6 unit's scratch note.
 
+2026-11-17 — the child's object now carries Node's `Symbol.toStringTag`
+brand (ADR-0345 §Corrections; parity `process/to-string-tag-same-realm`) but
+has no `versions`. A brand-based detector that reads `process.versions` after
+the brand check (pdfjs-dist `isNodeJS`: `!process.versions.nw`) now throws a
+`TypeError` here instead of taking its browser branch. Scratch same-realm
+parity case (seeded mode), Node v24.16.0 vs rifty: `typeof process.versions`
+`object` · `undefined`; the `isNodeJS` expression `true` · `TypeError: Cannot
+read properties of undefined (reading 'nw')`. Add both to the parity list below.
+
 ## Next
 
 Owner runtime-js. Trigger: a no-COI program piping into its own

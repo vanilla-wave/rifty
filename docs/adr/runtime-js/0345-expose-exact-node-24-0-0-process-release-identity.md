@@ -52,3 +52,12 @@ Sass facade would leave every other Node consumer with the same runtime gap.
 - The separate `process.versions.node` honesty question remains in
   `runtime-js/process-versions-node-honesty`; this decision does not change its
   value or ADR-0026's platform/architecture boundary.
+
+## Corrections
+
+- 2026-11-17 — every guest `process` (each `NodeProcess`, the same-realm child
+  object) carries Node's own brand: own `Symbol.toStringTag: 'process'`
+  (writable, non-enumerable, non-configurable) → `String(process) ===
+  '[object process]'`. Compatibility identity like `name: 'node'`, not an OS
+  claim; ADR-0026's `platform`/`arch` unchanged. Consumer: pdfjs-dist@6.5.438 /
+  pdf-parse@2.4.5 `isNodeJS`. Proof: parity `process/to-string-tag{,-eval}`.
