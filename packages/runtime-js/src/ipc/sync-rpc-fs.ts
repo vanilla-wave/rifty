@@ -18,6 +18,7 @@ import {
   decodeReadFileHead,
   encodeFsPathRequest,
   encodeFsReadRangeRequest,
+  encodeReadFileHead,
 } from './fs-rpc-protocol.ts';
 
 /** The published in-Worker sync-call shim (`KernelSyncApi.call`). */
@@ -54,7 +55,47 @@ function restoreTransportVfsError(error: unknown): unknown {
   });
 }
 
-export class SyncRpcFsSync implements FsSync {
+/**
+ * A VFS that answers one ADR-0365 head/continuation request with one upstream
+ * request. A nested-Worker relay serving such a VFS forwards the request
+ * instead of re-reading the whole file per request (O(N^2) across the hop).
+ */
+export interface ChunkedReadSource {
+  /** Exact `fs.readFileHead` reply bytes: f64LE total size + first chunk. */
+  readFileHeadReply(path: string): Uint8Array;
+  /** Exact `fs.readChunk` reply bytes for one range of the current file. */
+  readChunkReply(path: string, offset: number, length: number): Uint8Array;
+}
+
+function isChunkedReadSource(vfs: FsSync): vfs is FsSync & ChunkedReadSource {
+  const candidate = vfs as Partial<ChunkedReadSource>;
+  return (
+    typeof candidate.readFileHeadReply === 'function' &&
+    typeof candidate.readChunkReply === 'function'
+  );
+}
+
+/** `fs.readFileHead` reply for `vfs`: forwarded when it can, else one current full read. */
+export function readFileHeadReplyOf(vfs: FsSync, path: string): Uint8Array {
+  if (isChunkedReadSource(vfs)) return vfs.readFileHeadReply(path);
+  return encodeReadFileHead(vfs.readFileBytesSync(path));
+}
+
+/** `fs.readChunk` reply for `vfs`: forwarded when it can, else a slice of one current full read. */
+export function readChunkReplyOf(
+  vfs: FsSync,
+  path: string,
+  offset: number,
+  length: number,
+): Uint8Array {
+  if (isChunkedReadSource(vfs)) return vfs.readChunkReply(path, offset, length);
+  // TODO(backlog: perf/fs-rpc-chunk-perf) — a non-forwarding store re-reads the whole file per chunk → O(N²)
+  const bytes = vfs.readFileBytesSync(path);
+  if (offset >= bytes.length) return new Uint8Array(0);
+  return bytes.subarray(offset, Math.min(bytes.length, offset + length));
+}
+
+export class SyncRpcFsSync implements FsSync, ChunkedReadSource {
   constructor(
     private readonly call: SyncCall,
     private readonly callBinary: SyncBinaryCall,
@@ -104,10 +145,19 @@ export class SyncRpcFsSync implements FsSync {
     return this.callFs(FS_METHODS.readdir, { path }) as VfsDirent[];
   }
 
+  readFileHeadReply(path: string): Uint8Array {
+    return this.callFsBinary(FS_METHODS.readFileHead, encodeFsPathRequest(path)) as Uint8Array;
+  }
+
+  readChunkReply(path: string, offset: number, length: number): Uint8Array {
+    return this.callFsBinary(
+      FS_METHODS.readChunk,
+      encodeFsReadRangeRequest(path, offset, length),
+    ) as Uint8Array;
+  }
+
   readFileBytesSync(path: string): Uint8Array {
-    const { size, firstChunk } = decodeReadFileHead(
-      this.callFsBinary(FS_METHODS.readFileHead, encodeFsPathRequest(path)),
-    );
+    const { size, firstChunk } = decodeReadFileHead(this.readFileHeadReply(path));
     if (size === 0) return new Uint8Array(0);
     if (size <= FS_RPC_CHUNK) return firstChunk.slice();
     const out = new Uint8Array(size);
@@ -115,10 +165,7 @@ export class SyncRpcFsSync implements FsSync {
     let offset = firstChunk.length;
     while (offset < size) {
       const requested = Math.min(FS_RPC_CHUNK, size - offset);
-      const chunk = this.callFsBinary(
-        FS_METHODS.readChunk,
-        encodeFsReadRangeRequest(path, offset, requested),
-      ) as Uint8Array;
+      const chunk = this.readChunkReply(path, offset, requested);
       // Empty chunk before the admitted size means the owner store shrank mid-read
       // (snapshot inconsistent). ADR-0150 forbids silent truncation — fail loud
       // rather than hand the caller a partial file presented as the whole thing.
