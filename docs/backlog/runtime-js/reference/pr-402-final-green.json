@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "PASS for the standalone BOM unit at 83fc873d6. Merge only after pnpm pr:check and green PR CI at HEAD (PR-6); full reviewer parity had one exec-argv-startup timeout, which passed in isolation.",
+  "merge_call": "PASS Final+GREEN VERIFY at ee53146b6; merge after driver pnpm pr:check and green PR CI at HEAD (PR-6). Detached /tmp build:libs and esbuild-legacy-retirement passed; typescript-worker.js is 10022686 bytes, SHA-256 76b24647e04e854ce6c1a69b3f3b7c86036d09ae8262d121001c98e31c279456. Node v24.16.0 parity: bom 16/16, readable-set-encoding-latin1 1/1, consumers 3/3. Targeted unit tests: 23/23 runtime/relay plus 10/10 asset-gate tests; the gate test was rerun isolated after restoring missing scratch Git metadata. BOM sources, guards, harness and ADRs are unchanged since the prior verdict; both parents’ traps and runtime-js CHANGELOG lines survive; 17 changed production files have no duplicate class members. Main relay changes forward raw file bytes and introduce no Node text-decoding site.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "83fc873d68c3e3110f83d9218b1d3f1be64bcbee",
-  "unit_goal_source": "PR #402, standalone leading-UTF-8-BOM observed-defect repair; BASE 8a4a612ed11d5704b65d2a907c85bfa11784d170; real Node v24.16.0 baseline. User scope: Node-semantics decoder class-kill, latin1 with its own RED, consumers and module-loader stripping guards, ADR-0069 dated correction, ADR-0082 unchanged. Round-3 verify HEAD 83fc873d68c3e3110f83d9218b1d3f1be64bcbee. Broader wave-1 goal not reviewed.",
+  "reviewed_sha": "ee53146b678cc3a8bc34b2fe36ecdb627f15fa0d",
+  "unit_goal_source": "PR #402, standalone leading-UTF-8-BOM observed-defect repair; BASE 8a4a612ed11d5704b65d2a907c85bfa11784d170; real Node v24.16.0 baseline. Final+GREEN VERIFY of merge ee53146b678cc3a8bc34b2fe36ecdb627f15fa0d: previously reviewed result 83fc873d68c3e3110f83d9218b1d3f1be64bcbee plus origin/main 82b5b83debb6a7612c07a3ce586180359db5ae8b (PR #397), with the typescript-worker asset pin conflict resolved. Scope: preserve BOM fix, latin1 repair, consumers/module-loader guards, parity capture harness, ADR-0069 correction and ADR-0082; inspect merge interaction and refreshed ADR-0391 pin. Broader wave-1 goal not reviewed.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
