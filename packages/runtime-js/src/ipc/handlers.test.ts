@@ -135,6 +135,23 @@ describe('installRuntimeJsExecSyncHandler — runtime-js execSync handler (ADR-0
     });
   });
 
+  it('keeps a leading BOM of the child stderr in the failure message', async () => {
+    // Node v24.16.0: execSync of a child writing EF BB BF 'boom' to stderr →
+    // e.message ends "\n\ufeffboom\n" (stderr decoded like Buffer#toString).
+    const handler = installAndCapture(
+      () => new TextEncoder().encode('void 0;'),
+      async () => ({
+        stdout: new Uint8Array(),
+        stderr: new Uint8Array([0xef, 0xbb, 0xbf, 0x62, 0x6f, 0x6f, 0x6d, 0x0a]),
+        exitCode: 3,
+      }),
+    );
+    const failure = (await Promise.resolve(
+      handler({ cmd: 'node /run.js', opts: { cwd: '/workspace', env: {} } }),
+    ).catch((error: unknown) => error)) as Error;
+    expect(failure.message.endsWith('\n\ufeffboom')).toBe(true);
+  });
+
   it('forwards opts.cwd and opts.env into the recursive runner', async () => {
     const enc = new TextEncoder();
     let captured: { cwd?: string; env?: Readonly<Record<string, string>> } = {};
