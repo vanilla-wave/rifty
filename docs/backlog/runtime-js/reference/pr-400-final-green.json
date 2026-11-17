@@ -1,8 +1,8 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "PASS, no blockers; 2 concerns + 1 nit are NOTE. Round-3 fix verified: RED 0e994cbe8 fails at the c1f343583 product for the right reason (replaceAll/clearAll [\"armed\"], noReleaseHook [\"armed\"] vs Node [\"armed\",\"pong\"]/[\"armed\",\"alive\"]), GREEN at HEAD; the new `released` path kills the predecessor's mutant (M1 -> [\"armed\",\"hung\"]); 26/28 extra fork-IPC paths x json+advanced match Node v24.16.0 (2 diffs pre-existing or recorded); child_process/process/events/worker_threads/stream/readline parity lanes green. Merge only on green PR CI at HEAD 9ecc33394 (PR-6): lint-and-typecheck pass; unit-and-conformance (parity)/(run) pending at review time; browser/e2e red at playwright install (infra, PR #397). Driver adds reviewed_sha and commits the landing verdict (REV-8) before ready/merge.",
+  "merge_call": "PASS, no blockers; 2 concerns + 2 nits are NOTE. Delta verified: releasedAll (8be02e1a8) kills the predecessor's M3 (`event === undefined ||` dropped -> [\"releasedAll\",[\"armed\",\"hung\"],0]); d262c6c48 (concurrent children, 2000 ms unref guards) keeps every mutant killed (M1 released/releasedAll hung, M2 and c1f343583 noReleaseHook [\"armed\"], c1f343583 replaceAll/clearAll [\"armed\"], d597ec176^ replace [\"armed\"], no-hold mutant baseOn..once [\"armed\"]), 4/4 parallel runs stable; merge c5c34b104 keeps the PR's code hunks byte-identical vs BASE a639e0810 and composes with #402 (stdin `on` alias required by process/stdin-set-encoding-bom, readline removeListener detach and BOM decode each discriminate independently); typescript-worker pin = combined build (10,022,686 B, sha256 b05c95ee..., distinct from both parents). Parity vs Node v24.16.0 at d262c6c48: events/ 8, child_process/ 31, process/ 59, readline/ 2, readable-stream-v 3, bom 16, latin1, string_decoder/, readable-set-encoding 3, stream/pipe 9 - all match. Merge only on green PR CI at HEAD d262c6c48 (PR-6): unit-and-conformance (run) is RED (unhandled EPIPE in packages/shell/tests/git-portable-network.integration.test.ts, outside the diff, passes 3/3 locally) and browser-unit-chromium pending at review time; driver adds reviewed_sha and commits the landing verdict (REV-8) before ready/merge.",
   "checkpoint": "Final+GREEN",
-  "unit_goal_source": "PR #400, observed-defect repair (rifty-fix, no contract doc), VERIFY PASS of HEAD 9ecc33394afabb581d36f29d9865bd92c806540b after cross-review round-3 fixes 0e994cbe8 (RED), 610790b9e (fix), 9ecc33394 (typescript-worker SHA pin); previous verify pass reviewed c1f343583df4a5f7daed9d73123043a1fb8c1e9b (PASS). Authority: real-Node baseline Node v24.16.0 (EventEmitter.prototype.on === addListener, off === removeListener; readable-stream 2/3/4 `addListener = on` override flows in Node, RangeError in rifty at BASE; once/prependOnceListener return `this`; process.on === EventEmitter.prototype.on; the fork child's IPC hold = _forkChild 'newListener'/'removeListener' meta-listeners with control.refCounted()/unrefCounted(), and removeAllListeners emits 'removeListener' per listener while any 'removeListener' listener exists) and the user hand-off quoted in the PR body (identity, override sweep keeping process/stdin Node-faithful, RED first, real readable-stream v3+v4 data flow, mechanism sweep, acceptance on a real readable-stream package, exceljs ceiling out of scope, discoveries to backlog). BASE 8a4a612ed11d5704b65d2a907c85bfa11784d170.",
+  "unit_goal_source": "PR #400, observed-defect repair (rifty-fix, no contract doc), VERIFY PASS of HEAD d262c6c4894b522ac0aca508f62fb666f3f51c47 over the delta from the bound PASS at 9ecc33394afabb581d36f29d9865bd92c806540b: 8be02e1a8 (parity path releasedAll + backlog context line), a75578101 (verdict JSON), c5c34b104 (merge of origin/main a639e0810: #397 CI runner pin, #402 UTF-8 BOM; typescript-worker pin re-derived + ADR-0391 dated line), d262c6c48 (IPC listener-path children concurrent, release-guard unref timers 500 -> 2000 ms). Authority: real-Node baseline Node v24.16.0 (EventEmitter.prototype.on === addListener, off === removeListener; readable-stream 2/3/4 `addListener = on` override flows in Node, RangeError in rifty at the original BASE; once/prependOnceListener return `this`; process.on === EventEmitter.prototype.on; the fork child's IPC hold = _forkChild 'newListener'/'removeListener' meta-listeners with control.refCounted()/unrefCounted(), removeAllListeners emitting 'removeListener' per listener while any 'removeListener' listener exists) and the user hand-off quoted in the PR body (identity, override sweep keeping process/stdin Node-faithful, RED first, real readable-stream v3+v4 data flow, mechanism sweep, acceptance on a real readable-stream package, exceljs ceiling out of scope, discoveries to backlog). BASE a639e0810ae85206ee6bb6c09a969fa8d5b61dc3 (merge-base with main; original BASE 8a4a612ed11d5704b65d2a907c85bfa11784d170).",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
@@ -83,9 +83,9 @@
       "row": "ADR-0448 D5: a fork child's IPC lane holds the realm while it has a 'message' listener (both serializations): released when the last listener leaves and on disconnect; a launch-less URL Worker's raw port is never held",
       "source": "acceptance",
       "trace": "ADR-0448",
-      "status": "weak",
-      "citation": "tools/node-parity-runner/cases/child_process/ipc-message-listener-paths.case.ts:43",
-      "note": "removeAllListeners('message') release now discriminated (`released`, `noReleaseHook`); the no-argument removeAllListeners() release branch (process.ts:514 `event === undefined ||`) is not: mutant dropping it holds a listener-less child and survives every committed carrier (Completeness concern)."
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/ipc-message-listener-paths.case.ts:48",
+      "note": ""
     },
     {
       "row": "Builtin internals detach through Node's name removeListener (events.once, pipe/unpipe, readline close, pipeline, Readable.toWeb, Writable.toWeb, async iterator): a removeListener override sees them, an off override none",
@@ -98,7 +98,7 @@
     {
       "row": "@riftydev/io `EventEmitter` type keeps `on`/`off` as methods: a TS subclass can `override on()/off()` and reach the base through `super` (BASE's public type allowed it; published d.ts included)",
       "source": "public-api",
-      "trace": "baseline: BASE 8a4a612ed public type of `@riftydev/io` EventEmitter (src/index.ts export)",
+      "trace": "baseline: BASE public type of `@riftydev/io` EventEmitter (src/index.ts export)",
       "status": "pass",
       "citation": "packages/io/src/event-emitter-aliases.test.ts:12",
       "note": ""
@@ -110,25 +110,26 @@
       "status": "pass",
       "citation": "tools/node-parity-runner/src/npm-tree-files.ts:66",
       "note": ""
+    },
+    {
+      "row": "ADR-0391 exact compiler-asset exception: the typescript-worker.js pin equals the bytes/SHA-256 the merged tree's `pnpm build:libs` emits",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:103",
+      "note": ""
     }
   ],
   "axes": [
     {
       "axis": "Completeness",
-      "verdict": "concern",
+      "verdict": "pass",
       "findings": [
         {
-          "severity": "concern",
-          "location": "packages/runtime-js/src/builtins/process.ts:514",
-          "evidence": "Scratch worktree at 9ecc33394, mutant M3 `(event === undefined || event === 'message')` -> `(event === 'message')` in the removeAllListeners override: `pnpm -s test:parity child_process/` -> 30 cases, all match; `npx vitest run --project unit packages/runtime-js/src/ipc packages/runtime-js/src/builtins/process packages/io/src/event-emitter` -> 26 files / 181 tests passed. Scratch parity probe path `p.on('message', handler); p.removeAllListeners(); setTimeout(() => { p.send('hung'); p.disconnect(); }, 500).unref()`: Node v24.16.0 [\"armed\"] 0; HEAD [\"armed\"] 0; M3 [\"armed\",\"hung\"] 0. (`clearAll` does not discriminate: M3 keeps refs 2 there, Node 1, both held.) Other mutants killed by the committed case: M1 (predecessor's mutant: `#syncIpcKeepalive()` without reset) -> released [\"armed\",\"hung\"]; M2 (drop the hook-registered guard) -> noReleaseHook [\"armed\"]; M4 (count after super) -> released hung; M5 (reset to 0) -> replaceAll/clearAll [\"armed\"].",
-          "summary": "The no-argument removeAllListeners() release branch is undiscriminated: dropping `event === undefined ||` passes every committed carrier while holding a child with no 'message' listener. One more path in ipc-message-listener-paths (`on(handler)` + `removeAllListeners()` + unref'd 'hung' timer -> [\"armed\"]) would protect the ADR-0448 D5 row.",
-          "authority": ""
-        },
-        {
           "severity": "nit",
-          "location": "PR #400 body (## RED -> GREEN table)",
-          "evidence": "`gh pr view 400 --json body` at headRefOid 9ecc33394: commit list ends at \"round 2: RED 35a113994, fix d597ec176\"; no row for replaceAll/clearAll/released/noReleaseHook.",
-          "summary": "PR body (the re-entry record) does not yet list round 3: RED 0e994cbe8 (replaceAll/clearAll/noReleaseHook [\"armed\"]), fix 610790b9e.",
+          "location": "PR #400 body (## Blocked, Resume, ## Residuals first bullet)",
+          "evidence": "`gh pr view 400 --json headRefOid,body` at headRefOid d262c6c48: Blocked still says \"#397 (pins ubuntu-24.04) is unmerged\" and Resume step 1 \"After #397 lands: merge origin/main ... refresh the typescript-worker.js SHA pin\" (done in c5c34b104); Residuals bullet 1 still lists `listenerCount(name, fn)` under events-prototype-shape, which c5c34b104 moved to its own compat row (docs/public/compat/process.md:116). The bound verdict's round-3 nit is fixed (RED table row r3 present).",
+          "summary": "PR body (the re-entry record) is stale after the merge: Blocked/Resume describe the pre-merge state and the events-prototype-shape bullet still names listenerCount.",
           "authority": ""
         }
       ]
@@ -151,7 +152,15 @@
     {
       "axis": "Scope",
       "verdict": "pass",
-      "findings": []
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/public/compat/process.md:115",
+          "evidence": "`git diff a75578101 c5c34b104 -- docs/public/compat/process.md`: the merge splits the PR's own-property-shape row and adds row 116 (`emitter.listenerCount(name, listener)` -> backlog/runtime-js/events-listener-count-listener-arg); neither parent has row 116 (`git show --cc c5c34b104` marks it `++`). Content is accurate (draft exists, events-prototype-shape.md does not mention listenerCount). Code hunks unchanged: `diff <(git diff -U0 8a4a612ed a75578101 -- packages tools tests ...) <(git diff -U0 a639e0810 c5c34b104 -- ...)` -> identical.",
+          "summary": "Merge commit c5c34b104 carries a non-merge docs edit (compat row split) its message does not name; correct, but a reader of the merge cannot see it was intentional.",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Bugs",
@@ -160,16 +169,24 @@
         {
           "severity": "concern",
           "location": "packages/io/src/event-emitter.ts:101",
-          "evidence": "Scratch parity probe (plain emitter): `e.on('a', f); e.removeAllListeners(undefined)` and the same with a 'removeListener' listener -> Node v24.16.0 [1,1,1], HEAD [0,0,0]. Fork child `p.on('message', handler); p.removeAllListeners(undefined)` (json and advanced) -> Node [\"armed\",\"pong\"] 0, HEAD [\"armed\"] 0. BASE 8a4a612ed io body identical (`if (event === undefined) this.listenersMap.clear()`), so pre-existing, not a regression.",
-          "summary": "Pre-existing: Node's removeAllListeners keys 'all' on arguments.length === 0, so an explicit `undefined` removes nothing; @riftydev/io (and NodeProcess's override) treat it as 'all'. REV-12 route: a context line on the existing removeAllListeners backlog item (runtime-js/events-remove-all-listeners-remove-listener-event).",
+          "evidence": "Carried from the bound verdict (scratch probe at 9ecc33394: plain emitter `e.on('a', f); e.removeAllListeners(undefined)` -> Node v24.16.0 [1,1,1], rifty [0,0,0]; fork child `p.on('message', handler); p.removeAllListeners(undefined)` -> Node [\"armed\",\"pong\"], rifty [\"armed\"]); body unchanged at d262c6c48. Routed by 8be02e1a8 as a context line on the existing draft (docs/backlog/runtime-js/events-remove-all-listeners-remove-listener-event.md:40).",
+          "summary": "Pre-existing: Node's removeAllListeners clears all only for arguments.length === 0, an explicit `undefined` removes nothing; @riftydev/io (and NodeProcess's override) treat it as 'all'. Routed (REV-12) to the existing removeAllListeners backlog item; not a regression.",
           "authority": ""
         }
       ]
     },
     {
       "axis": "Regressions",
-      "verdict": "pass",
-      "findings": []
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/shell/tests/git-portable-network.integration.test.ts:77",
+          "evidence": "`gh pr checks 400` at d262c6c48: unit-and-conformance (run) fail (job 134296061111): `Test Files 845 passed | 8 skipped`, `Errors 1 error`: Uncaught `Error: write EPIPE` at Socket.end node:net <- IncomingMessage.<anonymous> git-portable-network.integration.test.ts:77:17 (`cgi.stdin.end(body)`, no 'error' sink on cgi.stdin); the file itself passed (206 ms). Not in the PR diff (`git diff a639e0810 HEAD --stat -- packages/shell packages/net packages/git` empty; main delta adds no listener overrides). Local isolation at d262c6c48: `npx vitest run packages/shell/tests/git-portable-network.integration.test.ts` x3 -> 1 passed each. Targeted unit set (io, process, null-net, ipc, stream, events) 52 files / 867 tests pass.",
+          "summary": "PR CI red at HEAD on an unhandled host EPIPE when git http-backend closes stdin early (test harness lacks a cgi.stdin 'error' sink); not attributable to this diff, does not reproduce locally. Merge blocks on PR-6 green CI: rerun the lane; a reproduction routes to rifty-fix, otherwise capture the missing error sink.",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Ecosystem UX",
@@ -177,5 +194,5 @@
       "findings": []
     }
   ],
-  "reviewed_sha": "9ecc33394afabb581d36f29d9865bd92c806540b"
+  "reviewed_sha": "d262c6c4894b522ac0aca508f62fb666f3f51c47"
 }
