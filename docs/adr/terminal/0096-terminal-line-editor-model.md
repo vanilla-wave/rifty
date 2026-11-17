@@ -53,3 +53,7 @@ small host rewrites without turning `@riftydev/terminal` into shell/readline.
 - [x] Wide/combining/wrapped cursor movement and repaint tests.
 - [x] Readline/history/kill-ring/undo/redo key tests.
 - [x] Host highlighter/validator/rewrite seams covered via package tests.
+
+## Decisions
+
+- 2026-11-17 — a submitted multi-line buffer runs as a newline-separated command list (`@riftydev/shell`); the host validator ignores word-initial `#` comment text; `cat <<EOF` submits and fails loudly (`shell.heredoc`) instead of prompting for a body.

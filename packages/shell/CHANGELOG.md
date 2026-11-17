@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Unquoted newlines separate commands; backslash-newline continues a line; word-initial `#` starts a comment; each later command expands `$VAR` after earlier ones ran (`X=1; echo $X`, bash). Heredoc/here-string and compound commands (if/for/while/case, `{…}`, `(…)`, `[[…]]`, `!`, functions) throw `NotImplementedError` (`shell.heredoc`, `shell.here-string`, `shell.compound-command`) before anything runs. Frozen bash 3.2.57 fixture; `docs/public/compat/shell.md` (ADR-0091/0093 notes 2026-11-17).
+
 - Carry file-redirection endpoint metadata into the command context (ADR-0544).
 
 - Execute local `npx` bins through the existing resolver/Node executor; unsupported acquisition and options fail explicitly (ADR-0545).

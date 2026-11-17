@@ -114,6 +114,7 @@ export function createSandboxAgentHost(options: SandboxAgentHostOptions): AgentH
             ? 'npm install uses the configured registry, subject to project policy; unsupported dependency specs and lifecycle scripts fail loudly.'
             : 'No registry is connected: npm install fails with registry-missing. Existing installed dependencies remain usable.',
           `Project policy: ${policy}. Root bounds file tools; SDK command policy is not a hostile-code filesystem jail.`,
+          'The shell rejects background `cmd &` with NotImplementedError.',
         ],
       };
     },

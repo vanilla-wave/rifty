@@ -56,3 +56,7 @@ Ordering matches bash: env-expansion (tokenize) → quote removal (tokenize) →
 - [ ] `Token` type exported from `packages/shell/src/index.ts`; TSDoc on the new public type.
 - [ ] Parity cases: quoted-vs-unquoted glob (`grep '*.ts'` vs `ls *.ts`), no-match pass-literal, multi-match sort order — per the harness chosen in ADR-0093.
 - [ ] Existing tokenizer behavior preserved: single-quote literal, double/unquoted `$VAR`/`${VAR}` expansion, `${VAR:-default}`/`${#VAR}` still throw, operator tokens unchanged, no IFS word-splitting.
+
+## Decisions
+
+- 2026-11-17 — command lines: an unquoted newline lexes as the existing `;` op (dropped after nothing, `;`, `&&`, `||`, `|`, `&`); unquoted and double-quoted backslash-newline and word-initial `#` comments are removed; unquoted `<<`/`<<-`/`<<<` throw `NotImplementedError('shell.heredoc'|'shell.here-string')`. `Token` shape unchanged. The shell re-lexes each later segment with its current env (structure is env-independent), so `X=1; echo $X` expands as bash. Heredoc tokens would extend the union here: `backlog/shell/heredoc`.

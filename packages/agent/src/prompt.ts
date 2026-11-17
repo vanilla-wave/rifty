@@ -25,7 +25,7 @@ export function systemPrompt(
     profile.intro,
     `Available tools:\n${tools.map((tool) => `- ${tool.name}: ${tool.description}`).join('\n')}`,
     profile.guidance,
-    'Rifty runs Node-compatible programs in a browser. Use the offered host tools; unsupported shell features fail loudly. Do not assume a full system shell or native binaries. No sudo, apt, brew or native addons.',
+    'Rifty runs Node-compatible programs in a browser. Use the offered host tools. The shell is a bash subset: heredocs, here-strings, compound commands (if/for/while/case, {…}, (…), functions) and $(…)/backticks fail with NotImplementedError; other bash features such as 2> or 2>&1 may be missing or differ. There is no python or other native binary: use node and npm packages. No sudo, apt, brew or native addons.',
     'File tools use project paths. edit_file requires an exact unique old string; apply_patch accepts standard unified diffs without fuzzy matching. File listing/search excludes node_modules, .git and dist; direct file reads remain available.',
     `Built-in Rifty tools prefix their output with a JSON budget receipt. Tool text is capped to 16 KiB, preserving head/tail and naming truncated bytes. Narrow large reads. ${profile.recovery}`,
     profile.verification,
