@@ -1,3 +1,4 @@
+import { NotImplementedError } from '@riftydev/io';
 import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { isOp, tokenize } from './tokenize.ts';
 
@@ -139,7 +140,14 @@ export function createShellCompleter(deps: ShellCompletionDeps) {
     if (deps.mode() === 'repl') return null;
     const { start, end } = tokenRange(line, cursor);
     const fragment = line.slice(start, cursor);
-    const argvZero = isArgvZeroPosition(line, start);
+    let argvZero: boolean;
+    try {
+      argvZero = isArgvZeroPosition(line, start);
+    } catch (error) {
+      // Syntax the shell rejects loudly (heredoc, `$(…)`) has nothing to complete.
+      if (error instanceof NotImplementedError) return null;
+      throw error;
+    }
     const pathLike = line.slice(start, end).includes('/');
 
     // A slash in argv-0 is an explicit path, not a bare command lookup. Route
@@ -220,10 +228,17 @@ export function shellLineHighlightSpans(line: string): readonly ShellHighlightSp
 export function validateShellInput(line: string, _cursor = line.length): ShellInputValidation {
   let quote: '"' | "'" | null = null;
   let escaped = false;
+  let wordStart = true;
+  let comment = false;
   const stack: string[] = [];
   for (const ch of line) {
+    if (comment) {
+      comment = ch !== '\n';
+      continue;
+    }
     if (escaped) {
       escaped = false;
+      wordStart = false;
       continue;
     }
     if (ch === '\\') {
@@ -234,6 +249,12 @@ export function validateShellInput(line: string, _cursor = line.length): ShellIn
       if (ch === quote) quote = null;
       continue;
     }
+    // Same rule as `tokenize`: a word-initial `#` comments out the line.
+    if (ch === '#' && wordStart) {
+      comment = true;
+      continue;
+    }
+    wordStart = /[\s;&|<>()]/u.test(ch);
     if (ch === '"' || ch === "'") {
       quote = ch;
       continue;

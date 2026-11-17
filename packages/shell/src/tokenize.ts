@@ -10,15 +10,16 @@
  *
  * Supported:
  *   - Whitespace splitting outside quotes.
+ *   - Unquoted newline ends a command: lowered to the `;` operator, or dropped
+ *     after nothing, `;`, `&&`, `||`, `|` or `&` (the list continues / ended).
+ *   - Unquoted or double-quoted backslash-newline is removed (line continuation).
+ *   - Word-initial unquoted `#` comments out the rest of the line.
  *   - Unquoted word-initial `~` / `~/…` → `$HOME` (bash tilde expansion).
  *   - Single quotes (`'…'`): literal, no expansion, no escapes.
  *   - Double quotes (`"…"`): `$VAR` / `${VAR}` expansion; escapes for
  *     `\$`, `\"`, `\\`, `` \` `` only — other backslashes are literal.
  *   - Unquoted: `$VAR` / `${VAR}` expansion; backslash escapes the next char.
- *   - `>` / `>>` redirection tokens.
- *   - `<` token; shell decides support (currently `NotImplementedError('shell.input-redirect')`).
- *   - `|` token; shell decides support (`NotImplementedError('shell.pipe')`).
- *     Without it, `cat f | grep x` would bury the pipe inside an argument.
+ *   - `>` / `>>` / `<` redirection tokens; `|` pipe token.
  *   - `&&`, `||`, `;` compound-chain joiner tokens. The dispatcher splits on
  *     these and runs each segment with POSIX joiner semantics (see `shell.ts`).
  *     Inside quotes they stay literal — `echo 'a && b'` is one argument.
@@ -28,7 +29,8 @@
  *   AFTER tokenize, using the `quoted` flag (ADR-0091). Command substitution
  *   `$(…)` / `` `…` `` and arithmetic `$((…))` THROW here (loud — they used to
  *   pass through as a silent literal, a Fidelity bug); single-quoted forms stay
- *   literal (bash suppresses substitution in `'…'`); heredocs unsupported.
+ *   literal (bash suppresses substitution in `'…'`). Heredoc `<<` / `<<-` and
+ *   here-string `<<<` THROW on the operator, before any body is lexed.
  *
  * Expansion uses the optional `env`; unknown variables expand to '' (POSIX).
  * Word splitting after expansion is NOT done — `"$x"` and unquoted `$x` both
@@ -59,7 +61,9 @@ export function isOp(token: Token): token is OpToken {
 }
 
 const VAR_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
-const WORD_END = new Set([' ', '\t', '>', '<', '|', '&', ';']);
+const WORD_END = new Set([' ', '\t', '\n', '>', '<', '|', '&', ';']);
+/** Operators after which a newline separates nothing: the list continues or already ended. */
+const NEWLINE_JOINED = new Set<OpToken['op']>([';', '&&', '||', '|', '&']);
 
 /**
  * Loud gap for `$(…)` / `$((…))` / `` `…` `` — command substitution and
@@ -72,6 +76,20 @@ function throwCommandSubstitution(): never {
   throw new NotImplementedError(
     'shell.command-substitution',
     'command substitution `$(…)` / backticks (and `$((…))` arithmetic) are not evaluated yet — run the inner command separately and use its output',
+  );
+}
+
+/** Loud gap for `<<` / `<<-` / `<<<`: thrown on the operator, so a body is never lexed as commands. */
+function throwHeredoc(hereString: boolean): never {
+  if (hereString) {
+    throw new NotImplementedError(
+      'shell.here-string',
+      'here-strings `<<<` are not supported — write the text to a file and redirect it with `<`',
+    );
+  }
+  throw new NotImplementedError(
+    'shell.heredoc',
+    'heredocs `<<` are not supported — write the body to a file (file tools or `node -e`), then redirect it with `<`',
   );
 }
 
@@ -123,8 +141,24 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
       i++;
       continue;
     }
+    if (ch === '\\' && line[i + 1] === '\n') {
+      i += 2;
+      continue;
+    }
+    if (ch === '\n') {
+      const last = tokens.at(-1);
+      if (last && !(isOp(last) && NEWLINE_JOINED.has(last.op))) tokens.push({ op: ';' });
+      i++;
+      continue;
+    }
+    if (ch === '#') {
+      // Comment to end of line; the newline itself still separates.
+      while (i < n && line[i] !== '\n') i++;
+      continue;
+    }
     if (ch === '>' || ch === '<' || ch === '|' || ch === '&' || ch === ';') {
       let op: OpToken['op'] = ch;
+      if (ch === '<' && line[i + 1] === '<') throwHeredoc(line[i + 2] === '<');
       if (ch === '>' && line[i + 1] === '>') {
         op = '>>';
         i++;
@@ -164,6 +198,7 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
       i < n &&
       line[i] !== ' ' &&
       line[i] !== '\t' &&
+      line[i] !== '\n' &&
       line[i] !== '>' &&
       line[i] !== '<' &&
       line[i] !== '|' &&
@@ -189,6 +224,10 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
           const dc = line[i]!;
           if (dc === '\\') {
             const next = line[i + 1];
+            if (next === '\n') {
+              i += 2;
+              continue;
+            }
             if (next === '$' || next === '"' || next === '\\' || next === '`') {
               buf += next;
               quoted = true;
@@ -222,6 +261,8 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
           // Trailing backslash — literal, no line continuation.
           buf += '\\';
           i++;
+        } else if (next === '\n') {
+          i += 2;
         } else {
           buf += next;
           i += 2;
@@ -244,4 +285,57 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
     tokens.push({ value: buf, quoted });
   }
   return tokens;
+}
+
+/** bash 3.2 reserved words; reserved only as the first word of a command. */
+const RESERVED_WORDS = new Set([
+  '!',
+  '{',
+  '}',
+  '[[',
+  ']]',
+  'case',
+  'do',
+  'done',
+  'elif',
+  'else',
+  'esac',
+  'fi',
+  'for',
+  'function',
+  'if',
+  'in',
+  'select',
+  'then',
+  'until',
+  'while',
+]);
+const COMMAND_SEPARATORS = new Set<OpToken['op']>([';', '&&', '||', '|', '&']);
+
+/**
+ * Loud gap for compound commands: a reserved word, `(…)`/`((…))` or a
+ * `name()` definition at command position throws before anything runs. Run as
+ * plain lines, a multi-line `if …\nthen\nrm -rf dist\nfi` body would execute
+ * unconditionally.
+ */
+export function assertSimpleCommands(tokens: readonly Token[]): void {
+  let commandStart = true;
+  for (const token of tokens) {
+    if (isOp(token)) {
+      commandStart = COMMAND_SEPARATORS.has(token.op);
+      continue;
+    }
+    const { value } = token;
+    if (
+      commandStart &&
+      !token.quoted &&
+      (RESERVED_WORDS.has(value) || /^[()]/.test(value) || value.endsWith('()'))
+    ) {
+      throw new NotImplementedError(
+        'shell.compound-command',
+        `\`${value}\`: compound commands (if/for/while/until/case/select, {…}, (…), [[…]], !, functions) are not supported — run simple commands, or move the logic into a node script`,
+      );
+    }
+    commandStart = false;
+  }
 }

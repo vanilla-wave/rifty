@@ -18,7 +18,7 @@ import { resolve } from './commands/_shared.ts';
 import type { ShellJobListItem } from './commands/jobs.ts';
 import { npx } from './commands/npx.ts';
 import { type ShellCompletionResult, createShellCompleter } from './language-service.ts';
-import { type Token, isOp, tokenize } from './tokenize.ts';
+import { type Token, assertSimpleCommands, isOp, tokenize } from './tokenize.ts';
 import type {
   CommandContext,
   ProcessExit,
@@ -361,10 +361,11 @@ export class Shell {
    * @returns exit code of the last executed segment plus captured stdout/stderr
    */
   async run(line: string, options: RunOptions = {}): Promise<RunResult> {
-    // Inline env overrides (`FOO=bar cmd $FOO`) apply to the command, NOT to
-    // expansion on the same line — POSIX: `FOO=bar echo $FOO` prints the OUTER FOO.
+    // Inline env overrides (`FOO=bar cmd $FOO`) apply to the command, NOT to its
+    // own expansion — POSIX: `FOO=bar echo $FOO` prints the OUTER FOO.
     const tokens = tokenize(line, this.env);
     if (tokens.length === 0) return runResult(0, '', '');
+    assertSimpleCommands(tokens);
     if (!this.allowBackground && tokens.some((token) => isOp(token) && token.op === '&')) {
       throw new NotImplementedError('shell.background', 'background execution is prohibited');
     }
@@ -380,7 +381,7 @@ export class Shell {
       if (background.foregroundTokens.length === 0) {
         return this.startBackgroundJob(background.line, background.backgroundTokens, options);
       }
-      const foreground = await this.runTokens(background.foregroundTokens, options);
+      const foreground = await this.runTokens(background.foregroundTokens, options, line);
       // `runTokens` owns cancellation only for its foreground prefix. Re-check
       // the host signal before the outer trailing-background dispatcher forks
       // an independent job (`;` / `||` must not turn SIGINT into a fresh run).
@@ -391,11 +392,9 @@ export class Shell {
       ) {
         return foreground;
       }
-      const started = await this.startBackgroundJob(
-        background.line,
-        background.backgroundTokens,
-        options,
-      );
+      // Expanded after its foreground prefix ran, like every later segment.
+      const job = this.trailingBackground(line, tokenize(line, this.env))!;
+      const started = await this.startBackgroundJob(job.line, job.backgroundTokens, options);
       return {
         exitCode: started.exitCode,
         exit: started.exit,
@@ -404,10 +403,15 @@ export class Shell {
       };
     }
 
-    return this.runTokens(tokens, options);
+    return this.runTokens(tokens, options, line);
   }
 
-  private async runTokens(tokens: readonly Token[], options: RunOptions): Promise<RunResult> {
+  /** `line` re-lexes each later segment so it expands with the env its predecessors left. */
+  private async runTokens(
+    tokens: readonly Token[],
+    options: RunOptions,
+    line?: string,
+  ): Promise<RunResult> {
     // Reject non-trailing bare `&` loudly; tokenizer emits it as an operator token.
     if (tokens.some((t) => isOp(t) && t.op === '&')) {
       throw new NotImplementedError(
@@ -439,7 +443,12 @@ export class Shell {
 
     try {
       for (let idx = 0; idx < segments.length; idx++) {
-        const seg = segments[idx]!;
+        // bash expands a command after its predecessors ran (`X=1; echo $X`);
+        // token structure is env-independent, so segment `idx` is the same one.
+        const seg =
+          line === undefined || idx === 0
+            ? segments[idx]!
+            : splitOnJoiners(tokenize(line, this.env).slice(0, tokens.length))[idx]!;
 
         // An empty segment (e.g. the tail of a trailing `;` or `echo a ;`) is a
         // no-op: skip it entirely so it cannot overwrite lastExitCode with 0
@@ -505,7 +514,7 @@ export class Shell {
     const joinerIdx = findLastJoinerIndex(body);
     if (joinerIdx === -1) {
       return {
-        line: stripTrailingAmp(line),
+        line: /[\n#]/u.test(line) ? tokensToShellLine(body) : stripTrailingAmp(line),
         foregroundTokens: [],
         backgroundTokens: body,
         joiner: null,
@@ -650,6 +659,7 @@ export class Shell {
         options,
         signal,
         abortPromise,
+        true,
       );
       stderr += res.stderr;
       exitCode = res.exitCode;
@@ -677,6 +687,7 @@ export class Shell {
     options: RunOptions,
     signal: AbortSignal,
     abortPromise: Promise<typeof ABORTED>,
+    pipelineStage = false,
   ): Promise<SegmentResult> {
     const empty = (): SegmentResult => ({
       exitCode: 0,
@@ -702,7 +713,8 @@ export class Shell {
     }
     const rest = segmentTokens.slice(i);
     if (rest.length === 0) {
-      Object.assign(this.env, overrides);
+      // A pipeline stage is a subshell: its assignment does not persist (bash).
+      if (!pipelineStage) Object.assign(this.env, overrides);
       return empty();
     }
 
