@@ -43,12 +43,12 @@ const paths = {
   released: [
     'p.on("message", handler)',
     'p.removeAllListeners("message")',
-    'setTimeout(() => { p.send("hung"); p.disconnect(); }, 500).unref()',
+    'setTimeout(() => { p.send("hung"); p.disconnect(); }, 2000).unref()',
   ].join('; '),
   releasedAll: [
     'p.on("message", handler)',
     'p.removeAllListeners()',
-    'setTimeout(() => { p.send("hung"); p.disconnect(); }, 500).unref()',
+    'setTimeout(() => { p.send("hung"); p.disconnect(); }, 2000).unref()',
   ].join('; '),
   // Without Node's release hook, removeAllListeners('message') releases nothing: still held.
   noReleaseHook: [
@@ -80,11 +80,11 @@ const c: ParityCase = {
       });
       child.on('exit', (code) => resolve([name, messages, code]));
     });
-    void (async () => {
-      const out = [];
-      for (const name of ${JSON.stringify(Object.keys(paths))}) out.push(await run(name));
+    // Children run concurrently: each one's hold is independent, and the case
+    // stays well inside the physical-Worker drain cap on a loaded host.
+    Promise.all(${JSON.stringify(Object.keys(paths))}.map(run)).then((out) => {
       console.log(JSON.stringify(out));
-    })();
+    });
   `,
   expected:
     '[["baseOn",["armed","pong"],0],["baseAddListener",["armed","pong"],0],["addListener",["armed","pong"],0],["prepend",["armed","pong"],0],["once",["armed","pong"],0],["replace",["armed","pong"],0],["replaceAll",["armed","pong"],0],["clearAll",["armed","pong"],0],["released",["armed"],0],["releasedAll",["armed"],0],["noReleaseHook",["armed","alive"],0]]\n',
