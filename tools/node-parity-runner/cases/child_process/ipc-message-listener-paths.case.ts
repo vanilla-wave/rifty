@@ -39,10 +39,15 @@ const paths = {
     'p.on("newListener", (e) => { if (e === "message") p.removeAllListeners(); })',
     'p.addListener("message", handler)',
   ].join('; '),
-  // removeAllListeners('message') releases the hold: the child exits before its unref'd timer.
+  // removeAllListeners('message' | no argument) releases the hold: the child exits before its unref'd timer.
   released: [
     'p.on("message", handler)',
     'p.removeAllListeners("message")',
+    'setTimeout(() => { p.send("hung"); p.disconnect(); }, 500).unref()',
+  ].join('; '),
+  releasedAll: [
+    'p.on("message", handler)',
+    'p.removeAllListeners()',
     'setTimeout(() => { p.send("hung"); p.disconnect(); }, 500).unref()',
   ].join('; '),
   // Without Node's release hook, removeAllListeners('message') releases nothing: still held.
@@ -82,7 +87,7 @@ const c: ParityCase = {
     })();
   `,
   expected:
-    '[["baseOn",["armed","pong"],0],["baseAddListener",["armed","pong"],0],["addListener",["armed","pong"],0],["prepend",["armed","pong"],0],["once",["armed","pong"],0],["replace",["armed","pong"],0],["replaceAll",["armed","pong"],0],["clearAll",["armed","pong"],0],["released",["armed"],0],["noReleaseHook",["armed","alive"],0]]\n',
+    '[["baseOn",["armed","pong"],0],["baseAddListener",["armed","pong"],0],["addListener",["armed","pong"],0],["prepend",["armed","pong"],0],["once",["armed","pong"],0],["replace",["armed","pong"],0],["replaceAll",["armed","pong"],0],["clearAll",["armed","pong"],0],["released",["armed"],0],["releasedAll",["armed"],0],["noReleaseHook",["armed","alive"],0]]\n',
 };
 
 export default c;

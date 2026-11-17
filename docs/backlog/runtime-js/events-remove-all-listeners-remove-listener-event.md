@@ -37,7 +37,11 @@ removed listener. Node v24.16.0 vs rifty: `process.removeAllListeners ===
 EventEmitter.prototype.removeAllListeners` true / false;
 `EventEmitter.prototype.removeAllListeners.call(process, 'message')` in a fork
 child exits it (Node) / keeps it held (rifty: the override is bypassed).
-Kill condition: this item lands → delete the override.
+Kill condition: this item lands → delete the override. Same body
+(pre-existing): Node clears every event only for a no-argument call
+(`arguments.length === 0`), an explicit `removeAllListeners(undefined)`
+removes nothing; rifty clears all (plain emitter listener counts after it:
+Node `[1,1,1]`, rifty `[0,0,0]`).
 
 ## Next
 
