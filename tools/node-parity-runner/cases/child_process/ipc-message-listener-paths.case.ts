@@ -5,7 +5,7 @@ import type { ParityCase } from '../../src/types.ts';
  * Node keys it to `'newListener'`, so the base prototype's `on` and
  * `addListener`, `prependListener` and `once` all keep the child alive until
  * the parent's late message arrives — also when a guest `'newListener'` hook
- * removes the previous listener mid-add.
+ * removes the previous listener(s) mid-add.
  */
 const child = (attach: string) => `
   const p = typeof __process === 'undefined' ? process : __process;
@@ -27,6 +27,30 @@ const paths = {
     'p.on("message", previous)',
     'p.on("newListener", (e) => { if (e === "message") p.removeListener("message", previous); })',
     'p.addListener("message", handler)',
+  ].join('; '),
+  // The same mid-add hook clearing through removeAllListeners (Node unrefs per listener).
+  replaceAll: [
+    'p.on("message", () => {})',
+    'p.on("newListener", (e) => { if (e === "message") p.removeAllListeners("message"); })',
+    'p.addListener("message", handler)',
+  ].join('; '),
+  clearAll: [
+    'p.on("message", () => {})',
+    'p.on("newListener", (e) => { if (e === "message") p.removeAllListeners(); })',
+    'p.addListener("message", handler)',
+  ].join('; '),
+  // removeAllListeners('message') releases the hold: the child exits before its unref'd timer.
+  released: [
+    'p.on("message", handler)',
+    'p.removeAllListeners("message")',
+    'setTimeout(() => { p.send("hung"); p.disconnect(); }, 500).unref()',
+  ].join('; '),
+  // Without Node's release hook, removeAllListeners('message') releases nothing: still held.
+  noReleaseHook: [
+    'p.on("message", handler)',
+    'p.removeAllListeners("removeListener")',
+    'p.removeAllListeners("message")',
+    'setTimeout(() => { p.send("alive"); p.disconnect(); }, 300).unref()',
   ].join('; '),
 };
 
@@ -58,7 +82,7 @@ const c: ParityCase = {
     })();
   `,
   expected:
-    '[["baseOn",["armed","pong"],0],["baseAddListener",["armed","pong"],0],["addListener",["armed","pong"],0],["prepend",["armed","pong"],0],["once",["armed","pong"],0],["replace",["armed","pong"],0]]\n',
+    '[["baseOn",["armed","pong"],0],["baseAddListener",["armed","pong"],0],["addListener",["armed","pong"],0],["prepend",["armed","pong"],0],["once",["armed","pong"],0],["replace",["armed","pong"],0],["replaceAll",["armed","pong"],0],["clearAll",["armed","pong"],0],["released",["armed"],0],["noReleaseHook",["armed","alive"],0]]\n',
 };
 
 export default c;
