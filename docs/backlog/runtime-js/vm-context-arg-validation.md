@@ -26,7 +26,8 @@ vm.createContext(1)         Node as runInNewContext · rifty as runInNewContext
 The `runInContext` messages come from `assertContextified` (`vm/index.ts`),
 which throws a plain `TypeError`; the `Object.defineProperty` rows come from
 `createContext`'s unchecked `Object.defineProperty(context, VM_CONTEXT, …)`.
-Measured on the default QuickJS engine; both engines share that code (code reading). `docs/public/compat/modules.md` claimed Node's exact error;
+Measured on the default QuickJS engine; both engines share that code (code
+reading). `docs/public/compat/modules.md` claimed Node's exact error;
 corrected to ❌ in the same change.
 
 ## Next
