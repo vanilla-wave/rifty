@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { installOpfsFs } from '@riftydev/vfs/internal';
+import { settleOpfsSetup } from './opfs-setup.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
 interface Input {
@@ -20,7 +21,7 @@ async function run(input: Input) {
   const bytes = (text: string) => new TextEncoder().encode(text);
   fs.mkdirSync('/a');
   fs.writeFileSync('/a/old', bytes('old'));
-  if ((await fs.flush()).total) throw new Error('seed failed');
+  await settleOpfsSetup(fs);
   const remove = FileSystemDirectoryHandle.prototype.removeEntry;
   const directory = FileSystemDirectoryHandle.prototype.getDirectoryHandle;
   const writable = FileSystemFileHandle.prototype.createWritable;
@@ -80,6 +81,8 @@ async function run(input: Input) {
         bytes(path === '/a' ? 'new' : 'old'),
       );
     }
+    // Judge the repair by real settlement; the 50ms bound is for the held phases.
+    await fs.fence();
     const repaired = await fs.flush();
     const live = fs.readdirSync('/a').map((entry) => entry.name);
     const native = (await pair.vfs.readdir('/a')).map((entry) => entry.name);
