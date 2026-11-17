@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Runtime: nested-Worker fs relays forward ADR-0365 head/chunk reads instead of re-reading whole files per chunk — the esbuild-wasm service child (every COI Vite start) read its 14 MB wasm with 36×36 owner requests (6.9 s local, 17–29 s on CI runners; measured on PR #395). Root cause of the `vite-at-root` watched-dev and `esbuild-vite-contract` CI timeouts and of slow e2e Vite boots; draft `kernel/vite-startup-readiness-ci` closed.
 - Browser-unit: `opfs-structural-repair` seeds and repair are judged after real settlement (`settleOpfsSetup` / `fence()`), not by the 50 ms report bound kept for the held phases; a slow-but-successful native close (80 ms probe) had failed the seed 8/8 (main run 40251341113). Real seed failures still fail by name. Closes the PR #340 sweep gap (it scoped by `replica-*` filenames).
 - Browser-unit: I4 targeted page reads compare small vs Tracker trees in one Worker with warm-up and 21 interleaved >=2 ms batch pairs; the gate is the median per-pair ratio <=2 (was ratio of independent medians, 2/96 CI misses) plus the unchanged <=1 ms absolute bound. An O(n) metadata-walk mutant still fails (~270x).
 - e2e: the non-TypeScript Problems test gets an explicit 120 s budget so Playwright's implicit 30 s no longer cuts its declared 90 s Vite readiness wait (re-lands the dropped a1bc2191a hunk).
