@@ -26,20 +26,23 @@ Not executed here: `Readable.pipe` (`packages/io/src/streams/readable.ts`
 `pipe`) calls `dest.on('drain'|'error'|'close', …)`, which a `{ write }`
 object lacks — the throw is code reading plus the u6 unit's scratch note.
 
-2026-11-17 — the child's object now carries Node's `Symbol.toStringTag`
-brand (ADR-0345 §Corrections; parity `process/to-string-tag-same-realm`) but
-has no `versions`. A brand-based detector that reads `process.versions` after
-the brand check (pdfjs-dist `isNodeJS`: `!process.versions.nw`) now throws a
-`TypeError` here instead of taking its browser branch. Scratch same-realm
-parity case (seeded mode), Node v24.16.0 vs rifty: `typeof process.versions`
-`object` · `undefined`; the `isNodeJS` expression `true` · `TypeError: Cannot
-read properties of undefined (reading 'nw')`. Add both to the parity list below.
+2026-11-17 — declared residual of the process brand fix (ADR-0345
+§Corrections; parity `process/to-string-tag-same-realm`): the child's object
+now carries Node's `Symbol.toStringTag` brand but has no `versions`. Scratch
+same-realm parity case (seeded mode), Node v24.16.0 vs rifty, pdfjs-dist's
+`isNodeJS` expression: Node `true`; rifty before the fix (`dc69559b9`) `false`,
+after `TypeError: Cannot read properties of undefined (reading 'nw')`;
+`typeof process.versions` `object` · `undefined`. Packages cannot load here:
+`require('./dep.js')` → `NotImplementedError: child_process.same-realm.require`
+(Node: the module), so only inline child code reaches the throw. Kill: the
+child's object carries `versions` (and the other shared identity fields).
 
 ## Next
 
 Owner runtime-js. Trigger: a no-COI program piping into its own
-`process.stdout`, or reading a `NodeProcess` member in a same-realm child;
-or a decision in `kernel/process-equals-web-worker` retiring the route.
+`process.stdout`, or reading a `NodeProcess` member in a same-realm child
+(including a brand-based Node detector reading `process.versions`); or a
+decision in `kernel/process-equals-web-worker` retiring the route.
 Parity first on the same-realm route: `pipe(process.stdout)`,
-`typeof process.memoryUsage`, `Object.keys(process)` subset vs the Worker
-route.
+`typeof process.memoryUsage`, `typeof process.versions`, the `isNodeJS`
+expression, `Object.keys(process)` subset vs the Worker route.

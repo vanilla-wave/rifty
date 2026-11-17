@@ -183,6 +183,11 @@ host→guest before each run, sweep guest→host after) — observationally equi
 context for synchronous code. Two caveats: a guest callback mutating the sandbox AFTER the run is
 seen only at the next run; the host→guest side retains one seed per DISTINCT inbound object/fn for
 the context's life (not GC-evicted), so keep `vm` off a hot loop that streams fresh objects in.
+Two gaps (❌, `backlog/runtime-js/vm-quickjs-seed-readonly-and-brand`): a seeded object with a
+non-writable enumerable data property at any depth (e.g. `{ p: process }` via `process.release.name`)
+runs the code, then the post-run sweep throws `TypeError: Cannot assign to read only property …`
+(result lost, side effects kept); a seeded object's symbol-keyed `Symbol.toStringTag` brand is not
+copied (`[object Object]`, Node `[object <tag>]`).
 
 **ES2023 (QuickJS) ≠ V8 residual divergences** (default engine; each verified vs real Node, pinned
 by conformance + parity cases; workaround = the `rewrite` opt-in, which is V8-correct for these):

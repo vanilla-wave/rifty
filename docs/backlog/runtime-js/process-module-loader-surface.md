@@ -37,12 +37,14 @@ Node 24.16.0 probe: `node --redirect-warnings=/tmp/rifty-fetch-warning-redirect-
 exits 0; the file contains `[FETCH-REDIRECT] Warning: redirect-proof`.
 
 2026-11-17 — consumer evidence for `getBuiltinModule`: pdfjs-dist@6.5.438
-legacy and pdf-parse@2.4.5 (bundled pdfjs 5.4.296) print on stderr
+legacy and pdf-parse@2.4.5 (depends on `pdfjs-dist: 5.4.296`, `npm view
+pdf-parse@2.4.5 dependencies`) print on stderr
 ``Warning: Cannot access the `require` function: "TypeError: process.getBuiltinModule is not a function".``
-in rifty; native Node 24.16.0 does not. Their extracted text equals Node's.
-`tests/no-coi/no-coi-pdf-text.spec.ts` pins the line as a declared residual
-(`NO_GET_BUILTIN_MODULE`); kill: when `getBuiltinModule` lands, drop it from
-the expected stderr.
+in rifty's no-COI toolchain; native Node 24.16.0 (same probe, same PDFs) does
+not, and the extracted text is byte-equal. `tests/no-coi/no-coi-pdf-text.spec.ts`
+pins the line as a declared residual (`NO_GET_BUILTIN_MODULE`; green locally on
+Chromium against Node v24.16.0); kill: when `getBuiltinModule` lands, drop it
+from the expected stderr.
 
 REGRESSION TRAP — `getBuiltinModule`: `net/src/sqlite/engine.ts:48` + `engine-shimmed-process.test.ts` use its ABSENCE as the "not a real Node realm" signal; adding it breaks sqlite init. MUST refactor detection (e.g. `versions.rifty` marker) + update the pin FIRST, regression test first.
 
