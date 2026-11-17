@@ -33,9 +33,10 @@ class EventEmitterPrototype {
     return this._warned;
   }
 
-  on(event: string | symbol, listener: Listener): this {
-    return this.addListener(event, listener);
-  }
+  /** Node: the same function object as {@link addListener}; aliased with the prototype below. */
+  declare on: (event: string | symbol, listener: Listener) => this;
+  /** Node: the same function object as {@link removeListener}. */
+  declare off: (event: string | symbol, listener: Listener) => this;
 
   addListener(event: string | symbol, listener: Listener): this {
     this.emitNewListener(event, listener);
@@ -70,10 +71,6 @@ class EventEmitterPrototype {
     const meta = this.listenersMap.get('newListener');
     if (!meta || meta.length === 0) return;
     for (const m of meta.slice()) m.call(this, event, listener);
-  }
-
-  off(event: string | symbol, listener: Listener): this {
-    return this.removeListener(event, listener);
   }
 
   removeListener(event: string | symbol, listener: Listener): this {
@@ -247,6 +244,16 @@ export const EventEmitter = /* @__PURE__ */ (() => {
   };
 
   CallableEventEmitter.prototype = EventEmitterPrototype.prototype;
+  // Node's events.js: `on = addListener`, `off = removeListener` — one function
+  // per pair. A forwarding `on` re-enters readable-stream's `addListener = on`
+  // override forever. A subclass overriding one name re-aliases the other.
+  const proto = CallableEventEmitter.prototype;
+  for (const [alias, name] of [
+    ['on', 'addListener'],
+    ['off', 'removeListener'],
+  ] as const) {
+    Object.defineProperty(proto, alias, { configurable: true, writable: true, value: proto[name] });
+  }
   Object.defineProperty(CallableEventEmitter.prototype, 'constructor', {
     configurable: true,
     value: CallableEventEmitter,
@@ -292,9 +299,10 @@ export function once(emitter: EventEmitter, event: string | symbol): Promise<unk
   return new Promise((resolve, reject) => {
     // Remove BOTH listeners on either path. `once` wrappers auto-remove the
     // firing one, but explicit cleanup stays correct if a custom `once` doesn't.
+    // Through `removeListener`, as Node: an override of that name sees it.
     const cleanup = (): void => {
-      emitter.off(event, onEvent);
-      if (event !== 'error') emitter.off('error', onError);
+      emitter.removeListener(event, onEvent);
+      if (event !== 'error') emitter.removeListener('error', onError);
     };
     const onEvent = (...args: unknown[]): void => {
       cleanup();

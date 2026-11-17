@@ -2,7 +2,7 @@ import type { KernelStdioInputReader } from '@riftydev/kernel';
 import { NotImplementedError } from '@riftydev/vfs';
 import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
 import { Buffer } from './buffer.ts';
-import { EventEmitter } from './events.ts';
+import { EventEmitter, aliasListenerOverrides } from './events.ts';
 import { INHERIT_STDIN, type InheritStdin, type StdinInheritor } from './process-stdin-inherit.ts';
 import { STDIN_FD, type StdinFdSource } from './stdio-fd-source.ts';
 
@@ -69,6 +69,8 @@ class NodeStdinEmitter extends EventEmitter implements NodeStdin {
     return throwStdinGap('process.stdin[Symbol.asyncIterator]');
   }
 }
+// Node's stdin is a Readable: `on === addListener`, one override for both names.
+aliasListenerOverrides(NodeStdinEmitter.prototype);
 
 /**
  * Build a `process.stdin` Readable-ish EventEmitter fed by either a kernel

@@ -32,7 +32,7 @@ import {
   encodeNodeIpcMessage,
 } from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
-import { EventEmitter } from './events.ts';
+import { EventEmitter, aliasListenerOverrides } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { memoryUsage } from './loud-members.ts';
 import {
@@ -521,7 +521,6 @@ export class NodeProcess extends EventEmitter {
     if (event === undefined || event === 'message') this.#syncIpcKeepalive();
     return result;
   }
-
   // Own instance-bound fields, not prototype methods: Node's detached
   // `const { exit } = process; exit(3)` / `import { kill }` still hit this process.
   // Node `exit()` (ADR-0445): an argument assigns `exitCode`, `'exit'` fires once,
@@ -848,6 +847,7 @@ export class NodeProcess extends EventEmitter {
     this.#disconnectIpc();
   }
 }
+aliasListenerOverrides(NodeProcess.prototype); // `on`/`off` reach the IPC keepalive overrides
 
 /** Apply an exact entry envelope's PTY metadata before that entry runs user code. */
 export function applyNodeProcessTerminalBootstrap(

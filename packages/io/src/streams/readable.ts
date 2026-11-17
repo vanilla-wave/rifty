@@ -293,10 +293,10 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
     // Node makes emit 'error') never throws unhandled (rifty EventEmitter, like
     // Node, throws on an unhandled 'error').
     const cleanup = (keepErrorSink = false): void => {
-      stream.off('data', onData);
-      stream.off('end', onEnd);
-      stream.off('close', onClose);
-      if (!keepErrorSink) stream.off('error', onError);
+      stream.removeListener('data', onData);
+      stream.removeListener('end', onEnd);
+      stream.removeListener('close', onClose);
+      if (!keepErrorSink) stream.removeListener('error', onError);
     };
     const close = (): void => {
       if (settled) return;
@@ -787,12 +787,12 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
       // Idempotent: only run once per pipe instance.
       if (this.pipeCleanups.get(dest) !== cleanup) return;
       this.pipeCleanups.delete(dest);
-      this.off('data', onData);
-      this.off('end', onEnd);
-      this.off('error', onSourceError);
-      dest.off('drain', onDrain);
-      dest.off('error', onDestError);
-      dest.off('close', onDestClose);
+      this.removeListener('data', onData);
+      this.removeListener('end', onEnd);
+      this.removeListener('error', onSourceError);
+      dest.removeListener('drain', onDrain);
+      dest.removeListener('error', onDestError);
+      dest.removeListener('close', onDestClose);
     };
     this.on('data', onData);
     this.on('end', onEnd);
@@ -909,9 +909,9 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
     const cleanup = (): void => {
       if (cleanedUp) return;
       cleanedUp = true;
-      this.off('data', onData);
-      this.off('end', onEnd);
-      this.off('error', onError);
+      this.removeListener('data', onData);
+      this.removeListener('end', onEnd);
+      this.removeListener('error', onError);
       // Pause to stop emitting; if iteration ended before the consumer drained,
       // also destroy — Node's iterator return() does this so the producer
       // learns the consumer is gone. `destroyOnReturn:false` skips the destroy

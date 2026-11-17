@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `EventEmitter.prototype.on === addListener` and `off === removeListener` (one function per pair, as Node): readable-stream 2/3/4's `addListener = on` override no longer recurses (`RangeError`). `events.once`, `Readable.pipe`/`unpipe`, `Readable.toWeb`, the async iterator, `Writable.toWeb` and `pipeline` detach through `removeListener`, Node's name, so an override of only that name still sees them.
+
 - Writable constructor write/writev/final options install the native replaceable _write/_writev/_final hooks; transport wrappers observe active writes instead of buffered admissions.
 
 - Writable uses Node tick callbacks (success = null) and a cursor over the existing reentrant buffer; completed slots release payloads.

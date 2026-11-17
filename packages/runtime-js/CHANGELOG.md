@@ -1,5 +1,7 @@
 # Changelog
 
+- `process` and `process.stdin` alias `on`/`off` to their listener overrides (`aliasListenerOverrides`), so `process.on('message')` keeps its IPC hold and `stdin.on('data')` starts flowing under the shared `on === addListener`; `readline` close detaches its input through `removeListener`.
+
 - Forward `control:kill-tree` `cascade` to the descendant authority; a missing or non-boolean bit is a loud self-exit (ADR-0548).
 
 - Preserve Buffer chunks on process.stdin after merging shared descriptor reads with no-COI children.

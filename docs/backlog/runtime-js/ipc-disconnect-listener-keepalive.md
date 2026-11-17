@@ -23,6 +23,18 @@ serializations:
 
 vitest 4.1.11's pool child uses neither shape.
 
+2026-11-17 (REV-12, `on === addListener` alias unit, branch
+`t3/w1-eventemitter-alias`): Node keys these effects to internal
+`'newListener'`/`'removeListener'` listeners on `process` (Node v24.16.0 fork
+child: `process.listeners('newListener')` includes `onNewListener(name) { if
+(name === 'message' || name === 'disconnect') control.refCounted(); }`;
+`process.on === EventEmitter.prototype.on` true). rifty overrides
+`addListener`/`prependListener`/`removeListener` on `NodeProcess.prototype`,
+aliasing `on`/`off` to them since that unit: `process.on ===
+EventEmitter.prototype.on` is false, and `EventEmitter.prototype.on.call(process,
+'message', fn)` takes no hold. The next IPC keepalive unit moves the hold to
+Node's meta-listener mechanism.
+
 ## Next
 
 Owner runtime-js; trigger: a fork child that waits only on `'disconnect'`,
