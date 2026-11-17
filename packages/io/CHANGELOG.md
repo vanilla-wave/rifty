@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- utf8 decode keeps a leading BOM like Node: `Buffer#toString`/`bytesToString` and `Readable#setEncoding` (utf8/utf16le) decoders run with `ignoreBOM: true`; `setEncoding('latin1'|'binary')` decodes through Buffer's latin1 (TextDecoder's label is windows-1252). ADR-0069 D3 note 2026-11-17.
+
 - Writable constructor write/writev/final options install the native replaceable _write/_writev/_final hooks; transport wrappers observe active writes instead of buffered admissions.
 
 - Writable uses Node tick callbacks (success = null) and a cursor over the existing reentrant buffer; completed slots release payloads.
