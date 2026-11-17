@@ -23,8 +23,10 @@ vm.runInNewContext('1', 1)  Node ERR_INVALID_ARG_TYPE 'The "object" argument mus
 vm.createContext(1)         Node as runInNewContext · rifty as runInNewContext
 ```
 
-The messages come from `assertContextified` (`vm/index.ts`), which throws a
-plain `TypeError`. `docs/public/compat/modules.md` claimed Node's exact error;
+The `runInContext` messages come from `assertContextified` (`vm/index.ts`),
+which throws a plain `TypeError`; the `Object.defineProperty` rows come from
+`createContext`'s unchecked `Object.defineProperty(context, VM_CONTEXT, …)`,
+shared by both engines. `docs/public/compat/modules.md` claimed Node's exact error;
 corrected to ❌ in the same change.
 
 ## Next

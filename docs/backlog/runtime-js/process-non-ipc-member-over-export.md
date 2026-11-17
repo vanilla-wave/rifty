@@ -10,12 +10,6 @@ code: [packages/runtime-js/src/builtins/process.ts, packages/io/src/event-emitte
 
 ## Context
 
-2026-11-17 — related own-shape difference, not an ESM name (symbols are not
-`Object.keys`): `Object.getOwnPropertySymbols(require('node:process'))`, scratch
-parity case, Node v24.16.0 `[shapeMode, kCapture, Symbol.toStringTag]` vs rifty
-seven `Symbol(rifty.runtime-js.process-*.v1)` keys plus `Symbol.toStringTag`
-(second). Pre-existing; the brand fix only added the tag (ADR-0345).
-
 REV-12 discovery D1 of `runtime-js/reference/builtin-static-names-prototype-methods-evidence.md`
 (evidence §D1, Node v24.16.0 O1). Builtin ESM names are
 `Object.keys(process)` (ADR-0348 §2). On a process with no IPC port rifty
@@ -28,6 +22,13 @@ listener or warning is recorded). Probe (temporary esm case):
 `connected`/`channel` only on an IPC child — unverified for the ESM facade
 of a forked child. Compat ⚠️ `docs/public/compat/process.md` named-imports
 row ("Known over-export").
+
+2026-11-17 — related own-shape difference, not an ESM name (symbols are not
+`Object.keys`): `Object.getOwnPropertySymbols(require('node:process'))`, scratch
+parity case, Node v24.16.0 `[shapeMode, kCapture, Symbol.toStringTag]` vs rifty
+seven `Symbol(rifty.runtime-js.process-*.v1)` keys plus `Symbol.toStringTag`
+(second). Pre-existing; the brand fix only added the tag (ADR-0345).
+Advisory: no known consumer.
 
 ## Next
 

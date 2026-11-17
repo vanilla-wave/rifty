@@ -164,9 +164,7 @@ Shared, faithful on both engines: writes from context code (assignments incl.
 compound/update/destructuring, `var`/function declarations incl. statement-position destructuring
 `var`, for-in/of targets, `delete`) land on the context; top-level functions hoist; declaration
 statements keep Node's empty completion value; a declared `var` stays readable after the run and in
-later runs. A non-object or non-contextified context arg throws a `TypeError` without Node's
-`ERR_INVALID_ARG_TYPE` code, and `runInNewContext`/`createContext` with a primitive throw
-`Object.defineProperty called on non-object` (❌, `backlog/runtime-js/vm-context-arg-validation`). Unsupported
+later runs. Unsupported
 execution controls (`timeout`/`displayErrors`/`cachedData`/`contextExtensions`/…) throw loudly.
 `createContext` accepts Node's `name` metadata. The default QuickJS engine enforces
 `codeGeneration.strings: false` and `codeGeneration.wasm: false`; the rewrite opt-in throws loudly
@@ -180,6 +178,10 @@ ignore `contextName` / `contextOrigin` / `contextCodeGeneration` (invalid values
 `contextCodeGeneration: { strings: false }` is not enforced, Node throws `EvalError`), and with
 `DONT_CONTEXTIFY` the ceiling replaces Node's `ERR_INVALID_ARG_TYPE` for those, `filename` and
 offsets — `backlog/runtime-js/vm-run-in-new-context-options`.
+
+Gap (❌, both engines, `backlog/runtime-js/vm-context-arg-validation`): a non-object or
+non-contextified context arg throws a `TypeError` without Node's `ERR_INVALID_ARG_TYPE` code, and
+`runInNewContext`/`createContext` with a primitive throw `Object.defineProperty called on non-object`.
 
 The default engine shares the live `contextObject` via a reconcile-based membrane (reseed
 host→guest before each run, sweep guest→host after) — observationally equivalent to Node's live

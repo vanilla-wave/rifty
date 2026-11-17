@@ -1,9 +1,9 @@
 ---
 area: runtime-js
 status: draft
-title: A same-realm (no-COI) child's `process` is a plain object with bare `{write}` stdio and no `NodeProcess` members
+title: A same-realm child's `process` is a plain object without most `NodeProcess` members and identity fields
 created: 2026-09-24
-why: on the same-realm fallback route the child's `process` / `require('process')` is a hand-built object — `stdout`/`stderr` are `{ write }` only, so `src.pipe(process.stdout)` throws `dest.on is not a function`, and members the Worker route has (`memoryUsage`, Writable surface, …) are absent
+why: on the same-realm fallback route the child's `process` / `require('process')` is a hand-built object — members the Worker route has (`memoryUsage`, `version`, `platform`, `release`, …) are absent
 sources: [docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md, docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-final-green.json, docs/backlog/runtime-js/reference/absent-builtin-members-loud-throws-evidence.md, docs/backlog/kernel/process-equals-web-worker.md]
 code: [packages/runtime-js/src/builtins/child_process-exec.ts]
 ---
@@ -22,9 +22,14 @@ entry. The claimed paths fork through the kernel Worker route
 (`NodeProcess`); this route runs only without a physical Worker
 (`kernel/process-equals-web-worker`: honest degraded mode, warned once).
 
-Not executed here: `Readable.pipe` (`packages/io/src/streams/readable.ts`
-`pipe`) calls `dest.on('drain'|'error'|'close', …)`, which a `{ write }`
-object lacks — the throw is code reading plus the u6 unit's scratch note.
+Since `5e7da8be1` (2026-10-20) the child's stdout/stderr are
+`makeStdioWriter(…)` EventEmitters, so the original `{ write }` /
+`dest.on is not a function` headline no longer holds. 2026-11-17 scratch
+same-realm parity case (seeded mode), Node v24.16.0 vs rifty:
+`Readable.from(['piped\n']).pipe(process.stdout)` prints `piped` on both;
+`typeof process.stdout.on` `function` on both; `typeof process.memoryUsage` /
+`process.version` / `process.release` / `process.platform` Node
+`function`/`string`/`object`/`string` · rifty all `undefined`.
 
 2026-11-17 — the process brand fix (ADR-0345 §Corrections; parity
 `process/to-string-tag-same-realm`) gives the child's object Node's
@@ -37,10 +42,9 @@ Only builtins load in this child: `require('./dep.js')` →
 
 ## Next
 
-Owner runtime-js. Trigger: a no-COI program piping into its own
-`process.stdout`, or reading a `NodeProcess` member in a same-realm child
-(including an identity field such as `process.version`); or a decision in
-`kernel/process-equals-web-worker` retiring the route.
-Parity first on the same-realm route: `pipe(process.stdout)`,
-`typeof process.memoryUsage`, `typeof process.version`/`release`,
-`Object.keys(process)` subset vs the Worker route.
+Owner runtime-js. Trigger: reading a `NodeProcess` member in a same-realm
+child (including an identity field such as `process.version`); or a decision
+in `kernel/process-equals-web-worker` retiring the route.
+Parity first on the same-realm route: `typeof process.memoryUsage`,
+`typeof process.version`/`platform`/`release`, `Object.keys(process)` subset
+vs the Worker route.
