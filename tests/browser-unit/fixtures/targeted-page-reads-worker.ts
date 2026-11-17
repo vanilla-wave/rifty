@@ -10,6 +10,8 @@ import manifest from './tracker-tree-manifest.json';
 declare const self: DedicatedWorkerGlobalScope;
 const root = '/workspace';
 const encoder = new TextEncoder();
+type Scale = 'small' | 'tracker';
+type Kind = 'file' | 'directory';
 
 // Transparent observation of the real memory backend; no substituted behavior.
 class ObservedMemory extends MemoryFsSync {
@@ -20,7 +22,7 @@ class ObservedMemory extends MemoryFsSync {
   }
 }
 
-async function measure(scale: 'tracker' | 'small') {
+function build(scale: Scale) {
   const memory = createMemoryFs();
   const raw = new ObservedMemory(memory.backend);
   raw.mkdirSync(`${root}/src`, { recursive: true });
@@ -81,7 +83,7 @@ async function measure(scale: 'tracker' | 'small') {
       throw error;
     },
   });
-  const read = (kind: 'file' | 'directory') =>
+  const read = (kind: Kind) =>
     vfs.handleFrame({
       type:
         kind === 'file'
@@ -90,39 +92,81 @@ async function measure(scale: 'tracker' | 'small') {
       requestId: 'measure',
       path: `${root}/${kind === 'file' ? 'src/main.ts' : 'browse'}`,
     });
-  const timings: Record<string, number[]> = {};
-  const reads: Record<string, string[]> = {};
-  for (const kind of ['file', 'directory'] as const) {
-    read(kind);
-    raw.contentReads.length = 0;
-    read(kind);
-    reads[kind] = [...raw.contentReads];
-    timings[kind] = [];
-    for (let batch = 0; batch < 7; batch++) {
-      raw.contentReads.length = 0;
-      const start = performance.now();
-      for (let i = 0; i < 20; i++) read(kind);
-      timings[kind].push((performance.now() - start) / 20);
-    }
-  }
-  read('file');
-  const file = result as OwnerProjectVfsFrame | undefined;
-  if (file?.type !== 'workbench:project-vfs-read-file-result' || !file.ok)
-    throw new Error('file read failed');
-  file.entry.content.fill(0);
-  const isolated = authority.readFileBytesSync(`${root}/src/main.ts`).every((byte) => byte === 42);
-  const fileVersion = file.entry.version;
-  authority.writeFileSync(`${root}/src/main.ts`, encoder.encode('edited'));
-  read('file');
-  const edited = result as OwnerProjectVfsFrame | undefined;
-  read('directory');
-  const directory = result;
-  await vfs.close();
-  return { scale, entryCount, timings, reads, isolated, fileVersion, edited, directory };
+  return { scale, raw, authority, vfs, read, entryCount, last: () => result };
+}
+type Tree = ReturnType<typeof build>;
+
+/** Mean ms per read over one batch; observation buffer cleared like every batch. */
+function batch(tree: Tree, kind: Kind, reads: number): number {
+  tree.raw.contentReads.length = 0;
+  const start = performance.now();
+  for (let i = 0; i < reads; i++) tree.read(kind);
+  return (performance.now() - start) / reads;
 }
 
-self.onmessage = (event: MessageEvent<'tracker' | 'small'>) => {
-  void measure(event.data).then(
+async function measure() {
+  // Both trees share one Worker/heap so runner and GC phases hit both sides.
+  const trees = { small: build('small'), tracker: build('tracker') };
+  const reads: Record<Scale, Record<Kind, string[]>> = {
+    small: { file: [], directory: [] },
+    tracker: { file: [], directory: [] },
+  };
+  const pairs: Record<Kind, { small: number; tracker: number }[]> = { file: [], directory: [] };
+  const batchReads: Record<Kind, number> = { file: 0, directory: 0 };
+  for (const kind of ['file', 'directory'] as const) {
+    for (const tree of Object.values(trees)) {
+      tree.read(kind);
+      tree.raw.contentReads.length = 0;
+      tree.read(kind);
+      reads[tree.scale][kind] = [...tree.raw.contentReads];
+      // Untimed warm-up: JIT tier-up must not land inside a timed batch.
+      for (let i = 0; i < 300; i++) tree.read(kind);
+    }
+    // Batches long enough (>= 2 ms on the small tree) to dwarf the coarse COI clock.
+    let n = 20;
+    while (n < 100_000 && batch(trees.small, kind, n) * n < 2) n *= 2;
+    batchReads[kind] = n;
+    for (let pair = 0; pair < 21; pair++) {
+      // Alternate order so neither side always runs first.
+      const first = pair % 2 === 0 ? trees.small : trees.tracker;
+      const second = first === trees.small ? trees.tracker : trees.small;
+      const a = batch(first, kind, n);
+      const b = batch(second, kind, n);
+      pairs[kind].push(first === trees.small ? { small: a, tracker: b } : { small: b, tracker: a });
+    }
+  }
+  const scales = [];
+  for (const tree of Object.values(trees)) {
+    tree.read('file');
+    const file = tree.last();
+    if (file?.type !== 'workbench:project-vfs-read-file-result' || !file.ok)
+      throw new Error('file read failed');
+    file.entry.content.fill(0);
+    const isolated = tree.authority
+      .readFileBytesSync(`${root}/src/main.ts`)
+      .every((byte) => byte === 42);
+    const fileVersion = file.entry.version;
+    tree.authority.writeFileSync(`${root}/src/main.ts`, encoder.encode('edited'));
+    tree.read('file');
+    const edited = tree.last();
+    tree.read('directory');
+    const directory = tree.last();
+    await tree.vfs.close();
+    scales.push({
+      scale: tree.scale,
+      entryCount: tree.entryCount,
+      reads: reads[tree.scale],
+      isolated,
+      fileVersion,
+      edited,
+      directory,
+    });
+  }
+  return { scales, pairs, batchReads };
+}
+
+self.onmessage = () => {
+  void measure().then(
     (result) => self.postMessage({ ok: true, result }),
     (error: unknown) => self.postMessage({ ok: false, error: String(error) }),
   );

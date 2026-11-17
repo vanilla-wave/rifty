@@ -70,3 +70,20 @@ unknown method after admission.
   behavior. That separate problem remains `perf/fs-rpc-chunk-perf`.
 - Binary request frames remain the next goal slice; v4 changes only this fs
   success payload and the shared version stamp.
+
+## Corrections
+
+- 2026-11-17 — nested relays forward. A child realm serving its nested Workers
+  (node-entry raw relay, dev-server-child rooted `ProjectTerminalFsSync`)
+  answered every relayed `fs.readFileHead`/`fs.readChunk` with a whole-file
+  upstream read: N chunks cost N×N owner requests (esbuild-wasm service reading
+  its 13 978 850 B wasm = 54 chunks: 54×54 requests, 6.9 s local / 31–35 s CI
+  vs 0.15 / 0.65 s one hop).
+  A served VFS implementing `ChunkedReadSource` (`SyncRpcFsSync`; the rooted
+  view after its usual guest resolution) now forwards each request as exactly
+  one upstream request of the same method. Wire, version, validation, error
+  identity and per-request freshness unchanged; no cache. Owner-side whole-file
+  re-read per chunk stays `perf/fs-rpc-chunk-perf`. Carriers:
+  `packages/runtime-js/src/ipc/sync-rpc-fs-relay.test.ts`,
+  `packages/workbench/src/workers/project-terminal-relay-reads.test.ts`.
+

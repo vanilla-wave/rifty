@@ -22,8 +22,8 @@ import {
   base64ToBytes,
   decodeFsPathRequest,
   decodeFsReadRangeRequest,
-  encodeReadFileHead,
 } from './fs-rpc-protocol.ts';
+import { readChunkReplyOf, readFileHeadReplyOf } from './sync-rpc-fs.ts';
 
 export type VfsAccessor = () => FsSync;
 
@@ -84,25 +84,20 @@ export function installRuntimeJsFsHandlers(
     ...getVfs().readdirSync(str(obj(p), 'path')),
   ]);
 
-  // One current owner read carries total size + first chunk (ADR-0365).
+  // One current owner read carries total size + first chunk (ADR-0365). A relay
+  // (nested Worker's dispatcher) forwards the request as-is: one upstream request.
   dispatcher.register(
     FS_METHODS.readFileHead,
-    (p): Uint8Array => encodeReadFileHead(getVfs().readFileBytesSync(str(obj(p), 'path'))),
+    (p): Uint8Array => readFileHeadReplyOf(getVfs(), str(obj(p), 'path')),
     { decodeBinaryRequest: decodeFsPathRequest },
   );
 
-  // Binary reply: ranged slice of the cached buffer (O(1) subarray reference).
-  // TODO(backlog: perf/fs-rpc-chunk-perf) — readFileBytesSync re-reads the whole file per chunk → O(N²)
+  // Binary reply: one range of the current file (forwarded by a relay).
   dispatcher.register(
     FS_METHODS.readChunk,
     (p): Uint8Array => {
       const r = obj(p);
-      const path = str(r, 'path');
-      const offset = num(r, 'offset');
-      const length = num(r, 'length');
-      const bytes = getVfs().readFileBytesSync(path);
-      if (offset >= bytes.length) return new Uint8Array(0);
-      return bytes.subarray(offset, Math.min(bytes.length, offset + length));
+      return readChunkReplyOf(getVfs(), str(r, 'path'), num(r, 'offset'), num(r, 'length'));
     },
     { decodeBinaryRequest: decodeFsReadRangeRequest },
   );

@@ -1,5 +1,7 @@
 # Changelog
 
+- Nested-Worker fs relays forward `fs.readFileHead`/`fs.readChunk` upstream (`ChunkedReadSource`, `readFileHeadReplyOf`/`readChunkReplyOf`) instead of re-reading the whole file per relayed request: a grandchild 14 MB read drops from 6.9 s to 0.14 s locally (esbuild-wasm service start under Vite; ADR-0365 correction).
+
 - Forward `control:kill-tree` `cascade` to the descendant authority; a missing or non-boolean bit is a loud self-exit (ADR-0548).
 
 - Preserve Buffer chunks on process.stdin after merging shared descriptor reads with no-COI children.
