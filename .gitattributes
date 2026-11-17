@@ -3,3 +3,5 @@
 *.gz binary
 # Vendored WASM artifacts (e.g. esbuild.wasm — ADR-0047) are binary.
 *.wasm binary
+# PDF fixtures: xref offsets are byte positions.
+*.pdf binary
