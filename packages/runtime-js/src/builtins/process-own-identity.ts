@@ -15,13 +15,12 @@ export function defineNodeProcessBrand(process: object): void {
   });
 }
 
-/** A `NodeProcess`'s own identity descriptors: a fresh `release` + the brand (ADR-0345). */
-export function defineNodeProcessOwnIdentity(process: object): void {
+/** A fresh Node `release` with Node's outer descriptor (ADR-0345). */
+export function defineNodeProcessRelease(process: object): void {
   Object.defineProperty(process, 'release', {
     value: createNodeProcessRelease(),
     writable: false,
     enumerable: true,
     configurable: true,
   });
-  defineNodeProcessBrand(process);
 }

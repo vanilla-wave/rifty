@@ -56,7 +56,7 @@ import {
   dispatchUncaughtException,
   rethrowUndispatched,
 } from './process-lifecycle-events.ts';
-import { defineNodeProcessOwnIdentity } from './process-own-identity.ts';
+import { defineNodeProcessBrand, defineNodeProcessRelease } from './process-own-identity.ts';
 import { type NodeStdin, makeStdinReader } from './process-stdin-reader.ts';
 import { type NodeStdioWriter, applyTtyShape, makeStdioWriter } from './process-stdio-writer.ts';
 import { type EmitWarning, installProcessWarnings } from './process-warnings.ts';
@@ -384,7 +384,8 @@ export class NodeProcess extends EventEmitter {
       configurable: false,
     });
     attachNodeProcessExit(this, this.#exit);
-    defineNodeProcessOwnIdentity(this);
+    defineNodeProcessRelease(this);
+    defineNodeProcessBrand(this);
     Object.defineProperty(this, NODE_PROCESS_TERMINAL_BOOTSTRAP, {
       value: (terminal: unknown): void => this.#applyTerminalBootstrap(terminal),
       enumerable: false,

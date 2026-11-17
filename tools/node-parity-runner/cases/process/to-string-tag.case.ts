@@ -17,6 +17,13 @@ export const BRAND_SOURCE = `
       own: own && [own.value, own.writable, own.enumerable, own.configurable],
       protoTag: Object.getOwnPropertyDescriptor(Object.getPrototypeOf(p), Symbol.toStringTag) !== undefined,
       enumerable: Object.prototype.propertyIsEnumerable.call(p, Symbol.toStringTag),
+      versions: typeof p.versions,
+      // pdfjs-dist@6.5.438 \`isNodeJS\`, verbatim.
+      isNodeJS:
+        typeof p === 'object' &&
+        p + '' === '[object process]' &&
+        !p.versions.nw &&
+        !(p.versions.electron && p.type && p.type !== 'browser'),
     };
   };
 `;
@@ -24,18 +31,12 @@ export const BRAND_SOURCE = `
 export default {
   code: `${BRAND_SOURCE}
     const p = require('node:process');
-    const isNodeJS =
-      typeof p === 'object' &&
-      p + '' === '[object process]' &&
-      !p.versions.nw &&
-      !(p.versions.electron && p.type && p.type !== 'browser');
     import('node:process').then((ns) => {
       console.log(JSON.stringify({
         binding: brand(p),
         bare: brand(require('process')),
         esmDefault: brand(ns.default),
         sameObject: ns.default === p && require('process') === p,
-        isNodeJS,
       }));
     });
   `,

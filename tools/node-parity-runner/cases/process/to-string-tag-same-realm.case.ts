@@ -1,6 +1,7 @@
 /**
  * The brand on a seeded owner (`new NodeProcess(spec)`) and on a same-realm
- * spawned child's own plain-object `process` (free, `node:process`, `process`).
+ * spawned child's own plain-object `process` (free, `node:process`, `process`),
+ * whose `versions` the brand-based detector reads next.
  */
 import type { ParityCase } from '../../src/types.ts';
 import { BRAND_SOURCE } from './to-string-tag.case.ts';

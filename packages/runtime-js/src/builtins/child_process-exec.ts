@@ -24,6 +24,7 @@ import {
   readActiveNodeProcessBootstrap,
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
+import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
 import { defineNodeProcessBrand } from './process-own-identity.ts';
 import { makeStdioWriter } from './process-stdio-writer.ts';
 import { patchPromiseForNextTick, riftyProcess } from './process.ts';
@@ -165,6 +166,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
     let childProcess!: {
       argv: string[];
       env: Record<string, string>;
+      versions: Record<string, string>;
       pid: number;
       ppid: number;
       stdin: EventEmitter;
@@ -292,6 +294,8 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
     childProcess = {
       argv: ['rifty', scriptPath, ...a.args.slice(1)],
       env: a.opts.env ?? {},
+      // Own mutable copy (ADR-0150), read with the brand by Node detectors (ADR-0345).
+      versions: { ...NODE_PROCESS_IDENTITY.versions },
       pid: a.ownHandle.pid,
       ppid: a.ownHandle.ppid,
       stdin,
