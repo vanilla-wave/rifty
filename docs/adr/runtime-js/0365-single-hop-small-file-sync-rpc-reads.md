@@ -77,7 +77,8 @@ unknown method after admission.
   (node-entry raw relay, dev-server-child rooted `ProjectTerminalFsSync`)
   answered every relayed `fs.readFileHead`/`fs.readChunk` with a whole-file
   upstream read: N chunks cost N×N owner requests (esbuild-wasm service reading
-  its 14 MB wasm: 36×36 requests, 6.9 s local / ~20 s CI vs 0.15 s one hop).
+  its 13 978 850 B wasm = 54 chunks: 54×54 requests, 6.9 s local / 31–35 s CI
+  vs 0.15 / 0.65 s one hop).
   A served VFS implementing `ChunkedReadSource` (`SyncRpcFsSync`; the rooted
   view after its usual guest resolution) now forwards each request as exactly
   one upstream request of the same method. Wire, version, validation, error
