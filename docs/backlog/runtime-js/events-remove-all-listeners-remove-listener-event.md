@@ -5,7 +5,7 @@ title: "`EventEmitter#removeAllListeners` emits `'removeListener'` per dropped l
 created: 2026-09-25
 why: Node's `removeAllListeners` emits `'removeListener'` for each removed listener (LIFO; no argument: own-key order, `'removeListener'` last); `@riftydev/io` (rifty's `node:events`) clears silently, so code that tracks listeners through `'removeListener'` never sees the removal
 sources: [docs/backlog/runtime-js/reference/worker-threads-handle-keepalive-evidence.md, docs/backlog/runtime-js/reference/worker-threads-handle-keepalive-final-green.json, docs/adr/runtime-js/0446-count-live-worker-threads-workers-in-child-realm-keepalive.md]
-code: [packages/io/src/event-emitter.ts, packages/runtime-js/src/builtins/fs-watch.ts, packages/kernel/src/process-manager.ts]
+code: [packages/io/src/event-emitter.ts, packages/runtime-js/src/builtins/fs-watch.ts, packages/kernel/src/process-manager.ts, packages/runtime-js/src/builtins/process.ts]
 ---
 
 ## Context
@@ -29,6 +29,15 @@ turned `no-coi-project-watches.test.ts` "silently retires FSWatcher abort and ev
 callbacks" red — ADR-0422 retirement (`fs-watch.ts:117`) and kernel teardown
 (`process-manager.ts` `removeAllListeners()` calls) rely on the silent
 clear. A fix separates those internal silent clears from the public method.
+
+2026-11-17 (REV-12, PR #400 cross-review): a fork child's IPC hold is Node's
+`'message'` ref count, released by `'removeListener'`; with the silent clear,
+`NodeProcess` keeps a `removeAllListeners` override releasing one ref per
+removed listener. Node v24.16.0 vs rifty: `process.removeAllListeners ===
+EventEmitter.prototype.removeAllListeners` true / false;
+`EventEmitter.prototype.removeAllListeners.call(process, 'message')` in a fork
+child exits it (Node) / keeps it held (rifty: the override is bypassed).
+Kill condition: this item lands → delete the override.
 
 ## Next
 

@@ -364,6 +364,9 @@ export class NodeProcess extends EventEmitter {
   #ipcKeepaliveHeld = false;
   // Node's `control.refCounted()`: +1 per `'message'` newListener, -1 per removeListener.
   #ipcMessageRefs = 0;
+  readonly #ipcReleaseHook = (event: unknown): void => {
+    if (event === 'message') this.#syncIpcKeepalive(this.#ipcMessageRefs - 1);
+  };
   readonly #workerMessageListeners = new Set<(message: unknown) => void>();
   readonly #workerIpcBacklog: unknown[] = [];
   #latestTtyControlSize: { readonly cols: number; readonly rows: number } | null = null;
@@ -472,9 +475,7 @@ export class NodeProcess extends EventEmitter {
         this.on('newListener', (event: unknown) => {
           if (event === 'message') this.#syncIpcKeepalive(this.#ipcMessageRefs + 1);
         });
-        this.on('removeListener', (event: unknown) => {
-          if (event === 'message') this.#syncIpcKeepalive(this.#ipcMessageRefs - 1);
-        });
+        this.on('removeListener', this.#ipcReleaseHook);
       }
     } else {
       this.pid = 1;
@@ -506,13 +507,17 @@ export class NodeProcess extends EventEmitter {
     installProcessWarnings(this);
   }
 
-  // Silent in `@riftydev/io` (no `'removeListener'` per listener, Node emits them).
+  // Silent in `@riftydev/io`; Node's emits `'removeListener'` per listener, so a still
+  // registered release hook drops one ref per removed `'message'` listener.
   override removeAllListeners(event?: string | symbol): this {
-    const result = super.removeAllListeners(event);
-    if (event === undefined || event === 'message') {
-      this.#syncIpcKeepalive(this.listenerCount('message'));
-    }
-    return result;
+    const released =
+      (event === undefined || event === 'message') &&
+      this.listeners('removeListener').includes(this.#ipcReleaseHook)
+        ? this.listenerCount('message')
+        : 0;
+    super.removeAllListeners(event);
+    if (released > 0) this.#syncIpcKeepalive(this.#ipcMessageRefs - released);
+    return this;
   }
 
   // Own instance-bound fields, not prototype methods: Node's detached

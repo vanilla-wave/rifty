@@ -4,7 +4,8 @@ import { EventEmitter } from './event-emitter.ts';
 type Listener = (...args: unknown[]) => void;
 
 // `on`/`off` stay methods in the public type: a TS subclass may override them
-// and reach the base through `super` (a field-typed alias refuses both).
+// and reach the base through `super` (a field-typed alias refuses both). The
+// type half is carried by the `@riftydev/io` typecheck lane (`tsc`).
 class Traced extends EventEmitter {
   readonly calls: string[] = [];
 
