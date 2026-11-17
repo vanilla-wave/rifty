@@ -40,8 +40,11 @@ exits 0; the file contains `[FETCH-REDIRECT] Warning: redirect-proof`.
 legacy and pdf-parse@2.4.5 (depends on `pdfjs-dist: 5.4.296`, `npm view
 pdf-parse@2.4.5 dependencies`) print on stderr
 ``Warning: Cannot access the `require` function: "TypeError: process.getBuiltinModule is not a function".``
-in rifty's no-COI toolchain; native Node 24.16.0 (same probe, same PDFs) does
-not, and the extracted text is byte-equal. `tests/no-coi/no-coi-pdf-text.spec.ts`
+in rifty's no-COI toolchain and then never load `@napi-rs/canvas`
+(`pdf.mjs` `node_utils`: `createRequire` via `getBuiltinModule`); native Node
+24.16.0 (same probe, same PDFs) loads it and does not warn. The extracted text
+is byte-equal; rifty needs no polyfill only because the guest exposes the
+browser `DOMMatrix`/`Path2D` (`runtime-js/guest-browser-only-globals`). `tests/no-coi/no-coi-pdf-text.spec.ts`
 pins the line as a declared residual (`NO_GET_BUILTIN_MODULE`; green locally on
 Chromium against Node v24.16.0); kill: when `getBuiltinModule` lands, drop it
 from the expected stderr.

@@ -22,8 +22,10 @@ const scenarios = [
   { name: 'pdf-parse', version: '2.4.5', api: 'getText', script: 'pdf-parse-text.cjs' },
 ];
 
-// Declared residual (backlog: runtime-js/process-module-loader-surface): no
-// `process.getBuiltinModule`, so the bundled pdfjs warns once before the same text path.
+// Declared residuals: no `process.getBuiltinModule` (backlog:
+// runtime-js/process-module-loader-surface), so pdfjs warns and never loads
+// `@napi-rs/canvas`; it then finds the guest's browser `DOMMatrix`/`Path2D`
+// (Node: undefined; backlog: runtime-js/guest-browser-only-globals) and needs no polyfill.
 const NO_GET_BUILTIN_MODULE =
   'Warning: Cannot access the `require` function: "TypeError: process.getBuiltinModule is not a function".\n';
 

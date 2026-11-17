@@ -1,10 +1,10 @@
 ---
 area: runtime-js
 status: draft
-title: "`node:path` functions accept non-string arguments instead of throwing Node's `ERR_INVALID_ARG_TYPE`"
+title: "`node:path` functions do not validate non-string arguments: `join` returns `'.'`, the rest throw a bare `TypeError`, not Node's `ERR_INVALID_ARG_TYPE`"
 created: 2026-11-17
 why: `path.join({})` returns `'.'` and the other functions throw a bare `TypeError` (`p.startsWith is not a function`) where Node throws `ERR_INVALID_ARG_TYPE`, so argument-validation branches and error text differ
-sources: [docs/backlog/runtime-js/process-constructor-name-identity.md]
+sources: [docs/adr/runtime-js/0345-expose-exact-node-24-0-0-process-release-identity.md, docs/public/compat/modules.md]
 code: [packages/runtime-js/src/builtins/path.ts]
 ---
 
@@ -23,9 +23,12 @@ path.dirname / path.extname  Node ERR_INVALID_ARG_TYPE     · rifty bare TypeErr
 path.relative  Node ERR_INVALID_ARG_TYPE '… "from" …'      · rifty bare TypeError
 ```
 
+The RDY-6 reviewer's probe adds `path.isAbsolute` and `path.parse` (bare
+`TypeError`); `path.format` and `path.toNamespacedPath` match Node.
+
 `path.ts` `join` filters and joins its parts with no type check; the others
-reach string methods unvalidated. No compat page row covers `node:path`
-argument validation.
+reach string methods unvalidated. Compat ❌: `docs/public/compat/modules.md`
+`node:path` argument validation.
 
 ## Next
 

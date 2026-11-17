@@ -59,5 +59,7 @@ Sass facade would leave every other Node consumer with the same runtime gap.
   object) carries Node's own brand: own `Symbol.toStringTag: 'process'`
   (writable, non-enumerable, non-configurable) → `String(process) ===
   '[object process]'`. Compatibility identity like `name: 'node'`, not an OS
-  claim; ADR-0026's `platform`/`arch` unchanged. Consumer: pdfjs-dist@6.5.438 /
-  pdf-parse@2.4.5 `isNodeJS`. Proof: parity `process/to-string-tag{,-eval}`.
+  claim; ADR-0026's `platform`/`arch` unchanged. The same-realm object also owns
+  a fresh `versions` copy, which brand-based detectors read next. Consumer:
+  pdfjs-dist@6.5.438 / pdf-parse@2.4.5 `isNodeJS`. Proof: parity
+  `process/to-string-tag{,-same-realm,-eval}`.

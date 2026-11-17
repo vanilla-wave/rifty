@@ -18,15 +18,16 @@ mode), Node v24.16.0 vs rifty:
 ```
 Object.getPrototypeOf(p).constructor.name  → Node "process"   · rifty "NodeProcess"
 util.inspect(p).slice(0, 8)                → Node "process "  · rifty "NodeProc"
-vm.runInContext('1', p)                    → Node ERR_INVALID_ARG_TYPE "… Received an instance of process"
-                                             rifty code undefined, "… Received an instance of NodeProcess"
+util.inspect(p, { depth: -1 })             → Node "[process]" · rifty "[Object]"
+vm.runInContext('1', p)                    → Node "… Received an instance of process"
+                                             rifty "… Received an instance of NodeProcess"
 ```
 
 Node: `node -e "Promise.reject(process)"` reports `reason "#<process>"`; rifty's
 `noSideEffectsToString` (`process-lifecycle-events.ts`) renders
 `#<NodeProcess>` from the constructor name (code reading, not executed).
-The vm `ERR_INVALID_ARG_TYPE` message comes from `assertContextified`
-(`vm/index.ts`), which also omits Node's `code`.
+The vm message comes from `assertContextified` (`vm/index.ts`); its missing
+`code` is a separate gap (`runtime-js/vm-context-arg-validation`).
 
 The class is `NodeProcess` (`process.ts`, ADR-0157), also a published export of
 the `./builtins/process` subpath — a rename touches that surface. The
@@ -45,5 +46,5 @@ honouring tags before the name is fixed would print `NodeProcess [process] {`
 Owner runtime-js. Trigger: a program or tool whose output or branch depends on
 `process.constructor.name`, `util.inspect(process)` or the rejection text.
 Parity first on the `node:process` binding (in-process the free global is the
-host's): constructor name, inspect header, `Promise.reject(process)` reason,
-`vm.runInContext('1', process)` code and message.
+host's): constructor name, inspect header (default and `depth: -1`),
+`Promise.reject(process)` reason, the `Received an instance of …` text.
