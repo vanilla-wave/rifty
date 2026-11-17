@@ -21,9 +21,9 @@ Observed 2026-11-17 after the stamp-miss restore removal (ADR-0135 correction
   `package-acquisition-authority.test.ts`) and direct dispatches in
   `package-acquisition-authority{,.fault}.test.ts`,
   `package-acquisition-invalid-claim.test.ts`,
-  `tests/integration/npm-shell-eddy-glue.test.ts`. The harness tests drive
-  `snapshotSource` with `fallback: 'install'`, a combination production no
-  longer sends (first materialization is `snapshot-only`; `activate-and-ensure`
+  `tests/integration/npm-shell-eddy-glue.test.ts`. The install-backed harness
+  tests drive `snapshotSource` with `fallback: 'install'`, a combination
+  production no longer sends (first materialization is `snapshot-only`; `activate-and-ensure`
   has no `snapshotSource`).
 - `project-switch` command with `resetPackages`: no production sender; the
   authority calls `adapter.switchProject` internally without it. Senders are
@@ -31,7 +31,9 @@ Observed 2026-11-17 after the stamp-miss restore removal (ADR-0135 correction
   project switch when durable destination revocation fails") and
   `tests/integration/npm-shell-command.test.ts`, both with their own adapters.
   The owner adapter's clear+reseed branch had no runner left, so it now throws
-  `NotImplementedError('package-acquisition.owner.project-switch.reset-packages')`.
+  `NotImplementedError('package-acquisition.owner.project-switch.reset-packages')`
+  — after the authority's durable revoke (`package-acquisition-authority.ts`
+  `project-switch` case), not before effects.
 
 Probe: `git grep -n -E "type: 'ensure'|type: 'project-switch'|resetPackages"
 -- 'packages/**' ':!*.test.ts' ':!*test-fixture*'` → only the type
