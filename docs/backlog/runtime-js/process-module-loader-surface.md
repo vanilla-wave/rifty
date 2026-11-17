@@ -48,7 +48,13 @@ is byte-equal; rifty needs no polyfill only because the guest exposes the
 browser `DOMMatrix`/`Path2D` (`runtime-js/guest-browser-only-globals`). `tests/no-coi/no-coi-pdf-text.spec.ts`
 pins the line as a declared residual (`NO_GET_BUILTIN_MODULE`; green locally on
 Chromium against Node v24.16.0); kill: when `getBuiltinModule` lands, drop it
-from the expected stderr.
+from the expected stderr. Next blockers on the same Node path (scratch no-COI
+spec, pdfjs-dist@6.5.438 legacy, Node v24.16.0 vs rifty): `getDocument({ url:
+'invoice.pdf' })` Node text · rifty rejects `process.getBuiltinModule is not a
+function`; `{ data, standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/' }`
+text on both, but rifty warns `Unable to load font data at: …LiberationSans-Regular.ttf`
+(Node loads it silently). Code reading: `pdf.mjs` `getUrlProp` (`url`),
+`node_utils_fetchData` (`fs/promises`: cMap / standard-font / wasm data).
 
 REGRESSION TRAP — `getBuiltinModule`: `net/src/sqlite/engine.ts:48` + `engine-shimmed-process.test.ts` use its ABSENCE as the "not a real Node realm" signal; adding it breaks sqlite init. MUST refactor detection (e.g. `versions.rifty` marker) + update the pin FIRST, regression test first.
 

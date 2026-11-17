@@ -179,7 +179,7 @@ ignore `contextName` / `contextOrigin` / `contextCodeGeneration` (invalid values
 `DONT_CONTEXTIFY` the ceiling replaces Node's `ERR_INVALID_ARG_TYPE` for those, `filename` and
 offsets — `backlog/runtime-js/vm-run-in-new-context-options`.
 
-Gap (❌, both engines, `backlog/runtime-js/vm-context-arg-validation`): a non-object or
+Gap (❌, both engines by code reading, `backlog/runtime-js/vm-context-arg-validation`): a non-object or
 non-contextified context arg throws a `TypeError` without Node's `ERR_INVALID_ARG_TYPE` code, and
 `runInNewContext`/`createContext` with a primitive throw `Object.defineProperty called on non-object`.
 

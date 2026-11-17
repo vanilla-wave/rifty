@@ -28,7 +28,9 @@ row ("Known over-export").
 parity case, Node v24.16.0 `[shapeMode, kCapture, Symbol.toStringTag]` vs rifty
 seven `Symbol(rifty.runtime-js.process-*.v1)` keys plus `Symbol.toStringTag`
 (second). Pre-existing; the brand fix only added the tag (ADR-0345).
-Advisory: no known consumer.
+Similarly `versions` is a writable data property on `NodeProcess` and the
+same-realm child; Node's is `{ writable: false, enumerable: true, configurable:
+true }` (`node -e`, v24.16.0). Advisory: no known consumer.
 
 ## Next
 

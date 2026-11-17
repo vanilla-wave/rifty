@@ -26,7 +26,8 @@ indexedDB caches self   rifty "object"   · Node "undefined"
 window document         rifty "undefined" · Node "undefined"
 ```
 
-These are native `WorkerGlobalScope` members; rifty installs none of them.
+These are native `WorkerGlobalScope` members (`WorkerGlobalScope` itself is
+visible too); rifty adds none, it only re-defines `self` as writable.
 rifty itself relies on several: a writable `self` for emnapi
 (`ipc/worker-realm-compat.ts`), `importScripts` as a worker-scope signal
 (`builtins/vm/quickjs-loader.ts`), the native `XMLHttpRequest` for no-COI
