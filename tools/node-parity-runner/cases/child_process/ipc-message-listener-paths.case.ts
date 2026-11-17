@@ -4,7 +4,8 @@ import type { ParityCase } from '../../src/types.ts';
  * A fork child's IPC hold follows every way a `'message'` listener is added —
  * Node keys it to `'newListener'`, so the base prototype's `on` and
  * `addListener`, `prependListener` and `once` all keep the child alive until
- * the parent's late message arrives.
+ * the parent's late message arrives — also when a guest `'newListener'` hook
+ * removes the previous listener mid-add.
  */
 const child = (attach: string) => `
   const p = typeof __process === 'undefined' ? process : __process;
@@ -20,6 +21,13 @@ const paths = {
   addListener: 'p.addListener("message", handler)',
   prepend: 'p.prependListener("message", handler)',
   once: 'p.once("message", handler)',
+  // A 'newListener' hook removing the previous listener mid-add (Node counts refs).
+  replace: [
+    'const previous = () => {}',
+    'p.on("message", previous)',
+    'p.on("newListener", (e) => { if (e === "message") p.removeListener("message", previous); })',
+    'p.addListener("message", handler)',
+  ].join('; '),
 };
 
 const c: ParityCase = {
@@ -50,7 +58,7 @@ const c: ParityCase = {
     })();
   `,
   expected:
-    '[["baseOn",["armed","pong"],0],["baseAddListener",["armed","pong"],0],["addListener",["armed","pong"],0],["prepend",["armed","pong"],0],["once",["armed","pong"],0]]\n',
+    '[["baseOn",["armed","pong"],0],["baseAddListener",["armed","pong"],0],["addListener",["armed","pong"],0],["prepend",["armed","pong"],0],["once",["armed","pong"],0],["replace",["armed","pong"],0]]\n',
 };
 
 export default c;

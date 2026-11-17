@@ -90,9 +90,13 @@ const c: ParityCase = {
       seen.push('count:' + t.listenerCount('x'));
     });
 
-    // \`once\` registers through \`this.on\` but returns the emitter itself.
+    // \`once\`/\`prependOnceListener\` register through \`this.on\`/\`this.prependListener\`
+    // but return the emitter itself.
     run('once-return', (seen) => {
-      class Quiet extends EventEmitter { on(ev, fn) { super.on(ev, fn); } }
+      class Quiet extends EventEmitter {
+        on(ev, fn) { super.on(ev, fn); }
+        prependListener(ev, fn) { super.prependListener(ev, fn); }
+      }
       const q = new Quiet();
       seen.push(q.once('z', () => {}) === q, q.prependOnceListener('z', () => {}) === q);
     });
