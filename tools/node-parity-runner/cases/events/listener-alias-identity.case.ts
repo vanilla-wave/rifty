@@ -89,11 +89,19 @@ const c: ParityCase = {
       t.emit('x');
       seen.push('count:' + t.listenerCount('x'));
     });
+
+    // \`once\` registers through \`this.on\` but returns the emitter itself.
+    run('once-return', (seen) => {
+      class Quiet extends EventEmitter { on(ev, fn) { super.on(ev, fn); } }
+      const q = new Quiet();
+      seen.push(q.once('z', () => {}) === q, q.prependOnceListener('z', () => {}) === q);
+    });
   `,
   expected:
     '{"ee":[true,true],"names":["addListener","removeListener"],"lengths":[2,2],"classes":[["Stream",true,true],["Readable",true,true],["Writable",true,true],["Duplex",true,true],["Transform",true,true],["PassThrough",true,true]],"instances":[[true,true],[true,true],[true,true],[true,true]]}\n' +
     'override-on ["on:data","on:data","on:end","data:1","data:1","removeListener:data","removeListener:data","removeListener:end","end","count:0,0"]\n' +
-    'override-addListener ["add:x","fired","fired","remove:x","remove:x","count:0"]\n',
+    'override-addListener ["add:x","fired","fired","remove:x","remove:x","count:0"]\n' +
+    'once-return [true,true]\n',
 };
 
 export default c;

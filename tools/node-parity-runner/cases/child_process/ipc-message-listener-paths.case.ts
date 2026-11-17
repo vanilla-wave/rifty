@@ -1,0 +1,56 @@
+import type { ParityCase } from '../../src/types.ts';
+
+/**
+ * A fork child's IPC hold follows every way a `'message'` listener is added —
+ * Node keys it to `'newListener'`, so the base prototype's `on` and
+ * `addListener`, `prependListener` and `once` all keep the child alive until
+ * the parent's late message arrives.
+ */
+const child = (attach: string) => `
+  const p = typeof __process === 'undefined' ? process : __process;
+  const EventEmitter = require('node:events');
+  const handler = () => { p.send('pong'); p.disconnect(); };
+  ${attach};
+  p.send('armed');
+`;
+
+const paths = {
+  baseOn: 'EventEmitter.prototype.on.call(p, "message", handler)',
+  baseAddListener: 'EventEmitter.prototype.addListener.call(p, "message", handler)',
+  addListener: 'p.addListener("message", handler)',
+  prepend: 'p.prependListener("message", handler)',
+  once: 'p.once("message", handler)',
+};
+
+const c: ParityCase = {
+  kind: 'child-worker',
+  expectedPhysicalWorkers: Object.keys(paths).length,
+  cwd: '/project',
+  setup: {
+    files: Object.fromEntries(
+      Object.entries(paths).map(([name, attach]) => [`project/${name}.js`, child(attach)]),
+    ),
+  },
+  code: `
+    const { fork } = require('node:child_process');
+    const cwd = require('node:process').cwd();
+    const run = (name) => new Promise((resolve) => {
+      const messages = [];
+      const child = fork(name + '.js', [], { cwd, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
+      child.on('message', (m) => {
+        messages.push(m);
+        if (m === 'armed') setTimeout(() => { if (child.connected) child.send('ping'); }, 100);
+      });
+      child.on('exit', (code) => resolve([name, messages, code]));
+    });
+    void (async () => {
+      const out = [];
+      for (const name of ${JSON.stringify(Object.keys(paths))}) out.push(await run(name));
+      console.log(JSON.stringify(out));
+    })();
+  `,
+  expected:
+    '[["baseOn",["armed","pong"],0],["baseAddListener",["armed","pong"],0],["addListener",["armed","pong"],0],["prepend",["armed","pong"],0],["once",["armed","pong"],0]]\n',
+};
+
+export default c;
