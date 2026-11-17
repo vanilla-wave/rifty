@@ -153,3 +153,10 @@ cause is not a repair (`AGENTS.md` §Fidelity; the PR-4 budget correction above
 was already spent once). Whether a Node-timing reference belongs in acceptance
 is an open fork, not decided here. Owner/trigger unchanged.
 
+## Follow-up — 2026-11-17 (PR #397)
+
+`tests/e2e/m0-boot.spec.ts` "non-TypeScript starter …" re-lands the dropped
+a1bc2191a hunk: outer 120 s so Playwright's implicit 30 s stops cutting its
+declared 90 s `expectViteDevServerReady`; inner bound and Problems assertions
+unchanged. Sweep of `tests/e2e`: the only Vite-readiness wait still under the
+default test timeout. Judge correction, not a runtime repair.

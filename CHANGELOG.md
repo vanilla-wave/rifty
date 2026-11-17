@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Browser-unit: `opfs-structural-repair` seeds and repair are judged after real settlement (`settleOpfsSetup` / `fence()`), not by the 50 ms report bound kept for the held phases; a slow-but-successful native close (80 ms probe) had failed the seed 8/8 (main run 40251341113). Real seed failures still fail by name. Closes the PR #340 sweep gap (it scoped by `replica-*` filenames).
+- Browser-unit: I4 targeted page reads compare small vs Tracker trees in one Worker with warm-up and 21 interleaved >=2 ms batch pairs; the gate is the median per-pair ratio <=2 (was ratio of independent medians, 2/96 CI misses) plus the unchanged <=1 ms absolute bound. An O(n) metadata-walk mutant still fails (~270x).
+- e2e: the non-TypeScript Problems test gets an explicit 120 s budget so Playwright's implicit 30 s no longer cuts its declared 90 s Vite readiness wait (re-lands the dropped a1bc2191a hunk).
 - CI: every `ci.yml` job and the cross-browser job pin `ubuntu-24.04`; `ubuntu-latest` moved to 26.04, where the locked Playwright 1.60.0 refuses to install Chromium (all browser jobs red in ~25 s; unit's agent-bench lifecycle tests lose their postinstall Chromium). The browser cache key carries the runner image. Move: `backlog/toolchain-build/playwright-ubuntu-26-runner-image`.
 - Browser-unit: omit Playwright's SW network instrumentation until Chromium's stopped-target `Network.getResponseBody` crash is fixed upstream (crbug 573662744). Native SW checks, page/DOM tracing and zero retries remain; real HTTP-denial stress regression covers the observer boundary.
 
