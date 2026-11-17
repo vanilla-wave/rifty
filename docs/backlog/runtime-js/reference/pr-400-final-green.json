@@ -1,0 +1,181 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS, no blockers; 2 concerns + 1 nit are NOTE. Round-3 fix verified: RED 0e994cbe8 fails at the c1f343583 product for the right reason (replaceAll/clearAll [\"armed\"], noReleaseHook [\"armed\"] vs Node [\"armed\",\"pong\"]/[\"armed\",\"alive\"]), GREEN at HEAD; the new `released` path kills the predecessor's mutant (M1 -> [\"armed\",\"hung\"]); 26/28 extra fork-IPC paths x json+advanced match Node v24.16.0 (2 diffs pre-existing or recorded); child_process/process/events/worker_threads/stream/readline parity lanes green. Merge only on green PR CI at HEAD 9ecc33394 (PR-6): lint-and-typecheck pass; unit-and-conformance (parity)/(run) pending at review time; browser/e2e red at playwright install (infra, PR #397). Driver adds reviewed_sha and commits the landing verdict (REV-8) before ready/merge.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #400, observed-defect repair (rifty-fix, no contract doc), VERIFY PASS of HEAD 9ecc33394afabb581d36f29d9865bd92c806540b after cross-review round-3 fixes 0e994cbe8 (RED), 610790b9e (fix), 9ecc33394 (typescript-worker SHA pin); previous verify pass reviewed c1f343583df4a5f7daed9d73123043a1fb8c1e9b (PASS). Authority: real-Node baseline Node v24.16.0 (EventEmitter.prototype.on === addListener, off === removeListener; readable-stream 2/3/4 `addListener = on` override flows in Node, RangeError in rifty at BASE; once/prependOnceListener return `this`; process.on === EventEmitter.prototype.on; the fork child's IPC hold = _forkChild 'newListener'/'removeListener' meta-listeners with control.refCounted()/unrefCounted(), and removeAllListeners emits 'removeListener' per listener while any 'removeListener' listener exists) and the user hand-off quoted in the PR body (identity, override sweep keeping process/stdin Node-faithful, RED first, real readable-stream v3+v4 data flow, mechanism sweep, acceptance on a real readable-stream package, exceljs ceiling out of scope, discoveries to backlog). BASE 8a4a612ed11d5704b65d2a907c85bfa11784d170.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "EventEmitter.prototype.on === addListener and off === removeListener (one function object per pair, name addListener/removeListener) on the prototype, every stream class and instances",
+      "source": "acceptance",
+      "trace": "baseline: Node v24.16.0 events.js identity (user hand-off)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/events/listener-alias-identity.case.ts:17",
+      "note": ""
+    },
+    {
+      "row": "readable-stream override pattern (`on` calls Stream.prototype.on.call, `addListener = on`) and its mirror (`addListener` override, `on = addListener`) run without recursion, as Node",
+      "source": "acceptance",
+      "trace": "baseline: Node v24.16.0 + scenario (user hand-off RED: identity + override pattern)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/events/listener-alias-identity.case.ts:41",
+      "note": ""
+    },
+    {
+      "row": "`once`/`prependOnceListener` register through `this.on`/`this.prependListener` and return the emitter itself even when the `on`/`prependListener` override returns something else",
+      "source": "acceptance",
+      "trace": "baseline: Node v24.16.0 events.js once/prependOnceListener (`this.on(...)`/`this.prependListener(...)`; `return this`)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/events/listener-alias-identity.case.ts:95",
+      "note": ""
+    },
+    {
+      "row": "Real readable-stream v3 and v4 'data' flowing inside rifty (plus v2), pipe and pipeline, original registry tarballs",
+      "source": "acceptance",
+      "trace": "scenario (user hand-off: real readable-stream v3 and v4 data flowing; parity runner carrier)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/readable-stream-v4-real.case.ts:7",
+      "note": ""
+    },
+    {
+      "row": "Acceptance: a real readable-stream-based package works in the runtime (through2 2.0.5 / 4.0.2 transform in a pipe)",
+      "source": "acceptance",
+      "trace": "scenario (user hand-off acceptance: observable proof, parity/e2e)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/readable-stream-v3-real.case.ts:7",
+      "note": ""
+    },
+    {
+      "row": "process keeps the inherited listener methods (process.on/off === EventEmitter.prototype.on/off, on===addListener, off===removeListener) and process.stdin's flow override is reachable through both names (stdin addListener('data') flows)",
+      "source": "acceptance",
+      "trace": "scenario (user hand-off: override of one name must not silently miss calls through the other) + baseline Node v24.16.0",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/listener-aliases.case.ts:20",
+      "note": ""
+    },
+    {
+      "row": "A fork child's IPC 'message' hold is taken through every add path: EventEmitter.prototype.on.call / addListener.call, process.addListener, prependListener, once (Node keys it to 'newListener')",
+      "source": "acceptance",
+      "trace": "baseline: Node v24.16.0 _forkChild meta-listeners + scenario (user hand-off: keep process Node-faithful under the aliasing) + ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/ipc-message-listener-paths.case.ts:19",
+      "note": ""
+    },
+    {
+      "row": "The fork child's IPC hold is Node's ref count (+1 per 'message' newListener, -1 per removeListener): a guest 'newListener' hook removing the previous 'message' listener mid-add keeps the hold",
+      "source": "acceptance",
+      "trace": "baseline: Node v24.16.0 _forkChild control.refCounted()/unrefCounted() + ADR-0448 (2026-11-17 correction)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/ipc-message-listener-paths.case.ts:25",
+      "note": ""
+    },
+    {
+      "row": "removeAllListeners('message') / removeAllListeners() releases one ref per removed 'message' listener while Node's release hook is registered (a guest 'newListener' hook clearing listeners mid-add keeps the hold; removeAllListeners('message') with no other listener releases the child), and releases nothing once the 'removeListener' hook is gone",
+      "source": "acceptance",
+      "trace": "baseline: Node v24.16.0 events.js removeAllListeners (per-listener removeListener -> _forkChild onRemoveListener -> control.unrefCounted()) + ADR-0448 (2026-11-17 correction)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/ipc-message-listener-paths.case.ts:32",
+      "note": ""
+    },
+    {
+      "row": "ADR-0448 D5: a fork child's IPC lane holds the realm while it has a 'message' listener (both serializations): released when the last listener leaves and on disconnect; a launch-less URL Worker's raw port is never held",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/child_process/ipc-message-listener-paths.case.ts:43",
+      "note": "removeAllListeners('message') release now discriminated (`released`, `noReleaseHook`); the no-argument removeAllListeners() release branch (process.ts:514 `event === undefined ||`) is not: mutant dropping it holds a listener-less child and survives every committed carrier (Completeness concern)."
+    },
+    {
+      "row": "Builtin internals detach through Node's name removeListener (events.once, pipe/unpipe, readline close, pipeline, Readable.toWeb, Writable.toWeb, async iterator): a removeListener override sees them, an off override none",
+      "source": "acceptance",
+      "trace": "baseline: Node v24.16.0 (user hand-off: keep overrides Node-faithful under aliasing)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/events/internal-removal-name.case.ts:69",
+      "note": ""
+    },
+    {
+      "row": "@riftydev/io `EventEmitter` type keeps `on`/`off` as methods: a TS subclass can `override on()/off()` and reach the base through `super` (BASE's public type allowed it; published d.ts included)",
+      "source": "public-api",
+      "trace": "baseline: BASE 8a4a612ed public type of `@riftydev/io` EventEmitter (src/index.ts export)",
+      "status": "pass",
+      "citation": "packages/io/src/event-emitter-aliases.test.ts:12",
+      "note": ""
+    },
+    {
+      "row": "Original npm fixture bytes: lock resolved/integrity match provenance, SHA512 SRI + size verified before system tar extraction, same bytes in both runtimes",
+      "source": "frozen-artifact",
+      "trace": "baseline: npm registry tarballs (README provenance, Node v24.16.0 / npm 11.17.0)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/src/npm-tree-files.ts:66",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/process.ts:514",
+          "evidence": "Scratch worktree at 9ecc33394, mutant M3 `(event === undefined || event === 'message')` -> `(event === 'message')` in the removeAllListeners override: `pnpm -s test:parity child_process/` -> 30 cases, all match; `npx vitest run --project unit packages/runtime-js/src/ipc packages/runtime-js/src/builtins/process packages/io/src/event-emitter` -> 26 files / 181 tests passed. Scratch parity probe path `p.on('message', handler); p.removeAllListeners(); setTimeout(() => { p.send('hung'); p.disconnect(); }, 500).unref()`: Node v24.16.0 [\"armed\"] 0; HEAD [\"armed\"] 0; M3 [\"armed\",\"hung\"] 0. (`clearAll` does not discriminate: M3 keeps refs 2 there, Node 1, both held.) Other mutants killed by the committed case: M1 (predecessor's mutant: `#syncIpcKeepalive()` without reset) -> released [\"armed\",\"hung\"]; M2 (drop the hook-registered guard) -> noReleaseHook [\"armed\"]; M4 (count after super) -> released hung; M5 (reset to 0) -> replaceAll/clearAll [\"armed\"].",
+          "summary": "The no-argument removeAllListeners() release branch is undiscriminated: dropping `event === undefined ||` passes every committed carrier while holding a child with no 'message' listener. One more path in ipc-message-listener-paths (`on(handler)` + `removeAllListeners()` + unref'd 'hung' timer -> [\"armed\"]) would protect the ADR-0448 D5 row.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "PR #400 body (## RED -> GREEN table)",
+          "evidence": "`gh pr view 400 --json body` at headRefOid 9ecc33394: commit list ends at \"round 2: RED 35a113994, fix d597ec176\"; no row for replaceAll/clearAll/released/noReleaseHook.",
+          "summary": "PR body (the re-entry record) does not yet list round 3: RED 0e994cbe8 (replaceAll/clearAll/noReleaseHook [\"armed\"]), fix 610790b9e.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/io/src/event-emitter.ts:101",
+          "evidence": "Scratch parity probe (plain emitter): `e.on('a', f); e.removeAllListeners(undefined)` and the same with a 'removeListener' listener -> Node v24.16.0 [1,1,1], HEAD [0,0,0]. Fork child `p.on('message', handler); p.removeAllListeners(undefined)` (json and advanced) -> Node [\"armed\",\"pong\"] 0, HEAD [\"armed\"] 0. BASE 8a4a612ed io body identical (`if (event === undefined) this.listenersMap.clear()`), so pre-existing, not a regression.",
+          "summary": "Pre-existing: Node's removeAllListeners keys 'all' on arguments.length === 0, so an explicit `undefined` removes nothing; @riftydev/io (and NodeProcess's override) treat it as 'all'. REV-12 route: a context line on the existing removeAllListeners backlog item (runtime-js/events-remove-all-listeners-remove-listener-event).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "9ecc33394afabb581d36f29d9865bd92c806540b"
+}
