@@ -1,9 +1,9 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "Final+GREEN: кодовых блокеров нет; merge только после green CI на HEAD. Однократный снимок run 43997609555 ещё показывает pending jobs. Независимо подтверждены BASE relay RED 36/6 и 16/4, GREEN 46 committed unit tests плюс один scratch freshness probe, OPFS 80 ms RED→GREEN, отказ timing judge на O(n)-мутанте, native port probe и retirement gate. PR-4: assertions и product deadlines сохранены. Новые exports относятся к существующему fs-RPC seam; dated correction ADR-0365 соответствует DEC-1/DEC-2. Sweep проверил node-entry-bootstrap.ts:115, dev-server-child-bootstrap.ts:89 и no-coi-child-transport.ts:71. REV-7: forwarding без кеша и нового state owner. Два замечания касаются точности описания доказательств. Основной checkout чист; probes выполнены в detached scratch. Полные suites и pr:check не запускались.",
+  "merge_call": "Final+GREEN: PASS, 0 блокеров, 15/15 coverage rows pass; merge только после green CI на HEAD 5a31d0909475052c87cf92ff022dc05a5c243bec. Verify pass REV-8 / Review run step 2: git diff c8c684c62..5a31d0909 содержит единственное изменение вне docs — выбор port pair перенесён перед createHostFixture(); отказ выбора больше не создаёт временный каталог, assertions и oracle semantics сохранены (PR-4). Независимый разрешённый e2e на проверенном через lsof порту 15273: 1 passed (12.3s), exit 0, /tmp/pr397-verify-cli.log; авторский /tmp/cli-final.log также 1 passed (12.5s). Docs corrections проверены: ceil(13978850/262144)=54, 54×54=2916; подробное описание retirement pin в PR учитывает перенос SyncRpcFsSync в shared chunk import и сохранённое compiler body. Оба замечания к формулировкам сняты. Прежний Final+GREEN и его coverage сохранены; полные suites и pr:check в этом verify pass не запускались. Однократный успешный gh pr checks 397: run 44057645537 и deployment run 44057645478 ещё pending; повторного опроса не было. Checkout чист, tracked files не изменены.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "c8c684c62831140e9dffd07277e0ee9e63c7c471",
-  "unit_goal_source": "PR #397 vanilla-wave/rifty, observed-defect repairs on rifty-fix route плюс CI image change. BASE origin/main 8a4a612ed11d5704b65d2a907c85bfa11784d170; HEAD c8c684c62831140e9dffd07277e0ee9e63c7c471. Baselines: CI 43974699316 ubuntu26.04/Playwright refusal; pin 518647719 ранее независимо проверен на #396. Grandchild read baseline: CI 43989500517, сырой job 133726159832, /tmp/diag-local.log и /tmp/diag-fixed.log. OPFS: main 40251341113 и /tmp/osr-*.log. Targeted reads: CI jobs 118434607690/121273822277 и /tmp/tpr-*.log. M0: три обрыва по 30 s в /tmp/ciflake/pin-l3.log. CLI: EADDRINUSE в job 133731913223, /tmp/cli-red.log и /tmp/cli-green.log. Compiler baseline: /tmp/tsw-base.js с прежним pinned SHA. У run 43992561128 все jobs success на 8fd528df8; browser log 133737482676 скачан независимо: 389 passed, 1 skipped. Сырые cached logs sampling run 43991199155 прочитаны. Authorities: эти baselines, ADR-0365, ADR-0391, прежние критерии из git и AGENTS.md Fidelity.",
+  "reviewed_sha": "5a31d0909475052c87cf92ff022dc05a5c243bec",
+  "unit_goal_source": "PR #397 vanilla-wave/rifty, observed-defect repairs on rifty-fix route плюс CI image change. BASE origin/main 8a4a612ed11d5704b65d2a907c85bfa11784d170; HEAD 5a31d0909475052c87cf92ff022dc05a5c243bec. Baselines: CI 43974699316 ubuntu26.04/Playwright refusal; pin 518647719 ранее независимо проверен на #396. Grandchild read baseline: CI 43989500517, сырой job 133726159832, /tmp/diag-local.log и /tmp/diag-fixed.log. OPFS: main 40251341113 и /tmp/osr-*.log. Targeted reads: CI jobs 118434607690/121273822277 и /tmp/tpr-*.log. M0: три обрыва по 30 s в /tmp/ciflake/pin-l3.log. CLI: EADDRINUSE в job 133731913223, /tmp/cli-red.log и /tmp/cli-green.log. Compiler baseline: /tmp/tsw-base.js с прежним pinned SHA. У run 43992561128 все jobs success на 8fd528df8; browser log 133737482676 скачан независимо: 389 passed, 1 skipped. Сырые cached logs sampling run 43991199155 прочитаны. Authorities: эти baselines, ADR-0365, ADR-0391, прежние критерии из git и AGENTS.md Fidelity. Verify pass: ранее принятый Final+GREEN на c8c684c62831140e9dffd07277e0ee9e63c7c471 переиспользован по REV-1; проверена вся дельта через docs-only 58bef12e3 и test-only 5a31d0909, включая cleanup при отказе port pick и неизменность PR-4 criteria; текущий headRefOid подтверждён через gh pr view 397.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
@@ -137,15 +137,8 @@
         {
           "severity": "concern",
           "location": ".github/workflows/ci.yml:337",
-          "evidence": "Однократный gh pr checks 397: run 43997609555; pending browser-unit, unit/run, no-coi, heavy 2/2, light 1/8 и 5/8; reds отсутствуют. gh pr view 397 --json headRefOid подтвердил c8c684c62831140e9dffd07277e0ee9e63c7c471. /tmp/rev397-head-checks.log:1; /tmp/rev397-head-oid.log:1. Prod, parity, lint и остальные завершённые lanes pass.",
-          "summary": "CI текущего HEAD ещё не завершён; green run 43992561128 относится к 8fd528df8. Сливать только после green CI на c8c684c62.",
-          "authority": ""
-        },
-        {
-          "severity": "concern",
-          "location": "docs/adr/runtime-js/0365-single-hop-small-file-sync-rpc-reads.md:80",
-          "evidence": "Сырой gh api actions/jobs/133726159832/logs: child 635/655/656 ms, grandchild 32283/31181/31703 ms, bytes 13978850. Python: (13978850+262143)//262144 = 54. Коммитный RED на BASE независимо дал 36 vs 6 для размера 5*FS_RPC_CHUNK+7. /tmp/rev397-diag-depth.log:369; /tmp/rev397-review-red-unit.log:5.",
-          "summary": "Уточнить атрибуцию 36×36: это шестичанковый RED fixture. Измеренный wasm 13 978 850 bytes при chunk 262144 требует 54 chunks, поэтому BASE raw relay даёт 54×54 запросов. Механизм и ускорение подтверждены.",
+          "evidence": "Однократный успешный gh pr checks 397: exit 8; Change scope и lint-and-typecheck pending в run 44057645537; Deploy landing и Deploy playground pending в run 44057645478. gh pr view 397 --json body,headRefOid,url подтвердил HEAD 5a31d0909475052c87cf92ff022dc05a5c243bec. Первый запрос из песочницы не достиг api.github.com; успешный снимок получен вне песочницы, без polling.",
+          "summary": "CI текущего HEAD ещё не green; сливать только после green CI на 5a31d0909475052c87cf92ff022dc05a5c243bec (PR-6).",
           "authority": ""
         }
       ]
@@ -177,16 +170,8 @@
     },
     {
       "axis": "Regressions",
-      "verdict": "concern",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "tools/checks/esbuild-legacy-retirement.mjs:105",
-          "evidence": "Сравнение /tmp/tsw-base.js и HEAD asset: BASE 10022694 bytes, SHA b27005eb…; HEAD 10022686 bytes, SHA 2171da5d…. Нормализации путей недостаточно для равенства. После удаления static imports и нормализации dynamic module-loader import тела совпадают побайтно. Старый retirement gate: exit 1, единственное нарушение typescript-worker. HEAD gate: exit 0. /tmp/rev397-review-retirement-base.log:1; /tmp/rev397-review-retirement-head.log:1.",
-          "summary": "Уточнить PR-4 описание pin: изменились не только chunk specifiers; binding SyncRpcFsSync переехал из отдельного named import в общий chunk. Compiler body сохранён; блокера нет.",
-          "authority": ""
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     },
     {
       "axis": "Ecosystem UX",
