@@ -4,9 +4,10 @@ import type { ParityCase } from '../../src/types.ts';
  * With `off === removeListener`, a subclass overriding just one of the two
  * names only sees the calls made through that name. Node's internals detach
  * through `removeListener` (events.once, pipe/unpipe cleanup, readline close,
- * pipeline), never `off`: a `removeListener` override sees them, an `off`
- * override sees none. Per path, the events reaching each override, filtered to
- * listeners both runtimes attach.
+ * pipeline, end-of-stream cleanup behind toWeb and the async iterator): a
+ * `removeListener` override sees them, an `off` override does not. Per path,
+ * the events reaching each override, filtered to listeners both runtimes
+ * attach (Node's iterator alone detaches its `'readable'` through `off`).
  */
 const c: ParityCase = {
   code: `
@@ -25,8 +26,8 @@ const c: ParityCase = {
       off(ev, fn) { note('off', label, ev); return super.off(ev, fn); }
     };
     const report = (label, common) => {
-      const seen = hits.removeListener.get(label) ?? new Set();
-      return [label, common.filter((ev) => seen.has(ev)), [...(hits.off.get(label) ?? [])]];
+      const via = (kind) => common.filter((ev) => hits[kind].get(label)?.has(ev) === true);
+      return [label, via('removeListener'), via('off')];
     };
 
     (async () => {
@@ -47,7 +48,22 @@ const c: ParityCase = {
       const src = new (tracked(Readable, 'pipeline.src'))({ read() { this.push('x'); this.push(null); } });
       const dest = new (tracked(Writable, 'pipeline.dest'))({ write(_c, _e, cb) { cb(); } });
       await new Promise((resolve) => pipeline(src, dest, () => resolve()));
-      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const web = new (tracked(Readable, 'toWeb'))({ read() { this.push('a'); this.push(null); } });
+      const reader = Readable.toWeb(web).getReader();
+      while (!(await reader.read()).done);
+
+      const slow = new (tracked(Writable, 'writable.toWeb'))({
+        highWaterMark: 1,
+        write(_c, _e, cb) { setImmediate(cb); },
+      });
+      const writer = Writable.toWeb(slow).getWriter();
+      await writer.write('ab');
+      await writer.write('cd');
+      await writer.close();
+
+      const kept = new (tracked(Readable, 'iterator'))({ read() { this.push('a'); } });
+      for await (const _ of kept.iterator({ destroyOnReturn: false })) break;
 
       console.log(JSON.stringify([
         report('once', ['ready', 'error']),
@@ -55,12 +71,15 @@ const c: ParityCase = {
         report('pipe.dest', ['close', 'error']),
         report('readline.input', ['data', 'end']),
         report('pipeline.dest', ['error']),
-        report('pipeline.src', []),
+        report('pipeline.src', ['data', 'end']),
+        report('toWeb', ['end', 'error', 'close']),
+        report('writable.toWeb', ['finish', 'error', 'close']),
+        report('iterator', ['end', 'error']),
       ]));
     })();
   `,
   expected:
-    '[["once",["ready","error"],[]],["pipe.src",["data","end"],[]],["pipe.dest",["close","error"],[]],["readline.input",["data","end"],[]],["pipeline.dest",["error"],[]],["pipeline.src",[],[]]]\n',
+    '[["once",["ready","error"],[]],["pipe.src",["data","end"],[]],["pipe.dest",["close","error"],[]],["readline.input",["data","end"],[]],["pipeline.dest",["error"],[]],["pipeline.src",["data","end"],[]],["toWeb",["end","error","close"],[]],["writable.toWeb",["finish","error","close"],[]],["iterator",["end","error"],[]]]\n',
 };
 
 export default c;
