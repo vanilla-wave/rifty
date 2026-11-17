@@ -9,7 +9,7 @@ permissions:
 jobs:
   e2e:
     name: ${{ matrix.lane }} / ${{ matrix.engine }} (record only)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.60 has no ubuntu26.04 build (trap playwright-host-image)
     continue-on-error: true
     timeout-minutes: 90
     strategy:
@@ -33,12 +33,14 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - id: pw-version
-        run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+          echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
       - id: pw-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}-${{ matrix.engine }}
+          key: ${{ runner.os }}-${{ steps.pw-version.outputs.image }}-playwright-${{ steps.pw-version.outputs.version }}-${{ matrix.engine }}
       - if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
       - if: steps.pw-cache.outputs.cache-hit == 'true'
