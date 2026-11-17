@@ -230,6 +230,7 @@ export function validateShellInput(line: string, _cursor = line.length): ShellIn
   let escaped = false;
   let wordStart = true;
   let comment = false;
+  let previous = '';
   const stack: string[] = [];
   for (const ch of line) {
     if (comment) {
@@ -238,7 +239,11 @@ export function validateShellInput(line: string, _cursor = line.length): ShellIn
     }
     if (escaped) {
       escaped = false;
-      wordStart = false;
+      // Backslash-newline is a continuation: it leaves the word state as it was.
+      if (ch !== '\n') {
+        wordStart = false;
+        previous = '';
+      }
       continue;
     }
     if (ch === '\\') {
@@ -254,7 +259,10 @@ export function validateShellInput(line: string, _cursor = line.length): ShellIn
       comment = true;
       continue;
     }
-    wordStart = /[\s;&|<>()]/u.test(ch);
+    // A heredoc fails loudly on submit; its body must not hold Enter as unfinished.
+    if (ch === '<' && previous === '<') return 'complete';
+    previous = ch;
+    wordStart = /[\s;&|<>]/u.test(ch);
     if (ch === '"' || ch === "'") {
       quote = ch;
       continue;

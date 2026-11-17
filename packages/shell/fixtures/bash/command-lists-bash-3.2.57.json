@@ -273,6 +273,63 @@
       }
     },
     {
+      "id": "continuation-joins-operators",
+      "command": "echo a >\\\n> f.txt\ntrue &\\\n& echo b",
+      "setup": {},
+      "bash": {
+        "stdout": "b\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "f.txt": "a\n"
+        }
+      }
+    },
+    {
+      "id": "continuation-joins-expansion",
+      "command": "X=v; echo $\\\nX",
+      "setup": {},
+      "bash": {
+        "stdout": "v\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "continuation-escaped-backslash",
+      "command": "echo a\\\\\necho b",
+      "setup": {},
+      "bash": {
+        "stdout": "a\\\nb\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "continuation-after-mid-word-hash",
+      "command": "echo a#b \\\nc",
+      "setup": {},
+      "bash": {
+        "stdout": "a#b c\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "literal-escaped-parens",
+      "command": "echo \\( a \\)",
+      "setup": {},
+      "bash": {
+        "stdout": "( a )\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
       "id": "double-quoted-newline",
       "command": "echo \"a\nb\"",
       "setup": {},
@@ -438,6 +495,17 @@
       }
     },
     {
+      "id": "comment-after-continuation",
+      "command": "echo \\\n# it's a comment",
+      "setup": {},
+      "bash": {
+        "stdout": "\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
       "id": "reserved-words-as-arguments",
       "command": "echo if then fi do done { } ! [[ ]] in",
       "setup": {},
@@ -470,6 +538,50 @@
         "files": {
           "done": "hi\n"
         }
+      }
+    },
+    {
+      "id": "reserved-word-escaped",
+      "command": "\\if",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: if: command not found\n",
+        "exit": 127,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-word-empty-quotes",
+      "command": "i''f",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: if: command not found\n",
+        "exit": 127,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-word-expanded",
+      "command": "CMD=if; $CMD",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: if: command not found\n",
+        "exit": 127,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-word-after-expansion",
+      "command": "${X}if",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: if: command not found\n",
+        "exit": 127,
+        "files": {}
       }
     },
     {
@@ -543,6 +655,19 @@
       }
     },
     {
+      "id": "heredoc-continued-operator",
+      "command": "echo pre > pre.txt; cat <\\\n<EOF\ntouch body-ran\nEOF",
+      "setup": {},
+      "bash": {
+        "stdout": "touch body-ran\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "pre.txt": "pre\n"
+        }
+      }
+    },
+    {
       "id": "here-string",
       "command": "cat <<< hi",
       "setup": {},
@@ -563,6 +688,19 @@
         "exit": 0,
         "files": {
           "t": ""
+        }
+      }
+    },
+    {
+      "id": "here-string-continued-operator",
+      "command": "echo pre > pre.txt; cat <\\\n<\\\n< hi",
+      "setup": {},
+      "bash": {
+        "stdout": "hi\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "pre.txt": "pre\n"
         }
       }
     },
@@ -737,6 +875,63 @@
       }
     },
     {
+      "id": "compound-function-spaced-subshell",
+      "command": "echo pre > pre.txt; f () (echo body\ntouch body-ran\ntrue)",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "pre.txt": "pre\n"
+        }
+      }
+    },
+    {
+      "id": "compound-after-and",
+      "command": "true && ! false",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-after-or",
+      "command": "false || ! false",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-after-pipe",
+      "command": "echo x | ! cat",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `!'\nbash: -c: line 0: `echo x | ! cat'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-paren-argument",
+      "command": "echo (a)",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `a'\nbash: -c: line 0: `echo (a)'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
       "id": "compound-bang",
       "command": "! false && echo neg",
       "setup": {},
@@ -864,6 +1059,39 @@
       "bash": {
         "stdout": "a\n",
         "stderr": "bash: -c: line 1: syntax error near unexpected token `]]'\nbash: -c: line 1: `]]'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "syntax-leading-and",
+      "command": "echo a\n&& echo b",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "bash: -c: line 1: syntax error near unexpected token `&&'\nbash: -c: line 1: `&& echo b'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "syntax-leading-pipe",
+      "command": "echo a\n| cat",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "bash: -c: line 1: syntax error near unexpected token `|'\nbash: -c: line 1: `| cat'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "syntax-double-semicolon",
+      "command": "echo a;; echo b",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `;;'\nbash: -c: line 0: `echo a;; echo b'\n",
         "exit": 2,
         "files": {}
       }

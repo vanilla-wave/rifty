@@ -26,8 +26,9 @@ const fixture = JSON.parse(
   readFileSync(new URL('../fixtures/bash/command-lists-bash-3.2.57.json', import.meta.url), 'utf8'),
 ) as { readonly cases: readonly BashCase[] };
 
-/** Rifty's contract per case: bash-identical, or a named loud gap. */
-function expectation(id: string): 'conform' | `shell.${string}` {
+/** Rifty's contract per case: bash-identical, a named loud gap, or a syntax error. */
+function expectation(id: string): 'conform' | 'syntax-error' | `shell.${string}` {
+  if (id.startsWith('syntax-')) return 'syntax-error';
   if (id === 'heredoc-operator-quoted') return 'conform';
   if (id.startsWith('heredoc-')) return 'shell.heredoc';
   if (id.startsWith('here-string')) return 'shell.here-string';
@@ -72,6 +73,7 @@ describe('command lists vs frozen bash 3.2.57', () => {
       'shell.compound-command',
       'shell.here-string',
       'shell.heredoc',
+      'syntax-error',
     ]);
   });
 
@@ -100,8 +102,13 @@ describe('command lists vs frozen bash 3.2.57', () => {
         () => null,
         (thrown: unknown) => thrown,
       );
-      expect(error).toBeInstanceOf(NotImplementedError);
-      expect((error as NotImplementedError).feature).toBe(expected);
+      if (expected === 'syntax-error') {
+        expect(error).not.toBeInstanceOf(NotImplementedError);
+        expect((error as Error).message).toMatch(/^shell: syntax error near unexpected token `/);
+      } else {
+        expect(error).toBeInstanceOf(NotImplementedError);
+        expect((error as NotImplementedError).feature).toBe(expected);
+      }
       // Atomic: nothing ran, so nothing was written or printed.
       expect(chunks).toEqual([]);
       expect(snapshot(fileSystem)).toEqual(before);

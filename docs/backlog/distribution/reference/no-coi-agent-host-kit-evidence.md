@@ -298,16 +298,17 @@ Class: ceiling | policy-default | invented-limit | silent-divergence | parity.
 | 18 | `session.ts:47-48` | defaults `maxToolCalls 100`, `runTimeoutMs 180 s` → `budget-exceeded` | Pi: none | invented-limit | ADR-0424 D7 | `session.test.ts`; bench 40 / 600 s |
 | 19 | `session.ts:104` `maxRetries:0` | one 429/5xx → run `error` | Pi CLI retries | policy-default (recorded) | ADR-0424 D4 | — |
 | 20 | `session.ts:30-45` | fixed Model (`reasoning:false`, ctx 128k, maxTokens 8192, no `compat`), content parts | provider-true | policy-default (recorded) | ADR-0436; kit items 5/6 | — |
+| 21 | `prompt.ts:26-28`, `sandbox-host.ts:66-67` | injected "No sudo, apt, brew … dependency policy belong to the host", `Project policy: {json}`, 16 KiB notice | Pi prompt: none | invented text (steers away from adding deps) | ADR-0424 D3 generic | prompt.test |
+| 22–25 | Stop semantics, `change`/`edit_file`, per-call cwd, exit codes 127/126/130 | — | same | parity | ADR-0418 D5, ADR-0426 D1 | pi-agent / agent-scenarios |
+| 26 | `workbench-host.ts:112-145` | no-COI lacks vs COI: TS diagnostics, SCM diff, CAS writes, persistent cwd/env, PTY, shell `npm install`, background jobs | — | gap list | ADR-0426 "absent stay absent" | asserted absent |
 
 Correction 2026-11-17 (row 14): a heredoc was not a loud 127. It lexed as two
 `<` redirects (a fabricated ENOENT, or a misattributed `shell.command-substitution`
 / `shell.background` from its body), and newlines did not separate commands.
-`if`/`for` were 127 per segment while the other segments still ran. Now `NotImplementedError('shell.heredoc' | 'shell.here-string'
-| 'shell.compound-command')` before anything runs; declared in
+`if`/`for` were 127 per segment while the other segments still ran. Now each
+throws `NotImplementedError` (`shell.heredoc`, `shell.here-string`,
+`shell.compound-command`) before anything runs; declared in
 `docs/public/compat/shell.md`, real heredoc in `backlog/shell/heredoc`.
-| 21 | `prompt.ts:26-28`, `sandbox-host.ts:66-67` | injected "No sudo, apt, brew … dependency policy belong to the host", `Project policy: {json}`, 16 KiB notice | Pi prompt: none | invented text (steers away from adding deps) | ADR-0424 D3 generic | prompt.test |
-| 22–25 | Stop semantics, `change`/`edit_file`, per-call cwd, exit codes 127/126/130 | — | same | parity | ADR-0418 D5, ADR-0426 D1 | pi-agent / agent-scenarios |
-| 26 | `workbench-host.ts:112-145` | no-COI lacks vs COI: TS diagnostics, SCM diff, CAS writes, persistent cwd/env, PTY, shell `npm install`, background jobs | — | gap list | ADR-0426 "absent stay absent" | asserted absent |
 
 Top findings: (a) #1+#2+#21 — the agent has no way to add a dependency; not a
 ceiling (same Worker installs). (b) #3 — README's reference policy silently

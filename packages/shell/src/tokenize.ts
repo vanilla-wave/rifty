@@ -12,7 +12,8 @@
  *   - Whitespace splitting outside quotes.
  *   - Unquoted newline ends a command: lowered to the `;` operator, or dropped
  *     after nothing, `;`, `&&`, `||`, `|` or `&` (the list continues / ended).
- *   - Unquoted or double-quoted backslash-newline is removed (line continuation).
+ *   - Unquoted or double-quoted backslash-newline is removed before lexing
+ *     (line continuation), so it can join operators, words and `$NAME`.
  *   - Word-initial unquoted `#` comments out the rest of the line.
  *   - Unquoted word-initial `~` / `~/…` → `$HOME` (bash tilde expansion).
  *   - Single quotes (`'…'`): literal, no expansion, no escapes.
@@ -80,6 +81,7 @@ function throwCommandSubstitution(): never {
 }
 
 /** Loud gap for `<<` / `<<-` / `<<<`: thrown on the operator, so a body is never lexed as commands. */
+// TODO(backlog: shell/heredoc)
 function throwHeredoc(hereString: boolean): never {
   if (hereString) {
     throw new NotImplementedError(
@@ -91,6 +93,48 @@ function throwHeredoc(hereString: boolean): never {
     'shell.heredoc',
     'heredocs `<<` are not supported — write the body to a file (file tools or `node -e`), then redirect it with `<`',
   );
+}
+
+/**
+ * bash removes a line continuation before it lexes: unquoted or double-quoted
+ * backslash-newline goes; `'…'`, an escaped `\\` and comment text keep theirs.
+ */
+function joinContinuations(line: string): string {
+  if (!line.includes('\\\n')) return line;
+  let out = '';
+  let quote: "'" | '"' | null = null;
+  let wordStart = true;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+    if (quote === "'") {
+      if (ch === "'") quote = null;
+      out += ch;
+      continue;
+    }
+    if (ch === '\\') {
+      if (line[i + 1] !== '\n') {
+        out += line.slice(i, i + 2);
+        wordStart = false;
+      }
+      i++;
+      continue;
+    }
+    if (quote === '"') {
+      if (ch === '"') quote = null;
+      out += ch;
+      continue;
+    }
+    if (ch === '#' && wordStart) {
+      const end = line.indexOf('\n', i);
+      out += line.slice(i, end === -1 ? line.length : end);
+      i = (end === -1 ? line.length : end) - 1;
+      continue;
+    }
+    if (ch === "'" || ch === '"') quote = ch;
+    wordStart = WORD_END.has(ch);
+    out += ch;
+  }
+  return out;
 }
 
 function expandVarAt(
@@ -131,8 +175,25 @@ function expandVarAt(
   return { value: env[name] ?? '', next: j + name.length };
 }
 
+/** Lexical facts the compound guard needs and the public {@link Token} does not carry. */
+interface Lexeme {
+  readonly token: Token;
+  /** Word made only of literal characters: no quote, escape or expansion. */
+  readonly plain: boolean;
+  /** Word holds an unquoted, unescaped `(` or `)` — a bash operator. */
+  readonly paren: boolean;
+}
+
 export function tokenize(line: string, env: Readonly<Record<string, string>> = {}): Token[] {
-  const tokens: Token[] = [];
+  return lex(line, env).map((lexeme) => lexeme.token);
+}
+
+function lex(input: string, env: Readonly<Record<string, string>>): Lexeme[] {
+  const line = joinContinuations(input);
+  const lexemes: Lexeme[] = [];
+  const push = (token: Token, plain = false, paren = false): void => {
+    lexemes.push({ token, plain, paren });
+  };
   let i = 0;
   const n = line.length;
   while (i < n) {
@@ -141,13 +202,9 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
       i++;
       continue;
     }
-    if (ch === '\\' && line[i + 1] === '\n') {
-      i += 2;
-      continue;
-    }
     if (ch === '\n') {
-      const last = tokens.at(-1);
-      if (last && !(isOp(last) && NEWLINE_JOINED.has(last.op))) tokens.push({ op: ';' });
+      const last = lexemes.at(-1)?.token;
+      if (last && !(isOp(last) && NEWLINE_JOINED.has(last.op))) push({ op: ';' });
       i++;
       continue;
     }
@@ -173,7 +230,7 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
         // rejects loudly instead of `vite &` silently dropping `&` into an arg.
         op = '&';
       }
-      tokens.push({ op });
+      push({ op });
       i++;
       continue;
     }
@@ -183,6 +240,8 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
     let buf = '';
     let quoted = false;
     let hasQuoteSyntax = false;
+    let plain = true;
+    let paren = false;
     // Tilde expansion (bash): an unquoted word-initial `~` alone or before `/`
     // is `$HOME`; `~user` and an unset HOME stay literal.
     const after = line[i + 1];
@@ -192,6 +251,7 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
       (after === undefined || after === '/' || WORD_END.has(after))
     ) {
       buf = env.HOME;
+      plain = false;
       i++;
     }
     while (
@@ -206,6 +266,7 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
       line[i] !== ';'
     ) {
       const c = line[i]!;
+      if (c === "'" || c === '"' || c === '\\' || c === '$') plain = false;
       if (c === "'") {
         // Single-quoted: literal, no expansion. Chars are quoted-provenance.
         hasQuoteSyntax = true;
@@ -224,10 +285,6 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
           const dc = line[i]!;
           if (dc === '\\') {
             const next = line[i + 1];
-            if (next === '\n') {
-              i += 2;
-              continue;
-            }
             if (next === '$' || next === '"' || next === '\\' || next === '`') {
               buf += next;
               quoted = true;
@@ -261,8 +318,6 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
           // Trailing backslash — literal, no line continuation.
           buf += '\\';
           i++;
-        } else if (next === '\n') {
-          i += 2;
         } else {
           buf += next;
           i += 2;
@@ -275,6 +330,7 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
         // Unquoted backtick is command substitution (bash) — loud, not literal.
         throwCommandSubstitution();
       } else {
+        if (c === '(' || c === ')') paren = true;
         buf += c;
         i++;
       }
@@ -282,9 +338,9 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
     // `''` / `""` is one real empty argv entry. Empty quotes adjacent to an
     // unquoted value contribute no characters, so `*''` remains glob-eligible.
     if (buf === '' && hasQuoteSyntax) quoted = true;
-    tokens.push({ value: buf, quoted });
+    push({ value: buf, quoted }, plain, paren);
   }
-  return tokens;
+  return lexemes;
 }
 
 /** bash 3.2 reserved words; reserved only as the first word of a command. */
@@ -313,27 +369,26 @@ const RESERVED_WORDS = new Set([
 const COMMAND_SEPARATORS = new Set<OpToken['op']>([';', '&&', '||', '|', '&']);
 
 /**
- * Loud gap for compound commands: a reserved word, `(…)`/`((…))` or a
- * `name()` definition at command position throws before anything runs. Run as
- * plain lines, a multi-line `if …\nthen\nrm -rf dist\nfi` body would execute
- * unconditionally.
+ * Loud gap for compound commands: a literal reserved word at command position,
+ * or an unquoted `(`/`)` anywhere (subshell, `name ()` function, `((…))`),
+ * throws before anything runs. Run as plain lines, a multi-line
+ * `if …\nthen\nrm -rf dist\nfi` body would execute unconditionally.
  */
-export function assertSimpleCommands(tokens: readonly Token[]): void {
+export function assertSimpleCommands(line: string): void {
   let commandStart = true;
-  for (const token of tokens) {
+  for (const { token, plain, paren } of lex(line, {})) {
     if (isOp(token)) {
+      // bash: a list operator where a command must start is a syntax error.
+      if (commandStart && COMMAND_SEPARATORS.has(token.op)) {
+        throw new Error(`shell: syntax error near unexpected token \`${token.op}\``);
+      }
       commandStart = COMMAND_SEPARATORS.has(token.op);
       continue;
     }
-    const { value } = token;
-    if (
-      commandStart &&
-      !token.quoted &&
-      (RESERVED_WORDS.has(value) || /^[()]/.test(value) || value.endsWith('()'))
-    ) {
+    if (paren || (commandStart && plain && RESERVED_WORDS.has(token.value))) {
       throw new NotImplementedError(
         'shell.compound-command',
-        `\`${value}\`: compound commands (if/for/while/until/case/select, {…}, (…), [[…]], !, functions) are not supported — run simple commands, or move the logic into a node script`,
+        `\`${token.value}\`: compound commands (if/for/while/until/case/select, {…}, (…), [[…]], !, functions) and unquoted \`(\`/\`)\` are not supported — run simple commands, or move the logic into a node script`,
       );
     }
     commandStart = false;

@@ -47,6 +47,23 @@ describe('tokenize — newline', () => {
     expect(tokenize('echo "a\\\nb"')).toEqual([w('echo'), w('ab', true)]);
     expect(tokenize("echo 'a\\\nb'")).toEqual([w('echo'), w('a\\\nb', true)]);
   });
+
+  it('joins operators, expansions and words across a continuation', () => {
+    expect(tokenize('a &\\\n& b >\\\n> f')).toEqual([
+      w('a'),
+      { op: '&&' },
+      w('b'),
+      { op: '>>' },
+      w('f'),
+    ]);
+    expect(tokenize('echo $\\\nX a \\\n b', { X: 'v' })).toEqual([
+      w('echo'),
+      w('v'),
+      w('a'),
+      w('b'),
+    ]);
+    expect(thrown(() => tokenize('cat <\\\n<EOF'))).toMatchObject({ feature: 'shell.heredoc' });
+  });
 });
 
 describe('tokenize — comments', () => {
@@ -93,6 +110,18 @@ describe('tokenize — heredoc and here-string', () => {
 });
 
 describe('Shell — multi-line input', () => {
+  it('reserves only literal words: escaped, quoted or expanded `if` is a command name', async () => {
+    const shell = new Shell({ env: { CMD: 'if' } });
+    shell.registerCommand('if', async (_args, ctx) => {
+      ctx.stdout.write('custom-if\n');
+      return 0;
+    });
+    for (const line of ['\\if', "i''f", '$CMD']) {
+      expect((await shell.run(line)).stdout).toBe('custom-if\n');
+    }
+    await expect(shell.run('if')).rejects.toMatchObject({ feature: 'shell.compound-command' });
+  });
+
   it('rejects a heredoc before the background policy in no-background hosts', async () => {
     const shell = new Shell({ allowBackground: false });
     await expect(shell.run("cat > f.js <<'JS'\na & b\nJS")).rejects.toMatchObject({
@@ -125,7 +154,7 @@ describe('Shell — multi-line input', () => {
         }),
     );
 
-    const run = await shell.run('slow &\n');
+    const run = await shell.run('# start\nslow &\n');
 
     expect(run.stdout).toBe('[1] Running slow\n');
     finish();

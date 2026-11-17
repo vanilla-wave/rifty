@@ -365,7 +365,7 @@ export class Shell {
     // own expansion — POSIX: `FOO=bar echo $FOO` prints the OUTER FOO.
     const tokens = tokenize(line, this.env);
     if (tokens.length === 0) return runResult(0, '', '');
-    assertSimpleCommands(tokens);
+    assertSimpleCommands(line);
     if (!this.allowBackground && tokens.some((token) => isOp(token) && token.op === '&')) {
       throw new NotImplementedError('shell.background', 'background execution is prohibited');
     }
