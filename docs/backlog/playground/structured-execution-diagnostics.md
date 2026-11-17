@@ -26,9 +26,9 @@ boundary; own draft withdrawn). Measured (spikes 2026-08-29/30, chromium
 
 - Owner package `log:` sink is `process.stdout.write`
   (workbench-owner-runtime.ts:327) — no prod reader; the restore-success line
-  and `reportPromotion` explanatory prose (project-deps.ts:291 —
-  persist-failure samples, «reload is unsafe until browser storage recovers»)
-  reached zero consoles in every run.
+  and `reportPromotion` explanatory prose (persist-failure samples, «reload is
+  unsafe until browser storage recovers»; both removed 2026-11-17 with the
+  stamp-miss restore) reached zero consoles in every run.
 - The active first-materialization boot branch
   (workbench-owner-runtime.ts:351/372 → `activateAndEnsure`) never reaches that
   legacy `restore()` code at all; only the bare `promotion-refused` reason

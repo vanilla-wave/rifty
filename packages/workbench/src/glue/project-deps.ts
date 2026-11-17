@@ -1,9 +1,11 @@
 /**
  * Project package-tree helpers shared by the owner package adapter: foreign-tree
  * clearing before install and template-owned node_modules seeding. Dependency
- * arrival itself is the package acquisition authority's: first materialization
- * (snapshot restore or deferred install, ADR-0394) and explicit npm install.
- * A saved open never restores a snapshot (ADR-0415).
+ * arrival itself is the package acquisition authority's: Playground first
+ * materialization (snapshot restore or deferred install, ADR-0394), Workbench
+ * SDK open (`activate-and-ensure`: stamp reuse, else install when a registry is
+ * configured) and explicit npm install. No open path restores a snapshot on a
+ * stamp miss (ADR-0415).
  */
 import { type VfsMutationIntent, dirname, joinPath, normalizePath } from '@riftydev/vfs';
 import { isSegmentContained } from './project-seed-paths.ts';

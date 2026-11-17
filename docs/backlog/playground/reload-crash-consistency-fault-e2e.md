@@ -8,7 +8,7 @@ user_story: As a developer, I want to close or reload the tab mid `npm install` 
 epic: fault-honest-opfs-persistence
 blocked_by: [vfs/iso-git-ref-torn-write-rows]
 sources: [docs/backlog/playground/reference/project-open-ide-boundaries-refine.md]
-code: [packages/workbench/src/glue/project-deps.ts, packages/workbench/src/workers/package-acquisition-authority.ts, tests/browser-unit]
+code: [packages/workbench/src/workers/owner-package-state.ts, packages/workbench/src/workers/package-acquisition-authority.ts, tests/browser-unit]
 ---
 
 ## Context

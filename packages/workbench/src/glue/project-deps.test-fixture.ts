@@ -15,16 +15,15 @@ import {
 import { installArtifactIdentity } from './install-artifact-identity.ts';
 import {
   type InstallStampAuthority,
-  type InstallStampPromotionResult,
   createInstallStampAuthority,
 } from './install-stamp-authority.ts';
-import { isStampedTreeDamage, readPackageJsonText } from './install-stamp.ts';
+import { readPackageJsonText } from './install-stamp.ts';
 import { clearProjectTree, prepareProjectInstallTree } from './project-deps.ts';
 import type { WorkspaceArchiveFs } from './workspace-archive.ts';
 
 /**
  * Test harness for the package authority's `ensure` command: stamp → snapshot →
- * install over one FIFO. Production retired this stamp-miss restore; instant
+ * install over one FIFO; `log` receives raw authority reason codes. Production retired this stamp-miss restore; instant
  * dependencies arrive only by first materialization or explicit apply
  * (ADR-0135 correction 2026-11-17, ADR-0394, ADR-0415).
  */
@@ -93,24 +92,10 @@ export function createTestProjectPackageAcquisitionAuthority(
   return createPackageAcquisitionAuthority({
     stamps,
     ...(opts.flush ? { stampTransition: { flush: opts.flush } } : {}),
+    // Raw authority reason codes: assertions pin product data, not harness prose.
     observe: (event) => {
-      if (event.type !== 'snapshot-rejected') return;
-      const outcome = opts.install
-        ? ' — falling back to install\n'
-        : ' — dependencies remain absent (restore-only mode)\n';
-      if (event.reason === 'snapshot-unavailable') {
-        opts.log(`[workbench/worker] baked snapshot unavailable (${event.snapshotId})${outcome}`);
-      } else if (event.reason.startsWith('snapshot-fetch-failed:')) {
-        opts.log(
-          `[workbench/worker] baked snapshot unavailable (${event.snapshotId}): ${event.reason
-            .slice('snapshot-fetch-failed:'.length)
-            .trim()}${outcome}`,
-        );
-      } else {
-        opts.log(
-          `[workbench/worker] baked snapshot is stale (package.json or install artifacts drifted; re-run \`pnpm snapshots:bake\`)${outcome}`,
-        );
-      }
+      if (event.type === 'snapshot-rejected')
+        opts.log(`snapshot-rejected ${event.snapshotId} ${event.reason}\n`);
     },
     adapter: {
       readPackageLock: async (project) => {
@@ -205,19 +190,15 @@ export async function ensureProjectDependencies(
         : {}),
       fallback: opts.install ? 'install' : 'snapshot-only',
       replaceTreeOnMiss: opts.replaceTreeOnMiss ?? opts.install !== undefined,
-      onPromotion: (result) => reportPromotion(opts, result),
+      onPromotion: (result) => {
+        if (result.status === 'refused') opts.log(`promotion refused ${result.reason}\n`);
+      },
     });
 
     switch (provenance.outcome) {
       case 'existing':
-        opts.log(
-          `[workbench/worker] node_modules reused via install stamp (${provenance.packages} packages, install skipped)\n`,
-        );
         return { source: 'stamp', packages: provenance.packages };
       case 'snapshot':
-        opts.log(
-          `[workbench/worker] baked node_modules restored (${provenance.packages} packages, no install needed)\n`,
-        );
         return { source: 'snapshot', packages: provenance.packages };
       case 'installed':
         return { source: 'install', packages: provenance.packages.length };
@@ -228,7 +209,6 @@ export async function ensureProjectDependencies(
       error.failure === 'snapshot-unavailable' &&
       !opts.install
     ) {
-      reportSnapshotFailures(opts, error.snapshotFailures);
       return { source: 'none', packages: 0 };
     }
     throw error;
@@ -257,90 +237,4 @@ async function resolveProjectSnapshot(opts: EnsureProjectDepsOptions) {
       payload: snapshot,
     },
   };
-}
-
-function reportSnapshotFailures(
-  opts: EnsureProjectDepsOptions,
-  failures: readonly { readonly snapshotId: string; readonly reason: string }[],
-): void {
-  if (failures.length === 0) return;
-  // The lifetime authority may use a different observer; keep restore-only failure loud here.
-  for (const failure of failures) reportSnapshotFailure(opts, failure.snapshotId, failure.reason);
-}
-
-function reportSnapshotFailure(
-  opts: EnsureProjectDepsOptions,
-  snapshotId: string,
-  reason: string,
-): void {
-  const outcome = opts.install
-    ? ' — falling back to install\n'
-    : ' — dependencies remain absent (restore-only mode)\n';
-  if (reason === 'snapshot-unavailable') {
-    opts.log(`[workbench/worker] baked snapshot unavailable (${snapshotId})${outcome}`);
-    return;
-  }
-  if (reason.startsWith('snapshot-fetch-failed:')) {
-    const detail = reason.slice('snapshot-fetch-failed:'.length).trim();
-    opts.log(`[workbench/worker] baked snapshot unavailable (${snapshotId}): ${detail}${outcome}`);
-    return;
-  }
-  if (reason.startsWith('snapshot-restore-failed:')) {
-    opts.log(
-      `[workbench/worker] baked snapshot restore failed: ${reason.slice('snapshot-restore-failed:'.length).trim()}${outcome}`,
-    );
-    return;
-  }
-  opts.log(
-    `[workbench/worker] baked snapshot is stale (package.json or install artifacts drifted; re-run \`pnpm snapshots:bake\`)${outcome}`,
-  );
-}
-
-function reportPromotion(
-  opts: EnsureProjectDepsOptions,
-  result: InstallStampPromotionResult,
-): void {
-  if (result.status === 'trusted' || result.status === 'stale') return;
-  switch (result.reason) {
-    case 'guarded-scope-not-durable': {
-      const example = result.report?.failures.find((failure) =>
-        isStampedTreeDamage(failure.path, opts.root),
-      );
-      const sample = example ? ` (first: ${example.op} ${example.path}: ${example.message})` : '';
-      opts.log(
-        `[workbench/worker] WARNING: node_modules failed to persist${sample} — trusted stamp publication blocked; the pending claim remains untrusted and the next boot re-runs dependency arrival\n`,
-      );
-      return;
-    }
-    case 'claim-not-durable':
-      opts.log(
-        '[workbench/worker] WARNING: pending install stamp failed to persist — promotion skipped; the next boot re-runs dependency arrival\n',
-      );
-      return;
-    case 'identity-drift':
-      opts.log(
-        '[workbench/worker] WARNING: package.json deps changed before install stamp promotion — trusted stamp publication blocked; the pending claim remains untrusted and the next boot re-runs dependency arrival\n',
-      );
-      return;
-    case 'tree-missing':
-      opts.log(
-        '[workbench/worker] WARNING: node_modules vanished before install stamp promotion — the next boot re-runs dependency arrival\n',
-      );
-      return;
-    case 'claim-replaced':
-      opts.log(
-        '[workbench/worker] WARNING: install stamp claim was replaced before promotion — the next boot re-runs dependency arrival\n',
-      );
-      return;
-    case 'revocation-not-durable':
-      opts.log(
-        '[workbench/worker] CRITICAL: a trusted install stamp over a damaged tree could not be revoked durably; reload is unsafe until browser storage recovers\n',
-      );
-      return;
-    case 'flush-failed':
-    case 'write-failed':
-      opts.log(
-        `[workbench/worker] WARNING: stamp durability check failed: ${result.error ?? result.reason}\n`,
-      );
-  }
 }

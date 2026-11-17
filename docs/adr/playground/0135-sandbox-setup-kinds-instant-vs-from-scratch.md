@@ -80,8 +80,9 @@ saved open. Files and terminal remain accessible; dependency failures occur at
 use, installation remains explicit. Setup-kind first materialization and no
 per-file surveillance remain.
 
-2026-11-17 — Decision 3's stamp → snapshot → install chain
+2026-11-17 — Decision 3's automatic stamp-miss invocation
 (`ensureProjectDependencies`, owner `restore`/`transition`) is retired, as is
-the ADR-0165 §5 dev-boot clean predicate it used. A snapshot restores only as
-first materialization (pending catalog receipt, ADR-0394) or explicit
-apply/Reset; a stamp miss on open never restores (ADR-0415).
+the ADR-0165 §5 dev-boot clean predicate it used. The stamp → snapshot order
+remains inside first materialization (pending catalog receipt, ADR-0394);
+otherwise a snapshot restores only by explicit apply/Reset, and a stamp miss
+on open never restores (ADR-0415).
