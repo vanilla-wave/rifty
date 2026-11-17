@@ -182,6 +182,8 @@ interface Lexeme {
   readonly plain: boolean;
   /** Word holds an unquoted, unescaped `(` or `)` — a bash operator. */
   readonly paren: boolean;
+  /** `;` lowered from a newline (bash names it `newline` in a syntax error). */
+  readonly newline: boolean;
 }
 
 export function tokenize(line: string, env: Readonly<Record<string, string>> = {}): Token[] {
@@ -191,8 +193,8 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
 function lex(input: string, env: Readonly<Record<string, string>>): Lexeme[] {
   const line = joinContinuations(input);
   const lexemes: Lexeme[] = [];
-  const push = (token: Token, plain = false, paren = false): void => {
-    lexemes.push({ token, plain, paren });
+  const push = (token: Token, plain = false, paren = false, newline = false): void => {
+    lexemes.push({ token, plain, paren, newline });
   };
   let i = 0;
   const n = line.length;
@@ -204,7 +206,8 @@ function lex(input: string, env: Readonly<Record<string, string>>): Lexeme[] {
     }
     if (ch === '\n') {
       const last = lexemes.at(-1)?.token;
-      if (last && !(isOp(last) && NEWLINE_JOINED.has(last.op))) push({ op: ';' });
+      if (last && !(isOp(last) && NEWLINE_JOINED.has(last.op)))
+        push({ op: ';' }, false, false, true);
       i++;
       continue;
     }
@@ -368,6 +371,21 @@ const RESERVED_WORDS = new Set([
 ]);
 const COMMAND_SEPARATORS = new Set<OpToken['op']>([';', '&&', '||', '|', '&']);
 
+function throwSyntaxError(at: Lexeme | undefined, previous?: Lexeme): never {
+  let text = at && !at.newline && isOp(at.token) ? at.token.op : 'newline';
+  // bash lexes `;;` (a `case` terminator) as one token.
+  if (
+    text === ';' &&
+    previous &&
+    !previous.newline &&
+    isOp(previous.token) &&
+    previous.token.op === ';'
+  ) {
+    text = ';;';
+  }
+  throw new Error(`shell: syntax error near unexpected token \`${text}\``);
+}
+
 /**
  * Loud gap for compound commands: a literal reserved word at command position,
  * or an unquoted `(`/`)` anywhere (subshell, `name ()` function, `((…))`),
@@ -375,14 +393,18 @@ const COMMAND_SEPARATORS = new Set<OpToken['op']>([';', '&&', '||', '|', '&']);
  * `if …\nthen\nrm -rf dist\nfi` body would execute unconditionally.
  */
 export function assertSimpleCommands(line: string): void {
+  const lexemes = lex(line, {});
   let commandStart = true;
-  for (const { token, plain, paren } of lex(line, {})) {
+  for (let k = 0; k < lexemes.length; k++) {
+    const { token, plain, paren } = lexemes[k]!;
     if (isOp(token)) {
-      // bash: a list operator where a command must start is a syntax error.
-      if (commandStart && COMMAND_SEPARATORS.has(token.op)) {
-        throw new Error(`shell: syntax error near unexpected token \`${token.op}\``);
-      }
-      commandStart = COMMAND_SEPARATORS.has(token.op);
+      const separator = COMMAND_SEPARATORS.has(token.op);
+      const next = lexemes[k + 1];
+      // bash: a list operator where a command must start, or a redirect
+      // without its target word, is a syntax error.
+      if (commandStart && separator) throwSyntaxError(lexemes[k], lexemes[k - 1]);
+      if (!separator && (next === undefined || isOp(next.token))) throwSyntaxError(next);
+      commandStart = separator;
       continue;
     }
     if (paren || (commandStart && plain && RESERVED_WORDS.has(token.value))) {

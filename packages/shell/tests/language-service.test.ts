@@ -198,6 +198,7 @@ describe('validateShellInput', () => {
     expect(validateShellInput("echo a#'b")).toBe('incomplete');
     expect(validateShellInput("echo '#' 'x")).toBe('incomplete');
     expect(validateShellInput("echo \\\n# it's a comment")).toBe('complete');
+    expect(validateShellInput("echo a;# it's")).toBe('complete');
   });
 
   it('submits a heredoc whatever its body holds, so the shell rejects it loudly', () => {

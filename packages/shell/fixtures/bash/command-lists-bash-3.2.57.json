@@ -1095,6 +1095,50 @@
         "exit": 2,
         "files": {}
       }
+    },
+    {
+      "id": "syntax-dangling-redirect-newline",
+      "command": "echo hi >\ntouch x",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `newline'\nbash: -c: line 0: `echo hi >'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "syntax-spaced-heredoc",
+      "command": "cat < <EOF\ntouch x\nEOF",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `<'\nbash: -c: line 0: `cat < <EOF'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "syntax-redirect-before-comment",
+      "command": "echo a >#b",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `newline'\nbash: -c: line 0: `echo a >#b'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "syntax-trailing-redirect",
+      "command": "echo a >",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `newline'\nbash: -c: line 0: `echo a >'\n",
+        "exit": 2,
+        "files": {}
+      }
     }
   ]
 }

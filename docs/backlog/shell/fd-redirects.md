@@ -22,7 +22,7 @@ The tokenizer has no fd-number or `&`-redirect operators: `2>` lexes as word
 | `echo x >&2` | stderr `x\n`, exit 0 | throws `shell.background` |
 | `cat <(echo x)` | stdout `x\n`, exit 0 | `cat: (echo: No such file or directory`, exit 1 |
 
-The first row is a silent wrong file effect; the others are loud but
+Since PR #401 `<(…)` throws `shell.compound-command` (unquoted parenthesis). The first row is a silent wrong file effect; the others are loud but
 misattributed. Agents commonly append `2>&1` / `2>/dev/null`. The 2026-06-07
 terminal review noted `2>&1` (no item was created). The agent prompt states
 that `2>` / `2>&1` may be missing or differ. Not caused or newly reached by

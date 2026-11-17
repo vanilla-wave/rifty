@@ -21,12 +21,12 @@ POSIX shell. Reference: frozen GNU bash 3.2.57 capture
 | `**`, brace `{a,b}` | ⚠️ | Passed through literally; bash expands them (ADR-0091 deferral) |
 | Unquoted `$VAR` word splitting | ⚠️ | Not split on `IFS`: an expansion stays one word |
 | Special parameters `$?`, `$$`, `$#`, `$0`, `$1`… | ⚠️ | Passed through literally: `backlog/shell/special-parameter-exit-status` |
-| fd redirects `2>`, `2>&1`, `>&2`, `&>`; process substitution `<(…)` | ⚠️ | `cmd 2>f` silently treats `2` as an argument and redirects stdout to `f`; `2>&1`, `>&2`, `&>` throw `NotImplementedError('shell.background')`; `<(…)` reports a missing file: `backlog/shell/fd-redirects` |
+| fd redirects `2>`, `2>&1`, `>&2`, `&>`; process substitution `<(…)` | ⚠️ | `cmd 2>f` silently treats `2` as an argument and redirects stdout to `f`; `2>&1`, `>&2`, `&>` throw `NotImplementedError('shell.background')`; `<(…)` throws `shell.compound-command` (unquoted parenthesis): `backlog/shell/fd-redirects` |
 | Trailing `cmd &` | ⚠️ | COI terminal: background job + `jobs`. No-COI project commands: `NotImplementedError('shell.background')` before anything runs (ADR-0418). Non-trailing `&` throws `shell.background`. `shell.test.ts` |
 | Heredoc `<<`, `<<-` | ❌ | `NotImplementedError('shell.heredoc')` before any command runs; the body is never run or lexed. Write the body with a file tool, then `< file`: `backlog/shell/heredoc`. Fixture `heredoc-*` |
 | Here-string `<<<` | ❌ | `NotImplementedError('shell.here-string')`, same atomicity. Fixture `here-string*` |
 | Compound commands | ❌ | `NotImplementedError('shell.compound-command')` before any command runs, for a literal reserved word (`if then elif else fi for while until do done case esac select in function { } ! [[ ]]`) at command position, or any unquoted `(` / `)` (subshell, `name ()` function, `((…))`). Reserved words as arguments or redirect targets, and quoted, escaped (`\if`, `\(`) or expanded words, stay literal. Fixture `compound-*`, `reserved-*` |
-| List operator where a command must start | ⚠️ | `a⏎&& b`, `a⏎\| b`, `a;; b` throw `shell: syntax error near unexpected token …` before anything runs; bash runs the lines before it, then exits 2. Fixture `syntax-*` |
+| Syntax errors: list operator where a command must start, redirect without a target | ⚠️ | `a⏎&& b`, `a⏎\| b`, `a;; b`, `echo hi >⏎b`, `cat < <EOF` throw `shell: syntax error near unexpected token …` (bash's token text) before anything runs; bash runs the lines before it, then exits 2. Fixture `syntax-*` |
 | Command substitution `$(…)`, backticks, `$((…))` | ❌ | `NotImplementedError('shell.command-substitution')`; single-quoted forms stay literal. `shell.test.ts` |
 | `${VAR:-x}`, `${#VAR}` and other parameter forms | ❌ | Throw `shell.tokenize: unsupported variable expansion form`: `backlog/shell/parameter-expansion` |
 | `export`, `exit`, `test` / `[`, `time`, `source` | ❌ | Not shell builtins here: `command not found`, exit 127 |

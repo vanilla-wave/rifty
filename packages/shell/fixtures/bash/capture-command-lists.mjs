@@ -125,6 +125,10 @@ const CASES = [
   ['syntax-leading-and', 'echo a\n&& echo b'],
   ['syntax-leading-pipe', 'echo a\n| cat'],
   ['syntax-double-semicolon', 'echo a;; echo b'],
+  ['syntax-dangling-redirect-newline', 'echo hi >\ntouch x'],
+  ['syntax-spaced-heredoc', 'cat < <EOF\ntouch x\nEOF'],
+  ['syntax-redirect-before-comment', 'echo a >#b'],
+  ['syntax-trailing-redirect', 'echo a >'],
 ];
 
 function snapshot(root, rel = '') {

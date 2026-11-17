@@ -104,7 +104,10 @@ describe('command lists vs frozen bash 3.2.57', () => {
       );
       if (expected === 'syntax-error') {
         expect(error).not.toBeInstanceOf(NotImplementedError);
-        expect((error as Error).message).toMatch(/^shell: syntax error near unexpected token `/);
+        const token = /near unexpected token `(.+?)'/.exec(c.bash.stderr)?.[1];
+        expect((error as Error).message).toBe(
+          `shell: syntax error near unexpected token \`${token}\``,
+        );
       } else {
         expect(error).toBeInstanceOf(NotImplementedError);
         expect((error as NotImplementedError).feature).toBe(expected);

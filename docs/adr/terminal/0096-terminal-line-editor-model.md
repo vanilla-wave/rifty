@@ -56,4 +56,4 @@ small host rewrites without turning `@riftydev/terminal` into shell/readline.
 
 ## Decisions
 
-- 2026-11-17 — a submitted multi-line buffer runs as a newline-separated command list (`@riftydev/shell`); the host validator ignores word-initial `#` comment text; `cat <<EOF` submits and fails loudly (`shell.heredoc`) instead of prompting for a body.
+- 2026-11-17 — `@riftydev/shell` runs a submitted buffer that holds newlines as a newline-separated command list; its exported validator ignores word-initial `#` comment text and reports `complete` at an unquoted `<<` (the shell then fails loudly, `shell.heredoc`). Gap: an xterm paste reaches the editor with `\r` line ends, which it drops, and the playground wires no validator, so pasted lines join into one: `backlog/terminal/paste-newlines-dropped`.
