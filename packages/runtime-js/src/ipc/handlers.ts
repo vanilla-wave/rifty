@@ -18,6 +18,7 @@
  * it auto-registered `'execSync'` from `getKernelDispatcher()`.
  */
 
+import { bytesToString } from '@riftydev/io';
 import type { SyncRpcDispatcher } from '@riftydev/kernel';
 import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { type NodeEntryRunner, makeRecursiveRunner } from './recursive-runner.ts';
@@ -115,7 +116,7 @@ export function installRuntimeJsExecSyncHandler(
       // runner captured it; decode for the message tail (kept short).
       const stderrText =
         result.stderr && result.stderr.byteLength > 0
-          ? `\n${new TextDecoder().decode(result.stderr).trimEnd()}`
+          ? `\n${bytesToString(result.stderr, 'utf8').trimEnd()}`
           : '';
       throw Object.assign(
         new Error(`Command failed with exit code ${result.exitCode}: ${payload.cmd}${stderrText}`),

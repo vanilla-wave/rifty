@@ -86,7 +86,8 @@ export function makeStdinReader(
 } {
   let encoding: string | null = null;
   const pending: Array<string | Uint8Array> = [];
-  let decoder = new TextDecoder();
+  const utf8Decoder = () => new TextDecoder('utf-8', { ignoreBOM: true }); // Node keeps BOM
+  let decoder = utf8Decoder();
   let flowing = false;
   let explicitlyPaused = false;
   let eofReceived = false;
@@ -194,7 +195,7 @@ export function makeStdinReader(
       }
       if (encoding === 'utf8') return stdin;
       encoding = 'utf8';
-      decoder = new TextDecoder();
+      decoder = utf8Decoder();
       return stdin;
     },
     resume() {

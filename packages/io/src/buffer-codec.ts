@@ -19,10 +19,11 @@ export type Encoding =
 
 // Module-level singletons: one-shot utf8 encode/decode is stateless (no
 // {stream:true}), so a shared instance is byte-identical and avoids per-call
-// allocation. Decoder uses DEFAULT config (non-fatal) — bad bytes -> U+FFFD.
+// allocation. Decoder is non-fatal (bad bytes -> U+FFFD) and keeps a leading
+// BOM like Node (WHATWG default strips it).
 // Do NOT use these for the streaming {stream:true} decoder (cross-chunk state).
 const UTF8_ENCODER = new TextEncoder();
-const UTF8_DECODER = new TextDecoder('utf-8');
+const UTF8_DECODER = new TextDecoder('utf-8', { ignoreBOM: true });
 
 // Batch code units through String.fromCharCode.apply in slices of this size to
 // avoid the O(n^2) per-char string concat, while staying under the engine

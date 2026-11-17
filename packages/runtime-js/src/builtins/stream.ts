@@ -115,10 +115,10 @@ function chunkToBuffer(chunk: unknown): Buffer {
   return Buffer.from(String(chunk), 'utf8');
 }
 
-async function consume(source: ConsumableStream): Promise<Buffer> {
-  const chunks: Buffer[] = [];
+async function collect(source: ConsumableStream): Promise<unknown[]> {
+  const chunks: unknown[] = [];
   if (typeof (source as AsyncIterable<unknown>)[Symbol.asyncIterator] === 'function') {
-    for await (const chunk of source as AsyncIterable<unknown>) chunks.push(chunkToBuffer(chunk));
+    for await (const chunk of source as AsyncIterable<unknown>) chunks.push(chunk);
   } else if (typeof (source as { getReader?: unknown }).getReader === 'function') {
     // Web ReadableStream that is not async-iterable in this realm: drain it via
     // a reader so Node's "accepts a web stream too" contract still holds.
@@ -128,12 +128,16 @@ async function consume(source: ConsumableStream): Promise<Buffer> {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (value !== undefined) chunks.push(chunkToBuffer(value));
+      if (value !== undefined) chunks.push(value);
     }
   } else {
     throw new TypeError('The "stream" argument must be an async iterable or a ReadableStream.');
   }
-  return Buffer.concat(chunks);
+  return chunks;
+}
+
+async function consume(source: ConsumableStream): Promise<Buffer> {
+  return Buffer.concat((await collect(source)).map(chunkToBuffer));
 }
 
 export const streamConsumers = {
@@ -144,11 +148,18 @@ export const streamConsumers = {
     const b = await consume(source);
     return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
   },
+  // Node: strings verbatim, bytes via one default TextDecoder (strips a BOM).
   async text(source: ConsumableStream): Promise<string> {
-    return (await consume(source)).toString('utf8');
+    const decoder = new TextDecoder();
+    let out = '';
+    for (const chunk of await collect(source)) {
+      out +=
+        typeof chunk === 'string' ? chunk : decoder.decode(chunkToBuffer(chunk), { stream: true });
+    }
+    return out + decoder.decode();
   },
   async json(source: ConsumableStream): Promise<unknown> {
-    return JSON.parse((await consume(source)).toString('utf8'));
+    return JSON.parse(await streamConsumers.text(source));
   },
   async blob(source: ConsumableStream): Promise<Blob> {
     return new Blob([await consume(source)]);
