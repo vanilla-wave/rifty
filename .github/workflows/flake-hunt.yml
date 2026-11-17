@@ -1,0 +1,203 @@
+# TEMPORARY (ci-flake-hunt experiment PR): repeated real CI samples of the
+# flake-suspect lanes on current main. Removed before merge.
+name: Flake hunt
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  browser-unit-full:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        rep: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - id: pw-version
+        run: |
+          echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+          echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
+      - id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ steps.pw-version.outputs.image }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:browser-unit
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flake-bu-full-${{ matrix.rep }}
+          path: |
+            playwright-report
+            test-results
+
+
+  browser-unit-suspects:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        rep: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - id: pw-version
+        run: |
+          echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+          echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
+      - id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ steps.pw-version.outputs.image }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - run: >-
+          pnpm test:browser-unit --repeat-each=3
+          tests/browser-unit/vite-at-root.spec.ts
+          tests/browser-unit/esbuild-vite-contract.spec.ts
+          tests/browser-unit/opfs-structural-repair.spec.ts
+          tests/browser-unit/targeted-page-reads.spec.ts
+          tests/browser-unit/workbench-vite-lifecycle.spec.ts
+          tests/browser-unit/diag-esbuild-startup.spec.ts
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flake-bu-suspects-${{ matrix.rep }}
+          path: |
+            playwright-report
+            test-results
+
+
+  e2e-light-3:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        rep: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - id: pw-version
+        run: |
+          echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+          echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
+      - id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ steps.pw-version.outputs.image }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e:light --workers=1 --shard=3/8
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flake-e2e-l3-${{ matrix.rep }}
+          path: |
+            playwright-report
+            test-results
+
+
+  e2e-heavy:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        rep: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - id: pw-version
+        run: |
+          echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+          echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
+      - id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ steps.pw-version.outputs.image }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e:heavy
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flake-e2e-heavy-${{ matrix.rep }}
+          path: |
+            playwright-report
+            test-results
+
+
+  e2e-light-1:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        rep: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - id: pw-version
+        run: |
+          echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+          echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
+      - id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ steps.pw-version.outputs.image }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:packed-consumer && pnpm test:e2e:light --workers=1 --shard=1/8
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flake-e2e-l1-${{ matrix.rep }}
+          path: |
+            playwright-report
+            test-results
+
