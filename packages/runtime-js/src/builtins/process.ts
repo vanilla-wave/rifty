@@ -362,6 +362,8 @@ export class NodeProcess extends EventEmitter {
   /** A fork program's `serialization`; `null` for a launch-less URL Worker's raw port. */
   #ipcSerialization: NodeIpcSerialization | null = null;
   #ipcKeepaliveHeld = false;
+  // Node's `control.refCounted()`: +1 per `'message'` newListener, -1 per removeListener.
+  #ipcMessageRefs = 0;
   readonly #workerMessageListeners = new Set<(message: unknown) => void>();
   readonly #workerIpcBacklog: unknown[] = [];
   #latestTtyControlSize: { readonly cols: number; readonly rows: number } | null = null;
@@ -468,10 +470,10 @@ export class NodeProcess extends EventEmitter {
         this.#wireIpc(spec.stdio.ipc);
         // Node's setupChannel: the hold follows meta-listeners, so every add path counts.
         this.on('newListener', (event: unknown) => {
-          if (event === 'message') this.#syncIpcKeepalive(1);
+          if (event === 'message') this.#syncIpcKeepalive(this.#ipcMessageRefs + 1);
         });
         this.on('removeListener', (event: unknown) => {
-          if (event === 'message') this.#syncIpcKeepalive();
+          if (event === 'message') this.#syncIpcKeepalive(this.#ipcMessageRefs - 1);
         });
       }
     } else {
@@ -507,7 +509,9 @@ export class NodeProcess extends EventEmitter {
   // Silent in `@riftydev/io` (no `'removeListener'` per listener, Node emits them).
   override removeAllListeners(event?: string | symbol): this {
     const result = super.removeAllListeners(event);
-    if (event === undefined || event === 'message') this.#syncIpcKeepalive();
+    if (event === undefined || event === 'message') {
+      this.#syncIpcKeepalive(this.listenerCount('message'));
+    }
     return result;
   }
 
@@ -813,12 +817,9 @@ export class NodeProcess extends EventEmitter {
     }
   }
 
-  /** `adding`: a `'newListener'` hook runs before its listener lands. */
-  #syncIpcKeepalive(adding = 0): void {
-    const shouldHold =
-      this.#ipcSerialization !== null &&
-      !this.#ipcDisconnected &&
-      this.listenerCount('message') + adding > 0;
+  #syncIpcKeepalive(refs = this.#ipcMessageRefs): void {
+    this.#ipcMessageRefs = refs;
+    const shouldHold = this.#ipcSerialization !== null && !this.#ipcDisconnected && refs > 0;
     if (shouldHold === this.#ipcKeepaliveHeld) return;
     this.#ipcKeepaliveHeld = shouldHold;
     if (shouldHold) refEventLoop();

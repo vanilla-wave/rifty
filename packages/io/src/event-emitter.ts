@@ -112,7 +112,7 @@ class EventEmitterPrototype {
     // Preserve `listener` reference for `removeListener(event, listener)`
     // compatibility with how Node lets you remove by-original-fn.
     (wrapper as { listener?: Listener }).listener = listener;
-    // Through `this.on`, as Node: an `on` override sees `once` registrations.
+    // Through `this.on`, as Node: an `on` override sees `once` registrations; returns `this`.
     (this as unknown as EventEmitter).on(event, wrapper);
     return this;
   }
@@ -123,7 +123,8 @@ class EventEmitterPrototype {
       listener.apply(this, args);
     };
     (wrapper as { listener?: Listener }).listener = listener;
-    return this.prependListener(event, wrapper);
+    this.prependListener(event, wrapper);
+    return this;
   }
 
   emit(event: string | symbol, ...args: unknown[]): boolean {

@@ -171,3 +171,10 @@ Proxy-prototype effects remain a separate successful-send gap, not error precede
 classes are JS objects. Headers/Request/Response/FormData own enumerable fields
 round-trip through real advanced fork IPC as Node; internal Fetch state omitted.
 Other native-object ceilings unchanged.
+
+2026-11-17 — PR #400: Decision 5's hold follows Node's `'newListener'`/`'removeListener'`
+meta-listeners with its ref count (`control.refCounted()`), not `NodeProcess`
+`addListener`/`removeListener` overrides: every add path holds
+(`EventEmitter.prototype.on.call(process, 'message', fn)` included), and after
+`process.removeAllListeners()` or `removeAllListeners('newListener')` a later
+`'message'` listener does not hold, as Node.

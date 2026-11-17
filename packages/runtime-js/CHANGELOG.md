@@ -1,6 +1,6 @@
 # Changelog
 
-- A fork child's IPC `'message'` hold follows `'newListener'`/`'removeListener'` meta-listeners, as Node's `setupChannel`: `process` keeps the inherited `on`/`addListener`/`off`/`removeListener` (`=== EventEmitter.prototype.*`), and `EventEmitter.prototype.on.call(process, 'message', fn)` holds too. `process.stdin` aliases `on` to its flow-starting `addListener` (Node's Readable shape); `readline` close detaches its input through `removeListener`.
+- A fork child's IPC `'message'` hold follows `'newListener'`/`'removeListener'` meta-listeners with Node's ref count (`control.refCounted()`; a guest hook removing a listener mid-add keeps the hold; after `removeAllListeners()`/`removeAllListeners('newListener')` a later listener does not hold), as Node's `setupChannel` (ADR-0448 correction): `process` keeps the inherited `on`/`addListener`/`off`/`removeListener` (`=== EventEmitter.prototype.*`), and `EventEmitter.prototype.on.call(process, 'message', fn)` holds too. `process.stdin` aliases `on` to its flow-starting `addListener` (Node's Readable shape); `readline` close detaches its input through `removeListener`.
 
 - Forward `control:kill-tree` `cascade` to the descendant authority; a missing or non-boolean bit is a loud self-exit (ADR-0548).
 
