@@ -30,6 +30,7 @@ implemented (throws `NotImplementedError` or `TypeError`).
 | `buf.lastIndexOf(value, byteOffset?, encoding?)` | ✅ | |
 | `buf.includes(value, byteOffset?, encoding?)` | ✅ | |
 | `buf.readUInt8/16/32/Int8/16/32 {BE,LE}` | ✅ | Via `DataView` |
+| Lowercase `readUint*`/`writeUint*`/`readBigUint64*` aliases, `buf.toLocaleString()` | ❌ | Node's lowercase forms (same functions as `readUInt*`…) read `undefined`; `toLocaleString` is `Uint8Array`'s (`"104,105"`, Node: `=== toString`) — `backlog/runtime-js/builtin-alias-members` |
 | `buf.writeUInt8/16/32/Int8/16/32 {BE,LE}` | ✅ | Returns post-write offset (Node parity) |
 | `buf.read{U}IntLE/BE(offset, byteLength)` | ✅ | Variable-width 1–6 byte (≤48-bit); signed forms sign-extend |
 | `buf.write{U}IntLE/BE(value, offset, byteLength)` | ✅ | 1–6 byte; returns offset+byteLength |

@@ -69,6 +69,12 @@ class NodeStdinEmitter extends EventEmitter implements NodeStdin {
     return throwStdinGap('process.stdin[Symbol.asyncIterator]');
   }
 }
+// Node's stdin is a Readable: `on === addListener`, one override for both names.
+Object.defineProperty(NodeStdinEmitter.prototype, 'on', {
+  configurable: true,
+  writable: true,
+  value: NodeStdinEmitter.prototype.addListener,
+});
 
 /**
  * Build a `process.stdin` Readable-ish EventEmitter fed by either a kernel

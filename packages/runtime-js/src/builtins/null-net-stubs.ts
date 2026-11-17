@@ -138,9 +138,9 @@ export class Interface extends EventEmitter {
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
-    this.input.off('data', this.#onData);
-    this.input.off('end', this.#onEnd);
-    this.input.off('close', this.#onEnd);
+    this.input.removeListener('data', this.#onData);
+    this.input.removeListener('end', this.#onEnd);
+    this.input.removeListener('close', this.#onEnd);
     this.input.pause?.();
     this.emit('close');
   }

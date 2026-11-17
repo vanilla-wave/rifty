@@ -234,7 +234,6 @@ export function patchPromiseForNextTick(): void {
   } as typeof Promise.prototype.then;
 }
 
-type StdinListener = (...args: unknown[]) => void;
 export type { NodeStdin } from './process-stdin-reader.ts';
 
 interface ProcessTerminalBootstrap {
@@ -364,6 +363,11 @@ export class NodeProcess extends EventEmitter {
   /** A fork program's `serialization`; `null` for a launch-less URL Worker's raw port. */
   #ipcSerialization: NodeIpcSerialization | null = null;
   #ipcKeepaliveHeld = false;
+  // Node's `control.refCounted()`: +1 per `'message'` newListener, -1 per removeListener.
+  #ipcMessageRefs = 0;
+  readonly #ipcReleaseHook = (event: unknown): void => {
+    if (event === 'message') this.#syncIpcKeepalive(this.#ipcMessageRefs - 1);
+  };
   readonly #workerMessageListeners = new Set<(message: unknown) => void>();
   readonly #workerIpcBacklog: unknown[] = [];
   #latestTtyControlSize: { readonly cols: number; readonly rows: number } | null = null;
@@ -468,6 +472,11 @@ export class NodeProcess extends EventEmitter {
         this.connected = true;
         this.channel = nodeIpcChannel('process');
         this.#wireIpc(spec.stdio.ipc);
+        // Node's setupChannel: the hold follows meta-listeners, so every add path counts.
+        this.on('newListener', (event: unknown) => {
+          if (event === 'message') this.#syncIpcKeepalive(this.#ipcMessageRefs + 1);
+        });
+        this.on('removeListener', this.#ipcReleaseHook);
       }
     } else {
       this.pid = 1;
@@ -498,28 +507,17 @@ export class NodeProcess extends EventEmitter {
     installProcessWarnings(this);
   }
 
-  override addListener(event: string | symbol, listener: StdinListener): this {
-    const result = super.addListener(event, listener);
-    if (event === 'message') this.#syncIpcKeepalive();
-    return result;
-  }
-
-  override prependListener(event: string | symbol, listener: StdinListener): this {
-    const result = super.prependListener(event, listener);
-    if (event === 'message') this.#syncIpcKeepalive();
-    return result;
-  }
-
-  override removeListener(event: string | symbol, listener: StdinListener): this {
-    const result = super.removeListener(event, listener);
-    if (event === 'message') this.#syncIpcKeepalive();
-    return result;
-  }
-
+  // Silent in `@riftydev/io`; Node's emits `'removeListener'` per listener, so a still
+  // registered release hook drops one ref per removed `'message'` listener.
   override removeAllListeners(event?: string | symbol): this {
-    const result = super.removeAllListeners(event);
-    if (event === undefined || event === 'message') this.#syncIpcKeepalive();
-    return result;
+    const released =
+      (event === undefined || event === 'message') &&
+      this.listeners('removeListener').includes(this.#ipcReleaseHook)
+        ? this.listenerCount('message')
+        : 0;
+    super.removeAllListeners(event);
+    if (released > 0) this.#syncIpcKeepalive(this.#ipcMessageRefs - released);
+    return this;
   }
 
   // Own instance-bound fields, not prototype methods: Node's detached
@@ -824,11 +822,9 @@ export class NodeProcess extends EventEmitter {
     }
   }
 
-  #syncIpcKeepalive(): void {
-    const shouldHold =
-      this.#ipcSerialization !== null &&
-      !this.#ipcDisconnected &&
-      this.listenerCount('message') > 0;
+  #syncIpcKeepalive(refs = this.#ipcMessageRefs): void {
+    this.#ipcMessageRefs = refs;
+    const shouldHold = this.#ipcSerialization !== null && !this.#ipcDisconnected && refs > 0;
     if (shouldHold === this.#ipcKeepaliveHeld) return;
     this.#ipcKeepaliveHeld = shouldHold;
     if (shouldHold) refEventLoop();

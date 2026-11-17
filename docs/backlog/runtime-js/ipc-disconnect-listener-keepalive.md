@@ -17,7 +17,7 @@ serializations:
 - a child with only `process.on('disconnect', …)` stays alive until the
   parent disconnects (Node `alive-after-300ms true true`, then
   `child-disconnect`, exit 0); rifty's `#syncIpcKeepalive` runs for
-  `'message'` only (`process.ts:662-680`), so the child exits early.
+  `'message'` only (`process.ts` `#syncIpcKeepalive`), so the child exits early.
 - same-realm route: parent `disconnect()` leaves a `'message'`-listening
   child's hold in place (Contract+RED r1 reviewer probe).
 

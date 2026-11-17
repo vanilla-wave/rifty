@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Parity: `npmTreeFiles` mounts original npm trees (npm-authored lock + SRI-checked registry tarballs, system `tar`) as case files; real readable-stream 2.3.8/3.6.2/4.7.0 (+ through2) cases under `cases/stream/readable-stream-v*-real`. Fault taxonomy gains the builtin-prototype ↔ guest-override boundary.
+
 - e2e: `cli-report` two-raw-eval-children picks its real-Node oracle ports by probe-binding `::` below Linux's ephemeral range; the pid-derived 40000+ port collided with runner sockets (`EADDRINUSE`, flaky on PR #397 sampling). Blocking 40000–41999 reproduces the old failure; the new pick passes with 6000 ports held.
 - Runtime: nested-Worker fs relays forward ADR-0365 head/chunk reads instead of re-reading whole files per chunk — the esbuild-wasm service child (every COI Vite start) read its 14 MB wasm (54 chunks) with 54×54 owner requests (6.9 s local, 31–35 s on CI runners vs 0.65 s one hop; measured on PR #395). Root cause of the `vite-at-root` watched-dev and `esbuild-vite-contract` CI timeouts and of slow e2e Vite boots; draft `kernel/vite-startup-readiness-ci` closed.
 - Browser-unit: `opfs-structural-repair` seeds and repair are judged after real settlement (`settleOpfsSetup` / `fence()`), not by the 50 ms report bound kept for the held phases; a slow-but-successful native close (80 ms probe) had failed the seed 8/8 (main run 40251341113). Real seed failures still fail by name. Closes the PR #340 sweep gap (it scoped by `replica-*` filenames).

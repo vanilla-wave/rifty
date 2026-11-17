@@ -58,7 +58,7 @@ export interface WritableLike {
   end(...args: unknown[]): unknown;
   destroy(err?: Error): unknown;
   on(event: string, listener: (...args: unknown[]) => void): unknown;
-  off(event: string, listener: (...args: unknown[]) => void): unknown;
+  removeListener(event: string, listener: (...args: unknown[]) => void): unknown;
   readonly destroyed: boolean;
 }
 
@@ -720,9 +720,9 @@ class WritableImplementation extends EventEmitter {
             reject(errored ?? abortError());
           };
           const cleanup = (): void => {
-            w.off('drain', onDrain);
-            w.off('error', onError);
-            w.off('close', onClose);
+            w.removeListener('drain', onDrain);
+            w.removeListener('error', onError);
+            w.removeListener('close', onClose);
           };
           w.on('drain', onDrain);
           w.on('error', onError);
@@ -746,9 +746,9 @@ class WritableImplementation extends EventEmitter {
             else reject(errored ?? abortError());
           };
           const cleanup = (): void => {
-            w.off('finish', onFinish);
-            w.off('error', onError);
-            w.off('close', onClose);
+            w.removeListener('finish', onFinish);
+            w.removeListener('error', onError);
+            w.removeListener('close', onClose);
           };
           w.on('finish', onFinish);
           w.on('error', onError);

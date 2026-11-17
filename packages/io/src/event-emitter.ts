@@ -33,10 +33,6 @@ class EventEmitterPrototype {
     return this._warned;
   }
 
-  on(event: string | symbol, listener: Listener): this {
-    return this.addListener(event, listener);
-  }
-
   addListener(event: string | symbol, listener: Listener): this {
     this.emitNewListener(event, listener);
     const arr = this.listenersMap.get(event);
@@ -70,10 +66,6 @@ class EventEmitterPrototype {
     const meta = this.listenersMap.get('newListener');
     if (!meta || meta.length === 0) return;
     for (const m of meta.slice()) m.call(this, event, listener);
-  }
-
-  off(event: string | symbol, listener: Listener): this {
-    return this.removeListener(event, listener);
   }
 
   removeListener(event: string | symbol, listener: Listener): this {
@@ -120,7 +112,9 @@ class EventEmitterPrototype {
     // Preserve `listener` reference for `removeListener(event, listener)`
     // compatibility with how Node lets you remove by-original-fn.
     (wrapper as { listener?: Listener }).listener = listener;
-    return this.on(event, wrapper);
+    // Through `this.on`, as Node: an `on` override sees `once` registrations; returns `this`.
+    (this as unknown as EventEmitter).on(event, wrapper);
+    return this;
   }
 
   prependOnceListener(event: string | symbol, listener: Listener): this {
@@ -129,7 +123,8 @@ class EventEmitterPrototype {
       listener.apply(this, args);
     };
     (wrapper as { listener?: Listener }).listener = listener;
-    return this.prependListener(event, wrapper);
+    this.prependListener(event, wrapper);
+    return this;
   }
 
   emit(event: string | symbol, ...args: unknown[]): boolean {
@@ -211,7 +206,12 @@ class EventEmitterPrototype {
  * Keep the listener implementation class-shaped for private state and method
  * typing, but publish its prototype through that single callable boundary.
  */
-export type EventEmitter = EventEmitterPrototype;
+export interface EventEmitter extends EventEmitterPrototype {
+  /** Node: the same function object as `addListener` (aliased on the prototype below). */
+  on(event: string | symbol, listener: Listener): this;
+  /** Node: the same function object as `removeListener`. */
+  off(event: string | symbol, listener: Listener): this;
+}
 
 interface EventEmitterConstructor {
   new (): EventEmitter;
@@ -247,6 +247,16 @@ export const EventEmitter = /* @__PURE__ */ (() => {
   };
 
   CallableEventEmitter.prototype = EventEmitterPrototype.prototype;
+  // Node's events.js: `on = addListener`, `off = removeListener` — one function
+  // per pair. A forwarding `on` re-enters readable-stream's `addListener = on`
+  // override forever. A subclass overriding one name must alias the other itself.
+  const proto = CallableEventEmitter.prototype;
+  for (const [alias, name] of [
+    ['on', 'addListener'],
+    ['off', 'removeListener'],
+  ] as const) {
+    Object.defineProperty(proto, alias, { configurable: true, writable: true, value: proto[name] });
+  }
   Object.defineProperty(CallableEventEmitter.prototype, 'constructor', {
     configurable: true,
     value: CallableEventEmitter,
@@ -292,9 +302,10 @@ export function once(emitter: EventEmitter, event: string | symbol): Promise<unk
   return new Promise((resolve, reject) => {
     // Remove BOTH listeners on either path. `once` wrappers auto-remove the
     // firing one, but explicit cleanup stays correct if a custom `once` doesn't.
+    // Through `removeListener`, as Node: an override of that name sees it.
     const cleanup = (): void => {
-      emitter.off(event, onEvent);
-      if (event !== 'error') emitter.off('error', onError);
+      emitter.removeListener(event, onEvent);
+      if (event !== 'error') emitter.removeListener('error', onError);
     };
     const onEvent = (...args: unknown[]): void => {
       cleanup();
