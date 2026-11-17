@@ -7,6 +7,7 @@
  */
 import { type ChildProcess, type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { type Page, expect, test } from '@playwright/test';
@@ -481,6 +482,25 @@ function startHostPreview(fixture: HostFixture, invocation: PreviewInvocation): 
   return { child, ready, outcome };
 }
 
+/**
+ * Two consecutive host ports free right now for the real-Node oracle (its
+ * children listen on `::`), below Linux's ephemeral range (32768+), where a
+ * pid-derived fixed port collided with outbound sockets (EADDRINUSE).
+ */
+async function freeHostPortPair(): Promise<number> {
+  const free = (port: number) =>
+    new Promise<boolean>((resolve) => {
+      const server = createServer();
+      server.once('error', () => resolve(false));
+      server.listen({ port, host: '::', exclusive: true }, () => server.close(() => resolve(true)));
+    });
+  for (let step = 0; step < 6_000; step++) {
+    const base = 20_000 + (((process.pid % 6_000) + step) % 6_000) * 2;
+    if ((await free(base)) && (await free(base + 1))) return base;
+  }
+  throw new Error('no free host port pair in 20000-31999');
+}
+
 async function fetchHostPreview(port: number): Promise<string> {
   const response = await fetch(`http://127.0.0.1:${String(port)}/`);
   expect(response.ok).toBe(true);
@@ -806,7 +826,7 @@ test.describe('CLI report template through the worker lifecycle', () => {
     test.setTimeout(240_000);
     const problems = capturePageProblems(page);
     const fixture = createHostFixture();
-    const portBase = 40_000 + (process.pid % 1_000) * 2;
+    const portBase = await freeHostPortPair();
     const invocationA = previewInvocation('preview-a', '/fixtures/a', '-e', 'alpha', portBase);
     const invocationB = previewInvocation(
       'preview-b',

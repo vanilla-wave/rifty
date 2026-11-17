@@ -18,7 +18,9 @@ read/write plus base64 write inflation.
 2026-11-17: the relay amplification (a nested Worker's chunk re-read the whole
 file upstream through its parent realm: N×N owner requests) is fixed by relay
 forwarding (ADR-0365 correction). The owner-side whole-file re-read per chunk
-(N in-memory copies, ~0.15 s for 14 MB locally) remains here.
+(N in-memory copies, ~0.15 s for 14 MB locally) remains here. The write direction is still
+amplified through a relay: an append `writeChunk` re-reads the previous bytes
+and rewrites them upstream per chunk (unmeasured; no CI failure attributed).
 
 ADR-0150 Consequences flag these as accepted-for-v1; concrete record here. (1) `fs-handlers.readChunk` re-reads the WHOLE file per chunk (`readFileBytesSync(path)` then `subarray`) → O(N²) for a file read in K chunks. (2) `writeChunk` append reads prev+concat+writes per chunk → O(N²) multi-chunk writes; plus base64 ~33% inflation on every write request.
 
