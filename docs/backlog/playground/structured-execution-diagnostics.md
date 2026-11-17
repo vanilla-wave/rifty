@@ -30,10 +30,11 @@ boundary; own draft withdrawn). Measured (spikes 2026-08-29/30, chromium
   unsafe until browser storage recovers»; both removed 2026-11-17 with the
   stamp-miss restore) reached zero consoles in every run.
 - The active first-materialization boot branch
-  (workbench-owner-runtime.ts:351/372 → `activateAndEnsure`) never reaches that
-  legacy `restore()` code at all; only the bare `promotion-refused` reason
-  surfaces via the authority observe hook → `console.warn`
-  (owner-package-state.ts ~255) — the prose context is lost on every path.
+  (workbench-owner-runtime.ts:351/372 → `activateAndEnsure`) never reached that
+  legacy `restore()` code (removed 2026-11-17); only the bare
+  `promotion-refused` reason surfaces via the authority observe hook →
+  `console.warn` (owner-package-state.ts `observe`) — the prose context is lost
+  on every path.
 - Snapshot unavailable re-probed 2026-10-26 (dev seam cookie with a malformed
   value → HTTP 400, vite8 cold deep-link): terminal 0 prints
   `snapshot-fetch-failed: … HTTP 400`, then `$ npm install` and its package

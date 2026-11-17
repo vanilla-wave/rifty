@@ -20,14 +20,18 @@ Observed 2026-11-17 after the stamp-miss restore removal (ADR-0135 correction
   (harness used by `project-deps.test.ts`, `dep-snapshot.test.ts`,
   `package-acquisition-authority.test.ts`) and direct dispatches in
   `package-acquisition-authority{,.fault}.test.ts`,
-  `package-acquisition-invalid-claim.test.ts`.
+  `package-acquisition-invalid-claim.test.ts`,
+  `tests/integration/npm-shell-eddy-glue.test.ts`. The harness tests drive
+  `snapshotSource` with `fallback: 'install'`, a combination production no
+  longer sends (first materialization is `snapshot-only`; `activate-and-ensure`
+  has no `snapshotSource`).
 - `project-switch` command with `resetPackages`: no production sender; the
-  authority calls `adapter.switchProject` internally without it. The owner
-  adapter branch (`owner-package-state.ts` `switchProject`, incl. its
-  `NotImplementedError('package-acquisition.project-switch.package-json')`)
-  runs only from `package-acquisition-authority.fault.test.ts` ("does not
-  mutate a clean project switch when durable destination revocation fails")
-  and `tests/integration/npm-shell-command.test.ts` (`resetPackages: true`).
+  authority calls `adapter.switchProject` internally without it. Senders are
+  only `package-acquisition-authority.fault.test.ts` ("does not mutate a clean
+  project switch when durable destination revocation fails") and
+  `tests/integration/npm-shell-command.test.ts`, both with their own adapters.
+  The owner adapter's clear+reseed branch had no runner left, so it now throws
+  `NotImplementedError('package-acquisition.owner.project-switch.reset-packages')`.
 
 Probe: `git grep -n -E "type: 'ensure'|type: 'project-switch'|resetPackages"
 -- 'packages/**' ':!*.test.ts' ':!*test-fixture*'` → only the type
@@ -42,5 +46,5 @@ surface, or a review that cites these routes as dead.
 
 Delete both routes and retarget their tests to `activate-and-ensure` /
 `prepare-first-materialization`, or keep `ensure` dispatch as the authority's
-focused test entry? A fault test that only exercises a dead route is deleted
-with it, not retargeted.
+focused test entry? Which of their tests pin a property that live routes still
+need?
