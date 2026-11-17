@@ -11,7 +11,7 @@ code: [packages/shell/src/tokenize.ts, packages/shell/src/shell.ts]
 ## Context
 
 GNU bash 3.2.57 (macOS 26.6.2, `/bin/bash --noprofile --norc -c`) vs rifty
-`Shell.run` @ 1f61b7bc5 (MemoryFsSync cwd `/p`), 2026-11-17:
+`Shell.run` @ 7691a6584 (MemoryFsSync cwd `/p`), 2026-11-17:
 `touch a1 a2; echo \a*  a\*` → bash `a1 a2 a*`, rifty `a1 a2 a1 a2` (silent).
 
 ADR-0091 defines `quoted` by quote characters; POSIX counts the escape

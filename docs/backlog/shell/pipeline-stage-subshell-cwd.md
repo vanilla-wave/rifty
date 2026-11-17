@@ -11,7 +11,7 @@ code: [packages/shell/src/shell.ts, packages/shell/src/commands/cd.ts]
 ## Context
 
 GNU bash 3.2.57 (macOS 26.6.2, `/bin/bash --noprofile --norc -c`) vs rifty
-`Shell.run` @ 1f61b7bc5 (MemoryFsSync cwd `/p`), 2026-11-17:
+`Shell.run` @ 7691a6584 (MemoryFsSync cwd `/p`), 2026-11-17:
 `mkdir d; cd d | cat; pwd` → bash prints the original cwd, rifty `/p/d`
 (silent; persists into later commands of a COI terminal session).
 

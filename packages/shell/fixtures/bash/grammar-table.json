@@ -17,7 +17,10 @@
       "text": ";&",
       "why": "POSIX Issue 8 / bash 4.0; bash 3.2.57: syntax error near unexpected token `&'"
     },
-    { "text": ";;&", "why": "bash 4.0; bash 3.2.57: syntax error near unexpected token `&'" }
+    {
+      "text": ";;&",
+      "why": "bash 4.0; bash 3.2.57: syntax error near unexpected token `&'"
+    }
   ],
   "operators": [
     {
@@ -55,7 +58,13 @@
       "rifty": "shell.heredoc",
       "fixture": "heredoc-unquoted"
     },
-    { "text": ">>", "name": "DGREAT", "source": "posix", "rifty": ">>", "fixture": "op-append" },
+    {
+      "text": ">>",
+      "name": "DGREAT",
+      "source": "posix",
+      "rifty": ">>",
+      "fixture": "op-append"
+    },
     {
       "text": "<&",
       "name": "LESSAND",
@@ -91,9 +100,27 @@
       "rifty": "shell.fd-redirect",
       "fixture": "fd-clobber"
     },
-    { "text": "<", "name": "<", "source": "posix", "rifty": "<", "fixture": "op-input" },
-    { "text": ">", "name": ">", "source": "posix", "rifty": ">", "fixture": "newline-redirects" },
-    { "text": "|", "name": "|", "source": "posix", "rifty": "|", "fixture": "op-pipe" },
+    {
+      "text": "<",
+      "name": "<",
+      "source": "posix",
+      "rifty": "<",
+      "fixture": "op-input"
+    },
+    {
+      "text": ">",
+      "name": ">",
+      "source": "posix",
+      "rifty": ">",
+      "fixture": "newline-redirects"
+    },
+    {
+      "text": "|",
+      "name": "|",
+      "source": "posix",
+      "rifty": "|",
+      "fixture": "op-pipe"
+    },
     {
       "text": ";",
       "name": ";",
@@ -163,26 +190,91 @@
       "fd-io-number-devnull",
       "fd-io-number-high",
       "fd-io-number-input",
-      "process-substitution-io-number"
+      "process-substitution-io-number",
+      "io-number-quoted-is-argument"
     ]
   },
   "reservedWords": [
-    { "word": "!", "source": "posix", "fixture": "compound-bang" },
-    { "word": "{", "source": "posix", "fixture": "compound-group" },
-    { "word": "}", "source": "posix", "fixture": "reserved-close-brace" },
-    { "word": "case", "source": "posix", "fixture": "compound-case" },
-    { "word": "do", "source": "posix", "fixture": "reserved-do" },
-    { "word": "done", "source": "posix", "fixture": "reserved-done" },
-    { "word": "elif", "source": "posix", "fixture": "reserved-elif" },
-    { "word": "else", "source": "posix", "fixture": "reserved-else" },
-    { "word": "esac", "source": "posix", "fixture": "reserved-esac" },
-    { "word": "fi", "source": "posix", "fixture": "reserved-fi" },
-    { "word": "for", "source": "posix", "fixture": "compound-for" },
-    { "word": "if", "source": "posix", "fixture": "compound-if-multiline" },
-    { "word": "in", "source": "posix", "fixture": "reserved-in" },
-    { "word": "then", "source": "posix", "fixture": "reserved-then" },
-    { "word": "until", "source": "posix", "fixture": "compound-until" },
-    { "word": "while", "source": "posix", "fixture": "compound-while" },
+    {
+      "word": "!",
+      "source": "posix",
+      "fixture": "compound-bang"
+    },
+    {
+      "word": "{",
+      "source": "posix",
+      "fixture": "compound-group"
+    },
+    {
+      "word": "}",
+      "source": "posix",
+      "fixture": "reserved-close-brace"
+    },
+    {
+      "word": "case",
+      "source": "posix",
+      "fixture": "compound-case"
+    },
+    {
+      "word": "do",
+      "source": "posix",
+      "fixture": "reserved-do"
+    },
+    {
+      "word": "done",
+      "source": "posix",
+      "fixture": "reserved-done"
+    },
+    {
+      "word": "elif",
+      "source": "posix",
+      "fixture": "reserved-elif"
+    },
+    {
+      "word": "else",
+      "source": "posix",
+      "fixture": "reserved-else"
+    },
+    {
+      "word": "esac",
+      "source": "posix",
+      "fixture": "reserved-esac"
+    },
+    {
+      "word": "fi",
+      "source": "posix",
+      "fixture": "reserved-fi"
+    },
+    {
+      "word": "for",
+      "source": "posix",
+      "fixture": "compound-for"
+    },
+    {
+      "word": "if",
+      "source": "posix",
+      "fixture": "compound-if-multiline"
+    },
+    {
+      "word": "in",
+      "source": "posix",
+      "fixture": "reserved-in"
+    },
+    {
+      "word": "then",
+      "source": "posix",
+      "fixture": "reserved-then"
+    },
+    {
+      "word": "until",
+      "source": "posix",
+      "fixture": "compound-until"
+    },
+    {
+      "word": "while",
+      "source": "posix",
+      "fixture": "compound-while"
+    },
     {
       "word": "[[",
       "source": "posix-optional, bash compgen -k",
@@ -198,8 +290,16 @@
       "source": "posix-optional, bash compgen -k",
       "fixture": "compound-function-keyword"
     },
-    { "word": "select", "source": "posix-optional, bash compgen -k", "fixture": "compound-select" },
-    { "word": "time", "source": "bash compgen -k", "fixture": "compound-time" }
+    {
+      "word": "select",
+      "source": "posix-optional, bash compgen -k",
+      "fixture": "compound-select"
+    },
+    {
+      "word": "time",
+      "source": "bash compgen -k",
+      "fixture": "compound-time"
+    }
   ],
   "reservedWordGap": "shell.compound-command"
 }

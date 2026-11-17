@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Prompt host facts state the real shell subset (heredoc/compound/`$(…)` fail loudly, other bash features may differ, no python or native binaries) instead of claiming every unsupported shell feature fails loudly; no-COI notes add that background `&` is rejected.
+- Prompt host facts state the real shell subset (heredoc/compound/`$(…)`/process substitution/fd redirects fail loudly, other bash features may differ, no python or native binaries) instead of claiming every unsupported shell feature fails loudly; no-COI notes add that background `&` is rejected.
 
 - Keep transcript notice types aligned with emitted notice events when archive receipts are enabled.
 

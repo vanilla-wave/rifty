@@ -1302,6 +1302,20 @@
       }
     },
     {
+      "id": "io-number-quoted-is-argument",
+      "command": "echo '2'>f; echo \\3>g",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "f": "2\n",
+          "g": "3\n"
+        }
+      }
+    },
+    {
       "id": "op-append",
       "command": "echo a > f; echo b >> f",
       "setup": {},

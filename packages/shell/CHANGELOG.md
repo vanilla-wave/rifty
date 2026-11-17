@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Unquoted newlines separate commands; backslash-newline continues a line; word-initial `#` starts a comment; each later command expands `$VAR` after earlier ones ran (`X=1; echo $X`, bash). Heredoc/here-string and compound commands (literal reserved words, any unquoted `(`/`)`) throw `NotImplementedError` (`shell.heredoc`, `shell.here-string`, `shell.compound-command`), fd-dup/`&>`/`<>`/`>|` operators throw `shell.fd-redirect`; a list operator where a command must start or a redirect without a target throws bash's syntax error — all before anything runs. Frozen bash 3.2.57 fixture; `docs/public/compat/shell.md` (ADR-0091/0093 notes 2026-11-17).
+- Unquoted newlines separate commands; backslash-newline continues a line; word-initial `#` starts a comment; each later command expands `$VAR` after earlier ones ran (`X=1; echo $X`, bash). Operators and reserved words come from one closed table (POSIX XCU Issue 7 + bash 3.2.57, `fixtures/bash/grammar-table.json`): heredoc/here-string, fd redirects (`2>`, `2>&1`, `&>`, `<>`, `>|`), process substitution and compound commands (literal reserved words incl. `time`, unquoted `(`/`)`, `;;`) throw `NotImplementedError` (`shell.heredoc`, `shell.here-string`, `shell.fd-redirect`, `shell.process-substitution`, `shell.compound-command`); `1>`/`1>>`/`0<` are the plain redirects (no longer argv `1`/`0`); a list operator where a command must start or a redirect without a target throws bash's syntax error — all before anything runs. Frozen bash 3.2.57 fixture; `docs/public/compat/shell.md` (ADR-0091/0093 notes 2026-11-17).
 
 - Carry file-redirection endpoint metadata into the command context (ADR-0544).
 

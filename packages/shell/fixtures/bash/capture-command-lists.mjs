@@ -142,6 +142,7 @@ const CASES = [
   ['io-number-stdout', 'echo x 1>out.txt'],
   ['io-number-append', 'echo a 1>o.txt; echo b 1>>o.txt'],
   ['io-number-stdin', 'echo IN > in.txt; cat 0<in.txt'],
+  ['io-number-quoted-is-argument', "echo '2'>f; echo \\3>g"],
   ['op-append', 'echo a > f; echo b >> f'],
   ['op-input', 'echo IN > in.txt; cat < in.txt'],
   ['op-pipe', 'echo a | cat'],
