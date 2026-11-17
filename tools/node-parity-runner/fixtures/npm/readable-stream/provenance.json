@@ -1,0 +1,182 @@
+{
+  "node": "v24.16.0",
+  "npm": "11.17.0",
+  "packages": [
+    {
+      "name": "abort-controller",
+      "version": "3.0.0",
+      "file": "abort-controller-3.0.0",
+      "tarball": "https://registry.npmjs.org/abort-controller/-/abort-controller-3.0.0.tgz",
+      "integrity": "sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==",
+      "bytes": 17548
+    },
+    {
+      "name": "base64-js",
+      "version": "1.5.1",
+      "file": "base64-js-1.5.1",
+      "tarball": "https://registry.npmjs.org/base64-js/-/base64-js-1.5.1.tgz",
+      "integrity": "sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==",
+      "bytes": 4109
+    },
+    {
+      "name": "buffer",
+      "version": "6.0.3",
+      "file": "buffer-6.0.3",
+      "tarball": "https://registry.npmjs.org/buffer/-/buffer-6.0.3.tgz",
+      "integrity": "sha512-FTiCpNxtwiZZHEZbcbTIcZjERVICn9yq/pDFkTl95/AxzD1naBctN7YO68riM/gLSDY7sdrMby8hofADYuuqOA==",
+      "bytes": 23108
+    },
+    {
+      "name": "core-util-is",
+      "version": "1.0.3",
+      "file": "core-util-is-1.0.3",
+      "tarball": "https://registry.npmjs.org/core-util-is/-/core-util-is-1.0.3.tgz",
+      "integrity": "sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==",
+      "bytes": 1897
+    },
+    {
+      "name": "event-target-shim",
+      "version": "5.0.1",
+      "file": "event-target-shim-5.0.1",
+      "tarball": "https://registry.npmjs.org/event-target-shim/-/event-target-shim-5.0.1.tgz",
+      "integrity": "sha512-i/2XbnSz/uxRCU6+NdVJgKWDTM427+MqYbkQzD321DuCQJUqOuJKIA0IM2+W2xtYHdKOmZ4dR6fExsd4SXL+WQ==",
+      "bytes": 37216
+    },
+    {
+      "name": "events",
+      "version": "3.3.0",
+      "file": "events-3.3.0",
+      "tarball": "https://registry.npmjs.org/events/-/events-3.3.0.tgz",
+      "integrity": "sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==",
+      "bytes": 16574
+    },
+    {
+      "name": "ieee754",
+      "version": "1.2.1",
+      "file": "ieee754-1.2.1",
+      "tarball": "https://registry.npmjs.org/ieee754/-/ieee754-1.2.1.tgz",
+      "integrity": "sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==",
+      "bytes": 2886
+    },
+    {
+      "name": "inherits",
+      "version": "2.0.4",
+      "file": "inherits-2.0.4",
+      "tarball": "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz",
+      "integrity": "sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==",
+      "bytes": 2030
+    },
+    {
+      "name": "isarray",
+      "version": "1.0.0",
+      "file": "isarray-1.0.0",
+      "tarball": "https://registry.npmjs.org/isarray/-/isarray-1.0.0.tgz",
+      "integrity": "sha512-VLghIWNM6ELQzo7zwmcg0NmTVyWKYjvIeM83yjp0wRDTmUnrM678fQbcKBo6n2CJEF0szoG//ytg+TKla89ALQ==",
+      "bytes": 2021
+    },
+    {
+      "name": "process",
+      "version": "0.11.10",
+      "file": "process-0.11.10",
+      "tarball": "https://registry.npmjs.org/process/-/process-0.11.10.tgz",
+      "integrity": "sha512-cdGef/drWFoydD1JsMzuFf8100nZl+GT+yacc2bEced5f9Rjk4z+WtFUTBu9PhOi9j/jfmBPu0mMEY4wIdAF8A==",
+      "bytes": 4669
+    },
+    {
+      "name": "process-nextick-args",
+      "version": "2.0.1",
+      "file": "process-nextick-args-2.0.1",
+      "tarball": "https://registry.npmjs.org/process-nextick-args/-/process-nextick-args-2.0.1.tgz",
+      "integrity": "sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==",
+      "bytes": 1654
+    },
+    {
+      "name": "readable-stream",
+      "version": "2.3.8",
+      "file": "readable-stream-2.3.8",
+      "tarball": "https://registry.npmjs.org/readable-stream/-/readable-stream-2.3.8.tgz",
+      "integrity": "sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA==",
+      "bytes": 25747
+    },
+    {
+      "name": "readable-stream",
+      "version": "3.6.2",
+      "file": "readable-stream-3.6.2",
+      "tarball": "https://registry.npmjs.org/readable-stream/-/readable-stream-3.6.2.tgz",
+      "integrity": "sha512-9u/sniCrY3D5WdsERHzHE4G2YCXqoG5FTHUiCC4SIbr6XcLZBY05ya9EKjYek9O5xOAwjGq+1JdGBAS7Q9ScoA==",
+      "bytes": 33238
+    },
+    {
+      "name": "readable-stream",
+      "version": "4.7.0",
+      "file": "readable-stream-4.7.0",
+      "tarball": "https://registry.npmjs.org/readable-stream/-/readable-stream-4.7.0.tgz",
+      "integrity": "sha512-oIGGmcpTLwPga8Bn6/Z75SVaH1z5dUut2ibSyAMVhmUggWpmDn2dapB0n7f8nwaSiRtepAsfJyfXIO5DCVAODg==",
+      "bytes": 54820
+    },
+    {
+      "name": "safe-buffer",
+      "version": "5.1.2",
+      "file": "safe-buffer-5.1.2",
+      "tarball": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.1.2.tgz",
+      "integrity": "sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g==",
+      "bytes": 9822
+    },
+    {
+      "name": "safe-buffer",
+      "version": "5.2.1",
+      "file": "safe-buffer-5.2.1",
+      "tarball": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz",
+      "integrity": "sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==",
+      "bytes": 9972
+    },
+    {
+      "name": "string_decoder",
+      "version": "1.1.1",
+      "file": "string_decoder-1.1.1",
+      "tarball": "https://registry.npmjs.org/string_decoder/-/string_decoder-1.1.1.tgz",
+      "integrity": "sha512-n/ShnvDi6FHbbVfviro+WojiFzv+s8MPMHBczVePfUpDJLwoLT0ht1l4YwBCbi8pJAveEEdnkHyPyTP/mzRfwg==",
+      "bytes": 4831
+    },
+    {
+      "name": "string_decoder",
+      "version": "1.3.0",
+      "file": "string_decoder-1.3.0",
+      "tarball": "https://registry.npmjs.org/string_decoder/-/string_decoder-1.3.0.tgz",
+      "integrity": "sha512-hkRX8U1WjJFd8LsDJ2yQ/wWWxaopEsABU1XfkM8A+j0+85JAGppt16cr1Whg6KIbb4okU6Mql6BOj+uup/wKeA==",
+      "bytes": 4622
+    },
+    {
+      "name": "through2",
+      "version": "2.0.5",
+      "file": "through2-2.0.5",
+      "tarball": "https://registry.npmjs.org/through2/-/through2-2.0.5.tgz",
+      "integrity": "sha512-/mrRod8xqpA+IHSLyGCQ2s8SPHiCDEeQJSep1jqLYeEUClOFG2Qsh+4FU6G9VeqpZnGW/Su8LQGc4YKni5rYSQ==",
+      "bytes": 4060
+    },
+    {
+      "name": "through2",
+      "version": "4.0.2",
+      "file": "through2-4.0.2",
+      "tarball": "https://registry.npmjs.org/through2/-/through2-4.0.2.tgz",
+      "integrity": "sha512-iOqSav00cVxEEICeD7TjLB1sueEL+81Wpzp2bY17uZjZN0pWZPuo4suZ/61VujxmqSGFfgOcNuTZ85QJwNZQpw==",
+      "bytes": 4009
+    },
+    {
+      "name": "util-deprecate",
+      "version": "1.0.2",
+      "file": "util-deprecate-1.0.2",
+      "tarball": "https://registry.npmjs.org/util-deprecate/-/util-deprecate-1.0.2.tgz",
+      "integrity": "sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==",
+      "bytes": 2246
+    },
+    {
+      "name": "xtend",
+      "version": "4.0.2",
+      "file": "xtend-4.0.2",
+      "tarball": "https://registry.npmjs.org/xtend/-/xtend-4.0.2.tgz",
+      "integrity": "sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==",
+      "bytes": 2529
+    }
+  ]
+}
