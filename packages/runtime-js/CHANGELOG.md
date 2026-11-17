@@ -1,6 +1,7 @@
 # Changelog
 
 - A fork child's IPC `'message'` hold follows `'newListener'`/`'removeListener'` meta-listeners with Node's ref count (`control.refCounted()`; `removeAllListeners` releases one ref per removed listener, as Node's per-listener `'removeListener'`, so a guest hook removing listeners mid-add keeps the hold; after `removeAllListeners()`/`removeAllListeners('newListener')` a later listener does not hold), as Node's `setupChannel` (ADR-0448 correction): `process` keeps the inherited `on`/`addListener`/`off`/`removeListener` (`=== EventEmitter.prototype.*`), and `EventEmitter.prototype.on.call(process, 'message', fn)` holds too. `process.stdin` aliases `on` to its flow-starting `addListener` (Node's Readable shape); `readline` close detaches its input through `removeListener`.
+- Nested-Worker fs relays forward `fs.readFileHead`/`fs.readChunk` upstream (`ChunkedReadSource`, `readFileHeadReplyOf`/`readChunkReplyOf`) instead of re-reading the whole file per relayed request: a grandchild 14 MB read drops from 6.9 s to 0.14 s locally (esbuild-wasm service start under Vite; ADR-0365 correction).
 
 - Forward `control:kill-tree` `cascade` to the descendant authority; a missing or non-boolean bit is a loud self-exit (ADR-0548).
 
@@ -11,6 +12,8 @@
 - Transport complete numeric Stats fields from VFS; upstream no-COI esbuild can resolve build files.
 
 ## [Unreleased]
+
+- Node decode surfaces keep a leading UTF-8 BOM: `fs` encoded reads and `createReadStream({ encoding })`, `string_decoder`, `readline`, `process.stdin.setEncoding`, `execSync` encoded output, `digest('utf8')`, Buffer paths, spec-less default process stdout/stderr. One-shot decodes use io `bytesToString`; COI `execSync` failure message carries the child stderr verbatim (no trim). `stream/consumers` `text()`/`json()` follow Node: string chunks verbatim, byte chunks through one default `TextDecoder` as they arrive. Module loader unchanged (`.json`, `package.json`, ESM still strip, as Node).
 
 - Guest Fetch instances and `markAsUncloneable` graphs throw Node's `DataCloneError` (code 25) on `structuredClone`, realm/`MessagePort`/`Worker`/`parentPort`/`BroadcastChannel` `postMessage` (kernel and same-realm workers): tags on ordinary objects and real Errors throw as Node, intrinsics ignore theirs; nested data properties, spoofed prototypes, Map/Set entries and Error `cause` included. One side-effect-free admission walk (`internal/clone-marks.ts`, realm-global marks shared across bundles) runs ahead of the native clone, which always gets the original graph; wrapped clone surfaces touch only captured primordials and forward a read transfer list as a primordial-only iterable. Declared gaps: a tag behind a getter is not seen (compat ❌); a tag on a host object is honoured where Node ignores it, and a getter deleting a later tagged sibling still throws (compat ⚠️) (ADR-0541).
 

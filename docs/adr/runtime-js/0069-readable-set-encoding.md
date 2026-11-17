@@ -53,6 +53,17 @@ verified by the live smoke wall.
   unaffected). The `encoding` constructor option (and
   `Readable.from(_, { encoding })`) now routes through the same path.
 
+## Corrections (active)
+
+2026-11-17: D3 "matches Node's `StringDecoder`" was false for two inputs. The
+WHATWG default `ignoreBOM: false` dropped a leading BOM that Node keeps → the
+utf8/utf16le decoder runs with `ignoreBOM: true`. TextDecoder `latin1` is
+windows-1252 (0x80 → U+20AC) → `latin1`/`binary` leave the TextDecoder set and
+decode per-chunk via `Buffer.toString('latin1')` (stateless, one byte per
+char). Parity: `stream/readable-set-encoding-bom`, `-latin1` cases. Still not
+`StringDecoder`: base64 carry, utf16le lone surrogates, unflushed tail —
+`docs/backlog/runtime-js/readable-set-encoding-string-decoder-residue.md`.
+
 ## Consequences
 
 - `packages/io/src/streams/readable.ts`: adds `setEncoding`, `readableEncoding`,

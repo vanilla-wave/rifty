@@ -13,6 +13,7 @@
  * `bind`/closure on boot) bypasses the drain. Acceptable for M3; revisit if a
  * real package breaks.
  */
+import { bytesToString } from '@riftydev/io';
 import {
   type IpcFrame,
   type KernelProcessSpec,
@@ -483,16 +484,15 @@ export class NodeProcess extends EventEmitter {
       this.argv = ['rifty', 'repl'];
       this.env = Object.create(null);
       const size = { cols: 80, rows: 24 };
-      const decoder = new TextDecoder();
       this.stdout = makeStdioWriter(
-        { write: (bytes) => console.log(decoder.decode(bytes)) },
+        { write: (bytes) => console.log(bytesToString(bytes, 'utf8')) },
         1,
         false,
         size,
         nextTick,
       );
       this.stderr = makeStdioWriter(
-        { write: (bytes) => console.error(decoder.decode(bytes)) },
+        { write: (bytes) => console.error(bytesToString(bytes, 'utf8')) },
         2,
         false,
         size,

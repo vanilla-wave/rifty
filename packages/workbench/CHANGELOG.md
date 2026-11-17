@@ -1,5 +1,7 @@
 # Changelog
 
+- The rooted guest view (`ProjectTerminalFsSync`) forwards ADR-0365 head/chunk reads through its usual guest resolution, so dev-server-child relays stay linear for nested Workers (esbuild-wasm service).
+
 - Supply owner-stable Stats metadata for virtual namespace directories, retaining guest-only error paths.
 
 - No-COI install/open/snapshot no longer activate the generated esbuild client; builds use SW children.

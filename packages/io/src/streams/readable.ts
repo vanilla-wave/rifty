@@ -118,13 +118,11 @@ function pushAfterEofError(): Error {
 }
 
 /**
- * Per-instance decode state set by `setEncoding(enc)`. The text encodings that
- * `TextDecoder` covers are decoded with a single persistent decoder in
- * `{ stream: true }` mode so a multi-byte character split across chunk
- * boundaries decodes correctly (matching Node's `StringDecoder`); byte-group
- * encodings (`hex`/`base64`/`base64url`) and `ascii` are decoded per-chunk via
- * `Buffer.toString` (Node's `ascii` is 7-bit, distinct from TextDecoder's
- * windows-1252 alias — so route it through Buffer for exactness).
+ * Per-instance decode state set by `setEncoding(enc)`. utf8/utf16le use one
+ * persistent `{ stream: true }` decoder that keeps a leading BOM, so a split
+ * multi-byte character decodes like Node's `StringDecoder`; byte-group
+ * encodings, `ascii` and `latin1` decode per-chunk via `Buffer.toString`
+ * (TextDecoder's ascii/latin1 labels are windows-1252, not Node's codecs).
  */
 interface EncodingState {
   /** Node's canonical name (`readableEncoding` + the `Buffer.toString` arg). */
@@ -134,9 +132,8 @@ interface EncodingState {
 
 /**
  * Node encoding name / alias → { canonical name, TextDecoder label or null }.
- * The TextDecoder set (utf8/utf16le/latin1) is streaming-decoded; the rest
- * (ascii/hex/base64/base64url) fall through to a per-chunk `Buffer.toString`
- * using the canonical name (all valid `Buffer` encodings).
+ * The TextDecoder set (utf8/utf16le) is streaming-decoded; the rest fall
+ * through to a per-chunk `Buffer.toString` using the canonical name.
  */
 const ENCODINGS: Record<string, { canonical: string; td: string | null }> = {
   utf8: { canonical: 'utf8', td: 'utf-8' },
@@ -145,8 +142,8 @@ const ENCODINGS: Record<string, { canonical: string; td: string | null }> = {
   'utf-16le': { canonical: 'utf16le', td: 'utf-16le' },
   ucs2: { canonical: 'utf16le', td: 'utf-16le' },
   'ucs-2': { canonical: 'utf16le', td: 'utf-16le' },
-  latin1: { canonical: 'latin1', td: 'latin1' },
-  binary: { canonical: 'latin1', td: 'latin1' },
+  latin1: { canonical: 'latin1', td: null },
+  binary: { canonical: 'latin1', td: null },
   ascii: { canonical: 'ascii', td: null },
   hex: { canonical: 'hex', td: null },
   base64: { canonical: 'base64', td: null },
@@ -160,7 +157,8 @@ function makeEncodingState(encoding: string): EncodingState {
     err.code = 'ERR_UNKNOWN_ENCODING';
     throw err;
   }
-  return { label: entry.canonical, decoder: entry.td ? new TextDecoder(entry.td) : null };
+  const decoder = entry.td ? new TextDecoder(entry.td, { ignoreBOM: true }) : null;
+  return { label: entry.canonical, decoder };
 }
 
 /**

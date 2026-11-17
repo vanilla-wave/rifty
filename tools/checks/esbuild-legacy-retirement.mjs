@@ -101,8 +101,8 @@ const WORKBENCH_COMPILER_OUTPUTS = Object.freeze({
     sha256: '39be666ac003c7361e9fbcd88abdda1ed51052350ade9b57b4d2716f1e296498',
   },
   'typescript-worker.js': {
-    bytes: 10022694,
-    sha256: 'eefc69cf3433702b756c585a79b922953b38acef11d26c94ca343744a454cdea',
+    bytes: 10022686,
+    sha256: 'b05c95ee2ae8a24de9ed364d003ab384e2637553190c6e0165e9cc34f0465de3',
   },
 });
 const WORKBENCH_WASM_OUTPUTS = Object.freeze({

@@ -6,6 +6,7 @@
  * its own path handling instead of importing this kit recreates that bug.
  */
 
+import { bytesToString } from '@riftydev/io';
 import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { URLConstructor, fileURLToPathPosix } from '../internal/posix-file-url.ts';
 import { getProcessCwd } from './process.ts';
@@ -15,7 +16,7 @@ export type PathLike = string | URL | Uint8Array;
 export function pathToString(p: PathLike): string {
   if (typeof p === 'string') return p;
   if (p instanceof URLConstructor) return fileURLToPathPosix(p);
-  if (p instanceof Uint8Array) return new TextDecoder().decode(p);
+  if (p instanceof Uint8Array) return bytesToString(p, 'utf8'); // a leading BOM is a name char
   throw new TypeError('fs path must be string, Buffer, or URL');
 }
 
