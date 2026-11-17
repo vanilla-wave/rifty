@@ -30,7 +30,13 @@ export type { BuiltinFactory } from './builtins/index.ts';
 // the child's `process.version` does, never a drifting hardcode.
 export { NODE_PROCESS_IDENTITY } from './builtins/process-identity.ts';
 export { installRuntimeJsFsHandlers } from './ipc/fs-handlers.ts';
-export { SyncRpcFsSync, installRemoteSyncFs } from './ipc/sync-rpc-fs.ts';
+export {
+  type ChunkedReadSource,
+  SyncRpcFsSync,
+  installRemoteSyncFs,
+  readChunkReplyOf,
+  readFileHeadReplyOf,
+} from './ipc/sync-rpc-fs.ts';
 export type { SyncBinaryCall, SyncCall } from './ipc/sync-rpc-fs.ts';
 export {} from './internal/worker-globals.ts';
 export { FS_RPC_CHUNK } from './ipc/fs-rpc-protocol.ts';
