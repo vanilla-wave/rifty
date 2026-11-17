@@ -69,6 +69,11 @@ describe('createShellCompleter', () => {
     const complete = makeCompleter();
     expect(complete('cat nope/a', 10)).toBeNull();
   });
+
+  it('returns null after syntax the shell rejects loudly', () => {
+    const complete = makeCompleter();
+    expect(complete('cat <<EOF src/ma', 16)).toBeNull();
+  });
 });
 
 describe('Shell.complete', () => {
@@ -185,5 +190,12 @@ describe('validateShellInput', () => {
   it('keeps trailing continuations and open shell brackets incomplete', () => {
     expect(validateShellInput('echo \\')).toBe('incomplete');
     expect(validateShellInput('echo {')).toBe('incomplete');
+  });
+
+  it('ignores quotes and brackets inside a word-initial comment', () => {
+    expect(validateShellInput("echo a # it's (")).toBe('complete');
+    expect(validateShellInput("# don't\necho ok")).toBe('complete');
+    expect(validateShellInput("echo a#'b")).toBe('incomplete');
+    expect(validateShellInput("echo '#' 'x")).toBe('incomplete');
   });
 });
