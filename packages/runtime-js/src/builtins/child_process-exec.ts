@@ -24,6 +24,7 @@ import {
   readActiveNodeProcessBootstrap,
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
+import { defineNodeProcessBrand } from './process-own-identity.ts';
 import { makeStdioWriter } from './process-stdio-writer.ts';
 import { patchPromiseForNextTick, riftyProcess } from './process.ts';
 import { captureProcessStdio } from './stdio-fd-source.ts';
@@ -372,6 +373,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       };
     }
     captureProcessStdio(childProcess);
+    defineNodeProcessBrand(childProcess);
     attachNodeProcessBootstrapIdentity(childProcess, {
       pid: a.ownHandle.pid,
       ppid: a.ownHandle.ppid,

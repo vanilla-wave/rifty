@@ -49,17 +49,14 @@ import {
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
 import { installLazyFileStdout } from './process-file-stdout.ts';
-import {
-  NODE_PROCESS_IDENTITY,
-  type NodeProcessRelease,
-  createNodeProcessRelease,
-} from './process-identity.ts';
+import { NODE_PROCESS_IDENTITY, type NodeProcessRelease } from './process-identity.ts';
 import {
   NodeProcessExit,
   attachNodeProcessExit,
   dispatchUncaughtException,
   rethrowUndispatched,
 } from './process-lifecycle-events.ts';
+import { defineNodeProcessOwnIdentity } from './process-own-identity.ts';
 import { type NodeStdin, makeStdinReader } from './process-stdin-reader.ts';
 import { type NodeStdioWriter, applyTtyShape, makeStdioWriter } from './process-stdio-writer.ts';
 import { type EmitWarning, installProcessWarnings } from './process-warnings.ts';
@@ -387,12 +384,7 @@ export class NodeProcess extends EventEmitter {
       configurable: false,
     });
     attachNodeProcessExit(this, this.#exit);
-    Object.defineProperty(this, 'release', {
-      value: createNodeProcessRelease(),
-      writable: false,
-      enumerable: true,
-      configurable: true,
-    });
+    defineNodeProcessOwnIdentity(this);
     Object.defineProperty(this, NODE_PROCESS_TERMINAL_BOOTSTRAP, {
       value: (terminal: unknown): void => this.#applyTerminalBootstrap(terminal),
       enumerable: false,
