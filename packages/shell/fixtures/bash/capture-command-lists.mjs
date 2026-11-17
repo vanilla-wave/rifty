@@ -124,7 +124,6 @@ const CASES = [
   ['reserved-close-bracket', 'echo a\n]]'],
   ['syntax-leading-and', 'echo a\n&& echo b'],
   ['syntax-leading-pipe', 'echo a\n| cat'],
-  ['syntax-double-semicolon', 'echo a;; echo b'],
   ['syntax-dangling-redirect-newline', 'echo hi >\ntouch x'],
   ['syntax-spaced-heredoc', 'cat < <EOF\ntouch x\nEOF'],
   ['syntax-redirect-before-comment', 'echo a >#b'],
@@ -136,6 +135,26 @@ const CASES = [
   ['fd-read-write', 'echo x <>f'],
   ['fd-clobber', 'echo a >| b'],
   ['fd-both', 'echo x &>f'],
+  ['fd-io-number-stderr', 'echo x 2>err.txt'],
+  ['fd-io-number-devnull', 'echo x 2>/dev/null'],
+  ['fd-io-number-high', 'echo x 10>f'],
+  ['fd-io-number-input', 'echo IN > in.txt; cat 3<in.txt'],
+  ['io-number-stdout', 'echo x 1>out.txt'],
+  ['io-number-append', 'echo a 1>o.txt; echo b 1>>o.txt'],
+  ['io-number-stdin', 'echo IN > in.txt; cat 0<in.txt'],
+  ['op-append', 'echo a > f; echo b >> f'],
+  ['op-input', 'echo IN > in.txt; cat < in.txt'],
+  ['op-pipe', 'echo a | cat'],
+  ['background-prohibited', 'true &'],
+  ['process-substitution-input', 'cat < <(echo hi)'],
+  ['process-substitution-output', 'echo a > >(cat)'],
+  ['process-substitution-append', 'echo a >> >(cat)'],
+  ['process-substitution-io-number', 'cat 0< <(echo hi)'],
+  ['process-substitution-argument', 'cat <(echo x)'],
+  ['compound-dsemi', 'echo a;; echo b'],
+  ['compound-close-paren', 'echo a\n)'],
+  ['compound-select', 'select x in a; do echo $x; done'],
+  ['compound-time', 'time true'],
 ];
 
 function snapshot(root, rel = '') {
@@ -173,8 +192,10 @@ const cases = CASES.map(([id, command, setup = {}]) => {
       setup,
       bash: {
         stdout: run.stdout,
-        // The only normalization: the interpreter path that prefixes diagnostics.
-        stderr: run.stderr.replaceAll(`${BASH}: `, 'bash: '),
+        // Normalized: the interpreter path that prefixes diagnostics and `time` durations.
+        stderr: run.stderr
+          .replaceAll(`${BASH}: `, 'bash: ')
+          .replace(/\d+m\d+\.\d+s/g, '<duration>'),
         exit: run.status,
         files: snapshot(cwd),
       },

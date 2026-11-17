@@ -4,39 +4,11 @@
  * here-string and compound-command syntax is a loud, atomic gap — the run
  * throws before any segment runs, so files and output stay untouched.
  */
-import { readFileSync } from 'node:fs';
 import { NotImplementedError } from '@riftydev/io';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { Shell } from '../src/index.ts';
-
-interface BashCase {
-  readonly id: string;
-  readonly command: string;
-  readonly setup: Readonly<Record<string, string>>;
-  readonly bash: {
-    readonly stdout: string;
-    readonly stderr: string;
-    readonly exit: number;
-    readonly files: Readonly<Record<string, string>>;
-  };
-}
-
-const fixture = JSON.parse(
-  readFileSync(new URL('../fixtures/bash/command-lists-bash-3.2.57.json', import.meta.url), 'utf8'),
-) as { readonly cases: readonly BashCase[] };
-
-/** Rifty's contract per case: bash-identical, a named loud gap, or a syntax error. */
-function expectation(id: string): 'conform' | 'syntax-error' | `shell.${string}` {
-  if (id.startsWith('syntax-')) return 'syntax-error';
-  if (id.startsWith('fd-')) return 'shell.fd-redirect';
-  if (id === 'heredoc-operator-quoted') return 'conform';
-  if (id.startsWith('heredoc-')) return 'shell.heredoc';
-  if (id.startsWith('here-string')) return 'shell.here-string';
-  if (id.startsWith('reserved-word')) return 'conform';
-  if (id.startsWith('compound-') || id.startsWith('reserved-')) return 'shell.compound-command';
-  return 'conform';
-}
+import { bashCases, expectation } from './_bash-fixture.ts';
 
 const ROOT = '/p';
 const dec = new TextDecoder();
@@ -68,23 +40,26 @@ function seeded(setup: Readonly<Record<string, string>>): MemoryFsSync {
 
 describe('command lists vs frozen bash 3.2.57', () => {
   it('covers loud and conforming cases', () => {
-    const kinds = new Set(fixture.cases.map((c) => expectation(c.id)));
+    const kinds = new Set(bashCases.map((c) => expectation(c.id)));
     expect([...kinds].sort()).toEqual([
       'conform',
+      'shell.background',
       'shell.compound-command',
       'shell.fd-redirect',
       'shell.here-string',
       'shell.heredoc',
+      'shell.process-substitution',
       'syntax-error',
     ]);
   });
 
-  for (const c of fixture.cases) {
+  for (const c of bashCases) {
     const expected = expectation(c.id);
     it(`${c.id}: ${expected}`, async () => {
       const fileSystem = seeded(c.setup);
       const before = snapshot(fileSystem);
-      const shell = new Shell({ cwd: ROOT, fileSystem });
+      const allowBackground = expected !== 'shell.background';
+      const shell = new Shell({ cwd: ROOT, fileSystem, allowBackground });
       const chunks: string[] = [];
       const run = shell.run(c.command, { onChunk: (chunk) => chunks.push(chunk) });
 

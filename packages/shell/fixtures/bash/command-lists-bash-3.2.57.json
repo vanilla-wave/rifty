@@ -1086,17 +1086,6 @@
       }
     },
     {
-      "id": "syntax-double-semicolon",
-      "command": "echo a;; echo b",
-      "setup": {},
-      "bash": {
-        "stdout": "",
-        "stderr": "bash: -c: line 0: syntax error near unexpected token `;;'\nbash: -c: line 0: `echo a;; echo b'\n",
-        "exit": 2,
-        "files": {}
-      }
-    },
-    {
       "id": "syntax-dangling-redirect-newline",
       "command": "echo hi >\ntouch x",
       "setup": {},
@@ -1221,6 +1210,242 @@
         "files": {
           "f": "x\n"
         }
+      }
+    },
+    {
+      "id": "fd-io-number-stderr",
+      "command": "echo x 2>err.txt",
+      "setup": {},
+      "bash": {
+        "stdout": "x\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "err.txt": ""
+        }
+      }
+    },
+    {
+      "id": "fd-io-number-devnull",
+      "command": "echo x 2>/dev/null",
+      "setup": {},
+      "bash": {
+        "stdout": "x\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "fd-io-number-high",
+      "command": "echo x 10>f",
+      "setup": {},
+      "bash": {
+        "stdout": "x\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "f": ""
+        }
+      }
+    },
+    {
+      "id": "fd-io-number-input",
+      "command": "echo IN > in.txt; cat 3<in.txt",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "in.txt": "IN\n"
+        }
+      }
+    },
+    {
+      "id": "io-number-stdout",
+      "command": "echo x 1>out.txt",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "out.txt": "x\n"
+        }
+      }
+    },
+    {
+      "id": "io-number-append",
+      "command": "echo a 1>o.txt; echo b 1>>o.txt",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "o.txt": "a\nb\n"
+        }
+      }
+    },
+    {
+      "id": "io-number-stdin",
+      "command": "echo IN > in.txt; cat 0<in.txt",
+      "setup": {},
+      "bash": {
+        "stdout": "IN\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "in.txt": "IN\n"
+        }
+      }
+    },
+    {
+      "id": "op-append",
+      "command": "echo a > f; echo b >> f",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "f": "a\nb\n"
+        }
+      }
+    },
+    {
+      "id": "op-input",
+      "command": "echo IN > in.txt; cat < in.txt",
+      "setup": {},
+      "bash": {
+        "stdout": "IN\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "in.txt": "IN\n"
+        }
+      }
+    },
+    {
+      "id": "op-pipe",
+      "command": "echo a | cat",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "background-prohibited",
+      "command": "true &",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "process-substitution-input",
+      "command": "cat < <(echo hi)",
+      "setup": {},
+      "bash": {
+        "stdout": "hi\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "process-substitution-output",
+      "command": "echo a > >(cat)",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "process-substitution-append",
+      "command": "echo a >> >(cat)",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "process-substitution-io-number",
+      "command": "cat 0< <(echo hi)",
+      "setup": {},
+      "bash": {
+        "stdout": "hi\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "process-substitution-argument",
+      "command": "cat <(echo x)",
+      "setup": {},
+      "bash": {
+        "stdout": "x\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-dsemi",
+      "command": "echo a;; echo b",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `;;'\nbash: -c: line 0: `echo a;; echo b'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-close-paren",
+      "command": "echo a\n)",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "bash: -c: line 1: syntax error near unexpected token `)'\nbash: -c: line 1: `)'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-select",
+      "command": "select x in a; do echo $x; done",
+      "setup": {},
+      "bash": {
+        "stdout": "\n",
+        "stderr": "1) a\n#? ",
+        "exit": 1,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-time",
+      "command": "time true",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "\nreal\t<duration>\nuser\t<duration>\nsys\t<duration>\n",
+        "exit": 0,
+        "files": {}
       }
     }
   ]
