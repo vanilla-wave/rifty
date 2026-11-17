@@ -1,0 +1,207 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS for the standalone BOM unit at 83fc873d6. Merge only after pnpm pr:check and green PR CI at HEAD (PR-6); full reviewer parity had one exec-argv-startup timeout, which passed in isolation.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "83fc873d68c3e3110f83d9218b1d3f1be64bcbee",
+  "unit_goal_source": "PR #402, standalone leading-UTF-8-BOM observed-defect repair; BASE 8a4a612ed11d5704b65d2a907c85bfa11784d170; real Node v24.16.0 baseline. User scope: Node-semantics decoder class-kill, latin1 with its own RED, consumers and module-loader stripping guards, ADR-0069 dated correction, ADR-0082 unchanged. Round-3 verify HEAD 83fc873d68c3e3110f83d9218b1d3f1be64bcbee. Broader wave-1 goal not reviewed.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Buffer#toString keeps a leading UTF-8 BOM, including aliases, ranges and repeated BOMs",
+      "source": "public-api",
+      "trace": "Node v24.16.0 baseline + ADR-0082",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/buffer/tostring-utf8-bom.case.ts:7",
+      "note": ""
+    },
+    {
+      "row": "bytesToString stays the shared decode implementation used by Buffer and encoded fs reads",
+      "source": "public-api",
+      "trace": "ADR-0082",
+      "status": "pass",
+      "citation": "packages/io/src/index.ts:33",
+      "note": ""
+    },
+    {
+      "row": "Sync, callback and promise fs UTF-8 reads preserve BOM; JSON.parse therefore throws",
+      "source": "public-api",
+      "trace": "Node v24.16.0 baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/fs/read-utf8-bom.case.ts:12",
+      "note": ""
+    },
+    {
+      "row": "fs Buffer paths retain a leading BOM as part of the file name",
+      "source": "public-api",
+      "trace": "Node v24.16.0 baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/fs/buffer-path-bom.case.ts:8",
+      "note": ""
+    },
+    {
+      "row": "fs.createReadStream encoded reads preserve a whole or split leading BOM",
+      "source": "public-api",
+      "trace": "Node v24.16.0 baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/fs/read-utf8-bom.case.ts:36",
+      "note": ""
+    },
+    {
+      "row": "Readable setEncoding utf8/utf16le, aliases and constructor encoding retain BOM",
+      "source": "public-api",
+      "trace": "ADR-0069 D1/D3, correction 2026-11-17",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/readable-set-encoding-bom.case.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Readable setEncoding latin1/binary maps high bytes as Node, not windows-1252",
+      "source": "public-api",
+      "trace": "ADR-0069 D3, correction 2026-11-17",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/readable-set-encoding-latin1.case.ts:6",
+      "note": ""
+    },
+    {
+      "row": "StringDecoder keeps whole/split BOM, end(buf), reset and legacy call paths",
+      "source": "public-api",
+      "trace": "Node v24.16.0 baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/string_decoder/utf8-bom.case.ts:6",
+      "note": ""
+    },
+    {
+      "row": "process.stdin.setEncoding utf8 keeps a split leading BOM",
+      "source": "public-api",
+      "trace": "Node v24.16.0 baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/stdin-set-encoding-bom.case.ts:5",
+      "note": ""
+    },
+    {
+      "row": "readline keeps BOM at the beginning and at aligned input chunk boundaries",
+      "source": "public-api",
+      "trace": "Node v24.16.0 baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/readline/bom-lines.case.ts:7",
+      "note": ""
+    },
+    {
+      "row": "crypto digest utf8 and hash utf8 keep the digest leading BOM",
+      "source": "public-api",
+      "trace": "Node v24.16.0 baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/crypto/digest-utf8-bom.case.ts:7",
+      "note": ""
+    },
+    {
+      "row": "execSync encoded stdout keeps a leading BOM",
+      "source": "public-api",
+      "trace": "Node v24.16.0 baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/exec-sync-encoding-bom.case.ts:7",
+      "note": ""
+    },
+    {
+      "row": "execSync failure message keeps stderr BOM, including BOM-only stderr and trailing newline",
+      "source": "public-api",
+      "trace": "Node v24.16.0 baseline",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/handlers.test.ts:138",
+      "note": ""
+    },
+    {
+      "row": "Default-realm process stdout retains BOM at its console sink",
+      "source": "public-api",
+      "trace": "Node v24.16.0 baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/default-realm-stdout-bom.case.ts:8",
+      "note": ""
+    },
+    {
+      "row": "stream consumers text/json strip byte BOM like Node, keep string BOM, and decode each yielded chunk before buffer reuse",
+      "source": "public-api",
+      "trace": "Node v24.16.0 baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/consumers-bom.case.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Module loader keeps its scoped stripping behavior for ESM and JSON/package metadata",
+      "source": "acceptance",
+      "trace": "scenario: user explicitly scoped module loader as keep-stripping",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/esm-bom-strip.case.ts:5; tools/node-parity-runner/cases/modules/require-bom-strip.case.ts:7",
+      "note": ""
+    },
+    {
+      "row": "Real kernel Worker node -e preserves fs/Buffer BOM and stdout/stderr offset-0 BOM in parity captures",
+      "source": "acceptance",
+      "trace": "scenario: observed office-document BOM defect against Node v24.16.0",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/node-eval-bom.case.ts:35",
+      "note": ""
+    },
+    {
+      "row": "Seeded stdout and HTTP parity capture preserve leading BOM bytes on the rifty side",
+      "source": "frozen-artifact",
+      "trace": "Node v24.16.0 oracle capture baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/seeded-stdout-bom.case.ts:5; tools/node-parity-runner/cases/http/server-body-bom.case.ts:5",
+      "note": ""
+    },
+    {
+      "row": "TypeScript-worker emitted asset matches exact size and SHA pin; gate ceilings and negative payload rejection remain",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:103; tools/checks/esbuild-legacy-retirement.test.ts:1",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}
