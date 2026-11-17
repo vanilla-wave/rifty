@@ -25,12 +25,10 @@ Probe, input `h\xc3\xa9\n` (3 chars, 4 bytes):
   ` 2  4 21 23` (chars also BOM-skewed; sweep probe 2026-11-17, docker node:24).
 Default C locale hides it (GNU chars = bytes: `4 4`).
 `wc.test.ts:48` pins `-c` and `-m` only separately; no combined-order case.
-Adjacent, separate intent: GNU pipe stdin with ≥2 columns pads width 7
-(`      1       1`; `< file` → `1 1`); rifty stdin width = digits of max
-(:113) — owner shell, same trigger; ride this item or split at pickup.
+Stdin column width is a separate item: `shell/wc-stdin-column-width`.
 Fault: plain GNU output divergence, no boundary class; twin column assembly
 (:56-59 vs :109-112) — fix both or share one.
-Compat: no shell page under `docs/public/compat/` — no row.
+Compat: no wc row (`shell.md` lands with PR #401).
 Dedup: git grep docs/backlog, docs/process/traps.md, docs/adr/README.md
 §Declined for wc/wc.ts/formatRow/column order — no match. Nearest:
 `byte-exact-command-output` (wc -m/-w BOM count, same file),

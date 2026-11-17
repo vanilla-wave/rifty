@@ -149,7 +149,24 @@ describe('installRuntimeJsExecSyncHandler — runtime-js execSync handler (ADR-0
     const failure = (await Promise.resolve(
       handler({ cmd: 'node /run.js', opts: { cwd: '/workspace', env: {} } }),
     ).catch((error: unknown) => error)) as Error;
-    expect(failure.message.endsWith('\n\ufeffboom')).toBe(true);
+    expect(failure.message.endsWith('\n\ufeffboom\n')).toBe(true);
+  });
+
+  it('keeps a BOM-only child stderr in the failure message (no whitespace trim)', async () => {
+    // Node v24.16.0: stderr EF BB BF → e.message ends "\n\ufeff"; U+FEFF is JS
+    // whitespace, so a trimEnd() would drop it.
+    const handler = installAndCapture(
+      () => new TextEncoder().encode('void 0;'),
+      async () => ({
+        stdout: new Uint8Array(),
+        stderr: Uint8Array.of(0xef, 0xbb, 0xbf),
+        exitCode: 3,
+      }),
+    );
+    const failure = (await Promise.resolve(
+      handler({ cmd: 'node /run.js', opts: { cwd: '/workspace', env: {} } }),
+    ).catch((error: unknown) => error)) as Error;
+    expect(failure.message.endsWith('\n\ufeff')).toBe(true);
   });
 
   it('forwards opts.cwd and opts.env into the recursive runner', async () => {

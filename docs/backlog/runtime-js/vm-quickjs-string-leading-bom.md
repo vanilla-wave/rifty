@@ -3,7 +3,7 @@ area: runtime-js
 status: draft
 title: vm (QuickJS engine) keeps a leading U+FEFF in strings and keys marshalled to the host
 created: 2026-11-17
-why: values and property names crossing the QuickJS membrane lose a leading U+FEFF, so `vm.runInNewContext("'﻿A'")` returns "A"
+why: values and property names crossing the QuickJS membrane lose a leading U+FEFF, so `vm.runInNewContext("'\ufeffA'")` returns "A"
 sources: [docs/adr/runtime-js/0142-node-vm-dual-engine-quickjs-real-realm-default-hardened-rewrite-loud-opt-in.md]
 code: [packages/runtime-js/src/builtins/vm/membrane.ts, packages/runtime-js/src/builtins/vm/quickjs-engine.ts]
 ---

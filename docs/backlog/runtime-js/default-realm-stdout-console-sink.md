@@ -20,7 +20,7 @@ console appends `\n` per call (`repl/console.ts` `stdoutWrite`).
 Probe (scratch parity case, in-process runner, Node v24.16.0):
 `p = require('node:process'); p.stdout.write('w1'); p.stdout.write(Buffer.from([0xef,0xbb,0xbf,0x42,0x0a]))`
 → Node stdout bytes `w 1 357 273 277 B \n` (`od -c`); rifty (runner-normalised,
-trailing newlines stripped) `w1\nB` before the BOM fix, `w1\n﻿B` after it —
+trailing newlines stripped) `w1\nB` before the BOM fix, `w1\n\ufeffB` after it —
 raw output adds `\n` per write. Each write also goes through console formatting.
 Dedup: git grep riftyProcess / console sink / stdout newline over
 docs/backlog — no match.

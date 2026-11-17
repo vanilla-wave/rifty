@@ -16,6 +16,10 @@ const c: ParityCase = {
       console.log('string', cps(await text(gen('\\ufeffA'))));
       console.log('after-string', cps(await text(gen('x', Buffer.from([...bom, 0x42])))));
       console.log('json', JSON.stringify(await json(gen(Buffer.from([...bom, 0x7b, 0x7d])))));
+      // text() decodes each chunk as it arrives: a producer reusing its buffer
+      // after yield does not rewrite already-consumed text.
+      async function* reuse() { const b = Buffer.from([...bom, 0x41]); yield b; b[3] = 0x42; yield b; }
+      console.log('reused-buffer', cps(await text(reuse())));
     })();
   `,
 };

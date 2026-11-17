@@ -115,10 +115,10 @@ function chunkToBuffer(chunk: unknown): Buffer {
   return Buffer.from(String(chunk), 'utf8');
 }
 
-async function collect(source: ConsumableStream): Promise<unknown[]> {
-  const chunks: unknown[] = [];
+/** Visit each chunk as it arrives (Node's consumers read inside the loop). */
+async function eachChunk(source: ConsumableStream, visit: (chunk: unknown) => void): Promise<void> {
   if (typeof (source as AsyncIterable<unknown>)[Symbol.asyncIterator] === 'function') {
-    for await (const chunk of source as AsyncIterable<unknown>) chunks.push(chunk);
+    for await (const chunk of source as AsyncIterable<unknown>) visit(chunk);
   } else if (typeof (source as { getReader?: unknown }).getReader === 'function') {
     // Web ReadableStream that is not async-iterable in this realm: drain it via
     // a reader so Node's "accepts a web stream too" contract still holds.
@@ -128,16 +128,17 @@ async function collect(source: ConsumableStream): Promise<unknown[]> {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (value !== undefined) chunks.push(value);
+      if (value !== undefined) visit(value);
     }
   } else {
     throw new TypeError('The "stream" argument must be an async iterable or a ReadableStream.');
   }
-  return chunks;
 }
 
 async function consume(source: ConsumableStream): Promise<Buffer> {
-  return Buffer.concat((await collect(source)).map(chunkToBuffer));
+  const chunks: Buffer[] = [];
+  await eachChunk(source, (chunk) => chunks.push(chunkToBuffer(chunk)));
+  return Buffer.concat(chunks);
 }
 
 export const streamConsumers = {
@@ -152,10 +153,10 @@ export const streamConsumers = {
   async text(source: ConsumableStream): Promise<string> {
     const decoder = new TextDecoder();
     let out = '';
-    for (const chunk of await collect(source)) {
+    await eachChunk(source, (chunk) => {
       out +=
         typeof chunk === 'string' ? chunk : decoder.decode(chunkToBuffer(chunk), { stream: true });
-    }
+    });
     return out + decoder.decode();
   },
   async json(source: ConsumableStream): Promise<unknown> {

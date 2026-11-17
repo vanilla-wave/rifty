@@ -17,8 +17,8 @@ throws `Error('Command failed with exit code ${code}: ${cmd}\n${stderr.trimEnd()
 with `code: 'ECHILDFAILED'`, `exitCode`; the kernel forwards
 `{name, message, code, errno, syscall, path}` (`sync-dispatch.ts:416`), so the
 guest sees `e.code === 'ECHILDFAILED'` (Node: undefined) and no `exitCode`.
-Node v24.16.0 (probe: child writes `﻿boom\n` to stderr, exits 3,
-`execSync('node fail.js', { stdio: 'pipe' })`): `e.message === "Command failed: node fail.js\n﻿boom\n"`,
+Node v24.16.0 (probe: child writes `\ufeffboom\n` to stderr, exits 3,
+`execSync('node fail.js', { stdio: 'pipe' })`): `e.message === "Command failed: node fail.js\n\ufeffboom\n"`,
 plus `e.status`, `e.stderr`, `e.stdout` Buffers. The async path already uses
 Node's format (`child_process-output.ts`). The BOM in the stderr tail is kept
 since this fix (`handlers.test.ts`). No compat row states the error shape.
