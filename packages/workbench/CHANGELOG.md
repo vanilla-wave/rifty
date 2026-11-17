@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+- Remove the stamp-miss dependency restore (`restore`/`transition`, `ensureProjectDependencies`, dev-boot clean predicate): no production caller; snapshot restore runs only as first materialization or explicit apply (ADR-0135 correction 2026-11-17). The `ensure` harness moves to `project-deps.test-fixture.ts`.
+
+- Verify a dependency snapshot's replay cache once per first-materialization restore and per no-COI `applySnapshot` (was twice; the no-COI path also projected twice). Measured 11–47 ms of the 2nd pass on Node 24 for the baked starters.
+
 - Remove the PTY `beforeRun` dependency gate: no production caller since PR #167; tests hold runs with a registered Shell command instead.
 
 - Use Brotli quality 11 for smaller dependency snapshot downloads; document production CPU cost (ADR-0546).

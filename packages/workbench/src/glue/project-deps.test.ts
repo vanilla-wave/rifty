@@ -7,12 +7,12 @@ import { type DepSnapshotV3, buildDepSnapshot } from './dep-snapshot.ts';
 import { createInstallStampAuthority } from './install-stamp-authority.ts';
 import { installStampSatisfied, readInstallStamp } from './install-stamp.ts';
 import {
+  type EnsureProjectDepsOptions,
   type TestEnsureProjectDepsOptions,
   createTestProjectPackageAcquisitionAuthority,
+  ensureProjectDependencies as ensureProjectDependenciesWithAuthority,
 } from './project-deps.test-fixture.ts';
 import {
-  type EnsureProjectDepsOptions,
-  ensureProjectDependencies as ensureProjectDependenciesWithAuthority,
   prepareProjectInstallTree,
   seedTemplateNodeModulesFiles,
   templateNodeModulesSeedMutationIntents,

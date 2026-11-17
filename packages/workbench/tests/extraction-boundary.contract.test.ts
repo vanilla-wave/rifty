@@ -299,16 +299,16 @@ async function runtimeBearingSourcesOutsideBuild(): Promise<readonly string[]> {
 
 describe('@riftydev/workbench extraction boundary', () => {
   it('pins the retained 223-file move, including all 107 tests and three fixtures', () => {
-    expect(EXTRACTION_MAP).toHaveLength(223);
-    expect(new Set(EXTRACTION_MAP.map(([source]) => source)).size).toBe(223);
-    expect(new Set(EXTRACTION_MAP.map(([, target]) => target)).size).toBe(223);
+    expect(EXTRACTION_MAP).toHaveLength(221);
+    expect(new Set(EXTRACTION_MAP.map(([source]) => source)).size).toBe(221);
+    expect(new Set(EXTRACTION_MAP.map(([, target]) => target)).size).toBe(221);
     expect(
       EXTRACTION_MAP.filter(([, target]) =>
         /(?:[\\/]test-fixtures[\\/]|(?:\.(?:contract\.)?(?:fault\.)?test|\.test-fixture)\.[cm]?[jt]sx?$)/u.test(
           target,
         ),
       ),
-    ).toHaveLength(110);
+    ).toHaveLength(109);
 
     expect(
       EXTRACTION_MAP.filter(([source]) => existsSync(resolve(APP_SRC_ROOT, source))).map(
@@ -377,7 +377,8 @@ describe('@riftydev/workbench extraction boundary', () => {
     // ADR-0531: guest layout module; legacy index parsing split from the
     // ratcheted playground project authority.
     // ADR-0543: dependency snapshot projection selects the target runtime tier.
-    expect(packageProductionFiles).toHaveLength(176);
+    // 176 → 175 (ADR-0135 correction 2026-11-17): stamp-miss restore's dev-boot predicate removed.
+    expect(packageProductionFiles).toHaveLength(175);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

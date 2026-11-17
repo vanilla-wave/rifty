@@ -79,3 +79,9 @@ removed node_modules or changed dependencies implied automatic installation on
 saved open. Files and terminal remain accessible; dependency failures occur at
 use, installation remains explicit. Setup-kind first materialization and no
 per-file surveillance remain.
+
+2026-11-17 — Decision 3's stamp → snapshot → install chain
+(`ensureProjectDependencies`, owner `restore`/`transition`) is retired, as is
+the ADR-0165 §5 dev-boot clean predicate it used. A snapshot restores only as
+first materialization (pending catalog receipt, ADR-0394) or explicit
+apply/Reset; a stamp miss on open never restores (ADR-0415).

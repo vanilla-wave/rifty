@@ -557,93 +557,6 @@ it.each(['install', 'i', 'add'] as const)(
   },
 );
 
-it('preserves a trusted user-extended tree when the first dev config replaces hidden-empty', async () => {
-  const pair = createMemoryFs();
-  const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
-    ownerEpoch: 'owner-package-hidden-first-dev-test',
-    initialRoots: ['/'],
-  });
-  setSyncMirror(authority, { async: pair.vfs });
-  const extendedPackageJson = `${JSON.stringify({
-    name: 'app',
-    version: '1.0.0',
-    dependencies: { vite: '5.4.21', cowsay: '1.6.0' },
-  })}\n`;
-  const cowsayBin = `${ROOT}/node_modules/.bin/cowsay`;
-  authority.mkdirSync(`${ROOT}/node_modules/.bin`, { recursive: true });
-  authority.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(extendedPackageJson));
-  authority.writeFileSync(cowsayBin, new TextEncoder().encode('#!/usr/bin/env node\n'));
-
-  const seedStamps = createInstallStampAuthority({
-    runtimeTier: 'coi',
-    vfs: pair.vfs,
-    fsSync: authority,
-    claimIo: installStampClaims,
-  });
-  const claim = await seedStamps.demote({ root: ROOT, slug: 'scratch' });
-  await expect(
-    seedStamps.promote(
-      { root: ROOT, slug: 'scratch', packageJsonText: extendedPackageJson },
-      { epoch: claim.epoch, packages: 2 },
-    ),
-  ).resolves.toMatchObject({ status: 'trusted' });
-
-  const state = createOwnerPackageState({
-    initial: {
-      cfg: {
-        ...config,
-        packageName: 'rifty-empty',
-        installDeps: {},
-        packageJson: '{"name":"rifty-empty","private":true}\n',
-      },
-      templateId: 'hidden-empty',
-      slug: 'scratch',
-      fromScratch: false,
-    },
-    primeInitialPrefetch: false,
-    vfs: new SyncMirrorVfs(),
-    fsSync: authority,
-    installStampClaims,
-    flush: async () => ({ failures: [], total: 0 }),
-    nodeWorkerRuntimeEnv: {},
-    log: () => {},
-    registry: new RegistryClient({
-      baseUrl: '/unused',
-      fetch: async () => new Response('', { status: 599 }),
-    }),
-    resolverUrl: () => undefined,
-    resolverBundleBaseUrl: () => undefined,
-    resolverPin: () => undefined,
-  });
-
-  await state.transition({
-    cfg: config,
-    templateId: 'vite',
-    slug: 'scratch',
-    fromScratch: false,
-  });
-
-  expect(new TextDecoder().decode(authority.readFileBytesSync(cowsayBin))).toBe(
-    '#!/usr/bin/env node\n',
-  );
-  expect(new TextDecoder().decode(authority.readFileBytesSync(`${ROOT}/package.json`))).toBe(
-    extendedPackageJson,
-  );
-  const reloadedStamps = createInstallStampAuthority({
-    runtimeTier: 'coi',
-    vfs: pair.vfs,
-    fsSync: authority,
-    claimIo: installStampClaims,
-  });
-  await expect(
-    reloadedStamps.check({
-      root: ROOT,
-      slug: 'scratch',
-      expectedPackageJsonText: BASE_PACKAGE_JSON,
-    }),
-  ).resolves.toMatchObject({ status: 'trusted' });
-});
-
 it('reasserts template node_modules inside the package authority; extraneous seed churn keeps trust (ADR-0307)', async () => {
   const pair = createMemoryFs();
   const { authority, installStampClaims } = createOwnerVfsAuthorityComposition(pair.fsSync, {
@@ -747,8 +660,6 @@ it('uses exact session project identity while a full install enters during promo
   let calls = 0;
   let secondSawInstalledTree = false;
   let secondSawExactManifest = false;
-  let switchedInstallSawPriorTree = false;
-  let switchedInstallSawPriorManifest = false;
   const state = createOwnerPackageState({
     initial: { cfg: realConfig, templateId: 'vite', slug: 'scratch', fromScratch: true },
     primeInitialPrefetch: false,
@@ -768,12 +679,6 @@ it('uses exact session project identity while a full install enters during promo
       if (calls === 2) {
         secondSawInstalledTree = authority.existsSync(`${ROOT}/node_modules/ms/index.js`);
         secondSawExactManifest =
-          JSON.parse(new TextDecoder().decode(authority.readFileBytesSync(`${ROOT}/package.json`)))
-            .dependencies.ms === '2.0.0';
-      }
-      if (calls === 3) {
-        switchedInstallSawPriorTree = authority.existsSync(`${ROOT}/node_modules/ms/index.js`);
-        switchedInstallSawPriorManifest =
           JSON.parse(new TextDecoder().decode(authority.readFileBytesSync(`${ROOT}/package.json`)))
             .dependencies.ms === '2.0.0';
       }
@@ -801,28 +706,6 @@ it('uses exact session project identity while a full install enters during promo
   expect(calls).toBe(2);
   expect(secondSawInstalledTree).toBe(true);
   expect(secondSawExactManifest).toBe(true);
-
-  const switched = {
-    cfg: {
-      ...realConfig,
-      packageName: 'other',
-      packageJson: `${JSON.stringify({
-        name: 'other',
-        version: '1.0.0',
-        dependencies: { kleur: '4.1.5' },
-      })}\n`,
-    },
-    templateId: 'other',
-    slug: 'other',
-    fromScratch: true,
-  };
-  state.configure(switched);
-  await state.transition(switched);
-  expect((await shell.run('npm install')).exitCode).toBe(0);
-
-  expect(calls).toBe(3);
-  expect(switchedInstallSawPriorTree).toBe(false);
-  expect(switchedInstallSawPriorManifest).toBe(false);
 });
 
 it('activates and ensures independent real project configs without an initial placeholder', async () => {
