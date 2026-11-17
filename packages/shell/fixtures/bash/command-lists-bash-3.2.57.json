@@ -262,6 +262,17 @@
       }
     },
     {
+      "id": "continuation-then-space",
+      "command": "\\\n echo a",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
       "id": "double-quoted-newline",
       "command": "echo \"a\nb\"",
       "setup": {},
@@ -446,6 +457,19 @@
         "stderr": "bash: if: command not found\n",
         "exit": 127,
         "files": {}
+      }
+    },
+    {
+      "id": "reserved-word-redirect-target",
+      "command": "echo hi > done; cat < done",
+      "setup": {},
+      "bash": {
+        "stdout": "hi\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "done": "hi\n"
+        }
       }
     },
     {
@@ -693,6 +717,17 @@
     {
       "id": "compound-function-definition",
       "command": "f() { echo in; }; f",
+      "setup": {},
+      "bash": {
+        "stdout": "in\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-function-subshell-body",
+      "command": "f() ( echo in ); f",
       "setup": {},
       "bash": {
         "stdout": "in\n",

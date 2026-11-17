@@ -31,7 +31,7 @@ function expectation(id: string): 'conform' | `shell.${string}` {
   if (id === 'heredoc-operator-quoted') return 'conform';
   if (id.startsWith('heredoc-')) return 'shell.heredoc';
   if (id.startsWith('here-string')) return 'shell.here-string';
-  if (id === 'reserved-words-as-arguments' || id === 'reserved-word-quoted') return 'conform';
+  if (id.startsWith('reserved-word')) return 'conform';
   if (id.startsWith('compound-') || id.startsWith('reserved-')) return 'shell.compound-command';
   return 'conform';
 }
