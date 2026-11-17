@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- `EventEmitter.prototype.on === addListener` and `off === removeListener` (one function per pair, as Node): readable-stream 2/3/4's `addListener = on` override no longer recurses (`RangeError`). `events.once`, `Readable.pipe`/`unpipe`, `Readable.toWeb`, the async iterator, `Writable.toWeb` and `pipeline` detach through `removeListener`, Node's name, so an override of only that name still sees them.
+- `EventEmitter.prototype.on === addListener` and `off === removeListener` (one function per pair, as Node): readable-stream 2/3/4's `addListener = on` override no longer recurses (`RangeError`). `events.once`, `Readable.pipe`/`unpipe`, `Readable.toWeb`, the async iterator, `Writable.toWeb` and `pipeline` detach through `removeListener`, Node's name, so an override of only that name still sees them. `on`/`off` stay method-typed (`interface EventEmitter`): a TS subclass can `override on() { return super.on(…) }`.
 
 - Writable constructor write/writev/final options install the native replaceable _write/_writev/_final hooks; transport wrappers observe active writes instead of buffered admissions.
 

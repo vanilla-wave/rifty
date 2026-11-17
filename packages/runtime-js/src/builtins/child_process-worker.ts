@@ -297,8 +297,8 @@ export function resolveWorkerStdio(
 }
 
 function detach(source: ReadableSource, event: string, listener: Listener): void {
-  if (source.off) source.off(event, listener);
-  else source.removeListener?.(event, listener);
+  if (source.removeListener) source.removeListener(event, listener);
+  else source.off?.(event, listener);
 }
 
 interface StdioHandle {

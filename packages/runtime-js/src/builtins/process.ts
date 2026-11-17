@@ -32,7 +32,7 @@ import {
   encodeNodeIpcMessage,
 } from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
-import { EventEmitter, aliasListenerOverrides } from './events.ts';
+import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { memoryUsage } from './loud-members.ts';
 import {
@@ -233,7 +233,6 @@ export function patchPromiseForNextTick(): void {
   } as typeof Promise.prototype.then;
 }
 
-type StdinListener = (...args: unknown[]) => void;
 export type { NodeStdin } from './process-stdin-reader.ts';
 
 interface ProcessTerminalBootstrap {
@@ -467,6 +466,13 @@ export class NodeProcess extends EventEmitter {
         this.connected = true;
         this.channel = nodeIpcChannel('process');
         this.#wireIpc(spec.stdio.ipc);
+        // Node's setupChannel: the hold follows meta-listeners, so every add path counts.
+        this.on('newListener', (event: unknown) => {
+          if (event === 'message') this.#syncIpcKeepalive(1);
+        });
+        this.on('removeListener', (event: unknown) => {
+          if (event === 'message') this.#syncIpcKeepalive();
+        });
       }
     } else {
       this.pid = 1;
@@ -498,29 +504,13 @@ export class NodeProcess extends EventEmitter {
     installProcessWarnings(this);
   }
 
-  override addListener(event: string | symbol, listener: StdinListener): this {
-    const result = super.addListener(event, listener);
-    if (event === 'message') this.#syncIpcKeepalive();
-    return result;
-  }
-
-  override prependListener(event: string | symbol, listener: StdinListener): this {
-    const result = super.prependListener(event, listener);
-    if (event === 'message') this.#syncIpcKeepalive();
-    return result;
-  }
-
-  override removeListener(event: string | symbol, listener: StdinListener): this {
-    const result = super.removeListener(event, listener);
-    if (event === 'message') this.#syncIpcKeepalive();
-    return result;
-  }
-
+  // Silent in `@riftydev/io` (no `'removeListener'` per listener, Node emits them).
   override removeAllListeners(event?: string | symbol): this {
     const result = super.removeAllListeners(event);
     if (event === undefined || event === 'message') this.#syncIpcKeepalive();
     return result;
   }
+
   // Own instance-bound fields, not prototype methods: Node's detached
   // `const { exit } = process; exit(3)` / `import { kill }` still hit this process.
   // Node `exit()` (ADR-0445): an argument assigns `exitCode`, `'exit'` fires once,
@@ -823,11 +813,12 @@ export class NodeProcess extends EventEmitter {
     }
   }
 
-  #syncIpcKeepalive(): void {
+  /** `adding`: a `'newListener'` hook runs before its listener lands. */
+  #syncIpcKeepalive(adding = 0): void {
     const shouldHold =
       this.#ipcSerialization !== null &&
       !this.#ipcDisconnected &&
-      this.listenerCount('message') > 0;
+      this.listenerCount('message') + adding > 0;
     if (shouldHold === this.#ipcKeepaliveHeld) return;
     this.#ipcKeepaliveHeld = shouldHold;
     if (shouldHold) refEventLoop();
@@ -847,7 +838,6 @@ export class NodeProcess extends EventEmitter {
     this.#disconnectIpc();
   }
 }
-aliasListenerOverrides(NodeProcess.prototype); // `on`/`off` reach the IPC keepalive overrides
 
 /** Apply an exact entry envelope's PTY metadata before that entry runs user code. */
 export function applyNodeProcessTerminalBootstrap(

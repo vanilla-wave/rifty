@@ -17,23 +17,11 @@ serializations:
 - a child with only `process.on('disconnect', …)` stays alive until the
   parent disconnects (Node `alive-after-300ms true true`, then
   `child-disconnect`, exit 0); rifty's `#syncIpcKeepalive` runs for
-  `'message'` only (`process.ts:662-680`), so the child exits early.
+  `'message'` only (`process.ts` `#syncIpcKeepalive`), so the child exits early.
 - same-realm route: parent `disconnect()` leaves a `'message'`-listening
   child's hold in place (Contract+RED r1 reviewer probe).
 
 vitest 4.1.11's pool child uses neither shape.
-
-2026-11-17 (REV-12, `on === addListener` alias unit, branch
-`t3/w1-eventemitter-alias`): Node keys these effects to internal
-`'newListener'`/`'removeListener'` listeners on `process` (Node v24.16.0 fork
-child: `process.listeners('newListener')` includes `onNewListener(name) { if
-(name === 'message' || name === 'disconnect') control.refCounted(); }`;
-`process.on === EventEmitter.prototype.on` true). rifty overrides
-`addListener`/`prependListener`/`removeListener` on `NodeProcess.prototype`,
-aliasing `on`/`off` to them since that unit: `process.on ===
-EventEmitter.prototype.on` is false, and `EventEmitter.prototype.on.call(process,
-'message', fn)` takes no hold. The next IPC keepalive unit moves the hold to
-Node's meta-listener mechanism.
 
 ## Next
 

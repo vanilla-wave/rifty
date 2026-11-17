@@ -33,11 +33,6 @@ class EventEmitterPrototype {
     return this._warned;
   }
 
-  /** Node: the same function object as {@link addListener}; aliased with the prototype below. */
-  declare on: (event: string | symbol, listener: Listener) => this;
-  /** Node: the same function object as {@link removeListener}. */
-  declare off: (event: string | symbol, listener: Listener) => this;
-
   addListener(event: string | symbol, listener: Listener): this {
     this.emitNewListener(event, listener);
     const arr = this.listenersMap.get(event);
@@ -117,7 +112,9 @@ class EventEmitterPrototype {
     // Preserve `listener` reference for `removeListener(event, listener)`
     // compatibility with how Node lets you remove by-original-fn.
     (wrapper as { listener?: Listener }).listener = listener;
-    return this.on(event, wrapper);
+    // Through `this.on`, as Node: an `on` override sees `once` registrations.
+    (this as unknown as EventEmitter).on(event, wrapper);
+    return this;
   }
 
   prependOnceListener(event: string | symbol, listener: Listener): this {
@@ -208,7 +205,12 @@ class EventEmitterPrototype {
  * Keep the listener implementation class-shaped for private state and method
  * typing, but publish its prototype through that single callable boundary.
  */
-export type EventEmitter = EventEmitterPrototype;
+export interface EventEmitter extends EventEmitterPrototype {
+  /** Node: the same function object as `addListener` (aliased on the prototype below). */
+  on(event: string | symbol, listener: Listener): this;
+  /** Node: the same function object as `removeListener`. */
+  off(event: string | symbol, listener: Listener): this;
+}
 
 interface EventEmitterConstructor {
   new (): EventEmitter;
@@ -246,7 +248,7 @@ export const EventEmitter = /* @__PURE__ */ (() => {
   CallableEventEmitter.prototype = EventEmitterPrototype.prototype;
   // Node's events.js: `on = addListener`, `off = removeListener` — one function
   // per pair. A forwarding `on` re-enters readable-stream's `addListener = on`
-  // override forever. A subclass overriding one name re-aliases the other.
+  // override forever. A subclass overriding one name must alias the other itself.
   const proto = CallableEventEmitter.prototype;
   for (const [alias, name] of [
     ['on', 'addListener'],

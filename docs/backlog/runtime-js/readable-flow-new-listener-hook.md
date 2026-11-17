@@ -5,7 +5,7 @@ title: "`Readable` starts flowing on `'data'` without a guest-removable `'newLis
 created: 2026-11-17
 why: rifty's Readable registers its data/readable start hook as an ordinary `'newListener'` listener, so a guest `removeAllListeners()` deletes it and a later `on('data')` never flows; Node keys flow to its `on` override
 sources: [docs/process/rules/fault-classes.md §Boundary failure models (builtin prototype → guest subclass/patch)]
-code: [packages/io/src/streams/callable-constructor.ts, packages/io/src/streams/readable.ts]
+code: [packages/io/src/streams/callable-constructor.ts, packages/io/src/streams/readable.ts, packages/runtime-js/src/builtins/process-stdin-reader.ts]
 ---
 
 ## Context
@@ -28,8 +28,20 @@ setTimeout(() => console.log('flowing', r.readableFlowing), 20);
 ```
 
 Node: `newListener count 0` / `data x` / `flowing true`. rifty:
-`newListener count 1` / `flowing undefined` — no data, and `readableFlowing`
-is not exposed.
+`newListener count 1` / `flowing undefined` — no data (`readableFlowing`
+itself is absent: `runtime-js/readable-flowing-property`).
+
+Same root, the other direction: Node's `prependListener('data', fn)` bypasses
+the `on` override and never starts flowing. Same harness, `new Readable({
+read() {} }).prependListener('data', …)` + `push('x')`, then (`stdin: 'in'`)
+`process.stdin.prependListener('data', …)`: Node prints neither chunk,
+`flowing null`; rifty prints `prepend data x` and `stdin prepend data in`
+(the hook sees every add; `NodeStdinEmitter`'s `prependListener` override
+starts stdin). Likewise `EventEmitter.prototype.on.call(r, 'data', fn)`: Node
+does not flow (`readableFlowing null`), rifty prints `base-on data y`.
+Shape: Node `Object.hasOwn(Readable.prototype, 'on')` true and `!==
+EventEmitter.prototype.on`; rifty false / `===`. `Duplex` carries the hook
+too (`listenerCount('newListener')` Node 0, rifty 1).
 
 ## Next
 

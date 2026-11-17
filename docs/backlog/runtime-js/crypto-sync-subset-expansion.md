@@ -30,3 +30,9 @@ Parked: record the deferral + its gate; don't build speculatively.
 ## Reversibility
 
 REVERSIBLE — additive builtins behind a verified-need gate. Recorded here.
+
+2026-11-17 (REV-12, PR #400 alias sweep, Node v24.16.0 parity runner): the
+Diffie-Hellman/ECDH family is not loud — `typeof` of
+`require('node:crypto').createDiffieHellman`, `getDiffieHellman`,
+`createDiffieHellmanGroup`, `createECDH`, `DiffieHellman` is `function`
+in Node, `undefined` in rifty.

@@ -33,8 +33,8 @@ export const streamsMatrix = {
     ],
     [
       'Listener aliases / real readable-stream',
-      '✅',
-      "`on === addListener` and `off === removeListener` on every stream class (Node's shared function objects); internals detach through `removeListener`. Original readable-stream 2.3.8 / 3.6.2 / 4.7.0 (+ through2 2.0.5 / 4.0.2) flow, pipe and pipeline as Node — parity `stream/readable-stream-v{2,3,4}-real`, `events/internal-removal-name`",
+      '⚠️',
+      "`on === addListener` and `off === removeListener` on every stream class (Node's shared function objects); internals detach through `removeListener`. Original readable-stream 2.3.8 / 3.6.2 / 4.7.0 (+ through2 2.0.5 / 4.0.2) flow, pipe and pipeline as Node — parity `stream/readable-stream-v{2,3,4}-real`, `events/internal-removal-name`. Caveat: `Readable.prototype.on` is EventEmitter's (Node overrides it; flow row below); internals attach with `on` where Node uses `once`/`prependListener` — backlog `runtime-js/stream-internal-listener-registration`",
     ],
     [
       '`Readable` flow after `removeAllListeners()`',
