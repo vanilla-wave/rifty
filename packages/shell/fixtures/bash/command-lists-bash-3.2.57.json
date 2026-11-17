@@ -1139,6 +1139,89 @@
         "exit": 2,
         "files": {}
       }
+    },
+    {
+      "id": "syntax-dropped-newline-semicolon",
+      "command": "echo a;\n;",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "bash: -c: line 1: syntax error near unexpected token `;'\nbash: -c: line 1: `;'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "fd-dup-stderr",
+      "command": "echo x 2>&1",
+      "setup": {},
+      "bash": {
+        "stdout": "x\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "fd-dup-to-stderr",
+      "command": "echo x >&2",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "x\n",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "fd-dup-input",
+      "command": "cat <&0",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "fd-read-write",
+      "command": "echo x <>f",
+      "setup": {},
+      "bash": {
+        "stdout": "x\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "f": ""
+        }
+      }
+    },
+    {
+      "id": "fd-clobber",
+      "command": "echo a >| b",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "b": "a\n"
+        }
+      }
+    },
+    {
+      "id": "fd-both",
+      "command": "echo x &>f",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "f": "x\n"
+        }
+      }
     }
   ]
 }

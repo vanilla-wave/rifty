@@ -29,6 +29,7 @@ const fixture = JSON.parse(
 /** Rifty's contract per case: bash-identical, a named loud gap, or a syntax error. */
 function expectation(id: string): 'conform' | 'syntax-error' | `shell.${string}` {
   if (id.startsWith('syntax-')) return 'syntax-error';
+  if (id.startsWith('fd-')) return 'shell.fd-redirect';
   if (id === 'heredoc-operator-quoted') return 'conform';
   if (id.startsWith('heredoc-')) return 'shell.heredoc';
   if (id.startsWith('here-string')) return 'shell.here-string';
@@ -71,6 +72,7 @@ describe('command lists vs frozen bash 3.2.57', () => {
     expect([...kinds].sort()).toEqual([
       'conform',
       'shell.compound-command',
+      'shell.fd-redirect',
       'shell.here-string',
       'shell.heredoc',
       'syntax-error',

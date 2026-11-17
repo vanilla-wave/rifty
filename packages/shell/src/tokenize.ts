@@ -80,6 +80,17 @@ function throwCommandSubstitution(): never {
   );
 }
 
+/** bash fd redirection operators; lexed alone they would read as a target-less redirect or `&`. */
+const FD_REDIRECTS = new Set(['>&', '<&', '<>', '>|', '&>']);
+
+// TODO(backlog: shell/fd-redirects)
+function throwFdRedirect(op: string): never {
+  throw new NotImplementedError(
+    'shell.fd-redirect',
+    `\`${op}\`: fd redirection (\`2>&1\`, \`>&2\`, \`&>\`, \`<>\`, \`>|\`) is not supported — redirect stdout with \`>\` / \`>>\``,
+  );
+}
+
 /** Loud gap for `<<` / `<<-` / `<<<`: thrown on the operator, so a body is never lexed as commands. */
 // TODO(backlog: shell/heredoc)
 function throwHeredoc(hereString: boolean): never {
@@ -182,8 +193,8 @@ interface Lexeme {
   readonly plain: boolean;
   /** Word holds an unquoted, unescaped `(` or `)` — a bash operator. */
   readonly paren: boolean;
-  /** `;` lowered from a newline (bash names it `newline` in a syntax error). */
-  readonly newline: boolean;
+  /** Operator text bash names in a syntax error when it differs from `op`: `newline`, `;;`. */
+  readonly text?: string;
 }
 
 export function tokenize(line: string, env: Readonly<Record<string, string>> = {}): Token[] {
@@ -193,8 +204,8 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
 function lex(input: string, env: Readonly<Record<string, string>>): Lexeme[] {
   const line = joinContinuations(input);
   const lexemes: Lexeme[] = [];
-  const push = (token: Token, plain = false, paren = false, newline = false): void => {
-    lexemes.push({ token, plain, paren, newline });
+  const push = (token: Token, plain = false, paren = false, text?: string): void => {
+    lexemes.push({ token, plain, paren, ...(text === undefined ? {} : { text }) });
   };
   let i = 0;
   const n = line.length;
@@ -207,7 +218,7 @@ function lex(input: string, env: Readonly<Record<string, string>>): Lexeme[] {
     if (ch === '\n') {
       const last = lexemes.at(-1)?.token;
       if (last && !(isOp(last) && NEWLINE_JOINED.has(last.op)))
-        push({ op: ';' }, false, false, true);
+        push({ op: ';' }, false, false, 'newline');
       i++;
       continue;
     }
@@ -219,6 +230,7 @@ function lex(input: string, env: Readonly<Record<string, string>>): Lexeme[] {
     if (ch === '>' || ch === '<' || ch === '|' || ch === '&' || ch === ';') {
       let op: OpToken['op'] = ch;
       if (ch === '<' && line[i + 1] === '<') throwHeredoc(line[i + 2] === '<');
+      if (FD_REDIRECTS.has(line.slice(i, i + 2))) throwFdRedirect(line.slice(i, i + 2));
       if (ch === '>' && line[i + 1] === '>') {
         op = '>>';
         i++;
@@ -233,7 +245,7 @@ function lex(input: string, env: Readonly<Record<string, string>>): Lexeme[] {
         // rejects loudly instead of `vite &` silently dropping `&` into an arg.
         op = '&';
       }
-      push({ op });
+      push({ op }, false, false, op === ';' && line[i - 1] === ';' ? ';;' : undefined);
       i++;
       continue;
     }
@@ -371,18 +383,8 @@ const RESERVED_WORDS = new Set([
 ]);
 const COMMAND_SEPARATORS = new Set<OpToken['op']>([';', '&&', '||', '|', '&']);
 
-function throwSyntaxError(at: Lexeme | undefined, previous?: Lexeme): never {
-  let text = at && !at.newline && isOp(at.token) ? at.token.op : 'newline';
-  // bash lexes `;;` (a `case` terminator) as one token.
-  if (
-    text === ';' &&
-    previous &&
-    !previous.newline &&
-    isOp(previous.token) &&
-    previous.token.op === ';'
-  ) {
-    text = ';;';
-  }
+function throwSyntaxError(at: Lexeme | undefined): never {
+  const text = at?.text ?? (at && isOp(at.token) ? at.token.op : 'newline');
   throw new Error(`shell: syntax error near unexpected token \`${text}\``);
 }
 
@@ -402,7 +404,7 @@ export function assertSimpleCommands(line: string): void {
       const next = lexemes[k + 1];
       // bash: a list operator where a command must start, or a redirect
       // without its target word, is a syntax error.
-      if (commandStart && separator) throwSyntaxError(lexemes[k], lexemes[k - 1]);
+      if (commandStart && separator) throwSyntaxError(lexemes[k]);
       if (!separator && (next === undefined || isOp(next.token))) throwSyntaxError(next);
       commandStart = separator;
       continue;

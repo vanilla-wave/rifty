@@ -21,7 +21,7 @@ POSIX shell. Reference: frozen GNU bash 3.2.57 capture
 | `**`, brace `{a,b}` | ⚠️ | Passed through literally; bash expands them (ADR-0091 deferral) |
 | Unquoted `$VAR` word splitting | ⚠️ | Not split on `IFS`: an expansion stays one word |
 | Special parameters `$?`, `$$`, `$#`, `$0`, `$1`… | ⚠️ | Passed through literally: `backlog/shell/special-parameter-exit-status` |
-| fd redirects `2>`, `2>&1`, `>&2`, `&>`; process substitution `<(…)` | ⚠️ | `cmd 2>f` silently treats `2` as an argument and redirects stdout to `f`; `2>&1`, `>&2`, `&>` throw `NotImplementedError('shell.background')`; `<(…)` throws `shell.compound-command` (unquoted parenthesis): `backlog/shell/fd-redirects` |
+| fd redirects `2>`, `2>&1`, `>&2`, `&>`, `<>`, `>\|`; process substitution `<(…)` | ⚠️ | `>&`, `<&`, `&>`, `<>`, `>\|` (so `2>&1`, `>&2`) throw `NotImplementedError('shell.fd-redirect')` before anything runs; `cmd 2>f` still silently treats `2` as an argument and redirects stdout to `f`; `<(…)` throws `shell.compound-command`: `backlog/shell/fd-redirects`. Fixture `fd-*` |
 | Trailing `cmd &` | ⚠️ | COI terminal: background job + `jobs`. No-COI project commands: `NotImplementedError('shell.background')` before anything runs (ADR-0418). Non-trailing `&` throws `shell.background`. `shell.test.ts` |
 | Heredoc `<<`, `<<-` | ❌ | `NotImplementedError('shell.heredoc')` before any command runs; the body is never run or lexed. Write the body with a file tool, then `< file`: `backlog/shell/heredoc`. Fixture `heredoc-*` |
 | Here-string `<<<` | ❌ | `NotImplementedError('shell.here-string')`, same atomicity. Fixture `here-string*` |

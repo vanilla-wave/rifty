@@ -129,6 +129,13 @@ const CASES = [
   ['syntax-spaced-heredoc', 'cat < <EOF\ntouch x\nEOF'],
   ['syntax-redirect-before-comment', 'echo a >#b'],
   ['syntax-trailing-redirect', 'echo a >'],
+  ['syntax-dropped-newline-semicolon', 'echo a;\n;'],
+  ['fd-dup-stderr', 'echo x 2>&1'],
+  ['fd-dup-to-stderr', 'echo x >&2'],
+  ['fd-dup-input', 'cat <&0'],
+  ['fd-read-write', 'echo x <>f'],
+  ['fd-clobber', 'echo a >| b'],
+  ['fd-both', 'echo x &>f'],
 ];
 
 function snapshot(root, rel = '') {
