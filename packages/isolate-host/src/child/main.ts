@@ -84,7 +84,8 @@ async function run(request: RunRequest): Promise<void> {
   try {
     const context = await isolate.createContext();
     const jail = context.global;
-    let fire: ivm.Reference<(id: number) => void> | undefined;
+    // Bound once the bundle has loaded; the bundle arms no timer while loading.
+    const guestFire: { ref?: ivm.Reference<(id: number) => void> } = {};
     const bridge = createBridge({
       output,
       outputPending: () => {
@@ -93,7 +94,7 @@ async function run(request: RunRequest): Promise<void> {
         // Batch: guest writes arrive as separate host tasks; one frame batch per 5 ms.
         setTimeout(flush, 5);
       },
-      fire: (id) => fire?.applyIgnored(undefined, [id]),
+      fire: (id) => guestFire.ref?.applyIgnored(undefined, [id]),
     });
     const names = Object.keys(bridge);
     for (const [name, fn] of Object.entries(bridge)) {
@@ -111,7 +112,7 @@ async function run(request: RunRequest): Promise<void> {
     const script = await isolate.compileScript(guestSource, { filename: 'rifty-isolate-guest.js' });
     await script.run(context);
     const guest = await jail.get('__riftyGuest', { reference: true });
-    fire = await guest.get('fire', { reference: true });
+    guestFire.ref = await guest.get('fire', { reference: true });
     rejection = await guest.get('rejection', { reference: true });
     const start = await guest.get('run', { reference: true });
     await jail.delete('__riftyGuest');
