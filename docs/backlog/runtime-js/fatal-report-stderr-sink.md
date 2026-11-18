@@ -26,10 +26,13 @@ Rifty at `294673988`:
 - No-COI project command sync throw: the host re-installs its writer before
   `terminateFatal` (PR #406, `no-coi-fatal-stderr` carriers
   `fatal-silenced-stderr` / `fatal-throwing-stderr` pass).
-- Still through the guest's `write` (code read, both hosts): the realm-trap
-  fatal rejection (`terminateFatal` from `event-loop-keepalive.ts`) and the
-  status-7 listener-throw print (`NodeProcessExit.listenerThrew`), via
-  `writeStderr: (text) => this.stderr.write(text)` (`process.ts`).
+- Still through the guest's `write` (code read, both hosts): a program entry's
+  realm-trap fatal rejection (`terminateFatal` from `event-loop-keepalive.ts`)
+  and the status-7 listener-throw print (`NodeProcessExit.listenerThrew`), via
+  `writeStderr: (text) => this.stderr.write(text)` (`process.ts`). A `-e`
+  rejection after evaluation is claimed first by `beginNodeEvalUnhandled`; its
+  eval terminal writes through the writer captured before guest code
+  (`captureNodeEvalTerminalProcess`, Greptile on PR #407, code read).
 - `process.stderr` is a writable class field: a reassigned object captures the
   trap and status-7 prints (code read). The command's sync path still reports,
   since the re-install writes onto that object (RDY-6 reviewer probe, scratch);
