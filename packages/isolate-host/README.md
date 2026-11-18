@@ -93,6 +93,8 @@ Known differences:
   objects, default depth is 3.
 - An uncaught error that is not a `throw` statement (e.g. `undefined.x`)
   prints without Node's `[eval]:1` source header.
+- An unhandled rejection fails at rifty's next event-loop check, not at once: a
+  `.catch` attached from a later timer still runs first.
 - An `unhandledRejection` listener receives a copy of the reason, and
   `promise` is `undefined`. A non-`Error` reason arrives as a generic `Error`.
 - Identity is rifty's: `process.version`, `os.platform()`, `process.cwd()`,
