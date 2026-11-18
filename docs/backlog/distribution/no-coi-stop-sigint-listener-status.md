@@ -10,16 +10,20 @@ code: [packages/shell/src/shell.ts, packages/workbench/src/workers/no-coi-projec
 
 ## Context
 
-PR #408 outside finding 4. `tests/no-coi/no-coi-shared-realm.spec.ts`
-`eval-stop` step `node -e "process.on('SIGINT', () => process.exit(0));
-setInterval(() => {}, 1000); console.log('L|ready')"`, stopped after `L|ready`:
-rifty `{ status: 'cancelled', exitCode: 130 }` (RED run of PR #408, before the
-row was narrowed to `status`); live Node v24.16.0 with SIGINT → exit code 0.
-The Shell resolves an aborted run with `SIGINT_EXIT` 130 (`shell.ts:101`,
-`:223`) regardless of the handler's terminal; the README documents 130 only
-for a program without a handler. Whether `cancelled` stays the status is an
-SDK question (ADR-0418 §3); the exit code is Node's. Terminal Ctrl-C (COI) is
-unmeasured.
+PR #408 outside finding 4. Shell: an aborted run's status is overridden to
+`SIGINT_EXIT` 130 (`packages/shell/src/shell.ts:223`, assigned at `:915`
+`exitCodeOverride = SIGINT_EXIT`) regardless of the handler's terminal; the
+`eval-stop` rows of `tests/no-coi/no-coi-shared-realm.spec.ts` compare only
+`status` for that reason (comment at the `expectSameStatus` stop branch).
+Uncommitted probe while writing that spec: `node -e "process.on('SIGINT', () =>
+process.exit(0)); setInterval(() => {}, 1000); console.log('L|ready')"`,
+`project.run(…).stop()` after `L|ready` → `{ status: 'cancelled', exitCode:
+130 }`. Live Node v24.16.0, same program, SIGINT → exit 0, the listener's
+status. `packages/rifty/README.md` (Stop paragraph) attributes 130 to real Node
+without a handler and does not state rifty's Stop exitCode. Whether
+`cancelled` stays the status is an SDK question (ADR-0418 §3); the exit code is
+Node's. COI terminal Ctrl-C (compat process.md `node <file>` row "Ctrl-C →
+exit 130") with a handler is unmeasured.
 
 ## Next
 
