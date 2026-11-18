@@ -18,7 +18,7 @@ were internal to `@riftydev/isolate-host`, whose install pulls
 
 1. Package `@riftydev/isolate-guest`, no dependencies of any kind (a subpath of
    isolate-host would install isolated-vm: I3). Root exports:
-   `createHostBridge(hooks) → { functions, close }`, `exitStatus(value)`,
+   `createHostBridge(hooks) → { functions, timeOrigin, close }`, `exitStatus(value)`,
    `IMPORT_GAP`, `UNCOPYABLE_REJECTION`, and types `GuestHost`, `GuestEntry`,
    `HostFunctions`, `HostHooks`, `HostBridge`. The bundle is an asset subpath
    `./guest.js` (no .d.ts), resolved by the consumer
@@ -76,3 +76,7 @@ Manager decision 2026-11-18: isolated-vm 6.2.0 stays a declared ceiling.
   lane builds both.
 - Every contract change is a release note for embedders; stabilizing it is a
   later decision.
+
+## Decisions
+
+- 2026-11-18 — cross-review round 1: the guest clock starts at `createHostBridge` (`timeOrigin` returned by it, `now()` relative), not the embedder's process start — an in-process embedder leaked its uptime and linked calls; `runCode`'s guest clock now starts at the child's bridge setup. `guard` passes only refusals it created (by identity). The README example refuses isolated-vm < 7 and states it has no limits; the timer `fire` queue is unbounded embedder memory (compat ⚠️, backpressure owned by `backlog/distribution/isolate-host-timer-fire-backpressure`, due with the pool goal). The `isolate-host bridge:` prefix stays (one name with the other guest-visible `isolate-host.*` texts).
