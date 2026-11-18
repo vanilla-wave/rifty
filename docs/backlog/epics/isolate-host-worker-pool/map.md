@@ -19,17 +19,6 @@ compat rows (I8).
 - Worker RSS ceiling and recycle watermark with many calls per worker: after
   `dispose()` RSS stays at its high-water mark (step 0 retention rows, macOS);
   Linux unmeasured — owner: agent — probe both at PICKUP of the pool wall.
-- A rerun whose original deadline runs out (I5): reject naming the lost
-  worker (recommended — an honest unknown failure, keeps the `timeoutMs` +
-  1 s bound), `timeout` (keeps the bound, tells the model its code was slow
-  when it was not), or a fresh `timeoutMs` for the rerun (fair to the guest,
-  bound becomes 2 × `timeoutMs` + 1 s) — owner: user — asked 2026-11-18 via
-  the manager thread; carrier row 8 encodes the recommendation.
-- A worker lost with no culprit (I5): rerun its calls once (recommended —
-  the frame's point 3 extended; neighbours of an unknown culprit lose only
-  delay, the true culprit costs at most two workers) or reject them at once
-  as A does today — owner: user — asked 2026-11-18 via the manager thread;
-  carrier row 8 encodes the recommendation.
 - Shard size 4 vs isolated-vm's pool of cores + 1 threads (CI runner cores) —
   owner: agent — probe 4 busy guests + 1 neighbour on the CI runner.
 - How many idle workers stay warm, and when an idle worker is reaped —

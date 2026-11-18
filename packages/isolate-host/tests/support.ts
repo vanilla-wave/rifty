@@ -76,7 +76,7 @@ const DIST_INDEX = new URL('../dist/index.js', import.meta.url).href;
  * built package at `entry`; return what it `out()`s (one JSON value). In scope:
  * `runCode`, `children()` (this consumer's child pids), `kill(pid)`,
  * `sleep(ms)`, `now()`, `waitFor(probe, ms)`, `settle(promise)` (a rejection →
- * `{rejected: message}`), `sampleChildren()` (`.stop()` → peak child count).
+ * `{rejected: message, code}`), `sampleChildren()` (`.stop()` → peak child count).
  * The consumer ends by `process.exit` after the body unless `naturalExit`.
  */
 export async function consumer(
@@ -95,7 +95,7 @@ export async function consumer(
       const end = Date.now() + ms;
       for (;;) { const v = probe(); if (v !== undefined) return v; if (Date.now() > end) throw new Error('waitFor: nothing within ' + ms + ' ms'); await sleep(20); }
     };
-    const settle = (p) => p.then((r) => r, (e) => ({ rejected: String(e && e.message) }));
+    const settle = (p) => p.then((r) => r, (e) => ({ rejected: String(e && e.message), code: e && e.code }));
     const sampleChildren = () => { let max = children().length; const t = setInterval(() => { max = Math.max(max, children().length); }, 20); return { stop: () => { clearInterval(t); return Math.max(max, children().length); } }; };
     const out = (v) => process.stdout.write('\\n' + JSON.stringify({ value: v }) + '\\n');
     try { await (async () => { ${body} })(); }

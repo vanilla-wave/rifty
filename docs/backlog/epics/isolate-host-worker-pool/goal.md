@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: Isolate host worker pool — runCode in fresh isolates inside long-lived shared worker processes
 created: 2026-11-18
 value: The same `runCode(code, options?)` at ≥ 2× lower warm latency (~10× with a V8 code cache) and ~3× lower memory for 8 concurrent calls, with a guest's OOM or hang costing its neighbours nothing but delay.
@@ -80,10 +80,14 @@ asserts the calls share one pid, and that precondition is what fails on main
   running 1000 ms after termination retires its worker: no new call goes
   there, neighbours finish there undisturbed, then the worker is killed.
 - I5. Lost worker, no culprit known (external SIGKILL, OOM-killer, crash, RSS
-  ceiling without a certain culprit): its in-flight calls rerun once on a fresh
-  worker, inside their original deadline; a call whose worker is lost a second
-  time, or whose rerun cannot finish before its deadline, rejects with an
-  error naming the lost worker's code/signal. No call runs more than twice.
+  ceiling without a certain culprit): its in-flight calls rerun once, together,
+  on a fresh worker no other call is placed on; with budget left the rerun is
+  transparent (the call resolves its own result once). A call whose worker is
+  lost a second time, or whose rerun cannot finish inside its original
+  deadline, rejects with `code: 'ERR_ISOLATE_HOST_WORKER_LOST'` and a message
+  naming the lost worker's code/signal, built from no guest or worker-written
+  bytes. A fresh call never shares a worker with rerun calls, so a second loss
+  rejects only calls already lost once. No call runs more than twice.
 - I6. Lifecycle: an idle worker stays warm without keeping the consumer alive
   (a consumer that called `runCode` exits on its own) and never outlives the
   consumer (consumer SIGKILL → worker gone).
@@ -95,7 +99,9 @@ asserts the calls share one pid, and that precondition is what fails on main
   state that an escape reaches every guest the worker hosts, concurrently and
   later, that cross-isolate side channels are an open class
   (`SharedArrayBuffer`/`Atomics` present; guest `performance.now` resolution
-  measured), and enumerate the worker's shared resources each with its guard.
+  measured), enumerate the worker's shared resources each with its guard,
+  and state that a guest may repeat an attack in new calls without bound —
+  rate limiting calls per source stays with the consumer.
 - I9. Measured density: README §Cost records `scripts/measure.mjs` on the
   landed tree next to A on one machine; warm-call p50 and peak RSS of 8
   concurrent calls are each ≤ ½ of A's (A on M3 Pro: 137 ms, 1118 MiB).
@@ -104,8 +110,8 @@ asserts the calls share one pid, and that precondition is what fails on main
 
 challenge: 2026-11-18 — 8 problems (fresh critic over request, goal, carrier, step 0; verified, dispositions below)
 
-1. Omitted user choice — a rerun neighbour's budget: deadline from call start makes victims of a time-path worker kill read `timeout`. Resolved for the time path by design (I4: a stuck guest retires its worker, neighbours finish there, no rerun); for I5 reruns the outcome is a user fork (`map.md` Open questions, default: reject naming the lost worker, never `timeout`).
-2. Omitted user choice — rerun on a worker lost with no culprit reverses A's reject-at-once (ADR-0557 §1). User fork (`map.md`, default: rerun once, the user's frame point 3 extended).
+1. Omitted user choice — a rerun neighbour's budget: deadline from call start makes victims of a time-path worker kill read `timeout`. Resolved for the time path by design (I4: a stuck guest retires its worker, neighbours finish there, no rerun); for I5 reruns: manager decision F1 below (shown to the user, unanswered).
+2. Omitted user choice — rerun on a worker lost with no culprit reverses A's reject-at-once (ADR-0557 §1): manager decision F2 below (shown to the user, unanswered).
 3. Escape persistence on a long-lived worker — documented (I8 "now and later"); not a fork: an escape runs as the worker's uid, so recycling the worker would not bound it (ADR-0557 Safety promise).
 4. Cheaper route A + code cache — probed: 74.5 ms p50, 108 MiB per call (step 0); rejected below.
 5. Value overstated — value line corrected (≥ 2× uncached, ~10× cached; ~3× at 8 calls in 2 workers).
@@ -118,6 +124,9 @@ challenge: 2026-11-18 — 8 problems (fresh critic over request, goal, carrier, 
 - 2026-11-18 — user (via manager thread `31383f4b`, verbatim): «Давай пойдем в C и сразу сделаем экспорт чистого rifty для кастомных интегарций. Ничего страшного, что контракт будет меняться».
 - 2026-11-18 — manager interpretation, shown to the user, unanswered at FIT: «C» = option C of the A/B/C table (pool of worker processes, many isolates each); the export is a separate goal in another thread. The user saw this OOM frame before choosing: small shard of K isolates per worker; culprit known via `onCatastrophicError` of its isolate, on an RSS kill by per-isolate heap stats; culprit `memory`, neighbours rerun elsewhere (possible because `runCode` is pure — no network, no host files); worker restart at an RSS threshold before a catastrophe.
 - 2026-11-18 — frame point 2 refuted in part by step 0: in the catastrophic case ivm disposes the culprit's isolate for its memory limit (seen at the RSS crossing) while `onCatastrophicError` had not fired after 8 s; per-isolate heap stats separate a host-side timer flood by 4 MiB only. Blame = the culprit isolate's own disposal/fatal signal; no heap-stats guess (I3, I5).
+- 2026-11-18 — manager decision by delegation (F1; both forks shown to the user, no answer yet; reversible until merge, a user answer lands as `amend:`): a rerun keeps the call's original deadline; out of budget it rejects `ERR_ISOLATE_HOST_WORKER_LOST`, never `timeout`, never a fresh `timeoutMs` — the consumer builds its own timeouts on `timeoutMs`, so a silent doubling is worse than a rare reject it can retry. Text and code carry no guest data.
+- 2026-11-18 — manager decision by delegation (F2): one rerun, a second loss rejects. Quarantine, minimal form: the calls of one lost worker rerun together on a worker of their own that takes no other call, so an unknown culprit's second kill reaches only calls lost once with it, never a fresh innocent call. Burst price: one extra process per lost worker. Rejected: rerun each suspect alone (names the culprit exactly, costs up to shard-size processes per loss).
+- 2026-11-18 — manager: blame only on a certain signal from the culprit's isolate accepted («угадывание по heap хуже честного "неизвестно"»).
 - 2026-11-18 — overturns ADR-0557 §2 (process per call) and the kill shape of §3 for this host; recorded per `DEC-2` as a superseding ADR + dated ADR-0557 §Corrections note, critic before landing.
 - 2026-11-18 — tier: robust — the new value is fault behaviour (OOM, hang, worker loss with neighbours); every reachable axis × operation gets an honest outcome + fault test.
 - 2026-11-18 — lazy pool behind `runCode`, no host object or `close()`: I6 holds with unref'd idle workers that kill themselves when their stdin ends; a `close()` has no scenario need (`REV-7`).

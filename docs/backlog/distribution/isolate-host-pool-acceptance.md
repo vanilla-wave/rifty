@@ -57,12 +57,13 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
    neighbours exact (`pool-faults.test.ts`) → I2
 8. One call (`x` now, `y` at 3 s) whose worker is SIGKILLed once resolves
    exactly `x\ny\n`, exit 0, on a new pid; SIGKILLed again on that pid it
-   rejects `isolate-host … exited unexpectedly (… SIGKILL)` < 1000 ms after
-   the kill; two calls sharing a worker killed once both resolve exactly; a
-   call (`timeoutMs` 4000, `y` at 3 s) whose worker dies at 1.5 s rejects
-   naming the lost worker, never `timeout` (`pool-faults.test.ts`) → I5
-   (both reruns and the out-of-budget outcome await the user's answer,
-   `map.md` Open questions)
+   rejects `code: 'ERR_ISOLATE_HOST_WORKER_LOST'`, message `isolate-host …
+   exited unexpectedly (… SIGKILL)` < 1000 ms after the kill; two calls sharing
+   a worker killed once both resolve exactly; a call (`timeoutMs` 4000, `y` at
+   3 s) whose worker dies at 1.5 s is rerun (a new pid appears) and rejects
+   with that code at its deadline, never `timeout`; a fresh call started
+   after a loss survives the kill of the reruns' worker, which rejects only
+   the rerun call (`pool-faults.test.ts`) → I5
 9. Hostile worker (real process, call-addressed wire below): a frame for a
    call id not in flight on that worker — an unknown id, ids of calls on the
    other worker, a call already settled — rejects that worker's in-flight
@@ -93,7 +94,8 @@ length, u8 kind, u32be call, payload`, kinds and payloads as ADR-0557 §6.
 | guest CPU, termination ignored × shared worker | culprit `timeout` at deadline; worker retires after 1000 ms, neighbours finish there, exact | row 6 sort | → I4 |
 | host-side flood (output, intervals) × shared worker | culprit ends; neighbours exact | row 7 | → I2 |
 | rerun × original deadline | rejects naming the lost worker | row 8 budget case | → I5 |
-| worker killed externally × in-flight calls | rerun once; second death rejects naming signal | row 8 | → I5 |
+| worker killed externally × in-flight calls | rerun once on a worker of their own; second death rejects `ERR_ISOLATE_HOST_WORKER_LOST` | row 8 | → I5 |
+| reruns' worker killed × a fresh call started after the loss | fresh call unaffected (never placed with reruns) | row 8 quarantine case | → I5 |
 | worker frame misaddressed × in-flight calls | protocol violation, worker killed, its calls reject | row 9 | → I7 |
 | consumer exit / SIGKILL × idle worker | consumer exits; worker gone | row 4 | → I6 |
 | concurrent calls × one worker | independent state and output | row 3 | → I2 |

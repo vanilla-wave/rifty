@@ -44,6 +44,8 @@ async function withNeighbours(
 const neighbour = (i: number) => ({ stdout: `a${i}\nb${i}\n`, stderr: '', exitCode: 0 });
 const NEIGHBOURS = [0, 1, 2].map(neighbour);
 const NEXT = { stdout: '42\n', stderr: '', exitCode: 0 };
+/** The rejection a consumer can retry on: a call lost with its worker (manager decision F1). */
+const LOST = 'ERR_ISOLATE_HOST_WORKER_LOST';
 
 describe('memory on a shared worker (I3)', () => {
   it('a catastrophic allocation is the culprit alone; neighbours get their own result once', async () => {
@@ -160,8 +162,9 @@ describe('a worker lost with no culprit (I5)', () => {
       kill(second);
       const result = await call;
       out({ result, ms: now() - t0, next: await settle(runCode('console.log(6 * 7)')) });`);
-    const v = value as { result: { rejected?: string }; ms: number; next: unknown };
+    const v = value as { result: { rejected?: string; code?: string }; ms: number; next: unknown };
     expect(v.result.rejected).toMatch(/isolate-host .*exited unexpectedly .*SIGKILL/);
+    expect(v.result.code).toBe(LOST);
     expect(v.ms).toBeLessThan(1000);
     expect(v.next).toEqual(NEXT);
   });
@@ -177,10 +180,30 @@ describe('a worker lost with no culprit (I5)', () => {
       await waitFor(() => children().find((p) => p !== first), 2000);
       const result = await call;
       out({ result, ms: now() - t0 });`);
-    const v = value as { result: { rejected?: string }; ms: number };
+    const v = value as { result: { rejected?: string; code?: string }; ms: number };
     expect(v.result.rejected).toMatch(/isolate-host .*exited unexpectedly .*SIGKILL/);
+    expect(v.result.code).toBe(LOST);
     expect(v.ms).toBeGreaterThanOrEqual(4000);
     expect(v.ms).toBeLessThanOrEqual(4000 + 1000);
+  });
+
+  it("a fresh call is never placed with reruns: killing the reruns' worker rejects only them", async () => {
+    const { value } = await consumer(`
+      const suspect = settle(runCode("setTimeout(() => console.log('s'), 4000)", { timeoutMs: 20000 }));
+      const first = await waitFor(() => children()[0], 5000);
+      await sleep(500);
+      kill(first);
+      const quarantine = await waitFor(() => children().find((p) => p !== first), 5000);
+      await sleep(300);
+      const fresh = settle(runCode("setTimeout(() => console.log('f'), 2000)", { timeoutMs: 20000 }));
+      await sleep(500);
+      const workers = children().length;
+      kill(quarantine);
+      out({ suspect: await suspect, fresh: await fresh, workers });`);
+    const v = value as { suspect: { code?: string }; fresh: unknown; workers: number };
+    expect(v.workers).toBe(2);
+    expect(v.suspect.code).toBe(LOST);
+    expect(v.fresh).toEqual({ stdout: 'f\n', stderr: '', exitCode: 0 });
   });
 
   it('two calls sharing a killed worker both resolve exactly', async () => {
