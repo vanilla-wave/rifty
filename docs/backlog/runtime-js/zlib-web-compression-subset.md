@@ -41,7 +41,20 @@ This item now tracks the surface DELIBERATELY deferred from those PRs.
   `CompressionStream` already emits Node-identical bytes — unifying async on
   `pako` could lose that. Consumers: pdf t1/t3 `inflateSync` (no-COI office-docs
   2026-11-12), pdfkit `deflateSync`. Wave-2 refine + ADR (ADR-0159 correction
-  2026-11-18). Until then each ceiling's error names its working async alternative.
+  2026-11-18). Until then each export ceiling's error names its working async
+  alternative. pako 1.0.11 diverges from Node on gunzip edges (`+'\n'` OK, 2nd
+  member dropped) and matches on inflate tails (`runtime-js/zlib-trailing-bytes-after-stream-end`).
+- **Option + `Gzip` instance ceiling reasons** (PR #403 outside finding): the
+  `zlib.<fn> option: flush|finishFlush|windowBits|dictionary|info` and
+  `zlib.Gzip.flush|params|reset|close|bytesWritten` throws still have no reason;
+  they fire from working functions, so they invite the misreading #403 fixed.
+  Verified rifty advice @ 39cf60307: omit `finishFlush` (complete input decodes;
+  truncated input errors `Z_BUF_ERROR`, no partial output) / `flush` / `info` /
+  `windowBits` (compress emits window 15 — a consumer pinned smaller rejects);
+  `dictionary` none (`Z_NEED_DICT`); `close` → `destroy()`; `reset` → new
+  `createGzip()`; `params`/`flush`/`bytesWritten` none (`end()` emits the rest).
+  0/12 office-docs traces hit them. Closed table over options × {6 one-shots,
+  createGzip} + 5 members, like #403's. REVERSIBLE message change.
 - Brotli / zstd stay loud ceilings — no Web API for brotli/zstd; not implemented
   yet (a WASM/JS codec is not evaluated).
 - **Cross-engine e2e** (residual risk, low — ADR-0159 Design notes): conformance +
@@ -49,6 +62,8 @@ This item now tracks the surface DELIBERATELY deferred from those PRs.
   Chromium's; only the gunzip path rides on the npm-install e2e (`unpacker.ts`). A
   small in-runtime e2e exercising compress + deflate/raw in real Chromium would close
   the last verification gap. Gate: any zlib-touching e2e flow worth pinning in-browser.
+  2026-11-18: not low — Node's DecompressionStream concatenates gzip members,
+  Chromium 148 throws; the harness masks it (`runtime-js/zlib-trailing-bytes-after-stream-end`).
 
 ## Reversibility
 
