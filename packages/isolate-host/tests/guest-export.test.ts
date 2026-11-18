@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
+import { runCode } from '../src/index.ts';
 
 /** The acceptance carrier (map item 1); RED was `it.fails` before the export landed. */
 const carrier = it;
@@ -14,4 +15,12 @@ carrier("the host's guest bundle is the export's, byte for byte", () => {
   const exported = createRequire(import.meta.url).resolve('@riftydev/isolate-guest/guest.js');
   const hosted = fileURLToPath(new URL('../dist/guest.js', import.meta.url));
   expect(readFileSync(hosted).equals(readFileSync(exported))).toBe(true);
+});
+
+it("runCode's guest clock is the export's: timeOrigin + now() is the wall clock", async () => {
+  // A fresh `node -e` reads ~0.5 ms here; the child's process origin would be ~70 ms off.
+  const result = await runCode(
+    'console.log(Math.abs(performance.timeOrigin + performance.now() - Date.now()) < 20, performance.now() < 1000)',
+  );
+  expect(result).toEqual({ stdout: 'true true\n', stderr: '', exitCode: 0 });
 });

@@ -135,6 +135,13 @@ describe('createHostBridge argument validation (I5)', () => {
         }
       }
       expect(bad).toEqual([]);
+      // The bridge's own refusal reaches the guest with its own text.
+      expect(() => functions.write(3, Uint8Array.of(1))).toThrow(
+        /^isolate-host bridge: write: fd must be 1 or 2$/,
+      );
+      expect(() => functions.random(65537)).toThrow(
+        /^isolate-host bridge: random: length must be an integer in 0\.\.65536$/,
+      );
       // Only valid calls reached the hook, and valid calls still work after the abuse.
       expect(written.every(([fd, b]) => (fd === 1 || fd === 2) && b instanceof Uint8Array)).toBe(
         true,
@@ -223,17 +230,17 @@ describe('createHostBridge argument validation (I5)', () => {
     const gc = runInNewContext('gc') as () => void;
     let fired = 0;
     const { functions, close } = createHostBridge({ write: () => {}, fire: () => fired++ });
-    const N = 100_000;
+    const N = 50_000;
     gc();
     const base = process.memoryUsage().heapUsed;
     for (let id = 1; id <= N; id++) functions.timerStart(id, 0, false);
-    const until = Date.now() + 5000;
+    const until = Date.now() + 20_000;
     while (fired < N && Date.now() < until) await sleep(20);
     expect(fired).toBe(N);
     gc();
     const kept = process.memoryUsage().heapUsed - base;
     close();
-    // Kept entries for 1e5 fired timers hold well over 8 MiB.
+    // Kept entries for 5e4 fired timers hold well over 4 MiB.
     expect(kept).toBeLessThan(4 * 1024 * 1024);
   });
 

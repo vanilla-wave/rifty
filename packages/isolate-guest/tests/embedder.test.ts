@@ -70,7 +70,8 @@ function embedder(name: string): string {
   const app = join(work, name);
   if (existsSync(join(app, 'embed.mjs'))) return app;
   install(name);
-  // The consumer's own isolated-vm 7.0.2: the workspace's copy (no registry access).
+  // The consumer's own isolated-vm 7.0.2: npm links the workspace's install (real
+  // package bytes and binary, no registry access).
   execFileSync('npm', ['install', '--no-audit', '--no-fund', '--offline', WORKSPACE_IVM], {
     cwd: app,
     stdio: 'pipe',
@@ -139,6 +140,9 @@ const IMPORT_FORMS = [
   "import('x').catch((e) => console.log(String(e.stack)))",
   // Two requests: the gap line is written once.
   "import('a'); import('b')",
+  // Output after the gap, synchronous and queued: never part of the result.
+  "console.log('before'); import('nope'); console.log('after')",
+  "import('x').catch(() => {}); for (let i = 0; i < 2000; i++) console.log(i)",
 ];
 
 let ran: Record<string, Outcome> | undefined;

@@ -58,7 +58,8 @@ export async function run(code) {
   };
   let guest;
   const { functions, timeOrigin, close } = createHostBridge({
-    write: (fd, bytes) => out[fd].push(Buffer.from(bytes)),
+    // The call's result ends with it (step 8): later guest output is dropped.
+    write: (fd, bytes) => ended || out[fd].push(Buffer.from(bytes)),
     fire: (id) => guest.fire.applyIgnored(undefined, [id]),
   });
   const isolate = new ivm.Isolate({
