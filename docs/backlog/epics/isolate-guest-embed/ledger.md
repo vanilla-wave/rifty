@@ -1,0 +1,1 @@
+- 2026-11-18 — goal fitted from the manager hand-off (thread 31383f4b); user's words and manager's interpretation in goal.md §Outcome
