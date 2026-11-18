@@ -15,8 +15,9 @@ PR #408 outside finding 5. `installNodeEvalCjsBindings` (`loader.ts`) calls
 true })`. Node v24.16.0 `lib/internal/process/execution.js`
 `runScriptInContext` assigns: the sloppy `[eval]-wrapper` does
 `globalThis.module/exports/__dirname/require = …`, strict internal code does
-`globalThis.__filename = name` and, after the synchronous part,
-`globalThis.module = origModule`.
+`globalThis.__filename = name` and, after the synchronous part, when a
+`module` existed before (`origModule !== undefined`), `globalThis.module =
+origModule`.
 
 Node, value preloaded with `node -r ./pre.js -e "…"` (2026-11-18 probe):
 - non-configurable, writable (any of the five): the eval runs with Node's values;

@@ -15,20 +15,21 @@ onto `self.require` at boot (`runtime-js/src/worker-entry.ts:188-194`).
 `executeNode` (project commands) hides it for each `node` with
 `captureNodeProcessGlobals` and puts it back afterwards (ADR-0418 correction
 2026-11-18). `runInstalledBin` (`no-coi-toolchain-owner.ts`, `runBin`) runs
-`runNodeEntry` in place without it (so does `startInstalledBin`, code read):
-a PR #408 review probe ran `sandbox.toolchain.runBin` on an ESM `.bin` and
-printed `typeof require` / `typeof globalThis.require` → `function function`
-(recorded in `reference/pr-408-final-green.json`; not a committed carrier). Declared in compat process.md "Shared realm across no-COI `node`
-invocations". `startBin` (resident) is unmeasured. Same in-place-host drift
-as `distribution/no-coi-sibling-hosts-sync-fatal` (sync fatal terminal). Rifty's `__rifty` and
-`__riftyImport` globals are visible to every no-COI `node` (declared; Node has
-neither). Fault: `sibling-drift` between in-place hosts.
+`runNodeEntry` in place without it (so does `startInstalledBin`, code read): a
+PR #408 review probe ran `sandbox.toolchain.runBin` and printed `typeof require`
+/ `typeof globalThis.require` → `function function`, Node `undefined undefined`
+(recorded in `reference/pr-408-final-green.json`; not a committed carrier).
+Declared in compat process.md "Shared realm across no-COI `node` invocations".
+`startBin` (resident) is unmeasured. Same in-place-host drift as
+`distribution/no-coi-sibling-hosts-sync-fatal` (sync fatal terminal). Rifty's
+`__rifty` and `__riftyImport` globals are visible to every no-COI `node`
+(declared; Node has neither). Fault: `sibling-drift` between in-place hosts.
 
 ## Next
 
 Owner distribution (workbench toolchain). Probe `startBin`; extend
-`tests/no-coi/no-coi-shared-realm.spec.ts` with `runBin`/`startBin` rows vs
-live Node; choose with `no-coi-sibling-hosts-sync-fatal` whether the in-place
-hosts share one invocation wrapper (§Class-kill) before changing either. Whether `__rifty` /
-`__riftyImport` should also be hidden from guest processes is a design
-question for the same owner (console eval relies on `__riftyImport`).
+`tests/no-coi/no-coi-shared-realm.spec.ts` with `runBin`/`startBin` rows vs live
+Node; choose with `no-coi-sibling-hosts-sync-fatal` whether the in-place hosts
+share one invocation wrapper (§Class-kill) before changing either. Whether
+`__rifty` / `__riftyImport` should also be hidden from guest processes is a
+design question for the same owner (console eval relies on `__riftyImport`).
