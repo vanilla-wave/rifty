@@ -1,0 +1,670 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS по Final+GREEN; merge после привязки verdict к 722af1ab72448df9b5e72810511eb058912a1481 и полностью зелёного CI этого HEAD (на последней проверке 2 lanes ещё pending).",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "722af1ab72448df9b5e72810511eb058912a1481",
+  "unit_goal_source": "PR #408, standalone observed-defect repair + documentation declaration; frozen user promise (a), promise (b), closed RED list; baseline /Users/vanilla-wave/ai/euphotic/proofs/2026-11-12-no-coi-office-docs/wave1/7-realm-eval-leak.md Part 1 and /Users/vanilla-wave/ai/euphotic/proofs/2026-11-12-no-coi-office-docs/runtime-comparison.json keys leak-set, leak-get, pdfjs-dist#after-unpdf; BASE b3a4f0a88e43d770df6968d2cccd02ba0778ecbd; HEAD 722af1ab72448df9b5e72810511eb058912a1481",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Closed list is exactly require, module, exports, __filename, __dirname from the Node v24.16.0 eval wrapper.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:11",
+      "note": "Fetched both official v24.16.0 files: lib/internal/process/execution.js:runScriptInContext@v24.16.0 (lines 407-435) and lib/internal/main/eval_string.js@v24.16.0 (lines 64-70). https://raw.githubusercontent.com/nodejs/node/v24.16.0/lib/internal/process/execution.js ; https://raw.githubusercontent.com/nodejs/node/v24.16.0/lib/internal/main/eval_string.js . Real baseline Part 1 and runtime-comparison leak-set/leak-get/pdfjs-dist#after-unpdf read independently. Commit 7a04acb97 changes tests only and precedes 76a1ef48c. Replayed its production blobs and original carrier in detached scratch: 11 expected failures, 1 pass, exit 1; e.g. later ESM/CJS prints function/object/object/string/string against five undefined in Node. HEAD carrier: 16/16, exit 0, live node v24.16.0. Logs: /tmp/fg408-red.log and /tmp/fg408-green.log."
+    },
+    {
+      "row": "-e \"1\": later .mjs and .cjs both read typeof globalThis.require as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e \"1\": the earlier guest descriptor/value of globalThis.require survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e \"1\": later .mjs and .cjs both read typeof globalThis.module as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e \"1\": the earlier guest descriptor/value of globalThis.module survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e \"1\": later .mjs and .cjs both read typeof globalThis.exports as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e \"1\": the earlier guest descriptor/value of globalThis.exports survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e \"1\": later .mjs and .cjs both read typeof globalThis.__filename as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e \"1\": the earlier guest descriptor/value of globalThis.__filename survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e \"1\": later .mjs and .cjs both read typeof globalThis.__dirname as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e \"1\": the earlier guest descriptor/value of globalThis.__dirname survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-p \"1\": later .mjs and .cjs both read typeof globalThis.require as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-p \"1\": the earlier guest descriptor/value of globalThis.require survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-p \"1\": later .mjs and .cjs both read typeof globalThis.module as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-p \"1\": the earlier guest descriptor/value of globalThis.module survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-p \"1\": later .mjs and .cjs both read typeof globalThis.exports as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-p \"1\": the earlier guest descriptor/value of globalThis.exports survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-p \"1\": later .mjs and .cjs both read typeof globalThis.__filename as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-p \"1\": the earlier guest descriptor/value of globalThis.__filename survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-p \"1\": later .mjs and .cjs both read typeof globalThis.__dirname as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-p \"1\": the earlier guest descriptor/value of globalThis.__dirname survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e throwing Error: later .mjs and .cjs both read typeof globalThis.require as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e throwing Error: the earlier guest descriptor/value of globalThis.require survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e throwing Error: later .mjs and .cjs both read typeof globalThis.module as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e throwing Error: the earlier guest descriptor/value of globalThis.module survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e throwing Error: later .mjs and .cjs both read typeof globalThis.exports as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e throwing Error: the earlier guest descriptor/value of globalThis.exports survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e throwing Error: later .mjs and .cjs both read typeof globalThis.__filename as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e throwing Error: the earlier guest descriptor/value of globalThis.__filename survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e throwing Error: later .mjs and .cjs both read typeof globalThis.__dirname as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e throwing Error: the earlier guest descriptor/value of globalThis.__dirname survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e process.exit(3): later .mjs and .cjs both read typeof globalThis.require as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e process.exit(3): the earlier guest descriptor/value of globalThis.require survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e process.exit(3): later .mjs and .cjs both read typeof globalThis.module as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e process.exit(3): the earlier guest descriptor/value of globalThis.module survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e process.exit(3): later .mjs and .cjs both read typeof globalThis.exports as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e process.exit(3): the earlier guest descriptor/value of globalThis.exports survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e process.exit(3): later .mjs and .cjs both read typeof globalThis.__filename as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e process.exit(3): the earlier guest descriptor/value of globalThis.__filename survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e process.exit(3): later .mjs and .cjs both read typeof globalThis.__dirname as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e process.exit(3): the earlier guest descriptor/value of globalThis.__dirname survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e settled Stop via SIGINT listener: later .mjs and .cjs both read typeof globalThis.require as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e settled Stop via SIGINT listener: the earlier guest descriptor/value of globalThis.require survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e settled Stop via SIGINT listener: later .mjs and .cjs both read typeof globalThis.module as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e settled Stop via SIGINT listener: the earlier guest descriptor/value of globalThis.module survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e settled Stop via SIGINT listener: later .mjs and .cjs both read typeof globalThis.exports as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e settled Stop via SIGINT listener: the earlier guest descriptor/value of globalThis.exports survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e settled Stop via SIGINT listener: later .mjs and .cjs both read typeof globalThis.__filename as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e settled Stop via SIGINT listener: the earlier guest descriptor/value of globalThis.__filename survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "-e settled Stop via SIGINT listener: later .mjs and .cjs both read typeof globalThis.__dirname as native Node does.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:299",
+      "note": "HEAD Chromium pass against live Node; retained Worker asserted at line 305. Original RED reproduces this mode."
+    },
+    {
+      "row": "-e settled Stop via SIGINT listener: the earlier guest descriptor/value of globalThis.__dirname survives unchanged.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:320",
+      "note": "Guest setup lines 61-75; native same-realm set/get oracle lines 87-88; descriptor flags and accessor identity checked at line 330. A delete-only or value-only restore fails."
+    },
+    {
+      "row": "Eval bindings remain available through timer and exit callbacks, then end with the invocation.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:166",
+      "note": "HEAD eval-late passes. Scratch mutant restoring immediately after runNodeEntry and before awaitDrain fails the committed test at line 310: timer/exit exports, __filename, __dirname become undefined. The declared late module residual is pinned to object and asserted different from actual Node function (lines 312-315). Mutant exit 1; /tmp/fg408-mutant-early.log."
+    },
+    {
+      "row": "An unrestorable eval binding fails loudly, replaces the Worker and cannot contaminate the next invocation.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:389",
+      "note": "Non-configurable __dirname: failed/null/replaced naming globalThis.__dirname; Node exits 0. Subsequent processes compare to Node. Existing replacement owner is reused; no added realm manager."
+    },
+    {
+      "row": "A pre-existing non-configurable guest binding remains a visible, declared ceiling.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:415",
+      "note": "Guest __dirname survives; later eval exits 1 with its exact TypeError, Node exits 0; other eval bindings are restored."
+    },
+    {
+      "row": "A non-extensible globalThis while the console require is hidden fails loudly and replaces the Worker.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a) + scenario (user promise b)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:439",
+      "note": "Committed test pins failed/null/replaced and globalThis.require, then proves the next invocation fresh. Additional scratch probe confirms the declaration is correctly conditional: after guest require claim, sealing retains the Worker, later eval exits 1 naming module, Node exits 0; /tmp/fg408-probes.log."
+    },
+    {
+      "row": "Console eval retains its require across project-command processes and a guest claim wins.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:461",
+      "note": "Real console eval requires node:fs before/after -e, ESM and CJS; guest string claim survives. Identity-based console hiding is at loader.ts:384; descriptor snapshot and installer share the one list at loader.ts:375. executeNode restores only after runInPlace settles (no-coi-project-command.ts:208-224)."
+    },
+    {
+      "row": "Guest globals, including a file-entry global and an eval var, persist.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:91",
+      "note": "SHARED guestGlobal=number, evalVar=number. Committed declaration test at lines 353-380 passes in Chromium: each SHARED value is pinned, Node must not have it, all other fields equal Node."
+    },
+    {
+      "row": "Added builtin properties and replaced fs.readFile persist through require and ESM import.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:92",
+      "note": "SHARED builtinProp=string, moduleBuiltinProp=string, builtinMethod/esmBuiltinMethod=patchedReadFile. Committed declaration test at lines 353-380 passes in Chromium: each SHARED value is pinned, Node must not have it, all other fields equal Node."
+    },
+    {
+      "row": "Builtin state and diagnostics_channel subscribers persist and the subscriber runs in the later process.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:103",
+      "note": "SHARED builtinState=77, channelSubscriber=true, staleChannelSubscriber=ran. Committed declaration test at lines 353-380 passes in Chromium: each SHARED value is pinned, Node must not have it, all other fields equal Node."
+    },
+    {
+      "row": "Array.prototype additions persist.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:97",
+      "note": "SHARED intrinsic=number. Committed declaration test at lines 353-380 passes in Chromium: each SHARED value is pinned, Node must not have it, all other fields equal Node."
+    },
+    {
+      "row": "Added process properties persist.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:98",
+      "note": "SHARED processProp=number. Committed declaration test at lines 353-380 passes in Chromium: each SHARED value is pinned, Node must not have it, all other fields equal Node."
+    },
+    {
+      "row": "Rifty __rifty and __riftyImport globals remain visible.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:121",
+      "note": "SHARED riftyNamespace=object, consoleImport=function. Committed declaration test at lines 353-380 passes in Chromium: each SHARED value is pinned, Node must not have it, all other fields equal Node."
+    },
+    {
+      "row": "require.cache and CommonJS module state are per invocation.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:110",
+      "note": "Counter module is absent from the new cache before require; its counter restarts at 1. Committed declaration test at lines 353-380 passes in Chromium: each SHARED value is pinned, Node must not have it, all other fields equal Node."
+    },
+    {
+      "row": "The ESM registry/module state is per invocation.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:135",
+      "note": "counter.mjs is primed in an earlier process; the later process prints 1, as Node. Committed declaration test at lines 353-380 passes in Chromium: each SHARED value is pinned, Node must not have it, all other fields equal Node."
+    },
+    {
+      "row": "process.env changes are per invocation.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:124",
+      "note": "Earlier SHARED_ENV mutation is absent in later process, equal to Node; not declared persisting. Committed declaration test at lines 353-380 passes in Chromium: each SHARED value is pinned, Node must not have it, all other fields equal Node."
+    },
+    {
+      "row": "Process and stdio listeners are per invocation.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:125",
+      "note": "No stale exit-listener output; exit/sharedEvent and stdout listener counts compare with Node. Committed declaration test at lines 353-380 passes in Chromium: each SHARED value is pinned, Node must not have it, all other fields equal Node."
+    },
+    {
+      "row": "Timers are per invocation.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shared-realm.spec.ts:105",
+      "note": "Earlier unref interval must emit no stale-timer during the later 50 ms observer; unexpected output fails the Node comparison. Committed declaration test at lines 353-380 passes in Chromium: each SHARED value is pinned, Node must not have it, all other fields equal Node."
+    },
+    {
+      "row": "Compat declares the measured persisting list with no-COI host scope and honest ceilings.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "docs/public/compat/process.md:63",
+      "note": "Compared with the independently executed Chromium/native measurements. Two extra scratch probes validate runBin console require (function/function; Node undefined/undefined) and sealing after a guest require claim; /tmp/fg408-probes.log. CHANGELOG entries exist in all four affected packages: agent, rifty, runtime-js, workbench."
+    },
+    {
+      "row": "SDK README declares shared JS realm separately from fresh Shell cwd/env.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "packages/rifty/README.md:298",
+      "note": "Compared with the independently executed Chromium/native measurements. Two extra scratch probes validate runBin console require (function/function; Node undefined/undefined) and sealing after a guest require claim; /tmp/fg408-probes.log. CHANGELOG entries exist in all four affected packages: agent, rifty, runtime-js, workbench."
+    },
+    {
+      "row": "Agent README declares the measured shared realm.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "packages/agent/README.md:151",
+      "note": "Compared with the independently executed Chromium/native measurements. Two extra scratch probes validate runBin console require (function/function; Node undefined/undefined) and sealing after a guest require claim; /tmp/fg408-probes.log. CHANGELOG entries exist in all four affected packages: agent, rifty, runtime-js, workbench."
+    },
+    {
+      "row": "Agent-injected host note truthfully states fresh cwd/env and the shared realm.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "packages/agent/src/sandbox-host.ts:112",
+      "note": "Compared with the independently executed Chromium/native measurements. Two extra scratch probes validate runBin console require (function/function; Node undefined/undefined) and sealing after a guest require claim; /tmp/fg408-probes.log. CHANGELOG entries exist in all four affected packages: agent, rifty, runtime-js, workbench."
+    },
+    {
+      "row": "SDK env API documentation promises only per-call env freshness.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox-project.ts:15",
+      "note": "Compared with the independently executed Chromium/native measurements. Two extra scratch probes validate runBin console require (function/function; Node undefined/undefined) and sealing after a guest require claim; /tmp/fg408-probes.log. CHANGELOG entries exist in all four affected packages: agent, rifty, runtime-js, workbench."
+    },
+    {
+      "row": "ADR-0418 carries a dated correction for the seam without introducing a realm per process.",
+      "source": "acceptance",
+      "trace": "scenario (user promise b)",
+      "status": "pass",
+      "citation": "docs/adr/distribution/0418-no-coi-project-files-and-invocation-commands.md:82",
+      "note": "Compared with the independently executed Chromium/native measurements. Two extra scratch probes validate runBin console require (function/function; Node undefined/undefined) and sealing after a guest require claim; /tmp/fg408-probes.log. CHANGELOG entries exist in all four affected packages: agent, rifty, runtime-js, workbench."
+    },
+    {
+      "row": "A deduplicated draft tracks the excluded realm-per-node work and the ADR-0539 user decision.",
+      "source": "acceptance",
+      "trace": "scenario (user promise a) + scenario (user promise b)",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/no-coi-node-process-realm.md:39",
+      "note": "Read ADR-0418 sections 4/5, ADR-0539 section 1 and searched backlog realm/process terms. Existing kernel process-equals-web-worker covers a different child-process fallback. New draft leaves Service Worker scope to its user owner; no per-process realm is implemented."
+    },
+    {
+      "row": "Compiler-output exception retains exact filename, size and complete-byte SHA with only the reviewed import rename.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:103",
+      "note": "Independent HEAD build: 10,022,686 bytes, e9ee14f760f3f9f428260fb2ab48f5c5c8a4567d90c96112d0343a506405d207. Exactly one ./module-loader-UWXZE6K3.js import; replacing it with ./module-loader-GTKXHMUA.js reproduces the BASE pin 294718dc35e39febd79162188dbcbaa648a86eaddf7879c64e13f18b08fc2597. Compiler body unchanged. Dated ADR correction at 0391:64."
+    },
+    {
+      "row": "Prior esbuild payload, size and provenance criteria remain intact.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.test.ts:51",
+      "note": "Read gate at b3a4f0a88 and diff: only the TypeScript SHA changes. Existing raw/gzip/base64 esbuild negative probes and 2 MB ceiling are unchanged. Independent pnpm pr:check at exact HEAD passes all 28 checks (including gate, related tests and parity), exit 0; /tmp/fg408-pr-check.log."
+    },
+    {
+      "row": "The reviewed compiler-output pin has actual packed browser proof.",
+      "source": "acceptance",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:1191",
+      "note": "Executed pnpm test:packed-toolchain-surface at HEAD, exit 0: 15 first-party + 75 external tarballs, strict TypeScript + generic SDK/Worker graphs; agent files/commands/Stop/installed-build scenarios all passed. /tmp/fg408-packed.log."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
