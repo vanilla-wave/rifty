@@ -14,12 +14,13 @@ code: [packages/workbench/src/workers/no-coi-project-command.ts, packages/workbe
 Measured in Chromium against live Node 24.16.0
 (`tests/no-coi/no-coi-shared-realm.spec.ts`, declared in compat process.md
 "Shared realm across no-COI `node` invocations"): a later `node` sees an
-earlier command's globals (an `-e` `var` too), added/replaced builtin-module
-members (`node:fs`, `node:module`, through `require` and `import`),
-`Array.prototype` additions and `process` properties; `process.env`,
-`require.cache`, the ESM registry, process/stdio listeners and timers are per
-invocation. The `-e`/`-p` `[eval]` bindings are restored at invocation end
-(PR #408), not by a fresh realm.
+earlier command's globals (an `-e` `var` too), builtin-module members added
+(`node:fs`, `node:module`) or replaced (`fs.readFile`, through `require` and
+`import`), builtin-module state (`events.defaultMaxListeners`; a
+`diagnostics_channel` subscriber runs in the later process), `Array.prototype`
+additions and `process` properties; `process.env`, `require.cache`, the ESM
+registry, process/stdio listeners and timers are per invocation. The `-e`/`-p`
+`[eval]` bindings are restored at invocation end (PR #408), not by a fresh realm.
 
 `executeNode` (`no-coi-project-command.ts`) and `runInstalledBin`
 (`no-coi-toolchain-owner.ts`) run `runNodeEntry` in place. COI runs each `node`

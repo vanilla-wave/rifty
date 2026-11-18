@@ -79,11 +79,14 @@ unacknowledged effects. Errors and completion expose this uncertainty.
 
 ## Corrections
 
-- 2026-11-18 — §5's no-fresh-realm line, made specific (PR #408): a command's
-  `-e`/`-p` `[eval]` bindings (`require`, `module`, `exports`, `__filename`,
-  `__dirname`; Node `runScriptInContext`) are rifty's own scaffolding and end
-  with their invocation — `executeNode` snapshots their descriptors before the
-  eval and restores them after `invocation.end()`, so a guest value under one
-  survives. Guest-made realm state stays shared and is declared, not reset:
-  compat process.md "Shared realm across no-COI `node` invocations". A realm
-  per invocation: draft `backlog/distribution/no-coi-node-process-realm`.
+- 2026-11-18 — §5's no-fresh-realm line, made specific (PR #408): rifty's own
+  scaffolding under Node's `[eval]` names (`require`, `module`, `exports`,
+  `__filename`, `__dirname`; Node `runScriptInContext`) does not reach a guest
+  process. `executeNode` opens `captureNodeProcessGlobals` before guest code:
+  the console `require` mirror is hidden from every project-command `node`; an eval's
+  bindings are snapshotted and restored once the process ends, so a guest value
+  under one survives; one the realm cannot return (made non-configurable) fails
+  the command and replaces the Worker. The rest of the realm stays shared and
+  is declared: compat process.md "Shared realm across no-COI `node`
+  invocations". A realm per invocation: draft
+  `backlog/distribution/no-coi-node-process-realm`.

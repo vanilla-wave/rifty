@@ -12,10 +12,11 @@ import { expect, test } from '@playwright/test';
 // evalScript) defines `[eval]`'s module, exports, __dirname, require (in the
 // `[eval]-wrapper`) and __filename on globalThis. They die with that process:
 // a later `node` sees none of them, and a guest value an earlier command left
-// under one of those names is still there after the eval process ends.
-// Residual: every no-COI `node` sees rifty's console `require` global
-// (runtime-js worker-entry.ts, resolving from `/__repl__.js`) with or without
-// an eval; Node has none. A leaked eval `require` still fails (its keys differ).
+// under one of those names is still there after the eval process ends. A
+// `node` also never sees rifty's console `require` (runtime-js worker-entry.ts):
+// a Node process has no global `require`. A binding the realm cannot return (a
+// guest made it non-configurable) fails the command loudly and replaces the
+// Worker, so the next `node` is fresh again.
 // (b) What else an earlier command leaves in the realm, measured against live
 // Node. Declared persisting state (compat process.md, "Shared realm across
 // no-COI `node` invocations"): rifty prints exactly the declared value and Node
@@ -45,10 +46,10 @@ interface RiftyRun {
   readonly worker: string;
   readonly stdout: string;
   readonly stderr: string;
+  readonly error: string | null;
 }
 
-// One row per name: its type and, for an object/function, its own enumerable
-// keys (the eval's `require` carries resolve/cache/…; rifty's console one none).
+// One row per name: its type and, for an object/function, its own enumerable keys.
 const typeofRows = `for (const name of ${JSON.stringify(NAMES)}) {
   const value = globalThis[name];
   const keys = typeof value === 'function' || (typeof value === 'object' && value !== null)
@@ -76,6 +77,8 @@ const getGuest = `for (const name of ${JSON.stringify(NAMES)}) {
 
 const files: Readonly<Record<string, string>> = {
   'later.mjs': typeofRows,
+  'frozen-guest.mjs':
+    "Object.defineProperty(globalThis, '__dirname', { value: 'frozen', writable: false, configurable: false });\n",
   'later.cjs': typeofRows,
   'set-guest.mjs': setGuest,
   'get-guest.mjs': getGuest,
@@ -95,6 +98,8 @@ process.env.SHARED_ENV = '1';
 process.on('exit', () => console.log('L|stale-exit-listener'));
 process.on('sharedEvent', () => {});
 process.stdout.on('sharedEvent', () => {});
+require('node:events').defaultMaxListeners = 77;
+require('node:diagnostics_channel').subscribe('shared-channel', () => console.log('L|staleChannelSubscriber ran'));
 setInterval(() => console.log('L|stale-timer'), 5).unref();
 require('./counter.cjs').inc();
 `,
@@ -109,6 +114,8 @@ const rows = {
   moduleBuiltinProp: typeof require('node:module').__sharedProp,
   intrinsic: typeof [].__sharedProto,
   processProp: typeof process.__sharedProp,
+  builtinState: require('node:events').defaultMaxListeners,
+  channelSubscriber: require('node:diagnostics_channel').hasSubscribers('shared-channel'),
   consoleRequire: typeof globalThis.require,
   consoleImport: typeof globalThis.__riftyImport,
   riftyNamespace: typeof globalThis.__rifty,
@@ -118,6 +125,7 @@ const rows = {
   requireCache: cached,
   cjsCounter: require('./counter.cjs').inc(),
 };
+require('node:diagnostics_channel').channel('shared-channel').publish('ping');
 // Leave time for a leaked 5 ms interval to print.
 setTimeout(() => { for (const [k, v] of Object.entries(rows)) console.log('L|' + k + ' ' + v); }, 50);
 `,
@@ -246,6 +254,7 @@ async function runRifty(
             worker: done.worker,
             stdout: done.stdout,
             stderr: done.stderr,
+            error: done.error?.message ?? null,
           });
         }
         return runs;
@@ -284,9 +293,6 @@ function expectSameStatus(rifty: RiftyRun, native: NativeRun, step: Step, label:
 
 const tagOf = (line: string): string => line.split(' ')[0] ?? line;
 
-// Rifty's console `require` global (worker-entry.ts), in every no-COI `node`.
-const CONSOLE_REQUIRE: Readonly<Record<string, string>> = { 'L|require': 'L|require function:' };
-
 for (const mode of evalModes) {
   test(`${mode.name}: a later node sees none of the [eval] bindings`, async ({ page }) => {
     test.setTimeout(120_000);
@@ -295,7 +301,7 @@ for (const mode of evalModes) {
     const rifty = await runRifty(page, steps);
     const label = `${mode.name} vs Node ${process.version}\n${JSON.stringify({ native, rifty }, null, 2)}`;
     expectSameRealm(rifty, label);
-    const residual = { ...CONSOLE_REQUIRE, ...mode.residual };
+    const residual = mode.residual ?? {};
     steps.forEach((step, index) => {
       expectSameStatus(rifty[index]!, native[index]!, step, label);
       const expected = rows(native[index]!.stdout).map((line) => residual[tagOf(line)] ?? line);
@@ -325,7 +331,7 @@ for (const mode of evalModes) {
 }
 
 // Declared: rifty's value of each realm state a later `node` sees — what an
-// earlier command left, and rifty's console globals (worker-entry.ts).
+// earlier command left, and rifty's own `__riftyImport`/`__rifty` globals.
 const SHARED: Readonly<Record<string, string>> = {
   guestGlobal: 'number',
   evalVar: 'number',
@@ -335,7 +341,9 @@ const SHARED: Readonly<Record<string, string>> = {
   moduleBuiltinProp: 'string',
   intrinsic: 'number',
   processProp: 'number',
-  consoleRequire: 'function',
+  builtinState: '77',
+  channelSubscriber: 'true',
+  staleChannelSubscriber: 'ran',
   consoleImport: 'function',
   riftyNamespace: 'object',
 };
@@ -360,13 +368,67 @@ test('declared shared realm: what an earlier node leaves for the next', async ({
     Object.fromEntries(lines.map((line) => line.slice(2).split(' ') as [string, string]));
   const node = fields(later(native));
   const observed = fields(later(rifty));
-  expect(Object.keys(node).sort(), label).toEqual(Object.keys(observed).sort());
   const compared = (shape: Record<string, string>) =>
     Object.fromEntries(Object.entries(shape).filter(([field]) => !(field in SHARED)));
-  // Per invocation as in Node: env, listeners, timers, require.cache, the ESM registry.
+  // Everything else as in Node (a leaked listener or timer prints an extra row).
   expect(compared(observed), label).toEqual(compared(node));
   for (const [field, value] of Object.entries(SHARED)) {
     expect(observed[field], `${label}\ndeclared shared ${field}`).toEqual(value);
     expect(node[field], `${label}\nNode now leaves the declared ${field}`).not.toEqual(value);
   }
+});
+
+// The eval makes its own `__dirname` non-configurable: the realm cannot return it.
+const UNRESTORABLE = evalStep(
+  '-e',
+  "Object.defineProperty(globalThis, '__dirname', { configurable: false })",
+);
+
+test('an [eval] binding the realm cannot restore fails loudly and replaces the Worker', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const steps = [file('set-guest.mjs'), UNRESTORABLE, file('get-guest.mjs'), file('later.mjs')];
+  const native = await nativeOracle(steps);
+  const rifty = await runRifty(page, steps);
+  const label = `vs Node ${process.version}\n${JSON.stringify({ native, rifty }, null, 2)}`;
+  // Declared degradation: Node's process exits 0; rifty names the binding and replaces the realm.
+  expect(native[1]!.code, label).toBe(0);
+  const failed = rifty[1]!;
+  expect(
+    { status: failed.status, exitCode: failed.exitCode, worker: failed.worker },
+    label,
+  ).toEqual({ status: 'failed', exitCode: null, worker: 'replaced' });
+  expect(failed.error, label).toContain('globalThis.__dirname');
+  // The next `node` is fresh, as every Node process is.
+  for (const index of [2, 3]) {
+    expect(rifty[index]!.worker, label).toBe('retained');
+    expectSameStatus(rifty[index]!, native[index]!, steps[index]!, label);
+    expect(rows(rifty[index]!.stdout), label).toEqual(rows(native[index]!.stdout));
+  }
+});
+
+// Declared: a non-configurable guest global an earlier command left under an
+// [eval] name makes a later `-e` throw (Node's wrapper assigns, never defines).
+test('a non-configurable guest global under an [eval] name fails a later eval loudly', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const steps = [file('frozen-guest.mjs'), evalStep('-e', '1'), file('later.mjs')];
+  const native = await nativeOracle(steps);
+  const rifty = await runRifty(page, steps);
+  const label = `vs Node ${process.version}\n${JSON.stringify({ native, rifty }, null, 2)}`;
+  expectSameRealm(rifty, label);
+  expect(native[1]!.code, label).toBe(0);
+  expect({ status: rifty[1]!.status, exitCode: rifty[1]!.exitCode }, label).toEqual({
+    status: 'exited',
+    exitCode: 1,
+  });
+  expect(rifty[1]!.stderr, label).toContain('TypeError: Cannot redefine property: __dirname');
+  // The guest value persists (declared shared realm); the eval's other bindings do not.
+  expect(rows(rifty[2]!.stdout), label).toEqual(
+    rows(native[2]!.stdout).map((line) =>
+      line.startsWith('L|__dirname ') ? 'L|__dirname string:' : line,
+    ),
+  );
 });

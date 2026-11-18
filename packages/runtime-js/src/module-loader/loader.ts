@@ -6,6 +6,7 @@ import { __setCreateRequireImpl } from '../builtins/module.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
 import { createRequirePath } from '../internal/create-require-path.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import { readRuntimeGlobal } from '../internal/worker-globals.ts';
 import { createCjsInteropAuthority } from './cjs-interop-authority.ts';
 import {
   type CjsExtensionHook,
@@ -374,18 +375,41 @@ export function projectNodeEvalError(
 const NODE_EVAL_CJS_BINDINGS = ['require', 'module', 'exports', '__filename', '__dirname'] as const;
 
 /**
- * A host running `-e`/`-p` in a reused realm calls this before the eval and
- * the returned restore once the process ends: Node's bindings die with it.
+ * A host running Node processes in place in a reused realm opens this before
+ * guest code: rifty's console `require` mirror is hidden (a Node process has no
+ * global `require`); an eval's bindings end with the process. The restore puts
+ * the realm back (a guest value survives) and names a binding it could not
+ * return (a guest made it non-configurable), else null.
  */
-export function captureNodeEvalCjsBindings(): () => void {
-  const prior = NODE_EVAL_CJS_BINDINGS.map(
-    (key) => [key, reflectGetOwnPropertyDescriptorPrimordial(globalThis, key)] as const,
-  );
+export function captureNodeProcessGlobals(evaluates: boolean): () => string | null {
+  const consoleRequire = readRuntimeGlobal('require');
+  const mirror = reflectGetOwnPropertyDescriptorPrimordial(globalThis, 'require');
+  const hidden =
+    consoleRequire !== null &&
+    mirror?.value === consoleRequire &&
+    reflectDeletePropertyPrimordial(globalThis, 'require');
+  const prior = evaluates
+    ? NODE_EVAL_CJS_BINDINGS.map(
+        (key) => [key, reflectGetOwnPropertyDescriptorPrimordial(globalThis, key)] as const,
+      )
+    : [];
   return () => {
+    let unrestored: string | null = null;
     for (const [key, descriptor] of prior) {
-      if (descriptor === undefined) reflectDeletePropertyPrimordial(globalThis, key);
-      else reflectDefinePropertyPrimordial(globalThis, key, descriptor);
+      const restored =
+        descriptor === undefined
+          ? reflectDeletePropertyPrimordial(globalThis, key)
+          : reflectDefinePropertyPrimordial(globalThis, key, descriptor);
+      if (!restored) unrestored ??= key;
     }
+    if (
+      hidden &&
+      mirror !== undefined &&
+      reflectGetOwnPropertyDescriptorPrimordial(globalThis, 'require') === undefined &&
+      !reflectDefinePropertyPrimordial(globalThis, 'require', mirror)
+    )
+      unrestored ??= 'require';
+    return unrestored;
   };
 }
 

@@ -11,7 +11,7 @@ import {
   type ToolchainCommandInput,
   type ToolchainCommandResult,
   activeRefs,
-  captureNodeEvalCjsBindings,
+  captureNodeProcessGlobals,
   installConsole,
   isNodeProcessExiting,
   takeUnhandledRejection,
@@ -86,15 +86,13 @@ export async function runNoCoiProjectCommand(
       ? undefined
       : new Set(input.project.allowedCommands);
 
-  const executeNode = async (
+  const runInPlace = async (
     entry: RunNodeEntryOptions,
     argv: readonly string[],
     execArgv: readonly string[],
     ctx: CommandContext,
   ): Promise<number> => {
     const invocation = openNoCoiInvocationScope();
-    // Node: the `-e`/`-p` bindings die with the process; a guest value under one survives.
-    const restoreEvalBindings = entry.kind === 'eval' ? captureNodeEvalCjsBindings() : undefined;
     const previous = {
       cwd: riftyProcess.cwd(),
       env: riftyProcess.env,
@@ -186,7 +184,6 @@ export async function runNoCoiProjectCommand(
       // A rejected drain leaves the realm owned until the host physically terminates it.
       if (!requiresTermination) {
         invocation.end();
-        restoreEvalBindings?.();
         restoreConsole();
         riftyProcess.stdout.write = previous.stdout;
         riftyProcess.stderr.write = previous.stderr;
@@ -198,6 +195,32 @@ export async function runNoCoiProjectCommand(
         setProcessCwd(previous.cwd);
       }
     }
+  };
+
+  // Node: a process sees no global `require`, and its `-e`/`-p` bindings die
+  // with it; a guest value under one survives (ADR-0418 correction 2026-11-18).
+  const executeNode = async (
+    entry: RunNodeEntryOptions,
+    argv: readonly string[],
+    execArgv: readonly string[],
+    ctx: CommandContext,
+  ): Promise<number> => {
+    const restoreGlobals = captureNodeProcessGlobals(entry.kind === 'eval');
+    const settled = await runInPlace(entry, argv, execArgv, ctx).then(
+      (exitCode) => ({ ok: true as const, exitCode }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
+    const unrestored = requiresTermination ? null : restoreGlobals();
+    if (unrestored !== null) {
+      // A guest made it non-configurable: only a new realm returns it.
+      requiresTermination = true;
+      failure = new Error(
+        `node left globalThis.${unrestored} unrestorable in the reused realm; the Worker is replaced`,
+      );
+      throw new ShellCommandLifecycleError('Node process globals not restored', { cause: failure });
+    }
+    if (!settled.ok) throw settled.error;
+    return settled.exitCode;
   };
 
   const makeShell = (cwd: string, env: Record<string, string>): Shell => {

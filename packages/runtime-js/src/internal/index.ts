@@ -24,7 +24,7 @@ export { captureRuntimeStartupOptions } from './worker-startup-options.ts';
 export { activeRefs, takeUnhandledRejection } from './event-loop-keepalive.ts';
 export { isNodeProcessExiting, terminateFatal } from '../builtins/process-lifecycle-events.ts';
 export {
-  captureNodeEvalCjsBindings,
+  captureNodeProcessGlobals,
   createModuleLoaderWithBuiltinOverrides,
 } from '../module-loader/loader.ts';
 export {
