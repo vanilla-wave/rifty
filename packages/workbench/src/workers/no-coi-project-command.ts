@@ -11,6 +11,7 @@ import {
   type ToolchainCommandInput,
   type ToolchainCommandResult,
   activeRefs,
+  captureNodeEvalCjsBindings,
   installConsole,
   isNodeProcessExiting,
   takeUnhandledRejection,
@@ -92,6 +93,8 @@ export async function runNoCoiProjectCommand(
     ctx: CommandContext,
   ): Promise<number> => {
     const invocation = openNoCoiInvocationScope();
+    // Node: the `-e`/`-p` bindings die with the process; a guest value under one survives.
+    const restoreEvalBindings = entry.kind === 'eval' ? captureNodeEvalCjsBindings() : undefined;
     const previous = {
       cwd: riftyProcess.cwd(),
       env: riftyProcess.env,
@@ -183,6 +186,7 @@ export async function runNoCoiProjectCommand(
       // A rejected drain leaves the realm owned until the host physically terminates it.
       if (!requiresTermination) {
         invocation.end();
+        restoreEvalBindings?.();
         restoreConsole();
         riftyProcess.stdout.write = previous.stdout;
         riftyProcess.stderr.write = previous.stderr;

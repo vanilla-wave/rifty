@@ -109,7 +109,7 @@ export function createSandboxAgentHost(options: SandboxAgentHostOptions): AgentH
         files,
         shell,
         notes: [
-          'no-COI commands mode: each invocation starts at the project root with a fresh environment. Files use ordinary read/transform/write, without CAS or rollback. The host owns build/preview mode changes.',
+          'no-COI commands mode: each invocation starts at the project root with fresh cwd/env in one shared JS realm: globals, builtin-module patches, intrinsics and process properties an earlier command left persist, and `require` is a global even in ES modules; require.cache, the ES module registry, listeners and timers do not. Files use ordinary read/transform/write, without CAS or rollback. The host owns build/preview mode changes.',
           options.sandbox.toolchain.registryConnected
             ? 'npm install uses the configured registry, subject to project policy; unsupported dependency specs and lifecycle scripts fail loudly.'
             : 'No registry is connected: npm install fails with registry-missing. Existing installed dependencies remain usable.',

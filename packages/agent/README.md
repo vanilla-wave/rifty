@@ -149,7 +149,8 @@ Set preview mode after start; return to commands mode after exit. Preview mode
 omits file/shell tools. No raw FS fallback, automatic mode switch or sandbox
 disposal occurs in this adapter. SDK readonly/command policy stays authoritative;
 root bounds standard file tools, not arbitrary guest code. Each command starts
-with fresh cwd/env. File edits use ordinary read/transform/write without CAS;
+with fresh cwd/env in one shared JS realm: globals, builtin-module patches,
+intrinsics and `process` properties an earlier command left persist. File edits use ordinary read/transform/write without CAS;
 forced Stop returns the SDK's unknown effects. Diagnostics/SCM are unavailable.
 
 Optional `policies: { files: { readonlyPaths: [...] }, shell: { readonlyPaths: [...],

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- README and `SandboxCommandOptions.env` state that every no-COI `node` shares the toolchain Worker's JS realm: earlier commands' globals, builtin-module patches, intrinsics and `process` properties persist, rifty's console `require` is a global; env, `require.cache`, the ES module registry, listeners and timers are per run (compat process.md).
+
 - No-COI child processes require a controlling rifty Service Worker; report missing transport explicitly while SW-free file/command APIs remain available. Toolchain protocol v7 requires matching Worker assets (ADR-0539).
 
 - Link the shared no-COI agent reference host with explicit initial preparation and saved open; remove automatic snapshot identity/force/reconciliation policy (ADR-0489/0490).

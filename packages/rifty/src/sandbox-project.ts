@@ -12,7 +12,7 @@ export type SandboxProjectOptions = ToolchainProjectOptions;
 export interface SandboxCommandOptions {
   /** Relative to project.root; defaults to project.root for every invocation. */
   readonly cwd?: string;
-  /** A fresh environment for this call; no preceding invocation state. */
+  /** This call's `process.env`; no earlier call's env changes. The JS realm is shared (README). */
   readonly env?: Readonly<Record<string, string>>;
 }
 

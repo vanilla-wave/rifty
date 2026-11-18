@@ -13,6 +13,9 @@ import { expect, test } from '@playwright/test';
 // `[eval]-wrapper`) and __filename on globalThis. They die with that process:
 // a later `node` sees none of them, and a guest value an earlier command left
 // under one of those names is still there after the eval process ends.
+// Residual: every no-COI `node` sees rifty's console `require` global
+// (runtime-js worker-entry.ts, resolving from `/__repl__.js`) with or without
+// an eval; Node has none. A leaked eval `require` still fails (its keys differ).
 // (b) What else an earlier command leaves in the realm, measured against live
 // Node. Declared persisting state (compat process.md, "Shared realm across
 // no-COI `node` invocations"): rifty prints exactly the declared value and Node
@@ -44,7 +47,15 @@ interface RiftyRun {
   readonly stderr: string;
 }
 
-const typeofRow = `console.log('L|' + ${JSON.stringify(NAMES)}.map((n) => n + '=' + typeof globalThis[n]).join(' '));\n`;
+// One row per name: its type and, for an object/function, its own enumerable
+// keys (the eval's `require` carries resolve/cache/…; rifty's console one none).
+const typeofRows = `for (const name of ${JSON.stringify(NAMES)}) {
+  const value = globalThis[name];
+  const keys = typeof value === 'function' || (typeof value === 'object' && value !== null)
+    ? Object.keys(value).sort().join(',') : '';
+  console.log('L|' + name + ' ' + typeof value + ':' + keys);
+}
+`;
 // Guest values for every eval binding name, with distinct descriptor shapes.
 const setGuest = `const moduleGetter = () => 'guest-module';
 globalThis.__guestModuleGetter = moduleGetter;
@@ -64,8 +75,8 @@ const getGuest = `for (const name of ${JSON.stringify(NAMES)}) {
 `;
 
 const files: Readonly<Record<string, string>> = {
-  'later.mjs': typeofRow,
-  'later.cjs': typeofRow,
+  'later.mjs': typeofRows,
+  'later.cjs': typeofRows,
   'set-guest.mjs': setGuest,
   'get-guest.mjs': getGuest,
   // Oracle for "unchanged": what get-guest reads right after set-guest in one realm.
@@ -98,6 +109,9 @@ const rows = {
   moduleBuiltinProp: typeof require('node:module').__sharedProp,
   intrinsic: typeof [].__sharedProto,
   processProp: typeof process.__sharedProp,
+  consoleRequire: typeof globalThis.require,
+  consoleImport: typeof globalThis.__riftyImport,
+  riftyNamespace: typeof globalThis.__rifty,
   env: typeof process.env.SHARED_ENV,
   processListeners: process.listenerCount('exit') + process.listenerCount('sharedEvent'),
   stdioListeners: process.stdout.listenerCount('sharedEvent'),
@@ -270,6 +284,9 @@ function expectSameStatus(rifty: RiftyRun, native: NativeRun, step: Step, label:
 
 const tagOf = (line: string): string => line.split(' ')[0] ?? line;
 
+// Rifty's console `require` global (worker-entry.ts), in every no-COI `node`.
+const CONSOLE_REQUIRE: Readonly<Record<string, string>> = { 'L|require': 'L|require function:' };
+
 for (const mode of evalModes) {
   test(`${mode.name}: a later node sees none of the [eval] bindings`, async ({ page }) => {
     test.setTimeout(120_000);
@@ -278,19 +295,16 @@ for (const mode of evalModes) {
     const rifty = await runRifty(page, steps);
     const label = `${mode.name} vs Node ${process.version}\n${JSON.stringify({ native, rifty }, null, 2)}`;
     expectSameRealm(rifty, label);
-    const residual = mode.residual ?? {};
+    const residual = { ...CONSOLE_REQUIRE, ...mode.residual };
     steps.forEach((step, index) => {
       expectSameStatus(rifty[index]!, native[index]!, step, label);
       const expected = rows(native[index]!.stdout).map((line) => residual[tagOf(line)] ?? line);
       expect(rows(rifty[index]!.stdout), `${label}\nstep ${step.line}`).toEqual(expected);
     });
-    const evalRows = rows(native[0]!.stdout);
+    const nodeRows = native.flatMap((run) => rows(run.stdout));
     for (const [tag, line] of Object.entries(residual)) {
-      expect(
-        evalRows.filter((row) => tagOf(row) === tag),
-        `${label}\nNode now prints the declared ${tag}`,
-      ).not.toContain(line);
-      expect(evalRows.map(tagOf), `${label}\nNode prints ${tag}`).toContain(tag);
+      expect(nodeRows.map(tagOf), `${label}\nNode prints ${tag}`).toContain(tag);
+      expect(nodeRows, `${label}\nNode now prints the declared ${line}`).not.toContain(line);
     }
   });
 
@@ -310,8 +324,9 @@ for (const mode of evalModes) {
   });
 }
 
-// Declared: rifty's value of each realm state an earlier command leaves behind.
-const PERSISTS: Readonly<Record<string, string>> = {
+// Declared: rifty's value of each realm state a later `node` sees — what an
+// earlier command left, and rifty's console globals (worker-entry.ts).
+const SHARED: Readonly<Record<string, string>> = {
   guestGlobal: 'number',
   evalVar: 'number',
   builtinProp: 'string',
@@ -320,6 +335,9 @@ const PERSISTS: Readonly<Record<string, string>> = {
   moduleBuiltinProp: 'string',
   intrinsic: 'number',
   processProp: 'number',
+  consoleRequire: 'function',
+  consoleImport: 'function',
+  riftyNamespace: 'object',
 };
 
 test('declared shared realm: what an earlier node leaves for the next', async ({ page }) => {
@@ -344,11 +362,11 @@ test('declared shared realm: what an earlier node leaves for the next', async ({
   const observed = fields(later(rifty));
   expect(Object.keys(node).sort(), label).toEqual(Object.keys(observed).sort());
   const compared = (shape: Record<string, string>) =>
-    Object.fromEntries(Object.entries(shape).filter(([field]) => !(field in PERSISTS)));
+    Object.fromEntries(Object.entries(shape).filter(([field]) => !(field in SHARED)));
   // Per invocation as in Node: env, listeners, timers, require.cache, the ESM registry.
   expect(compared(observed), label).toEqual(compared(node));
-  for (const [field, value] of Object.entries(PERSISTS)) {
-    expect(observed[field], `${label}\ndeclared persisting ${field}`).toEqual(value);
+  for (const [field, value] of Object.entries(SHARED)) {
+    expect(observed[field], `${label}\ndeclared shared ${field}`).toEqual(value);
     expect(node[field], `${label}\nNode now leaves the declared ${field}`).not.toEqual(value);
   }
 });

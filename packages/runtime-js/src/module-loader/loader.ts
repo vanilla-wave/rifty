@@ -84,6 +84,9 @@ const STUB_FROM_FILE_DEFAULT = '/__entry__';
 const indirectEvalPrimordial = globalThis.eval;
 const objectDefinePropertyPrimordial = Object.defineProperty;
 const reflectApplyPrimordial = Reflect.apply;
+const reflectDefinePropertyPrimordial = Reflect.defineProperty;
+const reflectDeletePropertyPrimordial = Reflect.deleteProperty;
+const reflectGetOwnPropertyDescriptorPrimordial = Reflect.getOwnPropertyDescriptor;
 const stringEndsWithPrimordial = String.prototype.endsWith;
 
 function stringEndsWith(value: string, suffix: string): boolean {
@@ -367,14 +370,35 @@ export function projectNodeEvalError(
   return error;
 }
 
+// Node v24 lib/internal/process/execution.js runScriptInContext: the globals `[eval]` defines.
+const NODE_EVAL_CJS_BINDINGS = ['require', 'module', 'exports', '__filename', '__dirname'] as const;
+
+/**
+ * A host running `-e`/`-p` in a reused realm calls this before the eval and
+ * the returned restore once the process ends: Node's bindings die with it.
+ */
+export function captureNodeEvalCjsBindings(): () => void {
+  const prior = NODE_EVAL_CJS_BINDINGS.map(
+    (key) => [key, reflectGetOwnPropertyDescriptorPrimordial(globalThis, key)] as const,
+  );
+  return () => {
+    for (const [key, descriptor] of prior) {
+      if (descriptor === undefined) reflectDeletePropertyPrimordial(globalThis, key);
+      else reflectDefinePropertyPrimordial(globalThis, key, descriptor);
+    }
+  };
+}
+
 function installNodeEvalCjsBindings(moduleObject: CjsModule, require: CjsRequire): void {
-  for (const [key, value] of [
-    ['require', require],
-    ['module', moduleObject],
-    ['exports', moduleObject.exports],
-    ['__filename', '[eval]'],
-    ['__dirname', '.'],
-  ] as const) {
+  const values = {
+    require,
+    module: moduleObject,
+    exports: moduleObject.exports,
+    __filename: '[eval]',
+    __dirname: '.',
+  } satisfies Record<(typeof NODE_EVAL_CJS_BINDINGS)[number], unknown>;
+  for (const key of NODE_EVAL_CJS_BINDINGS) {
+    const value = values[key];
     objectDefinePropertyPrimordial(globalThis, key, {
       value,
       writable: true,
