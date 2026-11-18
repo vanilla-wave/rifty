@@ -52,7 +52,7 @@ after the result (`src/run-code.ts` `spawn` per call; `isolation.test.ts` "no
 child process outlives its result"); N concurrent calls = N children; an
 externally killed child rejects at once (`lifecycle.test.ts`); README §Cost:
 p50 128 ms, 8 concurrent 1115 MiB; trust-model §Isolate host names only the
-child's uid as escape reach. I2, I4's stuck clause, I5 and I7 quantify over
+child's uid as escape reach. I2, I4's stuck clause, I5, I7 and I10 quantify over
 a worker hosting several calls, which main never has: each carrier row first
 asserts the calls share one pid, and that precondition is what fails on main
 (RED run 2026-11-18: every carrier case fails on main, marked `it.fails`). Step 0 probes:
@@ -108,7 +108,7 @@ asserts the calls share one pid, and that precondition is what fails on main
 - I9. Measured density: README §Cost records `scripts/measure.mjs` on the
   landed tree next to A on one machine; warm-call p50 and peak RSS of 8
   concurrent calls are each ≤ ½ of A's (A on M3 Pro: 137 ms, 1118 MiB).
-- I10. Bounded worker memory (the user's frame point 4): an idle worker never
+- I10. Bounded worker memory (frame point 4 — the manager's frame, shown to the user): an idle worker never
   stays warm above its recycle watermark (named in the ADR, ≤ 512 MiB); a
   worker past it takes no new call and is killed once idle.
 
@@ -124,6 +124,8 @@ challenge: 2026-11-18 — 8 problems (fresh critic over request, goal, carrier, 
 6. Invariants true on main as user statements — merged I2/I8 into I2; false-on-main note above states the shared-pid precondition; wire mechanism moved to the carrier/ADR, I7 restated by what a hostile worker can reach.
 7. Shard size fixed in the goal — moved to the ADR (I1 "fixed shard"); the carrier pins 4.
 8. User's OOM frame partly refuted — `onCatastrophicError` did not fire in 8 s and heap stats lead by 4 MiB under a timer flood (step 0): recorded below; I3 blames only on a certain signal, uncertain → I5.
+
+final-check: 2026-11-18 — PASS on verify pass (fresh RDY-6/FIT 8 reviewer over goal, map, carrier, tests, evidence): first pass 11 findings (1 blocker: carrier not `it.fails`), all fixed @ a403ff556; verify pass no blocker, 1 concern (forger death checked after consumer exit) + 3 nits fixed in place. No implementation or end-to-end acceptance claimed.
 
 ## Decisions
 

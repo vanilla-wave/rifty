@@ -6,12 +6,12 @@
  * replacing `dist/child.js` in a package copy; each call's `code` is the
  * hostile body it runs for that call (wire: acceptance item, "Wire").
  */
-import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import { alive, consumer, waitFor } from './support.ts';
+import { consumer } from './support.ts';
 
 /** Committed RED (FIT §5): the pool unit flips `carrier` to `it`. */
 const carrier = it.fails;
@@ -76,16 +76,20 @@ describe('call-addressed frames from a hostile worker (I7)', () => {
        const forger = settle(runCode(${JSON.stringify(
          'writeFileSync(FORGER_PID, String(process.pid)); const t = setInterval(() => { const ids = others(); if (ids.length < 4) return; clearInterval(t); for (const id of [...ids, call + 1000]) f(1, id, [1, 0, ...text("FORGED")]); setTimeout(() => f(2, call, [0]), 800); }, 20)',
        )}, { timeoutMs: 5000 }));
-       out({ honest: await Promise.all(honest), forger: await forger, workers: children().length });`,
+       const results = await Promise.all(honest);
+       const rejected = await forger;
+       // Inside the live consumer: the violation itself must kill the forger, not consumer exit.
+       const pid = Number(readFileSync(${JSON.stringify(FORGER_PID)}, 'utf8'));
+       const killed = await waitFor(() => { try { process.kill(pid, 0); return undefined; } catch { return true; } }, 3000).catch(() => false);
+       out({ honest: results, forger: rejected, killed });`,
         { entry },
       );
-      const v = value as { honest: unknown[]; forger: { rejected?: string } };
+      const v = value as { honest: unknown[]; forger: { rejected?: string }; killed: boolean };
       expect(v.honest).toEqual(
         [0, 1, 2, 3].map(() => ({ stdout: 'own', stderr: '', exitCode: 0 })),
       );
       expect(v.forger.rejected).toMatch(VIOLATION);
-      const forger = Number(readFileSync(FORGER_PID, 'utf8'));
-      await waitFor(() => (alive(forger) ? undefined : true), 3000);
+      expect(v.killed).toBe(true);
     },
   );
 

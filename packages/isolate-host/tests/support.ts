@@ -84,6 +84,7 @@ export async function consumer(
   { entry = DIST_INDEX, naturalExit = false, timeoutMs = 60_000 } = {},
 ): Promise<{ value: unknown; exitCode: number | null; signal: string | null; ms: number }> {
   const script = `import { execFileSync } from 'node:child_process';
+    import { readFileSync } from 'node:fs';
     const { runCode } = await import(${JSON.stringify(entry)});
     const children = () => execFileSync('ps', ['-A', '-o', 'pid=,ppid=,command='], { encoding: 'utf8' })
       .split('\\n').map((l) => /^\\s*(\\d+)\\s+(\\d+)\\s+(.*)$/.exec(l))

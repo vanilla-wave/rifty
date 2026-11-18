@@ -20,7 +20,7 @@ compat rows (I8).
 - Worker RSS ceiling and recycle watermark (I10 ≤ 512 MiB) with many calls
   per worker: after `dispose()` small-object heaps stay resident (step 0
   retention rows, macOS); Linux unmeasured — owner: agent — probe both at
-  PICKUP of the pool wall.
+  PICKUP of the pool wall; carrier row 11 needs a vector resident on both.
 - A pool-initiated RSS kill with no certain culprit (I5): step 0's only
   vector is the host-side timer fire queue — owner: agent — after the
   timer-backpressure wall, re-run the step 0 RSS probes; a vector left

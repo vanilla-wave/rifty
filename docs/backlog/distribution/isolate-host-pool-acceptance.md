@@ -90,7 +90,9 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 11. A warm worker serves a call that leaves ~650 MiB of small-object heap
     resident on macOS (8e6 objects, `memoryLimitMb` 1536; step 0 retention
     row): 1 s after it no child of the consumer holds > 512 MiB RSS; the next
-    call works (`pool-faults.test.ts`) → I10
+    call works (`pool-faults.test.ts`) → I10. Discriminates only where the
+    vector stays resident: Linux retention is unmeasured (`map.md` fog) — if
+    it returns there, the row takes a vector retained on Linux too
 
 All carrier cases are committed as `it.fails` (`carrier`); the pool unit flips
 them to `it`.
@@ -105,7 +107,7 @@ length, u8 kind, u32be call, payload`, kinds and payloads as ADR-0557 §6.
 | axis × operation | honest outcome | artifact / fault target | trace |
 |---|---|---|---|
 | guest heap limit × shared worker | culprit `memory`, neighbours exact | row 5 heap growth | → I3 |
-| V8 fatal OOM / worker RSS with the culprit's isolate disposed × shared worker | culprit `memory`, not rerun; neighbours rerun once, exact | row 5 `Array(2**28)` | → I3 |
+| culprit's isolate disposed by its heap limit / its `onCatastrophicError` × shared worker | culprit `memory`, not rerun; neighbours exact, a lost worker's neighbours rerun per I5 | row 5 `Array(2**28)` | → I3 |
 | worker RSS over ceiling, no certain culprit × in-flight calls | no blame; lost-worker path | no reachable vector after the timer-backpressure wall is expected (step 0's only one is the host-side fire queue, row 7 → I2); `map.md` fog re-runs the probes then — a vector left becomes a row here, none → recorded unreachable | → I5 |
 | guest CPU, interruptible × shared worker | culprit `timeout`; neighbours exact | row 6 busy loop, `Atomics.wait` | → I4 |
 | guest CPU, termination ignored × shared worker | culprit `timeout` at deadline; worker retires after 1000 ms, neighbours finish there, exact | row 6 sort | → I4 |
