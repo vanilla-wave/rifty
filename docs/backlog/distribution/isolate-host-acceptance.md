@@ -82,6 +82,8 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 
 ## Decisions
 
+ready-verdict: 2026-11-18 — Contract+RED @ 9e76eb622
+
 - 2026-11-18 — stderr canonicalization only on uncaught-error rows; stdout and every other stderr compared raw (no CRLF/ANSI normalization).
 - re-cut: 2026-11-18 — manager amend (goal.md): I3 bridge-walk attack, I4 reasons `timeout`|`memory` + one memory knob + settle bound + child death, ESM and ceiling rows; ceiling rows run as expected failures — trace: I1, I3, I4
 - 2026-11-18 — the parity carrier lives with the package (it needs the package build) and imports the node-cli-eval projection rather than copying it.

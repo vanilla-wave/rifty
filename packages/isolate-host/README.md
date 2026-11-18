@@ -77,7 +77,8 @@ Not available. Each of these throws `NotImplementedError` naming the API:
   `AbortController`/`AbortSignal`, `Event`/`EventTarget`/`CustomEvent`,
   `Blob`/`File`, `Request`/`Response`/`Headers`/`FormData`,
   `MessageChannel`/`MessagePort`/`BroadcastChannel`, `crypto.subtle`,
-  `performance.mark`/`measure`/…;
+  `performance.mark`/`measure`/…. Static members of these (`URL.canParse`,
+  `AbortSignal.timeout`, …) are missing and give a plain `TypeError`;
 - ESM syntax in the code (`import … from`, top-level `await`). Node runs such
   input as a module; this host evaluates CommonJS only, so use `require()`.
   `import()` rejects with a named error. If the guest does not handle that

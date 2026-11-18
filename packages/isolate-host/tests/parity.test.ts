@@ -51,7 +51,7 @@ const CORPUS: readonly Row[] = [
   },
   {
     label: 'event-loop-order',
-    code: "setTimeout(() => console.log('t60'), 60); setTimeout(() => console.log('t30'), 30); setImmediate(() => console.log('immediate')); Promise.resolve().then(() => console.log('micro')); queueMicrotask(() => console.log('qm')); process.nextTick(() => console.log('tick')); console.log('sync')",
+    code: "setTimeout(() => console.log('t200'), 200); setTimeout(() => console.log('t100'), 100); setImmediate(() => console.log('immediate')); Promise.resolve().then(() => console.log('micro')); queueMicrotask(() => console.log('qm')); process.nextTick(() => console.log('tick')); console.log('sync')",
   },
   {
     label: 'async-await',

@@ -5,3 +5,4 @@
 - 2026-11-18 — per-call cost `runCode('console.log(1)')`: p50 123 ms, p95 125 ms (20 sequential, M3 Pro macOS, Node v24.16.0, isolated-vm 7.0.2; guest bundle 7.0 MB); recorded, not promised
 - 2026-11-18 — corpus row `event-loop-order` delays 5/20 ms → 30/60 ms: under a loaded runner Node itself may run a 5 ms timer before `setImmediate` (startup past the delay), so the oracle was nondeterministic (one red in a parallel run, not reproduced in isolation; side unknown); order semantics unchanged
 - 2026-11-18 — Contract+RED verify pass found `kill -9` race: IPC `send` EPIPE rejected before the child's `exit` — fixed in `run-code.ts` (send callback; only a failed spawn ends on `'error'`)
+- 2026-11-18 — Contract+RED PASS @ 9e76eb622 after two verify passes (JSON on PR #405); reviewer measured Node v24.16.0 itself: 5/20 ms `event-loop-order` flipped 22/480 sequential, 30/60 ms 0/480 sequential but 4/480 at 16 parallel → delays now 100/200 ms, same order semantics
