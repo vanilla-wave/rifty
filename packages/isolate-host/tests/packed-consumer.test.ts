@@ -4,7 +4,7 @@
  * works under plain `node` (no flags).
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,14 +32,19 @@ it('packed tarball installs and runs under plain node', () => {
     cwd: app,
     stdio: 'pipe',
   });
+  // The README's own install line and usage snippet, not a test-local variant.
+  const readme = readFileSync(join(PACKAGE_DIR, 'README.md'), 'utf8');
+  expect(readme).toContain(`npm install /path/to/${tarball}`);
+  const snippet = /```js\n([\s\S]*?)```/.exec(readme)?.[1];
+  expect(snippet).toContain("import { runCode } from '@riftydev/isolate-host';");
   writeFileSync(
     join(app, 'main.js'),
-    'import { runCode } from \'@riftydev/isolate-host\';\nconsole.log(JSON.stringify(await runCode("process.stdout.write(String(6 * 7))")));\n',
+    `${snippet}\nconsole.log(JSON.stringify({ stdout, stderr, exitCode }));\n`,
   );
   const out = execFileSync(process.execPath, ['main.js'], {
     cwd: app,
     encoding: 'utf8',
     env: { PATH: process.env.PATH ?? '' },
   });
-  expect(JSON.parse(out)).toEqual({ stdout: '42', stderr: '', exitCode: 0 });
+  expect(JSON.parse(out)).toEqual({ stdout: '42\n', stderr: '', exitCode: 0 });
 }, 240_000);

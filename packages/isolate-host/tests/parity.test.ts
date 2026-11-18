@@ -142,6 +142,12 @@ const CORPUS: readonly Row[] = [
   },
 ];
 
+describe('package surface (ADR-0557 §1)', () => {
+  it("runCode is the package root's only runtime export", async () => {
+    expect(Object.keys(await import('../src/index.ts'))).toEqual(['runCode']);
+  });
+});
+
 describe('runCode parity with node -e (I1)', () => {
   for (const row of CORPUS) {
     const test = row.ceiling === undefined ? it : it.fails;
@@ -153,22 +159,31 @@ describe('runCode parity with node -e (I1)', () => {
         nodeArgv: ['-e', row.code],
         ...(row.evalError ? { evalErrorStderr: true } : {}),
       };
-      const oracle = canonicalNodeCliEvalOutcome(invocation, nodeEval(row.code));
-      expect(oracle.signal, 'oracle must exit on its own').toBeNull();
+      const raw = nodeEval(row.code);
+      expect(raw.signal, 'oracle must exit on its own').toBeNull();
       const result = await runCode(row.code);
       expect(result.termination).toBeUndefined();
       expect(result.truncated).toBeUndefined();
-      const actual = canonicalNodeCliEvalOutcome(invocation, {
+      // Raw bytes everywhere; only an uncaught-error row's stderr goes through the
+      // node-cli-eval diagnostic projection (I1).
+      const stderrOf = (stderr: string, code: number | null): string =>
+        row.evalError
+          ? canonicalNodeCliEvalOutcome(invocation, {
+              stdout: '',
+              stderr,
+              frames: [],
+              code,
+              signal: null,
+            }).stderr
+          : stderr;
+      expect({
         stdout: result.stdout,
-        stderr: result.stderr,
-        frames: [],
-        code: result.exitCode,
-        signal: null,
-      });
-      expect({ stdout: actual.stdout, stderr: actual.stderr, exitCode: actual.code }).toEqual({
-        stdout: oracle.stdout,
-        stderr: oracle.stderr,
-        exitCode: oracle.code,
+        stderr: stderrOf(result.stderr, result.exitCode),
+        exitCode: result.exitCode,
+      }).toEqual({
+        stdout: raw.stdout,
+        stderr: stderrOf(raw.stderr, raw.code),
+        exitCode: raw.code,
       });
     });
   }

@@ -47,16 +47,18 @@ describe('runCode limits (I4)', () => {
 
   it('a never-draining event loop is killed at the deadline', async () => {
     const started = Date.now();
-    const value = await runCode("setInterval(() => {}, 50); console.log('armed')", {
-      timeoutMs: 1000,
-    });
+    const { value, maxLagMs } = await withLag(() =>
+      runCode("setInterval(() => {}, 50); console.log('armed')", { timeoutMs: 1000 }),
+    );
     expect(value).toEqual({
       stdout: 'armed\n',
       stderr: '',
       exitCode: null,
       termination: 'timeout',
     });
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1000);
     expect(Date.now() - started).toBeLessThanOrEqual(1000 + 1000);
+    expect(maxLagMs).toBeLessThan(250);
   });
 
   it('isolate heap growth past memoryLimitMb ends with termination memory', async () => {
@@ -110,7 +112,9 @@ describe('runCode limits (I4)', () => {
     const before = process.memoryUsage().rss;
     const value = await runCode(
       "const s = 'z'.repeat(1 << 20); for (let i = 0; i < 256; i++) process.stdout.write(s); console.error('end')",
-      { maxOutputBytes: 1 << 20, timeoutMs: 60_000 },
+      // memoryLimitMb 32 → child RSS ceiling 352 MiB: a child buffering the flood
+      // (≥ 256 MiB over its baseline) would end as `memory`, not exit 0.
+      { maxOutputBytes: 1 << 20, timeoutMs: 60_000, memoryLimitMb: 32 },
     );
     const grownMb = (process.memoryUsage().rss - before) / (1 << 20);
     expect(value.exitCode).toBe(0);

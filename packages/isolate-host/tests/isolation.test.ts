@@ -63,7 +63,7 @@ describe('no host reach (I3)', () => {
         await probe('import', async () => (await (0, eval)("import('node:fs')")).readFileSync('/etc/hosts', 'utf8'));
         await probe('getBuiltinModule', () => process.getBuiltinModule('node:fs').readFileSync('/etc/hosts', 'utf8'));
         await probe('require', () => require('fs').readFileSync('/etc/hosts', 'utf8'));
-        await probe('binding', () => process.binding('fs'));
+        await probe('binding', () => { const b = process.binding('fs'); return b && (typeof b.open === 'function' || typeof b.readFileUtf8 === 'function') ? ${JSON.stringify(hosts)} : 'no'; });
         await probe('Function', () => Function('return typeof process.dlopen')() === 'function' ? ${JSON.stringify(hosts)} : 'no');
         console.log(out.join(' '));
       })();
