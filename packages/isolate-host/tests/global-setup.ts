@@ -1,12 +1,10 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-/** Tests run the packages' real build outputs: the export's guest bundle, then the host (which copies it). */
+/** Tests run the package's real build outputs (child entry + guest bundle). */
 export default function setup(): void {
-  for (const dir of ['../../isolate-guest', '..']) {
-    execFileSync('pnpm', ['run', 'build'], {
-      cwd: fileURLToPath(new URL(dir, import.meta.url)),
-      stdio: 'inherit',
-    });
-  }
+  execFileSync('pnpm', ['run', 'build'], {
+    cwd: fileURLToPath(new URL('..', import.meta.url)),
+    stdio: 'inherit',
+  });
 }

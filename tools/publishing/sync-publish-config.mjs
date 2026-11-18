@@ -132,7 +132,8 @@ const SPEC = {
   // ADR-0557: Node-only host. `build` adds the child entry + guest IIFE runCode loads from dist/.
   '@riftydev/isolate-host': {
     dir: 'packages/isolate-host',
-    build: 'tsup && node scripts/build-runtime.mjs',
+    // The guest bundle it copies is the export's: build that first (a `--filter` build skips deps).
+    build: 'pnpm --dir ../isolate-guest run build && tsup && node scripts/build-runtime.mjs',
     sideEffects: false,
     keywords: ['isolate', 'isolated-vm', 'sandbox', 'node-compatible'],
   },

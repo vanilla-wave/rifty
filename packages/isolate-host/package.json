@@ -45,7 +45,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsup && node scripts/build-runtime.mjs"
+    "build": "pnpm --dir ../isolate-guest run build && tsup && node scripts/build-runtime.mjs"
   },
   "dependencies": {
     "isolated-vm": "7.0.2"
