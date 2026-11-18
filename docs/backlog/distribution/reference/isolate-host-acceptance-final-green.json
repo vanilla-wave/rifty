@@ -1,211 +1,147 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "No blocker at b1a21a061; test-only delta keeps discrimination (mutant killed at old and new sizes) and the Linux env assertion is correct and stricter; merge only after unit-and-conformance (run) and the other 14 pending checks are green at HEAD.",
+  "merge_call": "No blocker at 9269eb909. B1 is closed: the shim clamps to 1 ms, all 16 delay edge probes match live Node stdout and status, and the clamp-revert mutant is killed by 2 parity rows. B2 is honestly declared: the compat ⚠️ row, the runtime-js backlog item (pendingTerminal claim verified in event-loop-keepalive.ts:289-325) and 3 pinned rows that turn red on a runtime fix. Its incomplete wording is a concern. Merge only on green PR CI at HEAD.",
   "checkpoint": "Final+GREEN",
-  "unit_goal_source": "docs/backlog/distribution/isolate-host-acceptance.md (ready-verdict Contract+RED @ 9e76eb622; Acceptance 13 re-cut 2026-11-18; Acceptance 14 sizes restated @ b1a21a061) in goal docs/backlog/epics/isolate-host-run-code/ (goal.md I1–I6), ADR-0557 §6; reviewed b1a21a061e3960868fea906667f680deeb1236bc vs prior verify @ 50cf12614 (delta: git diff 50cf12614 b1a21a061; coverage rows for unchanged carriers reused from docs/backlog/distribution/reference/isolate-host-acceptance-final-green.json)",
+  "unit_goal_source": "docs/backlog/distribution/isolate-host-acceptance.md (Acceptance 1–17, Fault matrix, re-cuts through own Final+GREEN @ 937595c70) in goal docs/backlog/epics/isolate-host-run-code/goal.md (I1–I6; Decisions 2026-11-18 post-guest class bound), ADR-0557 §1, §6, §Corrections; re-bound to 9269eb909 (delta git diff 264e4b894 9269eb909: web-shim timer clamp, parity rows, compat/backlog/README); coverage rows whose carriers are unchanged in the delta are reused from the verify @ 264e4b894, which reviewed 264e4b894 vs prior verifies @ 1d3fc3c43 (/tmp/isolate-host-fg-xr2-4.json) and @ 937595c70 (/tmp/isolate-host-fg-xr2-6.json); delta git diff 1d3fc3c43 264e4b894 -- packages docs",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
   "coverage": [
     {
-      "row": "runCode only runtime export; options/result shape",
+      "row": "Acceptance 1: runCode only runtime export; options/result shape",
       "source": "acceptance",
       "trace": "ADR-0557",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/parity.test.ts:150",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "citation": "packages/isolate-host/tests/parity.test.ts:151",
+      "note": "Carrier unchanged in delta 264e4b894..9269eb909; row reused from verify @ 264e4b894 (npx vitest run --root . --project isolate-host @264e4b894 → 11 files, 235 passed, exit 0. Mutant M1 (run-code.ts result() always emits `truncated: state.truncated`) killed: parity+limits 40 failed. Probes: 147 hostile programs → every resolved value has exactly {stdout:string, stderr:string, exitCode:int 0..255|null, termination?:timeout|memory, truncated?:true}, exitCode null iff termination; 13 …). npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     },
     {
-      "row": "runCode(code, options) public entry point",
-      "source": "public-api",
-      "trace": "ADR-0557",
-      "status": "pass",
-      "citation": "packages/isolate-host/tests/parity.test.ts:150",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
-    },
-    {
-      "row": "corpus parity vs live node oracle; ceiling rows expected failures",
+      "row": "Acceptance 2: corpus parity vs live node oracle; ceiling rows expected failures",
       "source": "acceptance",
       "trace": "I1",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/parity.test.ts:155",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "citation": "packages/isolate-host/tests/parity.test.ts:398",
+      "note": "npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running). Carrier changed (PR-4): new literal ceiling corpus row `timer-delay-out-of-range` (Node's Timeout*Warning, backlog runtime-js/timeout-delay-warnings), plus `timer delays Node clamps to 1 ms` (2**31, 1e10, -5, NaN vs live node). Mutant: reverting web-shim.ts:214 to the old `Number.isFinite(delay) && delay > 0 ? delay : 0` → 2 failed (2**31, 1e10). Probes /tmp/rifty-fg7/p5.mjs (isolated dist copy): 2**31, 1e10+clear, setInterval 3e9, -5, NaN, Infinity, 1.7, '5', valueOf→2**40, 2**31-1, timers/promises 2**31, setInterval -1 all equal Node in stdout and status."
     },
     {
-      "row": "declared ceilings fail with named NotImplementedError",
+      "row": "Acceptance 3: declared ceilings + import() loud and terminal in every form, never exit 0",
       "source": "acceptance",
       "trace": "scenario",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/parity.test.ts:205",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "citation": "packages/isolate-host/tests/parity.test.ts:206",
+      "note": "Carrier unchanged in delta 264e4b894..9269eb909; row reused from verify @ 264e4b894 (npx vitest run --root . --project isolate-host @264e4b894 → 11 files, 235 passed, exit 0. Probes: import().catch, 1000× import, import with Promise.prototype.then/Object.prototype.then poisoned, import().catch reading e.stack / prepareStackTrace → all exit 1 with the IMPORT_GAP line, no child path. …). npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     },
     {
-      "row": "fresh instance per call; no child outlives its result",
+      "row": "Acceptance 4: fresh instance per call; no child outlives its result",
       "source": "acceptance",
       "trace": "I2",
       "status": "pass",
       "citation": "packages/isolate-host/tests/isolation.test.ts:25",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "note": "Carrier unchanged in delta 264e4b894..9269eb909; row reused from verify @ 264e4b894 (npx vitest run --root . --project isolate-host @264e4b894 → 11 files, 235 passed, exit 0 …). npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     },
     {
-      "row": "no host reach (canaries, realm walk, env, --no-node-snapshot)",
+      "row": "Acceptance 5: no host reach (canaries, realm walk, env, --no-node-snapshot)",
       "source": "acceptance",
       "trace": "I3",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/isolation.test.ts:161",
-      "note": "Carrier changed (PR-4): Linux env assertion NODE_CHANNEL_{FD,SERIALIZATION_MODE} exactly → environment === '' (stricter). Docker node:24 (Linux) /tmp/ih8/docker/env.mjs with run-code.ts:170-173 spawn options (env {}, stdio [pipe,ignore,pipe,pipe]): /proc/<pid>/environ \"\" → empty; old stdio with 'ipc' → \"NODE_CHANNEL_FD=3\\0NODE_CHANNEL_SERIALIZATION_MODE=json\\0\". CI run 44249353089 @ 3d9958e84 already showed names [] vs expected NODE_CHANNEL_*. macOS branch (canaries absent) unchanged. suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "citation": "packages/isolate-host/tests/isolation.test.ts:43",
+      "note": "Carrier unchanged in delta 264e4b894..9269eb909; row reused from verify @ 264e4b894 (npx vitest run --root . --project isolate-host @264e4b894 → 11 files, 235 passed, exit 0. Probes from the consumer with HOST_CANARY env+global set: env dump `{}`, fs walk of `/` → only /workspace, Function('return this')().process is rifty's, ctor-chain lookups of __riftyIsolateHost/__riftyGuest/__riftyHost_write → undefined, CallSite.getFunction/getThis on bundle frames → undefined (strict), no c …). npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     },
     {
-      "row": "busy loop / never-draining → timeout within +1000 ms; heap / Array(2**28) → memory",
+      "row": "Acceptance 6: busy loop / never-draining → timeout ≤ +1000 ms; heap / Array(2**28) → memory",
       "source": "acceptance",
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/limits.test.ts:37",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "note": "Carrier unchanged in delta 264e4b894..9269eb909; row reused from verify @ 264e4b894 (npx vitest run --root . --project isolate-host @264e4b894 → 11 files, 235 passed, exit 0. Probes: timer flood, 20000 setInterval(0), Atomics.wait, random/now flood, 4 GiB wasm memory, 256 MiB error message → timeout at 3000–3010 ms or memory; none past timeoutMs+1000. …). npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     },
     {
-      "row": "output cap truncates, run continues; 256 MiB flood not buffered",
+      "row": "Acceptance 7: output cap truncates, run continues; 256 MiB flood not buffered",
       "source": "acceptance",
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/limits.test.ts:116",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "note": "Carrier unchanged in delta 264e4b894..9269eb909; row reused from verify @ 264e4b894 (npx vitest run --root . --project isolate-host @264e4b894 → 11 files, 235 passed, exit 0. Probe: 1 MiB stdout+stderr then throw at cap 1000 → exit 1, truncated:true; cap 0 → exit 2, truncated. …). npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     },
     {
-      "row": "kill -9 rejects within 1000 ms naming signal; host keeps working",
+      "row": "Acceptance 8: kill -9 rejects within 1000 ms naming signal; host keeps working",
       "source": "acceptance",
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/lifecycle.test.ts:25",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "note": "Carrier unchanged in delta 264e4b894..9269eb909; row reused from verify @ 264e4b894 (npx vitest run --root . --project isolate-host @264e4b894 → 11 files, 235 passed, exit 0 …). npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     },
     {
-      "row": "egress APIs → NotImplementedError",
+      "row": "Acceptance 9: egress APIs → NotImplementedError",
       "source": "acceptance",
       "trace": "I5",
       "status": "pass",
       "citation": "packages/isolate-host/tests/egress.test.ts:19",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "note": "Carrier unchanged in delta 264e4b894..9269eb909; row reused from verify @ 264e4b894 (npx vitest run --root . --project isolate-host @264e4b894 → 11 files, 235 passed, exit 0 …). npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     },
     {
-      "row": "packed tarball runs under plain node",
+      "row": "Acceptance 10: packed tarball runs under plain node",
       "source": "acceptance",
       "trace": "I6",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/packed-consumer.test.ts",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "citation": "packages/isolate-host/tests/packed-consumer.test.ts:17",
+      "note": "Carrier unchanged in delta 264e4b894..9269eb909; row reused from verify @ 264e4b894 (npx vitest run --root . --project isolate-host @264e4b894 → 11 files, 235 passed, exit 0 …). npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     },
     {
-      "row": "guest TextEncoder/TextDecoder equals Node",
+      "row": "Acceptance 11: guest TextEncoder/TextDecoder equals Node",
       "source": "acceptance",
       "trace": "ADR-0557",
       "status": "pass",
       "citation": "packages/isolate-host/tests/text-codec.test.ts:31",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "note": "Carrier unchanged in delta 264e4b894..9269eb909; row reused from verify @ 264e4b894 (npx vitest run --root . --project isolate-host @264e4b894 → 11 files, 235 passed, exit 0. Probe: lone surrogate / invalid bytes → U+FFFD equal to Node. …). npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     },
     {
-      "row": "host bridge garbage → guest-safe TypeError",
+      "row": "Acceptance 12: bridge unreachable; hostile args refused guest-safely",
       "source": "acceptance",
       "trace": "I3",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/bridge.test.ts:16",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "citation": "packages/isolate-host/tests/bridge.test.ts:54",
+      "note": "Carrier unchanged in delta; row reused from verify @ 264e4b894. The 264e4b894 B1 path (an ordinary program reaching a bridge refusal through a delay > 2^31-1) is closed by the clamp; npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     },
     {
-      "row": "hostile child frames (garbage, kind, over-announce, fd/flags, payload sizes, no-new-bytes, past cap, revert, long error) → kill + protocol violation <1000 ms, never a throw; stalled legal frame ≤ one frame; 2^16 1-byte frames < 4 MiB held",
+      "row": "Acceptance 13: hostile child frames → kill + protocol violation; framing bounds",
       "source": "acceptance",
       "trace": "I4",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:81",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "citation": "packages/isolate-host/tests/protocol.test.ts:82",
+      "note": "Carrier unchanged in delta 264e4b894..9269eb909; row reused from verify @ 264e4b894 (npx vitest run --root . --project isolate-host @264e4b894 → 11 files, 235 passed, exit 0; protocol.ts unchanged in delta. …). npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     },
     {
-      "row": "write shapes: 1e6 empty writes @ 1 KiB cap / 1e6 one-byte writes @ 512 KiB cap < 64 MiB consumer RSS; truncated survives timeout; timeoutMs > 2^31-1 RangeError",
+      "row": "Acceptance 14: write-shape accounting; truncated survives timeout; timeoutMs > 2^31-1 RangeError",
       "source": "acceptance",
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/limits.test.ts:144",
-      "note": "Carrier changed (PR-4): floods 3e6/2e6@1MiB → 1e6/1e6@512KiB, timeoutMs 60→120 s, test timeout 150 s; Acceptance 14 restated to match. Mutant /tmp/ih8/m1 (child keeps one chunk per write incl. empties, one frame per chunk; consumer drops the \"output without new bytes\" check and keeps per-frame chunks) via /tmp/ih8/probe.mjs, fresh process, same assertions: new empty1e6 FAIL +459 MiB, new one1e6 FAIL +296 MiB; old empty3e6 FAIL +1273 MiB, old one2e6 FAIL +496 MiB. Unmutated control: +6.9 / +9.6 MiB PASS. Mutant /tmp/ih8/m3 (child per-write 1-byte frames only, consumer intact) passes old and new alike (+6.6–11 MiB): not a clause violation. Kill set equal old vs new; margin ≥4.6× the 64 MiB bound. suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "note": "Carrier unchanged in delta 264e4b894..9269eb909; row reused from verify @ 264e4b894 (npx vitest run --root . --project isolate-host @264e4b894 → 11 files, 235 passed, exit 0. Probe: timeoutMs 2^31 → RangeError rejection. …). npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     },
     {
-      "row": "consumer death → child exits; spawn failure rejects at once",
+      "row": "Acceptance 15: consumer death → child exits; spawn failure rejects at once",
       "source": "acceptance",
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/lifecycle.test.ts:43",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "note": "Carrier unchanged in delta 264e4b894..9269eb909; row reused from verify @ 264e4b894 (npx vitest run --root . --project isolate-host @264e4b894 → 11 files, 235 passed, exit 0 …). npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     },
     {
-      "row": "guest CPU × run → SIGKILL at deadline, timeout",
-      "source": "fault-matrix",
-      "trace": "I4",
-      "status": "pass",
-      "citation": "packages/isolate-host/tests/limits.test.ts:37",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
-    },
-    {
-      "row": "guest heap × run → memory",
-      "source": "fault-matrix",
-      "trace": "I4",
-      "status": "pass",
-      "citation": "packages/isolate-host/tests/limits.test.ts:64",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
-    },
-    {
-      "row": "V8 fatal OOM / child RSS × run → memory",
-      "source": "fault-matrix",
-      "trace": "I4",
-      "status": "pass",
-      "citation": "packages/isolate-host/tests/limits.test.ts:91",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
-    },
-    {
-      "row": "guest output × run → discard past cap, truncated",
-      "source": "fault-matrix",
-      "trace": "I4",
-      "status": "pass",
-      "citation": "packages/isolate-host/tests/limits.test.ts:128",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
-    },
-    {
-      "row": "child killed externally / crash → reject at once naming code/signal",
-      "source": "fault-matrix",
-      "trace": "I4",
-      "status": "pass",
-      "citation": "packages/isolate-host/tests/lifecycle.test.ts:25",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
-    },
-    {
-      "row": "concurrent calls × run → independent",
-      "source": "fault-matrix",
-      "trace": "I2",
-      "status": "pass",
-      "citation": "packages/isolate-host/tests/lifecycle.test.ts:12",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
-    },
-    {
-      "row": "guest bridge args × call → validated refusal",
-      "source": "fault-matrix",
+      "row": "Acceptance 16: post-guest replacements: host promises hold for 50 cases; 38 Node's status; 12 BROKEN_RUNTIME pinned; open class declared; non-Error throw → runtime fatal text",
+      "source": "acceptance",
       "trace": "I3",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/bridge.test.ts:17",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "citation": "packages/isolate-host/tests/guest-seam.test.ts:310",
+      "note": "Carrier unchanged in delta 264e4b894..9269eb909; row reused from verify @ 264e4b894 (npx vitest run --root . --project isolate-host @264e4b894 → 11 files, 235 passed, exit 0 (FAITHFUL 38 + BROKEN_RUNTIME 12 = 50 rows counted). Mutant M2 (main.ts: after `started`, report KIND.error with the guest's thrown text instead of reportFailed) killed: child-trust 3 + guest-seam 6 failed. Prior-round repros re-run (/tmp/rifty-fg6/p1–p4.json): all six xr2-6 B1 frame-name hooks (species getter …). npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     },
     {
-      "row": "child frames × fd 3 (escaped child) → kill + protocol violation",
-      "source": "fault-matrix",
-      "trace": "I4",
+      "row": "Acceptance 17: child judges the isolate's status (stubs) → exit 1, empty stderr",
+      "source": "acceptance",
+      "trace": "I3",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:81",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
-    },
-    {
-      "row": "consumer death × run → child exits on disconnect (stdin EOF)",
-      "source": "fault-matrix",
-      "trace": "I4",
-      "status": "pass",
-      "citation": "packages/isolate-host/tests/lifecycle.test.ts:61",
-      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
+      "citation": "packages/isolate-host/tests/child-trust.test.ts:72",
+      "note": "Carrier unchanged in delta 264e4b894..9269eb909; row reused from verify @ 264e4b894 (npx vitest run --root . --project isolate-host @264e4b894 → 11 files, 235 passed, exit 0. Mutant M3 (main.ts status check reduced to `typeof code !== 'number'`) killed: 5 stubs (NaN, 0.5, negative, ∞, 256). `git diff --stat -- packages/isolate-host/src` empty after all three mutants; dist rebuilt from clean src. …). npx vitest run --root . --project isolate-host @9269eb909 → 11 files, 243 passed, exit 0 (second run; the first had 28 failures, all `Cannot find module …/dist/child.js|guest.js`: dist was rebuilt at 13:21:20 by a process other than this review, while the suite was running)"
     }
   ],
   "axes": [
@@ -215,9 +151,16 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "PR #405 @ b1a21a061",
-          "evidence": "gh pr checks 405 @ b1a21a061: 7 pass (Change scope, Deploy landing, Deploy playground, lint-and-typecheck, unit-and-conformance (parity), e2e light 4/8, 7/8), 15 pending incl. unit-and-conformance (run) — the Linux lane that runs the isolate-host project and failed @ 3d9958e84 (run 44249353089: env NODE_CHANNEL_* assertion; both floods resolved termination timeout at 60 s). Local: npx vitest run --project isolate-host → 104 passed, exit 0; pnpm -s backlog:check → backlog: OK.",
-          "summary": "PR CI not green at HEAD yet (Linux run lane pending); local gates green. goal_complete false until merge on green CI (REV-9 / DoD).",
+          "location": "PR #405 @ 9269eb909",
+          "evidence": "Local @ 9269eb909: isolate-host 243 passed; pnpm -s backlog:check → backlog: OK; pnpm -s check:compat-drift → exit 0, tree unchanged; pnpm -s refs:check → refs: OK. PR CI at HEAD not checked in this pass.",
+          "summary": "Merge only on green PR CI at HEAD (gh pr checks).",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/tests/global-setup.ts:6",
+          "evidence": "The first full run @ 9269eb909 had 28 failures: `Cannot find module …/dist/child.js` / ENOENT dist/guest.js, dist mtime 13:21:20. The build (tsup clean: true) of a concurrent session in the same worktree removed dist mid-run; the rerun gave 243/243.",
+          "summary": "Suites sharing one worktree's dist race any concurrent build. Environmental, not a product defect; note it for reruns.",
           "authority": ""
         }
       ]
@@ -230,7 +173,15 @@
     {
       "axis": "Goal drift",
       "verdict": "pass",
-      "findings": []
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/adr/distribution/0557-run-guest-code-in-a-disposable-child-process-holding-a-rifty-v8-isolate-isolated-vm.md:101",
+          "evidence": "grep for 'consults nothing|closed list|host-side class closed|primordial-only|bypassing anything' over ADR/compat/README/src/tests/backlog items → only ledger history lines and web-shim.ts:309 (§5 ceiling list, a different list). ADR §6 :108, compat :23, guest-seam.test.ts:17 and post-guest backlog :33 state the class is open and the hardening 'measured, not proven exhaustive'.",
+          "summary": "Docs match the scope decision: the open class is stated as open and no closure claim remains.",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Approach cost",
@@ -247,24 +198,45 @@
       "verdict": "concern",
       "findings": [
         {
-          "severity": "concern",
-          "location": "packages/isolate-host/tests/limits.test.ts:148",
-          "evidence": "Local (darwin): base 1e6 empty 8.1 s, 1e6 one-byte 7.4 s; 3e6 empty 24.4 s. CI @ 3d9958e84: 3e6 empty and 2e6 one-byte both > 60 s (resolved termination timeout, stdout '' / exitCode null) → CI ≥ ~2.5× slower than local under the full run lane; only a lower bound is known.",
-          "summary": "Headroom of the 120 s timeoutMs on the CI runner is unproven until unit-and-conformance (run) reports: 1e6 needs CI ≤ ~15× local. Failure mode is loud (timeout result ≠ expected), not a silent pass.",
+          "severity": "nit",
+          "location": "packages/isolate-host/src/guest/web-shim.ts:214",
+          "evidence": "264e4b894 blockers re-run (/tmp/rifty-fg7/p5.mjs on a private dist copy). B1: `setTimeout(() => console.log('t'), 2**31)` → host exit 0 't', stderr '' = node (plus TimeoutOverflowWarning, declared). B2: the 3 repros + `Promise.resolve().then(() => process.exit(0)); throw` → host {exitCode:0, stderr:''}, node 1, as the new compat row and the pinned parity rows state. The 264e4b894 concerns on compat :20 (now names exit 0) and memoryLimitMb < 16 (README:40) are closed.",
+          "summary": "Prior B1 fixed and B2 declared; both verified by probe.",
           "authority": ""
         },
         {
           "severity": "concern",
-          "location": "packages/isolate-host/src/protocol.ts:78",
-          "evidence": "Carried from verify @ 50cf12614 (probe a4: 1e6 legal 1-byte frames in one 8 MB write at default 1 MiB cap → consumer RSS peak +96 MiB); code unchanged in delta. /tmp/ih8/m3 (per-write frames arriving through the pipe as the guest writes) peaks +11 MiB.",
-          "summary": "Per-frame slice allocation lets a hostile burst of tiny frames peak consumer RSS ~96 MiB at the default cap (held memory stays bounded; README:121-124 now states transient RSS honestly). Hardening, not a clause violation.",
+          "location": "docs/public/compat/isolate-host.md:24",
+          "evidence": "Same probe file, live node v24.16.0, node exit 1 + report in every case. (a) `setTimeout(() => { throw new Error('x') }); setTimeout(() => process.exit(3))` → host 3, stderr ''. (b) `setTimeout(() => { throw new Error('x') }); setTimeout(() => console.log('second'))` → host prints 'second' then the report, exit 1; node prints nothing. (c) `process.on('exit', c => console.log('exit', c))` + (a) with exit(0) → the listener prints 'exit 1' and the status is 0. (d) nextTick and fs-callback exits also read clean 0. The row says only 'the queued exit(0) wins: {exitCode: 0, stderr: ''}'.",
+          "summary": "B2 declaration is honest but narrower than the class: an exit(n) gives n, every already-queued callback runs and prints after the fatal, and the 'exit' listener's code differs from the final status. Widen the row and the backlog item.",
           "authority": ""
         },
         {
           "severity": "nit",
-          "location": "packages/isolate-host/src/run-code.ts:181",
-          "evidence": "Carried from verify @ 50cf12614; code unchanged.",
-          "summary": "Byte-based stderr tail may start mid code point (leading U+FFFD); no suite test pins the tail logic.",
+          "location": "packages/isolate-host/src/guest/web-shim.ts:213",
+          "evidence": "`try { setTimeout(() => console.log('t'), 5n) } catch (e) { console.log(e.name) }` → node 'TypeError' (`after *= 1`); host runs the timer, prints 't' (Number(5n) = 5).",
+          "summary": "The clamp coerces with Number(); a BigInt delay runs instead of throwing.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/src/guest/entry.ts:180",
+          "evidence": "Unpoisoned programs at default limits: `new ArrayBuffer(2**30)` → RangeError exit 1 (node 0). `throw new Error('x'.repeat(2**26))` and `throw 'x'.repeat(2**27)` → exit 1 with empty stderr (node prints the diagnostic; writeDiagnostic's renders all fail under the heap limit). `process.stdout.write(5n)` inside try/catch → uncaught exit 1 (node 0, caught TypeError).",
+          "summary": "Undeclared limit-driven and stdio divergences. The run is loud but the diagnostic text can be lost; declare or route them.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/public/compat/isolate-host.md:24",
+          "evidence": "`const f = () => Promise.resolve().then(f); f(); throw new Error('x')` at timeoutMs 1500 → termination 'memory' (row says timeout).",
+          "summary": "The microtask-chain row names timeout only; a promise chain ends as memory.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/public/compat/isolate-host.md",
+          "evidence": "`setTimeout(() => { throw Object.create(null) })` → 'TypeError: Cannot convert object to primitive value at String (<anonymous>) at rifty-isolate-guest.js:…' (carried from xr2-6). The non-Error row says timer throws arrive 'wrapped as Error: <value>'.",
+          "summary": "The non-Error row does not cover timer-thrown null-proto values.",
           "authority": ""
         }
       ]
@@ -272,13 +244,29 @@
     {
       "axis": "Regressions",
       "verdict": "pass",
-      "findings": []
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "/tmp/rifty-fg6",
+          "evidence": "Prior blockers: xr2-4 P1 closed, P2 declared, P3(a) closed / P3(b) closed (formatThrown, no fallback line), P4 closed. xr2-6 B1 closed: repros (a)–(f) equal Node at HEAD, and the 'consults nothing' claim is gone. xr2-6 B2 closed: throw 5/Symbol/function/proxy/null-proto print runtime fatal text, no host line; the remaining shape gaps are declared (compat non-Error row + runtime-js/node-eval-non-error-throw-rendering).",
+          "summary": "Prior-round blockers are closed or now fall under the scope decision.",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Ecosystem UX",
-      "verdict": "pass",
-      "findings": []
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/public/compat/isolate-host.md:23",
+          "evidence": "In-realm poisoning divergences seen in probes, none reaching the host (scope decision 2026-11-18): Number.isInteger→()=>true + exitCode 2.5 → 2 (node 1); Promise[@@species] getter throw + timer exit(4) → 1 (node 4); Map.prototype get/set/delete throwing + timer → 7 (node 0); Array iterator throwing + timer args → 1 (node 0); globalThis.performance=null + timer → timeout (node 0); Reflect.get poisoned → runtime `Error: process.exit(0)` stack, exit 1 (node 0); `throw {get stack(){process.exit(0)}}` → 1 '#<Object>' (node 0); a Proxy throw runs guest traps in isRiftyProcessExit (frames in stderr); process.stdout.write replaced with a throwing fn + console.log → 1 (node 0, console swallows).",
+          "summary": "Open poisoning class behaves as declared: concerns only, routed by the existing runtime-js backlog items.",
+          "authority": "goal.md Decisions 2026-11-18 post-guest class bound"
+        }
+      ]
     }
   ],
-  "reviewed_sha": "b1a21a061e3960868fea906667f680deeb1236bc"
+  "reviewed_sha": "9269eb909150279088ae93650576f0831d5b7b2d"
 }

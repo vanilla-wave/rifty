@@ -15,6 +15,10 @@ exit 1 with the `Error: x` report, host `{stdout: '', stderr: '', exitCode: 0}`:
 `setTimeout(() => { throw new Error('x') }); setTimeout(() => process.exit(0))`;
 `setTimeout(() => { queueMicrotask(() => process.exit(0)); throw new Error('x') })`;
 `Promise.reject(new Error('x')); setTimeout(() => process.exit(0))`.
+Landing verify @ 9269eb909 widened the class: a queued `exit(3)` gives 3; any
+queued callback still runs and prints (`console.log('second')`, Node prints
+nothing); an `'exit'` listener sees 1 while the status ends 0; exits from
+`process.nextTick` and fs callbacks read as a clean 0 too.
 `beginNodeEvalUnhandled` records `pendingTerminal` and returns while a drain
 owns the run; the next queued callback's `exit(0)` becomes the terminal. The
 browser `node -e` path shares the lifecycle (unprobed there); the sibling
